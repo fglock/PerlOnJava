@@ -8,6 +8,8 @@ import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+
 /**
  * IOHandle implementation for writing to a process's OutputStream.
  * Used by IPC::Open3 and IPC::Open2 to write to child process stdin.
@@ -81,5 +83,30 @@ public class ProcessOutputHandle implements IOHandle {
      */
     public void setCharset(Charset charset) {
         this.charset = charset;
+    }
+
+    @Override
+    public RuntimeScalar fileno() {
+        return RuntimeScalarCache.scalarUndef;
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        if (isClosed) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            return new RuntimeScalar(); // undef
+        }
+        try {
+            byte[] bytes = new byte[data.length()];
+            for (int i = 0; i < data.length(); i++) {
+                bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+            outputStream.write(bytes);
+            outputStream.flush();
+            return new RuntimeScalar(bytes.length);
+        } catch (IOException e) {
+            getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(); // undef
+        }
     }
 }

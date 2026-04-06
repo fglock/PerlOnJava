@@ -465,7 +465,24 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 #### Merge-ready
 - **PR #440** — All Phase 1–11 fixes are complete and tested. Ready for review and merge.
 
-#### Post-merge follow-up (optional, low priority)
+#### Active — Phase 13: fileno for open3 handles + TAP open3 path
+
+1. **`fileno()` returns empty for open3 handles** — `IPC::Open3` works in PerlOnJava
+   (uses Java ProcessBuilder), but `fileno()` on the returned IO::Handle objects returns
+   empty instead of a valid file descriptor number. This prevents `IO::Select` from
+   registering the handles. Root cause: the IO::Handle objects created by open3 wrap Java
+   InputStreams/OutputStreams that are not registered in the RuntimeIO fileno registry.
+   Fix: ensure handles created through the open3/pipe path get proper fileno values so
+   IO::Select works. Once fixed, `TAP::Parser::Iterator::Process::_use_open3` can be
+   updated to also check for working open3 (not just `$Config{d_fork}`), enabling proper
+   stdout+stderr separation in the TAP harness.
+
+2. **Enable open3 path in TAP harness** — After fileno is fixed, update `_use_open3()` in
+   `TAP/Parser/Iterator/Process.pm` to return true when open3 is available even without
+   `d_fork`. This gives proper stderr separation and removes the need for the Phase 12
+   `ref $err` guards (though they remain harmless as defense-in-depth).
+
+#### Post-merge follow-up (lower priority)
 
 1. **cookies.t** — Blocked on JVM `fork()` limitation. The test uses `TestServer.pm` which
    requires `open FH, '-|'` (fork-open without exec). This is a known JVM limitation shared

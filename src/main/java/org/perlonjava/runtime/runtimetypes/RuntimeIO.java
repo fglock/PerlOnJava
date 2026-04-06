@@ -1547,7 +1547,9 @@ public class RuntimeIO extends RuntimeScalar {
                 || ioHandle instanceof PipeOutputChannel
                 || ioHandle instanceof InternalPipeHandle
                 || ioHandle instanceof LayeredIOHandle
-                || ioHandle instanceof SocketIO) {
+                || ioHandle instanceof SocketIO
+                || ioHandle instanceof ProcessInputHandle
+                || ioHandle instanceof ProcessOutputHandle) {
             fd = assignFileno();
             return new RuntimeScalar(fd);
         }

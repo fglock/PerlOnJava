@@ -1759,9 +1759,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /**
      * Close any IO handle associated with a GLOBREFERENCE value being dropped.
      * <p>
-     * In Perl 5, IO handles are closed by the interpreter's sv_clear/gp_free when
-     * the glob's reference count reaches zero. Since jperl doesn't implement
-     * reference counting or DESTROY, we close IO handles eagerly in specific cases.
+     * This is called ONLY from explicit user actions ({@code undef $fh} and
+     * {@code $fh = undef}), NOT from automatic scope-exit cleanup. For automatic
+     * cleanup of abandoned handles, see {@link RuntimeIO#registerGlobForFdRecycling}
+     * which uses PhantomReference-based GC tracking.
      * <p>
      * <b>Where this is called:</b>
      * <ul>
@@ -1771,26 +1772,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * <p>
      * <b>Where this is NOT called (by design):</b>
      * <ul>
-     *   <li>{@code setLarge(value)} for non-null values — removed because variable
-     *       reassignment (e.g. {@code $h = IO::Handle->new()}) cannot safely close
-     *       the old IO when other variables may still reference the same glob.
-     *       See the detailed comment in setLarge() for the Capture::Tiny failure
-     *       that motivated this change.</li>
-     *   <li>{@code set(int/long/double/String)} — these primitive-type setters
-     *       never called closeIOOnDrop (pre-existing behavior).</li>
+     *   <li>{@code setLarge(value)} for non-null values — variable reassignment
+     *       cannot safely close the old IO when other variables may reference
+     *       the same glob (see the Capture::Tiny comment in setLarge())</li>
+     *   <li>Scope exit — removed because without reference counting there is
+     *       no way to know if the glob is shared. See {@code scopeExitCleanup()}
+     *       javadoc for the full explanation.</li>
      * </ul>
      * <p>
      * <b>Safety heuristic:</b> We only close IO for globs that are NOT currently
      * in any stash (symbol table). Named globs still in the stash (like *MYFILE)
      * may have other references (including detached copies created by
-     * {@code \*MYFILE}) and should not be closed. Globs that have been removed
-     * from the stash (e.g., by gensym's delete) or that were never in a stash
-     * are candidates for closing — but even this is only safe from undefine()
-     * where the caller is explicitly requesting cleanup.
-     * <p>
-     * <b>Known limitation:</b> Without reference counting, anonymous file handles
-     * that are overwritten (not explicitly closed or undef'd) will leak their
-     * underlying IO until JVM garbage collection or program exit.
+     * {@code \*MYFILE}) and should not be closed.
      */
     private void closeIOOnDrop() {
         if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
@@ -1810,36 +1803,46 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
-     * Called by JVM bytecode at scope exit to deterministically close IO handles
-     * on anonymous lexical filehandles ({@code open(my $fh, ...)}).
+     * <b>DEAD CODE — DO NOT CALL OR RESURRECT.</b>
      * <p>
-     * This is the JVM-backend equivalent of Perl 5's DESTROY: when a {@code my $fh}
-     * goes out of scope, its IO handle should be closed and its fd recycled.
-     * Since the JVM's tracing GC is non-deterministic, we call this explicitly
-     * from the emitted scope-exit bytecode to ensure timely fd recycling.
+     * This method attempted to emulate Perl 5's deterministic DESTROY for lexical
+     * filehandles by eagerly closing IO on anonymous globs at scope exit. It was
+     * called from JVM bytecode emitted by {@code EmitStatement.emitScopeExitNullStores()}.
      * <p>
-     * Only closes IO on anonymous globs (globName == null) — named globs like
-     * {@code *STDOUT} or gensym'd handles may be referenced by other variables
-     * (e.g., in Capture::Tiny's save/restore pattern).
+     * <b>Why it was removed:</b> PerlOnJava does not implement reference counting.
+     * Without refcounting, there is no way to know at scope exit whether other
+     * variables still hold a reference to the same RuntimeGlob. This method
+     * unconditionally closed IO on any anonymous glob going out of scope, which
+     * destroyed shared handles still in use by other variables:
+     * <ul>
+     *   <li>Test2::Formatter::TAP: {@code my $io = $handles->[$hid]} in a for loop —
+     *       when $io went out of scope, the shared handle was closed, breaking test output</li>
+     *   <li>Capture::Tiny: dup'd STDOUT/STDERR handles stored in a hash were closed
+     *       when the gensym'd lexical was reassigned in a loop</li>
+     * </ul>
+     * <p>
+     * <b>The correct mechanism is PhantomReference-based GC cleanup:</b>
+     * {@link RuntimeIO#registerGlobForFdRecycling} tracks anonymous globs with
+     * {@code PhantomReference}. When a glob becomes truly unreachable (no variables
+     * reference it), the JVM GC enqueues the reference and
+     * {@link RuntimeIO#processAbandonedGlobs()} closes the IO. This is correct by
+     * construction — it only fires when there are genuinely zero references.
+     * The null-stores in {@code emitScopeExitNullStores()} make globs unreachable
+     * from JVM frames, enabling timely GC collection.
+     * <p>
+     * <b>Do not try to re-implement deterministic IO close at scope exit</b>
+     * without first implementing full reference counting on RuntimeGlob. Any
+     * heuristic (glob name checks, "owner" flags, copy counters) will have
+     * false positives that silently corrupt shared handles in production code.
      *
-     * @param scalar the RuntimeScalar being cleaned up (may be null if slot was already nulled)
+     * @param scalar unused
+     * @deprecated Removed — IO cleanup is handled by PhantomReference GC in RuntimeIO.
+     * @see RuntimeIO#registerGlobForFdRecycling
+     * @see RuntimeIO#processAbandonedGlobs()
      */
+    @Deprecated
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
-                && scalar.value instanceof RuntimeGlob glob
-                && glob.globName == null) {
-            // Decrement the holder count. Only close IO when no more holders exist.
-            // This prevents closing IO that is still referenced by variables in outer scopes
-            // (e.g., `my $io = $fh` inside a for loop where $fh is from an outer scope).
-            glob.ioHolderCount--;
-            if (glob.ioHolderCount <= 0) {
-                RuntimeScalar ioSlot = glob.getIO();
-                if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
-                        && !(io.ioHandle instanceof ClosedIOHandle)) {
-                    io.close();
-                }
-            }
-        }
+        // Intentionally empty. See javadoc above.
     }
 
     public RuntimeScalar defined() {

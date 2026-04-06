@@ -28,41 +28,46 @@ public class EmitStatement {
      * <p>
      * Must be called BEFORE {@code exitScope()} so the symbol table still has
      * the variable entries.
+     * <p>
+     * <b>Why we do NOT close IO handles here (do not re-add this!):</b>
+     * <p>
+     * Previous versions called {@code RuntimeScalar.scopeExitCleanup()} here to
+     * eagerly close IO on anonymous globs at scope exit, attempting to emulate
+     * Perl 5's deterministic DESTROY for lexical filehandles. This was fundamentally
+     * broken because <b>PerlOnJava has no reference counting</b> — there is no way
+     * to know at scope exit whether other variables (array elements, hash values,
+     * object fields, closures) still hold a reference to the same RuntimeGlob.
+     * <p>
+     * The eager close caused real bugs: Test2::Formatter::TAP stores handles in
+     * {@code $self->{handles}}, then uses {@code my $io = $handles->[$hid]} in a
+     * loop. When the loop body scope exited, the eager close destroyed the shared
+     * IO handle, breaking all subsequent test output.
+     * <p>
+     * <b>How fd recycling actually works (the correct mechanism):</b>
+     * Anonymous globs created by {@code open(my $fh, ...)} are registered with
+     * {@link RuntimeIO#registerGlobForFdRecycling} using a {@code PhantomReference}.
+     * When the glob becomes truly unreachable (all RuntimeScalars referencing it
+     * have been nulled or reassigned), the JVM GC enqueues the phantom reference
+     * and {@link RuntimeIO#processAbandonedGlobs()} closes the IO and recycles
+     * the fd. This is the JVM-native equivalent of Perl 5's refcount-based cleanup
+     * and is correct by construction — it only fires when the glob has no references.
+     * <p>
+     * Nulling the JVM local slots (below) is what makes this work: once the slot
+     * is null, the RuntimeGlob becomes unreachable from the JVM frame, making it
+     * eligible for GC collection and PhantomReference processing.
      *
      * @param ctx        The emitter context with the MethodVisitor and symbol table
      * @param scopeIndex The scope boundary being exited
-     * @param closeIO    If true, also call scopeExitCleanup on scalar variables to
-     *                   deterministically close IO on anonymous globs. Only set this
-     *                   to true in LOOP bodies where the value is discarded (VOID
-     *                   context). Do NOT set true for blocks that return values
-     *                   (do blocks, subroutine bodies, if/else blocks) because the
-     *                   returned value might be a file handle still in use by the caller.
      */
-    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean closeIO) {
-        if (closeIO) {
-            // For scalar variables in loop bodies, call cleanup to close IO
-            // on anonymous globs (deterministic DESTROY for lexical file handles).
-            java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
-            for (int idx : scalarIndices) {
-                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "scopeExitCleanup",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
-                        false);
-            }
-        }
-        // Null all my variable slots to help GC collect associated objects
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
+        // Null all my variable slots to help GC collect associated objects.
+        // For anonymous filehandle globs, this makes them unreachable so the
+        // PhantomReference-based fd recycling in RuntimeIO can close them.
         java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
         }
-    }
-
-    /** Convenience overload: null stores only, no IO cleanup (safe for all contexts). */
-    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
-        emitScopeExitNullStores(ctx, scopeIndex, false);
     }
 
     /**
@@ -388,7 +393,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !node.isSimpleBlock);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
@@ -506,7 +511,7 @@ public class EmitStatement {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack
