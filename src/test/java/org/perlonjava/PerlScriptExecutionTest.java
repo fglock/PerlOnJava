@@ -246,6 +246,12 @@ public class PerlScriptExecutionTest {
 
             // Read the content of the Perl script with UTF-8 encoding
             String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            // Normalize CRLF to LF, matching what readFileWithEncodingDetection() does
+            // for source files loaded by ./jperl. On Windows, Git checks out files with
+            // CRLF line endings, but the Lexer expects LF-only line endings.
+            if (content.indexOf('\r') >= 0) {
+                content = content.replace("\r\n", "\n").replace("\r", "\n");
+            }
             CompilerOptions options = new CompilerOptions();
             options.code = content; // Set the code to be executed
             options.fileName = filename; // Set the filename for reference
