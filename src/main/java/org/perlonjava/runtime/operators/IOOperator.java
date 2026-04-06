@@ -46,12 +46,12 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-            // Snapshot arguments to avoid multiple FETCH calls on tied variables.
-            // In Perl 5, arguments are evaluated once onto the stack before select runs.
-            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
-            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
-            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
-            RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
+            // Get the original scalars so we can modify bit vectors in-place
+            // (Perl's select() modifies its first 3 args to reflect which fds are ready)
+            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
+            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
+            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
+            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
 
             // Special case: if all bit vectors are undef, just sleep
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
