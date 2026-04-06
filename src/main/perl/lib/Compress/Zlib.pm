@@ -14,7 +14,7 @@ package Compress::Zlib;
 use strict;
 use warnings;
 
-our $VERSION = '2.106';
+our $VERSION = '2.219';
 
 use Exporter;
 our @ISA = qw(Exporter);
