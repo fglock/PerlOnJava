@@ -9,6 +9,7 @@ import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
@@ -27,24 +28,44 @@ public class InternalPipeHandle implements IOHandle {
     private boolean isEOF = false;
     private boolean blocking = true;
 
-    private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream, boolean isReader) {
+    // Shared between reader and writer ends so the reader can detect
+    // that the writer has been closed (EOF).  PipedInputStream.available()
+    // returns 0 for both "no data yet" and "writer closed", so we need
+    // this extra signal to distinguish the two cases.
+    private final AtomicBoolean writerClosed;
+
+    private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream,
+                               boolean isReader, AtomicBoolean writerClosed) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.isReader = isReader;
+        this.writerClosed = writerClosed;
     }
 
     /**
-     * Creates a reader end of an internal pipe.
+     * Creates a connected reader/writer pair of internal pipe handles.
+     * Both ends share a writerClosed flag so the reader can detect EOF.
+     */
+    public static InternalPipeHandle[] createPair(PipedInputStream inputStream, PipedOutputStream outputStream) {
+        AtomicBoolean shared = new AtomicBoolean(false);
+        return new InternalPipeHandle[]{
+                new InternalPipeHandle(inputStream, null, true, shared),
+                new InternalPipeHandle(null, outputStream, false, shared),
+        };
+    }
+
+    /**
+     * Creates a reader end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createReader(PipedInputStream inputStream) {
-        return new InternalPipeHandle(inputStream, null, true);
+        return new InternalPipeHandle(inputStream, null, true, new AtomicBoolean(false));
     }
 
     /**
-     * Creates a writer end of an internal pipe.
+     * Creates a writer end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createWriter(PipedOutputStream outputStream) {
-        return new InternalPipeHandle(null, outputStream, false);
+        return new InternalPipeHandle(null, outputStream, false, new AtomicBoolean(false));
     }
 
     /**
@@ -96,6 +117,12 @@ public class InternalPipeHandle implements IOHandle {
                     return new RuntimeScalar(result);
                 }
 
+                // No data available. Check if writer has closed (EOF).
+                if (writerClosed.get()) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+
                 // No data available - short sleep to avoid busy-wait
                 try {
                     Thread.sleep(10);
@@ -142,6 +169,7 @@ public class InternalPipeHandle implements IOHandle {
                 inputStream.close();
             } else if (!isReader && outputStream != null) {
                 outputStream.close();
+                writerClosed.set(true);  // Signal EOF to the reader end
             }
             isClosed = true;
             isEOF = true;
@@ -255,6 +283,12 @@ public class InternalPipeHandle implements IOHandle {
                     return new RuntimeScalar(result.toString());
                 }
 
+                // No data available. Check if writer has closed (EOF).
+                if (writerClosed.get()) {
+                    isEOF = true;
+                    return new RuntimeScalar("");  // EOF = 0 bytes read
+                }
+
                 // Non-blocking mode: return undef with EAGAIN when no data available
                 if (!blocking) {
                     getGlobalVariable("main::!").set(
@@ -281,12 +315,17 @@ public class InternalPipeHandle implements IOHandle {
      * Used by {@link FileDescriptorTable#isReadReady(IOHandle)} to implement
      * select() readiness checking for pipe handles.
      *
-     * @return true if data is available, the pipe is closed, or at EOF
+     * @return true if data is available, the writer has closed (EOF pending),
+     *         or the pipe is already at EOF
      */
     public boolean hasDataAvailable() {
-        if (isClosed || isEOF || !isReader) return false;
+        if (isClosed || !isReader) return false;
+        if (isEOF) return false;
         try {
-            return inputStream.available() > 0;
+            if (inputStream.available() > 0) return true;
+            // Writer closed with no data remaining = EOF is pending.
+            // select() should report this as readable (read will return 0 = EOF).
+            return writerClosed.get();
         } catch (IOException e) {
             return false;
         }

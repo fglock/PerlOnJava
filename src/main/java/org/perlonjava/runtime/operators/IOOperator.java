@@ -2000,9 +2000,11 @@ public class IOOperator {
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
-            // Create IOHandle implementations for the pipe ends
-            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
-            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
+            // Create IOHandle implementations for the pipe ends.
+            // Use createPair() so they share a writerClosed flag for EOF detection.
+            InternalPipeHandle[] pair = InternalPipeHandle.createPair(pipeIn, pipeOut);
+            InternalPipeHandle readerHandle = pair[0];
+            InternalPipeHandle writerHandle = pair[1];
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();

@@ -1746,6 +1746,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             InheritanceResolver.invalidateCache();
             return this;
         }
+        // Call DESTROY on blessed references before clearing.
+        // undef $obj explicitly discards the reference, so DESTROY should fire.
+        callDestroyIfNeeded(this);
         // Close IO handles when dropping a glob reference.
         // This mimics Perl's internal sv_clear behavior where IO handles are closed
         // when the glob's reference count drops to zero (independent of DESTROY).
@@ -1839,6 +1842,55 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     io.close();
                 }
             }
+        }
+        // Also handle blessed references with DESTROY methods.
+        // When a lexical variable holding a blessed reference goes out of scope,
+        // call DESTROY on the object. This is an approximation of Perl's
+        // reference-counted DESTROY: without ref counting, we may call DESTROY
+        // early if other references exist. The destroyCalled flag prevents
+        // double-DESTROY.
+        callDestroyIfNeeded(scalar);
+    }
+
+    /**
+     * Calls DESTROY on a blessed object if:
+     * 1. The scalar holds a blessed reference (blessId != 0)
+     * 2. DESTROY hasn't been called yet on this object (destroyCalled flag)
+     * 3. The class hierarchy defines a DESTROY method
+     * <p>
+     * Perl semantics: DESTROY exceptions are caught and warned "(in cleanup)".
+     * DESTROY is called with the blessed reference as $_[0].
+     * <p>
+     * Note: Without reference counting, this may call DESTROY while other
+     * references to the object still exist. The destroyCalled flag on
+     * RuntimeBase prevents double-DESTROY.
+     */
+    public static void callDestroyIfNeeded(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        int blessId = RuntimeScalarType.blessedId(scalar);
+        if (blessId == 0) return;
+        RuntimeBase base = (RuntimeBase) scalar.value;
+        if (base.destroyCalled) return;
+        base.destroyCalled = true;
+
+        String className = NameNormalizer.getBlessStr(blessId);
+        RuntimeScalar destroyMethod = InheritanceResolver.findMethodInHierarchy(
+                "DESTROY", className, null, 0);
+        if (destroyMethod == null || destroyMethod.type != CODE) {
+            base.destroyCalled = false;  // No DESTROY found, allow future attempts
+            return;
+        }
+
+        try {
+            // Call DESTROY($self) in void context
+            RuntimeArray args = new RuntimeArray();
+            args.push(scalar);
+            RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+        } catch (Exception e) {
+            // Perl: DESTROY exceptions are turned into warnings
+            String msg = e.getMessage();
+            if (msg == null) msg = e.getClass().getName();
+            Warnings.warn(new RuntimeArray(new RuntimeScalar("(in cleanup) " + msg + "\n")), RuntimeContextType.VOID);
         }
     }
 

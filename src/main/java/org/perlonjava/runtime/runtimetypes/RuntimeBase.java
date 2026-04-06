@@ -13,6 +13,10 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // Index to the class that this reference belongs
     public int blessId;
 
+    // Guard flag to prevent calling DESTROY more than once on the same object.
+    // Set to true after DESTROY has been called (or is being called).
+    public boolean destroyCalled;
+
     /**
      * Adds this entity to the specified RuntimeList.
      *
