@@ -270,7 +270,19 @@ public class IOOperator {
                     setBit(rresult, fd);
                     totalReady++;
                 }
-                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready.
+                // Also call finishConnect() to complete the connection handshake,
+                // since Perl's select() doesn't have a separate connect step.
+                if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
+                    SelectableChannel ch = key.channel();
+                    if (ch instanceof SocketChannel sc && sc.isConnectionPending()) {
+                        try {
+                            sc.finishConnect();
+                        } catch (IOException ignored) {
+                            // Connection error will be detected via SO_ERROR
+                        }
+                    }
+                }
                 if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
                     setBit(wresult, fd);
                     totalReady++;
@@ -1032,7 +1044,6 @@ public class IOOperator {
         try {
             result = baseHandle.sysread(length);
         } catch (Exception e) {
-            // e.printStackTrace();
             // This might happen with write-only handles
             getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(

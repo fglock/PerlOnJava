@@ -525,8 +525,10 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar sysread(int length) {
         try {
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O.
+            // Also use channel I/O when inputStream is not available
+            // (e.g., accepted sockets used with select/NIO).
+            if (socketChannel != null && (!blocking || inputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
                 int bytesRead = socketChannel.read(buf);
                 if (bytesRead == -1) {
