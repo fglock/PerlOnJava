@@ -247,9 +247,9 @@ foreach my $session (@children) {
 
 ## Fix Plan - Remaining Phases
 
-### Completed Phases (1-3, 4.1-4.4, 4.8)
+### Completed Phases (1-3, 4.1-4.4, 4.8, 4.11)
 
-All phases through 4.4 and Phase 4.8 are complete. See Progress Tracking below for details.
+All phases through 4.4, Phase 4.8, and Phase 4.11 are complete. See Progress Tracking below for details.
 
 ### Phase 4.5: Implement DESTROY workaround — HIGHEST REMAINING IMPACT
 
@@ -359,6 +359,25 @@ Likely needs adding the correct lib path or fixing Storable's module resolution.
 **Problem**: HTTP::Message byte-string handling has issues when processing HTTP requests/responses
 through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatch needs investigation.
 
+### Phase 4.12: fileno for regular file handles — BLOCKED BY DESTROY
+
+**Status**: Blocked (needs DESTROY/scope-exit cleanup first)
+**Difficulty**: Low (implementation ready) + Hard (DESTROY prerequisite)
+**Expected impact**: +3 tests (require_37033.t: tests 2, 5, 7; io/dup.t: tests 22, 24)
+
+**Problem**: Regular file opens don't call `assignFileno()`, so `fileno($fh)` returns undef
+for regular files. The fix is trivial (add `fh.assignFileno()` in RuntimeIO.open()), but it
+breaks perlio_leaks.t (12→4) because allocated fds aren't recycled without deterministic
+filehandle close (DESTROY) on lexical scope exit.
+
+**Current workaround**: fileno returns undef for regular files, which makes `is(undef, undef)`
+pass in tests that compare fd numbers of handles that were supposed to have been closed.
+
+**Implementation plan**:
+1. Implement DESTROY or scope-exit cleanup for lexical filehandles (Phase 4.5)
+2. Then add `fh.assignFileno()` in RuntimeIO.open() for regular files, JAR handles, and scalar-backed handles
+3. Verify both perlio_leaks.t (12/12) and require_37033.t (+3) pass
+
 ### Phase 5: JVM limitations (not fixable without major work)
 
 | Feature | Reason | Tests affected |
@@ -370,7 +389,7 @@ through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatc
 
 ## Progress Tracking
 
-### Current Status: Phase 4.8 complete — DESTROY workaround (Phase 4.5) is next highest impact
+### Current Status: Phase 4.11 complete — DESTROY workaround (Phase 4.5) is next highest impact
 
 ### Completed Phases
 - [x] Phase 1: Initial analysis (2026-04-04)
@@ -460,6 +479,28 @@ through POE::Filter::HTTPD. The exact nature of the bytes vs. characters mismatc
   - 15_kernel_internal.t: 7/12 → 12/12 (fd management works)
   - filehandles.t: 1/132 → 131/132 (only 1 TODO test fails)
   - signals.t: 45/46 → 46/46
+- [x] Phase 4.11: IO infrastructure fixes (2026-04-04)
+  - Fixed ClosedIOHandle.fileno() to return undef (not false) — matches Perl 5 semantics
+  - Wired DupIOHandle into duplicateFileHandle() — proper reference-counted dup with distinct
+    filenos. Handles that were already DupIOHandles use addDup(); first-time dups use createPair().
+    Original handle's fd is preserved (queried from IOHandle.fileno() for StandardIO).
+  - Fixed findFileHandleByDescriptor() to also check RuntimeIO.getByFileno() registry — enables
+    open-by-fd-number (e.g., `open($fh, ">&5")`) to find dup'd handles registered via registerExternalFd()
+  - Fixed openFileHandleDup() to use glob table for STDIN/STDOUT/STDERR instead of static
+    RuntimeIO.stdout/stdin/stderr fields — prevents stale handle references after redirections
+  - Added BorrowedIOHandle usage in all parsimonious dup paths (3-arg open with &= mode,
+    2-arg open with &= mode, and blessed object path) — close on parsimonious dup no longer
+    kills the original handle
+  - Fixed double-FETCH on tied $@ in WarnDie.warn() — Perl 5 fetches $@ exactly once when
+    warn() is called with no arguments; PerlOnJava was fetching twice (getDefinedBoolean + toString)
+  - Added InternalPipeHandle.hasDataAvailable() for select() readiness checking
+  - Added fd recycling pool (ConcurrentLinkedQueue) in RuntimeIO for POSIX-like fd reuse
+  - Files changed: ClosedIOHandle.java, IOOperator.java (duplicateFileHandle, findFileHandleByDescriptor,
+    openFileHandleDup, parsimonious dup paths), WarnDie.java, InternalPipeHandle.java,
+    DupIOHandle.java, BorrowedIOHandle.java, RuntimeIO.java
+  - tie_fetch_count.t: 175/343 → 178/343 (+3 from warn double-FETCH fix)
+  - perlio_leaks.t: 4/12 → 12/12 (fd recycling)
+  - All other tests at baseline (no regressions)
 
 ### Key Findings (Phase 3.1-3.4)
 - **foreach-push pattern**: Perl's foreach dynamically sees elements pushed during iteration.
@@ -550,11 +591,24 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
 ### Next Steps
 
 **Priority order:**
-1. **Phase 4.5: DESTROY workaround** — highest remaining impact (20-30+ tests)
-2. **Phase 4.6: TIOCSWINSZ stub** — low effort, unblocks k_signals_rerun
-3. **Phase 4.9: Storable path fix** — low effort, 3 filter tests
-4. **Phase 4.10: HTTP::Message bytes** — medium effort, 58 tests in 03_http.t
-5. **Phase 4.7: Windows platform support** — CI critical
+1. **Phase 4.5: DESTROY workaround** — highest remaining impact (20-30+ tests). Recommended
+   approach is Option A (trigger DESTROY on `delete`/`set` when overwriting a blessed reference).
+   Implementation plan:
+   - In `RuntimeHash.delete()`: check if removed value is a blessed ref with DESTROY, call it
+   - In `RuntimeScalar.set()`: when overwriting a blessed ref, check for DESTROY
+   - Guard against double-DESTROY: track whether DESTROY already called (flag on blessed object)
+   - DESTROY should be called in void context, catching any exceptions
+   - This also unblocks Phase 4.12 (fileno for regular files + scope-exit cleanup)
+2. **Phase 4.6: TIOCSWINSZ stub** — low effort, unblocks k_signals_rerun (8 tests).
+   Create `src/main/perl/lib/sys/ioctl.ph` with TIOCSWINSZ constant.
+3. **Phase 4.9: Storable path fix** — low effort, 3 filter tests.
+   Investigate why `use Storable` fails inside POE's filter tests (likely @INC path issue).
+4. **Phase 4.10: HTTP::Message bytes** — medium effort, 58 tests in 03_http.t.
+   Investigate bytes vs characters mismatch in HTTP::Message processing.
+5. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
+   Trivial implementation (add `assignFileno()` in RuntimeIO.open()) but requires DESTROY
+   for fd recycling. Will gain +3 tests in require_37033.t and io/dup.t.
+6. **Phase 4.7: Windows platform support** — CI critical. See detailed sub-steps above.
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern

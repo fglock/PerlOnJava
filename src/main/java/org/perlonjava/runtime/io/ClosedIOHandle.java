@@ -3,8 +3,7 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 public class ClosedIOHandle implements IOHandle {
 
@@ -27,7 +26,8 @@ public class ClosedIOHandle implements IOHandle {
 
     @Override
     public RuntimeScalar fileno() {
-        return RuntimeIO.handleIOError("Cannot get file number from a closed handle.");
+        // Perl 5: fileno() on a closed handle returns undef (not false)
+        return scalarUndef;
     }
 
     @Override

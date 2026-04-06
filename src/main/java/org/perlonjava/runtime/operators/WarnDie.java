@@ -128,6 +128,10 @@ public class WarnDie {
 
         if (messageStr.isEmpty()) {
             RuntimeScalar err = getGlobalVariable("main::@");
+            // Resolve tied $@ once to avoid double FETCH (Perl 5 fetches $@ exactly once)
+            if (err.type == RuntimeScalarType.TIED_SCALAR) {
+                err = err.tiedFetch();
+            }
             if (err.getDefinedBoolean()) {
                 // If $@ is a reference, pass it directly to the signal handler
                 if (RuntimeScalarType.isReference(err)) {
