@@ -31,18 +31,26 @@ public class EmitStatement {
      *
      * @param ctx        The emitter context with the MethodVisitor and symbol table
      * @param scopeIndex The scope boundary being exited
+     * @param closeIO    If true, also call scopeExitCleanup on scalar variables to
+     *                   deterministically close IO on anonymous globs. Only set this
+     *                   to true in LOOP bodies where the value is discarded (VOID
+     *                   context). Do NOT set true for blocks that return values
+     *                   (do blocks, subroutine bodies, if/else blocks) because the
+     *                   returned value might be a file handle still in use by the caller.
      */
-    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
-        // For scalar variables, call cleanup to close IO on anonymous globs
-        // (deterministic DESTROY equivalent for lexical file handles).
-        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
-        for (int idx : scalarIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    "scopeExitCleanup",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
-                    false);
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean closeIO) {
+        if (closeIO) {
+            // For scalar variables in loop bodies, call cleanup to close IO
+            // on anonymous globs (deterministic DESTROY for lexical file handles).
+            java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
+            for (int idx : scalarIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "scopeExitCleanup",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
         }
         // Null all my variable slots to help GC collect associated objects
         java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
@@ -50,6 +58,11 @@ public class EmitStatement {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
         }
+    }
+
+    /** Convenience overload: null stores only, no IO cleanup (safe for all contexts). */
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
+        emitScopeExitNullStores(ctx, scopeIndex, false);
     }
 
     /**
@@ -375,7 +388,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !node.isSimpleBlock);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
@@ -493,7 +506,7 @@ public class EmitStatement {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack

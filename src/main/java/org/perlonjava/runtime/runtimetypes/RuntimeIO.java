@@ -271,7 +271,7 @@ public class RuntimeIO extends RuntimeScalar {
     private static int tryRecycleLowestFd() {
         List<Integer> candidates = new ArrayList<>();
         Integer recycled;
-        while ((recycled = freedFilenos.poll()) != null) {
+        while ((recycled = recycledFds.poll()) != null) {
             candidates.add(recycled);
         }
         if (candidates.isEmpty()) {
@@ -281,9 +281,8 @@ public class RuntimeIO extends RuntimeScalar {
         int fd = candidates.get(0);
         // Put back the rest
         for (int i = 1; i < candidates.size(); i++) {
-            freedFilenos.add(candidates.get(i));
+            recycledFds.add(candidates.get(i));
         }
->>>>>>> 547f49215 (feat: implement fd recycling for lexical filehandles via scope-exit cleanup)
         return fd;
     }
 
