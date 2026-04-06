@@ -154,13 +154,13 @@ foreach my $session (@children) {
 | 05_filters/02_grep.t | **PASS** (48/48) | |
 | 05_filters/03_http.t | **PASS** (137/137) | All tests pass now |
 | 05_filters/04_line.t | **PASS** (50/50) | |
-| 05_filters/05_map.t | FAIL | Minor test failure |
+| 05_filters/05_map.t | PARTIAL (24/27) | 3 TODO failures |
 | 05_filters/06_recordblock.t | **PASS** (36/36) | |
-| 05_filters/07_reference.t | FAIL | Storable not available at test time |
+| 05_filters/07_reference.t | PARTIAL (32/34) | 2 failures: Compress::Zlib not available (XS) |
 | 05_filters/08_stream.t | **PASS** (24/24) | |
 | 05_filters/50_stackable.t | **PASS** (29/29) | |
-| 05_filters/51_reference_die.t | FAIL (0/5) | Storable not available at test time |
-| 05_filters/99_filterchange.t | FAIL | Filter::Reference compilation |
+| 05_filters/51_reference_die.t | PARTIAL (3/5) | 2 failures: YAML::PP doesn't die on terminated YAML |
+| 05_filters/99_filterchange.t | HANG | DESTROY-related hang |
 | 06_queues/01_array.t | **PASS** (2047/2047) | |
 | 07_exceptions/01_normal.t | **PASS** (7/7) | |
 | 07_exceptions/02_turn_off.t | **PASS** (4/4) | |
@@ -207,9 +207,8 @@ foreach my $session (@children) {
 
 | Issue | Impact | Difficulty |
 |-------|--------|------------|
-| DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files | Medium-Hard |
-| Storable not found by POE test runner | 3 filter tests | Low (path issue?) |
-| TIOCSWINSZ stub (Phase 4.6) | wheel_run, k_signals_rerun | Low |
+| DESTROY workaround (Phase 4.5) | 20-30+ tests across 5+ wheel test files + ses_session hang | Medium-Hard |
+| Compress::Zlib (XS) | 07_reference.t (2 tests) | Not fixable (XS module) |
 
 ### Event Loop Tests (t/30_loops/select/)
 
@@ -318,17 +317,13 @@ All sub-steps (4.7.1-4.7.6) completed:
 - Config.pm: Windows osname detection
 - RuntimeIO.java: Platform-specific ENOTEMPTY
 
-### Phase 4.9: Storable path fix — LOW EFFORT
+### Phase 4.9: Storable path fix — RESOLVED (not a real issue)
 
-**Status**: Not started
-**Difficulty**: Low
-**Expected impact**: 3 filter tests (07_reference.t, 51_reference_die.t, 99_filterchange.t)
-
-**Problem**: POE's test runner can't find Storable at test time. Storable is available in
-PerlOnJava (XSLoader backend) but the test's @INC doesn't include the right path.
-
-**Implementation plan**: Investigate why `use Storable` fails inside POE's filter tests.
-Likely needs adding the correct lib path or fixing Storable's module resolution.
+**Status**: Investigated (2026-04-06). Storable loads fine (`use Storable` works).
+The 07_reference.t and 51_reference_die.t failures are actually caused by:
+- Compress::Zlib not available (XS module, can't fix)
+- YAML::PP doesn't die on terminated YAML (behavior difference, not a bug)
+99_filterchange.t hangs due to DESTROY.
 
 ### Phase 4.10: HTTP::Message bytes handling — DONE
 
@@ -591,9 +586,7 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
    - This also unblocks Phase 4.12 (fileno for regular files + scope-exit cleanup)
    - **Note**: ses_session.t hangs because POE postbacks use DESTROY-based refcount cleanup.
      Without DESTROY, sessions using postbacks/callbacks are never garbage collected.
-2. **Phase 4.9: Storable path fix** — low effort, 3 filter tests.
-   Investigate why `use Storable` fails inside POE's filter tests (likely @INC path issue).
-3. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
+2. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
    Trivial implementation (add `assignFileno()` in RuntimeIO.open()) but requires DESTROY
    for fd recycling. Will gain +3 tests in require_37033.t and io/dup.t.
 
