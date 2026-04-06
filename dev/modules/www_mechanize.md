@@ -1,8 +1,8 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 12 Complete — TAP::Parser::Iterator::Process fix for no-fork platforms
+## Status: Phase 13 Complete — TAP harness fix + scopeExitCleanup fix + Clone fallback
 
-**Branch**: `feature/www-mechanize-support`
+**Branch**: `feature/www-mechanize-tap-fix`
 **Date started**: 2026-04-04
 
 ## Background
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 12 complete — TAP harness runs cleanly on no-fork platforms
+### Current Status: Phase 13 complete — 877/877 subtests via harness (61/63 test files, 100% pass rate)
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -510,7 +510,7 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 
 | Component | Status |
 |-----------|--------|
-| Non-server tests | ~542/545 (99.8%) |
+| Non-server tests | 877/877 via harness (61 test files, excluding cookies.t and frames.t) |
 | Local server tests (HTTP::Daemon) | 18/18 (0 timeouts) |
 | HTML::Parser (HTMLParser.java) | Chunked parsing, argspec, marked_sections, CDATA, raw text elements |
 | HTML::Form | Working (parse, submit, field access) |
@@ -518,3 +518,142 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 | Capture::Tiny | capture/capture_stdout/capture_stderr/capture_merged all working |
 | LWP::MediaTypes | media.types bundled, MIME detection working |
 | IO/socket cleanup | closeIOOnDrop for gensym'd globs |
+| TAP::Harness parallel mode | Working (j4 verified) |
+| Clone module | Working (Clone::PP fallback) |
+
+---
+
+## Phase 13: TAP Harness Fix + scopeExitCleanup + Clone Fallback — COMPLETE
+
+**Branch**: `feature/www-mechanize-tap-fix`
+**Date**: 2026-04-06
+
+### Problem
+
+Running `./jcpan -j 4 -t WWW::Mechanize` showed **all tests failing** (0% pass rate) with
+the harness reporting "Failed X/X subtests" for every test file. Every test printed its
+plan line (`1..N`) but no `ok` lines appeared. The root cause was a chain of three bugs.
+
+### Root Cause Analysis
+
+#### Bug 17: scopeExitCleanup closes IO on shared anonymous globs in foreach loops (CRITICAL)
+
+- **Files**: `EmitForeach.java`, `EmitStatement.java`, `RuntimeScalar.java`
+- **Symptom**: `Test::More::ok()` silently failed — `print $io $ok` returned false/empty
+- **Root cause chain**:
+  1. Test2::Formatter::TAP stores output handles in `$self->{handles}` array
+  2. `Test2::Formatter::TAP::write()` and `print_optimal_pass()` copy the handle
+     into a lexical: `my $io = $handles->[$hid]`
+  3. Both methods iterate with `for my $set (@tap)` which creates a foreach body scope
+  4. At the end of each foreach iteration, `emitScopeExitNullStores(ctx, bodyScopeIndex, true)`
+     calls `scopeExitCleanup()` on ALL scalar lexicals in the body scope
+  5. `scopeExitCleanup()` sees `$io` is a GLOBREFERENCE to an anonymous glob (globName == null)
+     and closes the IO handle
+  6. This closes the SHARED RuntimeIO object — the same IO used by `$handles->[0]`
+  7. After `plan()` writes "1..N", the output handle is dead. All subsequent `ok()` calls
+     silently fail (print returns empty, but `print_optimal_pass` returns 1 unconditionally)
+- **Fix**: Three changes to make scopeExitCleanup safe for shared globs:
+  1. `EmitForeach.java`: Track which variables in the foreach body scope were targets of
+     `open()` calls using `ScopedSymbolTable.markAsOpenTarget()`. Only emit
+     `scopeExitCleanup` for those variables, not for all scalars
+  2. `EmitStatement.java`: Same tracking for while/do-while loop bodies
+  3. `RuntimeScalar.java`: Refined `scopeExitCleanup()` to be safe for variables that
+     are copies of glob references (never close IO on a variable that didn't open it)
+- **Reproducer**:
+  ```perl
+  open(my $h, ">&", \*STDOUT) or die;
+  my @a = ($h);
+  for my $x (1) {
+      my $copy = $a[0];  # copy of glob ref
+  }
+  # $h is now closed (fileno returns undef) — BUG
+  # System Perl: $h still alive (fileno returns 3) — CORRECT
+  ```
+
+#### Bug 18: TAP::Parser::Iterator::Process `$err` comparison on no-fork platforms (HIGH)
+
+- **File**: `TAP/Parser/Iterator/Process.pm` (JAR overlay)
+- **Symptom**: `Argument "" isn't numeric in numeric eq (==)` warnings during parallel test runs
+- **Root cause**: On no-fork platforms, `_use_open3()` returns false and the fallback path
+  sets `$err` to an empty string. Later code does `$err == 0` which warns because `""` is
+  not numeric.
+- **Fix**: Guard `$err` comparisons with `defined($err) && length($err)` before numeric ops.
+
+#### Bug 19: Clone.pm XSLoader fallback not triggering (MEDIUM)
+
+- **File**: `Clone.pm` (JAR overlay)
+- **Symptom**: `Undefined subroutine &Clone::clone` — LWP::UserAgent::clone() fails
+- **Root cause**: `XSLoader::load('Clone', $VERSION)` returned success via `@ISA` fallback
+  (Exporter) without actually providing the `clone()` function. The `$loaded = 1` line
+  executed unconditionally, preventing the Clone::PP fallback.
+- **Fix**: Changed `$loaded = 1` to `$loaded = 1 if defined(&clone)`.
+
+#### Bug 20: select() EOF detection and handle lifecycle for TAP parallel mode (HIGH)
+
+- **File**: `IOOperator.java`, `RuntimeIO.java`, `ProcessInputHandle.java`,
+  `ProcessOutputHandle.java`, `IOHandle.java`
+- **Symptom**: TAP harness in parallel mode (`-j N`) hung indefinitely waiting for child
+  process output that had already finished
+- **Root cause**: Multiple issues in the select()/IO lifecycle chain:
+  1. `select()` didn't properly detect EOF on pipe handles from child processes
+  2. Process input/output handles lacked proper `isEof()` implementation
+  3. Handle close didn't unregister from the fileno registry, causing stale entries
+- **Fix**: Added `isEof()` to IOHandle interface and implementations. Fixed select() to
+  check EOF status. Added fileno unregistration on close.
+
+### Commits
+
+1. `81b90c789` — Guard `$err` comparisons in TAP::Parser::Iterator::Process for no-fork
+2. `acc4a157b` — select() EOF detection and handle lifecycle for TAP parallel mode
+3. `ba0d2daad` — DateTime module loading: strict vars, Clone fallback, XSLoader recursion
+
+### Test Results (2026-04-06)
+
+**Test command**: `./jcpan -j 4 -t WWW::Mechanize` (with cookies.t and frames.t excluded
+from harness due to hangs — see below)
+
+**Harness results**: `All tests successful. Files=61, Tests=877, 91 wallclock secs`
+
+| Category | Files | Subtests | Pass Rate |
+|----------|-------|----------|-----------|
+| Non-local tests (t/*.t) | 41/43 | 565/565 | 100% |
+| Local server tests (t/local/*.t) | 18/18 | 311/311 | 100% |
+| mech-dump tests | 2/2 | 2/2 | 100% |
+| **Total (excl. hanging)** | **61/63** | **877/877** | **100%** |
+
+### Individual test results for hanging/failing tests
+
+| Test | Result | Root Cause | Status |
+|------|--------|------------|--------|
+| cookies.t | HANG (0/14) | `TestServer.pm` requires `open FH, '-\|'` (fork-open, no exec) | Known JVM limitation |
+| frames.t | HANG at test 3 (2/7) | `$mech->get(URI::file->...)` hangs on file:// URI fetch | LWP file:// handler issue |
+| field.t | 15/16 (1 TODO fail) | HTML::TokeParser limitation, marked TODO in test | Not a PerlOnJava bug |
+| local/overload.t | SKIP | Test skips itself | OK |
+
+### Remaining Issues
+
+1. **cookies.t** — Blocked on JVM `fork()` limitation. The test uses `TestServer.pm` which
+   requires `open FH, '-|'` (fork-open without exec). No workaround available. LOW priority.
+
+2. **frames.t** — Hangs on `$mech->get()` with a `file://` URI. The `URI::file->new_abs()`
+   creates a local file URL and LWP's file handler appears to block. This may be related to
+   how LWP::Protocol::file handles local reads, or a blocking IO issue. MEDIUM priority.
+
+3. **field.t TODO test** — 1 subtest out of 16 is a known HTML::TokeParser limitation
+   (marked as TODO in the test itself). Not a PerlOnJava bug.
+
+### Verification
+
+```bash
+# Full build + unit tests (no regressions)
+make
+
+# Run WWW::Mechanize tests via harness (excludes hanging tests)
+cd ~/.cpan/build/WWW-Mechanize-2.20-0
+HARNESS_OPTIONS=j4 jperl -MTest::Harness \
+  -e 'my @t = grep { !/cookies|frames/ } glob("t/*.t t/local/*.t t/mech-dump/*.t"); runtests(@t)'
+
+# Run individual tests directly
+jperl t/00-load.t          # Quick smoke test
+jperl t/local/get.t        # Local server test
+```
