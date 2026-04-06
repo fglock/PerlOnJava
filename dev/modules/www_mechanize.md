@@ -1,6 +1,6 @@
 # WWW::Mechanize Support for PerlOnJava
 
-## Status: Phase 11 Complete — 99.8% non-server pass rate + all local server tests pass
+## Status: Phase 12 Complete — TAP::Parser::Iterator::Process fix for no-fork platforms
 
 **Branch**: `feature/www-mechanize-support`
 **Date started**: 2026-04-04
@@ -131,7 +131,7 @@ make
 
 ## Progress Tracking
 
-### Current Status: Phase 11 complete — 542/545 non-server subtests (99.8%) + all 18 local server tests pass
+### Current Status: Phase 12 complete — TAP harness runs cleanly on no-fork platforms
 
 ### Completed Phases
 - [x] Phase 1: Parser and UNIVERSAL::isa fixes (2026-04-04)
@@ -189,6 +189,25 @@ make
   - find_link_xhtml.t: 7/10 -> 10/10 (CDATA + legacy mode)
   - image-parse.t: 41/47 -> 47/47 (CSS MIME type detection)
   - `make` passes (all unit tests green)
+- [x] Phase 12: TAP::Parser::Iterator::Process fix for no-fork platforms (2026-04-06)
+  - Fixed `_next()`: guarded `$fh == $err` with `ref $err` to avoid comparing filehandle against empty string
+  - Fixed `_finish()`: guarded `$err->close` with `ref $err` so cleanup doesn't call method on non-object
+  - Root cause: non-open3 path (no fork) sets `$err = ''` but still creates IO::Select for `$out`; the `_next` and `_finish` methods assumed `$err` is always a real filehandle when `$sel` exists
+  - Eliminates: `Argument "" isn't numeric in numeric eq (==)` warning during `make test`
+  - Eliminates: `Can't call method "close" on an undefined value` error during test cleanup
+  - `make` passes (all unit tests green)
+
+### Bug 17: TAP harness warning on no-fork platforms (FIXED)
+- **File**: `TAP/Parser/Iterator/Process.pm` — `_next()` and `_finish()` methods
+- **Symptom**: `Argument "" isn't numeric in numeric eq (==)` warning during `make test`,
+  followed by `Can't call method "close" on an undefined value` at cleanup
+- **Root cause**: On no-fork platforms (PerlOnJava), `_use_open3` returns false and the
+  fallback path sets `$err = ''` (empty string). A later patch added `IO::Select` for the
+  `$out` pipe, but `_next()` still compared `$fh == $err` (filehandle vs empty string)
+  and `_finish()` still called `$err->close` assuming `$err` was a filehandle whenever
+  `$sel` was set.
+- **Fix**: Guarded both comparisons with `ref $err` so they only execute when `$err` is
+  an actual IO::Handle object.
 
 ### Bug 7: HTMLParser argspec "self" doubled for method callbacks (FIXED)
 - **File**: `HTMLParser.java:fireEvent()` + `buildEventDataFromArgspec()`
