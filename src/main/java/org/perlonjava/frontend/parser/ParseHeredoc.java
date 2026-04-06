@@ -132,8 +132,11 @@ public class ParseHeredoc {
 
                 if (token.type == LexerTokenType.NEWLINE || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)) {
                     lastTokenWasNewline = (token.type == LexerTokenType.NEWLINE);
-                    // End of the current line
+                    // End of the current line — strip trailing \r for Windows CRLF compatibility
                     String line = currentLine.toString();
+                    if (line.endsWith("\r")) {
+                        line = line.substring(0, line.length() - 1);
+                    }
                     if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Completed line: '" + line + "'");
                     lines.add(line);
                     currentLine.setLength(0); // Reset the current line
