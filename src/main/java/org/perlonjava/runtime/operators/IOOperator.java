@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
@@ -1685,8 +1686,9 @@ public class IOOperator {
                 SocketIO socketIOHandle = new SocketIO(channel, family);
                 socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
-                getGlobalVariable("main::!").set("UDP sockets not yet fully implemented");
-                return scalarFalse;
+                DatagramChannel channel = DatagramChannel.open(family);
+                SocketIO socketIOHandle = new SocketIO(channel, family);
+                socketIO = new RuntimeIO(socketIOHandle);
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket type: " + type);
                 return scalarFalse;
@@ -2300,8 +2302,29 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            // For now, ignore flags and TO address - implement basic send
-            // Send message as string
+            // Check if this is a UDP socket with a TO address (4th arg)
+            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                if (args.length >= 4) {
+                    // 4th arg is packed sockaddr_in (destination address)
+                    String packedAddr = args[3].toString();
+                    byte[] addrBytes = packedAddr.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                    if (addrBytes.length >= 8) {
+                        int port = ((addrBytes[2] & 0xFF) << 8) | (addrBytes[3] & 0xFF);
+                        String ip = String.format("%d.%d.%d.%d",
+                                addrBytes[4] & 0xFF, addrBytes[5] & 0xFF,
+                                addrBytes[6] & 0xFF, addrBytes[7] & 0xFF);
+                        InetSocketAddress target = new InetSocketAddress(ip, port);
+                        byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                        int sent = sio.sendTo(data, target);
+                        return new RuntimeScalar(sent);
+                    }
+                }
+                // No TO address — send to connected peer (not typical for UDP)
+                getGlobalVariable("main::!").set("send: UDP requires destination address");
+                return scalarUndef;
+            }
+
+            // TCP: ignore flags and TO address - send via stream
             RuntimeScalar result = socketIO.write(message);
 
             if (result != null && !result.equals(scalarFalse)) {
@@ -2329,7 +2352,7 @@ public class IOOperator {
 
         try {
             RuntimeScalar socketHandle = args[0].scalar();
-            RuntimeScalar buffer = args[1].scalar();
+            RuntimeScalar buffer = args[1].scalar().scalarDeref();
             int length = args[2].scalar().getInt();
             int flags = args.length > 3 ? args[3].scalar().getInt() : 0;
 
@@ -2339,13 +2362,27 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            // Read data from socket
+            // Check if this is a UDP socket
+            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                byte[] data = sio.recvFrom(length);
+                if (data != null) {
+                    buffer.set(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
+                    // Return the sender's packed sockaddr (Perl recv() returns this)
+                    return sio.getLastReceivedFrom();
+                } else {
+                    buffer.set("");
+                    return scalarUndef;
+                }
+            }
+
+            // TCP: Read data from socket stream
             RuntimeScalar data = socketIO.ioHandle.read(length);
             if (data != null && !data.equals(scalarUndef)) {
                 buffer.set(data.toString());
-                return new RuntimeScalar(data.toString().length());
+                // For TCP, return the empty string (Perl returns "" for connected sockets)
+                return new RuntimeScalar("");
             } else {
-                getGlobalVariable("main::!").set("Recv failed");
+                buffer.set("");
                 return scalarUndef;
             }
 

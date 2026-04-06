@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.*;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -41,6 +42,10 @@ public class SocketIO implements IOHandle {
     private ProtocolFamily protocolFamily;
     // Track bound address for lazy server socket creation in listen()
     private InetSocketAddress boundAddress;
+    // DatagramChannel for UDP sockets
+    private DatagramChannel datagramChannel;
+    // Last received sender address for recv() return value
+    private SocketAddress lastReceivedFrom;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -102,6 +107,18 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Constructs a SocketIO instance from a DatagramChannel for UDP sockets.
+     *
+     * @param channel the datagram channel
+     * @param family  the protocol family (INET, INET6, etc.)
+     */
+    public SocketIO(DatagramChannel channel, ProtocolFamily family) {
+        this.datagramChannel = channel;
+        this.protocolFamily = family;
+        this.socketOptions = new HashMap<>();
+    }
+
+    /**
      * Binds the socket to a specific address and port.
      *
      * @param address the IP address to bind to
@@ -111,7 +128,10 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar bind(String address, int port) {
         try {
             InetSocketAddress bindAddr = new InetSocketAddress(address, port);
-            if (socket != null) {
+            if (datagramChannel != null) {
+                datagramChannel.bind(bindAddr);
+                this.boundAddress = bindAddr;
+            } else if (socket != null) {
                 socket.bind(bindAddr);
                 this.boundAddress = bindAddr;
             } else if (serverSocket != null) {
@@ -617,7 +637,9 @@ public class SocketIO implements IOHandle {
         try {
             InetSocketAddress localAddress = null;
 
-            if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
+            if (datagramChannel != null && datagramChannel.getLocalAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) datagramChannel.getLocalAddress();
+            } else if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) socket.getLocalSocketAddress();
             } else if (serverSocket != null && serverSocket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) serverSocket.getLocalSocketAddress();
@@ -679,6 +701,67 @@ public class SocketIO implements IOHandle {
         } catch (Exception e) {
             return scalarUndef;
         }
+    }
+
+    /**
+     * Check if this is a datagram (UDP) socket.
+     */
+    public boolean isDatagramSocket() {
+        return datagramChannel != null;
+    }
+
+    /**
+     * Send a datagram to a specific address.
+     *
+     * @param data    the data to send
+     * @param target  the destination address
+     * @return number of bytes sent, or -1 on error
+     */
+    public int sendTo(byte[] data, SocketAddress target) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
+        return datagramChannel.send(buf, target);
+    }
+
+    /**
+     * Receive a datagram. Stores the sender address accessible via getLastReceivedFrom().
+     *
+     * @param maxLength maximum number of bytes to receive
+     * @return the received data as a byte array, or null on error
+     */
+    public byte[] recvFrom(int maxLength) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
+        lastReceivedFrom = datagramChannel.receive(buf);
+        if (lastReceivedFrom == null) {
+            return null;
+        }
+        buf.flip();
+        byte[] data = new byte[buf.remaining()];
+        buf.get(data);
+        return data;
+    }
+
+    /**
+     * Get the sender address from the last recvFrom() call.
+     * Returns a packed sockaddr_in structure suitable for Perl.
+     */
+    public RuntimeScalar getLastReceivedFrom() {
+        if (lastReceivedFrom instanceof InetSocketAddress addr) {
+            return packSockaddrIn(addr);
+        }
+        return scalarUndef;
+    }
+
+    /**
+     * Get the DatagramChannel for select() support.
+     */
+    public DatagramChannel getDatagramChannel() {
+        return datagramChannel;
     }
 
     /**
