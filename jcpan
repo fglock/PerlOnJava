@@ -42,4 +42,9 @@ else
     exit 1
 fi
 
+# Set default per-test timeout (300s) to kill hanging tests
+# Tests that produce no output for this duration will be killed
+# Override: JPERL_TEST_TIMEOUT=0 (disable) or JPERL_TEST_TIMEOUT=600 (10 min)
+export JPERL_TEST_TIMEOUT="${JPERL_TEST_TIMEOUT:-300}"
+
 exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "${ARGS[@]}"

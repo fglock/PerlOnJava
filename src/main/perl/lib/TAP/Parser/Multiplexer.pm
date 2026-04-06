@@ -62,6 +62,11 @@ sub _initialize {
     $self->{select} = IO::Select->new;
     $self->{avid}   = [];                # Parsers that can't select
     $self->{count}  = 0;
+    # PerlOnJava: per-test inactivity timeout to kill hanging tests
+    # Set JPERL_TEST_TIMEOUT env var (seconds, 0 = disabled)
+    $self->{_test_timeout}    = $ENV{JPERL_TEST_TIMEOUT} || 0;
+    $self->{_parser_activity} = {};      # "$parser" => last_activity_time
+    $self->{_parser_killed}   = {};      # "$parser" => 1 if already killed
     return $self;
 }
 
@@ -94,6 +99,8 @@ sub add {
         }
 
         $self->{count}++;
+        $self->{_parser_activity}{"$parser"} = time()
+            if $self->{_test_timeout};
     }
     else {
         push @{ $self->{avid} }, [ $parser, $stash ];
@@ -120,6 +127,7 @@ sub _iter {
     my $sel   = $self->{select};
     my $avid  = $self->{avid};
     my @ready = ();
+    my $test_timeout = $self->{_test_timeout};
 
     return sub {
 
@@ -133,8 +141,58 @@ sub _iter {
 
         until (@ready) {
             return unless $sel->count;
-            @ready = $sel->can_read;
-            last if @ready || !$!{EINTR};
+
+            if ($test_timeout) {
+                # Poll with 10s interval so we can check for stuck tests
+                @ready = $sel->can_read(10);
+
+                if (@ready) {
+                    # Update activity timestamps for parsers with ready handles
+                    my $now = time();
+                    my %updated;
+                    for my $entry (@ready) {
+                        my (undef, $p) = @$entry;
+                        $self->{_parser_activity}{"$p"} = $now
+                            unless $updated{"$p"}++;
+                    }
+                    last;
+                }
+
+                next if $!{EINTR};
+
+                # Poll timeout - check for stuck parsers
+                my $now = time();
+                my %seen;
+                for my $entry ($sel->handles) {
+                    my ($h, $p, $st, @fns) = @$entry;
+                    next if $seen{"$p"}++;
+                    next if $self->{_parser_killed}{"$p"};
+                    my $last = $self->{_parser_activity}{"$p"} || $now;
+                    next unless ($now - $last) > $test_timeout;
+
+                    # This parser exceeded the inactivity timeout
+                    $self->{_parser_killed}{"$p"} = 1;
+                    warn "# Test exceeded ${test_timeout}s inactivity timeout,"
+                        . " killing child process\n";
+
+                    # Kill the child process via the parser's iterator
+                    eval {
+                        my $iter = $p->{iterator};
+                        kill 9, $iter->{pid} if $iter && $iter->{pid};
+                    };
+
+                    # Remove all handles for this parser and signal end-of-input
+                    $sel->remove(@fns);
+                    $self->{count}--;
+                    delete $self->{_parser_activity}{"$p"};
+                    return ($p, $st, undef);
+                }
+                next;
+            }
+            else {
+                @ready = $sel->can_read;
+                last if @ready || !$!{EINTR};
+            }
         }
 
         my ( $h, $parser, $stash, @handles ) = @{ shift @ready };
@@ -143,6 +201,7 @@ sub _iter {
         unless ( defined $result ) {
             $sel->remove(@handles);
             $self->{count}--;
+            delete $self->{_parser_activity}{"$parser"} if $test_timeout;
 
             # Force another can_read - we may now have removed a handle
             # thought to have been ready.
