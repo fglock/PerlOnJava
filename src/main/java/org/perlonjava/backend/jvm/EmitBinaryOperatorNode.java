@@ -58,7 +58,7 @@ public class EmitBinaryOperatorNode {
             case "close", "readline", "fileno", "getc", "tell" ->
                     EmitOperator.handleReadlineOperator(emitterVisitor, node);
 
-            case "binmode", "seek" -> EmitOperator.handleBinmodeOperator(emitterVisitor, node);
+            case "binmode", "seek", "sysseek" -> EmitOperator.handleBinmodeOperator(emitterVisitor, node);
 
             // String operations
             case "join", "sprintf" -> EmitOperator.handleSubstr(emitterVisitor, node);

@@ -163,6 +163,14 @@ public class SocketIO implements IOHandle {
 
             // Use SocketChannel for non-blocking connect support
             if (socketChannel != null && !blocking) {
+                // Auto-bind if not already bound so getsockname() returns local address
+                // even before the connection completes (Java NIO doesn't expose the
+                // local address until finishConnect() without this).
+                // Bind to the same IP as the target so getsockname() returns the
+                // correct local address (matching Perl's kernel behavior).
+                if (socketChannel.getLocalAddress() == null) {
+                    socketChannel.bind(new InetSocketAddress(target.getAddress(), 0));
+                }
                 boolean connected = socketChannel.connect(target);
                 if (!connected) {
                     // Connection in progress — set EINPROGRESS
@@ -286,22 +294,36 @@ public class SocketIO implements IOHandle {
             if (serverSocket == null) {
                 // Convert from client socket to server socket.
                 // Close the client socket/channel and create a ServerSocketChannel.
-                InetSocketAddress addr = this.boundAddress;
+                // Get the actual bound address (with OS-assigned port) before closing.
+                InetSocketAddress addr = null;
+                if (socketChannel != null) {
+                    try {
+                        java.net.SocketAddress sa = socketChannel.getLocalAddress();
+                        if (sa instanceof InetSocketAddress isa) addr = isa;
+                    } catch (IOException ignored) {}
+                }
+                if (addr == null && socket != null) {
+                    java.net.SocketAddress sa = socket.getLocalSocketAddress();
+                    if (sa instanceof InetSocketAddress isa) addr = isa;
+                }
+                if (addr == null) {
+                    addr = this.boundAddress;
+                }
                 if (socketChannel != null) {
                     socketChannel.close();
                     socketChannel = null;
                 }
                 if (socket != null) {
-                    // Don't close if we got the bound address from the socket
-                    if (addr == null && socket.getLocalSocketAddress() instanceof InetSocketAddress localAddr) {
-                        addr = localAddr;
-                    }
                     socket.close();
                     socket = null;
                 }
 
                 // Create a new ServerSocketChannel and bind to the same address
                 serverSocketChannel = ServerSocketChannel.open();
+                // Transfer non-blocking mode from the original socket
+                if (!blocking) {
+                    serverSocketChannel.configureBlocking(false);
+                }
                 serverSocket = serverSocketChannel.socket();
 
                 // Apply stored SO_REUSEADDR option if set
@@ -394,18 +416,8 @@ public class SocketIO implements IOHandle {
      */
     @Override
     public RuntimeScalar fileno() {
-        if (socketChannel != null) {
-            return new RuntimeScalar(socketChannel.hashCode());
-        }
-        if (serverSocketChannel != null) {
-            return new RuntimeScalar(serverSocketChannel.hashCode());
-        }
-        if (socket != null) {
-            return new RuntimeScalar(socket.hashCode());
-        }
-        if (serverSocket != null) {
-            return new RuntimeScalar(serverSocket.hashCode());
-        }
+        // Return undef so RuntimeIO.fileno() assigns a proper small fd number
+        // via the registry system, enabling select() bit-vector operations.
         return scalarUndef;
     }
 
@@ -479,8 +491,9 @@ public class SocketIO implements IOHandle {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O,
+            // and also when outputStream is not available (NIO-created sockets)
+            if (socketChannel != null && (!blocking || outputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
                 int written = socketChannel.write(buf);
                 return written > 0 ? scalarTrue : scalarFalse;
@@ -579,8 +592,9 @@ public class SocketIO implements IOHandle {
             }
 
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O,
+            // and also when outputStream is not available (NIO-created sockets)
+            if (socketChannel != null && (!blocking || outputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
                 int written = socketChannel.write(buf);
                 if (written == 0) {
@@ -644,6 +658,8 @@ public class SocketIO implements IOHandle {
 
             if (datagramChannel != null && datagramChannel.getLocalAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) datagramChannel.getLocalAddress();
+            } else if (socketChannel != null && socketChannel.getLocalAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) socketChannel.getLocalAddress();
             } else if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) socket.getLocalSocketAddress();
             } else if (serverSocket != null && serverSocket.getLocalSocketAddress() instanceof InetSocketAddress) {

@@ -12,6 +12,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
+import java.net.StandardProtocolFamily;
 import java.nio.channels.DatagramChannel;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SelectableChannel;
@@ -1694,10 +1695,9 @@ public class IOOperator {
 
             RuntimeIO socketIO;
             if (type == 1) { // SOCK_STREAM (TCP)
-                // Create a SocketChannel - this is a client-capable socket that can be
-                // used with connect(). For server usage (bind+listen), SocketIO.listen()
-                // will lazily convert to a ServerSocketChannel.
-                SocketChannel channel = SocketChannel.open();
+                // Create a SocketChannel with protocol family for proper IPv4/IPv6 handling.
+                // This ensures getsockname() returns the right address family.
+                SocketChannel channel = SocketChannel.open(family);
                 SocketIO socketIOHandle = new SocketIO(channel, family);
                 socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
@@ -2812,44 +2812,37 @@ public class IOOperator {
         }
 
         try {
-            // The first two arguments are references to RuntimeGlob objects that already exist
-            RuntimeScalar sock1Ref = args[0].scalar();
-            RuntimeScalar sock2Ref = args[1].scalar();
-            RuntimeBase domain = args[2];
-            RuntimeBase type = args[3];
-            RuntimeBase protocol = args[4];
+            // The first two arguments are the socket handle scalars
+            RuntimeScalar sock1Handle = args[0].scalar();
+            RuntimeScalar sock2Handle = args[1].scalar();
 
-            // Get the actual RuntimeGlob objects from the references
-            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
-            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
+            // Use NIO SocketChannels so that select() can monitor these sockets
+            ServerSocketChannel serverChannel = ServerSocketChannel.open();
+            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
 
-            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
-            // This is similar to how socketpair works on Unix systems
+            // Create the first socket channel and connect it
+            SocketChannel channel1 = SocketChannel.open();
+            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            // Create a server socket on localhost with a random port
-            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
-            int port = serverSocket.getLocalPort();
+            // Accept the connection to get the second socket channel
+            SocketChannel channel2 = serverChannel.accept();
 
-            // Create the first socket and connect it to the server
-            Socket socket1 = new Socket();
-            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            // Close the server channel as we no longer need it
+            serverChannel.close();
 
-            // Accept the connection on the server side to get the second socket
-            Socket socket2 = serverSocket.accept();
-
-            // Close the server socket as we no longer need it
-            serverSocket.close();
-
-            // Create RuntimeIO objects for both sockets
+            // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(socket1);
+            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET);
+            io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(socket2);
+            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET);
+            io2.assignFileno();
 
-            // Set the IO handles directly on the existing globs
-            glob1.setIO(io1);
-            glob2.setIO(io2);
+            // Set IO slot on each handle, following the same pattern as socket()
+            setSocketOnHandle(sock1Handle, io1);
+            setSocketOnHandle(sock2Handle, io2);
 
             return scalarTrue;
 
@@ -2857,6 +2850,28 @@ public class IOOperator {
             // Set $! to the error message
             getGlobalVariable("main::!").set(e.getMessage());
             return scalarFalse;
+        }
+    }
+
+    /**
+     * Helper to set a RuntimeIO on a socket handle, auto-vivifying a glob if needed.
+     */
+    private static void setSocketOnHandle(RuntimeScalar handle, RuntimeIO io) {
+        RuntimeGlob targetGlob = null;
+        if ((handle.type == RuntimeScalarType.GLOB || handle.type == RuntimeScalarType.GLOBREFERENCE)
+                && handle.value instanceof RuntimeGlob glob) {
+            targetGlob = glob;
+        }
+        if (targetGlob != null) {
+            targetGlob.setIO(io);
+        } else {
+            // Create a new anonymous GLOB and assign it to the lvalue
+            RuntimeScalar newGlob = new RuntimeScalar();
+            newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(io);
+            newGlob.value = anonGlob;
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, io);
+            handle.set(newGlob);
         }
     }
 

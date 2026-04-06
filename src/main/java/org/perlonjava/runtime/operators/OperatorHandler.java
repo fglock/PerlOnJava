@@ -141,6 +141,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("getc", "getc", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("binmode", "binmode", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("seek", "seek", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("sysseek", "seek", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("select", "select", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("truncate", "truncate", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("flock", "flock", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
