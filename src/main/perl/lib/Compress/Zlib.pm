@@ -14,7 +14,7 @@ package Compress::Zlib;
 use strict;
 use warnings;
 
-our $VERSION = '2.106';
+our $VERSION = '2.219';
 
 use Exporter;
 our @ISA = qw(Exporter);
@@ -22,6 +22,12 @@ our @ISA = qw(Exporter);
 XSLoader::load('Compress::Zlib');
 
 our @EXPORT = qw(
+    compress
+    uncompress
+    memGzip
+    memGunzip
+    crc32
+    adler32
     inflateInit
     deflateInit
     gzopen
@@ -30,6 +36,19 @@ our @EXPORT = qw(
     Z_STREAM_ERROR
     Z_DATA_ERROR
     Z_BUF_ERROR
+    Z_NO_FLUSH
+    Z_SYNC_FLUSH
+    Z_FULL_FLUSH
+    Z_FINISH
+    Z_DEFAULT_COMPRESSION
+    Z_BEST_SPEED
+    Z_BEST_COMPRESSION
+    Z_FILTERED
+    Z_HUFFMAN_ONLY
+    Z_DEFAULT_STRATEGY
+    Z_DEFLATED
+    WANT_GZIP
+    WANT_GZIP_OR_ZLIB
     MAX_WBITS
 );
 
