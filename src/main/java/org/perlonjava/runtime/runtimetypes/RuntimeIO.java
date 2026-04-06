@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalIO;
@@ -142,19 +143,30 @@ public class RuntimeIO extends RuntimeScalar {
     private static final AtomicInteger nextFileno = new AtomicInteger(3);
     private static final ConcurrentHashMap<Integer, RuntimeIO> filenoToIO = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<RuntimeIO, Integer> ioToFileno = new ConcurrentHashMap<>();
+    /** Pool of released fd numbers available for reuse. Perl reuses fds (lowest available),
+     *  so we must do the same to pass tests like io/perlio_leaks.t that verify fd recycling. */
+    private static final ConcurrentLinkedQueue<Integer> recycledFds = new ConcurrentLinkedQueue<>();
 
     /**
-     * Assigns a small sequential fileno to this RuntimeIO and registers it.
-     * Returns the assigned fileno.
+     * Assigns a fileno to this RuntimeIO and registers it in the fd→IO maps.
+     * Reuses released fd numbers when available (lowest first via the recycle pool),
+     * otherwise allocates the next sequential fd. This matches POSIX semantics where
+     * close() releases an fd and the next open() reuses the lowest available fd.
+     *
+     * @return the assigned fileno
      */
     public int assignFileno() {
         Integer existing = ioToFileno.get(this);
         if (existing != null) {
             return existing;
         }
-        int fd = nextFileno.getAndIncrement();
+        // Try to reuse a recycled fd first (POSIX: lowest available)
+        Integer recycled = recycledFds.poll();
+        int fd = (recycled != null) ? recycled : nextFileno.getAndIncrement();
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
+        // Keep FileDescriptorTable in sync to prevent fd collisions with pipe()
+        FileDescriptorTable.advancePast(fd);
         return fd;
     }
 
@@ -174,13 +186,41 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
-     * Unregisters this RuntimeIO from the fileno registry.
+     * Unregisters this RuntimeIO from the fileno registry and returns
+     * the fd to the recycle pool for reuse by future {@link #assignFileno()} calls.
      */
     public void unregisterFileno() {
         Integer fd = ioToFileno.remove(this);
         if (fd != null) {
             filenoToIO.remove(fd);
+            // Return fd to the recycle pool so it can be reused (POSIX: lowest available)
+            recycledFds.add(fd);
         }
+    }
+
+    /**
+     * Registers this RuntimeIO at a specific fd number (e.g. one already assigned
+     * by FileDescriptorTable for pipes). Advances nextFileno past this fd to
+     * prevent future collisions with assignFileno().
+     *
+     * @param fd the file descriptor number to register at
+     */
+    public void registerExternalFd(int fd) {
+        filenoToIO.put(fd, this);
+        ioToFileno.put(this, fd);
+        // Advance nextFileno past this fd to avoid collisions
+        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
+    }
+
+    /**
+     * Advances the nextFileno counter past the given fd value.
+     * Called by FileDescriptorTable.register() to keep the two fd allocation
+     * systems in sync and prevent fd collisions.
+     *
+     * @param fd the fd value to advance past
+     */
+    public static void advanceFilenoCounterPast(int fd) {
+        nextFileno.updateAndGet(current -> Math.max(current, fd + 1));
     }
 
     static {
@@ -1196,6 +1236,9 @@ public class RuntimeIO extends RuntimeScalar {
         ioHandle.flush();
         RuntimeScalar ret = ioHandle.close();
         ioHandle = new ClosedIOHandle();
+        // Release our fd back to the recycle pool so it can be reused by future opens.
+        // This must happen AFTER close so that the fd is still valid during the close.
+        unregisterFileno();
         return ret;
     }
 

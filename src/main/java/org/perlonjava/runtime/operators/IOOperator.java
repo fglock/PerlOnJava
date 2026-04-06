@@ -471,8 +471,9 @@ public class IOOperator {
                     RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            // &= mode: reuse the same file descriptor (parsimonious)
-                            fh = sourceHandle;
+                            // &= mode: non-owning wrapper — close won't close the original
+                            fh = new RuntimeIO();
+                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
                         } else {
                             // & mode: create a new handle that duplicates the original
                             fh = duplicateFileHandle(sourceHandle);
@@ -499,8 +500,9 @@ public class IOOperator {
                                 System.err.flush();
                             }
                             if (isParsimonious) {
-                                // &= mode: reuse the same file descriptor (parsimonious)
-                                fh = sourceHandle;
+                                // &= mode: non-owning wrapper — close won't close the original
+                                fh = new RuntimeIO();
+                                fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
                             } else {
                                 // & mode: create a new handle that duplicates the original
                                 fh = duplicateFileHandle(sourceHandle);
@@ -522,7 +524,8 @@ public class IOOperator {
 
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
-                            fh = sourceHandle;
+                            fh = new RuntimeIO();
+                            fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
                         } else {
                             fh = duplicateFileHandle(sourceHandle);
                         }
@@ -536,8 +539,8 @@ public class IOOperator {
                                 sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
                                 if (sourceHandle != null && sourceHandle.ioHandle != null) {
                                     if (isParsimonious) {
-                                        // &= mode: reuse the same file descriptor (parsimonious)
-                                        fh = sourceHandle;
+                                        fh = new RuntimeIO();
+                                        fh.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
                                     } else {
                                         // & mode: create a new handle that duplicates the original
                                         fh = duplicateFileHandle(sourceHandle);
@@ -2468,7 +2471,8 @@ public class IOOperator {
 
     /**
      * Find a RuntimeIO handle by its file descriptor number.
-     * This is a simplified implementation that maps standard file descriptors.
+     * Checks multiple registries: IOOperator's local fileDescriptorMap, standard fds,
+     * and the RuntimeIO fileno registry (which includes dup'd handles and sockets).
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
         // Check if we have it in our mapping
@@ -2486,6 +2490,11 @@ public class IOOperator {
             case 2: // STDERR
                 return RuntimeIO.stderr;
             default:
+                // Check the RuntimeIO fileno registry (dup'd handles, sockets, regular files)
+                RuntimeIO registeredHandle = RuntimeIO.getByFileno(fd);
+                if (registeredHandle != null) {
+                    return registeredHandle;
+                }
                 return null; // Unknown file descriptor
         }
     }
@@ -2515,53 +2524,67 @@ public class IOOperator {
                 throw new PerlCompilerException("Bad file descriptor: " + fd);
             }
         } else {
-            // Handle named filehandles like STDERR, STDOUT, STDIN
-            switch (fileName.toUpperCase()) {
-                case "STDIN":
-                    sourceHandle = RuntimeIO.stdin;
-                    break;
-                case "STDOUT":
-                    sourceHandle = RuntimeIO.stdout;
-                    break;
-                case "STDERR":
-                    sourceHandle = RuntimeIO.stderr;
-                    break;
-                default:
-                    // Try to look up as a global filehandle
-                    // First, try the current package if no :: qualifier is present
-                    if (!fileName.contains("::")) {
-                        // Use RuntimeCode.getCurrentPackage() which uses caller() to determine
-                        // the current package - this works for both JVM-compiled and interpreter code
-                        String currentPkg = RuntimeCode.getCurrentPackage();
-                        // Remove trailing "::" for consistent naming
-                        if (currentPkg.endsWith("::")) {
-                            currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
+            // Handle named filehandles — always use glob table to get the CURRENT handle,
+            // not the static RuntimeIO.stdout/stdin/stderr fields which may be stale
+            // after redirections like open(STDOUT, ">file") + open(STDOUT, ">&SAVED").
+            String normalizedName;
+            if (fileName.equalsIgnoreCase("STDIN") || fileName.equalsIgnoreCase("STDOUT") || fileName.equalsIgnoreCase("STDERR")) {
+                normalizedName = "main::" + fileName.toUpperCase();
+            } else if (!fileName.contains("::")) {
+                // Try current package first, then fall back to main::
+                String currentPkg = RuntimeCode.getCurrentPackage();
+                if (currentPkg.endsWith("::")) {
+                    currentPkg = currentPkg.substring(0, currentPkg.length() - 2);
+                }
+                if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
+                    String currentPkgName = currentPkg + "::" + fileName;
+                    RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
+                    if (currentGlob != null) {
+                        sourceHandle = currentGlob.getRuntimeIO();
+                        if (sourceHandle != null && sourceHandle.ioHandle != null) {
+                            normalizedName = null; // Already found
+                        } else {
+                            normalizedName = "main::" + fileName;
                         }
-                        if (currentPkg != null && !currentPkg.isEmpty() && !currentPkg.equals("main")) {
-                            String currentPkgName = currentPkg + "::" + fileName;
-                            RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
-                            if (currentGlob != null) {
-                                sourceHandle = currentGlob.getRuntimeIO();
-                                if (sourceHandle != null && sourceHandle.ioHandle != null) {
-                                    break;  // Found it in current package
-                                }
-                            }
-                        }
+                    } else {
+                        normalizedName = "main::" + fileName;
                     }
-                    // Fall back to main:: or fully qualified name
-                    String normalizedName = fileName.contains("::") ? fileName : "main::" + fileName;
-                    RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
-                    if (glob != null) {
-                        sourceHandle = glob.getRuntimeIO();
+                } else {
+                    normalizedName = "main::" + fileName;
+                }
+            } else {
+                normalizedName = fileName;
+            }
+
+            if (sourceHandle == null) {
+                RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
+                if (glob != null) {
+                    sourceHandle = glob.getRuntimeIO();
+                }
+                if (sourceHandle == null || sourceHandle.ioHandle == null) {
+                    // Last resort: try static fields for standard handles
+                    switch (fileName.toUpperCase()) {
+                        case "STDIN": sourceHandle = RuntimeIO.stdin; break;
+                        case "STDOUT": sourceHandle = RuntimeIO.stdout; break;
+                        case "STDERR": sourceHandle = RuntimeIO.stderr; break;
+                        default:
+                            throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
                     }
                     if (sourceHandle == null || sourceHandle.ioHandle == null) {
                         throw new PerlCompilerException("Unsupported filehandle duplication: " + fileName);
                     }
+                }
             }
         }
 
         if (isParsimonious) {
-            return sourceHandle;
+            // Parsimonious dup (>&=) shares the same underlying IOHandle but must not
+            // close it when the duplicate is closed. BorrowedIOHandle delegates all I/O
+            // but only flushes (never closes) the delegate on close().
+            RuntimeIO result = new RuntimeIO();
+            result.ioHandle = new BorrowedIOHandle(sourceHandle.ioHandle);
+            result.currentLineNumber = sourceHandle.currentLineNumber;
+            return result;
         } else {
             return duplicateFileHandle(sourceHandle);
         }
@@ -2572,10 +2595,37 @@ public class IOOperator {
             return null;
         }
 
-        // Create a new RuntimeIO that shares the same IOHandle
         RuntimeIO duplicate = new RuntimeIO();
-        duplicate.ioHandle = original.ioHandle;
         duplicate.currentLineNumber = original.currentLineNumber;
+
+        if (original.ioHandle instanceof DupIOHandle existingDup) {
+            // Already reference-counted — add another dup sharing the same delegate
+            duplicate.ioHandle = DupIOHandle.addDup(existingDup);
+        } else {
+            // First duplication — wrap both original and duplicate in DupIOHandles
+            // so they share a refcount and get distinct filenos.
+            // Get the original's fd from the registry, or from the IOHandle itself
+            // (e.g. StandardIO.fileno() returns 0/1/2 for stdin/stdout/stderr).
+            int origFd = original.getAssignedFileno();
+            if (origFd < 0) {
+                // Not in the registry — ask the IOHandle directly
+                RuntimeScalar fdScalar = original.ioHandle.fileno();
+                origFd = fdScalar.getDefinedBoolean() ? fdScalar.getInt() : -1;
+            }
+            if (origFd < 0) {
+                // Still no fd — assign a new one
+                origFd = original.assignFileno();
+            }
+            DupIOHandle[] pair = DupIOHandle.createPair(original.ioHandle, origFd);
+            original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
+            duplicate.ioHandle = pair[1]; // New handle with unique fd
+        }
+
+        // Register the duplicate's fd in RuntimeIO's fileno registry
+        int dupFd = duplicate.ioHandle.fileno().getInt();
+        if (dupFd >= 0) {
+            duplicate.registerExternalFd(dupFd);
+        }
 
         if (System.getenv("JPERL_IO_DEBUG") != null) {
             String origFileno;
@@ -2584,8 +2634,15 @@ public class IOOperator {
             } catch (Throwable t) {
                 origFileno = "<err>";
             }
+            String dupFileno;
+            try {
+                dupFileno = duplicate.ioHandle.fileno().toString();
+            } catch (Throwable t) {
+                dupFileno = "<err>";
+            }
             System.err.println("[JPERL_IO_DEBUG] duplicateFileHandle: origIoHandle=" + original.ioHandle.getClass().getName() +
                     " origFileno=" + origFileno +
+                    " dupFileno=" + dupFileno +
                     " origIoHandleId=" + System.identityHashCode(original.ioHandle) +
                     " dupIoHandleId=" + System.identityHashCode(duplicate.ioHandle));
             System.err.flush();

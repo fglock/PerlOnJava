@@ -253,4 +253,20 @@ public class InternalPipeHandle implements IOHandle {
             return new RuntimeScalar(); // undef
         }
     }
+
+    /**
+     * Checks if this pipe has data available for reading without blocking.
+     * Used by {@link FileDescriptorTable#isReadReady(IOHandle)} to implement
+     * select() readiness checking for pipe handles.
+     *
+     * @return true if data is available, the pipe is closed, or at EOF
+     */
+    public boolean hasDataAvailable() {
+        if (isClosed || isEOF || !isReader) return false;
+        try {
+            return inputStream.available() > 0;
+        } catch (IOException e) {
+            return false;
+        }
+    }
 }
