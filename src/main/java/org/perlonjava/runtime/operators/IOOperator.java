@@ -138,13 +138,17 @@ public class IOOperator {
                                 ? SelectionKey.OP_ACCEPT
                                 : SelectionKey.OP_READ;
                     }
-                    if (wantWrite && ch instanceof SocketChannel sc) {
-                        // For non-blocking connects in progress, use OP_CONNECT.
-                        // Perl's select() treats write-readiness as "connect complete",
-                        // but Java NIO requires OP_CONNECT for pending connections.
-                        if (sc.isConnectionPending()) {
-                            ops |= SelectionKey.OP_CONNECT;
-                        } else {
+                    if (wantWrite) {
+                        if (ch instanceof SocketChannel sc) {
+                            // For non-blocking connects in progress, use OP_CONNECT.
+                            // Perl's select() treats write-readiness as "connect complete",
+                            // but Java NIO requires OP_CONNECT for pending connections.
+                            if (sc.isConnectionPending()) {
+                                ops |= SelectionKey.OP_CONNECT;
+                            } else {
+                                ops |= SelectionKey.OP_WRITE;
+                            }
+                        } else if (ch instanceof java.nio.channels.DatagramChannel) {
                             ops |= SelectionKey.OP_WRITE;
                         }
                     }

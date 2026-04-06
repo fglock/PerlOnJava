@@ -423,6 +423,9 @@ public class SocketIO implements IOHandle {
         if (socketChannel != null) {
             return socketChannel;
         }
+        if (datagramChannel != null) {
+            return datagramChannel;
+        }
         return null;
     }
 
