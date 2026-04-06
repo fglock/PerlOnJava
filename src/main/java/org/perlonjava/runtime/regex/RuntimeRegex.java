@@ -1191,7 +1191,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (lastCaptureGroups == null || lastCaptureGroups.length == 0) {
             return null;
         }
-        return lastCaptureGroups[lastCaptureGroups.length - 1];
+        // $+ returns the highest-numbered capture group that actually participated
+        // in the match (i.e., is non-null). Non-participating groups in alternations
+        // have null values from Java's Matcher.group().
+        for (int i = lastCaptureGroups.length - 1; i >= 0; i--) {
+            if (lastCaptureGroups[i] != null) {
+                return lastCaptureGroups[i];
+            }
+        }
+        return null;
     }
 
     /**

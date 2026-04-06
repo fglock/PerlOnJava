@@ -160,7 +160,11 @@ sub new_tmpfile {
     my $class = shift;
     @_ == 0 or croak "usage: $class->new_tmpfile()";
     require File::Temp;
-    my $fh = $class->new;
+    # Use bless+gensym directly instead of $class->new to avoid infinite
+    # recursion when subclasses override new() to call new_tmpfile().
+    # In standard Perl 5, new_tmpfile is an XS function in IO::Handle
+    # that calls C's tmpfile() without dispatching through Perl-level new().
+    my $fh = bless gensym(), $class;
     my ($tmp_fh, $tmp_name) = File::Temp::tempfile(UNLINK => 1);
     if (defined $tmp_fh) {
         close $tmp_fh;
