@@ -24,7 +24,14 @@ public class FileUtils {
      */
     public static String readFileWithEncodingDetection(Path filePath, CompilerOptions parsedArgs) throws IOException {
         byte[] bytes = Files.readAllBytes(filePath);
-        return detectEncodingAndDecode(bytes, parsedArgs);
+        String content = detectEncodingAndDecode(bytes, parsedArgs);
+        // Normalize line endings: \r\n → \n, bare \r → \n
+        // This must happen for source files so the Lexer sees clean \n line endings.
+        // For eval STRING input, \r characters are preserved (they don't go through this path).
+        if (content.indexOf('\r') >= 0) {
+            content = content.replace("\r\n", "\n").replace("\r", "\n");
+        }
+        return content;
     }
 
     /**

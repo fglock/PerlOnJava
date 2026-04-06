@@ -163,16 +163,14 @@ public class ByteCodeSourceMapper {
         }
         
         // First time seeing this tokenIndex - compute and store
-        // Use getLineNumberAccurate() instead of getLineNumber() because subroutine
-        // bodies may be compiled out-of-order (deferred closure compilation).
-        // getLineNumber() uses a forward-only cache that returns stale values for
-        // out-of-order access, causing caller() to report wrong line numbers.
-        int lineNumber = ctx.errorUtil.getLineNumberAccurate(tokenIndex);
+        // Use getSourceLocationAccurate() which properly handles #line directives.
+        // Unlike getLineNumberAccurate() (which only counts physical newlines),
+        // getSourceLocationAccurate() walks all tokens and processes #line N "file"
+        // directives, returning the correct adjusted filename and line number.
+        var sourceLoc = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        int lineNumber = sourceLoc.lineNumber();
+        String sourceFileName = sourceLoc.fileName();
         int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
-        
-        // Store the #line-adjusted filename (may differ from ctx.compilerOptions.fileName)
-        // This is what caller() should report to match Perl's behavior
-        String sourceFileName = ctx.errorUtil.getFileName();
         
         // FIX: If current sourceFile equals original file (no #line active in emit context),
         // check for a nearby parse-time entry that has a #line-adjusted filename.

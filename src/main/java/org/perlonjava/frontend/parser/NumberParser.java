@@ -395,8 +395,13 @@ public class NumberParser {
         return 0.0;
     }
 
-    // parseNumber(RuntimeScalar) method
+    // parseNumber(RuntimeScalar) method - no operation context
     public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar) {
+        return parseNumber(runtimeScalar, null);
+    }
+
+    // parseNumber(RuntimeScalar, String) method - with optional operation context for warnings
+    public static RuntimeScalar parseNumber(RuntimeScalar runtimeScalar, String operation) {
         String str = (String) runtimeScalar.value;
 
         RuntimeScalar result = numificationCache.get(str);
@@ -592,7 +597,11 @@ public class NumberParser {
 
         // Generate warning for non-numeric strings (all cases)
         if (shouldWarn) {
-            WarnDie.warnWithCategory(new RuntimeScalar("Argument \"" + str + "\" isn't numeric"),
+            String msg = "Argument \"" + str + "\" isn't numeric";
+            if (operation != null) {
+                msg += " in " + operation;
+            }
+            WarnDie.warnWithCategory(new RuntimeScalar(msg),
                     RuntimeScalarCache.scalarEmptyString, "numeric");
         }
 

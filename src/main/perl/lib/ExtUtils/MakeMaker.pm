@@ -172,6 +172,14 @@ sub _handle_xs_module {
     print "  - If no fallback exists, the module will fail to load\n";
     print "\n";
     
+    # For XS modules, exclude .pm files that already have a PerlOnJava shim
+    # in the JAR (jar:PERL5LIB).  The JAR shim provides proper fallback logic
+    # (e.g. inheriting from a pure-Perl parent), while the CPAN version would
+    # call XSLoader::load at the top level and die fatally.  Since
+    # ~/.perlonjava/lib/ comes before jar:PERL5LIB in @INC, installing the
+    # CPAN version would shadow the working shim.
+    $args->{_xs_module} = 1;
+    
     # Install the .pm files
     my $version = $args->{VERSION} || ($args->{VERSION_FROM} && _extract_version($args->{VERSION_FROM})) || '0';
     return _install_pure_perl($name, $version, $args);
@@ -256,6 +264,20 @@ sub _install_pure_perl {
         _create_mymeta($name, $version, $args);
         _create_install_makefile($name, $version, $args, {}, {}, $mm);
         return $mm;
+    }
+    
+    # For XS modules, skip .pm files that have a PerlOnJava shim in the JAR.
+    # The JAR shim provides proper pure-Perl fallback, while the CPAN version
+    # would call XSLoader::load at the top level and die fatally.
+    if ($args->{_xs_module}) {
+        for my $src (sort keys %pm) {
+            my $dest = $pm{$src};
+            (my $rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
+            if ($rel && -f "jar:PERL5LIB/$rel") {
+                print "  SKIP: $rel (PerlOnJava shim in JAR takes precedence)\n";
+                delete $pm{$src};
+            }
+        }
     }
     
     print "\nWill install to: $INSTALL_BASE\n\n";

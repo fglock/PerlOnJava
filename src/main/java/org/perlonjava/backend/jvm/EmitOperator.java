@@ -143,6 +143,17 @@ public class EmitOperator {
         String operator = node.operator;
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleReadlineOperator " + node);
 
+        // Set the handle name for error messages (e.g., "$f", "STDIN")
+        Object handleNameObj = node.getAnnotation("handleName");
+        if (handleNameObj instanceof String handleName) {
+            emitterVisitor.ctx.mv.visitLdcInsn(handleName);
+        } else {
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+        }
+        emitterVisitor.ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeIO",
+                "lastReadlineHandleName", "Ljava/lang/String;");
+
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);
 

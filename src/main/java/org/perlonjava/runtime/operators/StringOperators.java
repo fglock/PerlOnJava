@@ -46,12 +46,22 @@ public class StringOperators {
         if (!runtimeScalar.getDefinedBoolean()) {
             return RuntimeScalarCache.scalarUndef;
         }
-        // Convert the RuntimeScalar to a string and return its byte length
+        // In Perl 5, `use bytes; length(...)` returns the internal byte count:
+        // - BYTE_STRING (SvUTF8=0 in Perl 5): stored as Latin-1, byte count == char count
+        // - STRING (SvUTF8=1 in Perl 5): stored as UTF-8, byte count may be > char count
+        //
+        // In PerlOnJava:
+        // - BYTE_STRING: string literals with chars <= 0xFF, byte data from pack("A",...), etc.
+        // - STRING: pack("U",...), utf8::upgrade, literals with chars > 0xFF
         String str = runtimeScalar.toString();
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            // Latin-1: 1 byte per character
+            return getScalarInt(str.length());
+        }
+        // STRING type: return UTF-8 byte count
         try {
             return getScalarInt(str.getBytes(StandardCharsets.UTF_8).length);
         } catch (Exception e) {
-            // If UTF-8 encoding fails, fall back to character count
             return getScalarInt(str.codePointCount(0, str.length()));
         }
     }

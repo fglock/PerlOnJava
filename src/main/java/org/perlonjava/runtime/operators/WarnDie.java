@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -296,12 +297,37 @@ public class WarnDie {
 
     /**
      * Gets the Perl source location string (" at FILE line N") from the current
-     * Java call stack. Scans for JVM-compiled Perl frames (org.perlonjava.anon*)
-     * and uses ByteCodeSourceMapper to resolve to the Perl source file and line.
+     * execution context. First checks interpreter frames (which don't create
+     * org.perlonjava.anon* JVM stack entries), then falls back to scanning the
+     * JVM call stack for compiled Perl frames.
      *
      * @return A location string like " at script.pl line 42", or empty string if not found
      */
     static String getPerlLocationFromStack() {
+        // Check interpreter state first - interpreter frames don't create
+        // org.perlonjava.anon* JVM stack entries, so JVM stack scanning
+        // would skip them and find the wrong (calling Java code) location.
+        var frame = InterpreterState.current();
+        if (frame != null && frame.code() != null) {
+            var pcs = InterpreterState.getPcStack();
+            if (!pcs.isEmpty()) {
+                int currentPc = pcs.getLast();
+                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                    var pcEntry = frame.code().pcToTokenIndex.floorEntry(currentPc);
+                    if (pcEntry != null) {
+                        int tokenIndex = pcEntry.getValue();
+                        if (frame.code().errorUtil != null) {
+                            var loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                            if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+                                return " at " + loc.fileName() + " line " + loc.lineNumber();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to JVM stack scanning for compiled Perl frames
         Throwable t = new Throwable();
         HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new HashMap<>();
         for (StackTraceElement element : t.getStackTrace()) {
@@ -344,12 +370,12 @@ public class WarnDie {
             // Error message
             String out = message.toString();
             if (!out.endsWith("\n")) {
-                // Add filehandle context if available
+                // Add " at FILE line N" location
+                out += where.toString();
+                // Add filehandle context if available (e.g., ", <DATA> chunk 1")
                 String filehandleContext = getFilehandleContext();
                 if (filehandleContext != null && !filehandleContext.isEmpty()) {
-                    out += " " + filehandleContext;
-                } else {
-                    out += where.toString();
+                    out += filehandleContext;
                 }
                 // Perl adds a period and newline to die messages
                 if (!out.endsWith("\n")) {
@@ -466,16 +492,28 @@ public class WarnDie {
 
     /**
      * Gets the current filehandle context for error messages.
-     * Returns a string like "<$f> line 1" if a filehandle is currently active.
+     * Returns a string like ", <DATA> line 1" or ", <DATA> chunk 1" if a
+     * filehandle is currently active. Uses "chunk" when $/ is set to ""
+     * (paragraph mode), "line" otherwise. Matches Perl 5's behavior.
      *
-     * @return String with filehandle context, or null if no context available
+     * @return String with filehandle context (including leading ", "), or null if no context
      */
-    private static String getFilehandleContext() {
+    public static String getFilehandleContext() {
         if (RuntimeIO.lastAccesseddHandle != null && RuntimeIO.lastAccesseddHandle.currentLineNumber > 0) {
-            // Try to find the variable name for this filehandle
             String handleName = findFilehandleName(RuntimeIO.lastAccesseddHandle);
             if (handleName != null) {
-                return "<" + handleName + "> line " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
+                // Perl 5 uses "line" only when $/ is exactly "\n".
+                // Everything else (undef, "", custom separator, ref) uses "chunk".
+                String unit = "chunk";
+                try {
+                    RuntimeScalar rs = GlobalVariable.getGlobalVariable("main::/");
+                    if (rs.type != RuntimeScalarType.UNDEF && "\n".equals(rs.toString())) {
+                        unit = "line";
+                    }
+                } catch (Exception ignored) {
+                    // Default to "chunk" if we can't read $/
+                }
+                return ", <" + handleName + "> " + unit + " " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
             }
         }
         return null;
@@ -483,16 +521,22 @@ public class WarnDie {
 
     /**
      * Attempts to find the variable name for a given filehandle.
-     * This is a simplified implementation that checks common patterns.
+     * Uses the glob name stored on the RuntimeIO handle.
      *
      * @param handle The RuntimeIO handle to find the name for
-     * @return String with the variable name, or null if not found
+     * @return String with the bare handle name (e.g., "DATA", "STDIN"), or null if not found
      */
     private static String findFilehandleName(RuntimeIO handle) {
-        // For now, return a generic name since finding the exact variable name
-        // requires more complex symbol table traversal
-        // In a full implementation, we would search through the symbol table
-        // to find which variable references this handle
-        return "$f"; // Simplified - matches the test expectation
+        if (handle.globName != null && !handle.globName.isEmpty()) {
+            // Strip package prefix (e.g., "main::DATA" -> "DATA")
+            String name = handle.globName;
+            int colonIdx = name.lastIndexOf("::");
+            if (colonIdx >= 0 && colonIdx + 2 < name.length()) {
+                name = name.substring(colonIdx + 2);
+            }
+            return name;
+        }
+        // Fall back to the variable name set during the last readline (e.g., "$f")
+        return RuntimeIO.lastReadlineHandleName;
     }
 }

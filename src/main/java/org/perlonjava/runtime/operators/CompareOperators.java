@@ -96,8 +96,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric lt (<)");
+        arg2 = arg2.getNumber("numeric lt (<)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() < arg2.getDouble());
@@ -135,8 +135,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric le (<=)");
+        arg2 = arg2.getNumber("numeric le (<=)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() <= arg2.getDouble());
@@ -177,8 +177,8 @@ public class CompareOperators {
         checkUninitialized(arg1, arg2, "gt (>)");
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric gt (>)");
+        arg2 = arg2.getNumber("numeric gt (>)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() > arg2.getDouble());
@@ -216,8 +216,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric ge (>=)");
+        arg2 = arg2.getNumber("numeric ge (>=)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() >= arg2.getDouble());
@@ -249,7 +249,7 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
+        arg1 = arg1.getNumber("numeric eq (==)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == (double) arg2);
@@ -287,8 +287,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric eq (==)");
+        arg2 = arg2.getNumber("numeric eq (==)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() == arg2.getDouble());
@@ -326,8 +326,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric ne (!=)");
+        arg2 = arg2.getNumber("numeric ne (!=)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             return getScalarBoolean(arg1.getDouble() != arg2.getDouble());
@@ -357,8 +357,8 @@ public class CompareOperators {
         }
 
         // Convert strings to numbers if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("numeric comparison (<=>)");
+        arg2 = arg2.getNumber("numeric comparison (<=>)");
         // Perform comparison based on type
         if (arg1.type == RuntimeScalarType.DOUBLE || arg2.type == RuntimeScalarType.DOUBLE) {
             var d1 = arg1.getDouble();

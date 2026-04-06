@@ -346,7 +346,17 @@ public class InheritanceResolver {
                 if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
                     if (autoload.getDefinedBoolean()) {
-                        ((RuntimeCode) autoload.value).autoloadVariableName = autoloadName;
+                        // Use the AUTOLOAD sub's CvSTASH (packageName) for $AUTOLOAD,
+                        // not the glob's package. Perl sets $AUTOLOAD in the package
+                        // where the AUTOLOAD sub was compiled, which matters for closures
+                        // installed in proxy namespaces (e.g., Template::Plugin::Procedural).
+                        RuntimeCode autoloadCode = (RuntimeCode) autoload.value;
+                        String cvStash = autoloadCode.packageName;
+                        if (cvStash != null && !cvStash.isEmpty()) {
+                            autoloadCode.autoloadVariableName = cvStash + "::AUTOLOAD";
+                        } else {
+                            autoloadCode.autoloadVariableName = autoloadName;
+                        }
                         cacheMethod(cacheKey, autoload);
                         return autoload;
                     }

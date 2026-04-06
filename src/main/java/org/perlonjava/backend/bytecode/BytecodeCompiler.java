@@ -2974,8 +2974,39 @@ public class BytecodeCompiler implements Visitor {
 
                     // Check if already declared in current scope
                     if (hasVariable(varName)) {
-                        // Already declared, just return the existing register
                         int reg = getVariableRegister(varName);
+
+                        // For 'our' declarations, we must ALWAYS load from the global table
+                        // even if the variable name already exists in scope.  This handles
+                        // the interpreter-fallback case where detectClosureVariables()
+                        // pre-populates registers from outer-scope 'my' variables, but
+                        // the wrapper's 'our $VAR' needs to rebind the register to the
+                        // actual package global (e.g. BEGIN block capture variables).
+                        if (op.equals("our")) {
+                            String globalVarName = NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) sigilOp.operand).name,
+                                    getCurrentPackage()
+                            );
+                            int nameIdx = addToStringPool(globalVarName);
+
+                            switch (sigil) {
+                                case "$" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(reg);
+                                    emit(nameIdx);
+                                }
+                                case "@" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(reg);
+                                    emit(nameIdx);
+                                }
+                                case "%" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(reg);
+                                    emit(nameIdx);
+                                }
+                            }
+                        }
 
                         // If this is a declared reference, create a reference to it
                         if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {

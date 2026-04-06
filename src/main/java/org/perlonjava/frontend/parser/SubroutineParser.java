@@ -208,8 +208,17 @@ public class SubroutineParser {
 
             // PERL RULE: Indirect object syntax requires identifier to be a package
             // Check packageExistsCache which is populated when 'package' statement is parsed
-            // Note: packageExistsCache uses the package name as-is, not normalized
+            // Note: packageExistsCache uses the package name as-is for packages,
+            // and fully qualified names for sub names (e.g., "main::error" not "error")
             Boolean isPackage = GlobalVariable.packageExistsCache.get(packageName);
+            // Also check if this is a known sub in the current package (qualified lookup)
+            if (isPackage == null && !packageName.contains("::")) {
+                String qualifiedName = parser.ctx.symbolTable.getCurrentPackage() + "::" + packageName;
+                Boolean qualifiedResult = GlobalVariable.packageExistsCache.get(qualifiedName);
+                if (qualifiedResult != null && !qualifiedResult) {
+                    isPackage = false;
+                }
+            }
             LexerToken token = peek(parser);
             String fullName1 = NameNormalizer.normalizeVariableName(packageName, parser.ctx.symbolTable.getCurrentPackage());
             boolean isLexicalSub = parser.ctx.symbolTable.getSymbolEntry("&" + packageName) != null;
@@ -516,8 +525,15 @@ public class SubroutineParser {
             subName = IdentifierParser.parseSubroutineIdentifier(parser);
 
             // Mark named subroutines as non-packages in packageExistsCache immediately
-            // This helps indirect object detection distinguish subs from packages
-            if (subName != null) {
+            // This helps indirect object detection distinguish subs from packages.
+            // IMPORTANT: Use the fully qualified name so that `sub error` in Template::Base
+            // doesn't prevent `error` from being used as a class name in indirect method
+            // syntax from other packages (e.g., `parse error` in main should still work
+            // as indirect method call `error->parse()`).
+            if (subName != null && !subName.contains("::")) {
+                String qualifiedSubName = parser.ctx.symbolTable.getCurrentPackage() + "::" + subName;
+                GlobalVariable.packageExistsCache.put(qualifiedSubName, false);
+            } else if (subName != null) {
                 GlobalVariable.packageExistsCache.put(subName, false);
             }
         }

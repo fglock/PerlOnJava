@@ -28,7 +28,7 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
+        arg1 = arg1.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
@@ -106,8 +106,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("addition (+)");
+        arg2 = arg2.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -186,7 +186,7 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
+        arg1 = arg1.getNumber("subtraction (-)");
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2);
@@ -262,8 +262,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("subtraction (-)");
+        arg2 = arg2.getNumber("subtraction (-)");
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
@@ -355,8 +355,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("multiplication (*)");
+        arg2 = arg2.getNumber("multiplication (*)");
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
@@ -437,8 +437,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
-        arg2 = arg2.getNumber();
+        arg1 = arg1.getNumber("division (/)");
+        arg2 = arg2.getNumber("division (/)");
         double divisor = arg2.getDouble();
         // Check for division by zero
         if (divisor == 0.0) {
@@ -1095,7 +1095,7 @@ public class MathOperators {
 
         RuntimeScalar arg1 = runtimeScalar;
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
+        arg1 = arg1.getNumber("abs");
         // Compute absolute value based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(Math.abs(arg1.getDouble()));
@@ -1205,7 +1205,7 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber();
+        arg1 = arg1.getNumber("int");
 
         // Already an integer
         if (arg1.type == RuntimeScalarType.INTEGER) {
