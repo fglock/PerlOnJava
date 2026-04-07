@@ -15,9 +15,14 @@ import org.xml.sax.ext.LexicalHandler;
 import org.xml.sax.helpers.DefaultHandler;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Java XS implementation of XML::Parser::Expat.
@@ -706,6 +711,7 @@ public class XMLParserExpat extends PerlModuleBase {
             byte[] xmlBytes = (xmlArg.type == RuntimeScalarType.BYTE_STRING)
                     ? xmlString.getBytes(StandardCharsets.ISO_8859_1)
                     : xmlString.getBytes(StandardCharsets.UTF_8);
+            xmlBytes = convertEncoding(xmlBytes);
             state.bytesProcessed = 0;
             state.inputBytes = xmlBytes;
             state.inputScanPos = 0;
@@ -774,6 +780,7 @@ public class XMLParserExpat extends PerlModuleBase {
             }
 
             byte[] xmlBytes = baos.toByteArray();
+            xmlBytes = convertEncoding(xmlBytes);
             state.bytesProcessed = 0;
             state.inputBytes = xmlBytes;
             state.inputScanPos = 0;
@@ -828,6 +835,7 @@ public class XMLParserExpat extends PerlModuleBase {
             byte[] xmlBytes = state.partialIsByteString
                     ? xml.getBytes(StandardCharsets.ISO_8859_1)
                     : xml.getBytes(StandardCharsets.UTF_8);
+            xmlBytes = convertEncoding(xmlBytes);
             state.partialIsByteString = false;
             state.bytesProcessed = 0;
             state.inputBytes = xmlBytes;
@@ -841,6 +849,67 @@ public class XMLParserExpat extends PerlModuleBase {
             RuntimeHash selfHash = state.selfRef.hashDeref();
             selfHash.put("ErrorMessage", new RuntimeScalar(state.errorMessage));
             throw new PerlDieException(new RuntimeScalar(formatError(state, e)));
+        }
+    }
+
+    // ================================================================
+    // Encoding conversion utilities
+    // ================================================================
+
+    // Map of expat-specific encoding names to JDK charset names
+    private static final Map<String, String> ENCODING_MAP = new HashMap<>();
+    static {
+        ENCODING_MAP.put("x-sjis-unicode", "Shift_JIS");
+        ENCODING_MAP.put("x-euc-jp-unicode", "EUC-JP");
+    }
+
+    // Pattern to extract encoding from XML/text declarations
+    private static final Pattern ENCODING_PATTERN = Pattern.compile(
+            "<\\?xml[^>]*?encoding\\s*=\\s*[\"']([^\"']+)[\"']");
+
+    /**
+     * Map an encoding name to a JDK-supported charset name.
+     * Returns the mapped name if in ENCODING_MAP, otherwise returns the original.
+     */
+    private static String mapToJdkCharset(String encoding) {
+        if (encoding == null) return null;
+        String mapped = ENCODING_MAP.get(encoding.toLowerCase());
+        return mapped != null ? mapped : encoding;
+    }
+
+    /**
+     * Extract the encoding name from an XML/text declaration in raw bytes.
+     * Scans the first 200 bytes (ASCII-safe) for <?xml ... encoding="..." ?>.
+     */
+    private static String extractDeclaredEncoding(byte[] input) {
+        int len = Math.min(input.length, 200);
+        String header = new String(input, 0, len, StandardCharsets.ISO_8859_1);
+        Matcher m = ENCODING_PATTERN.matcher(header);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Convert encoding if the declared encoding is a custom name not supported by JDK.
+     * Re-decodes the raw bytes using the correct charset and re-encodes as UTF-8,
+     * updating the encoding declaration to match.
+     * Returns original bytes if no conversion is needed.
+     */
+    private static byte[] convertEncoding(byte[] input) {
+        String declared = extractDeclaredEncoding(input);
+        if (declared == null) return input;
+
+        String jdkCharset = ENCODING_MAP.get(declared.toLowerCase());
+        if (jdkCharset == null) return input; // not a custom encoding, let SAX handle it
+
+        try {
+            // Decode with the correct charset, re-encode as UTF-8
+            String content = new String(input, Charset.forName(jdkCharset));
+            content = content.replaceFirst(
+                    "encoding\\s*=\\s*[\"']" + Pattern.quote(declared) + "[\"']",
+                    "encoding=\"UTF-8\"");
+            return content.getBytes(StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return input; // fallback to original
         }
     }
 
@@ -906,9 +975,9 @@ public class XMLParserExpat extends PerlModuleBase {
         reader.setEntityResolver(handler);
 
         InputSource inputSource = new InputSource(input);
-        // Set protocol encoding if specified (e.g. "ISO-8859-1")
+        // Set protocol encoding if specified, mapping custom names to JDK charsets
         if (state.protocolEncoding != null) {
-            inputSource.setEncoding(state.protocolEncoding);
+            inputSource.setEncoding(mapToJdkCharset(state.protocolEncoding));
         }
         // Set systemId to the current working directory so SAX resolves relative URIs correctly.
         // This also allows unresolveSysId to strip this prefix and recover relative paths.
@@ -1774,16 +1843,18 @@ public class XMLParserExpat extends PerlModuleBase {
 
                     // Handler returned a string (entity content) or filehandle
                     if (RuntimeScalarType.isReference(retVal) || retVal.type == RuntimeScalarType.GLOB) {
-                        // Filehandle - read content
+                        // Filehandle - read content as bytes for proper encoding handling
                         RuntimeIO fh = RuntimeIO.getRuntimeIO(retVal);
                         if (fh != null) {
-                            StringBuilder content = new StringBuilder();
+                            ByteArrayOutputStream entBaos = new ByteArrayOutputStream();
                             while (true) {
                                 RuntimeScalar line = fh.ioHandle.read(8192);
                                 if (line.type == RuntimeScalarType.UNDEF) break;
                                 String s = line.toString();
                                 if (s.isEmpty()) break;
-                                content.append(s);
+                                java.nio.charset.Charset cs = (line.type == RuntimeScalarType.BYTE_STRING)
+                                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                                entBaos.write(s.getBytes(cs));
                             }
                             // Call ExternEntFin if set
                             if (state.externEntFinHandler != null) {
@@ -1791,7 +1862,8 @@ public class XMLParserExpat extends PerlModuleBase {
                                 RuntimeArray.push(finArgs, state.selfRef);
                                 RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
                             }
-                            InputSource is = new InputSource(new StringReader(content.toString()));
+                            byte[] rawBytes = convertEncoding(entBaos.toByteArray());
+                            InputSource is = new InputSource(new ByteArrayInputStream(rawBytes));
                             // Preserve systemId so SAX can resolve relative references within this entity
                             if (systemId != null) {
                                 is.setSystemId(systemId);
@@ -1809,13 +1881,19 @@ public class XMLParserExpat extends PerlModuleBase {
                             RuntimeArray.push(finArgs, state.selfRef);
                             RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
                         }
-                        InputSource is = new InputSource(new StringReader(content));
+                        // Convert to bytes for encoding handling (string may contain raw byte values)
+                        java.nio.charset.Charset cs = (retVal.type == RuntimeScalarType.BYTE_STRING)
+                                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                        byte[] rawBytes = convertEncoding(content.getBytes(cs));
+                        InputSource is = new InputSource(new ByteArrayInputStream(rawBytes));
                         if (systemId != null) {
                             is.setSystemId(systemId);
                         }
                         return is;
                     }
                 } catch (PerlDieException e) {
+                    throw new SAXException(e);
+                } catch (IOException e) {
                     throw new SAXException(e);
                 }
             }
