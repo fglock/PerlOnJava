@@ -56,11 +56,11 @@ public class FileSpec extends PerlModuleBase {
             fileSpec.registerMethod("file_name_is_absolute", "$");
             fileSpec.registerMethod("path", "");
             fileSpec.registerMethod("join", "@");
-            fileSpec.registerMethod("splitpath", "$");
+            fileSpec.registerMethod("splitpath", "$;$");
             fileSpec.registerMethod("splitdir", "$");
-            fileSpec.registerMethod("catpath", "$$");
-            fileSpec.registerMethod("abs2rel", "$");
-            fileSpec.registerMethod("rel2abs", "$");
+            fileSpec.registerMethod("catpath", "$$$");
+            fileSpec.registerMethod("abs2rel", "$;$");
+            fileSpec.registerMethod("rel2abs", "$;$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing File::Spec method: " + e.getMessage());
         }
