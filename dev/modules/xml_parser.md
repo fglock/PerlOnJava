@@ -1,10 +1,15 @@
 # XML::Parser Support for PerlOnJava
 
+> **Active plan and progress tracking**: See [`dev/design/xml_parser_xs.md`](../design/xml_parser_xs.md)
+>
+> This document contains the original architecture and reference material.
+> For current status, TODOs, and implementation progress, use the design doc.
+
 ## Overview
 
 **Module**: XML::Parser 2.56 (depends on XML::Parser::Expat XS backend)  
 **Test command**: `./jcpan --jobs 8 -t use XML::Parser`  
-**Status**: Not yet started  
+**Status**: 41/47 test files pass (95%)  
 **Branch**: `feature/xml-parser`
 
 ## Problem Statement
@@ -361,18 +366,19 @@ XML::Parser 2.56 has **47 test files**. Expected results by category:
 
 ## Progress Tracking
 
-### Current Status: Planning
+> See [`dev/design/xml_parser_xs.md`](../design/xml_parser_xs.md) for current progress.
 
 ### Completed
 - [x] Investigation and API catalog (2025-04-07)
-  - Cataloged all 47 test files, 55 XS functions, 20 handler types
-  - Identified JDK SAX as zero-dependency backend
-  - Mapped expat callbacks to SAX equivalents
+- [x] Phase 1: Infrastructure and installation (2025-04-06)
+- [x] Phase 2: Core parsing (2025-04-06)
+- [x] Phase 3: DTD and declarations (2025-04-07)
+- [x] Phase 4 partial: Advanced features (2025-04-07)
+- 41/47 test files pass (95%)
 
-### Next Steps
-1. Create feature branch `feature/xml-parser`
-2. Implement Phase 1 (infrastructure and installation)
-3. Implement Phase 2 (core parsing)
+### Remaining
+- Phase 4 continued: Encoding conversion (x-sjis-unicode)
+- UseForeignDTD
 
 ## Related Documents
 
