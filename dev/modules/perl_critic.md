@@ -459,56 +459,64 @@ The fixes should be applied in this sequence because of dependency ordering:
     `.run.PL` test data files with system perl, then re-running `jperl Build`
     and `jperl Build install`
 
-### Current Blocker: Readonly::Array tied iteration bug
+### Current Blocker: None — Perl::Critic test suite at 99.9%
 
-**Symptom:** `use Perl::Critic` fails:
-```
-Global symbol "$EMPTY" requires explicit package name
-  at Perl/Critic/Exception/AggregateConfiguration.pm line 95
-```
+### Phase 3: Runtime Bug Fixes (2026-04-07)
 
-**Root cause:** Perl::Critic::Utils declares:
-```perl
-Readonly::Hash our %EXPORT_TAGS => (characters => [qw($EMPTY ...)], ...);
-```
+Eleven bugs were fixed across three sessions to bring the Perl::Critic test suite
+from crashing to 99.9% pass rate (5411/5416 subtests, 39/40 files).
 
-Exporter reads `%EXPORT_TAGS` to expand `:characters` into individual symbols.
-However, **assigning a Readonly tied array to a regular array returns empty**:
+#### Fixes Applied (Java — committed to feature/perl-critic-support)
 
-```perl
-use Readonly;
-Readonly::Array my @arr => qw($FOO $BAR);
-print scalar @arr;    # 2  (FETCHSIZE works)
-print "@arr";         # "$FOO $BAR"  (string interpolation works)
-my @copy = @arr;      # EMPTY!  (list-context flatten is broken)
-```
+| # | Bug | File | Fix |
+|---|-----|------|-----|
+| 1 | `List::Util::reduce` used hardcoded `main::` for `$a`/`$b` | `ListUtil.java` | Use coderef's `packageName` for caller package |
+| 2 | `caller()` returned null package names | `ExceptionFormatter.java`, `RuntimeCode.java` | Default null packages to `"main"` |
+| 3 | `local *glob` corrupted blessed objects | `RuntimeGlob.java` | Create new empty replacements instead of mutating existing objects |
+| 4 | `\N{CARRIAGE RETURN}` and other control char names | `UnicodeResolver.java` | Add all C0/C1 control character name aliases |
+| 5 | `state` variable hoisting caused false warnings | `EmitBlock.java`, `EmitVariable.java` | Suppress redeclaration warnings for hoisted state vars |
+| 6 | `reduce` result corrupted by `finally` block | `ListUtil.java` | Clone accumulator before restoring `$a`/`$b` |
+| 7 | `caller()` null package in `runSpecialBlock` handler | `ExceptionFormatter.java` | Null-check in runSpecialBlock frame correction |
+| 8 | `caller()` package null in scalar/list context | `RuntimeCode.java` | Null-check in `callerWithSub()` return paths |
+| 9 | `charnames::viacode()` crashed on missing `unicore/Name.pl` | `_charnames.pm`, `Charnames.java` | Wire viacode to Java-backed ICU4J lookup; add C0/C1 control char names |
+| 10 | `ref(*{$fh}{IO})` returned "GLOB" instead of "IO::Handle" | `ReferenceOperators.java` | Check for RuntimeIO in GLOBREFERENCE ref() |
 
-The tied array's `FETCH(index)` and `FETCHSIZE()` methods work, but iterating
-in list context (which PerlOnJava does via a different code path than individual
-FETCH calls) returns no elements.
+#### Workarounds Applied (Perl — in `~/.perlonjava/lib/`)
 
-**Impact:** All `Readonly::Array` and `Readonly::Hash` values are invisible to
-Exporter's tag expansion. This blocks `use Perl::Critic::Utils qw(:characters)`,
-which blocks nearly every Perl::Critic module.
+| Module | File | Fix |
+|--------|------|-----|
+| Exception::Class | `Exception/Class.pm` | Replace alias closure with eval-string to avoid closure capture bug |
+| Devel::StackTrace | `Devel/StackTrace.pm` | Guard against undef package name in frame filter; wrap `isa()` in eval for safety |
 
-**Fix location:** This is a PerlOnJava runtime bug in tied array list-context
-iteration. The relevant code is likely in `RuntimeArray.java` — the path that
-converts a tied array to a list needs to call `FETCH(0)`, `FETCH(1)`, ...,
-`FETCH(FETCHSIZE-1)` rather than reading the underlying storage directly.
+#### Test Results (40 test files, 5416 subtests)
 
-**Verification:**
-```perl
-use Readonly;
-Readonly::Array my @arr => qw(a b c);
-my @copy = @arr;
-print "@copy\n";  # Should print "a b c", currently prints ""
-```
+| Metric | Value |
+|--------|-------|
+| Files passed | 39/40 |
+| Subtests OK | 5411/5416 |
+| Pass rate | **99.9%** |
+
+### Remaining Issue (5 failing subtests in 1 file)
+
+#### t/20_policy_require_tidy_code.t — 1/6 (5 failures)
+
+Tests 2-6 each expect 0 violations for tidy code but get 1 ("perltidy had errors!!").
+
+**Root cause:** `Perl::Tidy::Formatter::initialize_self_vars` has ~160 local variables.
+When PerlOnJava compiles this into a JVM method, it exceeds the JVM's 255-argument
+limit for method signatures, producing `ClassFormatError: Too many arguments in
+method signature`. The `RequireTidyCode` policy catches this in an eval and reports
+"perltidy had errors!!" for every test case.
+
+**Fix options:**
+- **Option A**: Split large Perl subroutines across multiple JVM methods during compilation
+- **Option B**: Use a different variable storage strategy (array-based instead of per-variable parameters)
+- Both options require significant changes to the PerlOnJava bytecode generator
+
+This is low priority since Perl::Tidy is optional and only affects this one policy.
 
 ### Next Steps
-1. Fix Readonly::Array tied iteration in RuntimeArray.java
-2. Verify `use Perl::Critic` loads without errors
-3. Smoke-test: `./jperl -MPerl::Critic -e 'print Perl::Critic->VERSION'`
-4. Test: `echo 'print "hello"' | ./jperl -MPerl::Critic -e '...'`
+1. Investigate JVM method signature limit for large subroutines (affects Perl::Tidy, possibly other large modules)
 
 ### Additional Issues Found (not blocking, for later)
 - **Fatal.pm runtime ClassCastException**: `use Fatal qw(open)` loads OK but
@@ -518,5 +526,9 @@ print "@copy\n";  # Should print "a b c", currently prints ""
 - **PPIx::QuoteLike**: `(??{...})` recursive regex not supported — Utils.pm
   fails to compile. Module is force-installed; may affect some Perl::Critic
   policies that use it.
+- **Deep eval-string closure capture bug**: Closures created inside `eval STRING`
+  inside subroutines don't capture outer lexicals correctly. Worked around in
+  Exception::Class by replacing closure-based aliases with eval-string-based ones.
+  This bug may affect other modules and is a known PerlOnJava limitation.
 - **Readonly test failures**: 7/188 tests fail — prototype checking (`001_assign.t`),
   deep clone (`clone.t`), and read-only modification detection (`readonly.t`)
