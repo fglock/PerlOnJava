@@ -1532,10 +1532,10 @@ public class EmitterMethodCreator implements Opcodes {
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw e;
-        } catch (VerifyError e) {
+        } catch (VerifyError | ClassFormatError e) {
             if (USE_INTERPRETER_FALLBACK) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: JVM VerifyError (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
+                    System.err.println("Note: JVM " + e.getClass().getSimpleName() + " (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
                 }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
@@ -1647,10 +1647,14 @@ public class EmitterMethodCreator implements Opcodes {
      */
     private static boolean needsInterpreterFallback(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof ClassFormatError) {
+                return true;
+            }
             String msg = t.getMessage();
             if (msg != null && (
                     msg.contains("ASM frame computation failed") ||
                             msg.contains("requires interpreter fallback") ||
+                            msg.contains("Too many arguments in method signature") ||
                             msg.contains("Unexpected runtime error during bytecode generation") ||
                             msg.contains("dstFrame"))) {
                 return true;
