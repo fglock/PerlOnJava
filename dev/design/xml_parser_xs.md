@@ -46,12 +46,110 @@ xpcarp, xpcroak
 
 ## TODO: Remaining Issues
 
-### Custom Encoding Registration
+### Phase 4: Encoding Conversion
 
-**Status**: Known limitation (JDK SAX limitation)
-**Tests affected**: encoding.t, decl.t (2 incomplete), parament.t (9 incomplete)
+**Status**: Planned
+**Tests affected**: encoding.t (all tests), decl.t (2 incomplete), parament.t (9 incomplete)
 
-Expat supports custom encoding maps via `XML_SetUnknownEncodingHandler`. JDK's SAX parser only supports encodings built into the JDK. Custom encodings like `x-sjis-unicode` cannot be registered. The `foo.dtd` test file uses this encoding, causing SAX parse errors when `ParseParamEnt` is enabled and the DTD is loaded.
+#### Problem
+
+JDK SAX rejects unknown encoding names like `x-sjis-unicode` (an expat-specific alias for Shift_JIS). This affects three areas:
+
+1. **Document parsing** (`ParseString`/`ParseStream`): When `<?xml encoding="x-sjis-unicode"?>` appears in the document, SAX throws an unsupported encoding error.
+2. **External entity resolution** (`resolveEntity`): When an external DTD like `foo.dtd` starts with `<?xml encoding="x-sjis-unicode"?>`, SAX fails while parsing the entity content.
+3. **ProtocolEncoding**: When `ProtocolEncoding => 'X-SJIS-UNICODE'` is passed without an XML declaration.
+
+#### Analysis of encoding.t
+
+The test covers 11 encoding groups. Most are standard encodings that JDK already supports:
+
+| Encoding | JDK Charset | Status |
+|----------|------------|--------|
+| `x-sjis-unicode` | `Shift_JIS` | **Needs mapping** |
+| `WINDOWS-1252` | `windows-1252` | JDK supports |
+| `windows-1251` | `windows-1251` | JDK supports |
+| `koi8-r` | `KOI8-R` | JDK supports |
+| `windows-1255` | `windows-1255` | JDK supports |
+| `ibm866` | `IBM866` | JDK supports |
+| `iso-8859-2` | `ISO-8859-2` | JDK supports |
+| `iso-8859-5` | `ISO-8859-5` | JDK supports |
+| `iso-8859-9` | `ISO-8859-9` | JDK supports |
+| `iso-8859-15` | `ISO-8859-15` | JDK supports |
+| `windows-1250` | `windows-1250` | JDK supports |
+
+The test crashes on the first case (`x-sjis-unicode`) and never reaches the standard cases.
+
+#### Analysis of parament.t / decl.t
+
+`t/foo.dtd` starts with `<?xml encoding="x-sjis-unicode"?>` and contains SJIS-encoded entity values (e.g., `<!ENTITY joy "\x99\x44">` where bytes `0x99 0x44` map to U+50D6 in Shift_JIS). When `ParseParamEnt => 1` loads this DTD, SAX fails on the unsupported encoding.
+
+#### Implementation Plan
+
+**Step 1: Pre-parse encoding detection and byte re-encoding**
+
+Before feeding bytes to SAX, scan for `<?xml ... encoding="..."?>` in the raw input. If the declared encoding is not directly supported by JDK, map it to a known Java charset and re-encode the bytes as UTF-8:
+
+```java
+// In doParse() and resolveEntity(), before creating InputSource:
+private static byte[] convertEncoding(byte[] input) {
+    String declared = extractDeclaredEncoding(input);  // parse <?xml encoding="...">
+    if (declared == null) return input;
+
+    // Map expat-specific encoding names to Java charsets
+    String javaCharset = mapEncodingName(declared);
+    if (javaCharset == null) return input;  // let SAX handle it
+
+    // Decode with the correct charset, re-encode as UTF-8,
+    // and replace the encoding declaration
+    String content = new String(input, Charset.forName(javaCharset));
+    content = content.replaceFirst(
+        "encoding=['\"]" + Pattern.quote(declared) + "['\"]",
+        "encoding='UTF-8'");
+    return content.getBytes(StandardCharsets.UTF_8);
+}
+```
+
+**Step 2: Encoding name mapping table**
+
+Build a static mapping of expat-specific encoding names to Java charset names:
+
+```java
+private static final Map<String, String> ENCODING_MAP = Map.of(
+    "x-sjis-unicode", "Shift_JIS",
+    "x-euc-jp-unicode", "EUC-JP"
+    // Add other expat-specific names as needed
+);
+
+private static String mapEncodingName(String encoding) {
+    // First check our custom map
+    String mapped = ENCODING_MAP.get(encoding.toLowerCase());
+    if (mapped != null) return mapped;
+    // Then check if JDK supports it directly
+    try {
+        Charset.forName(encoding);
+        return null;  // JDK handles it natively
+    } catch (Exception e) {
+        return null;  // truly unknown, let SAX report the error
+    }
+}
+```
+
+**Step 3: Apply in all input paths**
+
+Apply `convertEncoding()` in three places:
+1. `ParseString` — for document strings with non-UTF-8 encodings
+2. `ParseStream` — for streamed content
+3. `resolveEntity` — for external DTD/entity content returned by the ExternEnt handler
+
+**Step 4: ProtocolEncoding without XML declaration**
+
+When `ProtocolEncoding` is set and the input has no `<?xml?>` declaration, prepend a synthetic declaration or use `InputSource.setEncoding()` with the mapped charset name.
+
+#### Expected Results
+
+- encoding.t: All tests should pass (standard encodings already work in JDK; x-sjis-unicode gets mapped to Shift_JIS)
+- parament.t: foo.dtd loads successfully, enabling entity expansion and ATTLIST processing (~10 more tests)
+- decl.t: External DTD text declaration processed, enabling 2 more tests
 
 ### UseForeignDTD
 
