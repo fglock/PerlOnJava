@@ -435,6 +435,9 @@ sub _create_install_makefile {
     if ($test_glob) {
         # Use Perl one-liner with Test::Harness for cross-platform test running
         $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl -MTest::Harness -e "runtests(glob(q{$test_glob}))"};
+    } elsif (-f 'test.pl') {
+        # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
+        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl test.pl};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
