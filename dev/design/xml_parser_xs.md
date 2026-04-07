@@ -19,92 +19,53 @@ XML::Parser is implemented as a Java XS module (`XMLParserExpat.java`) backed by
 
 ## Test Status
 
-**Current: 35/47 test files pass (74%), 365/385 subtests pass (95%)**
+**Current: 41/47 test files pass (87%), 377/397 subtests pass (95%)**
 
-### Passing Tests (35/47)
+### Passing Tests (41/47)
 
-bare_glob_filehandle, cdata, combine_chars, current_byte, current_length,
-debug_multibyte, deep_nesting, defaulted, element_decl, error_hint,
-error_string, expat_version, extern_ent_lexical_glob, external_ent, file,
-file_open_scalar, finish, get_base, memory_leak_symtab, namespaces, nolwp,
-parse_error_context, parsefile_base_restore, security_api, skip,
-stream_attr_escape, stream_localize, styles, subs_inherited,
-tree_entity_expand, utf8_handling, utf8_stream, xml_escape, xpcarp, xpcroak
+astress, bare_glob_filehandle, cdata, combine_chars, current_byte,
+current_length, debug_multibyte, deep_nesting, defaulted, element_decl,
+error_hint, error_string, expat_version, extern_ent_lexical_glob,
+external_ent, file, file_open_scalar, finish, g_void, get_base,
+memory_leak_symtab, namespaces, nolwp, parament_internal,
+parse_error_context, parsefile_base_restore, partial, position_overflow,
+security_api, skip, stream, stream_attr_escape, stream_localize, styles,
+subs_inherited, tree_entity_expand, utf8_handling, utf8_stream, xml_escape,
+xpcarp, xpcroak
 
-### Failing Tests (12/47)
+### Failing Tests (6/47)
 
 | Test | Failures | Category | Notes |
 |------|----------|----------|-------|
-| astress.t | 5/29 | External entities | Ext ent resolution, position_in_context, element_index |
 | checklib_findcc.t | 1/3 | Not XML::Parser | Devel::CheckLib stub, no real C compiler check |
 | checklib_tmpdir.t | 2/3 | Not XML::Parser | Devel::CheckLib stub, no File::Temp check |
-| decl.t | 2/46 | Custom encoding | x-sjis-unicode encoding not supported by JDK SAX; 44/44 subtests pass |
+| decl.t | 0/44 pass, 2 incomplete | Custom encoding | x-sjis-unicode text declaration; all 44 subtests pass |
 | encoding.t | 0/crash | Custom encoding | Custom encoding map registration not supported |
-| foreign_dtd.t | 5/5 | External DTD | Requires external DTD loading / UseForeignDTD |
-| g_void.t | 1/35 | External entities | ExternEntFin handler not called |
-| parament.t | 5/10 | Parameter entities | PE resolution in document body |
-| parament_internal.t | 2/crash | External entities | common.txt external entity file not found |
-| partial.t | 1/3 | original_string | SAX expands entities; no access to unexpanded text |
-| position_overflow.t | 1/9 | Self-closing tags | Column off by 1 for `<tag/>` (see TODO below) |
-| stream.t | 2/3 | Stream delimiter | Resumable stream parsing with delimiter not implemented |
+| foreign_dtd.t | 0/5 (4 ran) | External DTD | Requires UseForeignDTD feature (not implemented) |
+| parament.t | 1/4 fail, 9 incomplete | Custom encoding | x-sjis-unicode in foo.dtd crashes SAX parser |
 
-## TODO: Items to Fix
-
-### SAX Limitation: Self-Closing Tag Column Recognition
-
-**Status**: To be fixed
-**Test**: position_overflow.t test 9
-**Problem**: For self-closing tags like `<child2/>`, `current_column` returns 3 instead of expected 2.
-
-**Root cause**: In `startElement()`, the `recognizedString` is built as `<child2>` (8 chars) but the actual XML token is `<child2/>` (10 chars). The column calculation in `GetCurrentColumnNumber()` subtracts `recognizedString.length()` from the SAX locator's post-token 1-based column to get expat's pre-token 0-based column:
-
-```java
-int col = state.locator.getColumnNumber() - 1;      // e.g. 12 - 1 = 11
-col -= state.recognizedString.length();               // 11 - 8 = 3 (wrong)
-// Should be: 11 - 10 = 1... wait, expected is 2
-```
-
-SAX does not distinguish self-closing tags (`<foo/>`) from empty elements (`<foo></foo>`) — both fire `startElement` + `endElement`. The recognizedString omits the `/` character.
-
-**Proposed fix options**:
-1. **Check input bytes**: In `startElement()`, look back in `inputBytes` from the locator position to detect if `/>` closed the tag, and if so append `/` to recognizedString
-2. **Compare locator positions**: If `endElement` fires at the same line/column as `startElement` ended, infer it was self-closing
-3. **Scan the raw input**: Use `inputBytes` and `inputScanPos` to find the actual tag text from the source
-
-### External Entity Resolution Architecture
-
-**Status**: Known limitation
-**Tests affected**: astress.t, g_void.t, parament.t, parament_internal.t, foreign_dtd.t
-
-SAX's `resolveEntity()` fundamentally differs from expat's `externalEntityRef`:
-- Expat: handler returns a sub-parser that processes the entity content and merges events into the main parse
-- SAX: `resolveEntity()` returns an `InputSource` and SAX processes it internally
-
-This means:
-- General entity resolution in document body doesn't trigger `resolveEntity` the same way
-- `ExternEntFin` handler cannot be called (no sub-parser lifecycle)
-- Parameter entity resolution differs between internal/external DTD subsets
+## TODO: Remaining Issues
 
 ### Custom Encoding Registration
 
 **Status**: Known limitation (JDK SAX limitation)
-**Tests affected**: encoding.t, decl.t (2 tests)
+**Tests affected**: encoding.t, decl.t (2 incomplete), parament.t (9 incomplete)
 
-Expat supports custom encoding maps via `XML_SetUnknownEncodingHandler`. JDK's SAX parser only supports encodings built into the JDK. Custom encodings like `x-sjis-unicode` cannot be registered.
+Expat supports custom encoding maps via `XML_SetUnknownEncodingHandler`. JDK's SAX parser only supports encodings built into the JDK. Custom encodings like `x-sjis-unicode` cannot be registered. The `foo.dtd` test file uses this encoding, causing SAX parse errors when `ParseParamEnt` is enabled and the DTD is loaded.
 
-### Stream Delimiter Resumable Parsing
+### UseForeignDTD
 
-**Status**: Known limitation
-**Tests affected**: stream.t (2 tests)
+**Status**: Not implemented
+**Tests affected**: foreign_dtd.t (5 tests)
 
-The current `ParseStream` reads the entire IO handle into a byte array and parses it all at once. Expat supports reading line-by-line, stopping at a delimiter, and resuming from the same filehandle position. This requires restructuring ParseStream to read incrementally.
+Expat's `XML_UseForeignDTD()` triggers the `ExternalEntityRef` handler even for documents without a DOCTYPE. This allows injecting a DTD dynamically. JDK SAX has no equivalent API.
 
-### `original_string` for Expanded Entities
+### Devel::CheckLib Stubs
 
-**Status**: Known limitation
-**Tests affected**: partial.t (1 test)
+**Status**: Not XML::Parser related
+**Tests affected**: checklib_findcc.t (1 test), checklib_tmpdir.t (2 tests)
 
-SAX always returns expanded entity values. There's no way to get the unexpanded original text (e.g., `&draft.day;` instead of `10`). Would require pre-processing the XML to track entity reference positions.
+These tests check C compiler detection and temp directory handling from Devel::CheckLib, which is not relevant to the Java XS implementation.
 
 ## Progress Tracking
 
@@ -126,8 +87,21 @@ SAX always returns expanded entity values. There's no way to get the unexpanded 
   - IO handle class detection (GLOB → IO::Handle)
   - MakeMaker BASEEXT directory scanning
 
-### Next Steps
+- [x] Batch 3 fixes (2025-04-07)
+  - Stream delimiter parsing (readline-based, respecting $/)
+  - Self-closing tag detection (inputBytes scanning for `/>`)
+  - Entity expansion tracking (startEntity/endEntity → original_string)
+  - ExternEntFin handler for string returns
+  - Element index stack (push/pop for start/end consistency)
+  - ProtocolEncoding (stored and applied to InputSource)
+  - PositionContext implementation (surrounding lines + linepos)
+  - ParseParamEnt conditional SAX feature flags
+  - Entity resolver systemId preservation for relative URI resolution
+  - Context pop order (after end handler, matching libexpat)
+  - Self-closing tag column in endElement (empty recognizedString)
 
-1. Fix self-closing tag column recognition (position_overflow.t test 9)
-2. Investigate stream delimiter resumable parsing
-3. Consider external entity architecture improvements
+### Remaining Limitations
+
+1. Custom encoding support (x-sjis-unicode) — JDK limitation
+2. UseForeignDTD — no SAX equivalent
+3. Devel::CheckLib tests — not XML-related
