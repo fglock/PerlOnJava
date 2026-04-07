@@ -573,22 +573,205 @@ POE's pattern is always `$heap->{wheel} = Wheel->new(...)` with a single referen
 calling DESTROY when the hash value is overwritten or deleted is correct 99% of the time.
 For safety, DESTROY could be made idempotent (track whether it's already been called).
 
-### Next Steps
+### Next Steps — Recommended Priority Order
 
-**Priority order:**
-1. **Phase 4.5: DESTROY workaround** — highest remaining impact (20-30+ tests). Recommended
-   approach is Option A (trigger DESTROY on `delete`/`set` when overwriting a blessed reference).
-   Implementation plan:
-   - In `RuntimeHash.delete()`: check if removed value is a blessed ref with DESTROY, call it
-   - In `RuntimeScalar.set()`: when overwriting a blessed ref, check for DESTROY
-   - Guard against double-DESTROY: track whether DESTROY already called (flag on blessed object)
-   - DESTROY should be called in void context, catching any exceptions
-   - This also unblocks Phase 4.12 (fileno for regular files + scope-exit cleanup)
-   - **Note**: ses_session.t hangs because POE postbacks use DESTROY-based refcount cleanup.
-     Without DESTROY, sessions using postbacks/callbacks are never garbage collected.
-2. **Phase 4.12: fileno for regular files** — blocked by Phase 4.5 (DESTROY).
-   Trivial implementation (add `assignFileno()` in RuntimeIO.open()) but requires DESTROY
-   for fd recycling. Will gain +3 tests in require_37033.t and io/dup.t.
+Goal: `./jcpan -j 8 -t POE` completes with minimal failures. DESTROY and weaken failures
+are acceptable. All changes must be 100% compatible with system Perl (no custom harness
+extensions, no non-standard timeout mechanisms).
+
+#### Test Inventory (~159 total test files)
+
+| Category | Files | Current Status |
+|----------|-------|----------------|
+| Already passing | ~62 | 38 unit + 9 resource + 14 select + 1 info |
+| DESTROY hangs/fails | ~12 | Acceptable — ses_session, wheel_*, filterchange, comp_tcp |
+| fork()-dependent | ~15 | Acceptable — k_sig_child, k_signals*, wheel_run*, regression/fork tests |
+| IO::Poll missing | 39 | Structural — 35 io_poll/ + 4 unit loop tests, fail fast |
+| Missing XS/native | ~5 | Structural — Curses, IO::Pty, Term::*, IPv6, Compress::Zlib |
+| Untested regression | ~8 | Pure POE, likely pass already |
+| Pipe tests | 2 | Likely pass already |
+| Self-skipping | ~5 | Should count as OK |
+| Potentially fixable | ~6 | See priorities below |
+
+#### Failure Root Causes (for tests not in acceptable categories)
+
+| Test | Root Cause | Notes |
+|------|-----------|-------|
+| comp_tcp.t (0/34) | First 14 tests are constructor validation (no I/O, no DESTROY). 0/34 suggests a loading/init issue — possibly missing `ETIMEDOUT` constant, `getsockname()` format mismatch, or `run_network_tests` sentinel file | Networking portion (20 tests) blocked by DESTROY |
+| wheel_sf_udp.t (4/10) | Three issues in IOOperator.java: (1) `socket()` rejects UDP ("not yet fully implemented"), (2) `send()` ignores TO address (4th arg), (3) `recv()` doesn't return sender's sockaddr | 4 passing tests are vacuous _stop checks |
+| wheel_sf_unix.t (0/12) | `pack_sockaddr_un`/`unpack_sockaddr_un` missing or lost. `bind()`/`connect()` only handle sockaddr_in format. Java 16+ has `UnixDomainSocketAddress` | Phase 4.1 stubs may have been lost |
+| k_signals.t (2/8) | fork-dependent tests (4) can't work. Self-signal tests (SIGUSR1/SIGPIPE via `kill($$)`) should work but only 2/8 pass — possible timing issue | Worth investigating 2-4 more tests |
+| 09_resources.t (1/7) | CORE::GLOBAL::require override not working at runtime | Parser infrastructure exists but runtime dispatch may be broken |
+| 51_reference_die.t (3/5) | YAML::PP too lenient on malformed YAML — doesn't die on truncated input | Low priority, 2 tests |
+| 05_map.t (24/27) | 3 TODO failures in POE itself (modify() carps instead of dying) | Not a PerlOnJava bug |
+| 99_filterchange.t | Hangs — likely select()/pipe interaction in same-process bidirectional I/O | May be DESTROY-related or I/O multiplexing bug |
+
+#### Priority 1: Verify untested tests (zero code changes, +10-15 wins)
+
+Run the following to establish the real baseline:
+
+**Pure POE regression tests** (no fork, no DESTROY, no I/O):
+- `t/90_regression/averell-callback-ret.t` — callback return values
+- `t/90_regression/rt14444-arg1.t` — argument passing via _default
+- `t/90_regression/meh-startstop-return.t` — _start/_stop return values
+- `t/90_regression/neyuki_detach.t` — detach_myself
+- `t/90_regression/rt23181-sigchld-rc.t` — sig_child without prior registration
+- `t/90_regression/whelan-dieprop.t` — die() propagation via sig(DIE)
+- `t/90_regression/grinnz-die-in-die.t` — die() inside die handler
+- `t/90_regression/leolo-sig-die.t` — $SIG{__DIE__} interaction
+
+**Pipe tests** (direct pipe/socketpair, no event loop):
+- `t/10_units/02_pipes/02_oneway.t` — OneWay pipe write/read
+- `t/10_units/02_pipes/03_twoway.t` — TwoWay bidirectional pipe
+
+**Self-skipping tests** (should count as OK in harness):
+- `t/30_loops/select/all_errors.t` — unconditional skip (all code commented out)
+- `t/90_regression/broeren-win32-nbio.t` — skips on non-Windows
+- `t/90_regression/prumike-win32-stat.t` — skips on non-Windows
+- `t/90_regression/suzman_windows.t` — Windows-specific
+
+**Networking regression tests** (no fork, but may need DESTROY for cleanup):
+- `t/90_regression/agaran-filter-httpd.t` — TCP server/client with HTTP filter
+- `t/90_regression/cfedde-filter-httpd.t` — similar HTTP filter test
+- `t/90_regression/somni-poco-server-tcp.t` — TCP server/client
+- `t/90_regression/ton-stop-corruption.t` — uses POE::Pipe::OneWay + select_read
+- `t/90_regression/socketfactory-timeout.t` — TCP connect to port 0 (expect failure)
+- `t/90_regression/rt19908-merlyn-stop.t` — uses alarm() and die() in _stop
+- `t/90_regression/tracing-sane-exit.t` — POE tracing
+
+**Other regression tests to classify** (may use fork via Wheel::Run — check before running):
+- `t/90_regression/steinert-passed-wheel.t` — uses POE::Pipe::OneWay + ReadWrite
+- `t/90_regression/bingos-followtail.t` — uses FollowTail
+- `t/90_regression/whjackson-followtail.t` — uses FollowTail
+- `t/90_regression/pipe-followtail.t` — uses mkfifo + FollowTail
+- `t/90_regression/ferrari-server-unix.t` — Unix domain sockets + backticks
+
+**Fork-dependent regression tests** (will fail, acceptable):
+- `t/90_regression/hinrik-wheel-run-die.t`
+- `t/90_regression/rt1648-tied-stderr.t`
+- `t/90_regression/rt47966-sigchld.t`
+- `t/90_regression/rt56417-wheel-run.t`
+- `t/90_regression/rt65460-forking.t`
+- `t/90_regression/kjeldahl-stop-start-polling.t`
+- `t/90_regression/kjeldahl-stop-start-sig-nopipe.t`
+- `t/90_regression/kjeldahl-stop-start-sig-pipe.t`
+
+#### Priority 2: Debug comp_tcp.t (0/34) — likely simple init issue
+
+The first 14 tests are constructor validation (eval + regex on error messages). They
+need no networking, no DESTROY, no fork. Getting 0/34 means even these fail, suggesting
+a loading or initialization issue.
+
+**Investigation steps:**
+1. Run `comp_tcp.t` manually with debug output to see the actual error
+2. Check if `run_network_tests` sentinel file exists (test skips without it)
+3. Check if `POE::Component::Server::TCP` loads — may need `ETIMEDOUT` in Errno
+4. Check `getsockname()` return format on listener sockets
+
+**Expected gain:** +14 constructor tests (networking tests blocked by DESTROY)
+
+#### Priority 3: Fix UDP socket support — wheel_sf_udp.t (4/10)
+
+Three issues in `IOOperator.java`:
+
+1. **`socket()` rejects UDP** (line ~1687): Returns false with "UDP sockets not yet
+   fully implemented". Need to add `DatagramChannel` support:
+   - `IOOperator.socket()`: detect `SOCK_DGRAM` and create `DatagramChannel`
+   - `SocketIO.java`: add DatagramChannel wrapper (or new `DatagramSocketIO` class)
+
+2. **`send()` ignores TO address** (line ~2303): The 4th argument to `send()` is the
+   packed destination sockaddr — essential for UDP. Need to:
+   - Parse the packed sockaddr_in to extract host/port
+   - Use `DatagramChannel.send(buffer, address)` or `DatagramSocket.send(DatagramPacket)`
+
+3. **`recv()` doesn't return sender address** (line ~2324-2355): Perl's `recv()` returns
+   the sender's packed sockaddr. Need to:
+   - Use `DatagramChannel.receive(buffer)` which returns `SocketAddress`
+   - Pack the returned address into sockaddr_in format
+
+**Expected gain:** +6 tests
+
+#### Priority 4: Fix Unix domain socket support — wheel_sf_unix.t (0/12)
+
+Java 16+ supports Unix domain sockets via `java.net.UnixDomainSocketAddress` and
+`SocketChannel.open(StandardProtocolFamily.UNIX)`.
+
+**Implementation steps:**
+1. **Re-implement `pack_sockaddr_un` / `unpack_sockaddr_un`** in Socket.java:
+   - `pack_sockaddr_un($path)`: Pack AF_UNIX + path into binary sockaddr
+   - `unpack_sockaddr_un($packed)`: Extract path from packed sockaddr
+   - Add `sockaddr_un($path)` dual-purpose function
+   - Register in Socket.pm `@EXPORT`
+
+2. **Update `bind()` and `connect()` in IOOperator.java**:
+   - Detect AF_UNIX family in packed sockaddr (first 2 bytes)
+   - Use `UnixDomainSocketAddress.of(path)` for address
+   - Use `SocketChannel.open(StandardProtocolFamily.UNIX)` for channel creation
+
+3. **Update `socket()` in IOOperator.java**:
+   - Handle `PF_UNIX` / `AF_UNIX` domain with `StandardProtocolFamily.UNIX`
+
+**Expected gain:** Up to +12 tests (networking portion may be blocked by DESTROY)
+
+#### Priority 5: Investigate k_signals.t self-signal tests
+
+Tests 5-8 in `k_signals.pm` (lines ~198-228) use `kill("USR1", $$)` and
+`kill("PIPE", $$)` — no fork needed. Only 2/8 tests pass currently. The self-signal
+tests should work given that signal delivery works end-to-end (verified in earlier phases).
+
+**Investigation steps:**
+1. Run k_signals.t manually, check which 2 tests pass
+2. Check if SIGUSR1/SIGPIPE delivery via `kill($$)` works in isolation
+3. May be a timing issue or event loop interaction
+
+**Expected gain:** +2-4 tests
+
+#### Priority 6: Phase 4.5 — DESTROY workaround (highest total impact)
+
+Status: Not started. See "DESTROY Workaround Options" section above.
+**Expected gain:** 20-30+ tests across wheel_readwrite, wheel_tail, wheel_sf_tcp,
+wheel_accept, ses_session, comp_tcp (networking), plus unblocks Phase 4.12.
+
+#### Priority 7: Phase 4.12 — fileno for regular files
+
+Blocked by Priority 6 (DESTROY). Trivial implementation once DESTROY works.
+**Expected gain:** +3 tests (require_37033.t, io/dup.t)
+
+#### Projected Pass Rates
+
+| After Step | Passing | Total | Rate | Delta |
+|------------|---------|-------|------|-------|
+| Current baseline | ~62 | ~159 | 39% | — |
+| + Verify untested (Priority 1) | ~76 | ~159 | 48% | +14 |
+| + comp_tcp constructor fix (Priority 2) | ~90 | ~159 | 57% | +14 |
+| + UDP support (Priority 3) | ~96 | ~159 | 60% | +6 |
+| + Unix sockets (Priority 4) | ~100 | ~159 | 63% | +4 (DESTROY blocks rest) |
+| + k_signals self-signal (Priority 5) | ~104 | ~159 | 65% | +4 |
+| + DESTROY workaround (Priority 6) | ~130 | ~159 | 82% | +26 |
+
+Remaining ~29 failures would all be structural: fork (~15), IO::Poll (39 — but these
+are separate test files from the select/ tests), missing XS modules (~5).
+
+Note: The 39 io_poll tests inflate the total. Counting only select-loop + unit +
+resource + regression tests (~124 files), the rate after all priorities would be ~105/124 (85%).
+
+#### Hanging Tests (informational)
+
+These tests hang due to DESTROY not being called. They will block a `-j 8` harness
+slot until the harness's overall timeout (if any). This is acceptable per requirements,
+but be aware that the test run may take a long time due to these:
+
+- `t/30_loops/select/ses_session.t` — POE::Kernel->run() never exits
+- `t/30_loops/select/wheel_readwrite.t` — event loop after test 16
+- `t/30_loops/select/wheel_tail.t` — delete $heap->{wheel} never cleans up
+- `t/30_loops/select/wheel_sf_tcp.t` — between TCP phases
+- `t/30_loops/select/wheel_accept.t` — after test 1
+- `t/10_units/05_filters/99_filterchange.t` — event loop deadlock
+- `t/30_loops/select/comp_tcp.t` — may hang or fail fast (needs investigation)
+- `t/90_regression/bingos-followtail.t` — FollowTail DESTROY
+- `t/90_regression/whjackson-followtail.t` — FollowTail DESTROY (if it uses event loop)
+
+After Priority 6 (DESTROY), most of these should complete normally.
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` - Symbol $VERSION pattern

@@ -88,6 +88,9 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("getnameinfo", null);
             socket.registerMethod("getaddrinfo", null);
             socket.registerMethod("sockaddr_family", null);
+            socket.registerMethod("pack_sockaddr_un", null);
+            socket.registerMethod("unpack_sockaddr_un", null);
+            socket.registerMethod("sockaddr_un", null);
 
             // Register constants as subroutines with empty prototype (like use constant)
             socket.registerMethod("AF_INET", "");
@@ -651,6 +654,93 @@ public class Socket extends PerlModuleBase {
         // Family is stored in the first 2 bytes (big-endian, matching pack_sockaddr_in convention)
         int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
         return new RuntimeScalar(family).getList();
+    }
+
+    /**
+     * pack_sockaddr_un(PATH)
+     * Packs a Unix domain socket path into a sockaddr_un structure.
+     * The structure is: 2 bytes family (AF_UNIX) + path + null terminator.
+     * Total size is 110 bytes on most platforms (matching struct sockaddr_un).
+     */
+    public static RuntimeList pack_sockaddr_un(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for pack_sockaddr_un");
+        }
+
+        String path = args.get(0).toString();
+        // struct sockaddr_un is typically 110 bytes: 2 bytes family + 108 bytes path
+        int SOCKADDR_UN_SIZE = 110;
+        int SUN_PATH_MAX = SOCKADDR_UN_SIZE - 2;
+
+        if (path.length() > SUN_PATH_MAX - 1) {
+            throw new RuntimeException("socket path too long for pack_sockaddr_un (max " + (SUN_PATH_MAX - 1) + ")");
+        }
+
+        byte[] sockaddr = new byte[SOCKADDR_UN_SIZE];
+        // Family: AF_UNIX = 1 (big-endian to match our pack_sockaddr_in convention)
+        sockaddr[0] = (byte) ((AF_UNIX >> 8) & 0xFF);
+        sockaddr[1] = (byte) (AF_UNIX & 0xFF);
+
+        // Copy path bytes
+        byte[] pathBytes = path.getBytes(StandardCharsets.ISO_8859_1);
+        System.arraycopy(pathBytes, 0, sockaddr, 2, pathBytes.length);
+        // Rest is already zero-filled (null terminator + padding)
+
+        return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1)).getList();
+    }
+
+    /**
+     * unpack_sockaddr_un(SOCKADDR)
+     * Unpacks a sockaddr_un structure into a Unix socket path.
+     * Returns the path string.
+     */
+    public static RuntimeList unpack_sockaddr_un(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for unpack_sockaddr_un");
+        }
+
+        String sockaddrStr = args.get(0).toString();
+        byte[] sockaddr = sockaddrStr.getBytes(StandardCharsets.ISO_8859_1);
+
+        if (sockaddr.length < 3) {
+            throw new RuntimeException("Bad arg length for Socket::unpack_sockaddr_un, length is " + sockaddr.length + ", should be at least 3");
+        }
+
+        // Extract path (starts at byte 2, null-terminated)
+        int pathEnd = 2;
+        while (pathEnd < sockaddr.length && sockaddr[pathEnd] != 0) {
+            pathEnd++;
+        }
+
+        String path = new String(sockaddr, 2, pathEnd - 2, StandardCharsets.ISO_8859_1);
+        return new RuntimeScalar(path).getList();
+    }
+
+    /**
+     * sockaddr_un(PATH) - pack form (1 arg in scalar context or 1 arg in list context)
+     * sockaddr_un(SOCKADDR) - unpack form (1 arg that looks like packed sockaddr)
+     * Dual-purpose function matching Perl's sockaddr_un behavior.
+     * In practice, if called with a path string, it packs; if called with a binary sockaddr, it unpacks.
+     */
+    public static RuntimeList sockaddr_un(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for sockaddr_un");
+        }
+        String arg = args.get(0).toString();
+        byte[] bytes = arg.getBytes(StandardCharsets.ISO_8859_1);
+
+        // Heuristic: if arg looks like a packed sockaddr_un (starts with AF_UNIX family bytes
+        // and is at least 3 bytes), treat it as an unpack operation.
+        // Otherwise, treat as a pack operation.
+        if (bytes.length >= 3) {
+            int family = ((bytes[0] & 0xFF) << 8) | (bytes[1] & 0xFF);
+            if (family == AF_UNIX && bytes.length > 10) {
+                // Likely a packed sockaddr_un — unpack it
+                return unpack_sockaddr_un(args, ctx);
+            }
+        }
+        // Otherwise, pack
+        return pack_sockaddr_un(args, ctx);
     }
 
     // New constant methods

@@ -12,6 +12,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
+import java.net.StandardProtocolFamily;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
@@ -44,12 +46,12 @@ public class IOOperator {
         }
         if (runtimeList.size() == 4) {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
-            // Snapshot arguments to avoid multiple FETCH calls on tied variables.
-            // In Perl 5, arguments are evaluated once onto the stack before select runs.
-            RuntimeScalar rbits = new RuntimeScalar().set(runtimeList.elements.get(0).scalar());
-            RuntimeScalar wbits = new RuntimeScalar().set(runtimeList.elements.get(1).scalar());
-            RuntimeScalar ebits = new RuntimeScalar().set(runtimeList.elements.get(2).scalar());
-            RuntimeScalar timeout = new RuntimeScalar().set(runtimeList.elements.get(3).scalar());
+            // Get the original scalars so we can modify bit vectors in-place
+            // (Perl's select() modifies its first 3 args to reflect which fds are ready)
+            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
+            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
+            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
+            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
 
             // Special case: if all bit vectors are undef, just sleep
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
@@ -137,13 +139,17 @@ public class IOOperator {
                                 ? SelectionKey.OP_ACCEPT
                                 : SelectionKey.OP_READ;
                     }
-                    if (wantWrite && ch instanceof SocketChannel sc) {
-                        // For non-blocking connects in progress, use OP_CONNECT.
-                        // Perl's select() treats write-readiness as "connect complete",
-                        // but Java NIO requires OP_CONNECT for pending connections.
-                        if (sc.isConnectionPending()) {
-                            ops |= SelectionKey.OP_CONNECT;
-                        } else {
+                    if (wantWrite) {
+                        if (ch instanceof SocketChannel sc) {
+                            // For non-blocking connects in progress, use OP_CONNECT.
+                            // Perl's select() treats write-readiness as "connect complete",
+                            // but Java NIO requires OP_CONNECT for pending connections.
+                            if (sc.isConnectionPending()) {
+                                ops |= SelectionKey.OP_CONNECT;
+                            } else {
+                                ops |= SelectionKey.OP_WRITE;
+                            }
+                        } else if (ch instanceof java.nio.channels.DatagramChannel) {
                             ops |= SelectionKey.OP_WRITE;
                         }
                     }
@@ -265,7 +271,19 @@ public class IOOperator {
                     setBit(rresult, fd);
                     totalReady++;
                 }
-                // OP_CONNECT means the non-blocking connect completed — treat as write-ready
+                // OP_CONNECT means the non-blocking connect completed — treat as write-ready.
+                // Also call finishConnect() to complete the connection handshake,
+                // since Perl's select() doesn't have a separate connect step.
+                if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
+                    SelectableChannel ch = key.channel();
+                    if (ch instanceof SocketChannel sc && sc.isConnectionPending()) {
+                        try {
+                            sc.finishConnect();
+                        } catch (IOException ignored) {
+                            // Connection error will be detected via SO_ERROR
+                        }
+                    }
+                }
                 if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
                     setBit(wresult, fd);
                     totalReady++;
@@ -1027,7 +1045,6 @@ public class IOOperator {
         try {
             result = baseHandle.sysread(length);
         } catch (Exception e) {
-            // e.printStackTrace();
             // This might happen with write-only handles
             getGlobalVariable("main::!").set("Bad file descriptor");
             WarnDie.warn(
@@ -1678,15 +1695,15 @@ public class IOOperator {
 
             RuntimeIO socketIO;
             if (type == 1) { // SOCK_STREAM (TCP)
-                // Create a SocketChannel - this is a client-capable socket that can be
-                // used with connect(). For server usage (bind+listen), SocketIO.listen()
-                // will lazily convert to a ServerSocketChannel.
-                SocketChannel channel = SocketChannel.open();
+                // Create a SocketChannel with protocol family for proper IPv4/IPv6 handling.
+                // This ensures getsockname() returns the right address family.
+                SocketChannel channel = SocketChannel.open(family);
                 SocketIO socketIOHandle = new SocketIO(channel, family);
                 socketIO = new RuntimeIO(socketIOHandle);
             } else if (type == 2) { // SOCK_DGRAM (UDP)
-                getGlobalVariable("main::!").set("UDP sockets not yet fully implemented");
-                return scalarFalse;
+                DatagramChannel channel = DatagramChannel.open(family);
+                SocketIO socketIOHandle = new SocketIO(channel, family);
+                socketIO = new RuntimeIO(socketIOHandle);
             } else {
                 getGlobalVariable("main::!").set("Unsupported socket type: " + type);
                 return scalarFalse;
@@ -1983,9 +2000,11 @@ public class IOOperator {
             java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
-            // Create IOHandle implementations for the pipe ends
-            InternalPipeHandle readerHandle = InternalPipeHandle.createReader(pipeIn);
-            InternalPipeHandle writerHandle = InternalPipeHandle.createWriter(pipeOut);
+            // Create IOHandle implementations for the pipe ends.
+            // Use createPair() so they share a writerClosed flag for EOF detection.
+            InternalPipeHandle[] pair = InternalPipeHandle.createPair(pipeIn, pipeOut);
+            InternalPipeHandle readerHandle = pair[0];
+            InternalPipeHandle writerHandle = pair[1];
 
             // Create RuntimeIO objects for the handles
             RuntimeIO readerIO = new RuntimeIO();
@@ -2300,8 +2319,29 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            // For now, ignore flags and TO address - implement basic send
-            // Send message as string
+            // Check if this is a UDP socket with a TO address (4th arg)
+            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                if (args.length >= 4) {
+                    // 4th arg is packed sockaddr_in (destination address)
+                    String packedAddr = args[3].toString();
+                    byte[] addrBytes = packedAddr.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                    if (addrBytes.length >= 8) {
+                        int port = ((addrBytes[2] & 0xFF) << 8) | (addrBytes[3] & 0xFF);
+                        String ip = String.format("%d.%d.%d.%d",
+                                addrBytes[4] & 0xFF, addrBytes[5] & 0xFF,
+                                addrBytes[6] & 0xFF, addrBytes[7] & 0xFF);
+                        InetSocketAddress target = new InetSocketAddress(ip, port);
+                        byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                        int sent = sio.sendTo(data, target);
+                        return new RuntimeScalar(sent);
+                    }
+                }
+                // No TO address — send to connected peer (not typical for UDP)
+                getGlobalVariable("main::!").set("send: UDP requires destination address");
+                return scalarUndef;
+            }
+
+            // TCP: ignore flags and TO address - send via stream
             RuntimeScalar result = socketIO.write(message);
 
             if (result != null && !result.equals(scalarFalse)) {
@@ -2329,7 +2369,7 @@ public class IOOperator {
 
         try {
             RuntimeScalar socketHandle = args[0].scalar();
-            RuntimeScalar buffer = args[1].scalar();
+            RuntimeScalar buffer = args[1].scalar().scalarDeref();
             int length = args[2].scalar().getInt();
             int flags = args.length > 3 ? args[3].scalar().getInt() : 0;
 
@@ -2339,13 +2379,27 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            // Read data from socket
+            // Check if this is a UDP socket
+            if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                byte[] data = sio.recvFrom(length);
+                if (data != null) {
+                    buffer.set(new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
+                    // Return the sender's packed sockaddr (Perl recv() returns this)
+                    return sio.getLastReceivedFrom();
+                } else {
+                    buffer.set("");
+                    return scalarUndef;
+                }
+            }
+
+            // TCP: Read data from socket stream
             RuntimeScalar data = socketIO.ioHandle.read(length);
             if (data != null && !data.equals(scalarUndef)) {
                 buffer.set(data.toString());
-                return new RuntimeScalar(data.toString().length());
+                // For TCP, return the empty string (Perl returns "" for connected sockets)
+                return new RuntimeScalar("");
             } else {
-                getGlobalVariable("main::!").set("Recv failed");
+                buffer.set("");
                 return scalarUndef;
             }
 
@@ -2760,44 +2814,37 @@ public class IOOperator {
         }
 
         try {
-            // The first two arguments are references to RuntimeGlob objects that already exist
-            RuntimeScalar sock1Ref = args[0].scalar();
-            RuntimeScalar sock2Ref = args[1].scalar();
-            RuntimeBase domain = args[2];
-            RuntimeBase type = args[3];
-            RuntimeBase protocol = args[4];
+            // The first two arguments are the socket handle scalars
+            RuntimeScalar sock1Handle = args[0].scalar();
+            RuntimeScalar sock2Handle = args[1].scalar();
 
-            // Get the actual RuntimeGlob objects from the references
-            RuntimeGlob glob1 = (RuntimeGlob) sock1Ref.value;
-            RuntimeGlob glob2 = (RuntimeGlob) sock2Ref.value;
+            // Use NIO SocketChannels so that select() can monitor these sockets
+            ServerSocketChannel serverChannel = ServerSocketChannel.open();
+            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
 
-            // For simplicity, we'll create a local socket pair using ServerSocket and Socket
-            // This is similar to how socketpair works on Unix systems
+            // Create the first socket channel and connect it
+            SocketChannel channel1 = SocketChannel.open();
+            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
 
-            // Create a server socket on localhost with a random port
-            ServerSocket serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
-            int port = serverSocket.getLocalPort();
+            // Accept the connection to get the second socket channel
+            SocketChannel channel2 = serverChannel.accept();
 
-            // Create the first socket and connect it to the server
-            Socket socket1 = new Socket();
-            socket1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+            // Close the server channel as we no longer need it
+            serverChannel.close();
 
-            // Accept the connection on the server side to get the second socket
-            Socket socket2 = serverSocket.accept();
-
-            // Close the server socket as we no longer need it
-            serverSocket.close();
-
-            // Create RuntimeIO objects for both sockets
+            // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(socket1);
+            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET);
+            io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(socket2);
+            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET);
+            io2.assignFileno();
 
-            // Set the IO handles directly on the existing globs
-            glob1.setIO(io1);
-            glob2.setIO(io2);
+            // Set IO slot on each handle, following the same pattern as socket()
+            setSocketOnHandle(sock1Handle, io1);
+            setSocketOnHandle(sock2Handle, io2);
 
             return scalarTrue;
 
@@ -2805,6 +2852,28 @@ public class IOOperator {
             // Set $! to the error message
             getGlobalVariable("main::!").set(e.getMessage());
             return scalarFalse;
+        }
+    }
+
+    /**
+     * Helper to set a RuntimeIO on a socket handle, auto-vivifying a glob if needed.
+     */
+    private static void setSocketOnHandle(RuntimeScalar handle, RuntimeIO io) {
+        RuntimeGlob targetGlob = null;
+        if ((handle.type == RuntimeScalarType.GLOB || handle.type == RuntimeScalarType.GLOBREFERENCE)
+                && handle.value instanceof RuntimeGlob glob) {
+            targetGlob = glob;
+        }
+        if (targetGlob != null) {
+            targetGlob.setIO(io);
+        } else {
+            // Create a new anonymous GLOB and assign it to the lvalue
+            RuntimeScalar newGlob = new RuntimeScalar();
+            newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+            RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(io);
+            newGlob.value = anonGlob;
+            RuntimeIO.registerGlobForFdRecycling(anonGlob, io);
+            handle.set(newGlob);
         }
     }
 

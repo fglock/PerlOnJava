@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.*;
+import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -41,6 +42,10 @@ public class SocketIO implements IOHandle {
     private ProtocolFamily protocolFamily;
     // Track bound address for lazy server socket creation in listen()
     private InetSocketAddress boundAddress;
+    // DatagramChannel for UDP sockets
+    private DatagramChannel datagramChannel;
+    // Last received sender address for recv() return value
+    private SocketAddress lastReceivedFrom;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -102,6 +107,18 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Constructs a SocketIO instance from a DatagramChannel for UDP sockets.
+     *
+     * @param channel the datagram channel
+     * @param family  the protocol family (INET, INET6, etc.)
+     */
+    public SocketIO(DatagramChannel channel, ProtocolFamily family) {
+        this.datagramChannel = channel;
+        this.protocolFamily = family;
+        this.socketOptions = new HashMap<>();
+    }
+
+    /**
      * Binds the socket to a specific address and port.
      *
      * @param address the IP address to bind to
@@ -111,7 +128,10 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar bind(String address, int port) {
         try {
             InetSocketAddress bindAddr = new InetSocketAddress(address, port);
-            if (socket != null) {
+            if (datagramChannel != null) {
+                datagramChannel.bind(bindAddr);
+                this.boundAddress = bindAddr;
+            } else if (socket != null) {
                 socket.bind(bindAddr);
                 this.boundAddress = bindAddr;
             } else if (serverSocket != null) {
@@ -143,6 +163,14 @@ public class SocketIO implements IOHandle {
 
             // Use SocketChannel for non-blocking connect support
             if (socketChannel != null && !blocking) {
+                // Auto-bind if not already bound so getsockname() returns local address
+                // even before the connection completes (Java NIO doesn't expose the
+                // local address until finishConnect() without this).
+                // Bind to the same IP as the target so getsockname() returns the
+                // correct local address (matching Perl's kernel behavior).
+                if (socketChannel.getLocalAddress() == null) {
+                    socketChannel.bind(new InetSocketAddress(target.getAddress(), 0));
+                }
                 boolean connected = socketChannel.connect(target);
                 if (!connected) {
                     // Connection in progress — set EINPROGRESS
@@ -266,22 +294,36 @@ public class SocketIO implements IOHandle {
             if (serverSocket == null) {
                 // Convert from client socket to server socket.
                 // Close the client socket/channel and create a ServerSocketChannel.
-                InetSocketAddress addr = this.boundAddress;
+                // Get the actual bound address (with OS-assigned port) before closing.
+                InetSocketAddress addr = null;
+                if (socketChannel != null) {
+                    try {
+                        java.net.SocketAddress sa = socketChannel.getLocalAddress();
+                        if (sa instanceof InetSocketAddress isa) addr = isa;
+                    } catch (IOException ignored) {}
+                }
+                if (addr == null && socket != null) {
+                    java.net.SocketAddress sa = socket.getLocalSocketAddress();
+                    if (sa instanceof InetSocketAddress isa) addr = isa;
+                }
+                if (addr == null) {
+                    addr = this.boundAddress;
+                }
                 if (socketChannel != null) {
                     socketChannel.close();
                     socketChannel = null;
                 }
                 if (socket != null) {
-                    // Don't close if we got the bound address from the socket
-                    if (addr == null && socket.getLocalSocketAddress() instanceof InetSocketAddress localAddr) {
-                        addr = localAddr;
-                    }
                     socket.close();
                     socket = null;
                 }
 
                 // Create a new ServerSocketChannel and bind to the same address
                 serverSocketChannel = ServerSocketChannel.open();
+                // Transfer non-blocking mode from the original socket
+                if (!blocking) {
+                    serverSocketChannel.configureBlocking(false);
+                }
                 serverSocket = serverSocketChannel.socket();
 
                 // Apply stored SO_REUSEADDR option if set
@@ -374,18 +416,8 @@ public class SocketIO implements IOHandle {
      */
     @Override
     public RuntimeScalar fileno() {
-        if (socketChannel != null) {
-            return new RuntimeScalar(socketChannel.hashCode());
-        }
-        if (serverSocketChannel != null) {
-            return new RuntimeScalar(serverSocketChannel.hashCode());
-        }
-        if (socket != null) {
-            return new RuntimeScalar(socket.hashCode());
-        }
-        if (serverSocket != null) {
-            return new RuntimeScalar(serverSocket.hashCode());
-        }
+        // Return undef so RuntimeIO.fileno() assigns a proper small fd number
+        // via the registry system, enabling select() bit-vector operations.
         return scalarUndef;
     }
 
@@ -402,6 +434,9 @@ public class SocketIO implements IOHandle {
         }
         if (socketChannel != null) {
             return socketChannel;
+        }
+        if (datagramChannel != null) {
+            return datagramChannel;
         }
         return null;
     }
@@ -456,8 +491,9 @@ public class SocketIO implements IOHandle {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O,
+            // and also when outputStream is not available (NIO-created sockets)
+            if (socketChannel != null && (!blocking || outputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
                 int written = socketChannel.write(buf);
                 return written > 0 ? scalarTrue : scalarFalse;
@@ -502,8 +538,10 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar sysread(int length) {
         try {
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O.
+            // Also use channel I/O when inputStream is not available
+            // (e.g., accepted sockets used with select/NIO).
+            if (socketChannel != null && (!blocking || inputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
                 int bytesRead = socketChannel.read(buf);
                 if (bytesRead == -1) {
@@ -554,8 +592,9 @@ public class SocketIO implements IOHandle {
             }
 
             // Use channel-based I/O for non-blocking sockets to avoid
-            // IllegalBlockingModeException from stream-based I/O
-            if (!blocking && socketChannel != null) {
+            // IllegalBlockingModeException from stream-based I/O,
+            // and also when outputStream is not available (NIO-created sockets)
+            if (socketChannel != null && (!blocking || outputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
                 int written = socketChannel.write(buf);
                 if (written == 0) {
@@ -617,7 +656,11 @@ public class SocketIO implements IOHandle {
         try {
             InetSocketAddress localAddress = null;
 
-            if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
+            if (datagramChannel != null && datagramChannel.getLocalAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) datagramChannel.getLocalAddress();
+            } else if (socketChannel != null && socketChannel.getLocalAddress() instanceof InetSocketAddress) {
+                localAddress = (InetSocketAddress) socketChannel.getLocalAddress();
+            } else if (socket != null && socket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) socket.getLocalSocketAddress();
             } else if (serverSocket != null && serverSocket.getLocalSocketAddress() instanceof InetSocketAddress) {
                 localAddress = (InetSocketAddress) serverSocket.getLocalSocketAddress();
@@ -679,6 +722,67 @@ public class SocketIO implements IOHandle {
         } catch (Exception e) {
             return scalarUndef;
         }
+    }
+
+    /**
+     * Check if this is a datagram (UDP) socket.
+     */
+    public boolean isDatagramSocket() {
+        return datagramChannel != null;
+    }
+
+    /**
+     * Send a datagram to a specific address.
+     *
+     * @param data    the data to send
+     * @param target  the destination address
+     * @return number of bytes sent, or -1 on error
+     */
+    public int sendTo(byte[] data, SocketAddress target) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
+        return datagramChannel.send(buf, target);
+    }
+
+    /**
+     * Receive a datagram. Stores the sender address accessible via getLastReceivedFrom().
+     *
+     * @param maxLength maximum number of bytes to receive
+     * @return the received data as a byte array, or null on error
+     */
+    public byte[] recvFrom(int maxLength) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
+        lastReceivedFrom = datagramChannel.receive(buf);
+        if (lastReceivedFrom == null) {
+            return null;
+        }
+        buf.flip();
+        byte[] data = new byte[buf.remaining()];
+        buf.get(data);
+        return data;
+    }
+
+    /**
+     * Get the sender address from the last recvFrom() call.
+     * Returns a packed sockaddr_in structure suitable for Perl.
+     */
+    public RuntimeScalar getLastReceivedFrom() {
+        if (lastReceivedFrom instanceof InetSocketAddress addr) {
+            return packSockaddrIn(addr);
+        }
+        return scalarUndef;
+    }
+
+    /**
+     * Get the DatagramChannel for select() support.
+     */
+    public DatagramChannel getDatagramChannel() {
+        return datagramChannel;
     }
 
     /**

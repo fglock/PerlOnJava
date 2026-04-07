@@ -15,6 +15,9 @@ use Exporter ();
 use XSLoader;
 XSLoader::load('POSIX');
 
+# Import S_IS* file type test functions from Fcntl for re-export
+use Fcntl qw(S_ISBLK S_ISCHR S_ISDIR S_ISFIFO S_ISLNK S_ISREG S_ISSOCK);
+
 # Define O_* constants directly (same values as Fcntl.pm)
 # These are needed by many modules that use POSIX
 use constant O_RDONLY   => 0;
@@ -125,6 +128,9 @@ our @EXPORT_OK = qw(
     # Constants - stat
     S_IRGRP S_IROTH S_IRUSR S_IRWXG S_IRWXO S_IRWXU S_ISGID
     S_ISUID S_IWGRP S_IWOTH S_IWUSR S_IXGRP S_IXOTH S_IXUSR
+
+    # Functions - stat file type tests (re-exported from Fcntl)
+    S_ISBLK S_ISCHR S_ISDIR S_ISFIFO S_ISLNK S_ISREG S_ISSOCK
 
     # Constants - wait
     WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WNOHANG WSTOPSIG
