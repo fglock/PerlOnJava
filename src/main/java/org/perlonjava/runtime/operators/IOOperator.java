@@ -7,6 +7,7 @@ import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.perlmodule.Socket;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -272,18 +273,10 @@ public class IOOperator {
                     totalReady++;
                 }
                 // OP_CONNECT means the non-blocking connect completed — treat as write-ready.
-                // Also call finishConnect() to complete the connection handshake,
-                // since Perl's select() doesn't have a separate connect step.
-                if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
-                    SelectableChannel ch = key.channel();
-                    if (ch instanceof SocketChannel sc && sc.isConnectionPending()) {
-                        try {
-                            sc.finishConnect();
-                        } catch (IOException ignored) {
-                            // Connection error will be detected via SO_ERROR
-                        }
-                    }
-                }
+                // Do NOT call finishConnect() here — leave the connection pending so that
+                // a subsequent connect() call (as IO::Socket does) can detect the result
+                // via finishConnect() and set $! appropriately (EISCONN or ECONNREFUSED).
+                // This matches POSIX behavior where select() just reports readiness.
                 if ((readyOps & (SelectionKey.OP_WRITE | SelectionKey.OP_CONNECT)) != 0 && isBitSet(wdata, fd)) {
                     setBit(wresult, fd);
                     totalReady++;
@@ -2569,7 +2562,7 @@ public class IOOperator {
                 int optionValue = socketIOHandle.getSocketOption(level, optname);
 
                 // For SO_ERROR, check actual socket connection status
-                if (level == 1 && optname == 4) { // SOL_SOCKET, SO_ERROR
+                if (level == Socket.SOL_SOCKET && optname == Socket.SO_ERROR) {
                     optionValue = socketIOHandle.getSocketError();
                 }
 
