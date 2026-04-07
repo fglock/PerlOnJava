@@ -413,11 +413,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(k);
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
-                    // Call DESTROY on blessed references being removed from a hash.
-                    // In Perl, delete() on the last reference triggers DESTROY.
-                    // Without ref counting, we call it eagerly; the destroyCalled
-                    // flag on RuntimeBase prevents double-DESTROY.
-                    RuntimeScalar.callDestroyIfNeeded(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();
@@ -437,7 +432,6 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(key);
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
-                    RuntimeScalar.callDestroyIfNeeded(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();
