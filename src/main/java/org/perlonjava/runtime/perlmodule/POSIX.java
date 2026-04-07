@@ -1,7 +1,10 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.io.DupIOHandle;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -38,6 +41,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_getcwd", "getcwd", null);
             module.registerMethod("_strerror", "strerror", null);
             module.registerMethod("_access", "access", null);
+            module.registerMethod("_dup2", "dup2", null);
             
             // Access constants
             module.registerMethod("_const_F_OK", "const_F_OK", null);
@@ -424,6 +428,98 @@ public class POSIX extends PerlModuleBase {
         
         // Return "0 but true" for success - this is 0 numerically but true in boolean context
         return new RuntimeScalar("0 but true").getList();
+    }
+
+    /**
+     * POSIX dup2(oldfd, newfd) - duplicate a file descriptor onto a specific fd.
+     * Used by IO::Socket::IP to replace a socket's underlying fd.
+     * Returns newfd on success, undef on failure (sets $!).
+     */
+    public static RuntimeList dup2(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+
+        int oldFd = args.get(0).getInt();
+        int newFd = args.get(1).getInt();
+
+        // If same fd, just validate and return
+        if (oldFd == newFd) {
+            RuntimeIO source = lookupByFd(oldFd);
+            if (source == null) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(newFd == 0 ? "0 but true" : (Object) newFd).getList();
+        }
+
+        // Look up source
+        RuntimeIO source = lookupByFd(oldFd);
+        if (source == null || source.ioHandle == null) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+
+        // Look up target — we want to reuse the existing RuntimeIO object so that
+        // any Perl variables (globs) pointing to it continue to work after dup2.
+        RuntimeIO target = lookupByFd(newFd);
+
+        // Close the target's old ioHandle (but keep the RuntimeIO shell)
+        if (target != null && target.ioHandle != null) {
+            target.ioHandle.close();
+        }
+
+        // Create the duplicate handle
+        IOHandle sourceHandle = source.ioHandle;
+        IOHandle dupHandle;
+
+        if (sourceHandle instanceof DupIOHandle existingDup) {
+            // Source is already a DupIOHandle — add another dup at the target fd
+            dupHandle = DupIOHandle.addDupAt(existingDup, newFd);
+        } else {
+            // First dup — wrap both source and target in DupIOHandles
+            int origFd = source.getAssignedFileno();
+            if (origFd < 0) origFd = oldFd;
+            DupIOHandle[] pair = DupIOHandle.createPairAt(sourceHandle, origFd, newFd);
+            source.ioHandle = pair[0]; // Replace source's handle with ref-counted wrapper
+            dupHandle = pair[1];
+        }
+
+        if (target != null) {
+            // Reuse existing RuntimeIO — just replace its ioHandle in-place.
+            // This preserves references from Perl glob variables.
+            target.ioHandle = dupHandle;
+        } else {
+            // No existing RuntimeIO at newFd — create a fresh one
+            target = new RuntimeIO();
+            target.ioHandle = dupHandle;
+            target.registerExternalFd(newFd);
+            IOOperator.registerFileDescriptor(newFd, target);
+        }
+
+        // If targeting fd 0/1/2, update the static handles
+        switch (newFd) {
+            case 0 -> RuntimeIO.stdin = target;
+            case 1 -> RuntimeIO.stdout = target;
+            case 2 -> RuntimeIO.stderr = target;
+        }
+
+        return new RuntimeScalar(newFd == 0 ? "0 but true" : (Object) newFd).getList();
+    }
+
+    /**
+     * Look up a RuntimeIO by fd number, including the standard handles.
+     */
+    private static RuntimeIO lookupByFd(int fd) {
+        RuntimeIO rio = RuntimeIO.getByFileno(fd);
+        if (rio != null) return rio;
+        return switch (fd) {
+            case 0 -> RuntimeIO.stdin;
+            case 1 -> RuntimeIO.stdout;
+            case 2 -> RuntimeIO.stderr;
+            default -> null;
+        };
     }
 
     // POSIX access() constants

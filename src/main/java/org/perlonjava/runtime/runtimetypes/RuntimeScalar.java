@@ -1831,7 +1831,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @see RuntimeIO#processAbandonedGlobs()
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.type == GLOBREFERENCE
+        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             RuntimeScalar ioSlot = glob.getIO();

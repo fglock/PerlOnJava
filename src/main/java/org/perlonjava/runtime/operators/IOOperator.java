@@ -1732,6 +1732,12 @@ public class IOOperator {
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
                 socketHandle.set(newGlob);
+                // Mark this scalar as the IO owner so scopeExitCleanup will
+                // unregister the fd when the variable goes out of scope.
+                // Copies (via set()) won't have ioOwner=true, preventing
+                // premature fd unregistration when copies go out of scope
+                // (e.g., method argument copies in IO::Handle::fileno).
+                socketHandle.ioOwner = true;
             }
             return scalarTrue;
 
