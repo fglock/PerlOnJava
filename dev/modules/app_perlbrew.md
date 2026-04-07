@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 7.1 complete — 65/73 tests pass (2026-04-07)
+## Status: Phase 7.4 complete — 66/73 tests pass (2026-04-07)
 
 ## Goal
 
@@ -621,3 +621,27 @@ than `stat(STDOUT)`, or a redesign of how `selectedHandle` interacts with tied h
 
 Remaining tests: `command-info.t`, `12.destdir.t`, `12.sitecustomize.t`, `installation2.t`,
 `installation-perlbrew.t`
+
+- [x] Phase 7.4: Fix backslash prototype precedence for `tied *GLOB && expr` (2026-04-07)
+  - **Root cause**: PerlOnJava parsed `tied *STDOUT && $] >= 5.008` as `tied(*STDOUT && $] >= 5.008)`
+    instead of `(tied *STDOUT) && ($] >= 5.008)`. This caused Capture::Tiny to skip
+    `local(*STDOUT)` when STDOUT was tied (by IOEvents), corrupting `selectedHandle`.
+  - **Fix**: `PrototypeArgs.java` — Added `parseBackslashArgWithComma()` that parses backslash
+    prototype arguments at named-unary precedence (level 15, same as `isa`) instead of comma
+    precedence (level 5). This matches Perl 5's parsing behavior where `\[$@%*]` prototypes
+    consume the variable term but not comparison/logical operators.
+  - **Effect**: Capture::Tiny's `local(*STDOUT)` now fires correctly when STDOUT is tied,
+    `selectedHandle` is properly saved/restored through `local(*STDOUT)` scopes
+  - Also cleaned up `RuntimeGlob.java` debug logging
+  - **66/73 pass** (up from 65/73)
+
+### Remaining 7 failures (Phase 7.4)
+| Test | Root Cause |
+|------|-----------|
+| `t/command-info.t` | `Compiled at:` field empty — PerlOnJava doesn't provide compile date |
+| `t/installation2.t` | Test2::Mock + Capture::Tiny crash |
+| `t/command-env.t` | Missing `local::lib` dependency |
+| `t/command-exec.t` | Missing `local::lib` dependency |
+| `t/command-make-shim.t` | Missing `local::lib` dependency |
+| `t/command-help.t` | Subprocess can't find dependencies (needs PERL5LIB) |
+| `t/09.exit_status.t` | Missing `Path::Class` dependency |
