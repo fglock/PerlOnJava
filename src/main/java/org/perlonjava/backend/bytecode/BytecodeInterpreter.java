@@ -2496,8 +2496,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 String fullName = code.stringPool[nameIdx];
 
-                RuntimeArray arr = GlobalVariable.getGlobalArray(fullName);
-                DynamicVariableManager.pushLocalVariable(arr);
+                GlobalRuntimeArray.makeLocal(fullName);
                 registers[rd] = GlobalVariable.getGlobalArray(fullName);
                 return pc;
             }

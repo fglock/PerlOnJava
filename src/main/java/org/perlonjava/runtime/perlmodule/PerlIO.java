@@ -51,7 +51,9 @@ public class PerlIO extends PerlModuleBase {
             throw new PerlCompilerException("Not a GLOB reference");
         }
         if (fh instanceof TieHandle) {
-            throw new PerlCompilerException("can't get_layers on tied handle");
+            // Tied handles don't have PerlIO layers; return empty list
+            // (Perl 5 returns empty list for tied handles)
+            return new RuntimeArray().getList();
         }
 
         // Parse optional arguments (output => 1, details => 1, etc.)

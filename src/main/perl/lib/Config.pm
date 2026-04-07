@@ -75,6 +75,7 @@ $os_name =~ s/\s+/_/g;
 # tie returns the object, so the value returned to require will be true.
 %Config = (
     archname => "java-$java_version-$os_arch",
+    myarchname => "$os_arch-$os_name",
     osname => $os_name,
     osvers => $os_version,
 

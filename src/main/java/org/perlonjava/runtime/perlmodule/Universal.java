@@ -155,6 +155,12 @@ public class Universal extends PerlModuleBase {
             if (codeRef.getDefinedBoolean()) {
                 return codeRef.getList();
             }
+            // Forward declarations (sub foo;) should be visible to can()
+            // even though defined(&foo) returns false.
+            // Perl 5: can() returns a code ref for forward-declared subs.
+            if (codeRef.value instanceof RuntimeCode rc && rc.isDeclared) {
+                return codeRef.getList();
+            }
         }
 
         // Fallback: if either the class name or method name was stored as UTF-8 octets

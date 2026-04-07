@@ -65,21 +65,17 @@ public class CompileAssignment {
                             bc.lastResultReg = regIdx;
                             return true;
                         }
-                        bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                        bc.emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
                         bc.emitReg(localReg);
                         bc.emit(nameIdx);
-                        bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                        bc.emitReg(localReg);
                         bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
                         bc.emitReg(localReg);
                         bc.emitReg(valueReg);
                     }
                     case "%" -> {
-                        bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                        bc.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
                         bc.emitReg(localReg);
                         bc.emit(nameIdx);
-                        bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-                        bc.emitReg(localReg);
                         bc.emit(Opcodes.HASH_SET_FROM_LIST);
                         bc.emitReg(localReg);
                         bc.emitReg(valueReg);
