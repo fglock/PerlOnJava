@@ -345,6 +345,39 @@ imports:
   - source: perl5/lib/English.pm
     target: src/main/perl/lib/English.pm
 
+  # Fatal / autodie - Make builtins throw exceptions on failure
+  # Required by Perl::Critic test data generation (.run.PL files)
+  - source: perl5/cpan/autodie/lib/Fatal.pm
+    target: src/main/perl/lib/Fatal.pm
+
+  - source: perl5/cpan/autodie/lib/autodie.pm
+    target: src/main/perl/lib/autodie.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/Util.pm
+    target: src/main/perl/lib/autodie/Util.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/exception.pm
+    target: src/main/perl/lib/autodie/exception.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/exception/system.pm
+    target: src/main/perl/lib/autodie/exception/system.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/hints.pm
+    target: src/main/perl/lib/autodie/hints.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/skip.pm
+    target: src/main/perl/lib/autodie/skip.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/Scope/Guard.pm
+    target: src/main/perl/lib/autodie/Scope/Guard.pm
+
+  - source: perl5/cpan/autodie/lib/autodie/Scope/GuardStack.pm
+    target: src/main/perl/lib/autodie/Scope/GuardStack.pm
+
+  # Tie::RefHash - Hash with references as keys (required by Fatal.pm)
+  - source: perl5/lib/Tie/RefHash.pm
+    target: src/main/perl/lib/Tie/RefHash.pm
+
   # From core distribution
   - source: perl5/dist/Env/lib/Env.pm
     target: src/main/perl/lib/Env.pm

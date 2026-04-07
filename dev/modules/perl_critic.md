@@ -420,7 +420,7 @@ The fixes should be applied in this sequence because of dependency ordering:
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete, Phase 2 blockers identified
+### Current Status: Phase 2 implementation in progress
 
 ### Completed Phases
 - [x] Investigation (2026-04-07)
@@ -432,12 +432,91 @@ The fixes should be applied in this sequence because of dependency ordering:
   - Fixed foreach my @array scoping in StatementResolver + EmitForeach
   - Build.PL now succeeds; dependency resolution proceeds
   - New Phase 2 blockers discovered: Readonly, Params::Util XS, Pod-Parser
+- [x] Phase 2a: DynaLoader.pm stub (2026-04-07)
+  - Created `src/main/perl/lib/DynaLoader.pm` stub (matches XSLoader.pm pattern)
+  - Set `$DynaLoader::VERSION` in `DynaLoader.java` initialize()
+  - Module::Build::Tiny now installs cleanly
+- [x] Phase 2b: XSLoader PP-companion detection (2026-04-07)
+  - Added `::PP` companion check in `XSLoader.java` before dying
+  - Params::Util now loads successfully; PPI works
+- [x] Phase 2c: MakeMaker PL_FILES non-fatal (2026-04-07)
+  - Prefixed PL_FILES commands with `-` in MakeMaker.pm
+- [x] Config.pm: Added `startperl` key (2026-04-07)
+  - `$Config{startperl}` was undefined; Module::Build::Tiny's `make_executable()`
+    died under `FATAL => 'all'` warnings. Fixed: `startperl => "#!$^X"`
+- [x] Fatal.pm / autodie: Imported from perl5/ tree (2026-04-07)
+  - Added Fatal.pm, autodie.pm, autodie/*, Tie/RefHash.pm via sync.pl
+  - `use Fatal qw(open close)` loads successfully
+- [x] Dependency chain installed (2026-04-07)
+  - Module::Build::Tiny: installed cleanly
+  - Readonly: force-installed (181/188 tests pass; 7 failures in prototype/clone)
+  - PPI 1.284: loads and parses code correctly
+  - PPIx::QuoteLike, PPIx::Regexp, PPIx::Utilities: force-installed
+  - Config::Tiny, String::Format: already installed
+- [x] Perl::Critic installed (2026-04-07)
+  - Build step failed due to Fatal.pm runtime bug (ClassCastException in
+    interpreter when `open` is wrapped by Fatal). Worked around by generating
+    `.run.PL` test data files with system perl, then re-running `jperl Build`
+    and `jperl Build install`
+
+### Current Blocker: Readonly::Array tied iteration bug
+
+**Symptom:** `use Perl::Critic` fails:
+```
+Global symbol "$EMPTY" requires explicit package name
+  at Perl/Critic/Exception/AggregateConfiguration.pm line 95
+```
+
+**Root cause:** Perl::Critic::Utils declares:
+```perl
+Readonly::Hash our %EXPORT_TAGS => (characters => [qw($EMPTY ...)], ...);
+```
+
+Exporter reads `%EXPORT_TAGS` to expand `:characters` into individual symbols.
+However, **assigning a Readonly tied array to a regular array returns empty**:
+
+```perl
+use Readonly;
+Readonly::Array my @arr => qw($FOO $BAR);
+print scalar @arr;    # 2  (FETCHSIZE works)
+print "@arr";         # "$FOO $BAR"  (string interpolation works)
+my @copy = @arr;      # EMPTY!  (list-context flatten is broken)
+```
+
+The tied array's `FETCH(index)` and `FETCHSIZE()` methods work, but iterating
+in list context (which PerlOnJava does via a different code path than individual
+FETCH calls) returns no elements.
+
+**Impact:** All `Readonly::Array` and `Readonly::Hash` values are invisible to
+Exporter's tag expansion. This blocks `use Perl::Critic::Utils qw(:characters)`,
+which blocks nearly every Perl::Critic module.
+
+**Fix location:** This is a PerlOnJava runtime bug in tied array list-context
+iteration. The relevant code is likely in `RuntimeArray.java` — the path that
+converts a tied array to a list needs to call `FETCH(0)`, `FETCH(1)`, ...,
+`FETCH(FETCHSIZE-1)` rather than reading the underlying storage directly.
+
+**Verification:**
+```perl
+use Readonly;
+Readonly::Array my @arr => qw(a b c);
+my @copy = @arr;
+print "@copy\n";  # Should print "a b c", currently prints ""
+```
 
 ### Next Steps
-1. Phase 2a: Create DynaLoader.pm stub + DynaLoader.java VERSION fix
-2. Phase 2b: Add PP-companion detection to XSLoader.java
-3. Phase 2c: Make PL_FILES non-fatal in MakeMaker.pm
-4. Run `make` — verify no regressions
-5. Install dependency chain: Module::Build::Tiny → Readonly → Params::Util → PPI
-6. Smoke-test PPI (biggest risk — 15K lines pure Perl)
-7. Phase 3: `./jcpan Perl::Critic`
+1. Fix Readonly::Array tied iteration in RuntimeArray.java
+2. Verify `use Perl::Critic` loads without errors
+3. Smoke-test: `./jperl -MPerl::Critic -e 'print Perl::Critic->VERSION'`
+4. Test: `echo 'print "hello"' | ./jperl -MPerl::Critic -e '...'`
+
+### Additional Issues Found (not blocking, for later)
+- **Fatal.pm runtime ClassCastException**: `use Fatal qw(open)` loads OK but
+  calling the wrapped `open` crashes with `InterpretedCode cannot be cast to
+  RuntimeScalar` at `InlineOpcodeHandler.java:392`. This blocks Perl::Critic's
+  `.run.PL` test data generation but not core functionality.
+- **PPIx::QuoteLike**: `(??{...})` recursive regex not supported — Utils.pm
+  fails to compile. Module is force-installed; may affect some Perl::Critic
+  policies that use it.
+- **Readonly test failures**: 7/188 tests fail — prototype checking (`001_assign.t`),
+  deep clone (`clone.t`), and read-only modification detection (`readonly.t`)
