@@ -162,6 +162,11 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 5. **Wait for review** before merging
 
+6. **Use `GIT_EDITOR="true"` for non-interactive git operations** (e.g., `git commit --amend`, `git rebase`). This avoids hanging on an interactive editor:
+   ```bash
+   GIT_EDITOR="true" git commit --amend
+   ```
+
 ### Commits
 
 - Reference the design doc or issue in commit messages when relevant
