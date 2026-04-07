@@ -150,6 +150,28 @@ incompatibilities. It should be tested incrementally:
 2. Run its test suite with `./jcpan -t PPI`
 3. Fix any issues that arise before attempting full Perl::Critic install
 
+### Blockers Discovered in Phase 2 Testing (2026-04-07)
+
+The following blockers were identified during `./jcpan Perl::Critic` after
+Phase 1 fixes were applied:
+
+| Blocker | Impact | Details |
+|---------|--------|---------|
+| **Readonly** | Critical | Needs Module::Build::Tiny, which needs DynaLoader (core, but CPAN can't find it). Fix: `force install Module::Build::Tiny` or provide a stub. |
+| **Params::Util XS** | Critical | PPI requires Params::Util, which tries XSLoader::load and dies. PP fallback exists via `PERL_PARAMS_UTIL_PP=1` env var. |
+| **Pod-Parser make** | Moderate | podselect.PL script generation fails. Pod::PlainText/Pod::Select .pm files are installed, but `make` step errors. Fix: `force install Pod-Parser` or skip script generation. |
+| **Pod::Spell Encode** | Low | `Encode::encode` undefined. Only needed for PodSpelling policy. |
+
+#### Workarounds
+
+```bash
+# Params::Util PP fallback
+PERL_PARAMS_UTIL_PP=1 ./jperl -e 'use Params::Util; print "OK\n"'
+
+# Force install Module::Build::Tiny (DynaLoader is available but not on CPAN)
+# Then install Readonly
+```
+
 ## Implementation Plan
 
 ### Phase 1: Fix Known Blockers (this PR)
@@ -183,15 +205,21 @@ incompatibilities. It should be tested incrementally:
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 1 complete, Phase 2 blockers identified
 
 ### Completed Phases
 - [x] Investigation (2026-04-07)
   - Identified 3 blockers from `./jcpan Perl::Critic` attempt
   - Mapped full dependency tree (40+ modules)
   - Root-caused `foreach my @array` scoping bug to EmitForeach.java
+- [x] Phase 1: Fix Known Blockers (2026-04-07)
+  - Added English.pm via dev/import-perl5/sync.pl (v1.12 from perl5/)
+  - Fixed foreach my @array scoping in StatementResolver + EmitForeach
+  - Build.PL now succeeds; dependency resolution proceeds
+  - New Phase 2 blockers discovered: Readonly, Params::Util XS, Pod-Parser
 
 ### Next Steps
-1. Add English.pm
-2. Fix foreach scoping bug
-3. Run make, create PR
+1. Fix Module::Build::Tiny / Readonly dependency chain
+2. Handle Params::Util XS fallback for PPI
+3. Fix Pod-Parser script generation
+4. Install and test PPI
