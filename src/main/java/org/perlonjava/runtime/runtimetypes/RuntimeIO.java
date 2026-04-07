@@ -1541,7 +1541,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (nativeFd.getDefinedBoolean()) {
             return nativeFd;
         }
-        // For file channels and pipes, lazily assign a registry fileno
+        // For file channels, pipes, and process handles, lazily assign a registry fileno
         if (ioHandle instanceof CustomFileChannel
                 || ioHandle instanceof PipeInputChannel
                 || ioHandle instanceof PipeOutputChannel

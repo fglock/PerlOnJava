@@ -159,6 +159,13 @@ public class FileDescriptorTable {
         if (handle instanceof InternalPipeHandle pipeHandle) {
             return pipeHandle.hasDataAvailable();
         }
+        if (handle instanceof ProcessInputHandle pih) {
+            try {
+                return pih.getInputStream().available() > 0;
+            } catch (Exception e) {
+                return true;  // Treat errors as ready to unblock
+            }
+        }
         if (handle instanceof StandardIO) {
             // stdin: check System.in.available()
             try {

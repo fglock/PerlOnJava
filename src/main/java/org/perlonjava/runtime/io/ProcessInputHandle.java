@@ -54,6 +54,19 @@ public class ProcessInputHandle implements IOHandle {
         return RuntimeScalarCache.scalarTrue;
     }
 
+    /**
+     * Returns the underlying InputStream for readiness checking by FileDescriptorTable.
+     */
+    public InputStream getInputStream() {
+        return inputStream;
+    }
+
+    @Override
+    public RuntimeScalar fileno() {
+        // Return undef to let RuntimeIO.fileno() lazily assign a registry fileno
+        return RuntimeScalarCache.scalarUndef;
+    }
+
     @Override
     public RuntimeScalar eof() {
         if (isClosed) return RuntimeScalarCache.scalarTrue;
@@ -97,6 +110,26 @@ public class ProcessInputHandle implements IOHandle {
             String result = new String(buffer, 0, bytesRead, charset);
             return new RuntimeScalar(result);
 
+        } catch (IOException e) {
+            isEOF = true;
+            return new RuntimeScalar();
+        }
+    }
+
+    @Override
+    public RuntimeScalar sysread(int length) {
+        if (isClosed || isEOF) {
+            return new RuntimeScalar();
+        }
+        try {
+            byte[] buffer = new byte[length];
+            int bytesRead = inputStream.read(buffer, 0, length);
+            if (bytesRead == -1) {
+                isEOF = true;
+                return new RuntimeScalar();
+            }
+            return new RuntimeScalar(new String(buffer, 0, bytesRead,
+                    StandardCharsets.ISO_8859_1));
         } catch (IOException e) {
             isEOF = true;
             return new RuntimeScalar();

@@ -67,6 +67,12 @@ public class ProcessOutputHandle implements IOHandle {
     }
 
     @Override
+    public RuntimeScalar fileno() {
+        // Return undef to let RuntimeIO.fileno() lazily assign a registry fileno
+        return RuntimeScalarCache.scalarUndef;
+    }
+
+    @Override
     public RuntimeScalar eof() {
         // Output handles don't have EOF in the same sense
         return isClosed ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
@@ -76,6 +82,21 @@ public class ProcessOutputHandle implements IOHandle {
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         // Output-only handle
         return new RuntimeScalar();
+    }
+
+    @Override
+    public RuntimeScalar syswrite(String data) {
+        if (isClosed) {
+            return RuntimeScalarCache.scalarFalse;
+        }
+        try {
+            byte[] bytes = data.getBytes(charset);
+            outputStream.write(bytes);
+            outputStream.flush();
+            return RuntimeScalarCache.getScalarInt(bytes.length);
+        } catch (IOException e) {
+            return RuntimeScalarCache.scalarFalse;
+        }
     }
 
     /**
