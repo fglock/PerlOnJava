@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 7.4 complete — 66/73 tests pass (2026-04-07)
+## Status: Phase 8 complete — 71/73 tests pass (2026-04-07)
 
 ## Goal
 
@@ -559,7 +559,7 @@ In Perl 5, `<$var/*.t>` is equivalent to `glob("$var/*.t")` — `$var` IS interp
 
 ## Progress Tracking
 
-### Current Status: Phase 7.1 complete — 65/73 App::perlbrew tests pass
+### Current Status: Phase 8 complete — 71/73 App::perlbrew tests pass
 
 ### Completed Phases
 - [x] Phase 1: Foundation Fixes (2026-04-07)
@@ -611,37 +611,137 @@ In Perl 5, `<$var/*.t>` is equivalent to `glob("$var/*.t")` — `$var` IS interp
   - **68/73 pass** (up from 65/73) — 3 tests fixed
   - Commit: 803ba99e0
 
-### Next Steps (Phase 7.3 — 5 remaining failures)
-All 5 remaining failures share the same root cause: Capture::Tiny + Test2::Plugin::IOEvents
-tied STDOUT interaction. The `selectedHandle` stub fix handles `open(*STDOUT, ...)` correctly,
-but IOEvents' tie-based output capture needs the TieHandle to remain active for print statements.
-The interaction between `local(*STDOUT)`, the TieHandle, and `selectedHandle` needs deeper
-investigation — possibly requiring IOEvents to detect handle changes via a different mechanism
-than `stat(STDOUT)`, or a redesign of how `selectedHandle` interacts with tied handles.
-
-Remaining tests: `command-info.t`, `12.destdir.t`, `12.sitecustomize.t`, `installation2.t`,
-`installation-perlbrew.t`
-
 - [x] Phase 7.4: Fix backslash prototype precedence for `tied *GLOB && expr` (2026-04-07)
   - **Root cause**: PerlOnJava parsed `tied *STDOUT && $] >= 5.008` as `tied(*STDOUT && $] >= 5.008)`
     instead of `(tied *STDOUT) && ($] >= 5.008)`. This caused Capture::Tiny to skip
     `local(*STDOUT)` when STDOUT was tied (by IOEvents), corrupting `selectedHandle`.
   - **Fix**: `PrototypeArgs.java` — Added `parseBackslashArgWithComma()` that parses backslash
-    prototype arguments at named-unary precedence (level 15, same as `isa`) instead of comma
-    precedence (level 5). This matches Perl 5's parsing behavior where `\[$@%*]` prototypes
-    consume the variable term but not comparison/logical operators.
+    prototype arguments at named-unary precedence for single-arg prototypes. Multi-arg prototypes
+    still use comma precedence. Determined by `countPrototypeArgs(prototype) <= 1`.
   - **Effect**: Capture::Tiny's `local(*STDOUT)` now fires correctly when STDOUT is tied,
     `selectedHandle` is properly saved/restored through `local(*STDOUT)` scopes
-  - Also cleaned up `RuntimeGlob.java` debug logging
   - **66/73 pass** (up from 65/73)
 
-### Remaining 7 failures (Phase 7.4)
-| Test | Root Cause |
-|------|-----------|
-| `t/command-info.t` | `Compiled at:` field empty — PerlOnJava doesn't provide compile date |
-| `t/installation2.t` | Test2::Mock + Capture::Tiny crash |
-| `t/command-env.t` | Missing `local::lib` dependency |
-| `t/command-exec.t` | Missing `local::lib` dependency |
-| `t/command-make-shim.t` | Missing `local::lib` dependency |
-| `t/command-help.t` | Subprocess can't find dependencies (needs PERL5LIB) |
-| `t/09.exit_status.t` | Missing `Path::Class` dependency |
+- [x] Phase 8: Re-investigation and reclassification (2026-04-07)
+  - **Key finding**: 5 of the 7 "remaining failures" from Phase 7.4 were actually caused by a
+    stale build (Module::Build::Tiny not installed to `~/.perlonjava/lib`). After a fresh
+    `jperl Build.PL && jperl Build`, these tests all pass.
+  - All CPAN dependencies are available: local::lib (v2.000029), Path::Class (v0.37),
+    Capture::Tiny (v0.50), Test2::Mock (v1.302219) — all install from CPAN and work correctly.
+    No PerlOnJava-specific versions are needed.
+  - **71/73 pass** (up from 66/73) — 5 tests were just stale-build artifacts
+
+### Remaining 2 failures (Phase 8)
+
+| Test | Subtests | Root Cause | Complexity |
+|------|----------|-----------|------------|
+| `t/command-info.t` | 3/4 fail | `Compiled at:` field empty in `jperl -V` output | Easy |
+| `t/installation2.t` | 1/1 fails | `DESTROY` not implemented — Test2::Mock can't restore methods | Hard (systemic) |
+
+---
+
+## Phase 9: Remaining Fixes (Planned)
+
+### 9.1 `command-info.t` — Add "Compiled at:" to `jperl -V` output
+
+**Priority: Easy** — Would fix 3 of the 4 subtests (subtest 3 already passes).
+
+**Problem:** `App::perlbrew`'s `format_info_output` method (perlbrew.pm line 2807-2814) runs
+`` `$perl -V` `` and parses the output for `/  Compiled at (.+)\n/`. PerlOnJava's `-V` output
+has no "Compiled at" line — it outputs JVM properties and PerlOnJava version info, but not
+the compile date in the format Perl 5 uses.
+
+**Expected format:** `  Compiled at Mon DD YYYY HH:MM:SS` (e.g., `  Compiled at Apr  7 2026 11:20:00`)
+
+**Test regex:** `Compiled at: ...\s+\d{1,2}\s+\d{4}\s+\d{1,2}:\d{2}:\d{2}`
+
+**Fix:** In `ArgumentParser.java` around line 716 (the `-V` output handler), add a
+"Compiled at" line using the git commit date from `Configuration.gitCommitDate`:
+
+```java
+// After the PerlOnJava section, add Perl 5-compatible compile info:
+System.out.println("  Compiled at " + formatCompileDate(Configuration.gitCommitDate));
+```
+
+The `Configuration.gitCommitDate` contains the date string (e.g., "2026-04-07") which needs
+reformatting to match Perl's `Mon DD YYYY HH:MM:SS` format. Since PerlOnJava doesn't have a
+traditional compile timestamp, the git commit date (with 00:00:00 time) is a reasonable
+approximation.
+
+**Files:** `src/main/java/org/perlonjava/app/cli/ArgumentParser.java`
+
+**Verification:**
+```bash
+./jperl -V 2>&1 | grep "Compiled at"
+# Should output: "  Compiled at Apr  7 2026 00:00:00" (or similar)
+```
+
+---
+
+### 9.2 `installation2.t` — DESTROY not implemented (Test2::Mock cleanup)
+
+**Priority: Hard (systemic)** — Requires implementing `DESTROY` or a workaround.
+
+**Problem:** Test2::Mock relies on `DESTROY` to restore original methods when a mock object
+goes out of scope. PerlOnJava does not call `DESTROY` (documented in AGENTS.md as a known
+limitation: "Object destructors never called"). This causes mock state to leak between subtests.
+
+**Detailed failure chain:**
+1. `installation2.t` subtest 1 ("do_install_url"): creates a mock that overrides `do_install_this`
+   with `sub { "" }` and `http_download`, `do_extract_tarball`
+2. Subtest 1 ends, `$mock` goes out of scope — but `DESTROY` never runs
+3. `do_install_this` remains overridden with `sub { "" }` on the `App::perlbrew` class
+4. Subtest 3 ("do_install_this"): creates a NEW mock that overrides only `do_system`
+5. Calls `$app->do_install_this(...)` — but this calls the STALE mock (`sub { "" }`) from
+   subtest 1, not the real method
+6. `do_system` is never reached → test fails: "do_system is called" and log is empty
+
+**Confirmed by reproduction:** Running just subtest 3 in isolation passes. Running it after
+subtest 1 (which mocks `do_install_this`) fails.
+
+**Possible approaches:**
+
+1. **Implement `DESTROY` (proper fix, high complexity):** JVM uses tracing GC, not reference
+   counting, so DESTROY can't fire at deterministic scope-exit like Perl 5. Options:
+   - Use `PhantomReference` + `ReferenceQueue` with a cleanup thread to call DESTROY when
+     objects are GC'd. Non-deterministic but eventually correct.
+   - Scope-based: track blessed objects created in a scope, call their DESTROY when the
+     scope exits (would need language-level support).
+
+2. **Scope guard / explicit cleanup (medium complexity):** Implement a `DESTROY`-lite that
+   calls destructors for objects whose refcount drops to zero at scope exit. This would
+   require basic reference counting for blessed objects, which is a significant change.
+
+3. **Accept the limitation (no fix):** Document that Test2::Mock requires explicit
+   `$mock->reset_all` calls in PerlOnJava. This test will remain failing.
+
+**Impact analysis:** DESTROY affects more than just Test2::Mock:
+- `File::Temp` cleanup (temp files may not be deleted)
+- `DBI` handle cleanup (connections may not be closed)
+- `Guard`/`Scope::Guard` modules
+- Any RAII pattern in Perl code
+
+**Files (for approach 1):** Would require changes across the runtime:
+- `RuntimeScalar.java` or `RuntimeCode.java` — add destructor tracking
+- New cleanup thread or scope-exit hooks
+- `RuntimeStash.java` — register DESTROY methods
+
+**Note:** This is a known PerlOnJava limitation. The JVM's tracing GC handles circular
+references natively (unlike Perl 5's refcounting), so the primary motivation for DESTROY
+(preventing memory leaks from circular refs) doesn't apply. However, the cleanup/RAII use
+case (like Test2::Mock) is genuinely needed.
+
+---
+
+### CPAN Module Status
+
+All dependencies install and work from CPAN. No PerlOnJava-specific versions are needed:
+
+| Module | Version | Source | Status |
+|--------|---------|--------|--------|
+| local::lib | 2.000029 | CPAN (`~/.perlonjava/lib`) | Works, 26/32 tests pass (shell.t hangs) |
+| Path::Class | 0.37 | CPAN (`~/.perlonjava/lib`) | Works fully |
+| Capture::Tiny | 0.50 | CPAN (`~/.perlonjava/lib`) | Works (tested via App::perlbrew) |
+| Test2::Mock | 1.302219 | Bundled in PerlOnJava jar | Works, but DESTROY-based cleanup doesn't fire |
+| Test2::Plugin::IOEvents | 0.001001 | CPAN (`~/.perlonjava/lib`) | Works (all 71 passing tests use it) |
+| Module::Build::Tiny | 0.053 | CPAN (`~/.perlonjava/lib`) | Works, 32/32 tests pass |
