@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
@@ -14,7 +15,11 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 
@@ -86,9 +91,8 @@ public class EmitSubroutine {
         }
         MethodVisitor mv = ctx.mv;
 
-        // Retrieve closure variable list
-        // Alternately, scan the AST for variables and capture only the ones that are used
-        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = ctx.symbolTable.getAllVisibleVariables();
+        // Retrieve closure variable list (copy to avoid corrupting the cache)
+        Map<Integer, SymbolTable.SymbolEntry> visibleVariables = new TreeMap<>(ctx.symbolTable.getAllVisibleVariables());
 
         // IMPORTANT: Package-level subs (named subs) should NOT capture closure variables from their 
         // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
@@ -110,6 +114,28 @@ public class EmitSubroutine {
                 }
                 return false;
             });
+        }
+
+        // Optimization: Only capture variables actually used in the subroutine body.
+        // This prevents hitting JVM's 255 constructor argument limit for closures
+        // in modules like Perl::Tidy that have 200+ lexicals in scope.
+        if (!isPackageSub && node.block != null && !visibleVariables.isEmpty()) {
+            Set<String> usedVars = new HashSet<>();
+            VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
+            node.block.accept(collector);
+            if (!collector.hasEvalString()) {
+                int skip = EmitterMethodCreator.skipVariables;
+                int pos = 0;
+                Iterator<Map.Entry<Integer, SymbolTable.SymbolEntry>> it =
+                        visibleVariables.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<Integer, SymbolTable.SymbolEntry> entry = it.next();
+                    if (pos >= skip && !usedVars.contains(entry.getValue().name())) {
+                        it.remove();
+                    }
+                    pos++;
+                }
+            }
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
