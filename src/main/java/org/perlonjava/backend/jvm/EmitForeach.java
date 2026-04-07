@@ -112,6 +112,17 @@ public class EmitForeach {
         Label loopEnd = new Label();
         Label continueLabel = new Label();
 
+        // Pre-evaluate the list in the enclosing scope so that any 'my' declarations
+        // in the list expression (e.g., "EXPR foreach my @values = @_") are registered
+        // in the enclosing scope, not trapped inside the for loop's inner scope.
+        // In Perl, the list in a foreach is always evaluated once in the enclosing scope.
+        int preEvalListLocal = -1;
+        if (node.preEvaluatedArrayIndex < 0) {
+            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            preEvalListLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            mv.visitVarInsn(Opcodes.ASTORE, preEvalListLocal);
+        }
+
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
         // Check if the variable is global
@@ -362,10 +373,10 @@ public class EmitForeach {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeArray", "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
         } else if (isGlobalUnderscore) {
-            // Global $_ as loop variable: evaluate list to array of aliases first
+            // Global $_ as loop variable: use pre-evaluated list (evaluated in enclosing scope)
             // This preserves aliasing semantics while ensuring list is evaluated before any
             // parent block's local $_ takes effect (e.g., in nested for loops)
-            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            mv.visitVarInsn(Opcodes.ALOAD, preEvalListLocal);
 
             // For statement modifiers, localize $_ ourselves
             if (needLocalizeUnderscore) {
@@ -400,8 +411,8 @@ public class EmitForeach {
 
             mv.visitLabel(afterIterLabel);
         } else {
-            // Standard path: obtain iterator for the list
-            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            // Standard path: use pre-evaluated list (evaluated in enclosing scope)
+            mv.visitVarInsn(Opcodes.ALOAD, preEvalListLocal);
 
             // IMPORTANT: avoid materializing huge ranges.
             // Even for lexical loop variables, ranges should use lazy iteration

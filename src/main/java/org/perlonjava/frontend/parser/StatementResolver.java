@@ -721,6 +721,25 @@ public class StatementResolver {
                         yield new BlockNode(List.of(expression), parser.tokenIndex);
                     }
 
+                    // Hoist 'my' declarations from the foreach list expression.
+                    // In Perl, "EXPR foreach my @w = LIST" declares @w in the enclosing
+                    // scope, not inside the foreach. Since the statement modifier wraps
+                    // the loop in a BlockNode (for local $_), we must hoist the 'my'
+                    // declaration before the BlockNode to preserve correct scoping.
+                    // This is analogous to handleStatementModifierWithMy for if/unless.
+                    Node hoistedMyDecl = null;
+                    if (modifierExpression instanceof BinaryOperatorNode assignNode
+                            && assignNode.operator.equals("=")) {
+                        Node left = assignNode.left;
+                        if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
+                            // Extract "my @w" as a standalone declaration
+                            hoistedMyDecl = left;
+                            // Replace "my @w = LIST" with "@w = LIST" in the foreach list
+                            modifierExpression = new BinaryOperatorNode(
+                                    "=", myNode.operand, assignNode.right, parser.tokenIndex);
+                        }
+                    }
+
                     // Statement modifier for loop: EXPR for LIST
                     // $_ is global, so needs array-of-alias and local wrapping
                     Node varNode = scalarUnderscore(parser);
@@ -730,13 +749,21 @@ public class StatementResolver {
                         identifierNode.name = fullName;
                         For1Node forNode = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
                         forNode.needsArrayOfAlias = true;
-                        yield new BlockNode(
+                        Node result = new BlockNode(
                                 List.of(
                                         new OperatorNode("local", varNode, parser.tokenIndex),
                                         forNode
                                 ), parser.tokenIndex);
+                        if (hoistedMyDecl != null) {
+                            yield new ListNode(List.of(hoistedMyDecl, result), parser.tokenIndex);
+                        }
+                        yield result;
                     }
-                    yield new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
+                    Node result = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
+                    if (hoistedMyDecl != null) {
+                        yield new ListNode(List.of(hoistedMyDecl, result), parser.tokenIndex);
+                    }
+                    yield result;
                 }
 
                 case "while", "until" -> {

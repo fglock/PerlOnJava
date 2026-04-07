@@ -341,6 +341,10 @@ imports:
     target: perl5_t/Attribute-Handlers
     type: directory
 
+  # English - Human-readable aliases for punctuation special variables
+  - source: perl5/lib/English.pm
+    target: src/main/perl/lib/English.pm
+
   # From core distribution
   - source: perl5/dist/Env/lib/Env.pm
     target: src/main/perl/lib/Env.pm
