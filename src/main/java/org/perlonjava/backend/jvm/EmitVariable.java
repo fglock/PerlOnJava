@@ -1379,6 +1379,10 @@ public class EmitVariable {
                     
                     // Check for redeclaration warnings
                     if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                        // Skip warning for state variables that were already hoisted by EmitBlock.
+                        // The hoisted declaration pre-allocates the JVM local slot, so the original
+                        // declaration sees it as a duplicate. This is not a real user-level redeclaration.
+                        boolean wasHoisted = sigilNode.getBooleanAnnotation("hoistedState");
                         if (operator.equals("our")) {
                             // For 'our', only warn if redeclared in the same package (matching Perl behavior)
                             if (emitterVisitor.ctx.symbolTable.isOurVariableRedeclaredInSamePackage(var)) {
@@ -1387,8 +1391,9 @@ public class EmitVariable {
                                                 "\"our\" variable " + var + " redeclared"));
                             }
                         } else {
-                            // For 'my'/'local', warn if redeclared in the same scope
-                            if (emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                            // For 'my'/'local'/'state', warn if redeclared in the same scope
+                            // (but not if the variable was hoisted by state declaration hoisting)
+                            if (!wasHoisted && emitterVisitor.ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                                 System.err.println(
                                         emitterVisitor.ctx.errorUtil.errorMessage(node.getIndex(),
                                                 "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope"));

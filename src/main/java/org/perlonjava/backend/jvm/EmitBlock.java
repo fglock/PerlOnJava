@@ -9,6 +9,7 @@ import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.ArrayList;
@@ -140,9 +141,22 @@ public class EmitBlock {
         for (Node element : list) {
             collectStateDeclSigilNodes(element, stateDeclSigilNodes);
         }
-        for (OperatorNode sigilNode : stateDeclSigilNodes) {
-            new OperatorNode("state", sigilNode, sigilNode.tokenIndex)
-                    .accept(voidVisitor);
+        if (!stateDeclSigilNodes.isEmpty()) {
+            // Suppress "masks earlier declaration" warning during hoisting AND mark
+            // the original nodes so they won't re-warn when processed later.
+            boolean isWarningEnabled = Warnings.warningManager.isWarningEnabled("redefine");
+            if (isWarningEnabled) {
+                Warnings.warningManager.setWarningState("redefine", false);
+            }
+            for (OperatorNode sigilNode : stateDeclSigilNodes) {
+                new OperatorNode("state", sigilNode, sigilNode.tokenIndex)
+                        .accept(voidVisitor);
+                // Mark the original sigil node so the real declaration suppresses its warning
+                sigilNode.setAnnotation("hoistedState", true);
+            }
+            if (isWarningEnabled) {
+                Warnings.warningManager.setWarningState("redefine", true);
+            }
         }
 
         int lastNonNullIndex = -1;

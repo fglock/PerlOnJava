@@ -147,7 +147,8 @@ public class ExceptionFormatter {
                 var callerInfo = CallerStack.peek(callerStackIndex);
                 if (callerInfo != null) {
                     var entry = new ArrayList<String>();
-                    entry.add(callerInfo.packageName());
+                    String ciPkg = callerInfo.packageName();
+                    entry.add(ciPkg != null ? ciPkg : "main");
                     entry.add(callerInfo.filename());
                     entry.add(String.valueOf(callerInfo.line()));
                     entry.add(null);  // No subroutine name available for use statements
@@ -236,7 +237,7 @@ public class ExceptionFormatter {
                         }
 
                         var entry = new ArrayList<String>();
-                        entry.add(pkg);
+                        entry.add(pkg != null ? pkg : "main");
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);
@@ -263,7 +264,8 @@ public class ExceptionFormatter {
                     }
 
                     var entry = new ArrayList<String>();
-                    entry.add(loc.packageName());
+                    String pkgName = loc.packageName();
+                    entry.add(pkgName != null ? pkgName : "main");
                     entry.add(loc.sourceFileName());
                     entry.add(String.valueOf(loc.lineNumber()));
                     entry.add(subName);  // Add subroutine name
@@ -291,7 +293,8 @@ public class ExceptionFormatter {
         }
         if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
             var entry = new ArrayList<String>();
-            entry.add(callerInfo.packageName());
+            String outerPkg = callerInfo.packageName();
+            entry.add(outerPkg != null ? outerPkg : "main");
             entry.add(callerInfo.filename());
             entry.add(String.valueOf(callerInfo.line()));
             entry.add(null);  // No subroutine name available

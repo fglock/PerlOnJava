@@ -9,6 +9,9 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
 import static org.perlonjava.runtime.runtimetypes.RuntimeCode.getCallerArgs;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
+// Note: List::Util functions like reduce, pairmap, etc. use $a and $b in the
+// caller's package, not main::. This matches Perl 5's XS implementation.
+
 /**
  * List::Util module implementation for PerlOnJava.
  * <p>
@@ -90,6 +93,29 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
+     * Gets the package name from a code ref for $a/$b variable resolution.
+     * In Perl 5, reduce/pairmap/etc. use $a and $b in the caller's package,
+     * not main::. The code ref carries the package it was compiled in.
+     */
+    private static String getCodeRefPackage(RuntimeScalar codeRef) {
+        if (codeRef.value instanceof RuntimeCode code && code.packageName != null && !code.packageName.isEmpty()) {
+            return code.packageName;
+        }
+        // Fallback: use caller() to determine the calling package
+        RuntimeList callerInfo = RuntimeCode.caller(
+            new RuntimeList(RuntimeScalarCache.getScalarInt(0)),
+            RuntimeContextType.LIST
+        );
+        if (callerInfo.size() > 0) {
+            String pkg = callerInfo.elements.get(0).toString();
+            if (pkg != null && !pkg.isEmpty()) {
+                return pkg;
+            }
+        }
+        return "main";
+    }
+
+    /**
      * Reduces a list by calling a block multiple times.
      */
     public static RuntimeList reduce(RuntimeArray args, int ctx) {
@@ -107,8 +133,9 @@ public class ListUtil extends PerlModuleBase {
             return values.elements.get(0).scalar().getList();
         }
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        String callerPkg = getCodeRefPackage(codeRef);
+        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
+        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
         RuntimeScalar saveA = varA.clone();
         RuntimeScalar saveB = varB.clone();
 
@@ -150,8 +177,9 @@ public class ListUtil extends PerlModuleBase {
             return results.getList();
         }
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        String callerPkg = getCodeRefPackage(codeRef);
+        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
+        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
         RuntimeScalar saveA = varA.clone();
         RuntimeScalar saveB = varB.clone();
 
@@ -596,8 +624,9 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar codeRef = args.get(0);
         RuntimeList kvlist = createSubList(args, 1);
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        String callerPkg = getCodeRefPackage(codeRef);
+        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
+        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
         RuntimeScalar saveA = varA.clone();
         RuntimeScalar saveB = varB.clone();
 
@@ -635,8 +664,9 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar codeRef = args.get(0);
         RuntimeList kvlist = createSubList(args, 1);
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        String callerPkg = getCodeRefPackage(codeRef);
+        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
+        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
         RuntimeScalar saveA = varA.clone();
         RuntimeScalar saveB = varB.clone();
 
@@ -683,8 +713,9 @@ public class ListUtil extends PerlModuleBase {
         RuntimeScalar codeRef = args.get(0);
         RuntimeList kvlist = createSubList(args, 1);
 
-        RuntimeScalar varA = getGlobalVariable("main::a");
-        RuntimeScalar varB = getGlobalVariable("main::b");
+        String callerPkg = getCodeRefPackage(codeRef);
+        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
+        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
         RuntimeScalar saveA = varA.clone();
         RuntimeScalar saveB = varB.clone();
 

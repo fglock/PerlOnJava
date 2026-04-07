@@ -33,9 +33,45 @@ public class UnicodeResolver {
             // These are short names that Perl's charnames module provides
             // for commonly used control characters and spaces
             codePoint = switch (name) {
-                // Control characters
-                case "NEL" -> 0x0085;  // NEXT LINE (NEL)
-                case "BOM" -> 0xFEFF;  // BYTE ORDER MARK
+                // C0 control character abbreviations (Unicode name aliases)
+                case "NUL", "NULL" -> 0x0000;
+                case "SOH", "START OF HEADING" -> 0x0001;
+                case "STX", "START OF TEXT" -> 0x0002;
+                case "ETX", "END OF TEXT" -> 0x0003;
+                case "EOT", "END OF TRANSMISSION" -> 0x0004;
+                case "ENQ", "ENQUIRY" -> 0x0005;
+                case "ACK", "ACKNOWLEDGE" -> 0x0006;
+                case "BEL", "ALERT" -> 0x0007;
+                case "BS", "BACKSPACE" -> 0x0008;
+                case "HT", "TAB", "CHARACTER TABULATION", "HORIZONTAL TABULATION" -> 0x0009;
+                case "LF", "LINE FEED", "LINE FEED (LF)" -> 0x000A;
+                case "VT", "LINE TABULATION", "VERTICAL TABULATION" -> 0x000B;
+                case "FF", "FORM FEED", "FORM FEED (FF)" -> 0x000C;
+                case "CR", "CARRIAGE RETURN", "CARRIAGE RETURN (CR)" -> 0x000D;
+                case "SO", "SHIFT OUT" -> 0x000E;
+                case "SI", "SHIFT IN" -> 0x000F;
+                case "DLE", "DATA LINK ESCAPE" -> 0x0010;
+                case "DC1", "DEVICE CONTROL ONE" -> 0x0011;
+                case "DC2", "DEVICE CONTROL TWO" -> 0x0012;
+                case "DC3", "DEVICE CONTROL THREE" -> 0x0013;
+                case "DC4", "DEVICE CONTROL FOUR" -> 0x0014;
+                case "NAK", "NEGATIVE ACKNOWLEDGE" -> 0x0015;
+                case "SYN", "SYNCHRONOUS IDLE" -> 0x0016;
+                case "ETB", "END OF TRANSMISSION BLOCK" -> 0x0017;
+                case "CAN", "CANCEL" -> 0x0018;
+                case "EOM", "END OF MEDIUM" -> 0x0019;
+                case "SUB", "SUBSTITUTE" -> 0x001A;
+                case "ESC", "ESCAPE" -> 0x001B;
+                case "FS", "INFORMATION SEPARATOR FOUR", "FILE SEPARATOR" -> 0x001C;
+                case "GS", "INFORMATION SEPARATOR THREE", "GROUP SEPARATOR" -> 0x001D;
+                case "RS", "INFORMATION SEPARATOR TWO", "RECORD SEPARATOR" -> 0x001E;
+                case "US", "INFORMATION SEPARATOR ONE", "UNIT SEPARATOR" -> 0x001F;
+                case "SP", "SPACE" -> 0x0020;
+                case "DEL", "DELETE" -> 0x007F;
+
+                // Other control characters and special characters
+                case "NEL", "NEXT LINE", "NEXT LINE (NEL)" -> 0x0085;
+                case "BOM", "BYTE ORDER MARK" -> 0xFEFF;
 
                 // Spaces (Perl allows both hyphenated and non-hyphenated forms)
                 case "NBSP", "NO-BREAK SPACE" -> 0x00A0;
