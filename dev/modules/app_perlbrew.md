@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 1 Complete (2026-04-07)
+## Status: Phase 5 in progress (2026-04-07)
 
 ## Goal
 
@@ -19,20 +19,20 @@ App::perlbrew 1.02
 ├── Test2::Plugin::IOEvents (build_requires)
 ├── local::lib >= 2.000014 (requires)
 │   └── uses `perl - args` stdin idiom in Makefile.PL
-└── (test dependencies: Test2::V0, FindBin, English.pm)
+└── (test dependencies: Test2::V0, Test2::Tools::Spec, FindBin, English.pm)
 ```
 
-## Test Run Summary (2026-04-07, after Phase 1 fixes)
+## Test Run Summary (2026-04-07, after Phase 4 fixes)
 
 | Module | Configure | Build | Test | Blocker |
 |--------|-----------|-------|------|---------|
 | Module::Build::Tiny | OK | OK | **32/32 PASS** | — |
 | CPAN::Perl::Releases | OK | OK | 104/105 (1 fail) | `blib/arch` not created |
 | Devel::PatchPerl | OK | OK | 28/28 pass, 3 programs fail | Missing `File::pushd` |
-| File::Which | OK | OK | 14/18 (4 fail) | `catpath()` prototype bug |
-| Test2::Plugin::IOEvents | OK | OK | FAIL | Test2::V0 import issue |
-| local::lib | **NOT OK** | — | — | `-` stdin arg not supported |
-| App::perlbrew | OK | OK | 4/73 (most crash) | Test2::V0 import + FindBin + English.pm |
+| File::Which | OK | OK | 14/18 (4 fail) | `catpath()` prototype bug *(fixed in Phase 2)* |
+| Test2::Plugin::IOEvents | OK | OK | FAIL | Test2::V0 import issue *(fixed in Phase 4)* |
+| local::lib | OK | OK | 26/32 pass, shell.t hangs | `-` stdin *(fixed in Phase 2)*, PATH in sub-shells |
+| App::perlbrew | OK | OK | **18/73 pass** | Test2::IPC context depth *(Phase 5)* |
 
 ---
 
@@ -133,43 +133,28 @@ MakeMaker may not create `blib/arch` during `make`. Standard Perl's `make` alway
 
 ---
 
-## Phase 3: Parser and Import System Fixes
+## Phase 3: Parser and Import System Fixes (COMPLETED 2026-04-07)
 
-### 3.1 Test2::V0 / Test2::Util::Importer function import chain
+### 3.1 Test2::V0 / Test2::Util::Importer function import chain ✅
 
-**Priority: HIGH** — Root cause of most App::perlbrew test failures (syntax errors on
-`is`, `subtest`, `prop`, etc.).
+**Problem:** `return` inside `map`/`grep` blocks only exited the block, not the enclosing
+subroutine. This broke `Test2::Util::Importer::optimal_import()` which uses `return` inside
+`map` to exit early from the import function.
 
-**Problem:** Functions imported via `use Test2::V0` are not recognized by the parser at compile
-time. The parser treats them as barewords, and subsequent tokens are misinterpreted as infix
-operators, producing syntax errors like:
-- `syntax error near "(' '"` (from `is join(...)`)
-- `syntax error near "( @vers "` (from `is scalar(...)`)
-- `syntax error near "(qw/"` (from `is editdist(...)`)
-- `syntax error near "=> sub"` (from `subtest foo => sub { }`)
+**Root cause:** Map/grep blocks were compiled as `SubroutineNode` (anonymous subs), so `return`
+inside them returned from the block rather than propagating to the enclosing sub.
 
-**Root cause chain:**
-1. `Test2::V0` imports via `Test2::Util::Importer->import_into()`
-2. `optimal_import()` uses `*{"$from\::$_"}{CODE}` to extract code refs from glob slots
-3. This may fail in PerlOnJava, causing the import to not register functions
-4. Without registered functions, `SubroutineParser.java` line ~353 checks
-   `nextTok.type != LexerTokenType.IDENTIFIER` — when the next token IS an identifier
-   (like `join`, `scalar`), the unknown-sub-call path is skipped, returning a bareword
-5. The expression parser loop gives unknown identifiers default precedence 24, consuming
-   them as infix operators, which then fails
+**Fix:** Two-layer approach:
+1. **Return-value markers**: Map/grep blocks annotated with `isMapGrepBlock`; `return` creates
+   `RuntimeControlFlowList(RETURN, returnValue)` marker returned as block result
+2. **Exception propagation**: `ListOperators.map()`/`grep()` detect RETURN markers and throw
+   `PerlNonLocalReturnException`; `RuntimeCode.apply()` catches this in normal subs
 
-**Diagnosis step:** Run:
-```perl
-./jperl -e 'use Test2::V0; print defined(&is) ? "is: OK\n" : "is: MISSING\n"'
-```
-This determines whether the issue is import-side or parser-side.
-
-**Fix approach (depends on diagnosis):**
-- If import-side: fix `*{...}{CODE}` glob slot extraction or string eval in Importer.pm
-- If parser-side: improve `SubroutineParser.java` to treat unknown subs followed by known
-  CORE functions (join, scalar, etc.) as list operator calls
-
-**Files:** TBD based on diagnosis
+**Files changed:** `PerlNonLocalReturnException.java` (new), `ControlFlowType.java`,
+`RuntimeControlFlowList.java`, `ParseMapGrepSort.java`, `JavaClassInfo.java`,
+`EmitSubroutine.java`, `EmitControlFlow.java`, `ListOperators.java`,
+`EmitterMethodCreator.java`, `RuntimeCode.java`, `InterpretedCode.java`,
+`BytecodeCompiler.java`, `BytecodeInterpreter.java`
 
 ### 3.2 `isa` infix operator precedence when feature-gated
 
@@ -215,21 +200,82 @@ the dependency chain to work.
 
 ---
 
+## Phase 5: Test2::IPC CallerStack Fix
+
+### 5.1 INIT/CHECK/END blocks missing CallerStack entry
+
+**Priority: HIGH** — Root cause of ~40 App::perlbrew test failures.
+
+**Problem:** Tests using `Test2::Tools::Spec` load `Test2::AsyncSubtest` → `Test2::IPC`,
+which has an INIT block that calls `Test2::API::context()`. The `context()` function uses
+`caller(1)` to find the calling package, but INIT blocks in PerlOnJava execute directly
+from Java (`SpecialBlock.runInitBlocks()` → `RuntimeCode.apply()`) with no Perl caller
+frame above them. `caller(1)` returns empty → confess "Could not find context at depth 1".
+
+**Loading chain for failing tests:**
+```
+Test2::Tools::Spec
+  → Test2::Workflow::Runner (line 9: use Test2::AsyncSubtest())
+    → Test2::AsyncSubtest (line 5: use Test2::IPC)
+      → Test2::IPC INIT block (line 26-29): context()->release()
+```
+
+**Why passing tests work:** Tests using only `Test2::V0` don't load `Test2::IPC`.
+
+**Root cause in PerlLanguageProvider.java:**
+- Line 161-177: `CallerStack.push("main", ...)` during parse, popped after parsing completes
+- Line 348: `runInitBlocks()` executes AFTER CallerStack was popped
+- Result: no CallerStack entry when `caller(1)` falls back to CallerStack
+
+**Fix:** Push a CallerStack entry around INIT/CHECK/END block execution in
+`PerlLanguageProvider.executeCode()`, matching Perl 5 behavior where these blocks
+run from the main program scope.
+
+```java
+if (isMainProgram) {
+    CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+    try { runInitBlocks(); } finally { CallerStack.pop(); }
+}
+```
+
+**Files:** `src/main/java/org/perlonjava/app/scriptengine/PerlLanguageProvider.java`
+
+**Verification:**
+```bash
+./jperl -e 'use Test2::IPC; print "ok\n"'
+# Should print "ok" instead of "Could not find context at depth 1"
+```
+
+### 5.2 Other remaining App::perlbrew test failures
+
+**Priority: MEDIUM** — After 5.1, some tests will still fail for other reasons:
+
+| Issue | Tests affected | Root cause |
+|-------|---------------|------------|
+| `can't get_layers on tied handle` | t/12.destdir.t, t/12.sitecustomize.t | PerlIO.java line 54 |
+| `B::SV` not implemented | t/util-looks-like.t | Test2::Util::Stash uses B:: introspection |
+| PATH in sub-shells | t/shell.t (local::lib) | `local::lib` test resets PATH, jperl shell script can't find `dirname`/`java` |
+| `sys()` returns undef | t/sys.t | Likely missing IPC::Cmd or similar |
+
+---
+
 ## Implementation Priority Order
 
-1. **Phase 2.1** — `-` stdin support (unblocks `local::lib`)
-2. **Phase 3.1** — Test2::V0 import chain (unblocks most App::perlbrew tests)
-3. **Phase 2.2** — English.pm (quick win, unblocks format_perl_version test)
-4. **Phase 2.3** — catpath prototype fix (quick win, improves File::Which)
-5. **Phase 4.1** — FindBin $0 investigation
-6. **Phase 2.4** — blib/arch creation
-7. **Phase 3.2** — isa feature gate
+1. ~~**Phase 2.1** — `-` stdin support~~ ✅
+2. ~~**Phase 3.1** — Non-local return from map/grep blocks~~ ✅
+3. ~~**Phase 2.2** — English.pm~~ ✅
+4. ~~**Phase 2.3** — catpath prototype fix~~ ✅
+5. **Phase 5.1** — CallerStack for INIT/CHECK/END blocks (unblocks ~40 App::perlbrew tests)
+6. **Phase 4.1** — FindBin $0 investigation
+7. **Phase 2.4** — blib/arch creation
+8. **Phase 3.2** — isa feature gate
+9. **Phase 5.2** — Remaining App::perlbrew test issues
 
 ---
 
 ## Progress Tracking
 
-### Current Status: Phase 2 ready to start
+### Current Status: Phase 5.1 in progress
 
 ### Completed Phases
 - [x] Phase 1: Foundation Fixes (2026-04-07)
@@ -237,12 +283,21 @@ the dependency chain to work.
   - Added `$DynaLoader::VERSION = '1.54'` to DynaLoader.java
   - Created DynaLoader.pm stub for CPAN disk-based lookups
   - Module::Build::Tiny now configures, builds, and tests (32/32) successfully
+- [x] Phase 2: CLI and Core Module Fixes (2026-04-07)
+  - 2.1: Added `-` stdin support in ArgumentParser.java (unblocked local::lib)
+  - 2.2: Added English.pm core module
+  - 2.3: Fixed File::Spec catpath/splitpath/abs2rel/rel2abs prototypes
+- [x] Phase 3.1: Non-local return from map/grep blocks (2026-04-07)
+  - Two-layer approach: return-value markers + PerlNonLocalReturnException
+  - Fixed Test2::Util::Importer::optimal_import() and all map/grep return semantics
+  - Commit: f97aa6c1c
+- [x] Phase 4 (partial): Test2::V0 import chain now works
 
 ### Next Steps
-1. Implement `-` stdin support in ArgumentParser.java
-2. Diagnose Test2::V0 import chain
-3. Add English.pm
+1. Implement CallerStack fix for INIT/CHECK/END blocks (Phase 5.1)
+2. Re-run `./jcpan -t App::perlbrew` to measure improvement
+3. Investigate remaining failures (Phase 5.2)
 
 ### Open Questions
-- Is the Test2::V0 failure import-side or parser-side?
+- Will the CallerStack fix also help the main program execution (`runtimeCode.apply()` at line 356)?
 - Does FindBin `$0 = 'can_ok'` come from test harness or incorrect `-e` handling?

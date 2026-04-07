@@ -335,7 +335,15 @@ public class PerlLanguageProvider {
     private static RuntimeList executeCode(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
-            runCheckBlocks();
+            // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
+            // sees the main program as their caller, matching Perl 5 behavior
+            // where these blocks run from the main program scope.
+            CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+            try {
+                runCheckBlocks();
+            } finally {
+                CallerStack.pop();
+            }
         }
         if (ctx.compilerOptions.compileOnly) {
             RuntimeIO.closeAllHandles();
@@ -345,7 +353,12 @@ public class PerlLanguageProvider {
         RuntimeList result;
         try {
             if (isMainProgram) {
-                runInitBlocks();
+                CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                try {
+                    runInitBlocks();
+                } finally {
+                    CallerStack.pop();
+                }
             }
 
             // Use the caller's context if specified, otherwise use default behavior
@@ -357,7 +370,12 @@ public class PerlLanguageProvider {
 
             try {
                 if (isMainProgram) {
-                    runEndBlocks();
+                    CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                    try {
+                        runEndBlocks();
+                    } finally {
+                        CallerStack.pop();
+                    }
                 }
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();
@@ -371,7 +389,12 @@ public class PerlLanguageProvider {
             throw e;
         } catch (Throwable t) {
             if (isMainProgram) {
-                runEndBlocks(false);  // Don't reset $? on exception path
+                CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                try {
+                    runEndBlocks(false);  // Don't reset $? on exception path
+                } finally {
+                    CallerStack.pop();
+                }
                 RuntimeIO.closeAllHandles();
             }
             if (t instanceof RuntimeException runtimeException) {
