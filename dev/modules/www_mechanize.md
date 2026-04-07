@@ -530,7 +530,7 @@ cd ~/.cpan/build/WWW-Mechanize-2.20-0 && ../../projects/PerlOnJava2/jperl t/loca
 
 ### Problem
 
-Running `./jcpan -j 4 -t WWW::Mechanize` showed **all tests failing** (0% pass rate) with
+Running `./jcpan --jobs 4 -t WWW::Mechanize` showed **all tests failing** (0% pass rate) with
 the harness reporting "Failed X/X subtests" for every test file. Every test printed its
 plan line (`1..N`) but no `ok` lines appeared. The root cause was a chain of three bugs.
 
@@ -609,7 +609,7 @@ plan line (`1..N`) but no `ok` lines appeared. The root cause was a chain of thr
 
 ### Test Results (2026-04-06)
 
-**Test command**: `./jcpan -j 4 -t WWW::Mechanize` (with cookies.t and frames.t excluded
+**Test command**: `./jcpan --jobs 4 -t WWW::Mechanize` (with cookies.t and frames.t excluded
 from harness due to hangs — see below)
 
 **Harness results**: `All tests successful. Files=61, Tests=877, 91 wallclock secs`

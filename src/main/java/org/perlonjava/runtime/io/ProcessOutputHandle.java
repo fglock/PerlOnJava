@@ -67,6 +67,12 @@ public class ProcessOutputHandle implements IOHandle {
     }
 
     @Override
+    public RuntimeScalar fileno() {
+        // Return undef to let RuntimeIO.fileno() lazily assign a registry fileno
+        return RuntimeScalarCache.scalarUndef;
+    }
+
+    @Override
     public RuntimeScalar eof() {
         // Output handles don't have EOF in the same sense
         return isClosed ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
@@ -76,18 +82,6 @@ public class ProcessOutputHandle implements IOHandle {
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         // Output-only handle
         return new RuntimeScalar();
-    }
-
-    /**
-     * Set the character encoding for writing.
-     */
-    public void setCharset(Charset charset) {
-        this.charset = charset;
-    }
-
-    @Override
-    public RuntimeScalar fileno() {
-        return RuntimeScalarCache.scalarUndef;
     }
 
     @Override
@@ -108,5 +102,12 @@ public class ProcessOutputHandle implements IOHandle {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
         }
+    }
+
+    /**
+     * Set the character encoding for writing.
+     */
+    public void setCharset(Charset charset) {
+        this.charset = charset;
     }
 }

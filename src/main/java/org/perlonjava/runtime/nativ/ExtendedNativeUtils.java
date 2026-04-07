@@ -407,7 +407,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         return result;
     }
 
-    public static RuntimeArray getprotobyname(int ctx, RuntimeBase... args) {
+    public static RuntimeBase getprotobyname(int ctx, RuntimeBase... args) {
         if (args.length < 1) return new RuntimeArray();
         String protocol = args[0].toString().toLowerCase();
 
@@ -415,14 +415,23 @@ public class ExtendedNativeUtils extends NativeUtils {
                 "tcp", 6, "udp", 17, "icmp", 1, "ip", 0
         );
 
-        RuntimeArray result = new RuntimeArray();
         Integer protoNum = protocols.get(protocol);
-        if (protoNum != null) {
-            RuntimeArray.push(result, new RuntimeScalar(protocol));
-            RuntimeArray.push(result, new RuntimeArray());
-            RuntimeArray.push(result, new RuntimeScalar(protoNum));
+        if (protoNum == null) {
+            // Not found — return empty list or undef in scalar context
+            if (ctx == 1) return RuntimeScalarCache.scalarUndef;
+            return new RuntimeArray();
         }
 
+        if (ctx == 1) {
+            // Scalar context: return just the protocol number
+            return new RuntimeScalar(protoNum);
+        }
+
+        // List context: return (name, aliases, proto_number)
+        RuntimeArray result = new RuntimeArray();
+        RuntimeArray.push(result, new RuntimeScalar(protocol));
+        RuntimeArray.push(result, new RuntimeArray());
+        RuntimeArray.push(result, new RuntimeScalar(protoNum));
         return result;
     }
 
@@ -871,7 +880,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         return new RuntimeArray();
     }
 
-    public static RuntimeArray getprotoent(int ctx, RuntimeBase... args) {
+    public static RuntimeBase getprotoent(int ctx, RuntimeBase... args) {
         Iterator<String> iterator = protoIterator.get();
         if (iterator == null) {
             List<String> protocols = Arrays.asList("tcp", "udp", "icmp", "ip");

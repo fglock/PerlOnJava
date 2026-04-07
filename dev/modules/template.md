@@ -3,7 +3,7 @@
 ## Overview
 
 Template Toolkit (TT) 3.102 is a widely-used Perl template processing system.
-This document tracks the work needed to make `./jcpan -j 8 -t Template` pass
+This document tracks the work needed to make `./jcpan --jobs 8 -t Template` pass
 its test suite on PerlOnJava.
 
 ## Current Status
@@ -102,7 +102,7 @@ This branch is ready for review and merge. All actionable failures have been fix
 The only remaining failure (`leak.t`) is due to a known PerlOnJava limitation (no DESTROY support).
 
 ### Post-merge: jcpan parallel test ordering
-When running `./jcpan -j 8 -t Template`, the compile tests (`compile2.t`, `compile3.t`,
+When running `./jcpan --jobs 8 -t Template`, the compile tests (`compile2.t`, `compile3.t`,
 `compile5.t`) may spuriously fail because they depend on `compile1.t` having run first
 to populate the compiled template cache. Running them sequentially (or with `-j 1`) always
 passes. This is a test-harness ordering issue, not a PerlOnJava bug.

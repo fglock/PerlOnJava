@@ -163,6 +163,40 @@ public class SocketIO implements IOHandle {
 
             // Use SocketChannel for non-blocking connect support
             if (socketChannel != null && !blocking) {
+                // If there's already a pending connection (second connect() call from
+                // IO::Socket->connect to check if the non-blocking connect succeeded),
+                // use finishConnect() instead of connect().
+                // On POSIX, the second connect() returns EISCONN if connected, or the
+                // actual error (ECONNREFUSED, etc.) if the connection failed.
+                if (socketChannel.isConnectionPending()) {
+                    try {
+                        boolean finished = socketChannel.finishConnect();
+                        if (finished) {
+                            // Connection completed — return EISCONN to match POSIX behavior
+                            this.socket = socketChannel.socket();
+                            this.inputStream = socket.getInputStream();
+                            this.outputStream = socket.getOutputStream();
+                            getGlobalVariable("main::!").set(ErrnoVariable.EISCONN());
+                            return scalarUndef;
+                        }
+                        // Still pending
+                        getGlobalVariable("main::!").set(ErrnoVariable.EINPROGRESS());
+                        return scalarUndef;
+                    } catch (java.net.ConnectException e) {
+                        getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+                        return scalarUndef;
+                    } catch (IOException e) {
+                        handleIOException(e, "connect operation failed");
+                        return scalarUndef;
+                    }
+                }
+
+                // If already connected, return EISCONN
+                if (socketChannel.isConnected()) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EISCONN());
+                    return scalarUndef;
+                }
+
                 // Auto-bind if not already bound so getsockname() returns local address
                 // even before the connection completes (Java NIO doesn't expose the
                 // local address until finishConnect() without this).
@@ -229,7 +263,13 @@ public class SocketIO implements IOHandle {
                 // finish pending connection and initialize streams if needed
                 if (newBlocking && outputStream == null) {
                     if (socketChannel.isConnectionPending()) {
-                        socketChannel.finishConnect();
+                        try {
+                            socketChannel.finishConnect();
+                        } catch (java.net.ConnectException e) {
+                            // Propagate connection error to $!
+                            getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+                            return;
+                        }
                     }
                     if (socketChannel.isConnected()) {
                         this.socket = socketChannel.socket();
@@ -877,25 +917,13 @@ public class SocketIO implements IOHandle {
      * @return the corresponding Java SocketOption, or null if not supported
      */
     private SocketOption<?> mapToJavaSocketOption(int level, int optname) {
-        // SOL_SOCKET = 1
-        if (level == 1) {
-            switch (optname) {
-                case 2:  // SO_REUSEADDR
-                    return StandardSocketOptions.SO_REUSEADDR;
-                case 9:  // SO_KEEPALIVE
-                    return StandardSocketOptions.SO_KEEPALIVE;
-                case 8:  // SO_RCVBUF
-                    return StandardSocketOptions.SO_RCVBUF;
-                case 7:  // SO_SNDBUF
-                    return StandardSocketOptions.SO_SNDBUF;
-            }
-        }
-        // IPPROTO_TCP = 6
-        else if (level == 6) {
-            switch (optname) {
-                case 1:  // TCP_NODELAY
-                    return StandardSocketOptions.TCP_NODELAY;
-            }
+        if (level == org.perlonjava.runtime.perlmodule.Socket.SOL_SOCKET) {
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_REUSEADDR) return StandardSocketOptions.SO_REUSEADDR;
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_KEEPALIVE) return StandardSocketOptions.SO_KEEPALIVE;
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_RCVBUF) return StandardSocketOptions.SO_RCVBUF;
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_SNDBUF) return StandardSocketOptions.SO_SNDBUF;
+        } else if (level == org.perlonjava.runtime.perlmodule.Socket.IPPROTO_TCP) {
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.TCP_NODELAY) return StandardSocketOptions.TCP_NODELAY;
         }
         return null;
     }

@@ -40,6 +40,8 @@ public class Socket extends PerlModuleBase {
     public static final int SO_BROADCAST = (IS_MAC || IS_WINDOWS) ? 0x20 : 6;
     public static final int SO_LINGER = (IS_MAC || IS_WINDOWS) ? 0x80 : 13;
     public static final int SO_ERROR = (IS_MAC || IS_WINDOWS) ? 0x1007 : 4;
+    public static final int SO_RCVBUF = (IS_MAC || IS_WINDOWS) ? 0x1002 : 8;
+    public static final int SO_SNDBUF = (IS_MAC || IS_WINDOWS) ? 0x1001 : 7;
     public static final int SO_TYPE = (IS_MAC || IS_WINDOWS) ? 0x1008 : 3;
     public static final int TCP_NODELAY = 1;
     public static final int IPPROTO_TCP = 6;

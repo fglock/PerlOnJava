@@ -383,19 +383,28 @@ public class IPCOpen3 extends PerlModuleBase {
         RuntimeIO io = new RuntimeIO();
         io.ioHandle = new ProcessOutputHandle(out);
 
-        // Create a new GLOB reference for the handle
-        RuntimeGlob glob = new RuntimeGlob(null);
-        glob.setIO(io);
-
-        RuntimeScalar newHandle = new RuntimeScalar();
-        newHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        newHandle.value = glob;
-
-        // Dereference and set the handle
+        // Dereference to get the inner value
+        RuntimeScalar inner;
         if (handleRef.type == RuntimeScalarType.REFERENCE && handleRef.value instanceof RuntimeScalar) {
-            ((RuntimeScalar) handleRef.value).set(newHandle);
+            inner = (RuntimeScalar) handleRef.value;
         } else {
-            handleRef.set(newHandle);
+            inner = handleRef;
+        }
+
+        // If the inner value is already a GLOBREFERENCE (e.g., \*FOO typeglob),
+        // set the IO slot on the existing glob so the bareword handle works
+        if (inner.type == RuntimeScalarType.GLOBREFERENCE && inner.value instanceof RuntimeGlob) {
+            ((RuntimeGlob) inner.value).setIO(io);
+        } else {
+            // Create a new GLOB reference for the handle
+            RuntimeGlob glob = new RuntimeGlob(null);
+            glob.setIO(io);
+
+            RuntimeScalar newHandle = new RuntimeScalar();
+            newHandle.type = RuntimeScalarType.GLOBREFERENCE;
+            newHandle.value = glob;
+
+            inner.set(newHandle);
         }
     }
 
@@ -406,19 +415,28 @@ public class IPCOpen3 extends PerlModuleBase {
         RuntimeIO io = new RuntimeIO();
         io.ioHandle = new ProcessInputHandle(in, process);
 
-        // Create a new GLOB reference for the handle
-        RuntimeGlob glob = new RuntimeGlob(null);
-        glob.setIO(io);
-
-        RuntimeScalar newHandle = new RuntimeScalar();
-        newHandle.type = RuntimeScalarType.GLOBREFERENCE;
-        newHandle.value = glob;
-
-        // Dereference and set the handle
+        // Dereference to get the inner value
+        RuntimeScalar inner;
         if (handleRef.type == RuntimeScalarType.REFERENCE && handleRef.value instanceof RuntimeScalar) {
-            ((RuntimeScalar) handleRef.value).set(newHandle);
+            inner = (RuntimeScalar) handleRef.value;
         } else {
-            handleRef.set(newHandle);
+            inner = handleRef;
+        }
+
+        // If the inner value is already a GLOBREFERENCE (e.g., \*FOO typeglob),
+        // set the IO slot on the existing glob so the bareword handle works
+        if (inner.type == RuntimeScalarType.GLOBREFERENCE && inner.value instanceof RuntimeGlob) {
+            ((RuntimeGlob) inner.value).setIO(io);
+        } else {
+            // Create a new GLOB reference for the handle
+            RuntimeGlob glob = new RuntimeGlob(null);
+            glob.setIO(io);
+
+            RuntimeScalar newHandle = new RuntimeScalar();
+            newHandle.type = RuntimeScalarType.GLOBREFERENCE;
+            newHandle.value = glob;
+
+            inner.set(newHandle);
         }
     }
 }

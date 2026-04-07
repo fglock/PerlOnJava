@@ -1181,7 +1181,7 @@ public class SubroutineParser {
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
-        filteredSnapshot.warningFlagsStack.push(parser.ctx.symbolTable.warningFlagsStack.peek());
+        filteredSnapshot.warningFlagsStack.push((java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone());
         
         // Clone fatal warning flags (critical for 'use warnings FATAL' pragmas)
         filteredSnapshot.warningFatalStack.pop();

@@ -104,12 +104,14 @@ sub test {
     
     # Set PERL5LIB to add blib/lib and blib/arch to @INC for test subprocesses
     # Test::Harness runs each test file as a subprocess, so we need PERL5LIB
+    # Use "undef *Test::Harness::Switches" to disable the default -w switch,
+    # matching standard ExtUtils::MakeMaker behavior (MM_Any::test_via_harness)
     return <<"MAKE_FRAG";
 test :: pure_all
-	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) -e 'use Test::Harness; runtests(glob(q{$tests}))'
+	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_dynamic :: pure_all
-	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) -e 'use Test::Harness; runtests(glob(q{$tests}))'
+	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_static ::
 	\@echo "No static tests for PerlOnJava"

@@ -416,9 +416,12 @@ public class ParseInfix {
         LexerToken ident = TokenUtils.consume(parser);
         LexerToken close = TokenUtils.consume(parser);
         if (ident.type == LexerTokenType.IDENTIFIER && close.text.equals("}")) {
-            // autoquote
+            // Autoquote: barewords in hash subscripts are always string literals.
+            // Use StringNode (not IdentifierNode) so that ConstantFoldingVisitor
+            // doesn't replace the key with a constant's numeric value.
+            // In Perl 5, $hash{FOO} is always $hash{"FOO"}, even if FOO is a constant sub.
             List<Node> list = new ArrayList<>();
-            list.add(new IdentifierNode(ident.text, currentIndex));
+            list.add(new StringNode(ident.text, currentIndex));
             return list;
         }
         // backtrack

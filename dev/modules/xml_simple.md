@@ -3,7 +3,7 @@
 ## Overview
 
 **Module**: XML::Simple 2.25 (depends on XML::SAX 1.02, XML::SAX::PurePerl)  
-**Test command**: `./jcpan -j 8 -t XML::Simple`  
+**Test command**: `./jcpan --jobs 8 -t XML::Simple`  
 **Status**: **14/14 test files pass, 487/487 subtests (100%)** — ALL FIXED
 
 ## Dependency Tree

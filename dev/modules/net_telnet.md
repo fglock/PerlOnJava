@@ -11,14 +11,14 @@ Net::Telnet is a CPAN module for automating Telnet sessions and TCP connections.
 It's pure Perl (no XS dependencies) and relies on socket I/O, 4-arg `select()`,
 `alarm()`/`$SIG{ALRM}` for timeouts, and `sysread`/`syswrite` for non-buffered I/O.
 
-Running `./jcpan -j 4 -t Net::Telnet` installs the module and passes all 3 CPAN
+Running `./jcpan --jobs 4 -t Net::Telnet` installs the module and passes all 3 CPAN
 tests (select.t), but using the module at runtime crashes on a regex octal escape
 bug when Net::Telnet's internal telnet-option stripping code is invoked.
 
 ## Test Command
 
 ```bash
-./jcpan -j 4 -t Net::Telnet
+./jcpan --jobs 4 -t Net::Telnet
 ```
 
 ## Current State (before fixes)
@@ -128,7 +128,7 @@ objects won't auto-close sockets when they go out of scope. Users should call
 make
 
 # CPAN test
-./jcpan -j 4 -t Net::Telnet
+./jcpan --jobs 4 -t Net::Telnet
 
 # Direct regex test
 ./jperl -e '"x" =~ /[\177-\237]/ and print "ok\n"'

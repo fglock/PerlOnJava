@@ -3,7 +3,7 @@
 ## Status: WORKING (all 134 tests pass)
 
 ```bash
-./jcpan -j 4 -t DateTime::Format::ICal   # All 5 test files pass (134/134 subtests)
+./jcpan --jobs 4 -t DateTime::Format::ICal   # All 5 test files pass (134/134 subtests)
 ```
 
 ## Dependency Chain
@@ -22,10 +22,10 @@ DateTime::Format::ICal  (Module::Build)
 
 ## Issues Fixed (this branch)
 
-### 1. Parallel test execution for jcpan (`-j N` flag)
+### 1. Parallel test execution for jcpan (`--jobs N` flag)
 **Files:** `jcpan`, `jcpan.bat`, `TAP/Parser/Iterator/Process.pm`
 
-`jcpan -t` ran CPAN module tests sequentially.  Added `-j N` flag that sets
+`jcpan -t` ran CPAN module tests sequentially.  Added `--jobs N` flag that sets
 `HARNESS_OPTIONS=jN`, which flows through `Test::Harness` →
 `TAP::Harness(jobs=N)` → `_aggregate_parallel()`.
 
@@ -35,7 +35,7 @@ without registering handles for `IO::Select` (because `d_fork` is not set).
 Fixed by trying `IO::Select` on pipe handles in the non-fork fallback path.
 
 **Benchmark (Path::Tiny, 30 test files):**
-- Sequential: 36s → Parallel `-j 4`: 18.5s (~2x speedup)
+- Sequential: 36s → Parallel `--jobs 4`: 18.5s (~2x speedup)
 
 ### 2. Module::Build `./Build` chained shebang fix
 **File:** `CPAN/Distribution.pm` (`_build_command()` + install path)

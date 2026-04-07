@@ -128,6 +128,31 @@ public class DupIOHandle implements IOHandle {
     }
 
     /**
+     * Creates an additional duplicate at a specific fd number, sharing the same
+     * delegate and refcount as an existing DupIOHandle. Used by POSIX::dup2()
+     * where the target fd is specified.
+     *
+     * @param existing   an existing DupIOHandle to share with
+     * @param explicitFd the fd number to assign to the new duplicate
+     * @return a new DupIOHandle sharing the same delegate at the specified fd
+     */
+    public static DupIOHandle addDupAt(DupIOHandle existing, int explicitFd) {
+        existing.refCount.incrementAndGet();
+        return new DupIOHandle(existing.delegate, existing.refCount, explicitFd);
+    }
+
+    /**
+     * Creates a pair of DupIOHandles with explicit fd numbers for both.
+     * Used by POSIX::dup2() when the source is not yet a DupIOHandle.
+     */
+    public static DupIOHandle[] createPairAt(IOHandle delegate, int originalFd, int newFd) {
+        AtomicInteger refCount = new AtomicInteger(2);
+        DupIOHandle a = new DupIOHandle(delegate, refCount, originalFd);
+        DupIOHandle b = new DupIOHandle(delegate, refCount, newFd);
+        return new DupIOHandle[]{a, b};
+    }
+
+    /**
      * Returns the file descriptor number for this duplicate.
      */
     public int getFd() {

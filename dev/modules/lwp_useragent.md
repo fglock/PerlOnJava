@@ -9,7 +9,7 @@
 
 LWP::UserAgent (libwww-perl) is a top-20 CPAN module providing the standard HTTP
 client library for Perl. It was previously blocked on HTTP::Message, which has since
-been fixed. Running `./jcpan -j 8 -t LWP::UserAgent` now installs and partially
+been fixed. Running `./jcpan --jobs 8 -t LWP::UserAgent` now installs and partially
 works, but several issues prevent full test coverage.
 
 ## Current State (after Phase 14)
@@ -481,7 +481,7 @@ via a prior jcpan run.
 - [x] **P3**: Import IO::Socket::IP + implement getaddrinfo/sockaddr_family in Socket.java
 - [x] **P4**: Fix File::Temp IO::Handle methods (close, seek, getline, printflush, etc.)
 - [x] `make` passes
-- [x] Re-run `./jcpan -j 8 -t LWP::UserAgent`: 141 tests, 137/141 pass (97.2%)
+- [x] Re-run `./jcpan --jobs 8 -t LWP::UserAgent`: 141 tests, 137/141 pass (97.2%)
 
 ### Phase 3: Quick fixes (P5, P6) -- COMPLETED (2026-04-03)
 
