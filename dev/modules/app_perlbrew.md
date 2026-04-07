@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 6 ready — interpreter fixes landed, re-run tests to measure (2026-04-07)
+## Status: Phase 6 complete — 57/73 tests pass (2026-04-07)
 
 ## Goal
 
@@ -32,7 +32,7 @@ App::perlbrew 1.02
 | File::Which | OK | OK | 14/18 (4 fail) | `catpath()` prototype bug *(fixed in Phase 2)* |
 | Test2::Plugin::IOEvents | OK | OK | FAIL | Test2::V0 import issue *(fixed in Phase 4)* |
 | local::lib | OK | OK | 26/32 pass, shell.t hangs | `-` stdin *(fixed in Phase 2)*, PATH in sub-shells |
-| App::perlbrew | OK | OK | **18/73 pass** | Test2::IPC context depth *(Phase 5)* |
+| App::perlbrew | OK | OK | **57/73 pass** | Tied STDOUT capture (9 tests), misc (7 tests) |
 
 ---
 
@@ -247,38 +247,66 @@ if (isMainProgram) {
 
 ---
 
-## Phase 6: Re-test and Fix Remaining Failures
+## Phase 6: Re-test and Fix Remaining Failures (COMPLETED 2026-04-07)
 
-### 6.1 Re-run App::perlbrew test suite
+### 6.1 Re-run App::perlbrew test suite ✅
 
-**Priority: HIGH** — Phases 5.1, 5.2 fixed multiple categories of failures. A fresh
-`./jcpan -t App::perlbrew` run is needed to measure the actual pass rate and identify
-which tests still fail.
+**Result:** 57/73 test files pass (from 18/73 before Phase 5 fixes).
 
-**Expected improvement:** From 18/73 pass → significantly more, since:
-- CallerStack fix unblocks ~32 tests that crashed on Test2::IPC context depth
-- `local @ARGV` reference fix unblocks all `args` tests (t/01.options.t, etc.)
-- `can()` forward declaration fix removes spurious "Subroutine redefined" warnings
-- PerlIO get_layers fix unblocks t/12.destdir.t, t/12.sitecustomize.t
-- Config myarchname fix unblocks t/sys.t
+### 6.2 TieHandle/TiedVariableBase cast fix ✅
 
-### 6.2 Investigate remaining failures after re-test
+**Problem:** When `Capture::Tiny` ties a filehandle, `tiedStore()` and `tiedFetch()` in
+`RuntimeScalar.java` cast `value` to `TiedVariableBase`, but `TieHandle` extends `RuntimeIO`,
+not `TiedVariableBase`. This caused `ClassCastException` crashes.
 
-After the re-test, categorize failures into:
-1. **PerlOnJava runtime bugs** — fix in Java code
-2. **Missing CPAN modules** — install via jcpan
-3. **Unimplementable features** — document and skip (e.g., fork-dependent tests)
+**Fix:** Added `instanceof TieHandle` checks before the `TiedVariableBase` cast.
+`tiedStore()` returns the value as-is for TieHandle; `tiedFetch()` returns
+`tieHandle.getSelf()`.
 
-Known remaining areas:
-- `B::SV` / B module introspection (used by Test2::Util::Stash)
-- Pod::Usage formatting for help tests
-- Shell integration tests (PATH, environment inheritance)
+**Files changed:** `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
+
+### 6.3 Remaining failures categorized
+
+16 test files still fail, in these categories:
+
+| Category | Count | Tests | Root Cause |
+|----------|-------|-------|------------|
+| **Tied STDOUT capture** | 9 | `05.get_current_perl.t`, `command-available.t`, `command-compgen.t`, `command-env.t`, `command-info.t`, `command-lib.t`, `command-list.t`, `installation-perlbrew.t`, `list_modules.t` | `print` without explicit filehandle bypasses tied STDOUT — `RuntimeIO.selectedHandle` still points to original untied handle |
+| **File/path ops** | 3 | `12.destdir.t`, `12.sitecustomize.t`, `20.patchperl.t` | sitecustomize.pl install fails; undefined path parameter in `App::Perlbrew::Path` |
+| **Test2::Mock** | 1 | `installation2.t` | Mock `do_system` not working — `goto &$sub` or Test2::Mock limitation |
+| **PATH lookup** | 1 | `http-ua-detect-non-curl.t` | Fake `curl` in `$PATH` not picked up; `File::Which` or jperl shell script resolves system curl instead |
+| **B:: introspection** | 1 | `util-looks-like.t` | `B::SV` class not implemented |
+| **No tests run** | 1 | `unit-files-are-the-same.t` | Skipped (no reason given) |
 
 ---
 
-## Phase 7: Stretch Goals
+## Phase 7: Tied STDOUT and Remaining Fixes
 
-### 7.1 FindBin `$0` handling in test contexts
+### 7.1 Fix `selectedHandle` for tied STDOUT
+
+**Priority: HIGH** — Root cause of 9/16 remaining failures (the single biggest blocker).
+
+**Problem:** When `Test2::Plugin::IOEvents` ties STDOUT, `print "hello"` (no explicit
+filehandle) still goes through `RuntimeIO.selectedHandle` which points to the original
+untied handle. The tie never intercepts the output, so all captured output is empty.
+
+**Complexity:** A previous fix that updated `selectedHandle` in `TieOperators.java` was
+reverted because `Test2::Plugin::IOEvents::Tie::PRINT` converts output to Test2 events
+(no real output). It relies on `stat(STDOUT)` inode changes to detect pipe redirects.
+PerlOnJava's `stat` on filehandles returns empty/meaningless values, so
+`_check_for_change()` never fires. This caused ALL print output to become events instead
+of going to the TAP harness, breaking every test.
+
+**Fix approach:** Two-part fix required:
+1. Update `selectedHandle` when tying/untying the currently-selected handle
+2. Implement meaningful `stat(STDOUT)` — at minimum, return a unique inode/dev so
+   `_check_for_change()` can detect when the FD changes (pipe redirect detection)
+
+**Tests affected:** `05.get_current_perl.t`, `command-available.t`, `command-compgen.t`,
+`command-env.t`, `command-info.t`, `command-lib.t`, `command-list.t`,
+`installation-perlbrew.t`, `list_modules.t`
+
+### 7.2 FindBin `$0` handling in test contexts
 
 **Priority: LOW** — Many App::perlbrew tests fail with
 `Cannot find current script 'can_ok'`.
@@ -287,19 +315,36 @@ Known remaining areas:
 name (`can_ok`) instead of a file path. FindBin.pm then dies because it can't find a file
 with that name.
 
-### 7.2 `blib/arch` directory creation
+### 7.3 `blib/arch` directory creation
 
 **Priority: LOW** — Causes `CPAN::Perl::Releases` test failure (1/105).
 
-### 7.3 `isa` infix operator feature gate
+### 7.4 `isa` infix operator feature gate
 
 **Priority: LOW** — Affects `prop isa => 'Class'` pattern in Test2 tests.
+
+### 7.5 `B::SV` stub for Test2::Util::Stash
+
+**Priority: LOW** — Causes `util-looks-like.t` failure.
+
+`Test2::Util::Stash` uses `B::svref_2object($ref)->SV` to introspect scalar references.
+Options: stub `B::SV` to return a minimal object, or patch Test2::Util::Stash to skip
+when B is not available.
+
+### 7.6 File/path operation fixes
+
+**Priority: MEDIUM** — Causes 3 test failures (`12.destdir.t`, `12.sitecustomize.t`,
+`20.patchperl.t`).
+
+- `12.destdir.t`: sitecustomize.pl not written to DESTDIR during mock install
+- `12.sitecustomize.t`: `App::Perlbrew::Path->new()` receives undefined parameter
+- `20.patchperl.t`: 0/1 subtests ran (need investigation)
 
 ---
 
 ## Progress Tracking
 
-### Current Status: Phase 6.1 — Re-run tests to measure improvement
+### Current Status: Phase 6 complete — 57/73 App::perlbrew tests pass
 
 ### Completed Phases
 - [x] Phase 1: Foundation Fixes (2026-04-07)
@@ -328,34 +373,21 @@ with that name.
     entry instead of modifying in-place. Updated BytecodeInterpreter, EmitOperatorLocal,
     CompileAssignment. Added 5 tests to local.t.
   - Commit: 57bca797c
+- [x] Phase 6: Re-test and remaining fixes (2026-04-07)
+  - Re-ran `./jcpan -t App::perlbrew`: **57/73 pass** (up from 18/73)
+  - Fixed TieHandle/TiedVariableBase cast error in RuntimeScalar.java (tiedFetch/tiedStore)
+  - Attempted selectedHandle fix for tied STDOUT — **reverted** due to stat(STDOUT) regression
+  - Categorized all 16 remaining failures (see Phase 6.3)
+  - Interpreter fixes: hash assignment return values, hash warning messages,
+    chop/chomp list args, hashassign.t 248→309/309
 
 ### Next Steps
-1. Re-run `./jcpan -t App::perlbrew` to measure pass rate improvement (Phase 6.1)
-2. Re-run `perl dev/tools/perl_test_runner.pl perl5_t/t/op/` to check for broader improvements from interpreter fixes
-3. Categorize remaining failures and fix what's feasible (Phase 6.2)
-4. Investigate B::SV, Pod::Usage, shell/PATH issues if they block significant tests
-
-### Recent Interpreter Fixes (2026-04-07)
-These fixes improve interpreter backend correctness, which benefits tests that fall back
-from the JVM backend to the interpreter for large/complex subroutines:
-
-- **chop/chomp with list arguments** (111efb287): `visitChop()`/`visitChomp()` in
-  `CompileOperator.java` only compiled the first element instead of the full operand in LIST
-  context. Also fixed `RuntimeHash.chomp()` calling `chop()` instead of `chomp()`.
-- **Hash assignment scalar context** (596676cef): `HASH_SET_FROM_LIST` used `createHash()`
-  instead of `setFromList()`, missing warnings. Scalar context used `ARRAY_SIZE` on the hash
-  instead of counting RHS elements. `RuntimeHash/RuntimeStash.countElements()` returned
-  `size()` instead of `size()*2`. `LIST_TO_COUNT` accessed `.elements.size()` directly
-  instead of polymorphic `countElements()`.
-- **List assignment return values** (596676cef): `($x,%h) = list` in list context returned
-  the consumed (empty) RHS list instead of the `setFromList()` result containing assigned
-  values with hash deduplication applied.
-- **"Reference found" warning** (2f3b45804): Hash assignment with a single hash/array
-  reference now emits "Reference found where even-sized list expected" instead of the
-  generic "Odd number of elements" warning, matching Perl 5 behavior.
-- **hashassign.t**: 248/309 → 309/309 (all passing)
+1. **Phase 7.1 (HIGH):** Fix `selectedHandle` + `stat(STDOUT)` to unblock 9 tied STDOUT tests
+2. **Phase 7.6 (MEDIUM):** Investigate file/path operation failures (3 tests)
+3. **Phase 7.5 (LOW):** Stub `B::SV` for Test2::Util::Stash (1 test)
+4. **Phase 7.2-7.4 (LOW):** FindBin, blib/arch, isa feature gate
 
 ### Open Questions
-- How many tests does the `local @ARGV` fix actually unblock? (need re-test to measure)
+- Can `stat(filehandle)` return a synthetic inode based on the underlying FD number?
+- Is the `selectedHandle` approach correct, or should `print` always go through the glob's IO?
 - Can we stub B::SV enough to satisfy Test2::Util::Stash, or is full B module support needed?
-- Does FindBin `$0 = 'can_ok'` come from test harness or incorrect `-e` handling?

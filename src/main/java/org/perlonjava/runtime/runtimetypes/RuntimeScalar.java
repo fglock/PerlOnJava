@@ -251,6 +251,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @return the result of the STORE operation
      */
     public RuntimeScalar tiedStore(RuntimeScalar v) {
+        if (value instanceof TieHandle) {
+            // Tied handles don't support scalar STORE; handle operations
+            // go through TieHandle's own methods (tiedPrint, etc.)
+            return v;
+        }
         return ((TiedVariableBase) value).tiedStore(v);
     }
 
@@ -262,6 +267,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @return the fetched value
      */
     public RuntimeScalar tiedFetch() {
+        if (value instanceof TieHandle tieHandle) {
+            // Tied handles don't support scalar FETCH.
+            // Return the tied object so callers get a usable blessed reference.
+            return tieHandle.getSelf();
+        }
         return ((TiedVariableBase) value).fetch();
     }
 
