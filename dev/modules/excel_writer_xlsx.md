@@ -3,7 +3,7 @@
 ## Overview
 
 **Module**: Excel::Writer::XLSX 1.15
-**Test command**: `./jcpan -j 8 -t Excel::Writer::XLSX`
+**Test command**: `./jcpan --jobs 8 -t Excel::Writer::XLSX`
 **Status**: 1247/1247 programs pass (100%), 5115/5115 subtests pass (100%)
 
 ## Dependency Tree

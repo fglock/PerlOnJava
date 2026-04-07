@@ -806,7 +806,7 @@ Can't load loadable object for module Template::Stash::XS:
   no Java XS implementation available
 ```
 
-This was discovered while investigating `./jcpan -j 8 -t Template` failures
+This was discovered while investigating `./jcpan --jobs 8 -t Template` failures
 (Template Toolkit 3.102).  The same issue would affect any CPAN XS module that
 has a bundled PerlOnJava shim in the JAR.
 
@@ -1010,7 +1010,7 @@ overwrite is wrong.
 
 4. **Template Toolkit retest**:
    ```bash
-   ./jcpan -j 8 -t Template   # expect significant improvement
+   ./jcpan --jobs 8 -t Template   # expect significant improvement
    ```
 
 #### Expected Impact on Template Toolkit

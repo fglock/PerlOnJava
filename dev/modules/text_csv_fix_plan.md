@@ -2,7 +2,7 @@
 
 ## Problem
 
-`./jcpan -j 4 -t Text::CSV` fails. Multiple root causes identified across four phases.
+`./jcpan --jobs 4 -t Text::CSV` fails. Multiple root causes identified across four phases.
 
 ## Architecture
 

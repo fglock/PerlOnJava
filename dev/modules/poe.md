@@ -575,7 +575,7 @@ For safety, DESTROY could be made idempotent (track whether it's already been ca
 
 ### Next Steps — Recommended Priority Order
 
-Goal: `./jcpan -j 8 -t POE` completes with minimal failures. DESTROY and weaken failures
+Goal: `./jcpan --jobs 8 -t POE` completes with minimal failures. DESTROY and weaken failures
 are acceptable. All changes must be 100% compatible with system Perl (no custom harness
 extensions, no non-standard timeout mechanisms).
 

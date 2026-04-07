@@ -433,8 +433,9 @@ sub _create_install_makefile {
     my $test_glob = ($args->{test} && $args->{test}{TESTS}) || '';
     $test_glob = 't/*.t' if !$test_glob && -d 't';
     if ($test_glob) {
-        # Use Perl one-liner with Test::Harness for cross-platform test running
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl -MTest::Harness -e "runtests(glob(q{$test_glob}))"};
+        # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
+        # to disable the default -w switch, matching standard MakeMaker behavior
+        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, './blib/lib', './blib/arch')" $test_glob};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
         $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl test.pl};

@@ -3,7 +3,7 @@
 ## Overview
 
 - **Module**: Data::Printer 1.002001
-- **Test command**: `./jcpan -j 8 -t Data::Printer`
+- **Test command**: `./jcpan --jobs 8 -t Data::Printer`
 - **Branch**: `feature/data-printer-phase3`
 - **PR**: #434
 - **Status**: Phase 7 complete — 599/647 subtests passing (92.6%)
