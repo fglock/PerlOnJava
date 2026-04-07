@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.Readline;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -156,6 +157,8 @@ public class XMLParserExpat extends PerlModuleBase {
         int currentByteCount = 0;
         int specifiedAttributeCount = 0;
         int elementIndex = 0;
+        int elementIndexCounter = 0; // monotonically increasing counter
+        java.util.Deque<Integer> elementIndexStack = new java.util.ArrayDeque<>();
 
         // Base URI
         String base;
@@ -163,6 +166,12 @@ public class XMLParserExpat extends PerlModuleBase {
         // Last recognized/original string for reconstructing
         String recognizedString = "";
         String originalString = "";
+
+        // Entity expansion tracking for original_string
+        String currentEntityName = null;
+
+        // Track if the current element was self-closing
+        boolean lastWasSelfClosing = false;
 
         // Skip until element index
         int skipUntilIndex = -1;
@@ -193,6 +202,9 @@ public class XMLParserExpat extends PerlModuleBase {
 
         // Base URI from InputSource for un-resolving SAX systemIds
         String parseBaseUri;
+
+        // Protocol encoding (e.g. "ISO-8859-1") from ParserCreate
+        String protocolEncoding;
     }
 
     // ================================================================
@@ -211,6 +223,7 @@ public class XMLParserExpat extends PerlModuleBase {
         ParserState state = new ParserState();
         state.selfRef = selfRef;
         state.namespaces = namespaces;
+        state.protocolEncoding = (encoding != null && !encoding.isEmpty()) ? encoding : null;
 
         // Store the state as a Java object in the Perl hash
         RuntimeScalar stateScalar = new RuntimeScalar(state);
@@ -452,11 +465,48 @@ public class XMLParserExpat extends PerlModuleBase {
     }
 
     public static RuntimeList PositionContext(RuntimeArray args, int ctx) {
-        // Returns (string, linepos) for position_in_context
-        // Simplified: return empty context
+        ParserState state = getState(args.get(0));
+        int numLines = args.size() > 1 ? args.get(1).getInt() : 0;
+
+        if (state.inputBytes == null || state.locator == null) {
+            RuntimeArray result = new RuntimeArray();
+            RuntimeArray.push(result, scalarUndef);
+            RuntimeArray.push(result, scalarZero);
+            return result.getList();
+        }
+
+        String input = new String(state.inputBytes, StandardCharsets.UTF_8);
+        int currentLine = state.locator.getLineNumber(); // 1-based
+
+        // Split input into lines
+        String[] lines = input.split("\n", -1);
+        int totalLines = lines.length;
+
+        // Clamp to valid range
+        int lineIdx = Math.max(0, Math.min(currentLine - 1, totalLines - 1));
+
+        // Calculate range of lines to show
+        int startLine = Math.max(0, lineIdx - numLines);
+        int endLine = Math.min(totalLines - 1, lineIdx + numLines);
+
+        // Build the context string and track where the current line ends
+        StringBuilder sb = new StringBuilder();
+        int linepos = 0;
+        for (int i = startLine; i <= endLine; i++) {
+            sb.append(lines[i]);
+            if (i < endLine) {
+                sb.append("\n");
+            }
+            if (i == lineIdx) {
+                // linepos = position AFTER the current line (including \n)
+                // This is where Expat.pm inserts the "===^" pointer
+                linepos = sb.length();
+            }
+        }
+
         RuntimeArray result = new RuntimeArray();
-        RuntimeArray.push(result, scalarUndef);
-        RuntimeArray.push(result, scalarZero);
+        RuntimeArray.push(result, new RuntimeScalar(sb.toString()));
+        RuntimeArray.push(result, new RuntimeScalar(linepos));
         return result.getList();
     }
 
@@ -688,32 +738,39 @@ public class XMLParserExpat extends PerlModuleBase {
             }
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            while (true) {
-                RuntimeScalar result = fh.ioHandle.read(buffer.length);
-                if (result.type == RuntimeScalarType.UNDEF) {
-                    break;
-                }
-                String chunk = result.toString();
-                if (chunk.isEmpty()) {
-                    break;
-                }
 
-                // Check for stream delimiter
-                if (delim != null && !delim.isEmpty()) {
-                    int delimPos = chunk.indexOf("\n" + delim + "\n");
-                    if (delimPos >= 0) {
-                        // Use ISO_8859_1 for BYTE_STRING to avoid double-encoding
-                        java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
-                                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
-                        baos.write(chunk.substring(0, delimPos).getBytes(cs));
+            if (delim != null && !delim.isEmpty()) {
+                // The Perl shim (Expat.pm) sets $/ to "\n$delim\n" before calling
+                // ParseStream. So readline() will read everything up to (and including)
+                // the delimiter, leaving the filehandle positioned right after it.
+                RuntimeScalar record = Readline.readline(fh);
+                if (record.type != RuntimeScalarType.UNDEF) {
+                    String recordStr = record.toString();
+                    // Strip the trailing "\n$delim\n" if present
+                    String suffix = "\n" + delim + "\n";
+                    if (recordStr.endsWith(suffix)) {
+                        recordStr = recordStr.substring(0, recordStr.length() - suffix.length());
+                    }
+                    java.nio.charset.Charset cs = (record.type == RuntimeScalarType.BYTE_STRING)
+                            ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                    baos.write(recordStr.getBytes(cs));
+                }
+            } else {
+                // No delimiter - read entire stream in chunks
+                byte[] buffer = new byte[8192];
+                while (true) {
+                    RuntimeScalar result = fh.ioHandle.read(buffer.length);
+                    if (result.type == RuntimeScalarType.UNDEF) {
                         break;
                     }
+                    String chunk = result.toString();
+                    if (chunk.isEmpty()) {
+                        break;
+                    }
+                    java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
+                            ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                    baos.write(chunk.getBytes(cs));
                 }
-                // Use ISO_8859_1 for BYTE_STRING to avoid double-encoding
-                java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
-                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
-                baos.write(chunk.getBytes(cs));
             }
 
             byte[] xmlBytes = baos.toByteArray();
@@ -792,6 +849,11 @@ public class XMLParserExpat extends PerlModuleBase {
     // ================================================================
 
     private static void doParse(ParserState state, InputStream input) throws Exception {
+        // Check if ParseParamEnt is enabled in the Perl self hash
+        RuntimeHash selfHash = state.selfRef.hashDeref();
+        RuntimeScalar parseParamEntSV = selfHash.get("ParseParamEnt");
+        boolean parseParamEnt = (parseParamEntSV != null && parseParamEntSV.getBoolean());
+
         SAXParserFactory factory = SAXParserFactory.newInstance();
         factory.setNamespaceAware(state.namespaces);
         factory.setValidating(false);
@@ -800,12 +862,13 @@ public class XMLParserExpat extends PerlModuleBase {
         try {
             factory.setFeature("http://xml.org/sax/features/external-general-entities", true);
         } catch (Exception ignored) {}
+        // Only enable parameter entity processing when ParseParamEnt is set
         try {
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", true);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", parseParamEnt);
         } catch (Exception ignored) {}
-        // Don't load external DTDs by default to avoid network access
+        // Load external DTDs only when ParseParamEnt is set
         try {
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", parseParamEnt);
         } catch (Exception ignored) {}
 
         SAXParser saxParser = factory.newSAXParser();
@@ -843,6 +906,10 @@ public class XMLParserExpat extends PerlModuleBase {
         reader.setEntityResolver(handler);
 
         InputSource inputSource = new InputSource(input);
+        // Set protocol encoding if specified (e.g. "ISO-8859-1")
+        if (state.protocolEncoding != null) {
+            inputSource.setEncoding(state.protocolEncoding);
+        }
         // Set systemId to the current working directory so SAX resolves relative URIs correctly.
         // This also allows unresolveSysId to strip this prefix and recover relative paths.
         String cwd = System.getProperty("user.dir");
@@ -1000,7 +1067,9 @@ public class XMLParserExpat extends PerlModuleBase {
         public void startElement(String uri, String localName, String qName,
                                  org.xml.sax.Attributes attributes)
                 throws SAXException {
-            state.elementIndex++;
+            state.elementIndexCounter++;
+            state.elementIndex = state.elementIndexCounter;
+            state.elementIndexStack.push(state.elementIndex);
 
             // Determine element name (as RuntimeScalar, possibly dualvar for namespaces)
             RuntimeScalar elementNameScalar;
@@ -1050,7 +1119,45 @@ public class XMLParserExpat extends PerlModuleBase {
                 sb.append(" ").append(attributes.getQName(i)).append("=\"")
                         .append(escapeXmlAttr(attributes.getValue(i))).append("\"");
             }
-            sb.append(">");
+            // Detect self-closing tags (<foo/>) by scanning inputBytes.
+            // SAX treats <foo/> and <foo></foo> identically, but for column
+            // tracking we need to know the actual token length.
+            boolean selfClosing = false;
+            if (state.inputBytes != null && state.locator != null) {
+                // Scan forward to find "<tagname" then check how the tag closes
+                byte[] tagStart = ("<" + qName).getBytes(StandardCharsets.UTF_8);
+                int searchFrom = state.inputScanPos;
+                for (int pos = searchFrom; pos <= state.inputBytes.length - tagStart.length; pos++) {
+                    // Look for "<tagname"
+                    boolean match = true;
+                    for (int j = 0; j < tagStart.length; j++) {
+                        if (state.inputBytes[pos + j] != tagStart[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        // Found the start tag, now find its closing '>'
+                        for (int endPos = pos + tagStart.length; endPos < state.inputBytes.length; endPos++) {
+                            if (state.inputBytes[endPos] == '>') {
+                                if (endPos > 0 && state.inputBytes[endPos - 1] == '/') {
+                                    selfClosing = true;
+                                }
+                                state.inputScanPos = endPos + 1;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            if (selfClosing) {
+                sb.append("/>");
+                state.lastWasSelfClosing = true;
+            } else {
+                sb.append(">");
+                state.lastWasSelfClosing = false;
+            }
             state.recognizedString = sb.toString();
             state.originalString = state.recognizedString;
             updateBytePosition(state);
@@ -1134,6 +1241,11 @@ public class XMLParserExpat extends PerlModuleBase {
 
         @Override
         public void endElement(String uri, String localName, String qName) throws SAXException {
+            // Restore elementIndex to match the corresponding startElement
+            if (!state.elementIndexStack.isEmpty()) {
+                state.elementIndex = state.elementIndexStack.pop();
+            }
+
             RuntimeScalar elementNameScalar;
             if (state.namespaces) {
                 if (uri != null && !uri.isEmpty()) {
@@ -1146,21 +1258,31 @@ public class XMLParserExpat extends PerlModuleBase {
                 elementNameScalar = new RuntimeScalar(qName);
             }
 
-            state.recognizedString = "</" + qName + ">";
-            state.originalString = state.recognizedString;
+            // For self-closing tags (<foo/>), SAX fires endElement immediately after
+            // startElement. For column calculation: libexpat returns column AFTER the
+            // '>' for self-closing end handlers. Set recognizedString to empty so
+            // GetCurrentColumnNumber doesn't subtract anything.
+            if (state.lastWasSelfClosing) {
+                state.recognizedString = "";
+                state.originalString = "";
+            } else {
+                state.recognizedString = "</" + qName + ">";
+                state.originalString = state.recognizedString;
+            }
+            // Always clear the flag after use
+            state.lastWasSelfClosing = false;
             updateBytePosition(state);
 
-            // Pop Perl's Context array
-            RuntimeHash selfHash = state.selfRef.hashDeref();
-            RuntimeScalar contextRef = selfHash.get("Context");
-            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
-                RuntimeArray context = contextRef.arrayDeref();
-                if (context.size() > 0) {
-                    RuntimeArray.pop(context);
-                }
-            }
-
             if (state.skipUntilIndex >= 0 && state.elementIndex < state.skipUntilIndex) {
+                // Pop Context even when skipping
+                RuntimeHash selfHash = state.selfRef.hashDeref();
+                RuntimeScalar contextRef = selfHash.get("Context");
+                if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
+                    RuntimeArray context = contextRef.arrayDeref();
+                    if (context.size() > 0) {
+                        RuntimeArray.pop(context);
+                    }
+                }
                 return;
             }
 
@@ -1181,6 +1303,16 @@ public class XMLParserExpat extends PerlModuleBase {
             } else if (state.defaultHandler != null) {
                 fireDefault(state, state.recognizedString);
             }
+
+            // Pop Perl's Context array AFTER the end handler (matches libexpat behavior)
+            RuntimeHash selfHash = state.selfRef.hashDeref();
+            RuntimeScalar contextRef = selfHash.get("Context");
+            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
+                RuntimeArray context = contextRef.arrayDeref();
+                if (context.size() > 0) {
+                    RuntimeArray.pop(context);
+                }
+            }
         }
 
         @Override
@@ -1189,7 +1321,14 @@ public class XMLParserExpat extends PerlModuleBase {
 
             String text = new String(ch, start, length);
             state.recognizedString = text;
-            state.originalString = text;
+            // When inside an entity expansion, originalString should be the
+            // unexpanded entity reference (e.g. "&draft.day;")
+            if (state.currentEntityName != null) {
+                state.originalString = "&" + state.currentEntityName + ";";
+                state.currentEntityName = null; // consume - only first characters() gets it
+            } else {
+                state.originalString = text;
+            }
             updateBytePosition(state);
 
             if (state.charHandler != null) {
@@ -1382,12 +1521,17 @@ public class XMLParserExpat extends PerlModuleBase {
 
         @Override
         public void startEntity(String name) throws SAXException {
-            // Not directly mapped; entity expansion is handled by SAX
+            // Track entity name so characters() can set originalString correctly.
+            // JDK SAX fires: startEntity → endEntity → characters,
+            // so we use a "pending" approach: set the name here, consume in characters().
+            if (!name.startsWith("[")) { // Skip internal SAX entities like [dtd]
+                state.currentEntityName = name;
+            }
         }
 
         @Override
         public void endEntity(String name) throws SAXException {
-            // Not directly mapped
+            // Don't clear here - characters() hasn't fired yet (JDK ordering)
         }
 
         // ---- DeclHandler ----
@@ -1647,14 +1791,29 @@ public class XMLParserExpat extends PerlModuleBase {
                                 RuntimeArray.push(finArgs, state.selfRef);
                                 RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
                             }
-                            return new InputSource(new StringReader(content.toString()));
+                            InputSource is = new InputSource(new StringReader(content.toString()));
+                            // Preserve systemId so SAX can resolve relative references within this entity
+                            if (systemId != null) {
+                                is.setSystemId(systemId);
+                            }
+                            return is;
                         }
                     }
 
                     // String content
                     String content = retVal.toString();
                     if (!content.isEmpty()) {
-                        return new InputSource(new StringReader(content));
+                        // Call ExternEntFin if set
+                        if (state.externEntFinHandler != null) {
+                            RuntimeArray finArgs = new RuntimeArray();
+                            RuntimeArray.push(finArgs, state.selfRef);
+                            RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
+                        }
+                        InputSource is = new InputSource(new StringReader(content));
+                        if (systemId != null) {
+                            is.setSystemId(systemId);
+                        }
+                        return is;
                     }
                 } catch (PerlDieException e) {
                     throw new SAXException(e);
