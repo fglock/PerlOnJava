@@ -366,11 +366,9 @@ public class CompileOperator {
         int targetReg;
         if (noArgs) {
             targetReg = loadDefaultUnderscore(bc);
-        } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()) {
-            list.elements.get(0).accept(bc);
-            targetReg = bc.lastResultReg;
         } else {
-            node.operand.accept(bc);
+            // Compile operand in LIST context so RuntimeList.chomp() handles all elements
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
             targetReg = bc.lastResultReg;
         }
         int rd = bc.allocateOutputRegister();
@@ -918,16 +916,21 @@ public class CompileOperator {
             case "return" -> {
                 // Check if we're inside a defer block - return out of defer is prohibited
                 bytecodeCompiler.checkNotInDeferBlock(node.getIndex(), "return");
+                // In map/grep blocks, explicit return must use RETURN_NONLOCAL
+                // so it propagates as a non-local return to the enclosing subroutine.
+                // The regular RETURN opcode is used for implicit end-of-block returns.
+                short returnOpcode = bytecodeCompiler.isInMapGrepBlock
+                        ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 if (node.operand != null) {
                     node.operand.accept(bytecodeCompiler);
                     int exprReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
                     bytecodeCompiler.emitReg(exprReg);
                 } else {
                     int undefReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                     bytecodeCompiler.emitReg(undefReg);
-                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
                     bytecodeCompiler.emitReg(undefReg);
                 }
                 bytecodeCompiler.lastResultReg = -1;
@@ -1212,8 +1215,8 @@ public class CompileOperator {
         if (chopNoArgs) {
             scalarReg = loadDefaultUnderscore(bc);
         } else {
-            if (node.operand instanceof ListNode list) list.elements.get(0).accept(bc);
-            else node.operand.accept(bc);
+            // Compile operand in LIST context so RuntimeList.chop() handles all elements
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
             scalarReg = bc.lastResultReg;
         }
         int rd = bc.allocateOutputRegister();

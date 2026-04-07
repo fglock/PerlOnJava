@@ -702,20 +702,15 @@ public class InlineOpcodeHandler {
     // =========================================================================
 
     /**
-     * Convert list/array to its count in scalar context (e.g. @arr used as number).
+     * Count the total flattened elements of a list/array/hash/scalar.
+     * Uses countElements() for recursive flattening (hashes contribute 2*keys elements).
      * Format: LIST_TO_COUNT rd rs
      */
     public static int executeListToCount(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
         RuntimeBase val = registers[rs];
-        if (val instanceof RuntimeList) {
-            registers[rd] = new RuntimeScalar(((RuntimeList) val).elements.size());
-        } else if (val instanceof RuntimeArray) {
-            registers[rd] = new RuntimeScalar(((RuntimeArray) val).size());
-        } else {
-            registers[rd] = val.scalar();
-        }
+        registers[rd] = new RuntimeScalar(val.countElements());
         return pc;
     }
 
@@ -1048,18 +1043,17 @@ public class InlineOpcodeHandler {
     }
 
     /**
-     * Set hash content from list: hash_reg = RuntimeHash.createHash(list_reg)
+     * Set hash content from list using setFromList for correct warnings.
      * Format: HASH_SET_FROM_LIST hashReg listReg
      */
     public static int executeHashSetFromList(int[] bytecode, int pc, RuntimeBase[] registers) {
         int hashReg = bytecode[pc++];
         int listReg = bytecode[pc++];
 
-        RuntimeHash existingHash = (RuntimeHash) registers[hashReg];
+        RuntimeHash hash = (RuntimeHash) registers[hashReg];
         RuntimeBase listBase = registers[listReg];
-
-        RuntimeHash newHash = RuntimeHash.createHash(listBase);
-        existingHash.elements = newHash.elements;
+        RuntimeList list = (listBase instanceof RuntimeList rl) ? rl : listBase.getList();
+        hash.setFromList(list);
         return pc;
     }
 

@@ -33,6 +33,10 @@ public class Disassemble {
                         int retReg = interpretedCode.bytecode[pc++];
                         sb.append("RETURN r").append(retReg).append("\n");
                         break;
+                    case Opcodes.RETURN_NONLOCAL:
+                        int retNLReg = interpretedCode.bytecode[pc++];
+                        sb.append("RETURN_NONLOCAL r").append(retNLReg).append("\n");
+                        break;
                     case Opcodes.GOTO:
                         sb.append("GOTO ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");
                         pc += 1;

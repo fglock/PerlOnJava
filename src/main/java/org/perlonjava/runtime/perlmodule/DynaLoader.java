@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -15,6 +16,8 @@ public class DynaLoader extends PerlModuleBase {
         DynaLoader dynaLoader = new DynaLoader();
         dynaLoader.initializeExporter();
         dynaLoader.defineExport("EXPORT", "bootstrap");
+        // Set $DynaLoader::VERSION so CPAN dependency checks are satisfied
+        GlobalVariable.getGlobalVariable("DynaLoader::VERSION").set("1.54");
         try {
             dynaLoader.registerMethod("bootstrap", null);
             dynaLoader.registerMethod("boot_DynaLoader", null);

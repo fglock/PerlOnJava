@@ -277,6 +277,30 @@ ok(scalar(@global_array) < 10, 'local array element restored, array size ' . sca
     is($test_hash{orig_key}, "orig_value", 'original hash value restored');
 }
 
+# Test: reference to localized array retains values after scope exit
+{
+    our @ref_test_array = ("original");
+    my $ref;
+    {
+        local @ref_test_array = ("a", "b");
+        $ref = \@ref_test_array;
+        is("@{$ref}", "a b", 'reference to local array inside scope');
+    }
+    is("@{$ref}", "a b", 'reference to local array retains values after scope exit');
+    is("@ref_test_array", "original", 'original array restored after local scope');
+}
+
+# Test: reference to localized @ARGV retains values (App::perlbrew pattern)
+{
+    my %opt;
+    {
+        local @ARGV = ("install", "perl-5.8.9");
+        $opt{args} = \@ARGV;
+        is("@{$opt{args}}", "install perl-5.8.9", 'ref to local @ARGV inside scope');
+    }
+    is("@{$opt{args}}", "install perl-5.8.9", 'ref to local @ARGV retains values after scope');
+}
+
 done_testing();
 
 __END__

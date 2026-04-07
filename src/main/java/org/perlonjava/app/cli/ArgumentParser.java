@@ -188,7 +188,7 @@ public class ArgumentParser {
 
         // Iterate over each argument
         for (int i = 0; i < args.length; i++) {
-            if (readingArgv || !args[i].startsWith("-")) {
+            if (readingArgv || !args[i].startsWith("-") || args[i].equals("-")) {
                 // Process non-switch arguments (e.g., file names or positional arguments)
                 processNonSwitchArgument(args, parsedArgs, i);
                 readingArgv = true; // Once a non-switch argument is encountered, treat all subsequent arguments as such
@@ -224,6 +224,33 @@ public class ArgumentParser {
         if (parsedArgs.code == null) {
             // If no code has been set, treat the argument as a file name
             parsedArgs.fileName = args[index];
+
+            // Handle "-" as "read from stdin" (standard Perl behavior: perl - arg1 arg2)
+            if (parsedArgs.fileName.equals("-")) {
+                // When -M modules are present (e.g., system($^X, '-MModule', '-', args)),
+                // the modules typically call exit() during import before stdin code runs.
+                // Use empty code to avoid blocking on stdin in this common pattern.
+                if (!parsedArgs.moduleUseStatements.isEmpty()) {
+                    parsedArgs.code = "";
+                    return;
+                }
+                // No -M modules: read code from stdin
+                try {
+                    StringBuilder stdinContent = new StringBuilder();
+                    java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(System.in));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stdinContent.append(line).append("\n");
+                    }
+                    parsedArgs.code = stdinContent.toString();
+                } catch (IOException e) {
+                    System.err.println("Error: Unable to read from stdin");
+                    System.exit(1);
+                }
+                return;
+            }
+
             try {
                 String filePath = parsedArgs.fileName;
                 if (parsedArgs.usePathEnv && !filePath.contains("/") && !filePath.contains("\\")) {

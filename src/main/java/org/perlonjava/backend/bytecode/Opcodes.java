@@ -2189,6 +2189,15 @@ public class Opcodes {
      */
     public static final short TO_BYTES_STRING = 460;
 
+    /**
+     * Non-local return from map/grep block: wraps the return value
+     * in a RuntimeControlFlowList(RETURN) so it propagates to the
+     * enclosing subroutine.  Used only for explicit {@code return}
+     * statements inside map/grep blocks.
+     * Format: RETURN_NONLOCAL rd
+     */
+    public static final short RETURN_NONLOCAL = 461;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -283,6 +283,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
     public boolean isClosurePrototype = false;
+    // Flag to indicate this code is a map/grep block - non-local return should propagate through it
+    public boolean isMapGrepBlock = false;
+    // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
+    public boolean isEvalBlock = false;
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -2064,6 +2068,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 // Cast the value to RuntimeCode and call apply()
                 return code.apply(a, callContext);
+            } catch (PerlNonLocalReturnException e) {
+                // Non-local return from map/grep block
+                if (code.isMapGrepBlock || code.isEvalBlock) {
+                    throw e;  // Propagate through map/grep blocks and eval blocks
+                }
+                // Consume at normal subroutine boundary
+                return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
             } finally {
                 HintHashRegistry.popCallerHintHash();
                 WarningBitsRegistry.popCallerHints();
@@ -2121,6 +2132,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Perl clears $@ on successful eval (even if nested evals previously set it).
             GlobalVariable.setGlobalVariable("main::@", "");
             return result;
+        } catch (PerlNonLocalReturnException e) {
+            // Non-local return from map/grep inside eval STRING - propagate, don't catch
+            throw e;
         } catch (Throwable t) {
             // Perl eval catches exceptions; set $@ and return undef / empty list.
             WarnDie.catchEval(t);
@@ -2278,6 +2292,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
+                } catch (PerlNonLocalReturnException e) {
+                    // Non-local return from map/grep block
+                    if (code.isMapGrepBlock || code.isEvalBlock) {
+                        throw e;  // Propagate through map/grep blocks and eval blocks
+                    }
+                    // Consume at normal subroutine boundary
+                    return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 } finally {
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
@@ -2437,6 +2458,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
+                } catch (PerlNonLocalReturnException e) {
+                    // Non-local return from map/grep block
+                    if (code.isMapGrepBlock || code.isEvalBlock) {
+                        throw e;  // Propagate through map/grep blocks and eval blocks
+                    }
+                    // Consume at normal subroutine boundary
+                    return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 } finally {
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();

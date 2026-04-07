@@ -156,11 +156,27 @@ public class BytecodeInterpreter {
                                 RuntimeBase retVal = registers[retReg];
 
                                 if (retVal == null) {
-                                    return new RuntimeList();
+                                    retVal = new RuntimeList();
                                 }
                                 RuntimeList retList = retVal.getList();
                                 RuntimeCode.materializeSpecialVarsInResult(retList);
+
                                 return retList;
+                            }
+
+                            case Opcodes.RETURN_NONLOCAL -> {
+                                // Non-local return from map/grep block (explicit 'return' statement):
+                                // wrap in RETURN marker so it propagates to enclosing subroutine
+                                int retReg = bytecode[pc++];
+                                RuntimeBase retVal = registers[retReg];
+
+                                if (retVal == null) {
+                                    retVal = new RuntimeList();
+                                }
+                                RuntimeList retList = retVal.getList();
+                                RuntimeCode.materializeSpecialVarsInResult(retList);
+
+                                return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
 
                             case Opcodes.GOTO -> {
@@ -961,6 +977,17 @@ public class BytecodeInterpreter {
                                 // Check for control flow (last/next/redo/goto) - TAILCALL already handled above
                                 if (result.isNonLocalGoto()) {
                                     RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+
+                                    // Handle RETURN markers: consume at non-map/grep boundaries, propagate in map/grep
+                                    if (flow.getControlFlowType() == ControlFlowType.RETURN) {
+                                        if (!code.isMapGrepBlock) {
+                                            // Consume: unwrap and return the value from this subroutine
+                                            RuntimeBase retVal = flow.getReturnValue();
+                                            return retVal != null ? retVal.getList() : new RuntimeList();
+                                        }
+                                        return result;  // Propagate in map/grep blocks
+                                    }
+
                                     // Check labeled block stack for a matching label
                                     boolean handled = false;
                                     for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
@@ -1065,6 +1092,16 @@ public class BytecodeInterpreter {
                                 // Check for control flow (last/next/redo/goto) - TAILCALL already handled above
                                 if (result.isNonLocalGoto()) {
                                     RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
+
+                                    // Handle RETURN markers: consume at non-map/grep boundaries, propagate in map/grep
+                                    if (flow.getControlFlowType() == ControlFlowType.RETURN) {
+                                        if (!code.isMapGrepBlock) {
+                                            RuntimeBase retVal = flow.getReturnValue();
+                                            return retVal != null ? retVal.getList() : new RuntimeList();
+                                        }
+                                        return result;
+                                    }
+
                                     boolean handled = false;
                                     for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
                                         int[] entry = labeledBlockStack.get(i);
@@ -2469,8 +2506,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 String fullName = code.stringPool[nameIdx];
 
-                RuntimeArray arr = GlobalVariable.getGlobalArray(fullName);
-                DynamicVariableManager.pushLocalVariable(arr);
+                GlobalRuntimeArray.makeLocal(fullName);
                 registers[rd] = GlobalVariable.getGlobalArray(fullName);
                 return pc;
             }

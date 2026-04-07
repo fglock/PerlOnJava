@@ -63,17 +63,26 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A new RuntimeHash populated with the elements from the list.
      */
     public static RuntimeHash createHashForAssignment(RuntimeBase value) {
-        // Count elements to check for odd number
+        // Count elements and check the first element's type
         int elementCount = 0;
+        int firstType = 0;
         Iterator<RuntimeScalar> checkIterator = value.iterator();
         while (checkIterator.hasNext()) {
-            checkIterator.next();
+            RuntimeScalar elem = checkIterator.next();
+            if (elementCount == 0) {
+                firstType = elem.type;
+            }
             elementCount++;
         }
 
-        // Warn about odd elements (Perl does not warn about references in hash assignment)
         if (elementCount % 2 != 0) {
-            return createHashInternal(value, "Odd number of elements in hash assignment");
+            // Single hash/array reference: "Reference found where even-sized list expected"
+            // Other odd cases: "Odd number of elements in hash assignment"
+            String warning = (elementCount == 1
+                    && (firstType == RuntimeScalarType.HASHREFERENCE || firstType == RuntimeScalarType.ARRAYREFERENCE))
+                    ? "Reference found where even-sized list expected"
+                    : "Odd number of elements in hash assignment";
+            return createHashInternal(value, warning);
         } else {
             return createHashNoWarn(value);
         }
@@ -143,12 +152,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
-     * Counts the number of elements in the hash.
+     * Counts the number of elements the hash contributes when flattened in list context.
+     * Each key-value pair contributes 2 elements.
      *
-     * @return The number of elements in the hash.
+     * @return The number of elements (2 * number of keys).
      */
     public int countElements() {
-        return size();
+        return size() * 2;
     }
 
     /**
@@ -204,10 +214,23 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // Store the original list size for scalar context
                 int originalSize = materializedList.elements.size();
 
-                // Warn about odd elements (Perl does not warn about references in hash assignment)
+                // Warn about odd elements
                 if (originalSize % 2 != 0) {
+                    // Single hash/array reference: "Reference found where even-sized list expected"
+                    // Other odd cases: "Odd number of elements in hash assignment"
+                    String warning;
+                    if (originalSize == 1) {
+                        RuntimeScalar first = materializedList.elements.get(0);
+                        if (first.type == RuntimeScalarType.HASHREFERENCE || first.type == RuntimeScalarType.ARRAYREFERENCE) {
+                            warning = "Reference found where even-sized list expected";
+                        } else {
+                            warning = "Odd number of elements in hash assignment";
+                        }
+                    } else {
+                        warning = "Odd number of elements in hash assignment";
+                    }
                     WarnDie.warn(
-                            new RuntimeScalar("Odd number of elements in hash assignment"),
+                            new RuntimeScalar(warning),
                             RuntimeScalarCache.scalarEmptyString);
                 }
 
@@ -820,7 +843,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the result of the chomp operation.
      */
     public RuntimeScalar chomp() {
-        return this.values().chop();
+        return this.values().chomp();
     }
 
     /**

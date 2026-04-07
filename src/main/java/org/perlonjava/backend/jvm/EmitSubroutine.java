@@ -168,6 +168,12 @@ public class EmitSubroutine {
         if (node.useTryCatch) {
             newJavaClassInfo.isInEvalBlock = true;
         }
+
+        // Check if this subroutine is a map/grep block - return should propagate non-locally
+        Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
+        if (isMapGrepBlock != null && isMapGrepBlock) {
+            newJavaClassInfo.isMapGrepBlock = true;
+        }
         
         EmitterContext subCtx =
                 new EmitterContext(
@@ -329,6 +335,38 @@ public class EmitSubroutine {
                         "prototype",
                         "Ljava/lang/String;");
             }
+        }
+
+        // Set isMapGrepBlock on the RuntimeCode so RuntimeCode.apply() can propagate
+        // non-local returns through map/grep blocks
+        if (isMapGrepBlock != null && isMapGrepBlock) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "isMapGrepBlock",
+                    "Z");
+        }
+
+        // Set isEvalBlock on the RuntimeCode so RuntimeCode.apply() propagates
+        // non-local returns through eval BLOCK boundaries
+        if (node.useTryCatch) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "value",
+                    "Ljava/lang/Object;");
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeCode");
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitFieldInsn(Opcodes.PUTFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "isEvalBlock",
+                    "Z");
         }
 
         // Set attributes if needed (after try-catch, both paths leave RuntimeScalar on stack)
@@ -915,6 +953,7 @@ public class EmitSubroutine {
                                             Label blockDispatcher, JavaClassInfo.SpillRef[] baseSpills) {
         Label propagateToCaller = new Label();
         Label checkLoopLabels = new Label();
+        Label handleHigherOrdinals = new Label();
 
         // Entry point for block dispatcher
         mv.visitLabel(blockDispatcher);
@@ -934,10 +973,10 @@ public class EmitSubroutine {
                 false);
         mv.visitVarInsn(Opcodes.ISTORE, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
 
-        // Only handle LAST/NEXT/REDO locally (ordinals 0/1/2). Others propagate.
+        // Only handle LAST/NEXT/REDO locally (ordinals 0/1/2). Others go to handleHigherOrdinals.
         mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
         mv.visitInsn(Opcodes.ICONST_2);
-        mv.visitJumpInsn(Opcodes.IF_ICMPGT, propagateToCaller);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGT, handleHigherOrdinals);
 
         // Check each visible loop label
         mv.visitLabel(checkLoopLabels);
@@ -1003,6 +1042,37 @@ public class EmitSubroutine {
 
         // No loop match; propagate to caller
         mv.visitJumpInsn(Opcodes.GOTO, propagateToCaller);
+
+        // Handle higher ordinals (GOTO=3, TAILCALL=4, RETURN=5)
+        mv.visitLabel(handleHigherOrdinals);
+        if (!emitterVisitor.ctx.javaClassInfo.isMapGrepBlock) {
+            // In a normal subroutine: consume RETURN markers by unwrapping the return value.
+            // This is where a non-local return from a map/grep block gets consumed.
+            Label notReturn = new Label();
+            mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+            mv.visitLdcInsn(5);  // RETURN.ordinal() = 5
+            mv.visitJumpInsn(Opcodes.IF_ICMPNE, notReturn);
+
+            // It's RETURN: unwrap the return value and use it as the subroutine's return value
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getReturnValue",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
+            mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+
+            mv.visitLabel(notReturn);
+        }
+        // For map/grep blocks or non-RETURN markers: propagate to caller
+        // (fall through to propagateToCaller)
 
         // Propagate: jump to returnLabel with the marked list
         mv.visitLabel(propagateToCaller);

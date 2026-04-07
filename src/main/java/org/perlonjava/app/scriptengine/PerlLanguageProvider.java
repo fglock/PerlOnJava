@@ -335,7 +335,15 @@ public class PerlLanguageProvider {
     private static RuntimeList executeCode(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
-            runCheckBlocks();
+            // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
+            // sees the main program as their caller, matching Perl 5 behavior
+            // where these blocks run from the main program scope.
+            CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+            try {
+                runCheckBlocks();
+            } finally {
+                CallerStack.pop();
+            }
         }
         if (ctx.compilerOptions.compileOnly) {
             RuntimeIO.closeAllHandles();
@@ -345,7 +353,12 @@ public class PerlLanguageProvider {
         RuntimeList result;
         try {
             if (isMainProgram) {
-                runInitBlocks();
+                CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                try {
+                    runInitBlocks();
+                } finally {
+                    CallerStack.pop();
+                }
             }
 
             // Use the caller's context if specified, otherwise use default behavior
@@ -357,7 +370,12 @@ public class PerlLanguageProvider {
 
             try {
                 if (isMainProgram) {
-                    runEndBlocks();
+                    CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                    try {
+                        runEndBlocks();
+                    } finally {
+                        CallerStack.pop();
+                    }
                 }
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();
@@ -369,9 +387,19 @@ public class PerlLanguageProvider {
             // PerlExitException already ran END blocks and closed handles in WarnDie.exit()
             // Just re-throw for the caller to handle
             throw e;
+        } catch (PerlNonLocalReturnException e) {
+            // A non-local return escaped to the top level (e.g., return inside map/grep
+            // at the top level). In Perl 5, this produces "Can't return outside a subroutine".
+            // Consume the exception and treat the return value as the program result.
+            result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
         } catch (Throwable t) {
             if (isMainProgram) {
-                runEndBlocks(false);  // Don't reset $? on exception path
+                CallerStack.push("main", ctx.compilerOptions.fileName, 0);
+                try {
+                    runEndBlocks(false);  // Don't reset $? on exception path
+                } finally {
+                    CallerStack.pop();
+                }
                 RuntimeIO.closeAllHandles();
             }
             if (t instanceof RuntimeException runtimeException) {

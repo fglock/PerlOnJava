@@ -85,6 +85,13 @@ public class JavaClassInfo {
     public boolean isInEvalString;
 
     /**
+     * Flag indicating if this subroutine is a map/grep/all/any block.
+     * When true, 'return' creates a non-local RETURN marker instead of a normal return,
+     * so the return value propagates to the enclosing subroutine.
+     */
+    public boolean isMapGrepBlock;
+
+    /**
      * Counter tracking nesting depth inside finally blocks.
      * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.
      * This is a counter rather than a boolean to handle nested finally blocks.

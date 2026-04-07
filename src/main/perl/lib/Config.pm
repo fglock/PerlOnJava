@@ -75,6 +75,7 @@ $os_name =~ s/\s+/_/g;
 # tie returns the object, so the value returned to require will be true.
 %Config = (
     archname => "java-$java_version-$os_arch",
+    myarchname => "$os_arch-$os_name",
     osname => $os_name,
     osvers => $os_version,
 
@@ -206,6 +207,8 @@ $os_name =~ s/\s+/_/g;
     exe_ext => $os_name =~ /win/ ? '.exe' : '',
     _exe => $os_name =~ /win/ ? '.exe' : '',
     perlpath => $^X,  # Path to the perl interpreter (jperl)
+    startperl => '#!' . $^X,  # Shebang line for Perl scripts
+    sharpbang => '#!',  # Shebang prefix
 
     # Version info
     version => '5.42.0',
