@@ -160,11 +160,7 @@ public class FileDescriptorTable {
             return pipeHandle.hasDataAvailable();
         }
         if (handle instanceof ProcessInputHandle pih) {
-            try {
-                return pih.getInputStream().available() > 0;
-            } catch (Exception e) {
-                return true;  // Treat errors as ready to unblock
-            }
+            return pih.isReadReady();
         }
         if (handle instanceof StandardIO) {
             // stdin: check System.in.available()
