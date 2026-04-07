@@ -3,6 +3,7 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
@@ -20,9 +21,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
@@ -1085,6 +1084,20 @@ public class SubroutineParser {
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
+
+        // Selective capture: only capture variables actually used in the sub body.
+        // This prevents hitting JVM's 255 constructor argument limit for named subs
+        // in modules like Perl::Tidy that have 200+ lexicals in scope.
+        Set<String> usedVars = null;
+        {
+            Set<String> usedVarSet = new HashSet<>();
+            VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVarSet);
+            block.accept(collector);
+            if (!collector.hasEvalString()) {
+                usedVars = usedVarSet;
+            }
+        }
+
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
@@ -1110,6 +1123,11 @@ public class SubroutineParser {
                     if (varName.contains("__lexmethod_") || varName.contains("__lexsub_")) {
                         continue;
                     }
+                }
+
+                // Skip variables not actually used in the sub body (selective capture optimization)
+                if (usedVars != null && !usedVars.contains(entry.name())) {
+                    continue;
                 }
 
                 String variableName = null;
@@ -1158,7 +1176,14 @@ public class SubroutineParser {
         // IMPORTANT: Use the 4-argument version to preserve the original perlPackage
         // This is critical for 'our' variables which must retain their declared package
         // for correct global lookup (especially with the 'local' fix)
+        //
+        // NOTE: We apply usedVars filtering here too, but we must preserve the first
+        // entries that correspond to skipVariables (3 slots: this, @_, wantarray).
+        // The outerVars loop (classList/paramList) skips @_ and empty-decl entries,
+        // so those entries only appear in filteredSnapshot as "padding" for the
+        // skipVariables slots. We must always include them.
         Map<Integer, SymbolTable.SymbolEntry> visibleVars = parser.ctx.symbolTable.getAllVisibleVariables();
+        int addedCount = 0;
         for (SymbolTable.SymbolEntry entry : visibleVars.values()) {
             // Skip field declarations when creating snapshot for bytecode generation
             if (entry.decl().equals("field")) {
@@ -1169,7 +1194,16 @@ public class SubroutineParser {
             if (sigil.equals("&")) {
                 continue;
             }
+            // Determine if this entry is a "padding" entry (would be skipped by classList loop)
+            // These correspond to the skipVariables slots and must always be included
+            boolean isPadding = entry.name().equals("@_") || entry.decl().isEmpty();
+            // Skip variables not actually used in the sub body (selective capture optimization)
+            // but always keep padding entries
+            if (!isPadding && usedVars != null && !usedVars.contains(entry.name())) {
+                continue;
+            }
             filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            addedCount++;
         }
 
         // Clone the current package
