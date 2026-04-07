@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 6 ready — re-run tests to measure (2026-04-07)
+## Status: Phase 6 ready — interpreter fixes landed, re-run tests to measure (2026-04-07)
 
 ## Goal
 
@@ -331,8 +331,29 @@ with that name.
 
 ### Next Steps
 1. Re-run `./jcpan -t App::perlbrew` to measure pass rate improvement (Phase 6.1)
-2. Categorize remaining failures and fix what's feasible (Phase 6.2)
-3. Investigate B::SV, Pod::Usage, shell/PATH issues if they block significant tests
+2. Re-run `perl dev/tools/perl_test_runner.pl perl5_t/t/op/` to check for broader improvements from interpreter fixes
+3. Categorize remaining failures and fix what's feasible (Phase 6.2)
+4. Investigate B::SV, Pod::Usage, shell/PATH issues if they block significant tests
+
+### Recent Interpreter Fixes (2026-04-07)
+These fixes improve interpreter backend correctness, which benefits tests that fall back
+from the JVM backend to the interpreter for large/complex subroutines:
+
+- **chop/chomp with list arguments** (111efb287): `visitChop()`/`visitChomp()` in
+  `CompileOperator.java` only compiled the first element instead of the full operand in LIST
+  context. Also fixed `RuntimeHash.chomp()` calling `chop()` instead of `chomp()`.
+- **Hash assignment scalar context** (596676cef): `HASH_SET_FROM_LIST` used `createHash()`
+  instead of `setFromList()`, missing warnings. Scalar context used `ARRAY_SIZE` on the hash
+  instead of counting RHS elements. `RuntimeHash/RuntimeStash.countElements()` returned
+  `size()` instead of `size()*2`. `LIST_TO_COUNT` accessed `.elements.size()` directly
+  instead of polymorphic `countElements()`.
+- **List assignment return values** (596676cef): `($x,%h) = list` in list context returned
+  the consumed (empty) RHS list instead of the `setFromList()` result containing assigned
+  values with hash deduplication applied.
+- **"Reference found" warning** (2f3b45804): Hash assignment with a single hash/array
+  reference now emits "Reference found where even-sized list expected" instead of the
+  generic "Odd number of elements" warning, matching Perl 5 behavior.
+- **hashassign.t**: 248/309 → 309/309 (all passing)
 
 ### Open Questions
 - How many tests does the `local @ARGV` fix actually unblock? (need re-test to measure)
