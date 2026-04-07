@@ -87,33 +87,6 @@ public class ProcessOutputHandle implements IOHandle {
     @Override
     public RuntimeScalar syswrite(String data) {
         if (isClosed) {
-            return RuntimeScalarCache.scalarFalse;
-        }
-        try {
-            byte[] bytes = data.getBytes(charset);
-            outputStream.write(bytes);
-            outputStream.flush();
-            return RuntimeScalarCache.getScalarInt(bytes.length);
-        } catch (IOException e) {
-            return RuntimeScalarCache.scalarFalse;
-        }
-    }
-
-    /**
-     * Set the character encoding for writing.
-     */
-    public void setCharset(Charset charset) {
-        this.charset = charset;
-    }
-
-    @Override
-    public RuntimeScalar fileno() {
-        return RuntimeScalarCache.scalarUndef;
-    }
-
-    @Override
-    public RuntimeScalar syswrite(String data) {
-        if (isClosed) {
             getGlobalVariable("main::!").set("Bad file descriptor");
             return new RuntimeScalar(); // undef
         }
@@ -129,5 +102,12 @@ public class ProcessOutputHandle implements IOHandle {
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
         }
+    }
+
+    /**
+     * Set the character encoding for writing.
+     */
+    public void setCharset(Charset charset) {
+        this.charset = charset;
     }
 }

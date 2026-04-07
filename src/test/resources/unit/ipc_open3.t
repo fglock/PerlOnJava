@@ -279,6 +279,27 @@ subtest 'IPC::Open3 with IO::File objects and IO::Select (Net::SSH pattern)' => 
     waitpid($pid, WNOHANG);
 };
 
+subtest 'IPC::Open3 with typeglob handles' => sub {
+    use IPC::Open3;
+    # Use bareword filehandles (typeglobs) like Net::SSH does:
+    #   open3(\*WRITER, \*READER, \*ERROR, @cmd)
+    my $pid = open3(\*WTR_GLOB, \*RDR_GLOB, \*ERR_GLOB,
+                    "sh", "-c", "echo glob-out; echo glob-err >&2");
+    close(WTR_GLOB);
+    # Small delay to let both streams fill
+    select(undef, undef, undef, 0.3);
+    my $out = <RDR_GLOB>;
+    my $err = <ERR_GLOB>;
+    chomp $out if defined $out;
+    chomp $err if defined $err;
+    is($out, "glob-out", "stdout via typeglob handle");
+    is($err, "glob-err", "stderr via typeglob handle");
+    close(RDR_GLOB);
+    close(ERR_GLOB);
+    waitpid($pid, 0);
+    is($? >> 8, 0, "child exited cleanly with typeglob handles");
+};
+
 subtest 'IPC::Open3 single string command (shell interpretation)' => sub {
     use IPC::Open3;
     my $pid = open3(my $in, my $out, undef, "echo hello && echo world");

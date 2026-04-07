@@ -1,8 +1,9 @@
 # Fix IPC::Open2/IPC::Open3 — fileno, sysread, IO::Select Compatibility
 
-## Status: PLANNED
+## Status: IMPLEMENTED
 
-**Branch**: `feature/net-smtp-support`
+**Branch**: `feature/fix-ipc-open3`
+**PR**: https://github.com/fglock/PerlOnJava/pull/452
 **Date**: 2026-04-06
 **Motivation**: Net::SSH `ssh_cmd()` (and other CPAN modules) use `IPC::Open3` with
 `IO::Select` + `sysread()`. These currently fail silently because open3 handles
@@ -286,3 +287,28 @@ Test cases:
 - **`ProcessInputHandle.eof()` mark/reset**: Uses `mark(1)/read()/reset()` peek
   pattern. May fail if the underlying InputStream doesn't support marking.
   Process streams on most JDKs do support it, but this is not guaranteed.
+
+## Bug 7: Typeglob handles (`\*FOO`) not populated correctly
+
+When passing typeglob references like `\*WTR`, `\*RDR` to `open3()`, the IO slot
+was not being set on the existing glob. Instead, `setupWriteHandle()` /
+`setupReadHandle()` would create a new RuntimeGlob and call `inner.set(newHandle)`,
+which replaced the inner scalar but left the original glob's IO slot empty.
+
+**Root cause**: When the inner value is already a `GLOBREFERENCE` (i.e., `\*FOO`),
+the code needs to set the IO slot on the existing `RuntimeGlob` rather than
+creating a new one. Otherwise, bareword reads like `<RDR_GLOB>` can't find the
+IO handle because they look at the glob in the symbol table, not the scalar
+reference.
+
+**Fix**: Added detection for `RuntimeScalarType.GLOBREFERENCE` in both
+`setupWriteHandle()` and `setupReadHandle()` in `IPCOpen3.java`. When the inner
+value is already a glob reference, call `((RuntimeGlob) inner.value).setIO(io)`
+directly instead of creating a new glob.
+
+This pattern is used by Net::SSH's `sshopen2()` / `sshopen3()`:
+```perl
+open3(\*WRITER, \*READER, \*ERROR, "ssh", @args);
+print WRITER "command\n";
+my $output = <READER>;
+```

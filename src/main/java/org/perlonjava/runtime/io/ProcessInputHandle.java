@@ -117,33 +117,8 @@ public class ProcessInputHandle implements IOHandle {
     }
 
     @Override
-    public RuntimeScalar sysread(int length) {
-        if (isClosed || isEOF) {
-            return new RuntimeScalar();
-        }
-        try {
-            byte[] buffer = new byte[length];
-            int bytesRead = inputStream.read(buffer, 0, length);
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar();
-            }
-            return new RuntimeScalar(new String(buffer, 0, bytesRead,
-                    StandardCharsets.ISO_8859_1));
-        } catch (IOException e) {
-            isEOF = true;
-            return new RuntimeScalar();
-        }
-    }
-
-    @Override
     public RuntimeScalar read(int maxBytes) {
         return read(maxBytes, StandardCharsets.ISO_8859_1);
-    }
-
-    @Override
-    public RuntimeScalar fileno() {
-        return RuntimeScalarCache.scalarUndef;
     }
 
     /**
