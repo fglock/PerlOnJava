@@ -103,6 +103,9 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
+        if (node.handle != null) {
+            node.handle.accept(this);
+        }
         if (node.elements != null) {
             for (Node element : node.elements) {
                 if (element != null) {
@@ -216,6 +219,9 @@ public class VariableCollectorVisitor implements Visitor {
         }
         if (node.catchBlock != null) {
             node.catchBlock.accept(this);
+        }
+        if (node.finallyBlock != null) {
+            node.finallyBlock.accept(this);
         }
     }
 
