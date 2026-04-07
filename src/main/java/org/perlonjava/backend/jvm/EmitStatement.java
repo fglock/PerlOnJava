@@ -21,48 +21,65 @@ import java.util.List;
 public class EmitStatement {
 
     /**
-     * Emits bytecode to null out JVM local variable slots for {@code my} variables
-     * going out of scope. This enables the JVM GC to collect objects (like anonymous
-     * filehandle globs from {@code open(my $fh, ...)}) that are no longer accessible
-     * from Perl code but would otherwise be held alive by the JVM stack frame.
+     * Emits bytecode to clean up and null out JVM local variable slots for
+     * {@code my} variables going out of scope.
      * <p>
      * Must be called BEFORE {@code exitScope()} so the symbol table still has
      * the variable entries.
      * <p>
-     * <b>Why we do NOT close IO handles here (do not re-add this!):</b>
+     * <b>Two-phase cleanup for anonymous filehandle globs:</b>
+     * <ol>
+     *   <li><b>Eager fd-number recycling (this method):</b> Before nulling each
+     *       scalar slot, calls {@link RuntimeScalar#scopeExitCleanup} which
+     *       unregisters the fileno from the fd table, returning it to the
+     *       recycle pool for immediate reuse. This does NOT close the IO stream —
+     *       only the fd number is freed. This is safe for shared handles because
+     *       the IO stream stays open and functional.</li>
+     *   <li><b>Deferred IO close via GC:</b> After nulling the slot, the
+     *       RuntimeGlob becomes unreachable from this JVM frame. When all
+     *       references are gone, the JVM GC enqueues the
+     *       {@link java.lang.ref.PhantomReference} registered by
+     *       {@link RuntimeIO#registerGlobForFdRecycling}, and
+     *       {@link RuntimeIO#processAbandonedGlobs()} closes the actual IO.</li>
+     * </ol>
      * <p>
-     * Previous versions called {@code RuntimeScalar.scopeExitCleanup()} here to
-     * eagerly close IO on anonymous globs at scope exit, attempting to emulate
-     * Perl 5's deterministic DESTROY for lexical filehandles. This was fundamentally
-     * broken because <b>PerlOnJava has no reference counting</b> — there is no way
-     * to know at scope exit whether other variables (array elements, hash values,
-     * object fields, closures) still hold a reference to the same RuntimeGlob.
+     * <b>Design history — why we unregister the fd but do NOT close IO:</b>
      * <p>
-     * The eager close caused real bugs: Test2::Formatter::TAP stores handles in
-     * {@code $self->{handles}}, then uses {@code my $io = $handles->[$hid]} in a
-     * loop. When the loop body scope exited, the eager close destroyed the shared
-     * IO handle, breaking all subsequent test output.
-     * <p>
-     * <b>How fd recycling actually works (the correct mechanism):</b>
-     * Anonymous globs created by {@code open(my $fh, ...)} are registered with
-     * {@link RuntimeIO#registerGlobForFdRecycling} using a {@code PhantomReference}.
-     * When the glob becomes truly unreachable (all RuntimeScalars referencing it
-     * have been nulled or reassigned), the JVM GC enqueues the phantom reference
-     * and {@link RuntimeIO#processAbandonedGlobs()} closes the IO and recycles
-     * the fd. This is the JVM-native equivalent of Perl 5's refcount-based cleanup
-     * and is correct by construction — it only fires when the glob has no references.
-     * <p>
-     * Nulling the JVM local slots (below) is what makes this work: once the slot
-     * is null, the RuntimeGlob becomes unreachable from the JVM frame, making it
-     * eligible for GC collection and PhantomReference processing.
+     * An earlier version eagerly closed IO on anonymous globs at scope exit.
+     * This was broken because PerlOnJava has no reference counting: there is
+     * no way to know at scope exit whether other variables (array elements,
+     * hash values, object fields, closures) still reference the same
+     * RuntimeGlob. The eager close destroyed shared handles still in use:
+     * <ul>
+     *   <li>Test2::Formatter::TAP: {@code my $io = $handles->[$hid]} in a
+     *       for loop — when $io went out of scope, the shared handle was
+     *       closed, breaking all subsequent test output.</li>
+     *   <li>Capture::Tiny: dup'd STDOUT/STDERR handles stored in a hash
+     *       were closed when the gensym'd lexical was reassigned in a loop.</li>
+     * </ul>
+     * The current approach (unregister fd only) avoids these bugs: shared
+     * handles keep their IO stream open. If the other reference later calls
+     * {@code fileno()}, {@link RuntimeIO#assignFileno()} assigns a fresh fd.
      *
      * @param ctx        The emitter context with the MethodVisitor and symbol table
      * @param scopeIndex The scope boundary being exited
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
-        // Null all my variable slots to help GC collect associated objects.
+        // Phase 1: Eagerly unregister fd numbers on scalar variables holding
+        // anonymous filehandle globs. This makes the fd available for reuse
+        // without waiting for non-deterministic GC.
+        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
+        for (int idx : scalarIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "scopeExitCleanup",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+        }
+        // Phase 2: Null all my variable slots to help GC collect associated objects.
         // For anonymous filehandle globs, this makes them unreachable so the
-        // PhantomReference-based fd recycling in RuntimeIO can close them.
+        // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.
         java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
