@@ -210,6 +210,9 @@ public class XMLParserExpat extends PerlModuleBase {
 
         // Protocol encoding (e.g. "ISO-8859-1") from ParserCreate
         String protocolEncoding;
+
+        // Foreign DTD content (for UseForeignDTD support)
+        byte[] foreignDtdContent;
     }
 
     // ================================================================
@@ -922,6 +925,84 @@ public class XMLParserExpat extends PerlModuleBase {
         RuntimeHash selfHash = state.selfRef.hashDeref();
         RuntimeScalar parseParamEntSV = selfHash.get("ParseParamEnt");
         boolean parseParamEnt = (parseParamEntSV != null && parseParamEntSV.getBoolean());
+
+        // UseForeignDTD: synthesize ExternEnt handler call and inject DOCTYPE
+        // for documents without a DOCTYPE declaration (per libexpat behavior)
+        RuntimeScalar useForeignDtdSV = selfHash.get("UseForeignDTD");
+        boolean useForeignDTD = (useForeignDtdSV != null && useForeignDtdSV.getBoolean());
+
+        if (useForeignDTD && parseParamEnt && state.externEntHandler != null
+                && state.inputBytes != null) {
+            // Check if document already has a DOCTYPE declaration
+            String docPrefix = new String(state.inputBytes, 0,
+                    Math.min(500, state.inputBytes.length), StandardCharsets.UTF_8);
+            if (!docPrefix.contains("<!DOCTYPE")) {
+                // Call ExternEnt handler with undef sysid/pubid (libexpat behavior)
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, state.selfRef);
+                RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
+                RuntimeArray.push(callArgs, scalarUndef); // sysid is undef for foreign DTD
+                RuntimeArray.push(callArgs, scalarUndef); // pubid is undef for foreign DTD
+                RuntimeList result = RuntimeCode.apply(state.externEntHandler, callArgs,
+                        RuntimeContextType.SCALAR);
+                RuntimeScalar retVal = result.getFirst();
+
+                if (retVal.type != RuntimeScalarType.UNDEF) {
+                    byte[] dtdBytes;
+                    if (RuntimeScalarType.isReference(retVal) || retVal.type == RuntimeScalarType.GLOB) {
+                        RuntimeIO fh = RuntimeIO.getRuntimeIO(retVal);
+                        if (fh != null) {
+                            ByteArrayOutputStream dtdBaos = new ByteArrayOutputStream();
+                            while (true) {
+                                RuntimeScalar line = fh.ioHandle.read(8192);
+                                if (line.type == RuntimeScalarType.UNDEF) break;
+                                String s = line.toString();
+                                if (s.isEmpty()) break;
+                                java.nio.charset.Charset cs = (line.type == RuntimeScalarType.BYTE_STRING)
+                                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                                dtdBaos.write(s.getBytes(cs));
+                            }
+                            dtdBytes = dtdBaos.toByteArray();
+                        } else {
+                            dtdBytes = null;
+                        }
+                    } else {
+                        dtdBytes = retVal.toString().getBytes(StandardCharsets.UTF_8);
+                    }
+
+                    if (dtdBytes != null) {
+                        // Call ExternEntFin if set
+                        if (state.externEntFinHandler != null) {
+                            RuntimeArray finArgs = new RuntimeArray();
+                            RuntimeArray.push(finArgs, state.selfRef);
+                            RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
+                        }
+
+                        // Store DTD content for resolveEntity to return
+                        state.foreignDtdContent = convertEncoding(dtdBytes);
+
+                        // Inject DOCTYPE after XML declaration
+                        String docStr = new String(state.inputBytes, StandardCharsets.UTF_8);
+                        int insertPos = 0;
+                        if (docStr.startsWith("<?xml")) {
+                            int endOfXmlDecl = docStr.indexOf("?>");
+                            if (endOfXmlDecl >= 0) {
+                                insertPos = endOfXmlDecl + 2;
+                                if (insertPos < docStr.length() && docStr.charAt(insertPos) == '\n') {
+                                    insertPos++;
+                                }
+                            }
+                        }
+                        String doctypeDecl = "<!DOCTYPE _fdt SYSTEM \"__perlonjava_foreign_dtd__\">\n";
+                        StringBuilder sb = new StringBuilder(docStr);
+                        sb.insert(insertPos, doctypeDecl);
+                        byte[] newBytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+                        state.inputBytes = newBytes;
+                        input = new ByteArrayInputStream(newBytes);
+                    }
+                }
+            }
+        }
 
         SAXParserFactory factory = SAXParserFactory.newInstance();
         factory.setNamespaceAware(state.namespaces);
@@ -1789,7 +1870,7 @@ public class XMLParserExpat extends PerlModuleBase {
                 // expat reports "NOTATION(x|y|z)" without space
                 String fixedType = type;
                 if (fixedType != null && fixedType.startsWith("NOTATION ")) {
-                    fixedType = "NOTATION" + fixedType.substring(8);
+                    fixedType = "NOTATION" + fixedType.substring(9);
                 }
 
                 // Compute default parameter per Perl API:
@@ -1820,10 +1901,42 @@ public class XMLParserExpat extends PerlModuleBase {
             }
         }
 
+        /**
+         * Fire the XMLDecl handler for text declarations in external entities.
+         * In libexpat, XML_SetXmlDeclHandler fires for both the main document's
+         * XML declaration and text declarations in external parsed entities
+         * (with version=undef). SAX doesn't do this, so we detect and fire manually.
+         */
+        private void fireTextDeclHandler(byte[] rawBytes) throws SAXException {
+            if (state.xmlDeclHandler == null) return;
+            String encoding = extractDeclaredEncoding(rawBytes);
+            if (encoding == null) return;
+            RuntimeArray callArgs = new RuntimeArray();
+            RuntimeArray.push(callArgs, state.selfRef);
+            RuntimeArray.push(callArgs, scalarUndef); // version is undef for text declarations
+            RuntimeArray.push(callArgs, new RuntimeScalar(encoding));
+            RuntimeArray.push(callArgs, scalarUndef); // standalone is undef
+            try {
+                RuntimeCode.apply(state.xmlDeclHandler, callArgs, RuntimeContextType.VOID);
+            } catch (PerlDieException e) {
+                throw new SAXException(e);
+            }
+        }
+
         // ---- EntityResolver ----
 
         @Override
         public InputSource resolveEntity(String publicId, String systemId) throws SAXException {
+            // Handle synthetic foreign DTD system ID (from UseForeignDTD injection)
+            if (systemId != null && systemId.contains("__perlonjava_foreign_dtd__")
+                    && state.foreignDtdContent != null) {
+                InputSource is = new InputSource(new ByteArrayInputStream(state.foreignDtdContent));
+                if (systemId != null) {
+                    is.setSystemId(systemId);
+                }
+                return is;
+            }
+
             if (state.externEntHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
@@ -1862,7 +1975,9 @@ public class XMLParserExpat extends PerlModuleBase {
                                 RuntimeArray.push(finArgs, state.selfRef);
                                 RuntimeCode.apply(state.externEntFinHandler, finArgs, RuntimeContextType.VOID);
                             }
-                            byte[] rawBytes = convertEncoding(entBaos.toByteArray());
+                            byte[] entRawBytes = entBaos.toByteArray();
+                            fireTextDeclHandler(entRawBytes);
+                            byte[] rawBytes = convertEncoding(entRawBytes);
                             InputSource is = new InputSource(new ByteArrayInputStream(rawBytes));
                             // Preserve systemId so SAX can resolve relative references within this entity
                             if (systemId != null) {
@@ -1884,7 +1999,9 @@ public class XMLParserExpat extends PerlModuleBase {
                         // Convert to bytes for encoding handling (string may contain raw byte values)
                         java.nio.charset.Charset cs = (retVal.type == RuntimeScalarType.BYTE_STRING)
                                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
-                        byte[] rawBytes = convertEncoding(content.getBytes(cs));
+                        byte[] entRawBytes = content.getBytes(cs);
+                        fireTextDeclHandler(entRawBytes);
+                        byte[] rawBytes = convertEncoding(entRawBytes);
                         InputSource is = new InputSource(new ByteArrayInputStream(rawBytes));
                         if (systemId != null) {
                             is.setSystemId(systemId);
@@ -2056,11 +2173,17 @@ public class XMLParserExpat extends PerlModuleBase {
         if (e instanceof org.xml.sax.SAXParseException) {
             org.xml.sax.SAXParseException spe = (org.xml.sax.SAXParseException) e;
             StringBuilder sb = new StringBuilder();
-            sb.append("not well-formed (invalid token)");
+            // Detect specific error types and map to expat error messages
+            if (msg.contains("was referenced, but not declared")) {
+                sb.append("undefined entity");
+            } else {
+                sb.append("not well-formed (invalid token)");
+                sb.append("\n(Hint: \"not well-formed\" often indicates unescaped '<', '>' or '&'");
+                sb.append(" in content \u2014 use &lt; &gt; or &amp; instead)");
+            }
             sb.append("\nat line ").append(spe.getLineNumber());
             sb.append(", column ").append(spe.getColumnNumber());
-            sb.append("\n(Hint: \"not well-formed\" often indicates unescaped '<', '>' or '&'");
-            sb.append(" in content \u2014 use &lt; &gt; or &amp; instead)\n");
+            sb.append("\n");
             return sb.toString();
         }
         if (state.locator != null) {
