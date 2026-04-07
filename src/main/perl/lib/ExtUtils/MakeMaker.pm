@@ -240,9 +240,10 @@ sub _install_pure_perl {
         # We derive the install subdirectory from the NAME parameter.
         if (!%pm && $name) {
             my @parts = split /::/, $name;
-            pop @parts;  # Remove BASEEXT (e.g. Crypt::RC4 -> Crypt)
+            my $baseext = pop @parts;  # Remove BASEEXT (e.g. XML::Parser -> Parser)
             my $parent_dir = @parts ? File::Spec->catdir(@parts) : '';
             
+            # Scan flat .pm files in current directory
             opendir(my $dh, '.') or warn "Cannot opendir .: $!";
             if ($dh) {
                 while (my $file = readdir($dh)) {
@@ -253,6 +254,22 @@ sub _install_pure_perl {
                     $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel);
                 }
                 closedir($dh);
+            }
+            
+            # Also scan BASEEXT directory recursively (standard MakeMaker PMLIBDIRS)
+            # e.g. for XML::Parser, scan Parser/ which contains Style/*.pm
+            if ($baseext && -d $baseext) {
+                find({
+                    wanted => sub {
+                        return unless -f && /$installable_re/;
+                        my $src = $File::Find::name;
+                        my $rel = $parent_dir
+                            ? File::Spec->catfile($parent_dir, $src)
+                            : $src;
+                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                    },
+                    no_chdir => 1,
+                }, $baseext);
             }
         }
     }

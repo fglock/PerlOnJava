@@ -237,6 +237,28 @@ public abstract class StringSegmentParser {
                 }
             }
 
+            // After ${...}, parse subscript access like ${$ref}{key} or ${$ref}[0]
+            // This matches Perl 5 where "${$hashref}{key}" = $hashref->{key}
+            //
+            // However, when ${var} uses explicit braces with a simple variable name,
+            // [...] and {...} should NOT be parsed as subscripts.
+            // Perl 5 rule: explicit braces terminate the variable name, so:
+            //   In regex:  ${var}[0]   = scalar $var + char class [0]
+            //   In string: "${var}[0]" = scalar $var + literal "[0]"
+            //   vs:        $var[0]     = array element $var[0]
+            // Only deref expressions like ${$ref}[0] should parse subscripts after braces.
+            boolean isSimpleBracedVariable = !isArray
+                    && operand instanceof OperatorNode opNode
+                    && "$".equals(opNode.operator)
+                    && opNode.operand instanceof IdentifierNode;
+            if (!isSimpleBracedVariable) {
+                try {
+                    operand = parseArrayHashAccess(parser, operand, isRegex);
+                } catch (Exception e) {
+                    // If array/hash access parsing fails, use operand as-is
+                }
+            }
+
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str operand " + operand);
         } else {
             // Parse simple variables using shared logic, but keep the exact same flow
