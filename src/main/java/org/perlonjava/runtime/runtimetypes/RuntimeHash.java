@@ -820,7 +820,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the result of the chomp operation.
      */
     public RuntimeScalar chomp() {
-        return this.values().chop();
+        return this.values().chomp();
     }
 
     /**

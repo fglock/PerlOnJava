@@ -366,11 +366,9 @@ public class CompileOperator {
         int targetReg;
         if (noArgs) {
             targetReg = loadDefaultUnderscore(bc);
-        } else if (node.operand instanceof ListNode list && !list.elements.isEmpty()) {
-            list.elements.get(0).accept(bc);
-            targetReg = bc.lastResultReg;
         } else {
-            node.operand.accept(bc);
+            // Compile operand in LIST context so RuntimeList.chomp() handles all elements
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
             targetReg = bc.lastResultReg;
         }
         int rd = bc.allocateOutputRegister();
@@ -1217,8 +1215,8 @@ public class CompileOperator {
         if (chopNoArgs) {
             scalarReg = loadDefaultUnderscore(bc);
         } else {
-            if (node.operand instanceof ListNode list) list.elements.get(0).accept(bc);
-            else node.operand.accept(bc);
+            // Compile operand in LIST context so RuntimeList.chop() handles all elements
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
             scalarReg = bc.lastResultReg;
         }
         int rd = bc.allocateOutputRegister();
