@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 5 in progress (2026-04-07)
+## Status: Phase 6 ready — re-run tests to measure (2026-04-07)
 
 ## Goal
 
@@ -171,24 +171,9 @@ treating `isa` as an infix operator. Also handle `isa =>` as autoquoting (fat co
 
 ---
 
-## Phase 4: FindBin and Test Harness
+## Phase 4: FindBin and Test Harness (DEFERRED → Phase 7)
 
-### 4.1 FindBin `$0` handling in test contexts
-
-**Priority: MEDIUM** — Many App::perlbrew tests fail with
-`Cannot find current script 'can_ok'`.
-
-**Problem:** When tests are run via the harness, `$0` sometimes gets set to a test function
-name (`can_ok`) instead of a file path. FindBin.pm then dies because it can't find a file
-with that name.
-
-**Investigation needed:** Determine how `$0` gets set to `can_ok`. Likely either:
-- The test harness sets `$0` to a sub name
-- PerlOnJava's `-e` handling doesn't set `$0` to `"-e"`
-- The test invocation pattern uses `perl -e 'can_ok(...)'` and `$0` isn't set correctly
-
-**Files:** `src/main/java/org/perlonjava/app/cli/ArgumentParser.java` (if `-e` handling),
-`src/main/perl/lib/FindBin.pm` (if resilience fix)
+### 4.1 FindBin `$0` handling — moved to Phase 7.1
 
 ### 4.2 Missing `File::pushd` dependency for Devel::PatchPerl
 
@@ -200,9 +185,9 @@ the dependency chain to work.
 
 ---
 
-## Phase 5: Test2::IPC CallerStack Fix
+## Phase 5: Test2::IPC CallerStack Fix (COMPLETED 2026-04-07)
 
-### 5.1 INIT/CHECK/END blocks missing CallerStack entry
+### 5.1 INIT/CHECK/END blocks missing CallerStack entry ✅
 
 **Priority: HIGH** — Root cause of ~40 App::perlbrew test failures.
 
@@ -246,36 +231,75 @@ if (isMainProgram) {
 # Should print "ok" instead of "Could not find context at depth 1"
 ```
 
-### 5.2 Other remaining App::perlbrew test failures
+### 5.2 Other remaining App::perlbrew test failures (PARTIALLY FIXED 2026-04-07)
 
 **Priority: MEDIUM** — After 5.1, some tests will still fail for other reasons:
 
-| Issue | Tests affected | Root cause |
-|-------|---------------|------------|
-| `can't get_layers on tied handle` | t/12.destdir.t, t/12.sitecustomize.t | PerlIO.java line 54 |
-| `B::SV` not implemented | t/util-looks-like.t | Test2::Util::Stash uses B:: introspection |
-| PATH in sub-shells | t/shell.t (local::lib) | `local::lib` test resets PATH, jperl shell script can't find `dirname`/`java` |
-| `sys()` returns undef | t/sys.t | Likely missing IPC::Cmd or similar |
+| Issue | Tests affected | Root cause | Status |
+|-------|---------------|------------|--------|
+| `can't get_layers on tied handle` | t/12.destdir.t, t/12.sitecustomize.t | PerlIO.java line 54 | **FIXED** — returns empty list for tied handles |
+| `$Config{myarchname}` undef | t/sys.t | Config.pm missing entry | **FIXED** — added `myarchname => "$os_arch-$os_name"` |
+| `Subroutine new redefined` warning | All Test2::V0 tests | Universal.java `can()` for forward declarations | **FIXED** — check `isDeclared` flag so `sub new;` returns true from `can()` |
+| `local(@ARGV)` + `\@ARGV` ref semantics | t/01.options.t args tests, many others | RuntimeArray in-place save/restore | **FIXED** — new GlobalRuntimeArray swaps global map entry |
+| `B::SV` not implemented | t/util-looks-like.t | Test2::Util::Stash uses B:: introspection | Not yet investigated |
+| PATH in sub-shells | t/shell.t (local::lib) | `local::lib` test resets PATH, jperl shell script can't find `dirname`/`java` | Not yet investigated |
+| Pod::Usage / help formatting | t/command-help.t | Likely missing Pod::Usage features | Not yet investigated |
 
 ---
 
-## Implementation Priority Order
+## Phase 6: Re-test and Fix Remaining Failures
 
-1. ~~**Phase 2.1** — `-` stdin support~~ ✅
-2. ~~**Phase 3.1** — Non-local return from map/grep blocks~~ ✅
-3. ~~**Phase 2.2** — English.pm~~ ✅
-4. ~~**Phase 2.3** — catpath prototype fix~~ ✅
-5. **Phase 5.1** — CallerStack for INIT/CHECK/END blocks (unblocks ~40 App::perlbrew tests)
-6. **Phase 4.1** — FindBin $0 investigation
-7. **Phase 2.4** — blib/arch creation
-8. **Phase 3.2** — isa feature gate
-9. **Phase 5.2** — Remaining App::perlbrew test issues
+### 6.1 Re-run App::perlbrew test suite
+
+**Priority: HIGH** — Phases 5.1, 5.2 fixed multiple categories of failures. A fresh
+`./jcpan -t App::perlbrew` run is needed to measure the actual pass rate and identify
+which tests still fail.
+
+**Expected improvement:** From 18/73 pass → significantly more, since:
+- CallerStack fix unblocks ~32 tests that crashed on Test2::IPC context depth
+- `local @ARGV` reference fix unblocks all `args` tests (t/01.options.t, etc.)
+- `can()` forward declaration fix removes spurious "Subroutine redefined" warnings
+- PerlIO get_layers fix unblocks t/12.destdir.t, t/12.sitecustomize.t
+- Config myarchname fix unblocks t/sys.t
+
+### 6.2 Investigate remaining failures after re-test
+
+After the re-test, categorize failures into:
+1. **PerlOnJava runtime bugs** — fix in Java code
+2. **Missing CPAN modules** — install via jcpan
+3. **Unimplementable features** — document and skip (e.g., fork-dependent tests)
+
+Known remaining areas:
+- `B::SV` / B module introspection (used by Test2::Util::Stash)
+- Pod::Usage formatting for help tests
+- Shell integration tests (PATH, environment inheritance)
+
+---
+
+## Phase 7: Stretch Goals
+
+### 7.1 FindBin `$0` handling in test contexts
+
+**Priority: LOW** — Many App::perlbrew tests fail with
+`Cannot find current script 'can_ok'`.
+
+**Problem:** When tests are run via the harness, `$0` sometimes gets set to a test function
+name (`can_ok`) instead of a file path. FindBin.pm then dies because it can't find a file
+with that name.
+
+### 7.2 `blib/arch` directory creation
+
+**Priority: LOW** — Causes `CPAN::Perl::Releases` test failure (1/105).
+
+### 7.3 `isa` infix operator feature gate
+
+**Priority: LOW** — Affects `prop isa => 'Class'` pattern in Test2 tests.
 
 ---
 
 ## Progress Tracking
 
-### Current Status: Phase 5.1 in progress
+### Current Status: Phase 6.1 — Re-run tests to measure improvement
 
 ### Completed Phases
 - [x] Phase 1: Foundation Fixes (2026-04-07)
@@ -290,14 +314,27 @@ if (isMainProgram) {
 - [x] Phase 3.1: Non-local return from map/grep blocks (2026-04-07)
   - Two-layer approach: return-value markers + PerlNonLocalReturnException
   - Fixed Test2::Util::Importer::optimal_import() and all map/grep return semantics
-  - Commit: f97aa6c1c
+  - Commit: f97aa6c1c → rebased as e53eb6d06
 - [x] Phase 4 (partial): Test2::V0 import chain now works
+- [x] Phase 5.1: CallerStack for INIT/CHECK/END blocks (2026-04-07)
+  - Wrapped runInitBlocks/runCheckBlocks/runEndBlocks with CallerStack.push/pop
+  - Unblocked ~32 App::perlbrew tests that crashed on "Could not find context at depth 1"
+  - Commit: 83a90050e
+- [x] Phase 5.2 (partial): Four additional fixes (2026-04-07)
+  - PerlIO.java: get_layers returns empty list for tied handles (was throwing exception)
+  - Config.pm: added `myarchname` entry
+  - Universal.java: `can()` returns true for forward-declared subs (`sub new;`)
+  - **local @ARRAY reference semantics**: created GlobalRuntimeArray.java to swap global map
+    entry instead of modifying in-place. Updated BytecodeInterpreter, EmitOperatorLocal,
+    CompileAssignment. Added 5 tests to local.t.
+  - Commit: 57bca797c
 
 ### Next Steps
-1. Implement CallerStack fix for INIT/CHECK/END blocks (Phase 5.1)
-2. Re-run `./jcpan -t App::perlbrew` to measure improvement
-3. Investigate remaining failures (Phase 5.2)
+1. Re-run `./jcpan -t App::perlbrew` to measure pass rate improvement (Phase 6.1)
+2. Categorize remaining failures and fix what's feasible (Phase 6.2)
+3. Investigate B::SV, Pod::Usage, shell/PATH issues if they block significant tests
 
 ### Open Questions
-- Will the CallerStack fix also help the main program execution (`runtimeCode.apply()` at line 356)?
+- How many tests does the `local @ARGV` fix actually unblock? (need re-test to measure)
+- Can we stub B::SV enough to satisfy Test2::Util::Stash, or is full B module support needed?
 - Does FindBin `$0 = 'can_ok'` come from test harness or incorrect `-e` handling?
