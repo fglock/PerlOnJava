@@ -41,7 +41,7 @@ public class EmitStatement {
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean closeIO) {
         if (closeIO) {
             // For scalar variables in loop bodies, call cleanup to close IO
-            // on anonymous globs (deterministic DESTROY for lexical file handles).
+            // on anonymous globs and fire DESTROY on blessed objects.
             java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
             for (int idx : scalarIndices) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
@@ -60,7 +60,7 @@ public class EmitStatement {
         }
     }
 
-    /** Convenience overload: null stores only, no IO cleanup (safe for all contexts). */
+    /** Convenience overload: null stores only, no IO/DESTROY cleanup (safe for all contexts). */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
         emitScopeExitNullStores(ctx, scopeIndex, false);
     }
