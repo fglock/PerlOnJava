@@ -74,12 +74,16 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // $a{key}, @a{keys}, %a{keys} all access hash %a
         if ("{".equals(node.operator) && node.left instanceof OperatorNode leftOp
-                && "$".equals(leftOp.operator) && leftOp.operand instanceof IdentifierNode idNode) {
+                && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
+                && leftOp.operand instanceof IdentifierNode idNode) {
             variables.add("%" + idNode.name);
         }
+        // $a[idx], @a[indices], %a[indices] all access array @a
         if ("[".equals(node.operator) && node.left instanceof OperatorNode leftOp
-                && "$".equals(leftOp.operator) && leftOp.operand instanceof IdentifierNode idNode) {
+                && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
+                && leftOp.operand instanceof IdentifierNode idNode) {
             variables.add("@" + idNode.name);
         }
         if (node.left != null) {

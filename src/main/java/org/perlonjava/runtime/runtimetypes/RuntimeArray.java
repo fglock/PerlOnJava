@@ -670,7 +670,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     TieArray.tiedStore(this, getScalarInt(index), element);
                     index++;
                 }
-                yield this;
+                // Return the materialized list instead of `this` to avoid calling
+                // FETCHSIZE/FETCH on the tied array after assignment.
+                // CLEAR may have replaced the glob (e.g., *a = []), making the
+                // tied object invalid. The result should reflect the RHS values.
+                yield materializedList;
             }
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
