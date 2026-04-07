@@ -2101,6 +2101,10 @@ sub prepare {
                 CPAN::Reporter::grade_PL( $self, $system, $output, $ret );
             }
             else {
+                # PerlOnJava: Stub out Devel::CheckLib in build directory
+                # so Makefile.PL can proceed to WriteMakefile even when
+                # native library checks would fail (we can't compile C).
+                $self->_stub_native_checkers_perlonjava();
                 $ret = system($system);
             }
             if ($ret != 0) {
@@ -2117,6 +2121,14 @@ sub prepare {
             $self->store_persistent_state;
             return $self->success("$system -- OK");
         } else {
+            # PerlOnJava: When Makefile.PL exits 0 but no Makefile is created,
+            # generate a fallback Makefile.PL from META and re-run it.
+            if ($self->_try_perlonjava_fallback_pl($system)) {
+                $self->{writemakefile} = CPAN::Distrostatus->new("YES");
+                delete $self->{make_clean};
+                $self->store_persistent_state;
+                return $self->success("$system -- OK (PerlOnJava XS fallback)");
+            }
             my $makefile = $self->{modulebuild} ? "Build" : "Makefile";
             my $why = "No '$makefile' created";
             $CPAN::Frontend->mywarn($why);
@@ -2128,6 +2140,86 @@ sub prepare {
     }
     $self->store_persistent_state;
     return 1; # success
+}
+
+#-> sub CPAN::Distribution::_stub_native_checkers_perlonjava
+# PerlOnJava: Replace Devel::CheckLib in build dir with a no-op stub.
+# This allows Makefile.PL to proceed to WriteMakefile() even when
+# native library checks (check_lib, assert_lib) would fail.
+sub _stub_native_checkers_perlonjava {
+    my ($self) = @_;
+    my $checklib = "inc/Devel/CheckLib.pm";
+    if (-f $checklib) {
+        $CPAN::Frontend->myprint("PerlOnJava: Stubbing $checklib for XS module\n");
+        if (open my $fh, '>', $checklib) {
+            print $fh <<'STUB';
+package Devel::CheckLib;
+use strict;
+use Exporter;
+our @ISA = ('Exporter');
+our @EXPORT = qw(assert_lib check_lib_or_exit check_lib);
+sub assert_lib { 1 }
+sub check_lib_or_exit { 1 }
+sub check_lib { 1 }
+1;
+STUB
+            close $fh;
+        }
+    }
+}
+
+#-> sub CPAN::Distribution::_try_perlonjava_fallback_pl
+# PerlOnJava: When Makefile.PL exits cleanly but creates no Makefile,
+# generate a minimal fallback Makefile.PL from META.yml/META.json
+# and re-run it so PerlOnJava's WriteMakefile can install .pm files.
+sub _try_perlonjava_fallback_pl {
+    my ($self, $system) = @_;
+
+    # Try to extract NAME and VERSION from META files
+    my ($name, $version);
+    for my $meta_file ('META.yml', 'META.json') {
+        next unless -f $meta_file;
+        if (open my $fh, '<', $meta_file) {
+            local $/;
+            my $content = <$fh>;
+            close $fh;
+            if ($meta_file eq 'META.json') {
+                ($name) = $content =~ /"name"\s*:\s*"([^"]+)"/;
+                ($version) = $content =~ /"version"\s*:\s*"([^"]+)"/;
+            } else {
+                ($name) = $content =~ /^name:\s*(\S+)/m;
+                ($version) = $content =~ /^version:\s*['"]?(\S+?)['"]?\s*$/m;
+            }
+            last if $name;
+        }
+    }
+
+    return 0 unless $name;
+    $version ||= '0';
+
+    # Convert dist name to module name (e.g., XML-Parser -> XML::Parser)
+    (my $module_name = $name) =~ s/-/::/g;
+
+    $CPAN::Frontend->myprint("PerlOnJava: Generating fallback Makefile.PL for $module_name $version\n");
+
+    # Write minimal Makefile.PL
+    if (open my $fh, '>', 'Makefile.PL') {
+        print $fh <<"FALLBACK";
+use ExtUtils::MakeMaker;
+WriteMakefile(
+    NAME         => '$module_name',
+    VERSION      => '$version',
+);
+FALLBACK
+        close $fh;
+    } else {
+        return 0;
+    }
+
+    # Re-run Makefile.PL
+    my $ret = system($system);
+    return 0 if $ret != 0;
+    return -f "Makefile" ? 1 : 0;
 }
 
 #-> sub CPAN::Distribution::shortcut_make ;
