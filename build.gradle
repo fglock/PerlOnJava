@@ -264,6 +264,22 @@ tasks.register('testAll', Test) {
     shouldRunAfter testUnit
 }
 
+// Bundled module tests (XML::Parser, etc.)
+// Tests live under src/test/resources/module/{ModuleName}/t/
+tasks.register('testModule', Test) {
+    description = 'Runs bundled CPAN module tests (e.g. XML::Parser)'
+    group = 'verification'
+    
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    
+    useJUnitPlatform {
+        includeTags 'module'
+    }
+    
+    shouldRunAfter testUnit
+}
+
 // Shadow JAR configuration for creating standalone executable
 shadowJar {
     archiveClassifier.set('')

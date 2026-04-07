@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter test-bundled-modules test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 all: build
 
@@ -63,6 +63,15 @@ endif
 test-interpreter:
 	@echo "Running unit tests with bytecode interpreter..."
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
+
+# Bundled CPAN module tests (XML::Parser, etc.)
+# Tests live under src/test/resources/module/{ModuleName}/t/
+test-bundled-modules: check-java-gradle
+ifeq ($(OS),Windows_NT)
+	gradlew.bat testModule --rerun-tasks
+else
+	./gradlew testModule --rerun-tasks
+endif
 
 # Image::ExifTool test suite (Image-ExifTool-13.44/t/ directory)
 test-exiftool:

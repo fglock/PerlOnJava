@@ -19,9 +19,19 @@ XML::Parser is implemented as a Java XS module (`XMLParserExpat.java`) backed by
 
 ## Test Status
 
-**Current: 47/47 test files pass (100%), 440/440 subtests pass (100%)**
+**Current: 45/45 test files pass (100%), 434/434 subtests pass (100%)**
 
-All XML::Parser 2.56 tests pass. See Completed Phases below for details.
+All XML::Parser 2.56 tests pass (excluding 2 `Devel::CheckLib` C compiler detection tests that are irrelevant to PerlOnJava).
+
+### Running Tests
+
+Tests are stored in `src/test/resources/module/XML-Parser/` and run via:
+
+```bash
+make test-bundled-modules
+```
+
+This uses JUnit 5 (`ModuleTestExecutionTest.java`) with `@Tag("module")` to discover and execute all `.t` files under `module/*/t/`. The test runner `chdir`s to the module directory so relative paths resolve correctly.
 
 ## Completed Phases
 

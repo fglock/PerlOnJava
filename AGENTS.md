@@ -82,6 +82,7 @@ PerlOnJava does **not** implement the following Perl features:
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
 | `make dev` | Build only, skip tests (for quick iteration during debugging) |
+| `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
 - For interpreter changes, test with both backends:
   ```bash
