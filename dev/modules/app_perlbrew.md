@@ -306,18 +306,254 @@ IOEvents ties it (via `test2_add_callback_post_load`), so TAP output bypasses th
 **Tests fixed:** `05.get_current_perl.t`, `command-available.t`, `command-compgen.t`,
 `command-env.t`, `command-lib.t`, `command-list.t`, `list_modules.t`, `20.patchperl.t`
 
-### 7.2 Remaining failures (8/73)
+### 7.2 Remaining failures — detailed analysis (8/73)
 
-| Test | Issue | Priority |
-|------|-------|----------|
-| `command-info.t` | Module info subtests (`info Data::Dumper`, `info SOME_FAKE_MODULE`) get empty output — first 2 subtests pass, module-specific ones fail | MEDIUM |
-| `installation-perlbrew.t` | 3/5 fail: fish/zsh/PERLBREW_HOME subtests get empty output — bash subtest passes | MEDIUM |
-| `12.destdir.t` | sitecustomize.pl not written during mock install | LOW |
-| `12.sitecustomize.t` | `App::Perlbrew::Path->new()` receives undefined parameter | LOW |
-| `installation2.t` | Test2::Mock `do_system` not working | LOW |
-| `http-ua-detect-non-curl.t` | Fake `curl` in PATH not picked up | LOW |
-| `util-looks-like.t` | `B::SV` class not implemented | LOW |
-| `unit-files-are-the-same.t` | No tests run (skipped) | LOW |
+#### 7.2.1 `command-info.t` — Capture::Tiny + tied STDOUT interaction (1 test, 2 subtests fail)
+
+**Symptom:** Subtests 3 and 4 (`info Data::Dumper`, `info SOME_FAKE_MODULE`) get
+empty GOT. Subtests 1 and 2 (basic `info` without module) pass.
+
+**Root cause:** The module-info code path calls `do_capture_current_perl('-le', $code)`
+(perlbrew.pm line 2833) which internally uses `Capture::Tiny::capture(sub { system(...) })`.
+Capture::Tiny does `local(*STDOUT)` + `_open(\*STDOUT, ">&=1")` to redirect output.
+This creates a new localized STDOUT glob, but `selectedHandle` still points to the
+old TieHandle from before the localization. After Capture::Tiny restores the original
+glob, `selectedHandle` may be stale.
+
+**Key code locations:**
+- `App/perlbrew.pm` line 2829-2834: `do_capture_current_perl` calls Capture::Tiny
+- `Capture/Tiny.pm` line 344: `local(*STDOUT), _open(\*STDOUT, ">&=1")`
+- `RuntimeGlob.java` `dynamicRestoreState()` line 847: restores `this.IO` but does
+  NOT check/update `RuntimeIO.selectedHandle`
+
+**Potential fix:** In `RuntimeGlob.dynamicRestoreState()`, after restoring `this.IO`,
+check if the restored IO contains a TieHandle and the glob is STDOUT, then update
+`selectedHandle`:
+```java
+this.IO = snap.io;
+if (snap.io != null && snap.io.type == RuntimeScalarType.TIED_SCALAR
+    && snap.io.value instanceof TieHandle th
+    && "main::STDOUT".equals(snap.globName)
+    && RuntimeIO.selectedHandle != th) {
+    RuntimeIO.selectedHandle = th;
+}
+```
+
+**Also investigate:** Thread safety of `GlobalVariable.globalIORefs` (HashMap, not
+ConcurrentHashMap) — `SystemOperator.writeToPerlStdout()` accesses it from a daemon thread.
+
+---
+
+#### 7.2.2 `installation-perlbrew.t` — Stat.java cannot unwrap DupIOHandle (1 test, 3 subtests fail)
+
+**Symptom:** "Works with fish", "Works with zsh", and "Exports PERLBREW_HOME when
+needed" subtests get empty output. "Works with bash" passes. All use `capture_stdout`.
+
+**Root cause:** `Stat.java` cannot stat filehandles backed by `DupIOHandle` or
+`BorrowedIOHandle`. This breaks `_check_for_change()` in Test2::Plugin::IOEvents::Tie.
+
+**Call chain:**
+1. IOEvents ties STDOUT → `stat(STDOUT)` returns empty → `$inode = undef` (saved)
+2. `capture_stdout` localizes STDOUT, opens temp file via `DupIOHandle(CustomFileChannel)`
+3. Inside capture, `print` goes through tied STDOUT → calls `_check_for_change()`
+4. `stat(STDOUT)` on localized STDOUT → `DupIOHandle` → Stat.java only unwraps
+   `LayeredIOHandle`, not `DupIOHandle` → falls through → returns empty → `$inode = undef`
+5. `undef ne undef` → false → no change detected → output becomes Test2 event, not captured
+
+**Fix location:** `Stat.java` lines 176-185 — add unwrapping for `DupIOHandle` and
+`BorrowedIOHandle` (both already have `getDelegate()` methods):
+```java
+IOHandle innerHandle = fh.ioHandle;
+boolean changed = true;
+while (changed) {
+    changed = false;
+    if (innerHandle instanceof LayeredIOHandle lh) {
+        innerHandle = lh.getDelegate(); changed = true;
+    } else if (innerHandle instanceof DupIOHandle dup) {
+        innerHandle = dup.getDelegate(); changed = true;
+    } else if (innerHandle instanceof BorrowedIOHandle borrowed) {
+        innerHandle = borrowed.getDelegate(); changed = true;
+    }
+}
+```
+
+**Why bash passes but fish/zsh fail:** Needs further investigation — may be an
+ordering/state issue. The stat fix should resolve all subtests simultaneously.
+
+---
+
+#### 7.2.3 `12.destdir.t` — Capture::Tiny inside `do_install_this` (1 test, 1 subtest fails)
+
+**Symptom:** `sitecustomize.pl installed in DESTDIR` fails — got undef, expected
+`use strict;\n`.
+
+**Root cause:** Same `selectedHandle` / Capture::Tiny interaction as 7.2.1. Inside
+`do_install_this` (perlbrew.pm line 1651), `do_capture("$newperl -V:sitelib")` uses
+Capture::Tiny. The localized STDOUT doesn't get `selectedHandle` pointed to it, so
+`print` inside the capture goes through the old TieHandle → output becomes a Test2
+event instead of being written to the capture temp file → capture returns empty →
+`$sitelib = undef` → sitecustomize.pl written to wrong path.
+
+**Fix:** Same as 7.2.1 — fix `dynamicRestoreState()` or make `setIO()` smarter about
+glob identity vs IO identity.
+
+---
+
+#### 7.2.4 `12.sitecustomize.t` — Same root cause as 7.2.3 (1 test, 1 subtest fails)
+
+**Symptom:** `Received an undefined entry as a parameter` at `App/Perlbrew/Path.pm`
+line 18.
+
+**Root cause:** Identical to 7.2.3. Capture::Tiny returns empty → `$sitelib = undef` →
+`App::Perlbrew::Path->new(undef)` → `_joinpath(undef)` → dies with "Received an
+undefined entry as a parameter".
+
+**Fix:** Same as 7.2.1 and 7.2.3.
+
+---
+
+#### 7.2.5 `installation2.t` — Test2::Mock `do_system` + Capture::Tiny crash (1 test, 1 subtest fails)
+
+**Symptom:** `do_system is called` fails, log file is empty. Mock tracking shows
+`do_system` was never called.
+
+**Root cause:** `do_install_this` calls `maybe_patchperl()` (perlbrew.pm line 1587-1589)
+before reaching `do_system`. `maybe_patchperl` uses `Capture::Tiny::capture { system("patchperl --version") }`.
+This hits the same selectedHandle/Capture::Tiny issue, causing `maybe_patchperl` to
+crash → `do_install_this` dies before reaching the mocked `do_system`.
+
+**Secondary concern:** Test2::Mock's tracking wrapper uses `goto &$sub` where `$sub`
+is a closure-captured lexical coderef:
+```perl
+# Test2/Mock.pm line 434-439
+$ref = sub {
+    push @{$sub_tracker->{$param}} => $call;
+    goto &$sub;  # tail call to actual mock sub
+};
+```
+If `goto &$sub` with closure-captured coderefs doesn't work correctly in PerlOnJava,
+the mock would fail even without the Capture::Tiny issue.
+
+**Fix:** Primary fix is the Capture::Tiny/selectedHandle fix (7.2.1). After that, verify
+`goto &$sub` with closures works.
+
+---
+
+#### 7.2.6 `http-ua-detect-non-curl.t` — `FileSpec.path()` uses Java env (1 test, 1 subtest fails)
+
+**Symptom:** Expected fake curl from `t/fake-bin/curl` but got `/usr/bin/curl`.
+
+**Root cause:** `FileSpec.java` line 357 uses `System.getenv("PATH")` instead of reading
+from Perl's `%ENV`. The test modifies `$ENV{PATH}` in a BEGIN block to prepend
+`t/fake-bin/`, but `System.getenv("PATH")` returns the original JVM process PATH.
+
+**Code:**
+```java
+// FileSpec.java line 356-363
+public static RuntimeList path(RuntimeArray args, int ctx) {
+    String path = System.getenv("PATH");  // BUG: reads Java env, not Perl %ENV
+    ...
+}
+```
+
+**Fix:** Simple one-line change in `FileSpec.java:357`:
+```java
+RuntimeHash perlEnv = GlobalVariable.getGlobalHash("main::ENV");
+RuntimeScalar pathScalar = perlEnv.get(new RuntimeScalar("PATH"));
+String path = pathScalar.getDefinedBoolean() ? pathScalar.toString() : null;
+```
+
+**Also affects:** `ArgumentParser.java` line 258 (same `System.getenv("PATH")` for `-S` flag).
+
+---
+
+#### 7.2.7 `util-looks-like.t` — `B::SV` missing `SV` method (1 test, 1 subtest fails)
+
+**Symptom:** `Can't locate object method "SV" via package "B::SV"` at
+`Test2/Util/Stash.pm` line 117.
+
+**Root cause:** `Test2::Util::Stash::get_symbol()` calls `B::svref_2object(\*glob)->SV`.
+PerlOnJava's `B::svref_2object()` returns `B::SV` for GLOB refs (should return `B::GV`),
+and `B::SV` has no `SV` method.
+
+**Three things missing from `src/main/perl/lib/B.pm`:**
+
+1. **`svref_2object` doesn't detect GLOB refs** — should return `B::GV`:
+```perl
+# In svref_2object, add before the SCALAR check:
+if ($rtype eq 'GLOB') {
+    my $name = *{$ref}{NAME} // '';
+    my $pkg  = *{$ref}{PACKAGE} // 'main';
+    my $gv = B::GV->new($name, $pkg);
+    $gv->{ref} = $ref;  # store glob ref for SV access
+    return $gv;
+}
+```
+
+2. **`B::GV` needs `SV` method** — return scalar slot of glob:
+```perl
+package B::GV;
+sub SV {
+    my $self = shift;
+    my $glob = $self->{ref};
+    if (defined $glob) {
+        local $@;
+        my $sv_val = eval { ${*{$glob}} };
+        if (!$@ && defined $sv_val) {
+            return B::SV->new(\${*{$glob}});
+        }
+    }
+    return B::SPECIAL->new(0);  # 0 = index for 'Nullsv'
+}
+```
+
+3. **`B::SPECIAL` class needed** — must NOT inherit from `B::SV`:
+```perl
+package B::SPECIAL;
+sub new { my ($class, $index) = @_; bless \$index, $class }
+```
+
+---
+
+#### 7.2.8 `unit-files-are-the-same.t` — `<$var/*.t>` glob not interpolating (1 test, 0 subtests)
+
+**Symptom:** "No tests run!" — exit 255.
+
+**Root cause:** The test uses `<$RealBin/*.t>` to find test files. PerlOnJava's
+`StringParser.parseRawString` does not interpolate variables in `<>` glob patterns.
+
+**Parser flow for `<$RealBin/*.t>`:**
+1. `parseDiamondOperator` sees `<`, next token is `$`
+2. Parses `$RealBin` as a variable, checks if next is `>` — it's NOT (`/`)
+3. Falls through to `parseRawString("<")`
+4. `parseRawString` creates literal StringNodes — `$RealBin` is NOT interpolated
+5. `handleGlobBuiltin` gets literal string `"$RealBin/*.t"` → no files match → empty
+   `@test_files` → no loop iterations → "No tests run!"
+
+**Fix location:** `StringParser.java` around line 666, add a `case "<>":` that applies
+double-quote interpolation:
+```java
+case "<>":
+    return new OperatorNode(operator,
+        StringDoubleQuoted.parseDoubleQuotedString(
+            parser.ctx, rawStr, true, true, false,
+            parser.getHeredocNodes(), parser),
+        rawStr.index);
+```
+
+In Perl 5, `<$var/*.t>` is equivalent to `glob("$var/*.t")` — `$var` IS interpolated
+(double-quote semantics).
+
+---
+
+### Summary of fix priorities
+
+| Priority | Tests Fixed | Fix | Complexity |
+|----------|------------|-----|------------|
+| **1 (easy)** | `http-ua-detect-non-curl.t` | `FileSpec.path()` read from `%ENV` instead of `System.getenv` | One line |
+| **2 (easy)** | `unit-files-are-the-same.t` | Interpolate variables in `<>` glob patterns | Small parser change |
+| **3 (medium)** | `util-looks-like.t` | Add GLOB detection to `svref_2object`, `SV` method to `B::GV`, `B::SPECIAL` class | ~30 lines in B.pm |
+| **4 (medium)** | `command-info.t`, `12.destdir.t`, `12.sitecustomize.t`, `installation2.t`, `installation-perlbrew.t` | Fix Capture::Tiny + tied STDOUT interaction — `selectedHandle` tracking during `local(*STDOUT)` and stat unwrapping for `DupIOHandle` | Two-part fix in Stat.java + RuntimeGlob.java |
 
 ---
 
@@ -366,12 +602,10 @@ IOEvents ties it (via `test2_add_callback_post_load`), so TAP output bypasses th
   - **65/73 pass** (up from 57/73) — 8 tests fixed
   - Also fixed: TieHandle/TiedVariableBase cast error in RuntimeScalar.java
 
-### Next Steps
-1. **Phase 7.2 (MEDIUM):** Investigate `command-info.t` module info output (2 subtests)
-2. **Phase 7.2 (MEDIUM):** Investigate `installation-perlbrew.t` fish/zsh/PERLBREW_HOME (3 subtests)
-3. **Phase 7.2 (LOW):** Remaining 6 test files (file path ops, Test2::Mock, B::SV, etc.)
-
-### Open Questions
-- Why do `info Data::Dumper` and `info SOME_FAKE_MODULE` produce empty output while basic `info` works?
-- Why do fish/zsh shell configuration outputs fail while bash passes in installation-perlbrew.t?
-- Can we stub B::SV enough to satisfy Test2::Util::Stash, or is full B module support needed?
+### Next Steps (Phase 7.2 — see detailed analysis in section 7.2 above)
+1. **Priority 1 (easy):** Fix `FileSpec.path()` to read from Perl `%ENV` → fixes `http-ua-detect-non-curl.t`
+2. **Priority 2 (easy):** Fix `<$var/*.t>` glob interpolation in StringParser → fixes `unit-files-are-the-same.t`
+3. **Priority 3 (medium):** Add GLOB ref support to `B::svref_2object`, `B::GV::SV`, `B::SPECIAL` → fixes `util-looks-like.t`
+4. **Priority 4 (medium):** Fix Capture::Tiny + tied STDOUT interaction → fixes 5 remaining tests
+   - Part A: `Stat.java` — unwrap `DupIOHandle`/`BorrowedIOHandle` in stat
+   - Part B: `RuntimeGlob.java` — update `selectedHandle` in `dynamicRestoreState()`
