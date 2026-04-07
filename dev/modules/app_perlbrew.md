@@ -1,6 +1,6 @@
 # App::perlbrew CPAN Installation Plan
 
-## Status: Phase 6 complete — 57/73 tests pass (2026-04-07)
+## Status: Phase 7.1 complete — 65/73 tests pass (2026-04-07)
 
 ## Goal
 
@@ -32,7 +32,7 @@ App::perlbrew 1.02
 | File::Which | OK | OK | 14/18 (4 fail) | `catpath()` prototype bug *(fixed in Phase 2)* |
 | Test2::Plugin::IOEvents | OK | OK | FAIL | Test2::V0 import issue *(fixed in Phase 4)* |
 | local::lib | OK | OK | 26/32 pass, shell.t hangs | `-` stdin *(fixed in Phase 2)*, PATH in sub-shells |
-| App::perlbrew | OK | OK | **57/73 pass** | Tied STDOUT capture (9 tests), misc (7 tests) |
+| App::perlbrew | OK | OK | **65/73 pass** | Module info output (2), file path ops (2), misc (4) |
 
 ---
 
@@ -282,69 +282,48 @@ not `TiedVariableBase`. This caused `ClassCastException` crashes.
 
 ## Phase 7: Tied STDOUT and Remaining Fixes
 
-### 7.1 Fix `selectedHandle` for tied STDOUT
+### 7.1 Fix `selectedHandle` for tied STDOUT ✅ (COMPLETED 2026-04-07)
 
-**Priority: HIGH** — Root cause of 9/16 remaining failures (the single biggest blocker).
+**Result:** 57/73 → **65/73 tests pass** (8 tests fixed).
 
 **Problem:** When `Test2::Plugin::IOEvents` ties STDOUT, `print "hello"` (no explicit
-filehandle) still goes through `RuntimeIO.selectedHandle` which points to the original
-untied handle. The tie never intercepts the output, so all captured output is empty.
+filehandle) still went through `RuntimeIO.selectedHandle` which pointed to the original
+untied handle. The tie never intercepted the output, so all captured output was empty.
 
-**Complexity:** A previous fix that updated `selectedHandle` in `TieOperators.java` was
-reverted because `Test2::Plugin::IOEvents::Tie::PRINT` converts output to Test2 events
-(no real output). It relies on `stat(STDOUT)` inode changes to detect pipe redirects.
-PerlOnJava's `stat` on filehandles returns empty/meaningless values, so
-`_check_for_change()` never fires. This caused ALL print output to become events instead
-of going to the TAP harness, breaking every test.
+**Fix:** Updated `TieOperators.java` to maintain `selectedHandle` during tie/untie:
+- In `tie()` GLOBREFERENCE case: if the glob's previous IO was `selectedHandle`, update
+  `selectedHandle` to point to the new `TieHandle`
+- In `untie()` GLOBREFERENCE case: if the current `TieHandle` is `selectedHandle`, restore
+  `selectedHandle` to the previous (untied) value
 
-**Fix approach:** Two-part fix required:
-1. Update `selectedHandle` when tying/untying the currently-selected handle
-2. Implement meaningful `stat(STDOUT)` — at minimum, return a unique inode/dev so
-   `_check_for_change()` can detect when the FD changes (pipe redirect detection)
+**Why `stat(STDOUT)` fix was NOT needed:** Analysis showed that `stat(STDOUT)` returning
+empty list (undef inode) is actually safe — `_check_for_change()` compares
+`undef ne undef` → false → tie stays in place. The TAP formatter dups STDOUT before
+IOEvents ties it (via `test2_add_callback_post_load`), so TAP output bypasses the tie.
 
-**Tests affected:** `05.get_current_perl.t`, `command-available.t`, `command-compgen.t`,
-`command-env.t`, `command-info.t`, `command-lib.t`, `command-list.t`,
-`installation-perlbrew.t`, `list_modules.t`
+**Files changed:** `src/main/java/org/perlonjava/runtime/operators/TieOperators.java`
 
-### 7.2 FindBin `$0` handling in test contexts
+**Tests fixed:** `05.get_current_perl.t`, `command-available.t`, `command-compgen.t`,
+`command-env.t`, `command-lib.t`, `command-list.t`, `list_modules.t`, `20.patchperl.t`
 
-**Priority: LOW** — Many App::perlbrew tests fail with
-`Cannot find current script 'can_ok'`.
+### 7.2 Remaining failures (8/73)
 
-**Problem:** When tests are run via the harness, `$0` sometimes gets set to a test function
-name (`can_ok`) instead of a file path. FindBin.pm then dies because it can't find a file
-with that name.
-
-### 7.3 `blib/arch` directory creation
-
-**Priority: LOW** — Causes `CPAN::Perl::Releases` test failure (1/105).
-
-### 7.4 `isa` infix operator feature gate
-
-**Priority: LOW** — Affects `prop isa => 'Class'` pattern in Test2 tests.
-
-### 7.5 `B::SV` stub for Test2::Util::Stash
-
-**Priority: LOW** — Causes `util-looks-like.t` failure.
-
-`Test2::Util::Stash` uses `B::svref_2object($ref)->SV` to introspect scalar references.
-Options: stub `B::SV` to return a minimal object, or patch Test2::Util::Stash to skip
-when B is not available.
-
-### 7.6 File/path operation fixes
-
-**Priority: MEDIUM** — Causes 3 test failures (`12.destdir.t`, `12.sitecustomize.t`,
-`20.patchperl.t`).
-
-- `12.destdir.t`: sitecustomize.pl not written to DESTDIR during mock install
-- `12.sitecustomize.t`: `App::Perlbrew::Path->new()` receives undefined parameter
-- `20.patchperl.t`: 0/1 subtests ran (need investigation)
+| Test | Issue | Priority |
+|------|-------|----------|
+| `command-info.t` | Module info subtests (`info Data::Dumper`, `info SOME_FAKE_MODULE`) get empty output — first 2 subtests pass, module-specific ones fail | MEDIUM |
+| `installation-perlbrew.t` | 3/5 fail: fish/zsh/PERLBREW_HOME subtests get empty output — bash subtest passes | MEDIUM |
+| `12.destdir.t` | sitecustomize.pl not written during mock install | LOW |
+| `12.sitecustomize.t` | `App::Perlbrew::Path->new()` receives undefined parameter | LOW |
+| `installation2.t` | Test2::Mock `do_system` not working | LOW |
+| `http-ua-detect-non-curl.t` | Fake `curl` in PATH not picked up | LOW |
+| `util-looks-like.t` | `B::SV` class not implemented | LOW |
+| `unit-files-are-the-same.t` | No tests run (skipped) | LOW |
 
 ---
 
 ## Progress Tracking
 
-### Current Status: Phase 6 complete — 57/73 App::perlbrew tests pass
+### Current Status: Phase 7.1 complete — 65/73 App::perlbrew tests pass
 
 ### Completed Phases
 - [x] Phase 1: Foundation Fixes (2026-04-07)
@@ -381,13 +360,18 @@ when B is not available.
   - Interpreter fixes: hash assignment return values, hash warning messages,
     chop/chomp list args, hashassign.t 248→309/309
 
+- [x] Phase 7.1: selectedHandle fix for tied STDOUT (2026-04-07)
+  - Updated `TieOperators.java` tie/untie to maintain `RuntimeIO.selectedHandle`
+  - Analysis showed stat(STDOUT) fix was NOT needed (undef-equality is safe)
+  - **65/73 pass** (up from 57/73) — 8 tests fixed
+  - Also fixed: TieHandle/TiedVariableBase cast error in RuntimeScalar.java
+
 ### Next Steps
-1. **Phase 7.1 (HIGH):** Fix `selectedHandle` + `stat(STDOUT)` to unblock 9 tied STDOUT tests
-2. **Phase 7.6 (MEDIUM):** Investigate file/path operation failures (3 tests)
-3. **Phase 7.5 (LOW):** Stub `B::SV` for Test2::Util::Stash (1 test)
-4. **Phase 7.2-7.4 (LOW):** FindBin, blib/arch, isa feature gate
+1. **Phase 7.2 (MEDIUM):** Investigate `command-info.t` module info output (2 subtests)
+2. **Phase 7.2 (MEDIUM):** Investigate `installation-perlbrew.t` fish/zsh/PERLBREW_HOME (3 subtests)
+3. **Phase 7.2 (LOW):** Remaining 6 test files (file path ops, Test2::Mock, B::SV, etc.)
 
 ### Open Questions
-- Can `stat(filehandle)` return a synthetic inode based on the underlying FD number?
-- Is the `selectedHandle` approach correct, or should `print` always go through the glob's IO?
+- Why do `info Data::Dumper` and `info SOME_FAKE_MODULE` produce empty output while basic `info` works?
+- Why do fish/zsh shell configuration outputs fail while bash passes in installation-perlbrew.t?
 - Can we stub B::SV enough to satisfy Test2::Util::Stash, or is full B module support needed?
