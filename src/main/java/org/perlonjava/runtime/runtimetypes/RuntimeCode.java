@@ -2895,8 +2895,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
             if (targetException instanceof ForkOpenCompleteException forkEx) {
-                // Return the captured output as the subroutine's result
-                return new RuntimeList(new RuntimeScalar(forkEx.capturedOutput));
+                return forkOpenOutputToList(forkEx.capturedOutput, callContext);
             }
             if (targetException instanceof RuntimeException re) {
                 throw re;
@@ -2904,8 +2903,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new RuntimeException(targetException);
         } catch (ForkOpenCompleteException e) {
             // Handle fork-open completion (from exec in fork-open emulation)
-            // Return the captured output as the subroutine's result
-            return new RuntimeList(new RuntimeScalar(e.capturedOutput));
+            return forkOpenOutputToList(e.capturedOutput, callContext);
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {
@@ -2994,8 +2992,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
             if (targetException instanceof ForkOpenCompleteException forkEx) {
-                // Return the captured output as the subroutine's result
-                return new RuntimeList(new RuntimeScalar(forkEx.capturedOutput));
+                return forkOpenOutputToList(forkEx.capturedOutput, callContext);
             }
             if (targetException instanceof RuntimeException re) {
                 throw re;
@@ -3003,13 +3000,39 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             throw new RuntimeException(targetException);
         } catch (ForkOpenCompleteException e) {
             // Handle fork-open completion (from exec in fork-open emulation)
-            // Return the captured output as the subroutine's result
-            return new RuntimeList(new RuntimeScalar(e.capturedOutput));
+            return forkOpenOutputToList(e.capturedOutput, callContext);
         } catch (RuntimeException e) {
             throw e;
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Converts fork-open captured output to a RuntimeList.
+     * In list context, splits output into lines (like readline {@code <FH>}).
+     * In scalar context, returns the entire output as a single scalar.
+     */
+    private static RuntimeList forkOpenOutputToList(String capturedOutput, int callContext) {
+        if (callContext == RuntimeContextType.LIST && capturedOutput != null && !capturedOutput.isEmpty()) {
+            // Split into lines preserving newlines (like Perl's <FH> in list context)
+            RuntimeArray arr = new RuntimeArray();
+            int start = 0;
+            int len = capturedOutput.length();
+            while (start < len) {
+                int nlPos = capturedOutput.indexOf('\n', start);
+                if (nlPos >= 0) {
+                    arr.push(new RuntimeScalar(capturedOutput.substring(start, nlPos + 1)));
+                    start = nlPos + 1;
+                } else {
+                    // Last line without trailing newline
+                    arr.push(new RuntimeScalar(capturedOutput.substring(start)));
+                    break;
+                }
+            }
+            return new RuntimeList(arr);
+        }
+        return new RuntimeList(new RuntimeScalar(capturedOutput));
     }
 
     /**
