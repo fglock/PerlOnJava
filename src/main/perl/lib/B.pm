@@ -211,6 +211,26 @@ package B::GV {
         my $self = shift;
         return B::STASH->new($self->{package});
     }
+
+    sub SV {
+        my $self = shift;
+        my $glob = $self->{ref};
+        if (defined $glob) {
+            local $@;
+            my $sv_val = eval { ${*{$glob}} };
+            if (!$@ && defined $sv_val) {
+                return B::SV->new(\${*{$glob}});
+            }
+        }
+        return B::SPECIAL->new(0);  # 0 = index for 'Nullsv'
+    }
+}
+
+package B::SPECIAL {
+    sub new {
+        my ($class, $index) = @_;
+        return bless \$index, $class;
+    }
 }
 
 package B::STASH {
@@ -278,6 +298,14 @@ sub svref_2object {
     my $rtype = Scalar::Util::reftype($ref) // '';
     if ($rtype eq 'CODE') {
         return B::CV->new($ref);
+    }
+
+    if ($rtype eq 'GLOB') {
+        my $name = *{$ref}{NAME} // '';
+        my $pkg  = *{$ref}{PACKAGE} // 'main';
+        my $gv = B::GV->new($name, $pkg);
+        $gv->{ref} = $ref;  # store glob ref for SV method access
+        return $gv;
     }
 
     if ($type eq 'SCALAR') {

@@ -686,6 +686,15 @@ public class StringParser {
             case "tr":
             case "y":
                 return parseTransliteration(parser.ctx, rawStr);
+            case "<>": {
+                // In Perl, <$var/*.t> uses double-quote interpolation (like qq//)
+                // before passing to glob(). This ensures variables are interpolated.
+                Node interpolated = StringDoubleQuoted.parseDoubleQuotedString(
+                        parser.ctx, rawStr, true, true, false, parser.getHeredocNodes(), parser);
+                ListNode diamondList = new ListNode(rawStr.index);
+                diamondList.elements.add(interpolated);
+                return new OperatorNode("<>", diamondList, rawStr.index);
+            }
         }
 
         ListNode list = new ListNode(rawStr.index);

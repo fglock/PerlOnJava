@@ -94,7 +94,13 @@ public class TieOperators {
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
                 glob.IO.type = TIED_SCALAR;
-                glob.IO.value = new TieHandle(className, previousValue, self);
+                TieHandle tieHandle = new TieHandle(className, previousValue, self);
+                glob.IO.value = tieHandle;
+                // Update selectedHandle so that `print` without explicit filehandle
+                // goes through the tied handle (e.g., Test2::Plugin::IOEvents)
+                if (previousValue == RuntimeIO.selectedHandle) {
+                    RuntimeIO.selectedHandle = tieHandle;
+                }
             }
             default -> {
                 return scalarUndef;
@@ -156,11 +162,16 @@ public class TieOperators {
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeScalar IO = glob.IO;
                 if (IO.type == TIED_SCALAR) {
-                    TieHandle.tiedUntie((TieHandle) IO.value);
-                    TieHandle.tiedDestroy((TieHandle) IO.value);
-                    RuntimeIO previousValue = ((TieHandle) IO.value).getPreviousValue();
+                    TieHandle currentTieHandle = (TieHandle) IO.value;
+                    TieHandle.tiedUntie(currentTieHandle);
+                    TieHandle.tiedDestroy(currentTieHandle);
+                    RuntimeIO previousValue = currentTieHandle.getPreviousValue();
                     IO.type = 0;    // XXX there is no type defined for IO handles
                     IO.value = previousValue;
+                    // Restore selectedHandle if it pointed to the tied handle
+                    if (currentTieHandle == RuntimeIO.selectedHandle) {
+                        RuntimeIO.selectedHandle = previousValue;
+                    }
                 }
                 return scalarTrue;
             }

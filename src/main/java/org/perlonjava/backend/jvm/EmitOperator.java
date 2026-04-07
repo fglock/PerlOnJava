@@ -609,14 +609,20 @@ public class EmitOperator {
     // Handles the 'diamond' operator, which reads input from a file or standard input.
     static void handleDiamondBuiltin(EmitterVisitor emitterVisitor, OperatorNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        // Defensive: ensure operand is a ListNode with a StringNode element
-        String argument = "";
-        if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty() 
-                && listNode.elements.getFirst() instanceof StringNode stringNode) {
-            argument = stringNode.value;
+        // Determine whether this is readline (<> or <<>>) or glob (<*.t>, <$var/*.t>).
+        // After interpolation, glob patterns may produce non-StringNode operands
+        // (e.g., BinaryOperatorNode for concatenation like $var . "/*.t").
+        boolean isReadline = false;
+        if (node.operand instanceof ListNode listNode) {
+            if (listNode.elements.isEmpty()) {
+                isReadline = true;
+            } else if (listNode.elements.getFirst() instanceof StringNode stringNode) {
+                isReadline = stringNode.value.isEmpty() || stringNode.value.equals("<>");
+            }
+            // If element is not a StringNode, it's an interpolated glob pattern → NOT readline
         }
-        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit diamond " + argument);
-        if (argument.isEmpty() || argument.equals("<>")) {
+        if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit diamond isReadline=" + isReadline);
+        if (isReadline) {
             // Handle null filehandle:  <>  <<>>
             node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             emitterVisitor.pushCallContext();

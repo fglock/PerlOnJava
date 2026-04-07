@@ -209,7 +209,7 @@ public class PrototypeArgs {
 //                element.setAnnotation("context", "LIST");
 //            }
         } else {
-            parsePrototypeArguments(parser, args, prototype);
+            parsePrototypeArguments(parser, args, prototype, hasParentheses);
 
             // Check for too many arguments without parentheses only if prototype expects 2+ args
             if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
@@ -328,8 +328,9 @@ public class PrototypeArgs {
      * @param parser    The parser instance
      * @param args      The argument list to populate
      * @param prototype The prototype string to parse
+     * @param hasParentheses Whether the function was called with explicit parentheses
      */
-    private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype) {
+    private static void parsePrototypeArguments(Parser parser, ListNode args, String prototype, boolean hasParentheses) {
         boolean isOptional = false;
         boolean needComma = false;
         int skipCount = 0;  // Number of prototype characters to skip (for flattened my/our/state)
@@ -382,7 +383,7 @@ public class PrototypeArgs {
                     needComma = true;
                 }
                 case '\\' -> {
-                    i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma);
+                    i = handleBackslashArgument(parser, args, prototype, i + 1, isOptional, needComma, hasParentheses);
                     needComma = true;
                 }
                 case ',' -> {
@@ -747,7 +748,7 @@ public class PrototypeArgs {
     }
 
     private static int handleBackslashArgument(Parser parser, ListNode args, String prototype, int prototypeIndex,
-                                               boolean isOptional, boolean needComma) {
+                                               boolean isOptional, boolean needComma, boolean hasParentheses) {
         if (prototypeIndex >= prototype.length()) {
             parser.throwError("syntax error, incomplete backslash reference in prototype");
         }
@@ -762,7 +763,22 @@ public class PrototypeArgs {
             parser.parsingTakeReference = true;
         }
 
-        Node referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
+        // Parse the backslash-prototype argument.
+        // With parentheses: always parse at comma precedence (level 5).
+        // Without parentheses:
+        //   - Single-arg prototypes (e.g. \[$@%*], \$): parse at named-unary precedence
+        //     so operators like && and == are NOT consumed. Example:
+        //     tied *STDOUT && $cond  →  (tied *STDOUT) && $cond
+        //   - Multi-arg prototypes (e.g. \$$, \$;$): parse at comma precedence
+        //     so assignment and other operators ARE consumed. Example:
+        //     sreftest my $a = 'val', $i++  →  sreftest(\(my $a = 'val'), $i++)
+        Node referenceArg;
+        boolean useNamedUnary = !hasParentheses && countPrototypeArgs(prototype) <= 1;
+        if (useNamedUnary) {
+            referenceArg = parseBackslashArgWithComma(parser, isOptional, needComma, expectedType);
+        } else {
+            referenceArg = parseArgumentWithComma(parser, isOptional, needComma, expectedType);
+        }
 
         // Restore flag
         parser.parsingTakeReference = oldParsingTakeReference;
@@ -859,6 +875,50 @@ public class PrototypeArgs {
             throwNotEnoughArgumentsError(parser);
         }
         Node expr = parser.parseExpression(parser.getPrecedence(","));
+        if (expr == null) {
+            if (!isOptional) {
+                throwNotEnoughArgumentsError(parser);
+            }
+        }
+        return expr;
+    }
+
+    /**
+     * Parses a backslash-prototype argument at named-unary precedence.
+     *
+     * <p>Backslash prototypes like {@code \[$@%*]} expect a single variable term.
+     * In Perl, these parse at named-unary precedence (between "isa" and shift operators),
+     * so operators like {@code &&}, {@code ||}, {@code ==}, {@code <} are NOT consumed,
+     * but arithmetic operators like {@code +}, {@code *}, {@code >>} ARE consumed.</p>
+     *
+     * @param parser       The parser instance
+     * @param isOptional   Whether the argument is optional
+     * @param needComma    Whether a comma is required before the argument
+     * @param expectedType Description of the expected argument type for error messages
+     * @return The parsed argument node, or null if parsing failed and the argument was optional
+     */
+    private static Node parseBackslashArgWithComma(Parser parser, boolean isOptional, boolean needComma, String expectedType) {
+        if (isArgumentTerminator(parser)) {
+            if (!isOptional) {
+                throwNotEnoughArgumentsError(parser);
+            }
+            return null;
+        }
+
+        if (needComma && !consumeCommaIfPresent(parser, isOptional)) {
+            return null;
+        }
+
+        if (isArgumentTerminator(parser)) {
+            if (isOptional) {
+                return null;
+            }
+            throwNotEnoughArgumentsError(parser);
+        }
+
+        // Parse at named-unary precedence (level 15, same as "isa")
+        // This ensures that comparison and logical operators are NOT consumed as part of the argument
+        Node expr = parser.parseExpression(parser.getPrecedence("isa"));
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);

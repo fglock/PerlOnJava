@@ -1,6 +1,8 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.SystemUtils;
@@ -354,7 +356,11 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the directories in the PATH.
      */
     public static RuntimeList path(RuntimeArray args, int ctx) {
-        String path = System.getenv("PATH");
+        // Read PATH from Perl's %ENV (not Java's System.getenv) so that
+        // modifications to $ENV{PATH} in Perl code are respected.
+        RuntimeHash perlEnv = GlobalVariable.getGlobalHash("main::ENV");
+        RuntimeScalar pathScalar = perlEnv.get(new RuntimeScalar("PATH"));
+        String path = pathScalar.getDefinedBoolean() ? pathScalar.toString() : System.getenv("PATH");
         String[] paths = path != null ? path.split(File.pathSeparator) : new String[0];
         List<RuntimeScalar> pathList = new ArrayList<>();
         for (String p : paths) {
