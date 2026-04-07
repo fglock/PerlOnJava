@@ -826,19 +826,24 @@ public class CompileAssignment {
                         bytecodeCompiler.emit(nameIdx);
                     }
 
+                    // In scalar context, count RHS elements BEFORE hash assignment
+                    // (the assignment may modify the RHS if it's the same hash)
+                    int countReg = -1;
+                    if (outerContext == RuntimeContextType.SCALAR) {
+                        countReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LIST_TO_COUNT);
+                        bytecodeCompiler.emitReg(countReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    }
+
                     // Populate hash from list using setFromList
                     bytecodeCompiler.emit(Opcodes.HASH_SET_FROM_LIST);
                     bytecodeCompiler.emitReg(hashReg);
                     bytecodeCompiler.emitReg(valueReg);
 
-                    // In scalar context, return the hash size; in list context, return the hash
+                    // Return the pre-computed count or the hash
                     if (outerContext == RuntimeContextType.SCALAR) {
-                        // Convert hash to scalar (returns bucket info like "3/8")
-                        int sizeReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                        bytecodeCompiler.emitReg(sizeReg);
-                        bytecodeCompiler.emitReg(hashReg);
-                        bytecodeCompiler.lastResultReg = sizeReg;
+                        bytecodeCompiler.lastResultReg = countReg;
                     } else {
                         bytecodeCompiler.lastResultReg = hashReg;
                     }
@@ -1655,30 +1660,33 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(rhsListReg);
                 bytecodeCompiler.emitReg(rhsReg);
 
-                int countReg = -1;
-                if (outerContext == RuntimeContextType.SCALAR) {
-                    countReg = bytecodeCompiler.allocateRegister();
-                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
-                    bytecodeCompiler.emitReg(countReg);
-                    bytecodeCompiler.emitReg(rhsListReg);
-                }
-
                 // Compile LHS ListNode in LIST context - this produces a RuntimeList of lvalues
                 // This follows the JVM backend approach (EmitVariable.java line 837)
                 bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
                 int lhsListReg = bytecodeCompiler.lastResultReg;
 
                 // Call SET_FROM_LIST to assign RHS values to LHS lvalues
+                // setFromList() returns a RuntimeArray with scalarContextSize set to the
+                // original RHS element count, and elements containing the assigned values.
+                // Note: rhsListReg is consumed (elements cleared) by setFromList's addToArray.
                 int resultReg = bytecodeCompiler.allocateRegister();
                 bytecodeCompiler.emit(Opcodes.SET_FROM_LIST);
                 bytecodeCompiler.emitReg(resultReg);
                 bytecodeCompiler.emitReg(lhsListReg);
                 bytecodeCompiler.emitReg(rhsListReg);
 
-                if (countReg >= 0) {
+                if (outerContext == RuntimeContextType.SCALAR) {
+                    // In scalar context, return the RHS element count.
+                    // resultReg is a RuntimeArray with scalarContextSize set;
+                    // ARRAY_SIZE on it calls scalar() which returns scalarContextSize.
+                    int countReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                    bytecodeCompiler.emitReg(countReg);
+                    bytecodeCompiler.emitReg(resultReg);
                     bytecodeCompiler.lastResultReg = countReg;
                 } else {
-                    bytecodeCompiler.lastResultReg = rhsListReg;
+                    // In list context, return the assigned values (after hash dedup etc.)
+                    bytecodeCompiler.lastResultReg = resultReg;
                 }
 
             } else {

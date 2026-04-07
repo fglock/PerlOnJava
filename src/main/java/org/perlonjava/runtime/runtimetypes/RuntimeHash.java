@@ -143,12 +143,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
-     * Counts the number of elements in the hash.
+     * Counts the number of elements the hash contributes when flattened in list context.
+     * Each key-value pair contributes 2 elements.
      *
-     * @return The number of elements in the hash.
+     * @return The number of elements (2 * number of keys).
      */
     public int countElements() {
-        return size();
+        return size() * 2;
     }
 
     /**
