@@ -132,7 +132,18 @@ public class Encode extends PerlModuleBase {
         encode.defineExport("EXPORT_OK", "FB_CROAK", "FB_QUIET", "FB_WARN", "FB_PERLQQ",
                 "FB_HTMLCREF", "FB_XMLCREF", "PERLQQ", "HTMLCREF", "XMLCREF",
                 "DIE_ON_ERR", "WARN_ON_ERR", "RETURN_ON_ERR", "LEAVE_SRC",
-                "ONLY_PRAGMA_WARNINGS", "STOP_AT_PARTIAL");
+                "ONLY_PRAGMA_WARNINGS", "STOP_AT_PARTIAL",
+                "FB_DEFAULT", "encode", "decode", "encode_utf8", "decode_utf8",
+                "is_utf8", "find_encoding", "from_to", "_utf8_on", "_utf8_off",
+                "define_encoding", "encodings", "perlio_ok", "resolve_alias");
+        encode.defineExportTag("fallbacks",
+                "FB_DEFAULT", "FB_CROAK", "FB_QUIET", "FB_WARN",
+                "FB_PERLQQ", "FB_HTMLCREF", "FB_XMLCREF");
+        encode.defineExportTag("fallback_all",
+                "FB_DEFAULT", "FB_CROAK", "FB_QUIET", "FB_WARN",
+                "FB_PERLQQ", "FB_HTMLCREF", "FB_XMLCREF",
+                "LEAVE_SRC", "DIE_ON_ERR", "WARN_ON_ERR", "RETURN_ON_ERR",
+                "STOP_AT_PARTIAL", "ONLY_PRAGMA_WARNINGS");
         try {
             encode.registerMethod("encode", null);
             encode.registerMethod("decode", null);
@@ -144,6 +155,7 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("_utf8_on", null);
             encode.registerMethod("_utf8_off", null);
             // Register constants
+            encode.registerMethod("FB_DEFAULT", null);
             encode.registerMethod("FB_CROAK", null);
             encode.registerMethod("FB_QUIET", null);
             encode.registerMethod("FB_WARN", null);
@@ -159,6 +171,9 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("LEAVE_SRC", null);
             encode.registerMethod("ONLY_PRAGMA_WARNINGS", null);
             encode.registerMethod("STOP_AT_PARTIAL", null);
+            encode.registerMethod("define_encoding", null);
+            encode.registerMethod("encodings", null);
+            encode.registerMethod("resolve_alias", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -189,12 +204,17 @@ public class Encode extends PerlModuleBase {
     }
 
     // Encode constants (check bits)
+    private static final int FB_DEFAULT = 0;
     private static final int FB_QUIET = 1;
     private static final int FB_WARN = 2;
     private static final int FB_CROAK = 4;
     private static final int FB_PERLQQ_VAL = 256;  // PERLQQ
     private static final int FB_HTMLCREF_VAL = 512;
     private static final int FB_XMLCREF_VAL = 1024;
+
+    public static RuntimeList FB_DEFAULT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(FB_DEFAULT).getList();
+    }
 
     public static RuntimeList FB_CROAK(RuntimeArray args, int ctx) {
         return new RuntimeScalar(FB_CROAK).getList();
@@ -254,6 +274,52 @@ public class Encode extends PerlModuleBase {
 
     public static RuntimeList STOP_AT_PARTIAL(RuntimeArray args, int ctx) {
         return new RuntimeScalar(32).getList();
+    }
+
+    /**
+     * define_encoding($obj, $name, ...) - registers an encoding object.
+     * This is a no-op in PerlOnJava since encodings are handled natively in Java.
+     */
+    public static RuntimeList define_encoding(RuntimeArray args, int ctx) {
+        // Register the encoding object in %Encode::Encoding hash
+        if (args.size() >= 2) {
+            RuntimeScalar obj = args.get(0);
+            // Register under all provided names
+            RuntimeHash encodingHash = GlobalVariable.getGlobalHash("Encode::Encoding");
+            for (int i = 1; i < args.size(); i++) {
+                String name = args.get(i).toString();
+                encodingHash.put(name, obj);
+            }
+            return obj.getList();
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * encodings() - returns a list of available encoding names.
+     */
+    public static RuntimeList encodings(RuntimeArray args, int ctx) {
+        RuntimeList list = new RuntimeList();
+        list.add(new RuntimeScalar("ascii"));
+        list.add(new RuntimeScalar("utf8"));
+        list.add(new RuntimeScalar("utf-8"));
+        list.add(new RuntimeScalar("iso-8859-1"));
+        list.add(new RuntimeScalar("latin1"));
+        return list;
+    }
+
+    /**
+     * resolve_alias($name) - resolves an encoding alias to a canonical name.
+     */
+    public static RuntimeList resolve_alias(RuntimeArray args, int ctx) {
+        if (args.size() > 0) {
+            String name = args.get(0).toString();
+            Charset cs = getCharset(name);
+            if (cs != null) {
+                return new RuntimeScalar(cs.name()).getList();
+            }
+        }
+        return new RuntimeScalar().getList();  // undef if not found
     }
 
     /**

@@ -1048,12 +1048,8 @@ public class RegexPreprocessor {
                     offset++;
                 }
 
-                // Close the non-capturing group and skip past ')'
-                sb.append(")");
-                if (offset < length && s.charAt(offset) == ')') {
-                    offset++;
-                }
-                return offset;
+                // offset now points at ')' closing the (??{...}) construct
+                // Fall through to common ')' handling at end of handleParentheses
             } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
                 // handleConditionalPattern processes the entire conditional including its closing )

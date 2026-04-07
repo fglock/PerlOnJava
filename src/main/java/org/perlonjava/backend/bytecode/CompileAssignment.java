@@ -267,11 +267,15 @@ public class CompileAssignment {
                 bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
                 bc.emitReg(localReg);
                 bc.emit(nameIdx);
+                int idxReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(idxReg);
+                bc.emit(i);
                 int elemReg = bc.allocateRegister();
                 bc.emit(Opcodes.ARRAY_GET);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
-                bc.emitInt(i);
+                bc.emitReg(idxReg);
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(localReg);
                 bc.emitReg(elemReg);
