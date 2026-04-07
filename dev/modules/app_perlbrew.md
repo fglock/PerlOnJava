@@ -602,10 +602,22 @@ In Perl 5, `<$var/*.t>` is equivalent to `glob("$var/*.t")` — `$var` IS interp
   - **65/73 pass** (up from 57/73) — 8 tests fixed
   - Also fixed: TieHandle/TiedVariableBase cast error in RuntimeScalar.java
 
-### Next Steps (Phase 7.2 — see detailed analysis in section 7.2 above)
-1. **Priority 1 (easy):** Fix `FileSpec.path()` to read from Perl `%ENV` → fixes `http-ua-detect-non-curl.t`
-2. **Priority 2 (easy):** Fix `<$var/*.t>` glob interpolation in StringParser → fixes `unit-files-are-the-same.t`
-3. **Priority 3 (medium):** Add GLOB ref support to `B::svref_2object`, `B::GV::SV`, `B::SPECIAL` → fixes `util-looks-like.t`
-4. **Priority 4 (medium):** Fix Capture::Tiny + tied STDOUT interaction → fixes 5 remaining tests
-   - Part A: `Stat.java` — unwrap `DupIOHandle`/`BorrowedIOHandle` in stat
-   - Part B: `RuntimeGlob.java` — update `selectedHandle` in `dynamicRestoreState()`
+- [x] Phase 7.2: Fix 3 more test failures (2026-04-07)
+  - Priority 1: `FileSpec.path()` reads from Perl `%ENV` (+ `ArgumentParser.java` `-S` flag)
+  - Priority 2: Diamond operator `<$var/*.t>` interpolation (StringParser, EmitOperator, CompileOperator)
+  - Priority 3: `B::svref_2object` GLOB detection, `B::GV::SV`, `B::SPECIAL` class
+  - Priority 4A: `Stat.java`/`FileTestOperator.java` unwrap `DupIOHandle`/`BorrowedIOHandle`
+  - Priority 4B: `RuntimeGlob.dynamicSaveState/Restore` saves/restores `selectedHandle`
+  - **68/73 pass** (up from 65/73) — 3 tests fixed
+  - Commit: 803ba99e0
+
+### Next Steps (Phase 7.3 — 5 remaining failures)
+All 5 remaining failures share the same root cause: Capture::Tiny + Test2::Plugin::IOEvents
+tied STDOUT interaction. The `selectedHandle` stub fix handles `open(*STDOUT, ...)` correctly,
+but IOEvents' tie-based output capture needs the TieHandle to remain active for print statements.
+The interaction between `local(*STDOUT)`, the TieHandle, and `selectedHandle` needs deeper
+investigation — possibly requiring IOEvents to detect handle changes via a different mechanism
+than `stat(STDOUT)`, or a redesign of how `selectedHandle` interacts with tied handles.
+
+Remaining tests: `command-info.t`, `12.destdir.t`, `12.sitecustomize.t`, `installation2.t`,
+`installation-perlbrew.t`
