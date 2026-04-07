@@ -305,7 +305,7 @@ subtest 'IPC::Open3 single string command (shell interpretation)' => sub {
     my $pid = open3(my $in, my $out, undef, "echo hello && echo world");
     close($in);
     my @lines;
-    while (<$out>) { chomp; push @lines, $_; }
+    while (<$out>) { s/\s+$//; push @lines, $_; }
     close($out);
     waitpid($pid, 0);
     is(scalar(@lines), 2, "shell interpreted && correctly");
