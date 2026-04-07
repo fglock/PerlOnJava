@@ -161,12 +161,22 @@ public class BytecodeInterpreter {
                                 RuntimeList retList = retVal.getList();
                                 RuntimeCode.materializeSpecialVarsInResult(retList);
 
-                                if (code.isMapGrepBlock) {
-                                    // Non-local return from map/grep block:
-                                    // wrap in RETURN marker so it propagates to enclosing subroutine
-                                    return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
-                                }
                                 return retList;
+                            }
+
+                            case Opcodes.RETURN_NONLOCAL -> {
+                                // Non-local return from map/grep block (explicit 'return' statement):
+                                // wrap in RETURN marker so it propagates to enclosing subroutine
+                                int retReg = bytecode[pc++];
+                                RuntimeBase retVal = registers[retReg];
+
+                                if (retVal == null) {
+                                    retVal = new RuntimeList();
+                                }
+                                RuntimeList retList = retVal.getList();
+                                RuntimeCode.materializeSpecialVarsInResult(retList);
+
+                                return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
 
                             case Opcodes.GOTO -> {

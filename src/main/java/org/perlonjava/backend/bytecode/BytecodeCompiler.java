@@ -101,6 +101,8 @@ public class BytecodeCompiler implements Visitor {
     private boolean isEvalString;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
+    // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
+    boolean isInMapGrepBlock;
     // Nesting depth inside eval blocks (goto &sub from eval is prohibited)
     // 0 = not in eval block, >0 = inside eval block(s)
     int evalBlockDepth;
@@ -4951,6 +4953,12 @@ public class BytecodeCompiler implements Visitor {
             subCompiler.isInDeferBlock = true;
         }
 
+        // Check if this subroutine is a map/grep block - explicit return must use RETURN_NONLOCAL
+        Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
+        if (isMapGrepBlock != null && isMapGrepBlock) {
+            subCompiler.isInMapGrepBlock = true;
+        }
+
         // Subroutine bodies should use RUNTIME context so the calling context
         // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
         // Without this, the default LIST context is baked into all opcodes,
@@ -4964,9 +4972,9 @@ public class BytecodeCompiler implements Visitor {
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();
 
-        // Check if this subroutine is a map/grep block - return should propagate non-locally
-        Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
-        if (isMapGrepBlock != null && isMapGrepBlock) {
+        // Copy the isMapGrepBlock flag to the runtime code object so that
+        // ListOperators.map/grep and RuntimeCode.apply() can detect non-local returns
+        if (subCompiler.isInMapGrepBlock) {
             subCode.isMapGrepBlock = true;
         }
 

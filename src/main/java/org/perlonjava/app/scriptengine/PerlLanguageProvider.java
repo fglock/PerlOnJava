@@ -387,6 +387,11 @@ public class PerlLanguageProvider {
             // PerlExitException already ran END blocks and closed handles in WarnDie.exit()
             // Just re-throw for the caller to handle
             throw e;
+        } catch (PerlNonLocalReturnException e) {
+            // A non-local return escaped to the top level (e.g., return inside map/grep
+            // at the top level). In Perl 5, this produces "Can't return outside a subroutine".
+            // Consume the exception and treat the return value as the program result.
+            result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
         } catch (Throwable t) {
             if (isMainProgram) {
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);

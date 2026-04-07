@@ -918,16 +918,21 @@ public class CompileOperator {
             case "return" -> {
                 // Check if we're inside a defer block - return out of defer is prohibited
                 bytecodeCompiler.checkNotInDeferBlock(node.getIndex(), "return");
+                // In map/grep blocks, explicit return must use RETURN_NONLOCAL
+                // so it propagates as a non-local return to the enclosing subroutine.
+                // The regular RETURN opcode is used for implicit end-of-block returns.
+                short returnOpcode = bytecodeCompiler.isInMapGrepBlock
+                        ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 if (node.operand != null) {
                     node.operand.accept(bytecodeCompiler);
                     int exprReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
                     bytecodeCompiler.emitReg(exprReg);
                 } else {
                     int undefReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                     bytecodeCompiler.emitReg(undefReg);
-                    bytecodeCompiler.emitWithToken(Opcodes.RETURN, node.getIndex());
+                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
                     bytecodeCompiler.emitReg(undefReg);
                 }
                 bytecodeCompiler.lastResultReg = -1;
