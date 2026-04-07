@@ -124,3 +124,4 @@ PERL_PARAMS_UTIL_PP=1 ./jcpan -t Class::Load
 - [dbix_class.md](dbix_class.md) - DBIx::Class support
 - [log4perl-compatibility.md](log4perl-compatibility.md) - Log::Log4perl
 - [term_readkey.md](term_readkey.md) - Term::ReadKey
+- [xml_parser.md](xml_parser.md) - XML::Parser (Java XS via JDK SAX)
