@@ -1,9 +1,6 @@
 package org.perlonjava.runtime.operators;
 
-import org.perlonjava.runtime.io.ClosedIOHandle;
-import org.perlonjava.runtime.io.CustomFileChannel;
-import org.perlonjava.runtime.io.IOHandle;
-import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -276,8 +273,16 @@ public class FileTestOperator {
 
             // Try to get the file path from the handle for stat-based file tests
             IOHandle innerHandle = fh.ioHandle;
-            while (innerHandle instanceof LayeredIOHandle lh) {
-                innerHandle = lh.getDelegate();
+            while (true) {
+                if (innerHandle instanceof LayeredIOHandle lh) {
+                    innerHandle = lh.getDelegate();
+                } else if (innerHandle instanceof DupIOHandle dh) {
+                    innerHandle = dh.getDelegate();
+                } else if (innerHandle instanceof BorrowedIOHandle bh) {
+                    innerHandle = bh.getDelegate();
+                } else {
+                    break;
+                }
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
                 // Special handling for -T/-B on filehandles: check from current position

@@ -255,7 +255,10 @@ public class ArgumentParser {
                 String filePath = parsedArgs.fileName;
                 if (parsedArgs.usePathEnv && !filePath.contains("/") && !filePath.contains("\\")) {
                     // Search in PATH when -S is used and filename has no path separators
-                    String pathEnv = System.getenv("PATH");
+                    // Read from Perl's %ENV first, fall back to Java env
+                    RuntimeHash perlEnv = GlobalVariable.getGlobalHash("main::ENV");
+                    RuntimeScalar pathVal = perlEnv.get(new RuntimeScalar("PATH"));
+                    String pathEnv = pathVal.getDefinedBoolean() ? pathVal.toString() : System.getenv("PATH");
                     if (pathEnv != null) {
                         for (String path : pathEnv.split(File.pathSeparator)) {
                             File file = new File(path, filePath);

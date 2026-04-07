@@ -1290,13 +1290,19 @@ public class CompileOperator {
     }
 
     private static void visitDiamond(BytecodeCompiler bc, OperatorNode node) {
-        // Defensive: ensure operand is a ListNode with a StringNode element
-        String argument = "";
-        if (node.operand instanceof ListNode listNode && !listNode.elements.isEmpty() 
-                && listNode.elements.getFirst() instanceof StringNode stringNode) {
-            argument = stringNode.value;
+        // Determine whether this is readline (<> or <<>>) or glob (<*.t>, <$var/*.t>).
+        // After interpolation, glob patterns may produce non-StringNode operands
+        // (e.g., BinaryOperatorNode for concatenation like $var . "/*.t").
+        boolean isReadline = false;
+        if (node.operand instanceof ListNode listNode) {
+            if (listNode.elements.isEmpty()) {
+                isReadline = true;
+            } else if (listNode.elements.getFirst() instanceof StringNode stringNode) {
+                isReadline = stringNode.value.isEmpty() || stringNode.value.equals("<>");
+            }
+            // If element is not a StringNode, it's an interpolated glob pattern → NOT readline
         }
-        if (argument.isEmpty() || argument.equals("<>")) {
+        if (isReadline) {
             bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int fhReg = bc.lastResultReg;
             int rd = bc.allocateOutputRegister();
