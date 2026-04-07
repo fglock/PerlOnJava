@@ -206,6 +206,8 @@ $os_name =~ s/\s+/_/g;
     exe_ext => $os_name =~ /win/ ? '.exe' : '',
     _exe => $os_name =~ /win/ ? '.exe' : '',
     perlpath => $^X,  # Path to the perl interpreter (jperl)
+    startperl => '#!' . $^X,  # Shebang line for Perl scripts
+    sharpbang => '#!',  # Shebang prefix
 
     # Version info
     version => '5.42.0',
