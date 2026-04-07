@@ -1749,10 +1749,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (frame >= 0 && frame < stackTraceSize) {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
-                res.add(new RuntimeScalar(stackTrace.get(frame).getFirst()));
+                String pkg = stackTrace.get(frame).getFirst();
+                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));
             } else {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
-                res.add(new RuntimeScalar(frameInfo.get(0)));  // package
+                String pkg = frameInfo.get(0);
+                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
 
@@ -1765,8 +1767,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (frame == 1 && currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
                     RuntimeCode code = (RuntimeCode) currentSub.value;
                     if (code.subName != null && !code.subName.isEmpty()) {
-                        String pkg = code.packageName != null ? code.packageName : "main";
-                        subName = pkg + "::" + code.subName;
+                        String codePkg = code.packageName != null ? code.packageName : "main";
+                        subName = codePkg + "::" + code.subName;
                     }
                 }
                 
@@ -1782,8 +1784,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // For anonymous code blocks (closures, callbacks), use __ANON__.
                 if (subName == null || subName.isEmpty()) {
                     if (frame > 0 && frame - 1 < stackTraceSize) {
-                        String pkg = stackTrace.get(frame - 1).getFirst();
-                        subName = (pkg != null && !pkg.isEmpty() ? pkg : "main") + "::__ANON__";
+                        String prevPkg = stackTrace.get(frame - 1).getFirst();
+                        subName = (prevPkg != null && !prevPkg.isEmpty() ? prevPkg : "main") + "::__ANON__";
                     }
                 }
 

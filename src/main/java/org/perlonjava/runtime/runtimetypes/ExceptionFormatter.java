@@ -122,7 +122,8 @@ public class ExceptionFormatter {
                 if (callerInfo != null) {
                     if (!stackTrace.isEmpty()) {
                         var lastEntry = stackTrace.getLast();
-                        lastEntry.set(0, callerInfo.packageName());
+                        String runSpecialPkg = callerInfo.packageName();
+                        lastEntry.set(0, runSpecialPkg != null ? runSpecialPkg : "main");
                         if (callerInfo.filename() != null) {
                             lastEntry.set(1, callerInfo.filename());
                         }

@@ -154,7 +154,12 @@ public class ListUtil extends PerlModuleBase {
                 accumulator = result.getFirst();
             }
 
-            return accumulator.getList();
+            // Clone to prevent the finally block from corrupting the result.
+            // If the code block returns $a or $b directly, accumulator may alias
+            // the same RuntimeScalar object as varA/varB. The finally block then
+            // restores varA/varB to their saved values, which would overwrite
+            // accumulator's value.
+            return accumulator.clone().getList();
         } finally {
             varA.set(saveA);
             varB.set(saveB);
