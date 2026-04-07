@@ -12,7 +12,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Lexical warnings with `use warnings` and FATAL support
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`/`goto $EXPR`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-- Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`.
+- Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`, `XML::Parser`.
 - Add operators: `flock`, `syscall`, `fcntl`, `ioctl`. 
 - Add `\&CORE::X` subroutine references: built-in functions can be used as first-class code refs (e.g., `\&CORE::push`, `\&CORE::length`) with correct prototypes and glob aliasing.
 - Support for forking patterns with `exec`:
