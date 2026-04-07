@@ -20,4 +20,6 @@ shift
 goto parse_args
 
 :run
+rem Set default per-test timeout (300s) to kill hanging tests
+if not defined JPERL_TEST_TIMEOUT set "JPERL_TEST_TIMEOUT=300"
 "%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_ARGS%

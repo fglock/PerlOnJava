@@ -91,12 +91,18 @@ Get the exit status for this iterator's process.
 }
 
 sub _use_open3 {
-    return unless $Config{d_fork} || IS_WIN32;
     for my $module (qw( IPC::Open3 IO::Select )) {
         eval "use $module";
         return if $@;
     }
-    return 1;
+    # open3 works on fork platforms, Win32, and JVM (via ProcessBuilder)
+    return 1 if $Config{d_fork} || IS_WIN32;
+    # On other platforms (e.g., PerlOnJava), probe whether open3 actually works
+    eval {
+        my $pid = IPC::Open3::open3(my $wtr, my $rdr, my $err, $^X, '-e', '1');
+        waitpid($pid, 0);
+    };
+    return $@ ? undef : 1;
 }
 
 {
@@ -247,11 +253,29 @@ sub _next {
             my @buf        = ();
             my $partial    = '';                    # Partial line
             my $chunk_size = $self->{chunk_size};
+            my $_test_timeout = $ENV{JPERL_TEST_TIMEOUT} || 0;
             return sub {
                 return shift @buf if @buf;
+                my $_deadline = $_test_timeout ? time() + $_test_timeout : 0;
 
                 READ:
-                while ( my @ready = $sel->can_read ) {
+                while (1) {
+                    last unless $sel->count;
+                    my @ready = $_test_timeout
+                        ? $sel->can_read(10) : $sel->can_read;
+                    unless (@ready) {
+                        next if $!{EINTR};
+                        if ($_test_timeout && time() > $_deadline) {
+                            warn "# Test timed out after ${_test_timeout}s\n";
+                            kill 9, $self->{pid}
+                                if defined $self->{pid};
+                            last;
+                        }
+                        next if $_test_timeout;
+                        last;
+                    }
+                    $_deadline = time() + $_test_timeout if $_test_timeout;
+
                     for my $fh (@ready) {
                         my $got = sysread $fh, my ($chunk), $chunk_size;
                         $got = 0 if !defined $got || $got eq '';

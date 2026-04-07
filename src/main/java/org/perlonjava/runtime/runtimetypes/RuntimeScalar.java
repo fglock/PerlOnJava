@@ -1759,9 +1759,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /**
      * Close any IO handle associated with a GLOBREFERENCE value being dropped.
      * <p>
-     * In Perl 5, IO handles are closed by the interpreter's sv_clear/gp_free when
-     * the glob's reference count reaches zero. Since jperl doesn't implement
-     * reference counting or DESTROY, we close IO handles eagerly in specific cases.
+     * This is called ONLY from explicit user actions ({@code undef $fh} and
+     * {@code $fh = undef}), NOT from automatic scope-exit cleanup. For automatic
+     * cleanup of abandoned handles, see {@link RuntimeIO#registerGlobForFdRecycling}
+     * which uses PhantomReference-based GC tracking.
      * <p>
      * <b>Where this is called:</b>
      * <ul>
@@ -1771,26 +1772,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * <p>
      * <b>Where this is NOT called (by design):</b>
      * <ul>
-     *   <li>{@code setLarge(value)} for non-null values — removed because variable
-     *       reassignment (e.g. {@code $h = IO::Handle->new()}) cannot safely close
-     *       the old IO when other variables may still reference the same glob.
-     *       See the detailed comment in setLarge() for the Capture::Tiny failure
-     *       that motivated this change.</li>
-     *   <li>{@code set(int/long/double/String)} — these primitive-type setters
-     *       never called closeIOOnDrop (pre-existing behavior).</li>
+     *   <li>{@code setLarge(value)} for non-null values — variable reassignment
+     *       cannot safely close the old IO when other variables may reference
+     *       the same glob (see the Capture::Tiny comment in setLarge())</li>
+     *   <li>Scope exit — removed because without reference counting there is
+     *       no way to know if the glob is shared. See {@code scopeExitCleanup()}
+     *       javadoc for the full explanation.</li>
      * </ul>
      * <p>
      * <b>Safety heuristic:</b> We only close IO for globs that are NOT currently
      * in any stash (symbol table). Named globs still in the stash (like *MYFILE)
      * may have other references (including detached copies created by
-     * {@code \*MYFILE}) and should not be closed. Globs that have been removed
-     * from the stash (e.g., by gensym's delete) or that were never in a stash
-     * are candidates for closing — but even this is only safe from undefine()
-     * where the caller is explicitly requesting cleanup.
-     * <p>
-     * <b>Known limitation:</b> Without reference counting, anonymous file handles
-     * that are overwritten (not explicitly closed or undef'd) will leak their
-     * underlying IO until JVM garbage collection or program exit.
+     * {@code \*MYFILE}) and should not be closed.
      */
     private void closeIOOnDrop() {
         if (type == GLOBREFERENCE && value instanceof RuntimeGlob glob) {
@@ -1810,34 +1803,44 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
-     * Called by JVM bytecode at scope exit to deterministically close IO handles
-     * on anonymous lexical filehandles ({@code open(my $fh, ...)}).
+     * Called from JVM bytecode at scope exit to eagerly free fd numbers
+     * for anonymous lexical filehandles ({@code open(my $fh, ...)}).
      * <p>
-     * This is the JVM-backend equivalent of Perl 5's DESTROY: when a {@code my $fh}
-     * goes out of scope, its IO handle should be closed and its fd recycled.
-     * Since the JVM's tracing GC is non-deterministic, we call this explicitly
-     * from the emitted scope-exit bytecode to ensure timely fd recycling.
+     * This only <b>unregisters the fileno</b> (returning the fd number to the
+     * recycle pool) — it does NOT close the underlying IO stream. This is safe
+     * for shared handles: if another variable references the same RuntimeGlob,
+     * the IO stream stays open and functional. If the other reference calls
+     * {@code fileno()}, a new fd number is assigned via {@code assignFileno()}.
      * <p>
-     * Only closes IO on anonymous globs (globName == null) — named globs like
-     * {@code *STDOUT} or gensym'd handles may be referenced by other variables
-     * (e.g., in Capture::Tiny's save/restore pattern).
+     * The actual IO close is still handled by PhantomReference-based GC in
+     * {@link RuntimeIO#processAbandonedGlobs()}, which only fires when the
+     * RuntimeGlob is truly unreachable (no variables reference it).
+     * <p>
+     * <b>Why we don't close IO here:</b> Without reference counting, there is
+     * no way to know if other variables still reference the same RuntimeGlob.
+     * Closing IO at scope exit broke Test2::Formatter::TAP and Capture::Tiny
+     * (see git history). Unregistering the fd is safe because:
+     * <ul>
+     *   <li>The IO stream stays open for reading/writing</li>
+     *   <li>Other references can still use the handle normally</li>
+     *   <li>{@code fileno()} on other references will assign a fresh fd</li>
+     * </ul>
      *
-     * @param scalar the RuntimeScalar being cleaned up (may be null if slot was already nulled)
+     * @param scalar the RuntimeScalar being cleaned up (may be null)
+     * @see RuntimeIO#registerGlobForFdRecycling
+     * @see RuntimeIO#processAbandonedGlobs()
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
+        if (scalar != null && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
-            // Decrement the holder count. Only close IO when no more holders exist.
-            // This prevents closing IO that is still referenced by variables in outer scopes
-            // (e.g., `my $io = $fh` inside a for loop where $fh is from an outer scope).
-            glob.ioHolderCount--;
-            if (glob.ioHolderCount <= 0) {
-                RuntimeScalar ioSlot = glob.getIO();
-                if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
-                        && !(io.ioHandle instanceof ClosedIOHandle)) {
-                    io.close();
-                }
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                // Only unregister the fd number — do NOT close the IO stream.
+                // This frees the fd for reuse while keeping the IO functional
+                // for any other variables that reference the same glob.
+                io.unregisterFileno();
             }
         }
     }

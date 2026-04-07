@@ -8,12 +8,16 @@ import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class XSLoader extends PerlModuleBase {
+
+    /** Guard against recursive loadJarShimOverrides calls (e.g. Clone.pm evals XSLoader::load). */
+    private static final Set<String> shimLoadingInProgress = new HashSet<>();
 
     /**
      * Non-functional base classes that should be ignored when checking @ISA
@@ -228,6 +232,11 @@ public class XSLoader extends PerlModuleBase {
      * @param moduleName The fully qualified Perl module name (e.g., "Template::Stash::XS")
      */
     private static void loadJarShimOverrides(String moduleName) {
+        // Guard against recursion: the shim code may call XSLoader::load() again
+        // for the same module (e.g. Clone.pm's eval { XSLoader::load('Clone') })
+        if (!shimLoadingInProgress.add(moduleName)) {
+            return; // Already loading this module's shim — break the cycle
+        }
         try {
             // Convert module name to file path: Template::Stash::XS -> Template/Stash/XS.pm
             String filePath = moduleName.replace("::", "/") + ".pm";
@@ -251,6 +260,8 @@ public class XSLoader extends PerlModuleBase {
             EvalStringHandler.evalString(code, new RuntimeBase[0], jarPath, 1);
         } catch (Exception e) {
             // Silently ignore - the module works via inheritance anyway
+        } finally {
+            shimLoadingInProgress.remove(moduleName);
         }
     }
 }

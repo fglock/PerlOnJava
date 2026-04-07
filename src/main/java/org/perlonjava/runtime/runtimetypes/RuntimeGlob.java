@@ -125,18 +125,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * This ensures that all copies of the same glob (including detached copies)
      * have the same hash code, which is necessary for correct stringification
      * and equality comparisons in Perl code like `$_[0] eq \*FOO`.
+     * Anonymous globs (null name) use identity hash for uniqueness.
      *
-     * @return Hash code based on the glob name
+     * @return Hash code based on the glob name, or identity hash for anonymous globs
      */
     @Override
     public int hashCode() {
-        return globName != null ? globName.hashCode() : 0;
+        return globName != null ? globName.hashCode() : System.identityHashCode(this);
     }
 
     /**
      * Checks equality based on glob name.
      * Two RuntimeGlob objects are equal if they have the same globName.
      * This ensures that detached copies compare equal to the original glob.
+     * Anonymous globs (null name) use identity equality only.
      *
      * @param obj The object to compare
      * @return true if both are RuntimeGlob with the same globName
@@ -145,7 +147,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (!(obj instanceof RuntimeGlob other)) return false;
-        return globName != null ? globName.equals(other.globName) : other.globName == null;
+        return globName != null && globName.equals(other.globName);
     }
 
     public static boolean isGlobAssigned(String globName) {

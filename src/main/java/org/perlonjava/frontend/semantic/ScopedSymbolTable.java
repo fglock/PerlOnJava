@@ -234,13 +234,13 @@ public class ScopedSymbolTable {
     }
 
     /**
-     * Returns the JVM local variable slot indices for {@code my} SCALAR variables
-     * (those starting with {@code $}) declared in the scopes being exited.
-     * Used to emit deterministic IO cleanup calls at scope exit — only scalar
-     * variables can hold GLOBREFERENCE values with anonymous file handles.
+     * Returns the JVM local slot indices for scalar ({@code $}) {@code my}
+     * variables declared in or after the given scope. Used by
+     * {@link org.perlonjava.backend.jvm.EmitStatement#emitScopeExitNullStores}
+     * to call {@link RuntimeScalar#scopeExitCleanup} for eager fd recycling.
      *
      * @param scopeIndex The scope boundary (inclusive lower bound)
-     * @return list of scalar variable slot indices for IO cleanup
+     * @return list of scalar variable slot indices
      */
     public java.util.List<Integer> getMyScalarIndicesInScope(int scopeIndex) {
         java.util.List<Integer> indices = new java.util.ArrayList<>();

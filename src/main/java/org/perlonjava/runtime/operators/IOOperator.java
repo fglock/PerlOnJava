@@ -290,14 +290,17 @@ public class IOOperator {
                 }
             }
 
-            // Modify the original scalars in place
-            if (rbits.getDefinedBoolean()) {
+            // Modify the original scalars in place.
+            // Only set back if the input had actual content (length > 0).
+            // Empty string '' means "don't monitor" — no modification needed,
+            // and attempting to set a read-only string literal would throw.
+            if (rdata.length > 0) {
                 rbits.set(new String(rresult, StandardCharsets.ISO_8859_1));
             }
-            if (wbits.getDefinedBoolean()) {
+            if (wdata.length > 0) {
                 wbits.set(new String(wresult, StandardCharsets.ISO_8859_1));
             }
-            if (ebits.getDefinedBoolean()) {
+            if (edata.length > 0) {
                 ebits.set(new String(eresult, StandardCharsets.ISO_8859_1));
             }
 
