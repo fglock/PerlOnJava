@@ -746,9 +746,26 @@ public class EmitterMethodCreator implements Opcodes {
                         false);
                 mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, return normally
 
-                // Marked with non-TAILCALL marker (LAST/NEXT/REDO/GOTO)
+                // Marked with non-TAILCALL marker (LAST/NEXT/REDO/GOTO/RETURN)
                 if (useTryCatch) {
-                    // For eval BLOCK, any marked non-TAILCALL result is an eval failure.
+                    // For eval BLOCK: RETURN markers should propagate (not error),
+                    // because 'return' inside map/grep inside eval should exit the enclosing sub.
+                    mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                            "getControlFlowType",
+                            "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
+                            false);
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                            "org/perlonjava/runtime/runtimetypes/ControlFlowType",
+                            "ordinal",
+                            "()I",
+                            false);
+                    mv.visitLdcInsn(5);  // RETURN.ordinal() = 5
+                    mv.visitJumpInsn(Opcodes.IF_ICMPEQ, normalReturn);  // RETURN → propagate
+
+                    // For non-RETURN markers (LAST/NEXT/REDO/GOTO), treat as eval failure.
                     mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
                     mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
                     int msgSlot = ctx.symbolTable.allocateLocalVariable();
@@ -836,6 +853,16 @@ public class EmitterMethodCreator implements Opcodes {
 
                 // Start of the catch block
                 mv.visitLabel(catchBlock);
+
+                // Re-throw PerlNonLocalReturnException - eval BLOCK must not catch non-local returns
+                // from map/grep blocks. The Throwable is on the stack.
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitTypeInsn(Opcodes.INSTANCEOF,
+                        "org/perlonjava/runtime/runtimetypes/PerlNonLocalReturnException");
+                Label notNonLocalReturn = new Label();
+                mv.visitJumpInsn(Opcodes.IFEQ, notNonLocalReturn);
+                mv.visitInsn(Opcodes.ATHROW);  // Re-throw PerlNonLocalReturnException
+                mv.visitLabel(notNonLocalReturn);
 
                 // Track eval depth for $^S: RuntimeCode.evalDepth--
                 // Note: Throwable is on the stack but GETSTATIC/PUTSTATIC don't affect it

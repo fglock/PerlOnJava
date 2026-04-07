@@ -92,6 +92,8 @@ public class ControlFlowMarker {
         if (type == ControlFlowType.TAILCALL) {
             // Tail call should have been handled by trampoline at returnLabel
             return "Tail call escaped to top level (internal error)" + location;
+        } else if (type == ControlFlowType.RETURN) {
+            return "Can't return outside a subroutine" + location;
         } else if (type == ControlFlowType.GOTO) {
             if (label != null) {
                 return "Can't find label " + label + location;

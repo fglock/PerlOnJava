@@ -4964,6 +4964,12 @@ public class BytecodeCompiler implements Visitor {
         subCode.attributes = node.attributes;
         subCode.packageName = getCurrentPackage();
 
+        // Check if this subroutine is a map/grep block - return should propagate non-locally
+        Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
+        if (isMapGrepBlock != null && isMapGrepBlock) {
+            subCode.isMapGrepBlock = true;
+        }
+
         if (RuntimeCode.DISASSEMBLE) {
             System.out.println(Disassemble.disassemble(subCode));
         }

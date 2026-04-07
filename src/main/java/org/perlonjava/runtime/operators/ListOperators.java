@@ -41,6 +41,12 @@ public class ListOperators {
                 // Apply the Perl map subroutine with the outer @_ as arguments
                 RuntimeList result = RuntimeCode.apply(perlMapClosure, mapArgs, RuntimeContextType.LIST);
 
+                // Check for non-local return from map block
+                if (result instanceof RuntimeControlFlowList cfList
+                        && cfList.getControlFlowType() == ControlFlowType.RETURN) {
+                    throw new PerlNonLocalReturnException(cfList.getReturnValue());
+                }
+
                 // `result` list contains aliases to the original array;
                 // We need to make copies of the result elements
                 RuntimeArray arr = new RuntimeArray();
@@ -141,6 +147,7 @@ public class ListOperators {
                         case LAST -> "last";
                         case NEXT -> "next";
                         case REDO -> "redo";
+                        case RETURN -> "return";
                     };
                     throw new PerlCompilerException("Can't \"" + keyword + "\" out of a pseudo block");
                 }
@@ -196,12 +203,20 @@ public class ListOperators {
                     // Apply the Perl filter subroutine with the outer @_ as arguments
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
+                    // Check for non-local return from grep block
+                    if (result instanceof RuntimeControlFlowList cfList
+                            && cfList.getControlFlowType() == ControlFlowType.RETURN) {
+                        throw new PerlNonLocalReturnException(cfList.getReturnValue());
+                    }
+
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
                         // If the result is non-zero, add the element to the filtered list
                         // We need to clone, otherwise we would be adding an alias to the original element
                         filteredElements.add(element.clone());
                     }
+                } catch (PerlNonLocalReturnException e) {
+                    throw e;  // Don't wrap non-local returns
                 } catch (Exception e) {
                     // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
                     throw new RuntimeException(e);
@@ -259,10 +274,18 @@ public class ListOperators {
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
+                    // Check for non-local return from all block
+                    if (result instanceof RuntimeControlFlowList cfList
+                            && cfList.getControlFlowType() == ControlFlowType.RETURN) {
+                        throw new PerlNonLocalReturnException(cfList.getReturnValue());
+                    }
+
                     // Check the result of the filter subroutine
                     if (!result.getFirst().getBoolean()) {
                         return scalarFalse.getList();
                     }
+                } catch (PerlNonLocalReturnException e) {
+                    throw e;  // Don't wrap non-local returns
                 } catch (Exception e) {
                     // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
                     throw new RuntimeException(e);
@@ -309,10 +332,18 @@ public class ListOperators {
                     // Apply the Perl filter subroutine with the argument
                     RuntimeList result = RuntimeCode.apply(perlFilterClosure, filterArgs, RuntimeContextType.SCALAR);
 
+                    // Check for non-local return from any block
+                    if (result instanceof RuntimeControlFlowList cfList
+                            && cfList.getControlFlowType() == ControlFlowType.RETURN) {
+                        throw new PerlNonLocalReturnException(cfList.getReturnValue());
+                    }
+
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
                         return scalarTrue.getList();
                     }
+                } catch (PerlNonLocalReturnException e) {
+                    throw e;  // Don't wrap non-local returns
                 } catch (Exception e) {
                     // Wrap any exceptions thrown by the filter subroutine in a RuntimeException
                     throw new RuntimeException(e);

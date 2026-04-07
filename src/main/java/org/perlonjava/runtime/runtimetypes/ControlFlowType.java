@@ -28,6 +28,11 @@ public enum ControlFlowType {
     /**
      * Tail call optimization for goto &NAME
      */
-    TAILCALL
+    TAILCALL,
+
+    /**
+     * Non-local return from map/grep block to enclosing subroutine
+     */
+    RETURN
 }
 

@@ -15,6 +15,12 @@ public class RuntimeControlFlowList extends RuntimeList {
     public final ControlFlowMarker marker;
 
     /**
+     * The return value for RETURN type (non-local return from map/grep block).
+     * Null for all other control flow types.
+     */
+    public final RuntimeBase returnValue;
+
+    /**
      * Constructor for control flow (last/next/redo/goto).
      *
      * @param type       The control flow type
@@ -25,6 +31,7 @@ public class RuntimeControlFlowList extends RuntimeList {
     public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber) {
         super();
         this.marker = new ControlFlowMarker(type, label, fileName, lineNumber);
+        this.returnValue = null;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0a] RuntimeControlFlowList constructor (type,label): type=" + type +
                     ", label=" + label + " @ " + fileName + ":" + lineNumber);
@@ -76,12 +83,36 @@ public class RuntimeControlFlowList extends RuntimeList {
             throw new PerlCompilerException("Can't goto subroutine from an " + evalScope);
         }
         this.marker = new ControlFlowMarker(codeRef, args, fileName, lineNumber);
+        this.returnValue = null;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0b] RuntimeControlFlowList constructor (codeRef,args): codeRef=" + codeRef +
                     ", args.size=" + (args != null ? args.size() : "null") +
                     " @ " + fileName + ":" + lineNumber +
                     " marker.type=" + marker.type);
         }
+    }
+
+    /**
+     * Constructor for non-local return from map/grep block.
+     * The return value is carried so it can be used as the enclosing subroutine's return value.
+     *
+     * @param returnValue The value being returned
+     * @param fileName    Source file name (for error messages)
+     * @param lineNumber  Line number (for error messages)
+     */
+    public RuntimeControlFlowList(RuntimeBase returnValue, String fileName, int lineNumber) {
+        super();
+        this.marker = new ControlFlowMarker(ControlFlowType.RETURN, null, fileName, lineNumber);
+        this.returnValue = returnValue;
+    }
+
+    /**
+     * Get the return value (for RETURN type only).
+     *
+     * @return The return value, or null if not a RETURN type
+     */
+    public RuntimeBase getReturnValue() {
+        return returnValue;
     }
 
     /**

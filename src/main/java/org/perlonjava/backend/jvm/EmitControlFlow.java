@@ -211,6 +211,36 @@ public class EmitControlFlow {
                     false);
         }
 
+        if (ctx.javaClassInfo.isMapGrepBlock) {
+            // Non-local return from map/grep block: wrap the return value in a
+            // RuntimeControlFlowList(RETURN) marker so it propagates to the enclosing subroutine.
+            // Stack: [returnValue : RuntimeBase]
+            int tempSlot = ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooled = tempSlot >= 0;
+            if (!pooled) {
+                tempSlot = ctx.symbolTable.allocateLocalVariable();
+            }
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, tempSlot);
+
+            ctx.mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, tempSlot);
+            // Push fileName
+            ctx.mv.visitLdcInsn(ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)");
+            // Push lineNumber
+            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            ctx.mv.visitLdcInsn(lineNumber);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "<init>",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Ljava/lang/String;I)V",
+                    false);
+
+            if (pooled) {
+                ctx.javaClassInfo.releaseSpillSlot();
+            }
+        }
+
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }
