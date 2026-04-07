@@ -237,6 +237,14 @@ public abstract class StringSegmentParser {
                 }
             }
 
+            // After ${...}, parse subscript access like ${$ref}{key} or ${$ref}[0]
+            // This matches Perl 5 where "${$hashref}{key}" = $hashref->{key}
+            try {
+                operand = parseArrayHashAccess(parser, operand, isRegex);
+            } catch (Exception e) {
+                // If array/hash access parsing fails, use operand as-is
+            }
+
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("str operand " + operand);
         } else {
             // Parse simple variables using shared logic, but keep the exact same flow

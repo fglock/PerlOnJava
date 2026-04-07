@@ -502,7 +502,7 @@ sub parse {
         my $delim = $self->{Stream_Delimiter};
         my $prev_rs;
         my $ioclass = ref $ioref;
-        $ioclass = 'IO::Handle' if !length $ioclass;
+        $ioclass = 'IO::Handle' if !length $ioclass || $ioclass eq 'GLOB';
 
         $prev_rs = $ioclass->input_record_separator("\n$delim\n")
           if defined($delim);

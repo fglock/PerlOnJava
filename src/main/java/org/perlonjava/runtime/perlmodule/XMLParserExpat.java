@@ -8,6 +8,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import org.xml.sax.*;
+import org.xml.sax.ext.Attributes2;
 import org.xml.sax.ext.DeclHandler;
 import org.xml.sax.ext.LexicalHandler;
 import org.xml.sax.helpers.DefaultHandler;
@@ -169,6 +170,7 @@ public class XMLParserExpat extends PerlModuleBase {
         // Partial parsing state
         StringBuilder partialBuffer;
         boolean partialMode = false;
+        boolean partialIsByteString = false;
 
         // Namespace mode
         boolean namespaces = false;
@@ -188,6 +190,9 @@ public class XMLParserExpat extends PerlModuleBase {
         // The raw input bytes for byte position tracking
         byte[] inputBytes;
         int inputScanPos = 0;  // how far we've scanned
+
+        // Base URI from InputSource for un-resolving SAX systemIds
+        String parseBaseUri;
     }
 
     // ================================================================
@@ -365,7 +370,15 @@ public class XMLParserExpat extends PerlModuleBase {
     public static RuntimeList GetCurrentColumnNumber(RuntimeArray args, int ctx) {
         ParserState state = getState(args.get(0));
         if (state.locator != null) {
-            return new RuntimeScalar(state.locator.getColumnNumber()).getList();
+            // SAX locator returns 1-based column AFTER the current token.
+            // Expat returns 0-based column at the START of the current token.
+            // Convert: (1-based position after) - 1 - tokenLength = 0-based start position
+            int col = state.locator.getColumnNumber() - 1;
+            if (state.recognizedString != null) {
+                col -= state.recognizedString.length();
+            }
+            if (col < 0) col = 0;
+            return new RuntimeScalar(col).getList();
         }
         return new RuntimeScalar(state.currentColumn).getList();
     }
@@ -633,10 +646,16 @@ public class XMLParserExpat extends PerlModuleBase {
      */
     public static RuntimeList ParseString(RuntimeArray args, int ctx) {
         ParserState state = getState(args.get(0));
-        String xmlString = args.get(1).toString();
+        RuntimeScalar xmlArg = args.get(1);
+        String xmlString = xmlArg.toString();
 
         try {
-            byte[] xmlBytes = xmlString.getBytes(StandardCharsets.UTF_8);
+            // Use ISO_8859_1 for BYTE_STRING to avoid double-encoding UTF-8 bytes.
+            // BYTE_STRING chars are raw byte values (0-255); ISO_8859_1 preserves them as-is.
+            // STRING (UTF-8 flagged) uses UTF_8 encoding as normal.
+            byte[] xmlBytes = (xmlArg.type == RuntimeScalarType.BYTE_STRING)
+                    ? xmlString.getBytes(StandardCharsets.ISO_8859_1)
+                    : xmlString.getBytes(StandardCharsets.UTF_8);
             state.bytesProcessed = 0;
             state.inputBytes = xmlBytes;
             state.inputScanPos = 0;
@@ -684,11 +703,17 @@ public class XMLParserExpat extends PerlModuleBase {
                 if (delim != null && !delim.isEmpty()) {
                     int delimPos = chunk.indexOf("\n" + delim + "\n");
                     if (delimPos >= 0) {
-                        baos.write(chunk.substring(0, delimPos).getBytes(StandardCharsets.UTF_8));
+                        // Use ISO_8859_1 for BYTE_STRING to avoid double-encoding
+                        java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
+                                ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                        baos.write(chunk.substring(0, delimPos).getBytes(cs));
                         break;
                     }
                 }
-                baos.write(chunk.getBytes(StandardCharsets.UTF_8));
+                // Use ISO_8859_1 for BYTE_STRING to avoid double-encoding
+                java.nio.charset.Charset cs = (result.type == RuntimeScalarType.BYTE_STRING)
+                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+                baos.write(chunk.getBytes(cs));
             }
 
             byte[] xmlBytes = baos.toByteArray();
@@ -712,13 +737,18 @@ public class XMLParserExpat extends PerlModuleBase {
      */
     public static RuntimeList ParsePartial(RuntimeArray args, int ctx) {
         ParserState state = getState(args.get(0));
-        String chunk = args.get(1).toString();
+        RuntimeScalar chunkArg = args.get(1);
+        String chunk = chunkArg.toString();
 
         if (state.partialBuffer == null) {
             state.partialBuffer = new StringBuilder();
         }
         state.partialBuffer.append(chunk);
         state.partialMode = true;
+        // Track if any chunk is BYTE_STRING for correct encoding in ParseDone
+        if (chunkArg.type == RuntimeScalarType.BYTE_STRING) {
+            state.partialIsByteString = true;
+        }
 
         return scalarTrue.getList();
     }
@@ -737,7 +767,11 @@ public class XMLParserExpat extends PerlModuleBase {
             String xml = state.partialBuffer.toString();
             state.partialBuffer = null;
             state.partialMode = false;
-            byte[] xmlBytes = xml.getBytes(StandardCharsets.UTF_8);
+            // Use ISO_8859_1 if any chunk was BYTE_STRING to avoid double-encoding
+            byte[] xmlBytes = state.partialIsByteString
+                    ? xml.getBytes(StandardCharsets.ISO_8859_1)
+                    : xml.getBytes(StandardCharsets.UTF_8);
+            state.partialIsByteString = false;
             state.bytesProcessed = 0;
             state.inputBytes = xmlBytes;
             state.inputScanPos = 0;
@@ -777,6 +811,17 @@ public class XMLParserExpat extends PerlModuleBase {
         SAXParser saxParser = factory.newSAXParser();
         XMLReader reader = saxParser.getXMLReader();
 
+        // Remove JDK security limits that restrict deep nesting and entity expansion
+        try {
+            reader.setProperty("http://www.oracle.com/xml/jaxp/properties/entityExpansionLimit", 0);
+        } catch (Exception ignored) {}
+        try {
+            reader.setProperty("http://www.oracle.com/xml/jaxp/properties/maxElementDepth", 0);
+        } catch (Exception ignored) {}
+        try {
+            reader.setProperty("http://www.oracle.com/xml/jaxp/properties/totalEntitySizeLimit", 0);
+        } catch (Exception ignored) {}
+
         ExpatSAXHandler handler = new ExpatSAXHandler(state);
         reader.setContentHandler(handler);
         reader.setErrorHandler(handler);
@@ -792,12 +837,20 @@ public class XMLParserExpat extends PerlModuleBase {
             reader.setProperty("http://xml.org/sax/properties/declaration-handler", handler);
         } catch (Exception ignored) {}
 
-        // Set EntityResolver if ExternEnt handler is set
-        if (state.externEntHandler != null) {
-            reader.setEntityResolver(handler);
-        }
+        // Always set EntityResolver - when ExternEnt handler is set, it bridges
+        // to Perl callbacks; otherwise, it returns empty content for unresolvable
+        // entities (preventing parse errors from missing external DTDs/PEs)
+        reader.setEntityResolver(handler);
 
         InputSource inputSource = new InputSource(input);
+        // Set systemId to the current working directory so SAX resolves relative URIs correctly.
+        // This also allows unresolveSysId to strip this prefix and recover relative paths.
+        String cwd = System.getProperty("user.dir");
+        String baseUri = new java.io.File(cwd, "dummy").toURI().toString();
+        baseUri = baseUri.substring(0, baseUri.lastIndexOf('/') + 1);
+        inputSource.setSystemId(baseUri);
+        // Store the base URI for un-resolution in callbacks
+        state.parseBaseUri = baseUri;
         reader.parse(inputSource);
     }
 
@@ -844,11 +897,21 @@ public class XMLParserExpat extends PerlModuleBase {
                         String version = extractAttr(start, "version");
                         String encoding = extractAttr(start, "encoding");
                         String standalone = extractAttr(start, "standalone");
+                        // Convert standalone from "yes"/"no" string to Perl boolean:
+                        // undef if not present, 1 for "yes", "" (defined but false) for "no"
+                        RuntimeScalar standaloneScalar;
+                        if (standalone == null) {
+                            standaloneScalar = scalarUndef;
+                        } else if ("yes".equals(standalone)) {
+                            standaloneScalar = new RuntimeScalar(1);
+                        } else {
+                            standaloneScalar = new RuntimeScalar("");
+                        }
                         RuntimeArray callArgs = new RuntimeArray();
                         RuntimeArray.push(callArgs, state.selfRef);
                         RuntimeArray.push(callArgs, version != null ? new RuntimeScalar(version) : scalarUndef);
                         RuntimeArray.push(callArgs, encoding != null ? new RuntimeScalar(encoding) : scalarUndef);
-                        RuntimeArray.push(callArgs, standalone != null ? new RuntimeScalar(standalone) : scalarUndef);
+                        RuntimeArray.push(callArgs, standaloneScalar);
                         try {
                             RuntimeCode.apply(state.xmlDeclHandler, callArgs, RuntimeContextType.VOID);
                         } catch (PerlDieException e) {
@@ -960,8 +1023,25 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray.push(context, elementNameScalar);
             }
 
+            // Separate specified from defaulted attributes for specifiedAttributeCount
+            List<Integer> specifiedIndices = new ArrayList<>();
+            List<Integer> defaultedIndices = new ArrayList<>();
+            if (attributes instanceof Attributes2) {
+                Attributes2 attrs2 = (Attributes2) attributes;
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    if (attrs2.isSpecified(i)) {
+                        specifiedIndices.add(i);
+                    } else {
+                        defaultedIndices.add(i);
+                    }
+                }
+            } else {
+                for (int i = 0; i < attributes.getLength(); i++) {
+                    specifiedIndices.add(i);
+                }
+            }
             // Track specified attribute count (number of attribute name+value pairs)
-            state.specifiedAttributeCount = attributes.getLength() * 2;
+            state.specifiedAttributeCount = specifiedIndices.size() * 2;
 
             // Update recognized string for original_string() approximation
             StringBuilder sb = new StringBuilder("<");
@@ -982,25 +1062,19 @@ public class XMLParserExpat extends PerlModuleBase {
 
             if (state.startHandler != null) {
                 // Build args: (expat, element, attr1, val1, attr2, val2, ...)
+                // Specified attributes first, then defaulted (expat convention)
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, elementNameScalar);
-                for (int i = 0; i < attributes.getLength(); i++) {
-                    RuntimeScalar attrNameScalar;
-                    if (state.namespaces) {
-                        String attrUri = attributes.getURI(i);
-                        String attrLocal = attributes.getLocalName(i);
-                        if (attrUri != null && !attrUri.isEmpty()) {
-                            attrNameScalar = generateNSNameForElement(attrLocal, attrUri);
-                        } else {
-                            String name = !attrLocal.isEmpty() ? attrLocal : attributes.getQName(i);
-                            attrNameScalar = new RuntimeScalar(name);
-                        }
-                    } else {
-                        attrNameScalar = new RuntimeScalar(attributes.getQName(i));
-                    }
-                    RuntimeArray.push(callArgs, attrNameScalar);
-                    RuntimeArray.push(callArgs, new RuntimeScalar(attributes.getValue(i)));
+                // Specified attributes first
+                for (int idx : specifiedIndices) {
+                    RuntimeArray.push(callArgs, makeAttrNameScalar(attributes, idx));
+                    RuntimeArray.push(callArgs, new RuntimeScalar(attributes.getValue(idx)));
+                }
+                // Defaulted attributes after
+                for (int idx : defaultedIndices) {
+                    RuntimeArray.push(callArgs, makeAttrNameScalar(attributes, idx));
+                    RuntimeArray.push(callArgs, new RuntimeScalar(attributes.getValue(idx)));
                 }
                 try {
                     RuntimeCode.apply(state.startHandler, callArgs, RuntimeContextType.VOID);
@@ -1038,6 +1112,24 @@ public class XMLParserExpat extends PerlModuleBase {
             RuntimeHash nsTable = nsTableRef.hashDeref();
             RuntimeArray nsList = nsListRef.arrayDeref();
             return generateNSNameInternal(localName, nsUri, nsTable, nsList);
+        }
+
+        /**
+         * Create a RuntimeScalar for an attribute name, handling namespace mode.
+         */
+        private RuntimeScalar makeAttrNameScalar(org.xml.sax.Attributes attributes, int index) {
+            if (state.namespaces) {
+                String attrUri = attributes.getURI(index);
+                String attrLocal = attributes.getLocalName(index);
+                if (attrUri != null && !attrUri.isEmpty()) {
+                    return generateNSNameForElement(attrLocal, attrUri);
+                } else {
+                    String name = !attrLocal.isEmpty() ? attrLocal : attributes.getQName(index);
+                    return new RuntimeScalar(name);
+                }
+            } else {
+                return new RuntimeScalar(attributes.getQName(index));
+            }
         }
 
         @Override
@@ -1152,11 +1244,30 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
-                RuntimeArray.push(callArgs, new RuntimeScalar(systemId != null ? systemId : ""));
+                String rawSysId = unresolveSysId(systemId, state);
+                RuntimeArray.push(callArgs, new RuntimeScalar(rawSysId != null ? rawSysId : ""));
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(notationName));
                 try {
                     RuntimeCode.apply(state.unparsedHandler, callArgs, RuntimeContextType.VOID);
+                } catch (PerlDieException e) {
+                    throw new SAXException(e);
+                }
+            } else if (state.entityDeclHandler != null) {
+                // Per Expat.pm docs: "If both [Entity and Unparsed handlers] are set,
+                // then [Entity] handler will not be called for unparsed entities."
+                // When only Entity handler is set, route unparsed entities through it.
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, state.selfRef);
+                RuntimeArray.push(callArgs, new RuntimeScalar(name));
+                RuntimeArray.push(callArgs, scalarUndef); // val (undef for external entities)
+                String rawSysId2 = unresolveSysId(systemId, state);
+                RuntimeArray.push(callArgs, rawSysId2 != null ? new RuntimeScalar(rawSysId2) : scalarUndef);
+                RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
+                RuntimeArray.push(callArgs, new RuntimeScalar(notationName)); // ndata
+                RuntimeArray.push(callArgs, scalarZero); // is_param
+                try {
+                    RuntimeCode.apply(state.entityDeclHandler, callArgs, RuntimeContextType.VOID);
                 } catch (PerlDieException e) {
                     throw new SAXException(e);
                 }
@@ -1171,7 +1282,8 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
-                RuntimeArray.push(callArgs, systemId != null ? new RuntimeScalar(systemId) : scalarUndef);
+                String rawNotSysId = unresolveSysId(systemId, state);
+                RuntimeArray.push(callArgs, rawNotSysId != null ? new RuntimeScalar(rawNotSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 try {
                     RuntimeCode.apply(state.notationHandler, callArgs, RuntimeContextType.VOID);
@@ -1307,7 +1419,8 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(name));
                 RuntimeArray.push(callArgs, scalarUndef); // value (external entities have no inline value)
-                RuntimeArray.push(callArgs, systemId != null ? new RuntimeScalar(systemId) : scalarUndef);
+                String rawExtSysId = unresolveSysId(systemId, state);
+                RuntimeArray.push(callArgs, rawExtSysId != null ? new RuntimeScalar(rawExtSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 RuntimeArray.push(callArgs, scalarUndef); // notation
                 RuntimeArray.push(callArgs, new RuntimeScalar(name.startsWith("%") ? 1 : 0)); // is_param
@@ -1459,12 +1572,32 @@ public class XMLParserExpat extends PerlModuleBase {
         public void attributeDecl(String eName, String aName, String type, String mode,
                                   String value) throws SAXException {
             if (state.attlistDeclHandler != null) {
+                // Fix type format: SAX reports "NOTATION (x|y|z)" with space,
+                // expat reports "NOTATION(x|y|z)" without space
+                String fixedType = type;
+                if (fixedType != null && fixedType.startsWith("NOTATION ")) {
+                    fixedType = "NOTATION" + fixedType.substring(8);
+                }
+
+                // Compute default parameter per Perl API:
+                // "#REQUIRED", "#IMPLIED", or "'quoted_value'" (with quotes)
+                String defaultStr;
+                if ("#REQUIRED".equals(mode)) {
+                    defaultStr = "#REQUIRED";
+                } else if ("#IMPLIED".equals(mode)) {
+                    defaultStr = "#IMPLIED";
+                } else if (value != null) {
+                    defaultStr = "'" + value + "'";
+                } else {
+                    defaultStr = null;
+                }
+
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, new RuntimeScalar(eName));
                 RuntimeArray.push(callArgs, new RuntimeScalar(aName));
-                RuntimeArray.push(callArgs, new RuntimeScalar(type));
-                RuntimeArray.push(callArgs, value != null ? new RuntimeScalar(value) : scalarUndef);
+                RuntimeArray.push(callArgs, new RuntimeScalar(fixedType));
+                RuntimeArray.push(callArgs, defaultStr != null ? new RuntimeScalar(defaultStr) : scalarUndef);
                 RuntimeArray.push(callArgs, new RuntimeScalar("#FIXED".equals(mode) ? 1 : 0));
                 try {
                     RuntimeCode.apply(state.attlistDeclHandler, callArgs, RuntimeContextType.VOID);
@@ -1482,7 +1615,8 @@ public class XMLParserExpat extends PerlModuleBase {
                 RuntimeArray callArgs = new RuntimeArray();
                 RuntimeArray.push(callArgs, state.selfRef);
                 RuntimeArray.push(callArgs, state.base != null ? new RuntimeScalar(state.base) : scalarUndef);
-                RuntimeArray.push(callArgs, systemId != null ? new RuntimeScalar(systemId) : scalarUndef);
+                String rawResSysId = unresolveSysId(systemId, state);
+                RuntimeArray.push(callArgs, rawResSysId != null ? new RuntimeScalar(rawResSysId) : scalarUndef);
                 RuntimeArray.push(callArgs, publicId != null ? new RuntimeScalar(publicId) : scalarUndef);
                 try {
                     RuntimeList result = RuntimeCode.apply(state.externEntHandler, callArgs,
@@ -1540,17 +1674,23 @@ public class XMLParserExpat extends PerlModuleBase {
         @Override
         public void error(SAXParseException e) throws SAXException {
             state.errorMessage = formatSAXError(e);
+            // Also set ErrorMessage in Perl hash for expat compatibility
+            RuntimeHash selfHash = state.selfRef.hashDeref();
+            selfHash.put("ErrorMessage", new RuntimeScalar(state.errorMessage));
             throw e;
         }
 
         @Override
         public void fatalError(SAXParseException e) throws SAXException {
             state.errorMessage = formatSAXError(e);
+            // Also set ErrorMessage in Perl hash for expat compatibility
+            RuntimeHash selfHash = state.selfRef.hashDeref();
+            selfHash.put("ErrorMessage", new RuntimeScalar(state.errorMessage));
             throw e;
         }
 
         private String formatSAXError(SAXParseException e) {
-            return e.getMessage() + " at line " + e.getLineNumber()
+            return "not well-formed (invalid token) at line " + e.getLineNumber()
                     + ", column " + e.getColumnNumber();
         }
     }
@@ -1610,20 +1750,85 @@ public class XMLParserExpat extends PerlModuleBase {
     }
 
     /**
-     * Format an error with line/column info
+     * Un-resolve a systemId that SAX has resolved to an absolute URI.
+     * SAX resolves relative systemIds (like "logo.gif") to absolute URIs
+     * (like "file:///path/to/logo.gif"), but expat passes the raw string.
+     * This strips the base URI prefix to recover the original relative path.
+     */
+    private static String unresolveSysId(String systemId, ParserState state) {
+        if (systemId == null) return null;
+        // Try to strip the parse base URI that we set on the InputSource
+        if (state.parseBaseUri != null && systemId.startsWith(state.parseBaseUri)) {
+            return systemId.substring(state.parseBaseUri.length());
+        }
+        // If state has an explicit base, try to make systemId relative to it
+        if (state.base != null) {
+            String base = state.base;
+            // Ensure base ends with /
+            if (!base.endsWith("/")) {
+                int lastSlash = base.lastIndexOf('/');
+                if (lastSlash >= 0) {
+                    base = base.substring(0, lastSlash + 1);
+                }
+            }
+            if (systemId.startsWith(base)) {
+                return systemId.substring(base.length());
+            }
+        }
+        // Try to strip file:// + CWD prefix to recover relative or absolute file paths
+        if (systemId.startsWith("file:")) {
+            try {
+                String cwd = System.getProperty("user.dir");
+                String filePath;
+                if (systemId.startsWith("file:///")) {
+                    filePath = systemId.substring(7); // file:///path -> /path
+                } else if (systemId.startsWith("file://")) {
+                    filePath = systemId.substring(7); // file://path -> path  
+                } else if (systemId.startsWith("file:/")) {
+                    filePath = systemId.substring(5); // file:/path -> /path
+                } else {
+                    filePath = systemId.substring(5); // file:path -> path
+                }
+                if (cwd != null) {
+                    String cwdWithSlash = cwd.endsWith("/") ? cwd : cwd + "/";
+                    if (filePath.startsWith(cwdWithSlash)) {
+                        return filePath.substring(cwdWithSlash.length());
+                    }
+                }
+                return filePath;
+            } catch (Exception ignored) {}
+        }
+        return systemId;
+    }
+
+    /**
+     * Format an error with line/column info, matching expat error format.
+     * SAX error messages are wrapped with "not well-formed (invalid token)"
+     * prefix and a hint about common escaping issues, matching libexpat behavior.
      */
     private static String formatError(ParserState state, Exception e) {
-        String msg = e.getMessage() != null ? e.getMessage() : e.toString();
-        if (state.locator != null) {
-            msg += "\nat line " + state.locator.getLineNumber()
-                    + ", column " + state.locator.getColumnNumber();
-        }
         // Unwrap SAXException wrapping PerlDieException
         if (e instanceof SAXException) {
             Exception nested = ((SAXException) e).getException();
             if (nested instanceof PerlDieException) {
                 throw (PerlDieException) nested;
             }
+        }
+        String msg = e.getMessage() != null ? e.getMessage() : e.toString();
+        // For SAXParseExceptions (XML parse errors), format like expat
+        if (e instanceof org.xml.sax.SAXParseException) {
+            org.xml.sax.SAXParseException spe = (org.xml.sax.SAXParseException) e;
+            StringBuilder sb = new StringBuilder();
+            sb.append("not well-formed (invalid token)");
+            sb.append("\nat line ").append(spe.getLineNumber());
+            sb.append(", column ").append(spe.getColumnNumber());
+            sb.append("\n(Hint: \"not well-formed\" often indicates unescaped '<', '>' or '&'");
+            sb.append(" in content \u2014 use &lt; &gt; or &amp; instead)\n");
+            return sb.toString();
+        }
+        if (state.locator != null) {
+            msg += "\nat line " + state.locator.getLineNumber()
+                    + ", column " + state.locator.getColumnNumber();
         }
         return msg;
     }
