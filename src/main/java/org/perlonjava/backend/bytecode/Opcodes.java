@@ -2212,6 +2212,20 @@ public class Opcodes {
      */
     public static final short SCOPE_EXIT_CLEANUP = 463;
 
+    /**
+     * Push a mark on the MortalList mark stack before scope-exit cleanup.
+     * Analogous to Perl 5's SAVETMPS.
+     * Format: MORTAL_PUSH_MARK (no operands)
+     */
+    public static final short MORTAL_PUSH_MARK = 464;
+
+    /**
+     * Pop the most recent mark and flush only entries added since it.
+     * Analogous to Perl 5's scoped FREETMPS after LEAVE.
+     * Format: MORTAL_POP_FLUSH (no operands)
+     */
+    public static final short MORTAL_POP_FLUSH = 465;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

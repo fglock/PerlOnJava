@@ -616,7 +616,7 @@ public class EmitForeach {
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 
             Local.localTeardown(bodyLocalRecord, mv);
-            EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, bodyScopeIndex);
+            EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, bodyScopeIndex, true);
             emitterVisitor.ctx.symbolTable.exitScope(bodyScopeIndex);
         } else {
             node.body.accept(voidVisitor);
@@ -747,7 +747,7 @@ public class EmitForeach {
 
         Local.localTeardown(localRecord, mv);
 
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

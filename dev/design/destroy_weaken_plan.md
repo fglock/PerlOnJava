@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
-**Status**: Design Plan  
-**Version**: 5.3  
+**Status**: Implementation — debugging scope-exit flush regressions  
+**Version**: 5.5  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-08 (v5.3 — simplify MortalList: delete-only initial scope, active flag gate, pop/shift/splice deferred to Phase 5)  
+**Updated**: 2026-04-08 (v5.5 — scope-exit flush causes Test2 crashes; re-bless refCount bug found)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #450 (WIP, open), `dev/modules/poe.md` (DestroyManager attempt)
 
@@ -1838,7 +1838,7 @@ sub DESTROY {
 
 ## Progress Tracking
 
-### Current Status: Phase 2 bugfix — deferred mortal mechanism (v5.4)
+### Current Status: Debugging scope-exit flush regressions (v5.5)
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-04-08)
@@ -1855,28 +1855,157 @@ sub DESTROY {
   - Created `WeakRefRegistry.java`, updated `ScalarUtil.java` and `Builtin.java`
 - [x] Phase 4: Global Destruction (2026-04-08)
   - Created `GlobalDestruction.java`, hooked shutdown in `PerlLanguageProvider` and `WarnDie`
+- [x] Phase 5 (partial): Container operations (2026-04-08)
+  - Hooked `RuntimeArray.pop()`, `RuntimeArray.shift()`, `Operator.splice()`
+    with `MortalList.deferDecrementIfTracked()` for removed elements
 - [x] Tests: Created `destroy.t` and `weaken.t` unit tests
+- [x] Scope-exit flush: Added `MortalList.flush()` after `emitScopeExitNullStores`
+  for non-subroutine blocks (JVM: `EmitBlock`, `EmitForeach`, `EmitStatement`;
+  Interpreter: `BytecodeCompiler.exitScope(boolean flush)`)
 
-### Bugs Found During Validation (v5.4)
-Three test failures identified after initial implementation:
+### Last Commit
+- `790c6842f`: "fix: weaken/refCount improvements — 178/196 sandbox tests passing"
+- Branch: `feature/destroy-weaken`
 
-1. **DESTROY exception warning (test 3)**: `DestroyDispatch.callDestroy()` used
-   `Warnings.warn()` which bypasses `$SIG{__WARN__}`. Fixed: use `WarnDie.warn()`.
+### Uncommitted Changes (scope-exit flush + container ops)
+Files modified since last commit:
+- `EmitBlock.java`: scope-exit flush for bare blocks
+- `EmitForeach.java`: scope-exit flush for foreach loops
+- `EmitStatement.java`: scope-exit flush for if/while/for blocks; added `emitScopeExitNullStores(ctx, scopeIndex, boolean flush)` overload
+- `BytecodeCompiler.java`: `exitScope(boolean flush)` emits `MORTAL_FLUSH` opcode
+- `RuntimeArray.java`: `pop()` and `shift()` call `MortalList.deferDecrementIfTracked()`
+- `Operator.java`: `splice()` calls `MortalList.deferDecrementIfTracked()` for removed elements
 
-2. **Return value overcounting (test 8)**: `return $obj` jumps to `returnLabel`,
-   bypassing `emitScopeExitNullStores`. The abandoned `$obj` slot never gets its
-   refCount decremented, causing a permanent +1 overcounting. Fix: add
-   `allMyScalarSlots` list to `JavaClassInfo`, emit cleanup at `returnLabel`.
+### Sandbox Test Results
 
-3. **Hash delete premature DESTROY (test 11)**: With per-statement `MortalList.flush()`
-   removed (to fix `code_too_large.t` OOM), immediate decrement in hash delete fires
-   DESTROY before the caller captures the return value. Fix: revert to
-   `MortalList.deferDecrementIfTracked()`, flush from runtime methods instead.
+| Test file | Before flush (commit 790c684) | After flush (uncommitted) | Delta |
+|-----------|:---:|:---:|:---:|
+| destroy_basic.t | 17/18 | **18/18** | +1 (scope-exit DESTROY now fires) |
+| destroy_collections.t | 18/22 | 17/20* | -1 pass, -2 total (crash) |
+| destroy_edge_cases.t | 17/22 | 11/12* | -6 pass, -10 total (crash after test 12) |
+| destroy_inheritance.t | 8/10 | 5/6* | -3 pass, -4 total (crash after test 6) |
+| destroy_return.t | 23/24 | 16/17* | -7 pass, -7 total (crash after test 17) |
+| weaken_basic.t | 33/34 | **34/34** | +1 (scope-exit flush fixes weaken timing) |
+| weaken_destroy.t | 20/24 | **23/24** | +3 (flush improves weak ref destruction) |
+| weaken_edge_cases.t | 42/42 | 42/42 | unchanged |
+| **Totals** | **178/196** | **166/173** | -12 pass, -23 total |
 
-4. **Per-statement bytecode bloat**: Emitting `INVOKESTATIC MortalList.flush()` at every
-   statement boundary adds ~3 bytes per statement. For `code_too_large.t` (4998 tests,
-   ~15K statements), this pushes bytecode over JVM heap limits. Fix: move flush to
-   runtime methods (`RuntimeCode.apply()`, `RuntimeScalar.setLarge()`).
+\* Crash = Test2 "CONTEXT_STACK" error causes premature file exit, skipping remaining tests.
+
+**Net effect**: The scope-exit flush fixes 5 tests but causes 4 test files to crash
+(losing 23 tests from the count), resulting in a net -12 passing.
+
+### Bugs Found During Validation
+
+#### Bug 1: DESTROY exception warning (FIXED in commit 790c684)
+`DestroyDispatch.callDestroy()` used `Warnings.warn()` which bypasses `$SIG{__WARN__}`.
+Fixed: use `WarnDie.warn()`.
+
+#### Bug 2: Return value overcounting (FIXED in commit 790c684)
+`return $obj` jumps to `returnLabel`, bypassing `emitScopeExitNullStores`. The
+abandoned `$obj` slot never gets its refCount decremented, causing a permanent +1
+overcounting. Fix: add `allMyScalarSlots` list to `JavaClassInfo`, emit cleanup at
+`returnLabel`.
+
+#### Bug 3: Hash delete premature DESTROY (FIXED in commit 790c684)
+With per-statement `MortalList.flush()` removed (to fix `code_too_large.t` OOM),
+immediate decrement in hash delete fires DESTROY before the caller captures the return
+value. Fix: revert to `MortalList.deferDecrementIfTracked()`, flush from runtime methods.
+
+#### Bug 4: Per-statement bytecode bloat (FIXED in commit 790c684)
+Emitting `INVOKESTATIC MortalList.flush()` at every statement boundary pushes bytecode
+over JVM heap limits for large test files. Fix: move flush to runtime methods
+(`RuntimeCode.apply()`, `RuntimeScalar.setLarge()`).
+
+#### Bug 5: Re-bless refCount initialization (OPEN)
+**Test**: destroy_edge_cases.t test 12 — "re-bless to class with DESTROY: DESTROY fires"
+
+**Problem**: When re-blessing from an untracked class (refCount=-1) to a class with
+DESTROY, `bless()` sets `refCount = 0`. But the scalar being blessed already holds a
+reference to the object, and this reference was never counted (because tracking wasn't
+active when the assignment happened).
+
+```perl
+my $obj = DE_NoDestroy->new;     # bless without DESTROY → refCount = -1
+                                  # setLarge: refCount < 0, no increment
+bless $obj, 'DE_HasDestroy';     # re-bless with DESTROY → refCount = 0 (WRONG)
+# $obj holds a reference but refCount is 0
+# Scope exit: deferDecrementIfTracked checks refCount > 0 → false → no DESTROY
+```
+
+**Fix**: Set `refCount = 1` instead of `0` when re-blessing from untracked to DESTROY.
+The scalar being blessed already holds a reference, so counting it as 1 is correct.
+This parallels how first-bless uses refCount=0 (the bless-time temp is NOT counted),
+but for re-bless the scalar IS a named variable, not a temp.
+
+**Caveat**: If there are pre-existing copies made before re-bless, refCount will
+undercount. This is the same limitation as §6.6 (Pre-bless Copies) — acceptable
+because the common pattern is a single reference being re-blessed.
+
+#### Bug 6: MortalList.flush() at scope exit causes Test2 crashes (OPEN — CRITICAL)
+**Symptom**: After a test failure, Test2's `diag()` function creates a context object
+(Test2::API::Context), which is blessed and has DESTROY. When Test2's internal scopes
+exit, `MortalList.flush()` processes ALL pending entries (not just those from the
+current scope), potentially destroying Test2 context objects at the wrong time.
+
+**Error**: "A context appears to have been destroyed without first calling release().
+... Cleaning up the CONTEXT_STACK..."
+
+**Root cause**: `MortalList.flush()` is global — it processes ALL pending entries from
+ALL scopes. In Perl 5, `FREETMPS` only frees temporaries up to the save stack mark
+(created by `SAVETMPS`). Our flush is equivalent to `FREETMPS` without `SAVETMPS`
+scoping — it drains everything.
+
+**Scenario**:
+1. Test function (`is_deeply`) fails → calls `diag()`
+2. `diag()` calls `context()` → creates Test2::API::Context, blessed with DESTROY
+3. `diag()` calls `$ctx->release()` → marks context as released
+4. `diag()` returns → $ctx goes out of scope → `deferDecrementIfTracked($ctx)` → pending
+5. Back in `_ok_debug()` → another internal scope exit → `flush()` fires
+6. `flush()` processes $ctx AND possibly other pending objects from earlier scopes
+7. A different context object (not yet released) gets DESTROY → crash
+
+**Possible fixes**:
+- **Option A: Scoped pending list** — partition pending entries by scope depth, only
+  flush entries from the current scope. Matches Perl 5's SAVETMPS/FREETMPS scoping.
+  Most correct but adds complexity.
+- **Option B: Remove scope-exit flush** — revert to flush only at `apply()` and
+  `setLarge()`. Loses scope-exit DESTROY timing but avoids the crash. The 5 tests
+  fixed by scope-exit flush would regress.
+- **Option C: Selective flush** — only flush at scope exits when the scope contains
+  tracked blessed variables. Skip flush when pending list only has entries from outer
+  scopes.
+
+#### Bug 7: AUTOLOAD-based DESTROY dispatch (OPEN)
+**Test**: destroy_inheritance.t test 6 — "AUTOLOAD catches DESTROY when no explicit
+DESTROY defined"
+
+**Status**: Not investigated yet. `DestroyDispatch.callDestroy()` has AUTOLOAD fallback
+code, but it may not be working correctly.
+
+#### Bug 8: Discarded return value not destroyed (OPEN)
+**Test**: destroy_return.t test 17 — "discarded return value is destroyed"
+
+**Problem**: When a function returns a blessed object and the caller discards the return
+value (void context), DESTROY should fire but doesn't. The object was created inside
+`new()` with `bless {}` → refCount=0, stored in no named variable, and returned directly.
+refCount stays at 0 forever because no `setLarge()` or `scopeExitCleanup()` processes it.
+
+In Perl 5, the return value becomes a mortal (SAVETMPS/FREETMPS), so its refcount is
+decremented at the next statement boundary. PerlOnJava has no equivalent for function
+return values.
+
+**Possible fix**: In the return epilogue, call `MortalList.deferDecrementIfTracked()` on
+the return value (not just on cleaned-up local variables). This would schedule a decrement
+for tracked return values. If the caller captures it (via `setLarge()`), the increment
+happens first; if discarded, the deferred decrement fires DESTROY at the next flush.
+However, this requires bumping refCount from 0 to 1 first (a temporary "mortal" increment).
+
+#### Bug 9: Circular refs with weaken (OPEN)
+**Test**: weaken_destroy.t test 9 — "B destroyed (circular ref broken by weaken)"
+
+**Status**: Not investigated yet. Likely related to weak ref handling in circular
+reference scenarios.
 
 ### Key Design Change (v5.4): Deferred Scope-Exit Decrements
 
@@ -1886,18 +2015,52 @@ being cleaned up. The deferred decrement is flushed by the caller's next `setLar
 or `RuntimeCode.apply()` call. This also fixes the returnLabel overcounting problem
 because the cleanup at returnLabel safely defers the decrement.
 
+### Key Design Change (v5.5): Scope-Exit Flush
+
+Added `MortalList.flush()` after scope cleanup for non-subroutine blocks. This ensures
+deferred decrements from `scopeExitCleanup()` are processed at scope boundaries, not
+just at the next `setLarge()` or `apply()` call.
+
+**JVM backend**: `emitScopeExitNullStores(ctx, scopeIndex, boolean flush)` overload.
+Subroutine bodies pass `flush=false` (return value protection); bare blocks, if/while/for,
+foreach pass `flush=true`.
+
+**Interpreter**: `exitScope(boolean flush)` emits `MORTAL_FLUSH` opcode when flush=true.
+
+**Problem**: The flush is global (processes all pending entries), causing premature
+DESTROY of objects from outer scopes. See Bug 6.
+
 ### Next Steps
-1. Implement v5.4 fixes (deferred scopeExitCleanup, runtime flush, returnLabel cleanup)
-2. Validate: `make` passes, all `destroy.t` and `weaken.t` tests pass
-3. Run `weaken.t` tests
-4. Commit to feature/destroy-weaken branch
+1. **Fix Bug 5** (re-bless refCount): change `refCount = 0` to `refCount = 1` in
+   `ReferenceOperators.bless()` for the untracked-to-DESTROY re-bless case
+2. **Fix Bug 6** (scope-exit flush crash): implement scoped pending list (Option A)
+   or revert scope-exit flush (Option B) — decision needed
+3. **Investigate Bug 7** (AUTOLOAD DESTROY dispatch)
+4. **Investigate Bug 8** (discarded return value) — may need mortal-increment for return values
+5. **Investigate Bug 9** (circular refs with weaken)
+6. Commit fixes, run `make`, push to branch
 
 ### Open Questions
-- Should `MortalList.flush()` also be called from `RuntimeArray.push()` or `RuntimeHash.put()`?
-  (Currently only in `setLarge()` and `apply()`)
-- Should the interpreter's MORTAL_FLUSH opcode be removed now that flush is runtime-driven?
+- **Scope-exit flush strategy**: Should we implement scoped pending (Perl 5-like
+  SAVETMPS/FREETMPS), or is the simpler approach of only flushing at `apply()`
+  and `setLarge()` sufficient for real-world modules?
+- Should `MortalList.flush()` also be called from `RuntimeArray.push()` or
+  `RuntimeHash.put()`?
+- Should the interpreter's `MORTAL_FLUSH` opcode be removed if flush becomes
+  purely runtime-driven?
 
 ### Version History
+- **v5.5** (2026-04-08): Scope-exit flush + container ops + regression analysis:
+  1. Added `MortalList.flush()` at non-subroutine scope exits (bare blocks, if/while/for,
+     foreach). JVM backend: `emitScopeExitNullStores(..., boolean flush)` overload.
+     Interpreter: `exitScope(boolean flush)` emits `MORTAL_FLUSH` opcode.
+  2. Hooked `RuntimeArray.pop()`, `RuntimeArray.shift()`, `Operator.splice()` with
+     `MortalList.deferDecrementIfTracked()` for removed tracked elements.
+  3. Discovered Bug 5 (re-bless refCount=0 should be 1), Bug 6 (global flush causes
+     Test2 context crashes), Bug 7 (AUTOLOAD DESTROY dispatch), Bug 8 (discarded return
+     value), Bug 9 (circular refs with weaken). See Progress Tracking for details.
+  4. Sandbox results: 166/173 (from 178/196). Flush fixes 5 tests but causes 4 test
+     files to crash (Test2 context stack errors on test failure paths).
 - **v5.4** (2026-04-08): Fix mortal mechanism based on implementation testing:
   1. Removed per-statement `MortalList.flush()` bytecode emission (caused OOM in
      `code_too_large.t`). Moved flush to runtime methods: `RuntimeCode.apply()` and

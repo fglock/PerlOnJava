@@ -45,9 +45,20 @@ public class ReferenceOperators {
                 }
             } else {
                 // First bless (or previously untracked)
+                boolean wasAlreadyBlessed = referent.blessId != 0;
                 referent.setBlessId(newBlessId);
                 if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
-                    referent.refCount = 0;  // Start tracking (zero containers counted)
+                    if (wasAlreadyBlessed) {
+                        // Re-bless from untracked class: the scalar being blessed
+                        // already holds a reference that was never counted (because
+                        // tracking wasn't active at assignment time). Count it as 1.
+                        referent.refCount = 1;
+                    } else {
+                        // First bless (e.g., inside new()): the RuntimeScalar is a
+                        // temporary that will be copied into a named variable via
+                        // setLarge(), which increments refCount. Start at 0.
+                        referent.refCount = 0;
+                    }
                 }
                 // If no DESTROY, leave refCount = -1 (untracked)
             }

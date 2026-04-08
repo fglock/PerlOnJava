@@ -295,8 +295,27 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void exitScope() {
+        exitScope(false);
+    }
+
+    /**
+     * Exit the current scope, emitting cleanup opcodes.
+     *
+     * @param flush If true, emit MORTAL_PUSH_MARK before and MORTAL_POP_FLUSH after
+     *              cleanup to trigger DESTROY for blessed objects whose refCount drops
+     *              to 0. Only entries added by the cleanup are flushed (scoped flush).
+     *              Must be false for subroutine body scopes where the return value
+     *              is on the stack.
+     */
+    private void exitScope(boolean flush) {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
+
+            // Push mark BEFORE cleanup so popAndFlush only processes entries
+            // added by scopeExitCleanup (not older entries from outer scopes)
+            if (flush) {
+                emit(Opcodes.MORTAL_PUSH_MARK);
+            }
 
             // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
             // This calls RuntimeScalar.scopeExitCleanup() which handles:
@@ -306,6 +325,11 @@ public class BytecodeCompiler implements Visitor {
             for (int reg : scalarIndices) {
                 emit(Opcodes.SCOPE_EXIT_CLEANUP);
                 emitReg(reg);
+            }
+
+            // Pop mark and flush only entries added since the mark
+            if (flush) {
+                emit(Opcodes.MORTAL_POP_FLUSH);
             }
 
             symbolTable.exitScope(scopeIdx);
@@ -1047,8 +1071,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(regexSaveReg);
         }
 
-        // Exit scope restores register state
-        exitScope();
+        // Exit scope restores register state.
+        // Flush mortal list for non-subroutine blocks so DESTROY fires promptly
+        // at scope exit. Subroutine body blocks must NOT flush — the implicit
+        // return value may still be in a register and flushing could destroy it.
+        exitScope(!node.getBooleanAnnotation("blockIsSubroutine"));
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -5301,7 +5328,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 13: Pop loop info and exit scope
         loopStack.pop();
-        exitScope();
+        exitScope(true);  // safe to flush — foreach loop, not subroutine body
 
         if (foreachRegexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
@@ -5371,7 +5398,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             } finally {
                 // Exit scope to clean up lexical variables
-                exitScope();
+                exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
             // next jumps here (continue point = end of body, before exit)

@@ -80,6 +80,11 @@ public class MortalList {
         }
     }
 
+    // Mark stack for scoped flushing (analogous to Perl 5's SAVETMPS).
+    // Each mark records the pending list size at scope entry, so that
+    // popAndFlush() only processes entries added within that scope.
+    private static final ArrayList<Integer> marks = new ArrayList<>();
+
     /**
      * Process all pending decrements. Called at statement boundaries.
      * Equivalent to Perl 5's FREETMPS.
@@ -95,5 +100,42 @@ public class MortalList {
             }
         }
         pending.clear();
+        marks.clear(); // All entries drained; marks are meaningless now
+    }
+
+    /**
+     * Push a mark recording the current pending list size.
+     * Called before scope-exit cleanup so that popAndFlush() only
+     * processes entries added by the cleanup (not earlier entries
+     * from outer scopes or prior operations).
+     * Analogous to Perl 5's SAVETMPS.
+     */
+    public static void pushMark() {
+        if (!active) return;
+        marks.add(pending.size());
+    }
+
+    /**
+     * Pop the most recent mark and flush only entries added since it.
+     * Called after scope-exit cleanup. Entries before the mark are left
+     * for the next full flush() (at apply/setLarge).
+     * Analogous to Perl 5's FREETMPS after LEAVE.
+     */
+    public static void popAndFlush() {
+        if (!active || marks.isEmpty()) return;
+        int mark = marks.removeLast();
+        if (pending.size() <= mark) return;
+        // Process entries from mark onwards (DESTROY may add new entries)
+        for (int i = mark; i < pending.size(); i++) {
+            RuntimeBase base = pending.get(i);
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
+        }
+        // Remove only the entries we processed (keep entries before mark)
+        while (pending.size() > mark) {
+            pending.removeLast();
+        }
     }
 }

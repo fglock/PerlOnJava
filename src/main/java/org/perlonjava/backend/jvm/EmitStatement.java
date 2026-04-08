@@ -65,6 +65,38 @@ public class EmitStatement {
      * @param scopeIndex The scope boundary being exited
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
+        emitScopeExitNullStores(ctx, scopeIndex, false);
+    }
+
+    /**
+     * Same as {@link #emitScopeExitNullStores(EmitterContext, int)} but with
+     * an option to flush the MortalList after cleanup.
+     * <p>
+     * When {@code flush} is true, emits a scoped flush using
+     * {@code MortalList.pushMark()} before cleanup and
+     * {@code MortalList.popAndFlush()} after. This only processes entries
+     * added by the scope-exit cleanup itself (not entries from outer scopes
+     * or prior operations), matching Perl 5's SAVETMPS/FREETMPS scoping.
+     * <p>
+     * {@code flush=true} is safe for bare blocks, loops, and control structures.
+     * It must be {@code false} for subroutine body blocks where the implicit
+     * return value may still be on the JVM operand stack — flushing would
+     * destroy the return value before the caller captures it.
+     *
+     * @param ctx        The emitter context with the MethodVisitor and symbol table
+     * @param scopeIndex The scope boundary being exited
+     * @param flush      If true, emit scoped MortalList flush around null stores
+     */
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
+        // Phase 0: Push mark BEFORE cleanup so popAndFlush only drains
+        // entries added by scopeExitCleanup in Phase 1 (not older entries).
+        if (flush) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushMark",
+                    "()V",
+                    false);
+        }
         // Phase 1: Eagerly unregister fd numbers on scalar variables holding
         // anonymous filehandle globs. This makes the fd available for reuse
         // without waiting for non-deterministic GC.
@@ -84,6 +116,17 @@ public class EmitStatement {
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
+        }
+        // Phase 3: Pop mark and flush only entries added since Phase 0.
+        // This triggers DESTROY for blessed objects whose last strong reference was
+        // in a lexical that just went out of scope. Only entries added by Phase 1
+        // are processed; older pending entries from outer scopes are preserved.
+        if (flush) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "popAndFlush",
+                    "()V",
+                    false);
         }
     }
 
@@ -136,7 +179,7 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(emitterVisitor);
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -151,7 +194,7 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(emitterVisitor);
-                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -223,7 +266,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -421,7 +464,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
@@ -539,7 +582,7 @@ public class EmitStatement {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack

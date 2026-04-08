@@ -372,7 +372,11 @@ public class EmitBlock {
                     "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
 
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        // Flush mortal list for non-subroutine blocks. Subroutine body blocks must
+        // NOT flush here because the implicit return value may be on the JVM stack
+        // and flushing could destroy it before the caller captures it.
+        boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !isSubBody);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }

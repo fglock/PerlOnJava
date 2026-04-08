@@ -161,6 +161,16 @@ public class BytecodeInterpreter {
                                 MortalList.flush();
                             }
 
+                            case Opcodes.MORTAL_PUSH_MARK -> {
+                                // Push mark before scope-exit cleanup (SAVETMPS equivalent)
+                                MortalList.pushMark();
+                            }
+
+                            case Opcodes.MORTAL_POP_FLUSH -> {
+                                // Pop mark and flush only entries added since it (scoped FREETMPS)
+                                MortalList.popAndFlush();
+                            }
+
                             case Opcodes.SCOPE_EXIT_CLEANUP -> {
                                 // Scope-exit cleanup for a my-scalar register
                                 int reg = bytecode[pc++];
