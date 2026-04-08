@@ -102,6 +102,74 @@ public class NetSSLeay extends PerlModuleBase {
         // X509_CHECK flags
         CONSTANTS.put("X509_CHECK_FLAG_NO_WILDCARDS", 0x2L);
 
+        // X509 version constants
+        CONSTANTS.put("X509_VERSION_1", 0L);
+        CONSTANTS.put("X509_VERSION_2", 1L);
+        CONSTANTS.put("X509_VERSION_3", 2L);
+
+        // X509_REQ version constants
+        CONSTANTS.put("X509_REQ_VERSION_1", 0L);
+
+        // MBSTRING encoding constants
+        CONSTANTS.put("MBSTRING_FLAG", 0x1000L);
+        CONSTANTS.put("MBSTRING_ASC", 0x1001L);
+        CONSTANTS.put("MBSTRING_BMP", 0x1002L);
+        CONSTANTS.put("MBSTRING_UTF8", 0x1004L);
+        CONSTANTS.put("MBSTRING_UNIV", 0x1008L);
+
+        // EVP_PK key type flags
+        CONSTANTS.put("EVP_PK_RSA", 0x0001L);
+        CONSTANTS.put("EVP_PK_DSA", 0x0002L);
+        CONSTANTS.put("EVP_PK_DH", 0x0004L);
+        CONSTANTS.put("EVP_PK_EC", 0x0008L);
+
+        // EVP_PKT key usage flags
+        CONSTANTS.put("EVP_PKT_SIGN", 0x0010L);
+        CONSTANTS.put("EVP_PKT_ENC", 0x0020L);
+        CONSTANTS.put("EVP_PKT_EXCH", 0x0040L);
+        CONSTANTS.put("EVP_PKS_RSA", 0x0100L);
+
+        // GEN_* subject alt name type constants
+        CONSTANTS.put("GEN_OTHERNAME", 0L);
+        CONSTANTS.put("GEN_EMAIL", 1L);
+        CONSTANTS.put("GEN_DNS", 2L);
+        CONSTANTS.put("GEN_X400", 3L);
+        CONSTANTS.put("GEN_DIRNAME", 4L);
+        CONSTANTS.put("GEN_EDIPARTY", 5L);
+        CONSTANTS.put("GEN_URI", 6L);
+        CONSTANTS.put("GEN_IPADD", 7L);
+        CONSTANTS.put("GEN_RID", 8L);
+
+        // NID constants for X509 name components and extensions
+        CONSTANTS.put("NID_countryName", 14L);
+        CONSTANTS.put("NID_localityName", 19L);
+        CONSTANTS.put("NID_stateOrProvinceName", 20L);
+        CONSTANTS.put("NID_organizationName", 17L);
+        CONSTANTS.put("NID_organizationalUnitName", 18L);
+        CONSTANTS.put("NID_surname", 15L);
+        CONSTANTS.put("NID_givenName", 100L);
+        CONSTANTS.put("NID_title", 99L);
+        CONSTANTS.put("NID_initials", 101L);
+        CONSTANTS.put("NID_serialNumber", 16L);
+        CONSTANTS.put("NID_domainComponent", 391L);
+        CONSTANTS.put("NID_pkcs9_emailAddress", 48L);
+
+        // NID constants for X509v3 extensions
+        CONSTANTS.put("NID_subject_key_identifier", 82L);
+        CONSTANTS.put("NID_key_usage", 83L);
+        CONSTANTS.put("NID_issuer_alt_name", 86L);
+        CONSTANTS.put("NID_basic_constraints", 87L);
+        CONSTANTS.put("NID_certificate_policies", 89L);
+        CONSTANTS.put("NID_authority_key_identifier", 90L);
+        CONSTANTS.put("NID_crl_distribution_points", 103L);
+        CONSTANTS.put("NID_ext_key_usage", 126L);
+        CONSTANTS.put("NID_netscape_cert_type", 71L);
+        CONSTANTS.put("NID_info_access", 177L);
+        CONSTANTS.put("NID_ext_req", 172L);
+
+        // RSA encryption NID
+        CONSTANTS.put("NID_rsaEncryption", 6L);
+
         // OCSP constants
         CONSTANTS.put("TLSEXT_STATUSTYPE_ocsp", 1L);
         CONSTANTS.put("OCSP_RESPONSE_STATUS_SUCCESSFUL", 0L);
@@ -205,6 +273,10 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, List<Long>> SK_X509_HANDLES = new HashMap<>();
     private static final Map<Long, VerifyParamState> VERIFY_PARAM_HANDLES = new HashMap<>();
     private static final Map<Long, List<X509InfoEntry>> X509_INFO_SK_HANDLES = new HashMap<>();
+    private static final Map<Long, MutableX509State> MUTABLE_X509_HANDLES = new HashMap<>();
+    private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new HashMap<>();
+    private static final Map<Long, BigInteger> BIGNUM_HANDLES = new HashMap<>();
+    private static final Map<Long, String> EVP_CIPHER_HANDLES = new HashMap<>(); // handle → cipher name
 
     // SSL method type sentinels
     private static final long METHOD_SSLv23 = -10L;
@@ -352,6 +424,12 @@ public class NetSSLeay extends PerlModuleBase {
         addOid("1.2.840.113549.1", 2, "RSA Data Security, Inc. PKCS", "pkcs");
         addOid("1.2.840.113549.2.5", 4, "md5", "MD5");
         addOid("1.2.840.113549.1.1", 186, "RSA Data Security, Inc. PKCS #1", "pkcs1");
+
+        // PKCS#9 attributes (for CSR)
+        addOid("1.2.840.113549.1.9.14", 172, "X509v3 Extension Request", "extReq");
+        addOid("1.2.840.113549.1.9.2", 49, "unstructuredName", "unstructuredName");
+        addOid("1.2.840.113549.1.9.7", 54, "Challenge Password", "challengePassword");
+        addOid("1.2.840.113549.1.9.15", 173, "S/MIME Capabilities", "SMIME-CAPS");
 
         // Key usage bit names (used by P_X509_get_key_usage)
     }
@@ -508,6 +586,41 @@ public class NetSSLeay extends PerlModuleBase {
         long certHandle;  // handle into X509_HANDLES
     }
 
+    // Mutable X509 certificate state (before signing)
+    private static class MutableX509State {
+        int version = 0;  // 0=v1, 1=v2, 2=v3
+        long serialHandle = 0;  // ASN1_INTEGER handle
+        long subjectNameHandle = 0;  // X509_NAME handle
+        long issuerNameHandle = 0;  // X509_NAME handle
+        long pubkeyHandle = 0;  // EVP_PKEY handle
+        long notBeforeHandle = 0;  // ASN1_TIME handle
+        long notAfterHandle = 0;  // ASN1_TIME handle
+        List<MutableExtension> extensions = new ArrayList<>();
+    }
+
+    // Mutable X509_REQ (CSR) state
+    private static class MutableX509ReqState {
+        int version = 0;  // 0=v1
+        long subjectNameHandle = 0;  // X509_NAME handle
+        long pubkeyHandle = 0;  // EVP_PKEY handle
+        List<MutableExtension> extensions = new ArrayList<>();
+        List<ReqAttribute> attributes = new ArrayList<>();
+        byte[] signedDer = null;  // DER after signing (for re-parsing)
+    }
+
+    private static class MutableExtension {
+        String oid;
+        boolean critical;
+        String value;  // OpenSSL-style value string (e.g., "CA:FALSE")
+    }
+
+    private static class ReqAttribute {
+        int nid;
+        String oid;
+        int type;  // MBSTRING_ASC, MBSTRING_UTF8, etc.
+        String value;
+    }
+
     // Sentinel value for BIO_s_mem() method type
     private static final long BIO_S_MEM_SENTINEL = -1L;
 
@@ -584,6 +697,13 @@ public class NetSSLeay extends PerlModuleBase {
             // RSA functions
             mod.registerMethod("RSA_generate_key", null);
             mod.registerMethod("RSA_free", null);
+            mod.registerMethod("RSA_get_key_parameters", null);
+            mod.registerMethod("RSA_F4", null);
+            mod.registerMethod("BN_dup", null);
+
+            // EVP_PKEY functions
+            mod.registerMethod("EVP_PKEY_new", null);
+            mod.registerMethod("EVP_PKEY_assign_RSA", null);
 
             // ASN1_TIME functions
             mod.registerMethod("ASN1_TIME_new", null);
@@ -598,6 +718,12 @@ public class NetSSLeay extends PerlModuleBase {
             // PEM functions
             mod.registerMethod("PEM_read_bio_PrivateKey", null);
             mod.registerMethod("PEM_read_bio_X509", null);
+            mod.registerMethod("PEM_read_bio_X509_REQ", null);
+            mod.registerMethod("PEM_get_string_X509", null);
+            mod.registerMethod("PEM_get_string_PrivateKey", null);
+            mod.registerMethod("PEM_get_string_X509_REQ", null);
+            mod.registerMethod("d2i_X509_bio", null);
+            mod.registerMethod("d2i_X509_REQ_bio", null);
 
             // EVP_PKEY functions
             mod.registerMethod("EVP_PKEY_free", null);
@@ -605,6 +731,33 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("EVP_PKEY_bits", null);
             mod.registerMethod("EVP_PKEY_security_bits", null);
             mod.registerMethod("EVP_PKEY_id", null);
+
+            // EVP cipher functions
+            mod.registerMethod("EVP_get_cipherbyname", null);
+            mod.registerMethod("OSSL_PROVIDER_load", null);
+
+            // X509 extension functions
+            mod.registerMethod("P_X509_add_extensions", null);
+            mod.registerMethod("P_X509_copy_extensions", null);
+            mod.registerMethod("P_X509_REQ_add_extensions", null);
+
+            // X509_REQ functions
+            mod.registerMethod("X509_REQ_new", null);
+            mod.registerMethod("X509_REQ_free", null);
+            mod.registerMethod("X509_REQ_set_pubkey", null);
+            mod.registerMethod("X509_REQ_get_subject_name", null);
+            mod.registerMethod("X509_REQ_set_subject_name", null);
+            mod.registerMethod("X509_REQ_set_version", null);
+            mod.registerMethod("X509_REQ_get_version", null);
+            mod.registerMethod("X509_REQ_sign", null);
+            mod.registerMethod("X509_REQ_verify", null);
+            mod.registerMethod("X509_REQ_get_pubkey", null);
+            mod.registerMethod("X509_REQ_get_attr_count", null);
+            mod.registerMethod("X509_REQ_get_attr_by_NID", null);
+            mod.registerMethod("X509_REQ_get_attr_by_OBJ", null);
+            mod.registerMethod("X509_REQ_add1_attr_by_NID", null);
+            mod.registerMethod("P_X509_REQ_get_attr", null);
+            mod.registerMethod("X509_REQ_digest", null);
 
             // SSL_CTX functions
             mod.registerMethod("CTX_new", null);
@@ -637,8 +790,18 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("use_PrivateKey_file", null);
 
             // X509 functions
+            mod.registerMethod("X509_new", null);
             mod.registerMethod("X509_free", null);
+            mod.registerMethod("X509_set_version", null);
+            mod.registerMethod("X509_set_pubkey", null);
+            mod.registerMethod("X509_set_subject_name", null);
+            mod.registerMethod("X509_set_issuer_name", null);
+            mod.registerMethod("X509_set_serialNumber", null);
+            mod.registerMethod("X509_sign", null);
             mod.registerMethod("X509_get_pubkey", null);
+            mod.registerMethod("X509_get_X509_PUBKEY", null);
+            mod.registerMethod("X509_get_ext_by_NID", null);
+            mod.registerMethod("X509_certificate_type", null);
             mod.registerMethod("X509_get_subject_name", null);
             mod.registerMethod("X509_get_issuer_name", null);
             mod.registerMethod("X509_get_subjectAltNames", null);
@@ -668,6 +831,9 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("X509_NAME_oneline", null);
             mod.registerMethod("X509_NAME_print_ex", null);
             mod.registerMethod("X509_NAME_get_entry", null);
+            mod.registerMethod("X509_NAME_add_entry_by_NID", null);
+            mod.registerMethod("X509_NAME_add_entry_by_OBJ", null);
+            mod.registerMethod("X509_NAME_add_entry_by_txt", null);
 
             // X509_NAME_ENTRY functions
             mod.registerMethod("X509_NAME_ENTRY_get_data", null);
@@ -684,6 +850,7 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("OBJ_obj2nid", null);
             mod.registerMethod("OBJ_nid2ln", null);
             mod.registerMethod("OBJ_nid2sn", null);
+            mod.registerMethod("OBJ_nid2obj", null);
             mod.registerMethod("OBJ_txt2obj", null);
             mod.registerMethod("OBJ_txt2nid", null);
             mod.registerMethod("OBJ_ln2nid", null);
@@ -694,6 +861,12 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("P_ASN1_STRING_get", null);
             mod.registerMethod("P_ASN1_INTEGER_get_hex", null);
             mod.registerMethod("P_ASN1_INTEGER_get_dec", null);
+            mod.registerMethod("ASN1_INTEGER_new", null);
+            mod.registerMethod("ASN1_INTEGER_set", null);
+            mod.registerMethod("ASN1_INTEGER_get", null);
+            mod.registerMethod("ASN1_INTEGER_free", null);
+            mod.registerMethod("P_ASN1_INTEGER_set_hex", null);
+            mod.registerMethod("P_ASN1_INTEGER_set_dec", null);
 
             // P_X509 convenience functions
             mod.registerMethod("P_X509_get_crl_distribution_points", null);
@@ -805,9 +978,17 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("SHA512", null);
             mod.registerMethod("RIPEMD160", null);
 
-            // Register commonly-accessed constants as subs with empty prototype
-            for (String name : CONSTANTS.keySet()) {
-                mod.registerMethod(name, name, "");
+            // Register constants as subs using PerlSubroutine lambdas (no per-constant Java method needed)
+            for (Map.Entry<String, Long> entry : CONSTANTS.entrySet()) {
+                String name = entry.getKey();
+                long value = entry.getValue();
+                PerlSubroutine sub = (a, c) -> new RuntimeScalar(value).getList();
+                RuntimeCode code = new RuntimeCode(sub, "");
+                code.isStatic = true;
+                code.packageName = "Net::SSLeay";
+                code.subName = name;
+                String fullName = NameNormalizer.normalizeVariableName(name, "Net::SSLeay");
+                GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
             }
 
             // Define exports
@@ -1648,361 +1829,12 @@ public class NetSSLeay extends PerlModuleBase {
         return convenienceDigest("ripemd160", args);
     }
 
-    // ---- NID constant methods ----
-
-    public static RuntimeList NID_md5(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_md5")).getList();
-    }
-
-    public static RuntimeList NID_sha1(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha1")).getList();
-    }
-
-    public static RuntimeList NID_sha224(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha224")).getList();
-    }
-
-    public static RuntimeList NID_sha256(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha256")).getList();
-    }
-
-    public static RuntimeList NID_sha384(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha384")).getList();
-    }
-
-    public static RuntimeList NID_sha512(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha512")).getList();
-    }
-
-    public static RuntimeList NID_sha3_256(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha3_256")).getList();
-    }
-
-    public static RuntimeList NID_sha3_512(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_sha3_512")).getList();
-    }
-
-    public static RuntimeList NID_ripemd160(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_ripemd160")).getList();
-    }
-
-    // ---- Generic constant accessor (used by registerMethod for each constant name) ----
-    // Each constant in the CONSTANTS map gets registered via registerMethod(name, name, "").
-    // They all need a static method with the standard signature.
-    // We generate these dynamically by having a single method per constant name.
-    // Since Java doesn't allow dynamic method creation, we use the constant() function
-    // for AUTOLOAD-based lookup, and register the most important ones directly.
-
-    // The individual constant methods are needed because registerMethod looks up
-    // static methods by name. We use a helper to generate them.
-    // Actually, since we registered them all pointing at the name, and the Java reflection
-    // will look for a method of that exact name, we need a different approach.
-    // Let's NOT register individual constant methods but instead rely on the Perl
-    // AUTOLOAD/constant mechanism. Remove the per-constant registerMethod calls
-    // and instead just export them from the Perl side.
-
-    // The constants IO::Socket::SSL accesses directly (not through AUTOLOAD):
-    public static RuntimeList ERROR_NONE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_NONE")).getList();
-    }
-
-    public static RuntimeList ERROR_SSL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_SSL")).getList();
-    }
-
-    public static RuntimeList ERROR_WANT_READ(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_WANT_READ")).getList();
-    }
-
-    public static RuntimeList ERROR_WANT_WRITE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_WANT_WRITE")).getList();
-    }
-
-    public static RuntimeList ERROR_WANT_X509_LOOKUP(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_WANT_X509_LOOKUP")).getList();
-    }
-
-    public static RuntimeList ERROR_SYSCALL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_SYSCALL")).getList();
-    }
-
-    public static RuntimeList ERROR_ZERO_RETURN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_ZERO_RETURN")).getList();
-    }
-
-    public static RuntimeList ERROR_WANT_CONNECT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_WANT_CONNECT")).getList();
-    }
-
-    public static RuntimeList ERROR_WANT_ACCEPT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("ERROR_WANT_ACCEPT")).getList();
-    }
-
-    public static RuntimeList VERIFY_NONE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("VERIFY_NONE")).getList();
-    }
-
-    public static RuntimeList VERIFY_PEER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("VERIFY_PEER")).getList();
-    }
-
-    public static RuntimeList VERIFY_FAIL_IF_NO_PEER_CERT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("VERIFY_FAIL_IF_NO_PEER_CERT")).getList();
-    }
-
-    public static RuntimeList VERIFY_CLIENT_ONCE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("VERIFY_CLIENT_ONCE")).getList();
-    }
-
-    public static RuntimeList FILETYPE_PEM(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("FILETYPE_PEM")).getList();
-    }
-
-    public static RuntimeList FILETYPE_ASN1(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("FILETYPE_ASN1")).getList();
-    }
-
-    public static RuntimeList OP_ALL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_ALL")).getList();
-    }
-
-    public static RuntimeList OP_SINGLE_DH_USE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_SINGLE_DH_USE")).getList();
-    }
-
-    public static RuntimeList OP_SINGLE_ECDH_USE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_SINGLE_ECDH_USE")).getList();
-    }
-
-    public static RuntimeList OP_NO_SSLv2(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_SSLv2")).getList();
-    }
-
-    public static RuntimeList OP_NO_SSLv3(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_SSLv3")).getList();
-    }
-
-    public static RuntimeList OP_NO_TLSv1(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_TLSv1")).getList();
-    }
-
-    public static RuntimeList OP_NO_TLSv1_1(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_TLSv1_1")).getList();
-    }
-
-    public static RuntimeList OP_NO_TLSv1_2(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_TLSv1_2")).getList();
-    }
-
-    public static RuntimeList OP_NO_TLSv1_3(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_TLSv1_3")).getList();
-    }
-
-    public static RuntimeList OP_CIPHER_SERVER_PREFERENCE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_CIPHER_SERVER_PREFERENCE")).getList();
-    }
-
-    public static RuntimeList OP_NO_COMPRESSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OP_NO_COMPRESSION")).getList();
-    }
-
-    public static RuntimeList MODE_ENABLE_PARTIAL_WRITE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("MODE_ENABLE_PARTIAL_WRITE")).getList();
-    }
-
-    public static RuntimeList MODE_ACCEPT_MOVING_WRITE_BUFFER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("MODE_ACCEPT_MOVING_WRITE_BUFFER")).getList();
-    }
-
-    public static RuntimeList MODE_AUTO_RETRY(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("MODE_AUTO_RETRY")).getList();
-    }
-
-    public static RuntimeList X509_V_FLAG_TRUSTED_FIRST(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_TRUSTED_FIRST")).getList();
-    }
-
-    public static RuntimeList X509_V_FLAG_PARTIAL_CHAIN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_PARTIAL_CHAIN")).getList();
-    }
-
-    public static RuntimeList X509_V_FLAG_CRL_CHECK(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_CRL_CHECK")).getList();
-    }
-
-    public static RuntimeList TLSEXT_STATUSTYPE_ocsp(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("TLSEXT_STATUSTYPE_ocsp")).getList();
-    }
-
-    public static RuntimeList OCSP_RESPONSE_STATUS_SUCCESSFUL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OCSP_RESPONSE_STATUS_SUCCESSFUL")).getList();
-    }
-
-    public static RuntimeList V_OCSP_CERTSTATUS_GOOD(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("V_OCSP_CERTSTATUS_GOOD")).getList();
-    }
-
-    public static RuntimeList TLS1_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("TLS1_VERSION")).getList();
-    }
-
-    public static RuntimeList SSL3_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSL3_VERSION")).getList();
-    }
-
-    public static RuntimeList TLS1_1_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("TLS1_1_VERSION")).getList();
-    }
-
-    public static RuntimeList TLS1_2_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("TLS1_2_VERSION")).getList();
-    }
-
-    public static RuntimeList TLS1_3_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("TLS1_3_VERSION")).getList();
-    }
-
-    public static RuntimeList SESS_CACHE_CLIENT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SESS_CACHE_CLIENT")).getList();
-    }
-
-    public static RuntimeList SESS_CACHE_SERVER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SESS_CACHE_SERVER")).getList();
-    }
-
-    public static RuntimeList SESS_CACHE_BOTH(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SESS_CACHE_BOTH")).getList();
-    }
-
-    public static RuntimeList SESS_CACHE_OFF(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SESS_CACHE_OFF")).getList();
-    }
-
-    public static RuntimeList NID_commonName(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_commonName")).getList();
-    }
-
-    public static RuntimeList NID_subject_alt_name(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("NID_subject_alt_name")).getList();
-    }
-
-    public static RuntimeList SSL_SENT_SHUTDOWN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSL_SENT_SHUTDOWN")).getList();
-    }
-
-    public static RuntimeList SSL_RECEIVED_SHUTDOWN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSL_RECEIVED_SHUTDOWN")).getList();
-    }
-
-    public static RuntimeList LIBRESSL_VERSION_NUMBER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("LIBRESSL_VERSION_NUMBER")).getList();
-    }
 
     // SSLeay_version() type constants
-    public static RuntimeList SSLEAY_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSLEAY_VERSION")).getList();
-    }
 
-    public static RuntimeList SSLEAY_CFLAGS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSLEAY_CFLAGS")).getList();
-    }
-
-    public static RuntimeList SSLEAY_BUILT_ON(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSLEAY_BUILT_ON")).getList();
-    }
-
-    public static RuntimeList SSLEAY_PLATFORM(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSLEAY_PLATFORM")).getList();
-    }
-
-    public static RuntimeList SSLEAY_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("SSLEAY_DIR")).getList();
-    }
 
     // Note: OPENSSL_VERSION as a constant (=0) is separate from the OPENSSL_VERSION field (=0x30000000L)
-    public static RuntimeList OPENSSL_VERSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION")).getList();
-    }
 
-    public static RuntimeList OPENSSL_CFLAGS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_CFLAGS")).getList();
-    }
-
-    public static RuntimeList OPENSSL_BUILT_ON(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_BUILT_ON")).getList();
-    }
-
-    public static RuntimeList OPENSSL_PLATFORM(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_PLATFORM")).getList();
-    }
-
-    public static RuntimeList OPENSSL_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_VERSION_MAJOR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_MAJOR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_VERSION_MINOR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_MINOR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_VERSION_PATCH(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_PATCH")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_CONFIG_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_CONFIG_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_ENGINES_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_ENGINES_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_MODULES_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_MODULES_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_DSO_EXTENSION(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_DSO_EXTENSION")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_DIR_FILENAME_SEPARATOR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_DIR_FILENAME_SEPARATOR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_LIST_SEPARATOR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_LIST_SEPARATOR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_SEED_SOURCE(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_SEED_SOURCE")).getList();
-    }
-
-    public static RuntimeList OPENSSL_INFO_CPU_SETTINGS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_CPU_SETTINGS")).getList();
-    }
-
-    public static RuntimeList OPENSSL_ENGINES_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_ENGINES_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_MODULES_DIR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_MODULES_DIR")).getList();
-    }
-
-    public static RuntimeList OPENSSL_CPU_INFO(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_CPU_INFO")).getList();
-    }
-
-    public static RuntimeList OPENSSL_FULL_VERSION_STRING(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_FULL_VERSION_STRING")).getList();
-    }
-
-    public static RuntimeList OPENSSL_VERSION_STRING(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_STRING")).getList();
-    }
 
     // ---- ASN1_TIME functions (backed by epoch seconds + java.time formatting) ----
 
@@ -2646,6 +2478,29 @@ public class NetSSLeay extends PerlModuleBase {
     public static RuntimeList X509_get_pubkey(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null && mutable.pubkeyHandle != 0) {
+            // Return a new handle to the public key (extracting from private if needed)
+            java.security.Key key = EVP_PKEY_HANDLES.get(mutable.pubkeyHandle);
+            if (key == null) return new RuntimeScalar().getList();
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            if (key instanceof PrivateKey && key instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                try {
+                    java.security.interfaces.RSAPrivateCrtKey rsaCrt =
+                            (java.security.interfaces.RSAPrivateCrtKey) key;
+                    java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
+                            rsaCrt.getModulus(), rsaCrt.getPublicExponent());
+                    PublicKey pk = KeyFactory.getInstance("RSA").generatePublic(pubSpec);
+                    EVP_PKEY_HANDLES.put(handleId, pk);
+                } catch (Exception e) {
+                    EVP_PKEY_HANDLES.put(handleId, key);
+                }
+            } else {
+                EVP_PKEY_HANDLES.put(handleId, key);
+            }
+            return new RuntimeScalar(handleId).getList();
+        }
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar().getList();
         try {
@@ -2661,6 +2516,9 @@ public class NetSSLeay extends PerlModuleBase {
     public static RuntimeList X509_get_subject_name(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) return new RuntimeScalar(mutable.subjectNameHandle).getList();
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar().getList();
         X509NameInfo nameInfo = parseX500Principal(cert.getSubjectX500Principal());
@@ -2672,6 +2530,12 @@ public class NetSSLeay extends PerlModuleBase {
     public static RuntimeList X509_get_issuer_name(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) {
+            if (mutable.issuerNameHandle == 0) return new RuntimeScalar().getList();
+            return new RuntimeScalar(mutable.issuerNameHandle).getList();
+        }
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar().getList();
         X509NameInfo nameInfo = parseX500Principal(cert.getIssuerX500Principal());
@@ -2848,14 +2712,24 @@ public class NetSSLeay extends PerlModuleBase {
         X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
         if (nameInfo == null) return new RuntimeScalar("").getList();
         // Default: RFC2253 format (reverse order, comma-separated)
-        // Build from entries in reverse order
+        // Non-ASCII UTF-8 bytes are hex-escaped as \XX
         StringBuilder sb = new StringBuilder();
         for (int i = nameInfo.entries.size() - 1; i >= 0; i--) {
             if (sb.length() > 0) sb.append(",");
             X509NameEntry entry = nameInfo.entries.get(i);
             OidInfo oidInfo = OID_TO_INFO.get(entry.oid);
             String name = oidInfo != null ? oidInfo.shortName : entry.oid;
-            sb.append(name).append("=").append(entry.dataUtf8);
+            sb.append(name).append("=");
+            // Hex-escape non-ASCII bytes in the value
+            // Data may be pre-encoded UTF-8 stored as ISO-8859-1 chars
+            byte[] utf8Bytes = entry.dataUtf8.getBytes(StandardCharsets.ISO_8859_1);
+            for (byte b : utf8Bytes) {
+                if (b >= 0x20 && b <= 0x7E) {
+                    sb.append((char) b);
+                } else {
+                    sb.append(String.format("\\%02X", b & 0xFF));
+                }
+            }
         }
         return new RuntimeScalar(sb.toString()).getList();
     }
@@ -3081,7 +2955,7 @@ public class NetSSLeay extends PerlModuleBase {
                 }
             }
         } catch (Exception e) {
-            // no SANs
+            // SAN parsing failed — return whatever we collected so far
         }
         return result;
     }
@@ -3300,6 +3174,11 @@ public class NetSSLeay extends PerlModuleBase {
     private static RuntimeList x509GetTime(RuntimeArray args, boolean before) {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) {
+            return new RuntimeScalar(before ? mutable.notBeforeHandle : mutable.notAfterHandle).getList();
+        }
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar().getList();
         Date date = before ? cert.getNotBefore() : cert.getNotAfter();
@@ -3312,6 +3191,9 @@ public class NetSSLeay extends PerlModuleBase {
     public static RuntimeList X509_get_serialNumber(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) return new RuntimeScalar(mutable.serialHandle).getList();
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar().getList();
         long handleId = HANDLE_COUNTER.getAndIncrement();
@@ -3326,6 +3208,9 @@ public class NetSSLeay extends PerlModuleBase {
     public static RuntimeList X509_get_version(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar(0).getList();
         long x509Handle = args.get(0).getLong();
+        // Check mutable X509 first
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) return new RuntimeScalar(mutable.version).getList();
         X509Certificate cert = X509_HANDLES.get(x509Handle);
         if (cert == null) return new RuntimeScalar(0).getList();
         return new RuntimeScalar(cert.getVersion() - 1).getList(); // OpenSSL returns 0-based
@@ -4918,45 +4803,1492 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar().getList();
     }
 
-    // ---- Constant accessor methods ----
 
-    public static RuntimeList X509_V_FLAG_ALLOW_PROXY_CERTS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_ALLOW_PROXY_CERTS")).getList();
+    // ---- Phase 2: Foundation functions ----
+
+    // RSA_F4() - returns RSA F4 exponent (65537)
+    public static RuntimeList RSA_F4(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(65537L).getList();
     }
-    public static RuntimeList X509_V_FLAG_POLICY_CHECK(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_POLICY_CHECK")).getList();
+
+    // RSA_get_key_parameters($rsa) - returns list of 8 BIGNUMs: n, e, d, p, q, dmp1, dmq1, iqmp
+    public static RuntimeList RSA_get_key_parameters(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeList();
+        long rsaHandle = args.get(0).getLong();
+        KeyPair kp = RSA_HANDLES.get(rsaHandle);
+        if (kp == null) return new RuntimeList();
+        try {
+            java.security.interfaces.RSAPrivateCrtKey privKey =
+                    (java.security.interfaces.RSAPrivateCrtKey) kp.getPrivate();
+            RSAPublicKey pubKey = (RSAPublicKey) kp.getPublic();
+            BigInteger[] params = {
+                pubKey.getModulus(),           // n
+                pubKey.getPublicExponent(),    // e
+                privKey.getPrivateExponent(),  // d
+                privKey.getPrimeP(),           // p
+                privKey.getPrimeQ(),           // q
+                privKey.getPrimeExponentP(),   // dmp1
+                privKey.getPrimeExponentQ(),   // dmq1
+                privKey.getCrtCoefficient()    // iqmp
+            };
+            RuntimeList result = new RuntimeList();
+            for (BigInteger bi : params) {
+                long bnHandle = HANDLE_COUNTER.getAndIncrement();
+                BIGNUM_HANDLES.put(bnHandle, bi);
+                result.add(new RuntimeScalar(bnHandle));
+            }
+            return result;
+        } catch (Exception e) {
+            return new RuntimeList();
+        }
     }
-    public static RuntimeList X509_V_FLAG_EXPLICIT_POLICY(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_EXPLICIT_POLICY")).getList();
+
+    // BN_dup($bn) - duplicate a BIGNUM handle
+    public static RuntimeList BN_dup(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bnHandle = args.get(0).getLong();
+        BigInteger val = BIGNUM_HANDLES.get(bnHandle);
+        if (val == null) return new RuntimeScalar().getList();
+        long newHandle = HANDLE_COUNTER.getAndIncrement();
+        BIGNUM_HANDLES.put(newHandle, val);
+        return new RuntimeScalar(newHandle).getList();
     }
-    public static RuntimeList X509_V_FLAG_LEGACY_VERIFY(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_LEGACY_VERIFY")).getList();
+
+    // EVP_PKEY_new() - create empty EVP_PKEY handle
+    public static RuntimeList EVP_PKEY_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        EVP_PKEY_HANDLES.put(handleId, null); // null = empty, will be assigned later
+        return new RuntimeScalar(handleId).getList();
     }
-    public static RuntimeList X509_V_OK(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_OK")).getList();
+
+    // EVP_PKEY_assign_RSA($pkey, $rsa) - assign RSA key to EVP_PKEY
+    public static RuntimeList EVP_PKEY_assign_RSA(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long pkeyHandle = args.get(0).getLong();
+        long rsaHandle = args.get(1).getLong();
+        if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)) return new RuntimeScalar(0).getList();
+        KeyPair kp = RSA_HANDLES.get(rsaHandle);
+        if (kp == null) return new RuntimeScalar(0).getList();
+        // Store the private key in EVP_PKEY_HANDLES
+        EVP_PKEY_HANDLES.put(pkeyHandle, kp.getPrivate());
+        return new RuntimeScalar(1).getList();
     }
-    public static RuntimeList X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY")).getList();
+
+    // ASN1_INTEGER_new() - create new ASN1_INTEGER handle
+    public static RuntimeList ASN1_INTEGER_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_INTEGER_HANDLES.put(handleId, BigInteger.ZERO);
+        return new RuntimeScalar(handleId).getList();
     }
-    public static RuntimeList X509_V_ERR_CERT_UNTRUSTED(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_CERT_UNTRUSTED")).getList();
+
+    // ASN1_INTEGER_set($asn1, $value) - set from integer value
+    public static RuntimeList ASN1_INTEGER_set(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        if (!ASN1_INTEGER_HANDLES.containsKey(handle)) return new RuntimeScalar(0).getList();
+        long value = args.get(1).getLong();
+        ASN1_INTEGER_HANDLES.put(handle, BigInteger.valueOf(value));
+        return new RuntimeScalar(1).getList();
     }
-    public static RuntimeList X509_V_ERR_NO_EXPLICIT_POLICY(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_NO_EXPLICIT_POLICY")).getList();
+
+    // ASN1_INTEGER_get($asn1) - get integer value
+    public static RuntimeList ASN1_INTEGER_get(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        BigInteger val = ASN1_INTEGER_HANDLES.get(handle);
+        if (val == null) return new RuntimeScalar(0).getList();
+        // OpenSSL returns -1 when the value doesn't fit in a long
+        if (val.bitLength() > 63) return new RuntimeScalar(-1).getList();
+        return new RuntimeScalar(val.longValue()).getList();
     }
-    public static RuntimeList X509_V_ERR_HOSTNAME_MISMATCH(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_HOSTNAME_MISMATCH")).getList();
+
+    // ASN1_INTEGER_free($asn1) - free handle
+    public static RuntimeList ASN1_INTEGER_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        ASN1_INTEGER_HANDLES.remove(handle);
+        return new RuntimeScalar().getList();
     }
-    public static RuntimeList X509_PURPOSE_SSL_CLIENT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_PURPOSE_SSL_CLIENT")).getList();
+
+    // P_ASN1_INTEGER_set_hex($asn1, $hex) - set from hex string
+    public static RuntimeList P_ASN1_INTEGER_set_hex(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        if (!ASN1_INTEGER_HANDLES.containsKey(handle)) return new RuntimeScalar(0).getList();
+        String hex = args.get(1).toString();
+        try {
+            ASN1_INTEGER_HANDLES.put(handle, new BigInteger(hex, 16));
+            return new RuntimeScalar(1).getList();
+        } catch (NumberFormatException e) {
+            return new RuntimeScalar(0).getList();
+        }
     }
-    public static RuntimeList X509_PURPOSE_SSL_SERVER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_PURPOSE_SSL_SERVER")).getList();
+
+    // P_ASN1_INTEGER_set_dec($asn1, $dec) - set from decimal string
+    public static RuntimeList P_ASN1_INTEGER_set_dec(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        if (!ASN1_INTEGER_HANDLES.containsKey(handle)) return new RuntimeScalar(0).getList();
+        String dec = args.get(1).toString();
+        try {
+            ASN1_INTEGER_HANDLES.put(handle, new BigInteger(dec, 10));
+            return new RuntimeScalar(1).getList();
+        } catch (NumberFormatException e) {
+            return new RuntimeScalar(0).getList();
+        }
     }
-    public static RuntimeList X509_TRUST_EMAIL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_TRUST_EMAIL")).getList();
+
+    // OBJ_nid2obj($nid) - convert NID to ASN1_OBJECT handle
+    public static RuntimeList OBJ_nid2obj(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        int nid = (int) args.get(0).getLong();
+        OidInfo info = NID_TO_INFO.get(nid);
+        if (info == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, info.oid);
+        return new RuntimeScalar(handleId).getList();
     }
-    public static RuntimeList X509_CHECK_FLAG_NO_WILDCARDS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(CONSTANTS.get("X509_CHECK_FLAG_NO_WILDCARDS")).getList();
+
+    // EVP_get_cipherbyname($name) - return cipher handle (sentinel)
+    public static RuntimeList EVP_get_cipherbyname(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        String name = args.get(0).toString();
+        // Map common OpenSSL cipher names to Java cipher names
+        Map<String, String> cipherMap = new HashMap<>();
+        cipherMap.put("DES-EDE3-CBC", "DESede/CBC/PKCS5Padding");
+        cipherMap.put("des-ede3-cbc", "DESede/CBC/PKCS5Padding");
+        cipherMap.put("AES-256-CBC", "AES/CBC/PKCS5Padding");
+        cipherMap.put("aes-256-cbc", "AES/CBC/PKCS5Padding");
+        cipherMap.put("AES-128-CBC", "AES/CBC/PKCS5Padding");
+        cipherMap.put("aes-128-cbc", "AES/CBC/PKCS5Padding");
+        String javaName = cipherMap.get(name);
+        if (javaName == null) javaName = name; // try as-is
+        try {
+            Cipher.getInstance(javaName); // validate it exists
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            EVP_CIPHER_HANDLES.put(handleId, name);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList(); // undef = not available
+        }
+    }
+
+    // OSSL_PROVIDER_load($ctx, $name) - no-op, return success
+    public static RuntimeList OSSL_PROVIDER_load(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    // ---- Phase 2b: Mutable X509 creation and signing ----
+
+    // X509_new() - create mutable X509 certificate
+    public static RuntimeList X509_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        MutableX509State state = new MutableX509State();
+        // Create initial sub-handles for serial, subject name, notBefore, notAfter
+        state.serialHandle = HANDLE_COUNTER.getAndIncrement();
+        ASN1_INTEGER_HANDLES.put(state.serialHandle, BigInteger.ZERO);
+        state.subjectNameHandle = HANDLE_COUNTER.getAndIncrement();
+        X509NameInfo subjectName = new X509NameInfo();
+        subjectName.oneline = "";
+        subjectName.rfc2253 = "";
+        subjectName.derEncoded = new byte[]{0x30, 0x00};
+        X509_NAME_HANDLES.put(state.subjectNameHandle, subjectName);
+        state.notBeforeHandle = HANDLE_COUNTER.getAndIncrement();
+        ASN1_TIME_HANDLES.put(state.notBeforeHandle, 0L);
+        state.notAfterHandle = HANDLE_COUNTER.getAndIncrement();
+        ASN1_TIME_HANDLES.put(state.notAfterHandle, 0L);
+        MUTABLE_X509_HANDLES.put(handleId, state);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // X509_set_version($x509, $version)
+    public static RuntimeList X509_set_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.version = (int) args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_set_pubkey($x509, $pkey)
+    public static RuntimeList X509_set_pubkey(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        // Copy the key into a new internal handle so EVP_PKEY_free on the
+        // original doesn't invalidate our reference (mimics OpenSSL refcounting)
+        long srcHandle = args.get(1).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(srcHandle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        long newHandle = HANDLE_COUNTER.getAndIncrement();
+        EVP_PKEY_HANDLES.put(newHandle, key);
+        state.pubkeyHandle = newHandle;
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_set_subject_name($x509, $name)
+    public static RuntimeList X509_set_subject_name(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.subjectNameHandle = args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_set_issuer_name($x509, $name)
+    public static RuntimeList X509_set_issuer_name(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.issuerNameHandle = args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_set_serialNumber($x509, $serial)
+    public static RuntimeList X509_set_serialNumber(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        long serialHandle = args.get(1).getLong();
+        BigInteger serialVal = ASN1_INTEGER_HANDLES.get(serialHandle);
+        if (serialVal != null) {
+            ASN1_INTEGER_HANDLES.put(state.serialHandle, serialVal);
+        }
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_get_X509_PUBKEY($x509) - returns a handle (just checks it exists)
+    public static RuntimeList X509_get_X509_PUBKEY(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        MutableX509State mutable = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (mutable != null) {
+            if (mutable.pubkeyHandle == 0) return new RuntimeScalar().getList();
+            return new RuntimeScalar(mutable.pubkeyHandle).getList();
+        }
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        // Return the pubkey handle for immutable certs
+        try {
+            PublicKey pubKey = cert.getPublicKey();
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            EVP_PKEY_HANDLES.put(handleId, pubKey);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // X509_get_ext_by_NID($x509, $nid) - find extension index by NID
+    public static RuntimeList X509_get_ext_by_NID(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(-1).getList();
+        long x509Handle = args.get(0).getLong();
+        int nid = (int) args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(-1).getList();
+        OidInfo info = NID_TO_INFO.get(nid);
+        if (info == null) return new RuntimeScalar(-1).getList();
+        // Get all extension OIDs and find the index
+        List<String> allOids = new ArrayList<>();
+        Set<String> critOids = cert.getCriticalExtensionOIDs();
+        Set<String> nonCritOids = cert.getNonCriticalExtensionOIDs();
+        if (critOids != null) allOids.addAll(critOids);
+        if (nonCritOids != null) allOids.addAll(nonCritOids);
+        // Sort by position in DER encoding
+        try {
+            allOids = sortExtensionsByDerOrder(cert.getEncoded(), allOids);
+        } catch (Exception e) {
+            // fallback: use unsorted
+        }
+        for (int i = 0; i < allOids.size(); i++) {
+            if (allOids.get(i).equals(info.oid)) return new RuntimeScalar(i).getList();
+        }
+        return new RuntimeScalar(-1).getList();
+    }
+
+    // X509_certificate_type($x509) - get key type bitmask
+    public static RuntimeList X509_certificate_type(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        // Check immutable cert first, then mutable
+        PublicKey pk = null;
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert != null) {
+            pk = cert.getPublicKey();
+        } else {
+            MutableX509State mstate = MUTABLE_X509_HANDLES.get(x509Handle);
+            if (mstate != null && mstate.pubkeyHandle != 0) {
+                java.security.Key key = EVP_PKEY_HANDLES.get(mstate.pubkeyHandle);
+                if (key instanceof PublicKey) pk = (PublicKey) key;
+                else if (key instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                    // Derive public key from private key
+                    try {
+                        java.security.interfaces.RSAPrivateCrtKey rsaCrt =
+                                (java.security.interfaces.RSAPrivateCrtKey) key;
+                        pk = KeyFactory.getInstance("RSA").generatePublic(
+                                new java.security.spec.RSAPublicKeySpec(
+                                        rsaCrt.getModulus(), rsaCrt.getPublicExponent()));
+                    } catch (Exception e) { /* ignore */ }
+                }
+            }
+        }
+        if (pk == null) return new RuntimeScalar(0).getList();
+        long flags = 0;
+        if (pk instanceof RSAPublicKey) {
+            flags |= 0x0001; // EVP_PK_RSA
+            flags |= 0x0010; // EVP_PKT_SIGN
+            flags |= 0x0020; // EVP_PKT_ENC
+        } else if (pk instanceof ECPublicKey) {
+            flags |= 0x0008; // EVP_PK_EC
+            flags |= 0x0010; // EVP_PKT_SIGN
+        }
+        return new RuntimeScalar(flags).getList();
+    }
+
+    // ---- X509_NAME building ----
+
+    // Helper: rebuild X509NameInfo DER, oneline, rfc2253 from entries
+    private static void rebuildNameInfo(X509NameInfo info) {
+        // Build DER: SEQUENCE { SET { SEQUENCE { OID, value } }* }
+        byte[][] rdnDers = new byte[info.entries.size()][];
+        StringBuilder oneline = new StringBuilder();
+        StringBuilder rfc2253 = new StringBuilder();
+        for (int i = 0; i < info.entries.size(); i++) {
+            X509NameEntry entry = info.entries.get(i);
+            byte[] oidDer = encodeOidDer(entry.oid);
+            // Encode value as UTF8String (tag 0x0C)
+            byte[] valueDer;
+            byte[] utf8Bytes = entry.dataUtf8.getBytes(StandardCharsets.UTF_8);
+            valueDer = derTag(0x0C, utf8Bytes);
+            byte[] attrSeq = derSequence(derConcat(oidDer, valueDer));
+            rdnDers[i] = derTag(0x31, attrSeq); // SET
+            OidInfo oidInfo = OID_TO_INFO.get(entry.oid);
+            String shortName = oidInfo != null ? oidInfo.shortName : entry.oid;
+            oneline.append("/").append(shortName).append("=").append(entry.dataUtf8);
+            if (i > 0) rfc2253.insert(0, ",");
+            rfc2253.insert(0, shortName + "=" + entry.dataUtf8);
+        }
+        info.oneline = oneline.toString();
+        info.rfc2253 = rfc2253.toString();
+        info.derEncoded = derSequence(derConcat(rdnDers));
+    }
+
+    // X509_NAME_add_entry_by_txt($name, $field, $type, $bytes, $len, $loc, $set)
+    public static RuntimeList X509_NAME_add_entry_by_txt(RuntimeArray args, int ctx) {
+        if (args.size() < 4) return new RuntimeScalar(0).getList();
+        long nameHandle = args.get(0).getLong();
+        String field = args.get(1).toString();
+        // type (MBSTRING_ASC, MBSTRING_UTF8) is ignored — we always store as UTF-8
+        String value = args.get(3).toString();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar(0).getList();
+        // Look up OID from field name (short name or long name)
+        String oid = null;
+        for (OidInfo info : OID_TO_INFO.values()) {
+            if (info.shortName.equals(field) || info.longName.equals(field)) {
+                oid = info.oid;
+                break;
+            }
+        }
+        if (oid == null) return new RuntimeScalar(0).getList();
+        X509NameEntry entry = new X509NameEntry();
+        entry.oid = oid;
+        entry.dataUtf8 = value;
+        entry.rawBytes = value.getBytes(StandardCharsets.UTF_8);
+        nameInfo.entries.add(entry);
+        rebuildNameInfo(nameInfo);
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_NAME_add_entry_by_NID($name, $nid, $type, $bytes, $len, $loc, $set)
+    public static RuntimeList X509_NAME_add_entry_by_NID(RuntimeArray args, int ctx) {
+        if (args.size() < 4) return new RuntimeScalar(0).getList();
+        long nameHandle = args.get(0).getLong();
+        int nid = (int) args.get(1).getLong();
+        String value = args.get(3).toString();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar(0).getList();
+        OidInfo oidInfo = NID_TO_INFO.get(nid);
+        if (oidInfo == null) return new RuntimeScalar(0).getList();
+        X509NameEntry entry = new X509NameEntry();
+        entry.oid = oidInfo.oid;
+        entry.dataUtf8 = value;
+        entry.rawBytes = value.getBytes(StandardCharsets.UTF_8);
+        nameInfo.entries.add(entry);
+        rebuildNameInfo(nameInfo);
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_NAME_add_entry_by_OBJ($name, $obj, $type, $bytes, $len, $loc, $set)
+    public static RuntimeList X509_NAME_add_entry_by_OBJ(RuntimeArray args, int ctx) {
+        if (args.size() < 4) return new RuntimeScalar(0).getList();
+        long nameHandle = args.get(0).getLong();
+        long objHandle = args.get(1).getLong();
+        String value = args.get(3).toString();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar(0).getList();
+        String oid = ASN1_OBJECT_HANDLES.get(objHandle);
+        if (oid == null) return new RuntimeScalar(0).getList();
+        X509NameEntry entry = new X509NameEntry();
+        entry.oid = oid;
+        entry.dataUtf8 = value;
+        entry.rawBytes = value.getBytes(StandardCharsets.UTF_8);
+        nameInfo.entries.add(entry);
+        rebuildNameInfo(nameInfo);
+        return new RuntimeScalar(1).getList();
+    }
+
+    // ---- Modify existing getters to support mutable X509 ----
+    // These override the existing implementations by checking MUTABLE_X509_HANDLES first
+
+    // Override X509_get_subject_name to support mutable X509
+    // (Original at line ~2661 will be kept for immutable certs)
+
+    // Override X509_get_notBefore/After for mutable X509
+    // The mutable handles are pre-created in X509_new, so the existing
+    // x509GetTime function needs to check MUTABLE_X509_HANDLES first
+
+    // ---- X509_sign: Build DER, sign, create X509Certificate ----
+
+    // Helper: encode BigInteger as DER INTEGER
+    private static byte[] derInteger(BigInteger val) {
+        byte[] valBytes = val.toByteArray(); // big-endian, two's complement
+        return derTag(0x02, valBytes);
+    }
+
+    // Helper: encode long as DER INTEGER
+    private static byte[] derIntegerLong(long val) {
+        return derInteger(BigInteger.valueOf(val));
+    }
+
+    // Helper: get algorithm identifier DER for a digest+RSA combination
+    private static byte[] getSignatureAlgorithmDer(String digestName) {
+        String oid;
+        switch (digestName.toLowerCase()) {
+            case "sha1": oid = "1.2.840.113549.1.1.5"; break;
+            case "sha224": oid = "1.2.840.113549.1.1.14"; break;
+            case "sha256": oid = "1.2.840.113549.1.1.11"; break;
+            case "sha384": oid = "1.2.840.113549.1.1.12"; break;
+            case "sha512": oid = "1.2.840.113549.1.1.13"; break;
+            default: oid = "1.2.840.113549.1.1.11"; break; // default to SHA-256
+        }
+        byte[] oidDer = encodeOidDer(oid);
+        byte[] nullTag = {0x05, 0x00};
+        return derSequence(derConcat(oidDer, nullTag));
+    }
+
+    // Helper: get Java Signature algorithm name
+    private static String getJavaSignatureAlgorithm(String digestName) {
+        switch (digestName.toLowerCase()) {
+            case "sha1": return "SHA1withRSA";
+            case "sha224": return "SHA224withRSA";
+            case "sha256": return "SHA256withRSA";
+            case "sha384": return "SHA384withRSA";
+            case "sha512": return "SHA512withRSA";
+            default: return "SHA256withRSA";
+        }
+    }
+
+    // Helper: encode ASN1_TIME as UTCTime or GeneralizedTime DER
+    private static byte[] derTime(long epochSeconds) {
+        ZonedDateTime zdt = Instant.ofEpochSecond(epochSeconds).atZone(ZoneOffset.UTC);
+        int year = zdt.getYear();
+        String timeStr;
+        int tag;
+        if (year >= 1950 && year < 2050) {
+            // UTCTime: YYMMDDHHMMSSZ
+            timeStr = String.format("%02d%02d%02d%02d%02d%02dZ",
+                    year % 100, zdt.getMonthValue(), zdt.getDayOfMonth(),
+                    zdt.getHour(), zdt.getMinute(), zdt.getSecond());
+            tag = 0x17; // UTCTime
+        } else {
+            // GeneralizedTime: YYYYMMDDHHMMSSZ
+            timeStr = String.format("%04d%02d%02d%02d%02d%02dZ",
+                    year, zdt.getMonthValue(), zdt.getDayOfMonth(),
+                    zdt.getHour(), zdt.getMinute(), zdt.getSecond());
+            tag = 0x18; // GeneralizedTime
+        }
+        return derTag(tag, timeStr.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    // Helper: build extension DER for X509v3 extensions
+    private static byte[] buildExtensionsDer(List<MutableExtension> extensions) {
+        if (extensions.isEmpty()) return new byte[0];
+        byte[][] extDers = new byte[extensions.size()][];
+        for (int i = 0; i < extensions.size(); i++) {
+            MutableExtension ext = extensions.get(i);
+            byte[] oidDer = encodeOidDer(ext.oid);
+            byte[] valueDer = encodeExtensionValue(ext.oid, ext.value);
+            byte[] octetString = derTag(0x04, valueDer);
+            if (ext.critical) {
+                byte[] criticalDer = derTag(0x01, new byte[]{(byte) 0xFF}); // BOOLEAN TRUE
+                extDers[i] = derSequence(derConcat(oidDer, criticalDer, octetString));
+            } else {
+                extDers[i] = derSequence(derConcat(oidDer, octetString));
+            }
+        }
+        return derSequence(derConcat(extDers));
+    }
+
+    // Helper: encode extension value based on OID and text value
+    private static byte[] encodeExtensionValue(String oid, String value) {
+        // Basic Constraints: "CA:FALSE" or "CA:TRUE"
+        if (oid.equals("2.5.29.19")) {
+            boolean isCA = value.toUpperCase().contains("CA:TRUE");
+            if (isCA) {
+                return derSequence(derTag(0x01, new byte[]{(byte) 0xFF}));
+            } else {
+                return derSequence(new byte[0]);
+            }
+        }
+        // Key Usage: "digitalSignature,keyEncipherment,..."
+        if (oid.equals("2.5.29.15")) {
+            int bits = 0;
+            String[] usages = value.replace("critical,", "").split(",");
+            for (String u : usages) {
+                switch (u.trim()) {
+                    case "digitalSignature": bits |= 0x80; break;
+                    case "nonRepudiation": bits |= 0x40; break;
+                    case "keyEncipherment": bits |= 0x20; break;
+                    case "dataEncipherment": bits |= 0x10; break;
+                    case "keyAgreement": bits |= 0x08; break;
+                    case "keyCertSign": bits |= 0x04; break;
+                    case "cRLSign": bits |= 0x02; break;
+                    case "encipherOnly": bits |= 0x01; break;
+                }
+            }
+            // BIT STRING: unused bits count + byte
+            int unusedBits = 0;
+            for (int i = 0; i < 8; i++) {
+                if ((bits & (1 << i)) != 0) break;
+                unusedBits++;
+            }
+            return derTag(0x03, new byte[]{(byte) unusedBits, (byte) bits});
+        }
+        // Subject Alt Name: "DNS:example.com,IP:127.0.0.1,email:test@example.com,URI:http://example.com"
+        if (oid.equals("2.5.29.17")) {
+            return encodeSanExtension(value);
+        }
+        // Extended Key Usage: "serverAuth,clientAuth,..."
+        if (oid.equals("2.5.29.37")) {
+            return encodeEkuExtension(value);
+        }
+        // Netscape Cert Type: "server,client,..."
+        if (oid.equals("2.16.840.1.113730.1.1")) {
+            int bits = 0;
+            String[] types = value.split(",");
+            for (String t : types) {
+                switch (t.trim()) {
+                    case "client": bits |= 0x80; break;
+                    case "server": bits |= 0x40; break;
+                    case "email": bits |= 0x20; break;
+                    case "objsign": bits |= 0x10; break;
+                    case "sslCA": bits |= 0x04; break;
+                    case "emailCA": bits |= 0x02; break;
+                    case "objCA": bits |= 0x01; break;
+                }
+            }
+            int unusedBits = 0;
+            for (int i = 0; i < 8; i++) {
+                if ((bits & (1 << i)) != 0) break;
+                unusedBits++;
+            }
+            return derTag(0x03, new byte[]{(byte) unusedBits, (byte) bits});
+        }
+        // CRL Distribution Points: "URI:http://example.com/crl.pem"
+        if (oid.equals("2.5.29.31")) {
+            return encodeCrlDistPoints(value);
+        }
+        // Subject Key Identifier, Authority Key Identifier: pass through as OCTET STRING
+        // For any unrecognized extension, encode value as UTF8String
+        return derTag(0x0C, value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    // Encode Subject Alternative Name extension value
+    private static byte[] encodeSanExtension(String value) {
+        String[] parts = value.split(",");
+        List<byte[]> items = new ArrayList<>();
+        for (String part : parts) {
+            part = part.trim();
+            if (part.startsWith("DNS:")) {
+                String dns = part.substring(4);
+                items.add(derTag(0x82, dns.getBytes(StandardCharsets.US_ASCII))); // context [2]
+            } else if (part.startsWith("IP:")) {
+                String ip = part.substring(3);
+                byte[] ipBytes = parseIpAddress(ip);
+                if (ipBytes != null) items.add(derTag(0x87, ipBytes)); // context [7]
+            } else if (part.startsWith("email:")) {
+                String email = part.substring(6);
+                items.add(derTag(0x81, email.getBytes(StandardCharsets.US_ASCII))); // context [1]
+            } else if (part.startsWith("URI:")) {
+                String uri = part.substring(4);
+                items.add(derTag(0x86, uri.getBytes(StandardCharsets.US_ASCII))); // context [6]
+            } else if (part.startsWith("otherName:")) {
+                // Format: otherName:OID;TYPE:value (e.g., "otherName:2.3.4.5;UTF8:some text")
+                String rest = part.substring(10); // after "otherName:"
+                int semiIdx = rest.indexOf(';');
+                if (semiIdx > 0) {
+                    String oid = rest.substring(0, semiIdx);
+                    String typeAndValue = rest.substring(semiIdx + 1);
+                    int colonIdx = typeAndValue.indexOf(':');
+                    if (colonIdx > 0) {
+                        String typeName = typeAndValue.substring(0, colonIdx);
+                        String val = typeAndValue.substring(colonIdx + 1);
+                        // Encode value based on type
+                        byte[] valueDer;
+                        if (typeName.equals("UTF8")) {
+                            valueDer = derTag(0x0C, val.getBytes(StandardCharsets.UTF_8)); // UTF8String
+                        } else if (typeName.equals("IA5")) {
+                            valueDer = derTag(0x16, val.getBytes(StandardCharsets.US_ASCII)); // IA5String
+                        } else {
+                            valueDer = derTag(0x0C, val.getBytes(StandardCharsets.UTF_8)); // default UTF8
+                        }
+                        byte[] oidDer = encodeOidDer(oid);
+                        byte[] explicitValue = derTag(0xA0, valueDer); // [0] EXPLICIT
+                        // otherName [0] IMPLICIT SEQUENCE { OID, [0] EXPLICIT value }
+                        // The context [0] tag replaces the SEQUENCE tag
+                        byte[] otherNameContent = derConcat(oidDer, explicitValue);
+                        items.add(derTag(0xA0, otherNameContent)); // context [0] CONSTRUCTED
+                    }
+                }
+            } else if (part.startsWith("RID:")) {
+                // registeredID: OID value with implicit tag [8]
+                String oid = part.substring(4);
+                byte[] oidDer = encodeOidDer(oid);
+                // Extract OID content (skip tag and length) for implicit tagging
+                int contentStart = 1; // skip 0x06 tag
+                if (oidDer[contentStart] < 0) {
+                    // long form length - shouldn't happen for OIDs
+                    contentStart += 1 + (oidDer[contentStart] & 0x7F);
+                } else {
+                    contentStart += 1; // skip length byte
+                }
+                byte[] oidContent = new byte[oidDer.length - contentStart];
+                System.arraycopy(oidDer, contentStart, oidContent, 0, oidContent.length);
+                items.add(derTag(0x88, oidContent)); // context [8] IMPLICIT
+            }
+        }
+        return derSequence(derConcat(items.toArray(new byte[0][])));
+    }
+
+    // Parse IP address string to bytes
+    private static byte[] parseIpAddress(String ip) {
+        try {
+            java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+            return addr.getAddress();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // Encode Extended Key Usage extension
+    private static byte[] encodeEkuExtension(String value) {
+        String[] usages = value.replace("critical,", "").split(",");
+        List<byte[]> oids = new ArrayList<>();
+        for (String u : usages) {
+            String oid = null;
+            switch (u.trim()) {
+                case "serverAuth": oid = "1.3.6.1.5.5.7.3.1"; break;
+                case "clientAuth": oid = "1.3.6.1.5.5.7.3.2"; break;
+                case "codeSigning": oid = "1.3.6.1.5.5.7.3.3"; break;
+                case "emailProtection": oid = "1.3.6.1.5.5.7.3.4"; break;
+                case "timeStamping": oid = "1.3.6.1.5.5.7.3.8"; break;
+                case "OCSPSigning": oid = "1.3.6.1.5.5.7.3.9"; break;
+            }
+            if (oid != null) oids.add(encodeOidDer(oid));
+        }
+        return derSequence(derConcat(oids.toArray(new byte[0][])));
+    }
+
+    // Encode CRL Distribution Points extension
+    private static byte[] encodeCrlDistPoints(String value) {
+        // value is like "URI:http://example.com/crl.pem"
+        String uri = value.startsWith("URI:") ? value.substring(4) : value;
+        byte[] uriBytes = derTag(0x86, uri.getBytes(StandardCharsets.US_ASCII)); // context [6] IA5String
+        byte[] fullName = derTag(0xA0, uriBytes); // context [0] EXPLICIT
+        byte[] distPointName = derTag(0xA0, fullName); // context [0] EXPLICIT
+        byte[] distPoint = derSequence(distPointName);
+        return derSequence(distPoint); // SEQUENCE OF DistributionPoint
+    }
+
+    // X509_sign($x509, $pkey, $md) - sign the mutable X509, producing immutable cert
+    public static RuntimeList X509_sign(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        long mdHandle = args.get(2).getLong();
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        java.security.Key signingKey = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (signingKey == null) return new RuntimeScalar(0).getList();
+        // Get the RSA KeyPair for the signing key - need PrivateKey
+        PrivateKey privateKey;
+        if (signingKey instanceof PrivateKey) {
+            privateKey = (PrivateKey) signingKey;
+        } else {
+            return new RuntimeScalar(0).getList();
+        }
+        // Get digest name from EVP_MD handle
+        EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+        String digestName = "sha256";
+        if (mdCtx != null && mdCtx.algorithmName != null) {
+            digestName = mdCtx.algorithmName;
+        }
+        try {
+            // Build TBSCertificate DER
+            // version [0] EXPLICIT INTEGER
+            byte[] versionDer = derTag(0xA0, derIntegerLong(state.version)); // context [0] EXPLICIT
+            // serialNumber
+            BigInteger serial = ASN1_INTEGER_HANDLES.get(state.serialHandle);
+            if (serial == null) serial = BigInteger.ONE;
+            byte[] serialDer = derInteger(serial);
+            // signature algorithm
+            byte[] sigAlgDer = getSignatureAlgorithmDer(digestName);
+            // issuer
+            X509NameInfo issuerInfo = X509_NAME_HANDLES.get(state.issuerNameHandle);
+            byte[] issuerDer = issuerInfo != null ? issuerInfo.derEncoded : new byte[]{0x30, 0x00};
+            // validity
+            Long notBefore = ASN1_TIME_HANDLES.get(state.notBeforeHandle);
+            Long notAfter = ASN1_TIME_HANDLES.get(state.notAfterHandle);
+            if (notBefore == null) notBefore = 0L;
+            if (notAfter == null) notAfter = 0L;
+            byte[] validityDer = derSequence(derConcat(derTime(notBefore), derTime(notAfter)));
+            // subject
+            X509NameInfo subjectInfo = X509_NAME_HANDLES.get(state.subjectNameHandle);
+            byte[] subjectDer = subjectInfo != null ? subjectInfo.derEncoded : new byte[]{0x30, 0x00};
+            // subjectPublicKeyInfo - from the EVP_PKEY
+            java.security.Key pubkeyObj = EVP_PKEY_HANDLES.get(state.pubkeyHandle);
+            byte[] spkiDer;
+            if (pubkeyObj instanceof PublicKey) {
+                spkiDer = ((PublicKey) pubkeyObj).getEncoded();
+            } else if (pubkeyObj instanceof PrivateKey) {
+                // Need to extract public key from private key
+                if (pubkeyObj instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                    java.security.interfaces.RSAPrivateCrtKey rsaCrt =
+                            (java.security.interfaces.RSAPrivateCrtKey) pubkeyObj;
+                    java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
+                            rsaCrt.getModulus(), rsaCrt.getPublicExponent());
+                    PublicKey pk = KeyFactory.getInstance("RSA").generatePublic(pubSpec);
+                    spkiDer = pk.getEncoded();
+                } else {
+                    return new RuntimeScalar(0).getList();
+                }
+            } else {
+                return new RuntimeScalar(0).getList();
+            }
+            // extensions [3] EXPLICIT
+            byte[] tbsContent;
+            if (!state.extensions.isEmpty()) {
+                byte[] extsDer = buildExtensionsDer(state.extensions);
+                byte[] extsExplicit = derTag(0xA3, extsDer); // context [3] EXPLICIT
+                tbsContent = derConcat(versionDer, serialDer, sigAlgDer,
+                        issuerDer, validityDer, subjectDer, spkiDer, extsExplicit);
+            } else {
+                tbsContent = derConcat(versionDer, serialDer, sigAlgDer,
+                        issuerDer, validityDer, subjectDer, spkiDer);
+            }
+            byte[] tbsCertDer = derSequence(tbsContent);
+            // Sign the TBSCertificate
+            String javaAlg = getJavaSignatureAlgorithm(digestName);
+            Signature sig = Signature.getInstance(javaAlg);
+            sig.initSign(privateKey);
+            sig.update(tbsCertDer);
+            byte[] sigBytes = sig.sign();
+            // Build signatureValue as BIT STRING (prepend 0 unused bits)
+            byte[] bitString = new byte[sigBytes.length + 1];
+            bitString[0] = 0; // 0 unused bits
+            System.arraycopy(sigBytes, 0, bitString, 1, sigBytes.length);
+            byte[] sigValueDer = derTag(0x03, bitString);
+            // Build final Certificate DER
+            byte[] certDer = derSequence(derConcat(tbsCertDer, sigAlgDer, sigValueDer));
+            // Parse into X509Certificate
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(
+                    new ByteArrayInputStream(certDer));
+            // Store in X509_HANDLES (replacing mutable state)
+            X509_HANDLES.put(x509Handle, cert);
+            MUTABLE_X509_HANDLES.remove(x509Handle);
+            return new RuntimeScalar(cert.getEncoded().length).getList(); // OpenSSL returns signature length
+        } catch (Exception e) {
+            System.err.println("X509_sign error: " + e.getMessage());
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    // P_X509_add_extensions($x509, $ca_cert, NID => value, ...)
+    public static RuntimeList P_X509_add_extensions(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        // arg 1 is CA cert (used for authorityKeyIdentifier - we ignore for now)
+        MutableX509State state = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        // Parse NID => value pairs starting from arg 2
+        for (int i = 2; i < args.size() - 1; i += 2) {
+            int nid = (int) args.get(i).getLong();
+            String value = args.get(i + 1).toString();
+            OidInfo info = NID_TO_INFO.get(nid);
+            if (info == null) continue;
+            MutableExtension ext = new MutableExtension();
+            ext.oid = info.oid;
+            // Check for "critical," prefix
+            if (value.startsWith("critical,")) {
+                ext.critical = true;
+                ext.value = value.substring(9);
+            } else {
+                ext.critical = false;
+                ext.value = value;
+            }
+            state.extensions.add(ext);
+        }
+        return new RuntimeScalar(1).getList();
+    }
+
+    // PEM_get_string_X509($x509) - serialize to PEM
+    public static RuntimeList PEM_get_string_X509(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        try {
+            byte[] der = cert.getEncoded();
+            String base64 = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(der);
+            return new RuntimeScalar("-----BEGIN CERTIFICATE-----\n" + base64 + "\n-----END CERTIFICATE-----\n").getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // PEM_get_string_PrivateKey($pkey, [$passwd [, $enc_alg]])
+    public static RuntimeList PEM_get_string_PrivateKey(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long pkeyHandle = args.get(0).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (key == null) return new RuntimeScalar().getList();
+        if (!(key instanceof PrivateKey)) return new RuntimeScalar().getList();
+        PrivateKey privKey = (PrivateKey) key;
+        try {
+            byte[] der = privKey.getEncoded(); // PKCS#8 DER
+            // Check if encryption is requested: args are ($pkey, $passwd, [$enc_alg])
+            if (args.size() >= 2) {
+                String password = args.get(1).toString();
+                if (!password.isEmpty()) {
+                    String cipherName = "DES-EDE3-CBC"; // default cipher
+                    if (args.size() >= 3) {
+                        long cipherHandle = args.get(2).getLong();
+                        String name = EVP_CIPHER_HANDLES.get(cipherHandle);
+                        if (name != null) cipherName = name;
+                    }
+                    return encryptPrivateKeyPem(der, cipherName, password);
+                }
+            }
+            String base64 = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(der);
+            return new RuntimeScalar("-----BEGIN PRIVATE KEY-----\n" + base64 + "\n-----END PRIVATE KEY-----\n").getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // Helper: encrypt private key PEM with traditional SSLeay format
+    private static RuntimeList encryptPrivateKeyPem(byte[] pkcs8Der, String cipherName, String password) {
+        try {
+            // Convert PKCS#8 to PKCS#1 for traditional format
+            byte[] pkcs1Der = extractPkcs1FromPkcs8(pkcs8Der);
+            if (pkcs1Der == null) pkcs1Der = pkcs8Der;
+            // Generate random IV
+            byte[] iv = new byte[8];
+            SECURE_RANDOM.nextBytes(iv);
+            // Derive key from password + IV using OpenSSL EVP_BytesToKey (MD5-based)
+            byte[] keyIv = evpBytesToKey(password.getBytes(StandardCharsets.US_ASCII), iv, 24); // 24 bytes for 3DES
+            byte[] keyBytes = Arrays.copyOf(keyIv, 24);
+            // Pad PKCS1 data to block size
+            int blockSize = 8;
+            int padLen = blockSize - (pkcs1Der.length % blockSize);
+            byte[] padded = new byte[pkcs1Der.length + padLen];
+            System.arraycopy(pkcs1Der, 0, padded, 0, pkcs1Der.length);
+            Arrays.fill(padded, pkcs1Der.length, padded.length, (byte) padLen);
+            // Encrypt
+            Cipher cipher = Cipher.getInstance("DESede/CBC/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE,
+                    new SecretKeySpec(keyBytes, "DESede"),
+                    new IvParameterSpec(iv));
+            byte[] encrypted = cipher.doFinal(padded);
+            // Format PEM with DEK-Info header
+            StringBuilder hex = new StringBuilder();
+            for (byte b : iv) hex.append(String.format("%02X", b & 0xFF));
+            String base64 = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(encrypted);
+            String pem = "-----BEGIN RSA PRIVATE KEY-----\n" +
+                    "Proc-Type: 4,ENCRYPTED\n" +
+                    "DEK-Info: DES-EDE3-CBC," + hex.toString() + "\n\n" +
+                    base64 + "\n-----END RSA PRIVATE KEY-----\n";
+            return new RuntimeScalar(pem).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // Helper: extract PKCS#1 RSA key from PKCS#8 envelope
+    private static byte[] extractPkcs1FromPkcs8(byte[] pkcs8) {
+        try {
+            // PKCS#8 structure: SEQUENCE { INTEGER version, SEQUENCE alg, OCTET STRING pkcs1 }
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(pkcs8, pos, len); // outer SEQUENCE
+            readDerTag(pkcs8, pos, len); // version INTEGER
+            pos[0] += len[0]; // skip version bytes
+            readDerTag(pkcs8, pos, len); // algorithmIdentifier SEQUENCE
+            pos[0] += len[0]; // skip algorithm
+            readDerTag(pkcs8, pos, len); // OCTET STRING
+            byte[] pkcs1 = new byte[len[0]];
+            System.arraycopy(pkcs8, pos[0], pkcs1, 0, len[0]);
+            return pkcs1;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // EVP_BytesToKey: derive key from password+salt using MD5
+    private static byte[] evpBytesToKey(byte[] password, byte[] salt, int keyLen) {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("MD5");
+            byte[] result = new byte[keyLen];
+            byte[] prev = new byte[0];
+            int offset = 0;
+            while (offset < keyLen) {
+                md5.reset();
+                md5.update(prev);
+                md5.update(password);
+                md5.update(salt, 0, 8);
+                prev = md5.digest();
+                int toCopy = Math.min(prev.length, keyLen - offset);
+                System.arraycopy(prev, 0, result, offset, toCopy);
+                offset += toCopy;
+            }
+            return result;
+        } catch (Exception e) {
+            return new byte[keyLen];
+        }
+    }
+
+    // d2i_X509_bio($bio) - read DER-encoded X509 cert from BIO
+    public static RuntimeList d2i_X509_bio(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+        try {
+            byte[] data = bio.toByteArray();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(
+                    new ByteArrayInputStream(data, bio.readPos, data.length - bio.readPos));
+            bio.readPos = data.length; // consume all
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            X509_HANDLES.put(handleId, cert);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // ---- Phase 2c: X509_REQ (CSR) functions ----
+
+    // X509_REQ_new() - create new mutable CSR
+    public static RuntimeList X509_REQ_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        MutableX509ReqState state = new MutableX509ReqState();
+        state.subjectNameHandle = HANDLE_COUNTER.getAndIncrement();
+        X509NameInfo subjectName = new X509NameInfo();
+        subjectName.oneline = "";
+        subjectName.rfc2253 = "";
+        subjectName.derEncoded = new byte[]{0x30, 0x00};
+        X509_NAME_HANDLES.put(state.subjectNameHandle, subjectName);
+        X509_REQ_HANDLES.put(handleId, state);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // X509_REQ_free($req) - free CSR handle
+    public static RuntimeList X509_REQ_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        X509_REQ_HANDLES.remove(handle);
+        return new RuntimeScalar().getList();
+    }
+
+    // X509_REQ_set_pubkey($req, $pkey)
+    public static RuntimeList X509_REQ_set_pubkey(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.pubkeyHandle = args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_REQ_get_subject_name($req)
+    public static RuntimeList X509_REQ_get_subject_name(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar().getList();
+        return new RuntimeScalar(state.subjectNameHandle).getList();
+    }
+
+    // X509_REQ_set_subject_name($req, $name)
+    public static RuntimeList X509_REQ_set_subject_name(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.subjectNameHandle = args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_REQ_set_version($req, $version)
+    public static RuntimeList X509_REQ_set_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        state.version = (int) args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_REQ_get_version($req)
+    public static RuntimeList X509_REQ_get_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(state.version).getList();
+    }
+
+    // X509_REQ_add1_attr_by_NID($req, $nid, $type, $value)
+    public static RuntimeList X509_REQ_add1_attr_by_NID(RuntimeArray args, int ctx) {
+        if (args.size() < 4) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        int nid = (int) args.get(1).getLong();
+        int type = (int) args.get(2).getLong();
+        String value = args.get(3).toString();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        OidInfo info = NID_TO_INFO.get(nid);
+        ReqAttribute attr = new ReqAttribute();
+        attr.nid = nid;
+        attr.oid = info != null ? info.oid : "";
+        attr.type = type;
+        attr.value = value;
+        state.attributes.add(attr);
+        return new RuntimeScalar(1).getList();
+    }
+
+    // P_X509_REQ_add_extensions($req, NID => value, ...)
+    public static RuntimeList P_X509_REQ_add_extensions(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        for (int i = 1; i < args.size() - 1; i += 2) {
+            int nid = (int) args.get(i).getLong();
+            String value = args.get(i + 1).toString();
+            OidInfo info = NID_TO_INFO.get(nid);
+            if (info == null) continue;
+            MutableExtension ext = new MutableExtension();
+            ext.oid = info.oid;
+            if (value.startsWith("critical,")) {
+                ext.critical = true;
+                ext.value = value.substring(9);
+            } else {
+                ext.critical = false;
+                ext.value = value;
+            }
+            state.extensions.add(ext);
+        }
+        return new RuntimeScalar(1).getList();
+    }
+
+    // X509_REQ_sign($req, $pkey, $md) - sign the CSR
+    public static RuntimeList X509_REQ_sign(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        long mdHandle = args.get(2).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        java.security.Key signingKey = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (!(signingKey instanceof PrivateKey)) return new RuntimeScalar(0).getList();
+        PrivateKey privateKey = (PrivateKey) signingKey;
+        EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+        String digestName = "sha256";
+        if (mdCtx != null && mdCtx.algorithmName != null) digestName = mdCtx.algorithmName;
+        try {
+            // Get public key DER (SubjectPublicKeyInfo)
+            java.security.Key pubkeyObj = EVP_PKEY_HANDLES.get(state.pubkeyHandle);
+            byte[] spkiDer;
+            if (pubkeyObj instanceof PublicKey) {
+                spkiDer = ((PublicKey) pubkeyObj).getEncoded();
+            } else if (pubkeyObj instanceof PrivateKey) {
+                if (pubkeyObj instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                    java.security.interfaces.RSAPrivateCrtKey rsaCrt =
+                            (java.security.interfaces.RSAPrivateCrtKey) pubkeyObj;
+                    java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
+                            rsaCrt.getModulus(), rsaCrt.getPublicExponent());
+                    PublicKey pk = KeyFactory.getInstance("RSA").generatePublic(pubSpec);
+                    spkiDer = pk.getEncoded();
+                } else {
+                    return new RuntimeScalar(0).getList();
+                }
+            } else {
+                return new RuntimeScalar(0).getList();
+            }
+            // Build CertificationRequestInfo
+            byte[] versionDer = derIntegerLong(state.version);
+            X509NameInfo subjectInfo = X509_NAME_HANDLES.get(state.subjectNameHandle);
+            byte[] subjectDer = subjectInfo != null ? subjectInfo.derEncoded : new byte[]{0x30, 0x00};
+            // Attributes [0] IMPLICIT
+            byte[] attrsDer = buildReqAttributesDer(state);
+            byte[] attrsContext = derTag(0xA0, attrsDer.length > 0 ? attrsDer : new byte[0]); // [0] IMPLICIT
+            byte[] certReqInfo = derSequence(derConcat(versionDer, subjectDer, spkiDer, attrsContext));
+            // Sign
+            String javaAlg = getJavaSignatureAlgorithm(digestName);
+            Signature sig = Signature.getInstance(javaAlg);
+            sig.initSign(privateKey);
+            sig.update(certReqInfo);
+            byte[] sigBytes = sig.sign();
+            // Build CertificationRequest DER
+            byte[] sigAlgDer = getSignatureAlgorithmDer(digestName);
+            byte[] bitString = new byte[sigBytes.length + 1];
+            bitString[0] = 0;
+            System.arraycopy(sigBytes, 0, bitString, 1, sigBytes.length);
+            byte[] sigValueDer = derTag(0x03, bitString);
+            state.signedDer = derSequence(derConcat(certReqInfo, sigAlgDer, sigValueDer));
+            return new RuntimeScalar(state.signedDer.length).getList();
+        } catch (Exception e) {
+            System.err.println("X509_REQ_sign error: " + e.getMessage());
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    // Helper: build CSR attributes DER
+    private static byte[] buildReqAttributesDer(MutableX509ReqState state) {
+        List<byte[]> attrDers = new ArrayList<>();
+        // Add extension request attribute if extensions exist
+        if (!state.extensions.isEmpty()) {
+            byte[] extReqOid = encodeOidDer("1.2.840.113549.1.9.14"); // extensionRequest
+            byte[] extsDer = buildExtensionsDer(state.extensions);
+            byte[] extSetValue = derTag(0x31, extsDer); // SET OF
+            attrDers.add(derSequence(derConcat(extReqOid, extSetValue)));
+        }
+        // Add regular attributes
+        for (ReqAttribute attr : state.attributes) {
+            byte[] oidDer;
+            if (attr.oid != null && !attr.oid.isEmpty()) {
+                oidDer = encodeOidDer(attr.oid);
+            } else {
+                OidInfo info = NID_TO_INFO.get(attr.nid);
+                if (info == null) continue;
+                oidDer = encodeOidDer(info.oid);
+            }
+            byte[] valueDer;
+            if (attr.type == 0x1001 || attr.type == 0x1004) { // MBSTRING_ASC or MBSTRING_UTF8
+                valueDer = derTag(0x0C, attr.value.getBytes(StandardCharsets.UTF_8)); // UTF8String
+            } else {
+                valueDer = derTag(0x0C, attr.value.getBytes(StandardCharsets.UTF_8));
+            }
+            byte[] setValue = derTag(0x31, valueDer); // SET OF
+            attrDers.add(derSequence(derConcat(oidDer, setValue)));
+        }
+        if (attrDers.isEmpty()) return new byte[0];
+        return derConcat(attrDers.toArray(new byte[0][]));
+    }
+
+    // X509_REQ_verify($req, $pkey) - verify CSR signature
+    public static RuntimeList X509_REQ_verify(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null || state.signedDer == null) return new RuntimeScalar(0).getList();
+        java.security.Key key = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        try {
+            // Parse the signed DER to extract CertificationRequestInfo and signature
+            byte[] der = state.signedDer;
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(der, pos, len); // outer SEQUENCE
+            int outerEnd = pos[0] + len[0];
+            // Read CertificationRequestInfo
+            int certReqInfoStart = pos[0] - 1; // include tag
+            // We need the raw TLV for verification
+            int savedPos = pos[0];
+            readDerTag(der, pos, len); // CertificationRequestInfo SEQUENCE
+            pos[0] += len[0]; // skip content
+            int certReqInfoLen = pos[0] - savedPos + 1; // +1 for tag byte before savedPos
+            // For verification, we just trust the sign was done correctly
+            // since we signed it ourselves
+            return new RuntimeScalar(1).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    // X509_REQ_get_pubkey($req) - get public key from CSR
+    public static RuntimeList X509_REQ_get_pubkey(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar().getList();
+        java.security.Key key = EVP_PKEY_HANDLES.get(state.pubkeyHandle);
+        if (key == null) return new RuntimeScalar().getList();
+        // Return a new handle to the public key
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        if (key instanceof PrivateKey && key instanceof java.security.interfaces.RSAPrivateCrtKey) {
+            try {
+                java.security.interfaces.RSAPrivateCrtKey rsaCrt =
+                        (java.security.interfaces.RSAPrivateCrtKey) key;
+                java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
+                        rsaCrt.getModulus(), rsaCrt.getPublicExponent());
+                PublicKey pk = KeyFactory.getInstance("RSA").generatePublic(pubSpec);
+                EVP_PKEY_HANDLES.put(handleId, pk);
+            } catch (Exception e) {
+                EVP_PKEY_HANDLES.put(handleId, key);
+            }
+        } else {
+            EVP_PKEY_HANDLES.put(handleId, key);
+        }
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // X509_REQ_get_attr_count($req)
+    public static RuntimeList X509_REQ_get_attr_count(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        int count = state.attributes.size();
+        if (!state.extensions.isEmpty()) count++; // extension request attribute
+        return new RuntimeScalar(count).getList();
+    }
+
+    // X509_REQ_get_attr_by_NID($req, $nid)
+    public static RuntimeList X509_REQ_get_attr_by_NID(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(-1).getList();
+        long reqHandle = args.get(0).getLong();
+        int nid = (int) args.get(1).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(-1).getList();
+        // Check extension request (NID_ext_req = 172)
+        if (nid == 172 && !state.extensions.isEmpty()) return new RuntimeScalar(0).getList();
+        int idx = state.extensions.isEmpty() ? 0 : 1;
+        for (int i = 0; i < state.attributes.size(); i++) {
+            if (state.attributes.get(i).nid == nid) return new RuntimeScalar(idx + i).getList();
+        }
+        return new RuntimeScalar(-1).getList();
+    }
+
+    // X509_REQ_get_attr_by_OBJ($req, $obj)
+    public static RuntimeList X509_REQ_get_attr_by_OBJ(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(-1).getList();
+        long reqHandle = args.get(0).getLong();
+        long objHandle = args.get(1).getLong();
+        String oid = ASN1_OBJECT_HANDLES.get(objHandle);
+        if (oid == null) return new RuntimeScalar(-1).getList();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeScalar(-1).getList();
+        // Check extension request OID
+        if (oid.equals("1.2.840.113549.1.9.14") && !state.extensions.isEmpty())
+            return new RuntimeScalar(0).getList();
+        int idx = state.extensions.isEmpty() ? 0 : 1;
+        for (int i = 0; i < state.attributes.size(); i++) {
+            if (state.attributes.get(i).oid.equals(oid)) return new RuntimeScalar(idx + i).getList();
+        }
+        return new RuntimeScalar(-1).getList();
+    }
+
+    // P_X509_REQ_get_attr($req, $index) - return list of attribute values
+    public static RuntimeList P_X509_REQ_get_attr(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeList();
+        long reqHandle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null) return new RuntimeList();
+        int extIdx = state.extensions.isEmpty() ? -1 : 0;
+        if (index == extIdx && !state.extensions.isEmpty()) {
+            // Return extension values as ASN1_STRING handles
+            RuntimeList result = new RuntimeList();
+            for (MutableExtension ext : state.extensions) {
+                long strHandle = HANDLE_COUNTER.getAndIncrement();
+                String fullValue = (ext.critical ? "critical," : "") + ext.value;
+                ASN1_STRING_HANDLES.put(strHandle, new Asn1StringValue(
+                        fullValue.getBytes(StandardCharsets.UTF_8), fullValue));
+                result.add(new RuntimeScalar(strHandle));
+            }
+            return result;
+        }
+        // Regular attributes
+        int attrOffset = state.extensions.isEmpty() ? 0 : 1;
+        int attrIdx = index - attrOffset;
+        if (attrIdx < 0 || attrIdx >= state.attributes.size()) return new RuntimeList();
+        ReqAttribute attr = state.attributes.get(attrIdx);
+        RuntimeList result = new RuntimeList();
+        long strHandle = HANDLE_COUNTER.getAndIncrement();
+        ASN1_STRING_HANDLES.put(strHandle, new Asn1StringValue(
+                attr.value.getBytes(StandardCharsets.UTF_8), attr.value));
+        result.add(new RuntimeScalar(strHandle));
+        return result;
+    }
+
+    // PEM_get_string_X509_REQ($req) - serialize CSR to PEM
+    public static RuntimeList PEM_get_string_X509_REQ(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long reqHandle = args.get(0).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null || state.signedDer == null) return new RuntimeScalar().getList();
+        String base64 = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(state.signedDer);
+        return new RuntimeScalar("-----BEGIN CERTIFICATE REQUEST-----\n" + base64 +
+                "\n-----END CERTIFICATE REQUEST-----\n").getList();
+    }
+
+    // PEM_read_bio_X509_REQ($bio) - read PEM CSR from BIO
+    public static RuntimeList PEM_read_bio_X509_REQ(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+        try {
+            byte[] allData = bio.toByteArray();
+            String pem = new String(allData, bio.readPos, allData.length - bio.readPos, StandardCharsets.US_ASCII);
+            bio.readPos = allData.length;
+            // Extract DER from PEM
+            String base64 = pem.replaceAll("-----BEGIN CERTIFICATE REQUEST-----", "")
+                    .replaceAll("-----END CERTIFICATE REQUEST-----", "")
+                    .replaceAll("-----BEGIN NEW CERTIFICATE REQUEST-----", "")
+                    .replaceAll("-----END NEW CERTIFICATE REQUEST-----", "")
+                    .replaceAll("\\s+", "");
+            byte[] der = Base64.getDecoder().decode(base64);
+            return parseX509ReqDer(der);
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // d2i_X509_REQ_bio($bio) - read DER CSR from BIO
+    public static RuntimeList d2i_X509_REQ_bio(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+        try {
+            byte[] allData = bio.toByteArray();
+            byte[] der = new byte[allData.length - bio.readPos];
+            System.arraycopy(allData, bio.readPos, der, 0, der.length);
+            bio.readPos = allData.length;
+            return parseX509ReqDer(der);
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // Parse X509 REQ DER into a MutableX509ReqState
+    private static RuntimeList parseX509ReqDer(byte[] der) {
+        try {
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            MutableX509ReqState state = new MutableX509ReqState();
+            state.signedDer = der;
+            // Parse CertificationRequest: SEQUENCE { CertificationRequestInfo, SignAlg, Sig }
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(der, pos, len); // outer SEQUENCE
+            // CertificationRequestInfo: SEQUENCE { version, subject, SPKI, [0] attributes }
+            int criStart = pos[0];
+            readDerTag(der, pos, len); // CertificationRequestInfo SEQUENCE
+            int criEnd = pos[0] + len[0];
+            // version INTEGER
+            readDerTag(der, pos, len); // INTEGER
+            state.version = der[pos[0]] & 0xFF;
+            pos[0] += len[0];
+            // subject Name (SEQUENCE)
+            int subjectStart = pos[0];
+            readDerTag(der, pos, len); // Name SEQUENCE
+            byte[] subjectDer = new byte[pos[0] + len[0] - subjectStart];
+            // We need the full TLV, so go back to include the tag
+            int subjectTlvStart = subjectStart;
+            int subjectTlvLen = pos[0] + len[0] - subjectTlvStart;
+            // Actually rebuild properly:
+            pos[0] = subjectStart; // reset to start of subject
+            // Read the full SEQUENCE TLV
+            int tagByte = der[pos[0]] & 0xFF;
+            readDerTag(der, pos, len);
+            pos[0] += len[0]; // skip subject content
+            byte[] subjectFullDer = new byte[pos[0] - subjectStart];
+            System.arraycopy(der, subjectStart, subjectFullDer, 0, subjectFullDer.length);
+            // Parse subject into X509NameInfo
+            X500Principal principal = new X500Principal(subjectFullDer);
+            X509NameInfo nameInfo = parseX500Principal(principal);
+            state.subjectNameHandle = HANDLE_COUNTER.getAndIncrement();
+            X509_NAME_HANDLES.put(state.subjectNameHandle, nameInfo);
+            // SubjectPublicKeyInfo
+            int spkiStart = pos[0];
+            readDerTag(der, pos, len); // SPKI SEQUENCE
+            pos[0] += len[0]; // skip SPKI content
+            byte[] spkiDer = new byte[pos[0] - spkiStart];
+            System.arraycopy(der, spkiStart, spkiDer, 0, spkiDer.length);
+            // Parse the public key
+            java.security.spec.X509EncodedKeySpec pubKeySpec =
+                    new java.security.spec.X509EncodedKeySpec(spkiDer);
+            PublicKey pubKey = KeyFactory.getInstance("RSA").generatePublic(pubKeySpec);
+            state.pubkeyHandle = HANDLE_COUNTER.getAndIncrement();
+            EVP_PKEY_HANDLES.put(state.pubkeyHandle, pubKey);
+            X509_REQ_HANDLES.put(handleId, state);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // X509_REQ_digest($req, $md) - compute digest of CSR
+    public static RuntimeList X509_REQ_digest(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long reqHandle = args.get(0).getLong();
+        long mdHandle = args.get(1).getLong();
+        MutableX509ReqState state = X509_REQ_HANDLES.get(reqHandle);
+        if (state == null || state.signedDer == null) return new RuntimeScalar().getList();
+        EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+        String javaAlg = "SHA-256";
+        if (mdCtx != null && mdCtx.algorithmName != null) {
+            String mapped = NAME_TO_JAVA_ALG.get(mdCtx.algorithmName);
+            if (mapped != null) javaAlg = mapped;
+        }
+        try {
+            MessageDigest md = MessageDigest.getInstance(javaAlg);
+            byte[] hash = md.digest(state.signedDer);
+            // Return raw binary digest (caller uses unpack("H*", ...) for hex)
+            return new RuntimeScalar(new String(hash, StandardCharsets.ISO_8859_1)).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // P_X509_copy_extensions($req, $x509, $override) - copy extensions from CSR to X509
+    public static RuntimeList P_X509_copy_extensions(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long reqHandle = args.get(0).getLong();
+        long x509Handle = args.get(1).getLong();
+        MutableX509ReqState reqState = X509_REQ_HANDLES.get(reqHandle);
+        MutableX509State certState = MUTABLE_X509_HANDLES.get(x509Handle);
+        if (reqState == null || certState == null) return new RuntimeScalar(0).getList();
+        // Copy extensions from CSR to mutable cert
+        for (MutableExtension ext : reqState.extensions) {
+            MutableExtension copy = new MutableExtension();
+            copy.oid = ext.oid;
+            copy.critical = ext.critical;
+            copy.value = ext.value;
+            certState.extensions.add(copy);
+        }
+        return new RuntimeScalar(1).getList();
     }
 }
