@@ -758,6 +758,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Setters
 
+    /**
+     * Increment refCount for a scalar that was just stored in a container (array/hash).
+     * Container stores use the copy constructor which doesn't increment refCount
+     * (to avoid over-counting for temporary copies). This method should be called
+     * after storing a tracked reference in a container, if MortalList is active.
+     */
+    public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
+        if ((scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
+                && base.refCount >= 0) {
+            base.refCount++;
+        }
+    }
+
     // Inlineable fast path for set(RuntimeScalar)
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
@@ -883,6 +896,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldBase = (RuntimeBase) this.value;
         }
 
+        // If this scalar was a weak ref, remove from weak tracking before overwriting.
+        // Weak refs don't count toward refCount, so skip refCount decrement later.
+        boolean thisWasWeak = (oldBase != null && WeakRefRegistry.removeWeakRef(this, oldBase));
+
         // Increment new value's refCount (>= 0 means tracked; -1 means untracked)
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
@@ -893,10 +910,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = value.value;
 
-        // Decrement old value's refCount AFTER assignment
-        if (oldBase != null && oldBase.refCount > 0 && --oldBase.refCount == 0) {
-            oldBase.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(oldBase);
+        // Decrement old value's refCount AFTER assignment (skip for weak refs)
+        if (oldBase != null && !thisWasWeak) {
+            if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            }
+            // Note: WEAKLY_TRACKED (-2) objects are not decremented here.
+            // Their weak refs are cleared via scope exit or explicit undef.
         }
 
         // Flush deferred mortal decrements. This is the primary flush point for
@@ -1849,10 +1870,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return this;
         }
 
-        // Decrement refCount for blessed references with DESTROY
+        // Decrement refCount for blessed references with DESTROY or weakly-tracked refs
         RuntimeBase oldBase = null;
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value instanceof RuntimeBase base
-                && base.refCount > 0) {
+                && base.refCount != -1 && base.refCount != Integer.MIN_VALUE) {
             oldBase = base;
         }
 
@@ -1865,9 +1886,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = null;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
-        if (oldBase != null && --oldBase.refCount == 0) {
-            oldBase.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(oldBase);
+        if (oldBase != null) {
+            if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            } else if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                // Non-DESTROY weakly-tracked object: clear weak refs
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            }
         }
 
         return this;

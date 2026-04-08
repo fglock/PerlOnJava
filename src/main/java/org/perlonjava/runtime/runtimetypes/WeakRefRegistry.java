@@ -22,11 +22,26 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
+     * Special refCount value for non-DESTROY objects that have weak refs.
+     * Unlike DESTROY objects (where refCount tracks strong refs accurately),
+     * non-DESTROY objects can't have their strong refs counted (because refs
+     * created before weaken() activation weren't tracked). Using -2 prevents
+     * setLarge() from incrementing/decrementing (which would give wrong counts),
+     * and weak ref clearing happens only via explicit undef or scope exit.
+     */
+    public static final int WEAKLY_TRACKED = -2;
+
+    /**
      * Make a reference weak. The reference no longer counts as a strong reference
      * for refCount purposes. If this was the last strong reference, DESTROY fires.
+     * For non-DESTROY objects (refCount == -1), activates minimal tracking so that
+     * weak refs can be nullified when the last strong reference is dropped.
      */
     public static void weaken(RuntimeScalar ref) {
-        if (!RuntimeScalarType.isReference(ref)) return;
+        if (!RuntimeScalarType.isReference(ref)) {
+            if (ref.type == RuntimeScalarType.UNDEF) return;  // weaken(undef) is a no-op
+            throw new PerlCompilerException("Can't weaken a nonreference");
+        }
         if (!(ref.value instanceof RuntimeBase base)) return;
         if (weakScalars.contains(ref)) return;  // already weak
 
@@ -42,13 +57,21 @@ public class WeakRefRegistry {
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
 
-        // Weak ref doesn't count as strong reference
-        if (base.refCount > 0) {
+        if (base.refCount == -1) {
+            // Non-DESTROY object: mark as weakly tracked.
+            // Use WEAKLY_TRACKED (-2) to prevent setLarge() from incrementing/
+            // decrementing refCount for this object. Strong refs aren't counted
+            // for these objects — clearing happens via scope exit or explicit undef.
+            MortalList.active = true;
+            base.refCount = WEAKLY_TRACKED;
+        } else if (base.refCount > 0) {
+            // DESTROY-tracked object: decrement strong count (weak ref doesn't count)
             if (--base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
         }
+        // refCount == 0 or WEAKLY_TRACKED: already tracked, just added to maps
     }
 
     /**
@@ -69,6 +92,29 @@ public class WeakRefRegistry {
             if (base.refCount >= 0) base.refCount++;  // restore strong count
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
+    }
+
+    /**
+     * Remove a scalar from weak ref tracking when it's being overwritten.
+     * Returns true if the scalar was indeed a weak ref (so the caller can
+     * skip refCount decrement for the old referent).
+     */
+    public static boolean removeWeakRef(RuntimeScalar ref, RuntimeBase oldReferent) {
+        if (!weakScalars.remove(ref)) return false;
+        Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(oldReferent);
+        if (weakRefs != null) {
+            weakRefs.remove(ref);
+            if (weakRefs.isEmpty()) referentToWeakRefs.remove(oldReferent);
+        }
+        return true;
+    }
+
+    /**
+     * Check if any weak references point to a given referent.
+     */
+    public static boolean hasWeakRefsTo(RuntimeBase referent) {
+        Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(referent);
+        return weakRefs != null && !weakRefs.isEmpty();
     }
 
     /**

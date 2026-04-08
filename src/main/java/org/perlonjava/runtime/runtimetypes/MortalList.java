@@ -41,9 +41,42 @@ public class MortalList {
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!active || scalar == null) return;
         if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.refCount > 0) {
-            pending.add(base);
+                && scalar.value instanceof RuntimeBase base) {
+            if (base.refCount > 0) {
+                pending.add(base);
+            } else if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                // Non-DESTROY weakly-tracked object: transition to 1 so flush
+                // decrements to 0 and triggers callDestroy (which clears weak refs)
+                base.refCount = 1;
+                pending.add(base);
+            }
+        }
+    }
+
+    /**
+     * Defer DESTROY for tracked blessed refs in a collection being cleared.
+     * <p>
+     * Container stores (via copy constructor) now increment refCount for tracked
+     * objects. When clearing, we need to defer decrement for all tracked elements.
+     */
+    public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
+        if (!active) return;
+        for (RuntimeScalar scalar : elements) {
+            if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase base) {
+                if (base.refCount > 0) {
+                    // Tracked object: defer decrement (may trigger DESTROY if last ref)
+                    pending.add(base);
+                } else if (base.refCount == 0) {
+                    // Object with refCount 0: bump to 1 so flush triggers DESTROY
+                    base.refCount = 1;
+                    pending.add(base);
+                } else if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                    // Non-DESTROY weakly-tracked: bump for clearing weak refs
+                    base.refCount = 1;
+                    pending.add(base);
+                }
+            }
         }
     }
 

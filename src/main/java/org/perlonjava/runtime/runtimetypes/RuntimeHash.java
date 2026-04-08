@@ -235,6 +235,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
 
                 // Clear existing elements but keep the same Map instance to preserve capacity
+                MortalList.deferDestroyForContainerClear(this.elements.values());
                 this.elements.clear();
                 if (this.byteKeys != null) this.byteKeys.clear();
 
@@ -250,6 +251,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
                     this.elements.put(key, val);
+                    if (MortalList.active) RuntimeScalar.incrementRefCountForContainerStore(val);
                 }
 
                 // Create a RuntimeArray that wraps this hash
@@ -258,6 +260,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 RuntimeArray result = new RuntimeArray(this);
                 // Store the original size as an annotation for scalar context
                 result.scalarContextSize = originalSize;
+                // Flush deferred DESTROY for refs removed from the container
+                MortalList.flush();
                 yield result;
             }
             case AUTOVIVIFY_HASH -> {
@@ -949,12 +953,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeHash undefine() {
         // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
+        MortalList.deferDestroyForContainerClear(this.elements.values());
         if (this.type == PLAIN_HASH) {
             this.elements = new StableHashMap<>();
         } else {
             this.elements.clear();
         }
         this.byteKeys = null;
+        MortalList.flush();
         return this;
     }
 

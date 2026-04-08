@@ -66,11 +66,12 @@ public class DestroyDispatch {
      */
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
+
+        // Clear weak refs BEFORE calling DESTROY (or returning for unblessed objects)
+        WeakRefRegistry.clearWeakRefsTo(referent);
+
         String className = NameNormalizer.getBlessStr(referent.blessId);
         if (className == null) return;
-
-        // Clear weak refs BEFORE calling DESTROY
-        WeakRefRegistry.clearWeakRefsTo(referent);
 
         doCallDestroy(referent, className);
     }
