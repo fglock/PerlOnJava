@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Design Plan  
-**Version**: 5.1  
+**Version**: 5.2  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-08 (v5.1 — replaced trackedObjects set with stash-walking at shutdown to avoid pinning objects in memory)  
+**Updated**: 2026-04-08 (v5.2 — review corrections: mortal-like defer-decrement for delete/pop/shift, interpreter scope-exit cleanup, dynamicRestoreState fix)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #450 (WIP, open), `dev/modules/poe.md` (DestroyManager attempt)
 
@@ -358,6 +358,7 @@ Global destruction uses stash walking (no persistent tracking overhead).
 | DESTROY method cache | Hierarchy traversal on every DESTROY call | One map lookup |
 | Stash walking at shutdown | Persistent tracking set that pins objects in memory | One-time stash scan at exit |
 | Post-assignment DESTROY | Incorrect variable state during DESTROY | One extra local variable |
+| MortalList defer-decrement | Premature DESTROY on delete/pop/shift/splice return values | One `isEmpty()` check per statement |
 
 ---
 
@@ -545,7 +546,9 @@ memory cost is zero.
 | Scalar assignment | `RuntimeScalar.setLarge()` — new value has `refCount >= 0` |
 | Hash element store | Via `RuntimeScalar.set()` on the element → `setLarge()` |
 | Array element store | Via `RuntimeScalar.set()` on the element → `setLarge()` |
-| `local` restore | `RuntimeScalar.dynamicRestoreState()` — restored value may be tracked |
+
+Note: `local` restore does NOT increment the restored value (see §6.2 note on
+`local` save/restore for explanation).
 
 #### Decrement (drop a tracked reference)
 
@@ -553,42 +556,110 @@ memory cost is zero.
 |---------|-----------|
 | Scalar overwrite | `RuntimeScalar.setLarge()` — old value has `refCount > 0` |
 | `undef $obj` | `RuntimeScalar.undefine()` |
-| `delete $hash{key}` | `RuntimeHash.delete()` — explicit decrement on removed element |
+| `delete $hash{key}` | `MortalList.deferDecrement()` — deferred to statement end (see §6.2A) |
 | Scope exit (scalar lexicals) | `RuntimeScalar.scopeExitCleanup()` |
-| `local $obj` save | `RuntimeScalar.dynamicSaveState()` — old value displaced |
-| Array `pop`/`shift`/`splice` | `RuntimeArray.pop()`, `.shift()`, `.splice()` — element removed |
+| `local` restore | `dynamicRestoreState()` — displaced current value (see §6.2 note) |
+| Array `pop`/`shift`/`splice` | `MortalList.deferDecrement()` — deferred to statement end (see §6.2A) |
 
 #### Note on `local` save/restore
 
 `dynamicSaveState()` copies `type`/`value` to a saved state and sets the current
-scalar to UNDEF. If the old value was a tracked blessed ref, the saved-state copy
-is an additional container that should be counted. `dynamicRestoreState()` puts
-the old value back, displacing the current value.
+scalar to UNDEF. `dynamicRestoreState()` puts the old value back, displacing the
+current value.
 
 Both methods currently do raw field copies. They need refCount adjustments:
 - `dynamicSaveState()`: no-op for refCount (the referent is moving from the
-  current scalar into the saved state — net zero container change)
+  current scalar into the saved state — net zero container change). The saved
+  state is created via raw field copy (not `setLarge()`), so it is *uncounted*.
+  The referent's refCount remains inflated by 1 from when the original variable
+  was stored via `setLarge()`. This inflation is intentional — it prevents
+  premature DESTROY while the value is saved on the stack.
 - `dynamicRestoreState()`: decrement refCount of the CURRENT value being
-  displaced, increment refCount of the restored value. This is equivalent to
-  `setLarge()` semantics and should call the same DESTROY trigger path.
+  displaced. Do NOT increment the restored value — it already has the correct
+  refCount from its original counting (it was never decremented during save).
+  Incrementing would permanently overcount by 1, preventing DESTROY from ever
+  firing for `local`-ized globals.
+
+**Trace showing why increment-on-restore is wrong:**
+```
+our $g = MyObj->new;     # setLarge: refCount 0→1
+{
+    local $g = MyObj2->new;
+    # dynamicSaveState: MyObj moves to saved state (refCount stays 1)
+    # $g = MyObj2: setLarge increments MyObj2 (0→1)
+}
+# dynamicRestoreState:
+#   Decrement MyObj2: 1→0 → DESTROY fires ✓
+#   Restore MyObj: refCount stays 1 (NOT incremented to 2) ✓
+#   $g has MyObj, refCount=1, 1 container ($g) — correct
+undef $g;   # refCount 1→0 → DESTROY fires ✓
+```
+
+#### Note on `GlobalRuntimeScalar` and proxy classes
+
+Only `RuntimeScalar.dynamicSaveState/RestoreState` is discussed above, but
+there are 21+ implementations of `DynamicState` across the codebase:
+- `GlobalRuntimeScalar.dynamicSaveState/RestoreState` — for `local` on global scalars
+- `RuntimeHashProxyEntry.dynamicSaveState/RestoreState` — for `local $hash{key}`
+- `RuntimeArrayProxyEntry.dynamicSaveState/RestoreState` — for `local $array[$idx]`
+- `GlobalRuntimeHash`, `GlobalRuntimeArray`, `RuntimeGlob`, etc.
+
+The refCount displacement-decrement logic (decrement the displaced current value,
+do NOT increment the restored value) must be applied consistently to all
+implementations that displace scalar values:
+- `RuntimeScalar` — lexical `local`
+- `GlobalRuntimeScalar` — global `local`
+- `RuntimeHashProxyEntry` — `local $hash{key}`
+- `RuntimeArrayProxyEntry` — `local $array[$idx]`
+
+Hash/array-level implementations (`RuntimeHash.dynamicSaveState`) swap entire
+collections and don't need per-element tracking (Phase 5 scope).
 
 #### Note on `RuntimeHash.delete()`
 
 The current `delete()` implementation does `elements.remove(k)` and returns
 `new RuntimeScalar(value)` using the copy constructor, which bypasses `setLarge()`.
-The refCount must be decremented explicitly because the element is removed from
-the hash's internal map. The returned copy creates a new RuntimeScalar pointing
-to the same referent, but it is typically a temporary (like the bless-time
-container), so it should NOT be counted. Net effect: decrement by 1.
 
-If the caller stores the return value in a named variable (`my $v = delete $h{k}`),
-that assignment goes through `setLarge()` which increments — this is correct.
+**Problem**: The hash element was counted when stored (via `setLarge()`). When
+removed, the refCount should eventually be decremented. But decrementing
+*immediately* in `delete()` would cause premature DESTROY for patterns like
+`my $v = delete $h{k}` — DESTROY fires before the caller can capture the value.
+In Perl 5, `delete` returns a mortal (DESTROY deferred to statement end).
+
+**Solution**: Use `MortalList.deferDecrement()` (see §6.2A) to schedule the
+decrement for the end of the current statement. This gives the caller time to
+store the return value. If stored, `setLarge()` increments, and the deferred
+decrement produces the correct final refCount. If discarded, the deferred
+decrement fires DESTROY.
+
+This is critical for **POE::Wheel** patterns like `delete $heap->{wheel}` where
+the deleted object needs immediate DESTROY to unregister event watchers.
 
 #### Note on Array mutation methods
 
-`RuntimeArray.pop()`, `shift()`, and `splice()` remove elements. Like `delete()`,
-these use the copy constructor for return values and bypass `setLarge()`. Each
-needs an explicit decrement for removed elements that have `refCount > 0`.
+`RuntimeArray.pop()` and `shift()` remove elements and return the **raw element**
+directly (NOT a copy — the actual RuntimeScalar from the internal list is
+returned). `splice()` is in `Operator.java` (not `RuntimeArray.java`) and returns
+removed elements in a RuntimeList.
+
+Like `delete()`, these methods remove a counted element from a container. The
+removed element's refCount must be decremented, but not immediately — the
+element is being returned to the caller who may store it.
+
+**Solution**: Use `MortalList.deferDecrement()` for each removed tracked element.
+The decrement fires at statement end. If the caller stores the value, `setLarge()`
+increments first, producing the correct final refCount.
+
+```java
+// In RuntimeArray.pop() for PLAIN_ARRAY:
+RuntimeScalar result = runtimeArray.elements.removeLast();
+if (result != null) {
+    // Schedule deferred decrement — fires at statement end
+    MortalList.deferDecrementIfTracked(result);
+    yield result;
+}
+yield scalarUndef;
+```
 
 #### Note on the copy constructor `RuntimeScalar(RuntimeScalar)`
 
@@ -603,6 +674,98 @@ be audited. In `dynamicSaveState`, the saved copy replaces the current value
 (which is set to UNDEF), so the net container count doesn't change — no
 adjustment needed. But any new code that uses the copy constructor to create an
 additional long-lived container must manually adjust refCount.
+
+### 6.2A Mortal-Like Defer-Decrement Mechanism
+
+Perl 5 uses "mortals" to keep values alive until the end of the current
+statement (FREETMPS). Without this, operations like `delete`, `pop`, `shift`,
+and `splice` would trigger DESTROY before the caller can capture the returned
+value. This is critical for module compatibility.
+
+PerlOnJava implements a lightweight equivalent: `MortalList`.
+
+#### Design
+
+```java
+public class MortalList {
+    // Thread-local list of RuntimeBase references awaiting decrement.
+    // Populated by delete/pop/shift/splice when removing tracked elements.
+    // Drained at statement boundaries (FREETMPS equivalent).
+    private static final ArrayList<RuntimeBase> pending = new ArrayList<>();
+
+    /**
+     * Schedule a deferred refCount decrement for a tracked referent.
+     * Called from delete(), pop(), shift(), splice() when removing a
+     * tracked blessed reference from a container.
+     */
+    public static void deferDecrement(RuntimeBase base) {
+        pending.add(base);
+    }
+
+    /**
+     * Convenience: check if a RuntimeScalar holds a tracked reference
+     * and schedule a deferred decrement if so.
+     */
+    public static void deferDecrementIfTracked(RuntimeScalar scalar) {
+        if ((scalar.type & REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.refCount > 0) {
+            pending.add(base);
+        }
+    }
+
+    /**
+     * Process all pending decrements. Called at statement boundaries.
+     * Equivalent to Perl 5's FREETMPS.
+     */
+    public static void flush() {
+        if (pending.isEmpty()) return;
+        for (int i = 0; i < pending.size(); i++) {
+            RuntimeBase base = pending.get(i);
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+                // DESTROY may add new entries to pending — the loop
+                // continues processing them (natural behavior of ArrayList).
+            }
+        }
+        pending.clear();
+    }
+}
+```
+
+#### Call Sites for `flush()`
+
+`MortalList.flush()` must be called at every statement boundary:
+
+1. **JVM backend**: `EmitterVisitor` already emits code between statements. Add
+   `INVOKESTATIC MortalList.flush()` after each statement that could trigger a
+   deferred decrement (or unconditionally — the empty-list fast path is a single
+   branch).
+
+2. **Interpreter backend**: The interpreter loop already has a statement-boundary
+   concept (between opcodes that correspond to statement starts). Add a
+   `MortalList.flush()` call there.
+
+#### Why This Is Needed for POE
+
+POE::Wheel patterns use `delete $heap->{wheel}` to destroy a wheel and trigger
+its DESTROY method, which unregisters event watchers from the kernel. Without
+deferred decrement, two bad outcomes are possible:
+
+- **No decrement** (overcounting): DESTROY delayed to global destruction. The
+  event loop hangs because watchers are never unregistered. **This breaks POE.**
+- **Immediate decrement** (premature DESTROY): For `my $w = delete $heap->{wheel}`,
+  DESTROY fires before `$w` captures the value. This violates Perl 5 semantics.
+
+The mortal mechanism gives the correct behavior: the decrement fires at statement
+end, after the caller has (or hasn't) stored the return value.
+
+#### Performance Impact
+
+- `flush()` empty-path: one null check + one `isEmpty()` call per statement.
+- `pending` list: reused (clear, not reallocate). Typical size is 0-1 entries.
+- No allocation in the common case (no tracked blessed refs being deleted/popped).
 
 #### The `setLarge()` Interception
 
@@ -713,7 +876,57 @@ public static void scopeExitCleanup(RuntimeScalar scalar) {
 }
 ```
 
-### 6.5 Edge Case: Pre-bless Copies
+### 6.5 Interpreter Backend Scope-Exit Cleanup
+
+**CRITICAL**: The JVM backend emits `emitScopeExitNullStores()` (in
+`EmitStatement.java`) which calls `RuntimeScalar.scopeExitCleanup()` on each
+`my` scalar going out of scope. This is where DESTROY fires for lexical
+variables at scope exit.
+
+The interpreter backend (`BytecodeCompiler`) has **no equivalent**. On scope
+exit, it resets the register counter (`exitScope()` → `nextRegister =
+savedNextRegister.pop()`). The old register values are simply overwritten by
+later code. No cleanup opcodes are emitted. **DESTROY will not fire at scope
+exit for `my` variables in the interpreter backend without this fix.**
+
+#### Implementation
+
+Add a new opcode `SCOPE_EXIT_CLEANUP` that calls `scopeExitCleanup()` on each
+`my` scalar register in the exiting scope:
+
+```java
+// In BytecodeCompiler, before exitScope():
+// Emit cleanup for each my-scalar register going out of scope
+List<Integer> scalarRegs = symbolTable.getMyScalarIndicesInScope(currentScopeIndex);
+if (!scalarRegs.isEmpty()) {
+    for (int reg : scalarRegs) {
+        emit(Opcodes.SCOPE_EXIT_CLEANUP);
+        emitReg(reg);
+    }
+}
+exitScope();
+```
+
+```java
+// In BytecodeInterpreter, handle SCOPE_EXIT_CLEANUP:
+case Opcodes.SCOPE_EXIT_CLEANUP -> {
+    int reg = opcodes[ip++];
+    RuntimeScalar.scopeExitCleanup(registers[reg]);
+    registers[reg] = null;
+}
+```
+
+The `symbolTable.getMyScalarIndicesInScope()` API already exists and is used by
+the JVM backend's `emitScopeExitNullStores()`.
+
+#### Files to Modify
+
+- `Opcodes.java` — add `SCOPE_EXIT_CLEANUP` opcode constant
+- `BytecodeCompiler.java` — emit cleanup opcodes before `exitScope()`
+- `BytecodeInterpreter.java` — handle `SCOPE_EXIT_CLEANUP` opcode
+- `Disassemble.java` — add disassembly text for new opcode
+
+### 6.6 Edge Case: Pre-bless Copies
 
 ```perl
 my $hashref = {};
@@ -843,8 +1056,29 @@ of the source's weakness. The weakness is a property of the SOURCE RuntimeScalar
 For unblessed objects (`refCount == -1`, untracked), `weaken()` sets the flag in the
 external registry but doesn't adjust refCount.
 
-The "becomes undef when strong refs gone" behavior for unblessed weak refs uses
-`java.lang.ref.WeakReference<Object>` internally:
+**Deferred to Phase 5 (optional)**. The "becomes undef when strong refs gone"
+behavior for unblessed weak refs requires wrapping `ref.value` in a
+`java.lang.ref.WeakReference` (`WeakReferenceWrapper`) and checking every
+dereference path. This is high-risk: there are 15-20+ code paths that cast
+`RuntimeScalar.value` to `RuntimeBase`, and missing any one causes ClassCastException.
+
+**Why this can be deferred**: All bundled module uses of `weaken()` are on
+**blessed** references (Test2::API::Context, Test2::Mock, Test2::Tools::Mock,
+Test2::AsyncSubtest, Tie::RefHash). For blessed refs, the external registry
+approach (§7.2-7.4) handles everything — when refCount reaches 0,
+`clearWeakRefsTo()` sets all weak scalars to UNDEF. No `WeakReferenceWrapper`
+needed.
+
+For unblessed weak refs, `weaken()` registers the flag (so `isweak()` returns
+true) and decrements refCount (which is -1 for untracked — no change). The
+"becomes undef" behavior does not work for unblessed refs until
+`WeakReferenceWrapper` is implemented. This is an acceptable limitation for
+the initial implementation.
+
+#### Future: WeakReferenceWrapper (Phase 5)
+
+If unblessed weak refs are needed by a real module, implement
+`WeakReferenceWrapper` with a centralized unwrap helper:
 
 ```java
 // In weaken() for untracked referents (refCount == -1):
@@ -852,25 +1086,19 @@ ref.value = new WeakReferenceWrapper(ref.value);
 // On dereference, if WeakReference.get() returns null → set to undef
 ```
 
-This provides non-deterministic but correct "becomes undef" behavior via GC.
-
-#### Dereference check locations for WeakReferenceWrapper
-
-Every code path that dereferences `RuntimeScalar.value` as a `RuntimeBase` must
-check for `WeakReferenceWrapper` and call `.get()`. If `.get()` returns null,
-set the scalar to UNDEF and return undef. The key locations are:
-
-1. **`RuntimeScalar.hashDerefGet()`** — `$weak_ref->{key}` hash dereference
-2. **`RuntimeScalar.arrayDerefGet()`** — `$weak_ref->[idx]` array dereference
-3. **`RuntimeScalar.scalarDeref()`** — `$$weak_ref` scalar dereference
-4. **`RuntimeScalar.codeDeref()`** — `$weak_ref->()` code call
-5. **`ReferenceOperators.ref()`** — `ref($weak_ref)` type check
-6. **`RuntimeScalarType.blessedId()`** — blessing check
-7. **`setLarge()`** — when casting `this.value` to `RuntimeBase` for oldBase
-
 An alternative to per-site checks: add a `WeakReferenceWrapper.unwrap()` static
 helper and call it at the top of each dereference path. If unwrap detects a
 cleared reference, it updates the RuntimeScalar in-place to UNDEF and returns null.
+
+Key dereference locations that would need checking:
+1. `RuntimeScalar.hashDerefGet()` — `$weak_ref->{key}`
+2. `RuntimeScalar.arrayDerefGet()` — `$weak_ref->[idx]`
+3. `RuntimeScalar.scalarDeref()` — `$$weak_ref`
+4. `RuntimeScalar.codeDeref()` — `$weak_ref->()`
+5. `ReferenceOperators.ref()` — `ref($weak_ref)`
+6. `RuntimeScalarType.blessedId()` — blessing check
+7. `setLarge()` — when casting `this.value` to `RuntimeBase`
+8. Plus: method dispatch, overload resolution, tied variable access, etc.
 
 ---
 
@@ -1050,20 +1278,44 @@ where global destruction order is not guaranteed. DESTROY methods should check
 **Files**: `RuntimeBase.java`, `DestroyDispatch.java` (NEW), `InheritanceResolver.java`  
 **Validation**: `make` passes. No behavior change.
 
-### Phase 2: Scalar Refcounting + DESTROY (4-8 hours)
+### Phase 2: Scalar Refcounting + DESTROY + Mortal Mechanism (8-12 hours)
 
-**Goal**: DESTROY works for the common case — single lexical, undef, hash delete, local.
+**Goal**: DESTROY works for the common case — single lexical, undef, hash delete,
+pop/shift/splice, local. Mortal mechanism provides correct semantics for operations
+that return values while removing references (critical for POE).
 
+**Part 2a: Core refcounting**
 - Hook `RuntimeScalar.setLarge()` — increment/decrement for `refCount >= 0`
 - Hook `RuntimeScalar.undefine()` — decrement
 - Hook `RuntimeScalar.scopeExitCleanup()` — decrement
-- Hook `RuntimeHash.delete()` — explicit decrement on removed blessed values
-- Hook `RuntimeArray.pop()`, `.shift()`, `.splice()` — decrement on removed elements
-- Hook `RuntimeScalar.dynamicRestoreState()` — decrement displaced value, increment restored value
+- Hook `dynamicRestoreState()` — decrement displaced value only (do NOT increment
+  restored value — see §6.2 note on `local` save/restore)
+- Apply displacement-decrement to: `RuntimeScalar`, `GlobalRuntimeScalar`,
+  `RuntimeHashProxyEntry`, `RuntimeArrayProxyEntry`
+- Make `REFERENCE_BIT` accessible (package-private or public constant)
 - Initialize `refCount = 0` in `ReferenceOperators.bless()` for DESTROY classes
 - Handle re-bless (don't reset refCount; set to -1 if new class has no DESTROY)
 
-**Files**: `RuntimeScalar.java`, `ReferenceOperators.java`, `RuntimeHash.java`, `RuntimeArray.java`  
+**Part 2b: Mortal-like defer-decrement (§6.2A)**
+- Create `MortalList.java` with `deferDecrement()`, `deferDecrementIfTracked()`, `flush()`
+- Hook `RuntimeHash.delete()` — call `MortalList.deferDecrementIfTracked()` on removed element
+- Hook `RuntimeArray.pop()`, `.shift()` — call `MortalList.deferDecrementIfTracked()` on removed element
+- Hook `Operator.splice()` — call `MortalList.deferDecrementIfTracked()` on each removed element
+- Emit `MortalList.flush()` at statement boundaries in JVM backend (`EmitterVisitor`)
+- Emit `MortalList.flush()` at statement boundaries in interpreter backend
+
+**Part 2c: Interpreter scope-exit cleanup (§6.5)**
+- Add `SCOPE_EXIT_CLEANUP` opcode to `Opcodes.java`
+- Emit cleanup opcodes before `exitScope()` in `BytecodeCompiler.java`
+- Handle `SCOPE_EXIT_CLEANUP` in `BytecodeInterpreter.java`
+- Add disassembly text in `Disassemble.java`
+
+**Files**: `RuntimeScalar.java`, `ReferenceOperators.java`, `RuntimeHash.java`,
+`RuntimeArray.java`, `Operator.java`, `GlobalRuntimeScalar.java`,
+`RuntimeHashProxyEntry.java`, `RuntimeArrayProxyEntry.java`,
+`RuntimeScalarType.java` (REFERENCE_BIT visibility),
+`MortalList.java` (NEW), `EmitterVisitor.java`, `BytecodeCompiler.java`,
+`BytecodeInterpreter.java`, `Opcodes.java`, `Disassemble.java`  
 **Validation**: `make` passes + `destroy.t` unit test passes.
 
 ### Phase 3: weaken/isweak/unweaken (4-8 hours)
@@ -1092,14 +1344,16 @@ where global destruction order is not guaranteed. DESTROY methods should check
 **Files**: `GlobalContext.java`, `GlobalVariable.java`, `Main.java`, `DestroyDispatch.java`  
 **Validation**: Global destruction test passes.
 
-### Phase 5: Collection Cleanup (optional, 4-8 hours)
+### Phase 5: Collection Cleanup + Unblessed Weak Refs (optional, 4-8 hours)
 
 **Goal**: Deterministic DESTROY for blessed refs in lexical arrays/hashes at scope exit.
+Optionally, implement `WeakReferenceWrapper` for unblessed weak refs if needed.
 
 - Add `boolean containsTrackedRef` to `RuntimeArray`/`RuntimeHash`
 - Set flag when a `refCount >= 0` element is stored
 - Add `scopeExitCleanup(RuntimeArray)` and `scopeExitCleanup(RuntimeHash)`
 - Extend `emitScopeExitNullStores()` to call cleanup on array/hash lexicals
+- (Optional) Implement `WeakReferenceWrapper` for unblessed weak refs (see §7.5)
 
 **Files**: `RuntimeArray.java`, `RuntimeHash.java`, `EmitStatement.java`  
 **Validation**: Collection-DESTROY test passes. No performance regression.
@@ -1263,6 +1517,42 @@ subtest 'DESTROY on hash delete returns value' => sub {
     is_deeply(\@log, ["destroyed"], "DESTROY called after return value dropped");
 };
 
+subtest 'DESTROY on hash delete in void context' => sub {
+    my @log;
+    { package DestroyDeleteVoid;
+      sub new { bless {}, shift }
+      sub DESTROY { push @log, "destroyed" } }
+    my %h;
+    $h{obj} = DestroyDeleteVoid->new;
+    delete $h{obj};  # void context — no one captures the return value
+    is_deeply(\@log, ["destroyed"],
+        "DESTROY called at statement end for void-context delete (mortal mechanism)");
+};
+
+subtest 'DESTROY on pop returns value' => sub {
+    my @log;
+    { package DestroyPopReturn;
+      sub new { bless { data => 99 }, shift }
+      sub DESTROY { push @log, "destroyed" } }
+    my @arr = (DestroyPopReturn->new);
+    my $val = pop @arr;
+    is_deeply(\@log, [], "DESTROY not called while pop return value alive");
+    is($val->{data}, 99, "popped value still accessible");
+    undef $val;
+    is_deeply(\@log, ["destroyed"], "DESTROY called after pop return value dropped");
+};
+
+subtest 'DESTROY on shift in void context' => sub {
+    my @log;
+    { package DestroyShiftVoid;
+      sub new { bless {}, shift }
+      sub DESTROY { push @log, "destroyed" } }
+    my @arr = (DestroyShiftVoid->new);
+    shift @arr;  # void context
+    is_deeply(\@log, ["destroyed"],
+        "DESTROY called at statement end for void-context shift (mortal mechanism)");
+};
+
 done_testing();
 ```
 
@@ -1321,17 +1611,19 @@ done_testing();
 | **Missed decrement point** — a code path drops a blessed ref without decrementing | DESTROY delayed to global destruction | Medium | Global destruction catches it; audit all assignment/drop paths |
 | **Overcounting from temporaries** — function returns create transient RuntimeScalars that increment but don't decrement | DESTROY delayed to global destruction | Medium | Acceptable — matches Perl 5 behavior for circular refs |
 | **Performance regression** — refCount checks slow the critical path | Throughput drop | Low | Fast-path bypass; `refCount >= 0` gate skips 99% of refs; benchmark before/after |
+| **`MortalList.flush()` overhead** — called at every statement boundary | Throughput drop | Low | Empty-list fast path is one `isEmpty()` check; only allocates when needed |
 | **Interference with IO lifecycle** — refCount decrement triggers premature DESTROY on IO-blessed objects | IO corruption | Low | Test IO::Handle, File::Temp explicitly; separate code paths for IO vs DESTROY |
 | **Existing test regressions** — refCount logic has a bug that breaks existing tests | Build failure | Medium | Phase 1 adds field only (no behavior change); Phase 2 is independently testable; run `make` after every change |
-| **`local` save/restore bypasses refCount** — `dynamicSaveState`/`dynamicRestoreState` do raw field copies without adjusting refCount | Incorrect DESTROY timing or missed DESTROY with `local $blessed_ref` | Medium | Hook both methods to decrement/increment; see §6.2 notes |
-| **Copy constructor bypasses refCount** — `new RuntimeScalar(scalar)` copies type/value without calling `setLarge()` | Undercounting from `RuntimeHash.delete()`, `RuntimeArray.pop()`, etc. | Medium | Audit all callers; add explicit decrements in `delete()`/`pop()`/`shift()`/`splice()` |
-| **Array mutation methods not hooked** — `pop()`, `shift()`, `splice()` remove blessed refs without decrement | DESTROY delayed for blessed objects in arrays | Medium | Add explicit refCount decrements in Phase 2; see §6.2 notes |
+| **`local` save/restore bypasses refCount** — `dynamicSaveState`/`dynamicRestoreState` do raw field copies without adjusting refCount | Incorrect DESTROY timing or missed DESTROY with `local $blessed_ref` | Medium | Hook `dynamicRestoreState()` to decrement displaced value; do NOT increment restored value; see §6.2 notes |
+| **Copy constructor bypasses refCount** — `new RuntimeScalar(scalar)` copies type/value without calling `setLarge()` | Undercounting from `RuntimeHash.delete()`, `RuntimeArray.pop()`, etc. | Medium | Use `MortalList.deferDecrementIfTracked()` in `delete()`/`pop()`/`shift()`/`splice()` — see §6.2A |
+| **Interpreter scope-exit not hooked** — interpreter backend has no `scopeExitCleanup()` equivalent | DESTROY never fires for `my` vars in interpreter | High | Add `SCOPE_EXIT_CLEANUP` opcode — see §6.5 |
 
 ### Rollback Plan
 
 Each phase is independently revertable:
 - Phase 1: Remove `refCount` field (no behavior change to revert)
-- Phase 2: Remove hooks in `setLarge()`/`undefine()`/`scopeExitCleanup()` and bless()
+- Phase 2: Remove hooks in `setLarge()`/`undefine()`/`scopeExitCleanup()` and bless();
+  remove `MortalList.java`; remove `SCOPE_EXIT_CLEANUP` opcode; revert statement-boundary flush calls
 - Phase 3: Revert `ScalarUtil.java` to stubs, remove `WeakRefRegistry.java`
 - Phase 4: Remove shutdown hook
 
@@ -1384,6 +1676,7 @@ If the whole approach fails, close PR #450 and document findings for future refe
 | File | Phase | Purpose |
 |------|-------|---------|
 | `DestroyDispatch.java` | 1 | Central DESTROY logic and caching |
+| `MortalList.java` | 2 | Defer-decrement mechanism (mortal equivalent) |
 | `WeakRefRegistry.java` | 3 | External registry for weak references |
 | `src/test/resources/unit/destroy.t` | 2 | DESTROY unit tests |
 | `src/test/resources/unit/weaken.t` | 3 | Weak reference unit tests |
@@ -1393,10 +1686,20 @@ If the whole approach fails, close PR #450 and document findings for future refe
 |------|-------|---------|
 | `RuntimeBase.java` | 1 | Add `int refCount = -1` field |
 | `InheritanceResolver.java` | 1 | Cache invalidation hook for `destroyClasses`/`destroyMethodCache` |
+| `RuntimeScalarType.java` | 2 | Make `REFERENCE_BIT` package-private or add public constant |
 | `RuntimeScalar.java` | 2 | Hook `setLarge()`, `undefine()`, `scopeExitCleanup()`, `dynamicRestoreState()` |
 | `ReferenceOperators.java` | 2 | Initialize refCount in `bless()`, handle re-bless |
-| `RuntimeHash.java` | 2 | Hook `delete()` for refcount decrement |
-| `RuntimeArray.java` | 2 | Hook `pop()`, `shift()`, `splice()` for refcount decrement |
+| `RuntimeHash.java` | 2 | Hook `delete()` — call `MortalList.deferDecrementIfTracked()` |
+| `RuntimeArray.java` | 2 | Hook `pop()`, `shift()` — call `MortalList.deferDecrementIfTracked()` |
+| `Operator.java` | 2 | Hook `splice()` — call `MortalList.deferDecrementIfTracked()` |
+| `GlobalRuntimeScalar.java` | 2 | Hook `dynamicRestoreState()` — decrement displaced value |
+| `RuntimeHashProxyEntry.java` | 2 | Hook `dynamicRestoreState()` — decrement displaced value |
+| `RuntimeArrayProxyEntry.java` | 2 | Hook `dynamicRestoreState()` — decrement displaced value |
+| `EmitterVisitor.java` | 2 | Emit `MortalList.flush()` at statement boundaries (JVM backend) |
+| `Opcodes.java` | 2 | Add `SCOPE_EXIT_CLEANUP` opcode |
+| `BytecodeCompiler.java` | 2 | Emit scope-exit cleanup opcodes + `MortalList.flush()` |
+| `BytecodeInterpreter.java` | 2 | Handle `SCOPE_EXIT_CLEANUP` opcode + `MortalList.flush()` |
+| `Disassemble.java` | 2 | Add disassembly text for `SCOPE_EXIT_CLEANUP` |
 | `ScalarUtil.java` | 3 | Replace `weaken`/`isweak`/`unweaken` stubs |
 | `Builtin.java` | 3 | Update `builtin::weaken`, `builtin::is_weak`, `builtin::unweaken` |
 | `GlobalContext.java` | 4 | `${^GLOBAL_PHASE}` support |
@@ -1486,10 +1789,28 @@ sub DESTROY {
 
 ### Next Steps
 1. Implement Phase 1 (Infrastructure)
-2. Implement Phase 2 (Scalar Refcounting + DESTROY)
+2. Implement Phase 2 (Scalar Refcounting + DESTROY + Mortal Mechanism)
 3. Validate with `make` and `destroy.t` unit test
+4. Test with both JVM and interpreter backends
 
 ### Version History
+- **v5.2** (2026-04-08): Review corrections based on codebase analysis:
+  1. Fixed `dynamicRestoreState()` — do NOT increment restored value (was causing
+     permanent +1 overcounting, preventing DESTROY for `local`-ized globals).
+  2. Corrected `pop()`/`shift()` — they return raw elements (not copies). Immediate
+     decrement would cause premature DESTROY before caller captures return value.
+  3. Added **MortalList** defer-decrement mechanism (§6.2A) — equivalent to Perl 5's
+     FREETMPS. Critical for POE::Wheel `delete $heap->{wheel}` pattern. Deferred
+     decrements fire at statement end, giving caller time to store return values.
+  4. Added **interpreter scope-exit cleanup** (§6.5) — the interpreter backend had no
+     `scopeExitCleanup()` equivalent. Without this, DESTROY would never fire for `my`
+     variables in the interpreter. Added `SCOPE_EXIT_CLEANUP` opcode.
+  5. Added notes on `GlobalRuntimeScalar` and proxy class `dynamicRestoreState()` —
+     21+ implementations of `DynamicState` need consistent displacement-decrement.
+  6. Fixed splice reference — it's in `Operator.java`, not `RuntimeArray.java`.
+  7. Deferred `WeakReferenceWrapper` for unblessed weak refs to Phase 5 — all bundled
+     module uses of `weaken()` are on blessed refs which work without the wrapper.
+  8. Expanded Phase 2 into three parts (2a/2b/2c) and updated file list accordingly.
 - **v5.1** (2026-04-08): Replaced `trackedObjects` set with stash-walking at shutdown.
   The set pinned every tracked object in memory (preventing JVM GC from collecting
   overcounted/circular objects), reintroducing Perl 5's memory leak behavior. Stash
