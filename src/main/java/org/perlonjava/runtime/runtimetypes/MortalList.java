@@ -44,12 +44,13 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
                 pending.add(base);
-            } else if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                // Non-DESTROY weakly-tracked object: transition to 1 so flush
-                // decrements to 0 and triggers callDestroy (which clears weak refs)
-                base.refCount = 1;
-                pending.add(base);
             }
+            // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
+            // on scope exit. We can't count strong refs for non-DESTROY objects
+            // (refs created before weaken() weren't tracked), so scope exit of
+            // ONE reference doesn't mean there are no other strong refs (e.g.,
+            // symbol table entries). Weak refs for these objects are cleared only
+            // via explicit undefine() of the referent's last known reference.
         }
     }
 
@@ -83,11 +84,9 @@ public class MortalList {
                     // Object with refCount 0: bump to 1 so flush triggers DESTROY
                     base.refCount = 1;
                     pending.add(base);
-                } else if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                    // Non-DESTROY weakly-tracked: bump for clearing weak refs
-                    base.refCount = 1;
-                    pending.add(base);
                 }
+                // Note: WEAKLY_TRACKED (-2) objects are not scheduled here.
+                // See deferDecrementIfTracked() for rationale.
             }
         }
     }

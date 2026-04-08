@@ -679,48 +679,85 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 ### Current Status
 
-**Test Results (after Phase 38 - croak-locations.t fully passing):**
-- **Moo**: 65/71 test programs passing (91.5%), 808/839 subtests passing (96.3%)
+**Test Results (after Phase 39 - DESTROY/weaken integration fix):**
+- **Moo**: 64/71 test programs passing (90.1%), 801/813 subtests passing (98.5%)
 - **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
 
-**Remaining Failures (all expected - require Java features not available):**
-1. **accessor-weaken*.t** (20 failures) - Weak references not supported in Java GC
-2. **demolish-*.t** (6 failures) - DESTROY not supported
-3. **no-moo.t** (5 failures) - Namespace cleanup requires weak references
+Note: DESTROY and weaken were implemented in the `feature/destroy-weaken` branch (PR #464).
+The integration exposed a bug where `weaken()` on non-DESTROY objects caused premature
+weak reference clearing on scope exit, breaking Moo's constructor installation (Phase 39).
 
-**All remaining failures require fundamental Java GC limitations:**
-- Weak references: accessor-weaken tests (20), no-moo.t cleanup (5)
-- DESTROY/GC: demolish tests (6)
+**Remaining Failures:**
+1. **accessor-weaken*.t** (6 failures) - Weak ref not cleared when last strong ref removed (improved from 20)
+2. **demolish-global_destruction.t** (1 failure) - `${^GLOBAL_PHASE}` not implemented
+3. **demolish-throw.t** (2 failures) - DEMOLISH error not properly converted to warning
+4. **accessor-isa.t** (2 failures) - Lazy builder returns `$self` instead of built value
+5. **accessor-trigger.t** (0 subtests failed, but parse error) - `_trigger_one` method dispatch issue
+6. **overloaded-coderefs.t** (1 failure) - Sub::Quoted inlined coercion overload
+
+**Improvements from DESTROY/weaken implementation:**
+- demolish-basics.t: 0/3 → 3/3 (PASS)
+- demolish-bugs-eats_exceptions.t: 0/4 → 4/4 (PASS)
+- demolish-bugs-eats_mini.t: 0/3 → 3/3 (PASS)
+- no-moo.t: 0/5 → 5/5 (PASS)
+- accessor-weaken*.t: 16/19 → 16/19 per file (weak ref clearing still partial)
 
 ### Next Steps - Missing Features Roadmap
 
 The remaining test failures require implementing core Perl features that are currently missing or incomplete in PerlOnJava.
 
-#### Phase 31: DESTROY/Destructor Support (High Impact)
-**Enables**: demolish tests (6 failures), proper object cleanup  
-**Status**: Analysis complete, implementation deferred  
-**Design doc**: `../design/object_lifecycle.md`
+#### Phase 31: DESTROY/Destructor Support (Completed)
+**Enables**: demolish tests → 7/9 passing (was 0/9)  
+**Status**: Completed 2026-04-08 (PR #464 on `feature/destroy-weaken` branch)
 
-Perl's DESTROY relies on reference counting; Java uses GC. The challenge is detecting
-when an object becomes unreachable while we can still access it to call DESTROY.
+Implemented scope-based DESTROY with reference counting:
+- `RuntimeBase.refCount` tracks strong references for blessed objects with DESTROY
+- `MortalList` defers DESTROY to safe points (statement boundaries)
+- `DestroyDispatch` handles DESTROY method lookup, caching, and invocation
+- Cascading destruction for nested objects
 
-Proposed approach: Scope-based DESTROY with GC fallback. See dedicated design doc for
-detailed analysis of implementation strategies, challenges, and test cases.
+**Remaining failures**: `demolish-global_destruction.t` (`${^GLOBAL_PHASE}` not implemented),
+`demolish-throw.t` (DEMOLISH exception → warning conversion needs improvement)
 
-#### Phase 32: Weak Reference Emulation (High Impact)  
-**Enables**: accessor-weaken tests (20 failures), no-moo.t (5 failures)  
-**Status**: Analysis complete, implementation deferred  
-**Design doc**: `../design/object_lifecycle.md`
+#### Phase 32: Weak Reference Emulation (Completed)
+**Enables**: accessor-weaken tests → 16/19 per file (was 0/19), no-moo.t → 5/5  
+**Status**: Completed 2026-04-08 (PR #464 on `feature/destroy-weaken` branch)
 
-Perl's weak references are tied to reference counting, which Java doesn't have.
+Implemented using external registry (IdentityHashMap) to avoid memory overhead:
+- `WeakRefRegistry` tracks weak scalars and reverse referent→weak-refs mapping
+- `weaken()`, `unweaken()`, `isweak()` all functional
+- Weak refs cleared when refCount reaches 0 (for DESTROY objects)
+- Non-DESTROY objects marked as WEAKLY_TRACKED for minimal tracking
 
-**Key concern**: Adding `isWeak` field to RuntimeScalar would have significant memory
-impact - RuntimeScalar is instantiated millions of times. Need to explore alternatives:
-- External registry (IdentityHashMap) for weak ref tracking
-- Sentinel wrapper type in value field
-- Bit-packing in type field
+**Remaining failures**: 6 subtests where weak ref not cleared when last strong ref
+removed (WEAKLY_TRACKED objects can't track strong ref count accurately)
 
-See dedicated design doc for full analysis and alternative approaches.
+#### Phase 39: Fix premature weak ref clearing on scope exit (Completed)
+**Enables**: All Moo tests that use `weaken()` internally (constructor installation)  
+**Status**: Completed 2026-04-08
+
+**Root cause**: `MortalList.deferDecrementIfTracked()` was treating WEAKLY_TRACKED (-2)
+objects the same as DESTROY-tracked objects on scope exit. When a local variable holding
+a reference to a WEAKLY_TRACKED code ref went out of scope, the code transitioned
+refCount from -2 → 1, then flush() decremented to 0, triggering `callDestroy()` which
+called `clearWeakRefsTo()` — setting all weak references to undef. But the code ref was
+still alive in the symbol table!
+
+This broke Moo's `Method::Generate::Constructor` which uses:
+```perl
+weaken($self->{constructor} = $constructor);
+```
+The weak ref was cleared prematurely, causing "Unknown constructor already exists" error.
+
+**Fix**: Removed WEAKLY_TRACKED handling from `deferDecrementIfTracked()` and
+`deferDestroyForContainerClear()`. For non-DESTROY objects, we can't count strong refs
+(refs created before `weaken()` weren't tracked), so scope exit of ONE reference
+should not destroy the referent.
+
+**Files changed**:
+- `src/main/java/org/perlonjava/runtime/runtimetypes/MortalList.java`
+
+**Result**: Moo tests went from 14/71 → 64/71 test programs passing
 
 #### Phase 33: B::Deparse Stub Implementation (Completed)
 **Enables**: overloaded-coderefs.t (10 tests) → **FIXED**  
@@ -779,28 +816,21 @@ Tests 15 and 18 are now fixed. Tests 27-28 were also fixed by Phase 29 and 37 (s
 
 ---
 
-**Revised Priority Order** (all high-impact items completed):
+**Revised Priority Order**:
 
 | Priority | Phase | Impact | Status | Effort |
 |----------|-------|--------|--------|--------|
-| 1 | ~~B::Deparse (33)~~ | ~~1 test~~ | **Completed** | ~~Medium~~ |
-| 2 | ~~Mo strict.t (35)~~ | ~~1 test~~ | **Completed** | ~~Low~~ |
-| 3 | ~~Interpreter caller() (34)~~ | ~~Parity~~ | **Completed** | ~~Medium~~ |
-| 4 | ~~croak-locations.t 15,18 (36/37)~~ | ~~2 tests~~ | **Completed** | ~~Medium~~ |
-| 5 | ~~croak-locations.t 27,28~~ | ~~2 tests~~ | **Completed** | ~~High~~ |
-| 6 | DESTROY (31) | 6 tests | **Deferred** | High |
-| 7 | Weak References (32) | 25 tests | **Deferred** | High |
+| 1 | ~~DESTROY (31)~~ | ~~6 tests~~ | **Completed** | ~~High~~ |
+| 2 | ~~Weak References (32)~~ | ~~25 tests~~ | **Completed** | ~~High~~ |
+| 3 | ~~weaken scope fix (39)~~ | ~~57 tests~~ | **Completed** | ~~Low~~ |
+| 4 | accessor-trigger.t | 1 test prog | Investigating | Medium |
+| 5 | accessor-isa.t (lazy builder) | 2 subtests | Investigating | Medium |
+| 6 | demolish-throw.t | 2 subtests | Open | Medium |
+| 7 | demolish-global_destruction.t | 1 subtest | Open (needs `${^GLOBAL_PHASE}`) | Low |
 
-**All actionable items completed!** Remaining failures (31 subtests) require:
-- Phase 31 (DESTROY): Scope-based tracking, complex GC interaction
-- Phase 32 (Weak refs): Memory impact concern, need alternative to adding field
-
-**Final achievable state reached**:
-- Moo: 65/71 test programs (91.5%), 808/839 subtests (96.3%)
+**Current state**:
+- Moo: 64/71 test programs (90.1%), 801/813 subtests (98.5%)
 - Mo: 28/28 test programs (100%), 144/144 subtests (100%)
-
-The 31 remaining failing subtests all require DESTROY or weak reference support,
-which are fundamentally limited by Java's GC model.
 
 ### PR Information
 - **Branch**: `feature/moo-support` (PR #319 - merged)
