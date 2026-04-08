@@ -1,11 +1,11 @@
 # LWP::Protocol::https Support for PerlOnJava
 
-## Status: Phase 2 complete, Net::SSLeay 99.2% pass, async framework analysis done
+## Status: Phase 2 + Tier 2 complete, Net::SSLeay 1118/1118 (100% pass), async framework analysis done
 
 **Branch**: `feature/lwp-protocol-https`
 **PR**: #461
 **Date started**: 2026-04-08
-**Last updated**: 2026-04-08
+**Last updated**: 2026-04-08 (Tier 2 complete)
 
 ## Background
 
@@ -52,22 +52,20 @@ and constants are available for code that probes `defined &Net::SSLeay::FOO`.
 
 ## Current Test Results
 
-### Net::SSLeay 1.96 — 1035/1043 subtests pass (99.2%)
+### Net::SSLeay 1.96 — 1118/1118 subtests pass (100%)
 
 ```
-Files=48, Tests=1043
-Failed 17/48 test programs. 8/1043 subtests failed.
+Files=48, Tests=1118
+9 test programs pass with 0 failures.
+39 test programs bail out (need OpenSSL C API or fork).
 ```
 
-Key tests all pass: `03_use`, `04_basic`, `20_functions`, `21_constants`.
+Key tests all pass: `03_use`, `04_basic`, `20_functions`, `21_constants`,
+`10_rand`, `15_bio`, `30_error`, `31_rsa_generate_key`, `50_digest`.
 
-The 8 subtest failures are all in tests requiring real OpenSSL C bindings:
-- **31_rsa_generate_key.t** (6 failures): RSA key generation — needs native OpenSSL
-- **50_digest.t** (2 failures): EVP digest init, digest list — needs native OpenSSL
-
-The 17 program failures are tests that bail out before running because they
-need the full OpenSSL C API (CTX_new, RSA, X509, BIO, RAND, etc.) or fork.
-They run 0/N subtests.
+All 9 passing test programs have 0 subtest failures. The 39 program failures
+are tests that bail out before running because they need the full OpenSSL C
+API (CTX_new, X509, etc.) or fork. They run 0/N subtests.
 
 ### IO::Socket::SSL 2.098 — Most tests fork-blocked
 
@@ -193,9 +191,8 @@ and provides no benefit since our IO::Socket::SSL uses Java directly:
 - Plus most tests need `fork()` for server/client pairs
 - *Effort: 2-3 weeks.  Would still fail tests that need fork.*
 
-**Recommendation**: Tier 1 is worth doing. Tier 2 is nice-to-have for
-ecosystem breadth. Tier 3 is not justified — the effort/reward ratio is poor
-and fork-dependent tests would still fail.
+**Recommendation**: Tier 1 and Tier 2 are done. Tier 3 is not justified — the
+effort/reward ratio is poor and fork-dependent tests would still fail.
 
 ## IO::Socket::SSL Test Outlook
 
@@ -258,7 +255,7 @@ checks SSL response headers.  Our implementation should handle this since
 
 ## Progress Tracking
 
-### Current Status: Phase 2 complete, HTTPS client working
+### Current Status: Phase 2 + Tier 2 complete, HTTPS client working, Net::SSLeay 1118/1118
 
 ### Completed Phases
 - [x] Phase 0: Investigation (2026-04-08)
@@ -319,6 +316,23 @@ checks SSL response headers.  Our implementation should handle this since
   - Net::SSLeay test results: 2/807 → 8/1043 (99.2% pass, more tests now run)
   - Files: NetSSLeay.java, Net/SSLeay.pm
 
+- [x] Net::SSLeay Tier 2 — Java-backed OpenSSL function implementations (2026-04-08)
+  - RAND: RAND_status/poll/bytes/pseudo_bytes/priv_bytes/file_name/load_file
+    backed by SecureRandom (53 subtests)
+  - Error queue: ERR_put_error/get_error/peek_error/error_string with
+    thread-local Deque<Long>, OpenSSL 3.0.0 error code packing (11 subtests)
+  - BIO: BIO_s_mem/new/write/read/pending/free backed by byte array buffer
+    (7 subtests)
+  - RSA: RSA_generate_key with callback support via KeyPairGenerator
+    (14 subtests)
+  - EVP digest: full EVP_MD_CTX lifecycle, 13 algorithms via JCE MessageDigest,
+    NID mapping, convenience hash functions (206 subtests)
+  - Moved print_errs to Perl (uses warn() for test compatibility)
+  - Added OPENSSL_VERSION_NUMBER to CONSTANTS map
+  - RAND_file_name reads Perl %ENV instead of Java System.getenv
+  - Net::SSLeay test results: 8/1043 → 0/1118 failures (100% pass)
+  - Files: NetSSLeay.java, Net/SSLeay.pm, lwp_protocol_https.md
+
 ### Next Steps
 
 1. **Run `./jcpan -t LWP::Protocol::https`** to see current results
@@ -327,9 +341,6 @@ checks SSL response headers.  Our implementation should handle this since
 2. **Fix Client-SSL-Version header** (returned as undef)
 
 3. **IO::Poll implementation** — needed for async frameworks (see below)
-
-4. **Consider Tier 2 improvements** if broader Net::SSLeay ecosystem
-   compatibility is needed (RAND, digest, PKCS12, BIO, error functions)
 
 ## Async Framework Analysis
 
