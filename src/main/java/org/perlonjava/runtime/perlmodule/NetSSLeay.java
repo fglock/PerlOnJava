@@ -89,10 +89,45 @@ public class NetSSLeay extends PerlModuleBase {
 
         // LIBRESSL_VERSION_NUMBER (we are not LibreSSL)
         CONSTANTS.put("LIBRESSL_VERSION_NUMBER", 0L);
+
+        // SSLeay_version() type constants
+        CONSTANTS.put("SSLEAY_VERSION", 0L);
+        CONSTANTS.put("SSLEAY_CFLAGS", 2L);
+        CONSTANTS.put("SSLEAY_BUILT_ON", 3L);
+        CONSTANTS.put("SSLEAY_PLATFORM", 4L);
+        CONSTANTS.put("SSLEAY_DIR", 5L);
+        CONSTANTS.put("OPENSSL_VERSION", 0L);
+        CONSTANTS.put("OPENSSL_CFLAGS", 2L);
+        CONSTANTS.put("OPENSSL_BUILT_ON", 3L);
+        CONSTANTS.put("OPENSSL_PLATFORM", 4L);
+        CONSTANTS.put("OPENSSL_DIR", 5L);
+
+        // OpenSSL 3.x version component constants
+        CONSTANTS.put("OPENSSL_VERSION_MAJOR", 3L);
+        CONSTANTS.put("OPENSSL_VERSION_MINOR", 0L);
+        CONSTANTS.put("OPENSSL_VERSION_PATCH", 0L);
+
+        // OPENSSL_info() type constants
+        CONSTANTS.put("OPENSSL_INFO_CONFIG_DIR", 1001L);
+        CONSTANTS.put("OPENSSL_INFO_ENGINES_DIR", 1002L);
+        CONSTANTS.put("OPENSSL_INFO_MODULES_DIR", 1003L);
+        CONSTANTS.put("OPENSSL_INFO_DSO_EXTENSION", 1004L);
+        CONSTANTS.put("OPENSSL_INFO_DIR_FILENAME_SEPARATOR", 1005L);
+        CONSTANTS.put("OPENSSL_INFO_LIST_SEPARATOR", 1006L);
+        CONSTANTS.put("OPENSSL_INFO_SEED_SOURCE", 1007L);
+        CONSTANTS.put("OPENSSL_INFO_CPU_SETTINGS", 1008L);
+
+        // Additional OpenSSL_version() type constants (OpenSSL 1.1.1+)
+        CONSTANTS.put("OPENSSL_ENGINES_DIR", 6L);
+        // OpenSSL 3.0+ version info type constants
+        CONSTANTS.put("OPENSSL_MODULES_DIR", 7L);
+        CONSTANTS.put("OPENSSL_CPU_INFO", 8L);
+        CONSTANTS.put("OPENSSL_FULL_VERSION_STRING", 9L);
+        CONSTANTS.put("OPENSSL_VERSION_STRING", 10L);
     }
 
     // Report as OpenSSL 3.0.0 — modern enough for IO::Socket::SSL features
-    private static final long OPENSSL_VERSION = 0x30000000L;
+    private static final long OPENSSL_VERSION_HEX = 0x30000000L;
 
     public NetSSLeay() {
         super("Net::SSLeay", false);
@@ -114,14 +149,24 @@ public class NetSSLeay extends PerlModuleBase {
             // Library initialization (no-ops — JVM handles SSL natively)
             mod.registerMethod("library_init", null);
             mod.registerMethod("load_error_strings", null);
+            mod.registerMethod("ERR_load_crypto_strings", null);
             mod.registerMethod("SSLeay_add_ssl_algorithms", null);
             mod.registerMethod("OpenSSL_add_all_digests", null);
             mod.registerMethod("randomize", null);
+            mod.registerMethod("hello", null);
 
             // Version info
             mod.registerMethod("SSLeay", null);
             mod.registerMethod("SSLeay_version", null);
+            mod.registerMethod("OpenSSL_version", null);
+            mod.registerMethod("OpenSSL_version_num", null);
             mod.registerMethod("OPENSSL_VERSION_NUMBER", "");
+            mod.registerMethod("OPENSSL_version_major", null);
+            mod.registerMethod("OPENSSL_version_minor", null);
+            mod.registerMethod("OPENSSL_version_patch", null);
+            mod.registerMethod("OPENSSL_version_pre_release", null);
+            mod.registerMethod("OPENSSL_version_build_metadata", null);
+            mod.registerMethod("OPENSSL_info", null);
 
             // Error functions
             mod.registerMethod("ERR_clear_error", null);
@@ -184,6 +229,10 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(1).getList();
     }
 
+    public static RuntimeList ERR_load_crypto_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
     public static RuntimeList SSLeay_add_ssl_algorithms(RuntimeArray args, int ctx) {
         return new RuntimeScalar(1).getList();
     }
@@ -196,19 +245,103 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(1).getList();
     }
 
+    public static RuntimeList hello(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
     // ---- Version info ----
 
     public static RuntimeList SSLeay(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(OPENSSL_VERSION).getList();
+        return new RuntimeScalar(OPENSSL_VERSION_HEX).getList();
     }
 
     public static RuntimeList SSLeay_version(RuntimeArray args, int ctx) {
-        return new RuntimeScalar("PerlOnJava TLS (Java " +
-                System.getProperty("java.version") + ")").getList();
+        int type = args.size() > 0 ? (int) args.get(0).getLong() : 0;
+        switch (type) {
+            case 0: // SSLEAY_VERSION / OPENSSL_VERSION
+                return new RuntimeScalar("PerlOnJava TLS (Java " +
+                        System.getProperty("java.version") + ")").getList();
+            case 2: // SSLEAY_CFLAGS / OPENSSL_CFLAGS
+                return new RuntimeScalar("compiler: javac").getList();
+            case 3: // SSLEAY_BUILT_ON / OPENSSL_BUILT_ON
+                return new RuntimeScalar("built on: JVM").getList();
+            case 4: // SSLEAY_PLATFORM / OPENSSL_PLATFORM
+                return new RuntimeScalar("platform: " + System.getProperty("os.name")).getList();
+            case 5: // SSLEAY_DIR / OPENSSL_DIR
+                return new RuntimeScalar("OPENSSLDIR: \"\"").getList();
+            case 6: // OPENSSL_ENGINES_DIR
+                return new RuntimeScalar("ENGINESDIR: \"\"").getList();
+            case 7: // OPENSSL_MODULES_DIR
+                return new RuntimeScalar("MODULESDIR: \"\"").getList();
+            case 8: // OPENSSL_CPU_INFO
+                return new RuntimeScalar("CPUINFO: " + System.getProperty("os.arch")).getList();
+            case 9: // OPENSSL_FULL_VERSION_STRING
+                return new RuntimeScalar("PerlOnJava TLS 3.0.0").getList();
+            case 10: // OPENSSL_VERSION_STRING
+                return new RuntimeScalar("3.0.0").getList();
+            default:
+                return new RuntimeScalar("PerlOnJava TLS (Java " +
+                        System.getProperty("java.version") + ")").getList();
+        }
+    }
+
+    // OpenSSL_version is an alias for SSLeay_version
+    public static RuntimeList OpenSSL_version(RuntimeArray args, int ctx) {
+        return SSLeay_version(args, ctx);
+    }
+
+    // OpenSSL_version_num is an alias for SSLeay (returns numeric version)
+    public static RuntimeList OpenSSL_version_num(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(OPENSSL_VERSION_HEX).getList();
+    }
+
+    // OpenSSL 3.x version component functions
+    public static RuntimeList OPENSSL_version_major(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(3).getList();
+    }
+
+    public static RuntimeList OPENSSL_version_minor(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList OPENSSL_version_patch(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList OPENSSL_version_pre_release(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("").getList();
+    }
+
+    public static RuntimeList OPENSSL_version_build_metadata(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("").getList();
+    }
+
+    public static RuntimeList OPENSSL_info(RuntimeArray args, int ctx) {
+        int type = args.size() > 0 ? (int) args.get(0).getLong() : -1;
+        switch (type) {
+            case 1001: // OPENSSL_INFO_CONFIG_DIR
+                return new RuntimeScalar("").getList();
+            case 1002: // OPENSSL_INFO_ENGINES_DIR
+                return new RuntimeScalar("").getList();
+            case 1003: // OPENSSL_INFO_MODULES_DIR
+                return new RuntimeScalar("").getList();
+            case 1004: // OPENSSL_INFO_DSO_EXTENSION
+                return new RuntimeScalar(".so").getList();
+            case 1005: // OPENSSL_INFO_DIR_FILENAME_SEPARATOR
+                return new RuntimeScalar("/").getList();
+            case 1006: // OPENSSL_INFO_LIST_SEPARATOR
+                return new RuntimeScalar(":").getList();
+            case 1007: // OPENSSL_INFO_SEED_SOURCE
+                return new RuntimeScalar("os-specific").getList();
+            case 1008: // OPENSSL_INFO_CPU_SETTINGS
+                return new RuntimeScalar("").getList();
+            default:
+                return new RuntimeScalar().getList(); // undef for unknown types
+        }
     }
 
     public static RuntimeList OPENSSL_VERSION_NUMBER(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(OPENSSL_VERSION).getList();
+        return new RuntimeScalar(OPENSSL_VERSION_HEX).getList();
     }
 
     // ---- Error functions ----
@@ -439,5 +572,111 @@ public class NetSSLeay extends PerlModuleBase {
 
     public static RuntimeList LIBRESSL_VERSION_NUMBER(RuntimeArray args, int ctx) {
         return new RuntimeScalar(CONSTANTS.get("LIBRESSL_VERSION_NUMBER")).getList();
+    }
+
+    // SSLeay_version() type constants
+    public static RuntimeList SSLEAY_VERSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSLEAY_VERSION")).getList();
+    }
+
+    public static RuntimeList SSLEAY_CFLAGS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSLEAY_CFLAGS")).getList();
+    }
+
+    public static RuntimeList SSLEAY_BUILT_ON(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSLEAY_BUILT_ON")).getList();
+    }
+
+    public static RuntimeList SSLEAY_PLATFORM(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSLEAY_PLATFORM")).getList();
+    }
+
+    public static RuntimeList SSLEAY_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSLEAY_DIR")).getList();
+    }
+
+    // Note: OPENSSL_VERSION as a constant (=0) is separate from the OPENSSL_VERSION field (=0x30000000L)
+    public static RuntimeList OPENSSL_VERSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION")).getList();
+    }
+
+    public static RuntimeList OPENSSL_CFLAGS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_CFLAGS")).getList();
+    }
+
+    public static RuntimeList OPENSSL_BUILT_ON(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_BUILT_ON")).getList();
+    }
+
+    public static RuntimeList OPENSSL_PLATFORM(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_PLATFORM")).getList();
+    }
+
+    public static RuntimeList OPENSSL_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_VERSION_MAJOR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_MAJOR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_VERSION_MINOR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_MINOR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_VERSION_PATCH(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_PATCH")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_CONFIG_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_CONFIG_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_ENGINES_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_ENGINES_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_MODULES_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_MODULES_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_DSO_EXTENSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_DSO_EXTENSION")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_DIR_FILENAME_SEPARATOR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_DIR_FILENAME_SEPARATOR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_LIST_SEPARATOR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_LIST_SEPARATOR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_SEED_SOURCE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_SEED_SOURCE")).getList();
+    }
+
+    public static RuntimeList OPENSSL_INFO_CPU_SETTINGS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_INFO_CPU_SETTINGS")).getList();
+    }
+
+    public static RuntimeList OPENSSL_ENGINES_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_ENGINES_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_MODULES_DIR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_MODULES_DIR")).getList();
+    }
+
+    public static RuntimeList OPENSSL_CPU_INFO(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_CPU_INFO")).getList();
+    }
+
+    public static RuntimeList OPENSSL_FULL_VERSION_STRING(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_FULL_VERSION_STRING")).getList();
+    }
+
+    public static RuntimeList OPENSSL_VERSION_STRING(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_STRING")).getList();
     }
 }
