@@ -1058,9 +1058,11 @@ public class RegexPreprocessor {
                 if (isSimpleConstant(codeBlock)) {
                     String value = evaluateSimpleConstant(codeBlock);
                     if (value != null) {
-                        // Insert the constant value as a non-capturing group pattern
+                        // Insert the constant value as a non-capturing group pattern.
+                        // Run through handleRegex to process any regex constructs
+                        // (e.g. (?[...]) from regex_sets transformation).
                         sb.append("(?:");
-                        sb.append(value);
+                        handleRegex(value, 0, sb, regexFlags, false);
                     } else {
                         // Fallback: empty non-capturing group
                         sb.append("(?:");
