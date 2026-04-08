@@ -278,6 +278,7 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new HashMap<>();
     private static final Map<Long, BigInteger> BIGNUM_HANDLES = new HashMap<>();
     private static final Map<Long, String> EVP_CIPHER_HANDLES = new HashMap<>(); // handle → cipher name
+    private static final Map<Long, KeyPair> EC_KEY_HANDLES = new HashMap<>(); // EC key pairs
     private static final Map<Long, MutableCRLState> CRL_HANDLES = new HashMap<>();
     private static final Map<Long, X509CRL> X509_CRL_HANDLES = new HashMap<>(); // read-only parsed CRLs
     private static final Map<String, Long> CRL_TIME_CACHE = new HashMap<>(); // cache for read-only CRL time handles
@@ -518,6 +519,7 @@ public class NetSSLeay extends PerlModuleBase {
         String role; // "generic", "client", "server"
         long minProtoVersion = 0; // 0 = automatic
         long maxProtoVersion = 0; // 0 = automatic
+        int securityLevel = 1;  // OpenSSL 1.1.0+ default
         RuntimeScalar passwdCb = null;       // password callback CODE ref
         RuntimeScalar passwdUserdata = null;  // password callback userdata
 
@@ -531,6 +533,7 @@ public class NetSSLeay extends PerlModuleBase {
         String role;
         long minProtoVersion;
         long maxProtoVersion;
+        int securityLevel;
         RuntimeScalar passwdCb = null;
         RuntimeScalar passwdUserdata = null;
         long ctxHandle; // reference to parent CTX
@@ -539,6 +542,7 @@ public class NetSSLeay extends PerlModuleBase {
             this.role = ctx.role;
             this.minProtoVersion = ctx.minProtoVersion;
             this.maxProtoVersion = ctx.maxProtoVersion;
+            this.securityLevel = ctx.securityLevel;
             this.ctxHandle = ctxHandle;
         }
     }
@@ -1203,6 +1207,61 @@ public class NetSSLeay extends PerlModuleBase {
                 }
             });
 
+            // Security level get/set (OpenSSL 1.1.0+)
+            registerLambda("CTX_get_security_level", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(st != null ? st.securityLevel : 0).getList();
+            });
+            registerLambda("CTX_set_security_level", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st != null) st.securityLevel = (int) a.get(1).getLong();
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("get_security_level", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(st != null ? st.securityLevel : 0).getList();
+            });
+            registerLambda("set_security_level", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st != null) st.securityLevel = (int) a.get(1).getLong();
+                return new RuntimeScalar().getList();
+            });
+
+            // EC key functions
+            registerLambda("EC_KEY_generate_key", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                String curveName = a.get(0).toString();
+                // Map OpenSSL curve names to Java names
+                String javaCurve = curveName;
+                if ("prime256v1".equals(curveName)) javaCurve = "secp256r1";
+                else if ("secp384r1".equals(curveName)) javaCurve = "secp384r1";
+                else if ("secp521r1".equals(curveName)) javaCurve = "secp521r1";
+                try {
+                    java.security.KeyPairGenerator kpg = java.security.KeyPairGenerator.getInstance("EC");
+                    kpg.initialize(new java.security.spec.ECGenParameterSpec(javaCurve));
+                    KeyPair kp = kpg.generateKeyPair();
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    EC_KEY_HANDLES.put(h, kp);
+                    return new RuntimeScalar(h).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("EVP_PKEY_assign_EC_KEY", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long pkeyHandle = a.get(0).getLong();
+                long ecHandle = a.get(1).getLong();
+                if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)) return new RuntimeScalar(0).getList();
+                KeyPair kp = EC_KEY_HANDLES.get(ecHandle);
+                if (kp == null) return new RuntimeScalar(0).getList();
+                EVP_PKEY_HANDLES.put(pkeyHandle, kp.getPrivate());
+                return new RuntimeScalar(1).getList();
+            });
+
             // Define exports
             String[] exportOk = CONSTANTS.keySet().toArray(new String[0]);
             mod.defineExport("EXPORT_OK", exportOk);
@@ -1240,7 +1299,10 @@ public class NetSSLeay extends PerlModuleBase {
                     "CTX_set_min_proto_version", "CTX_set_max_proto_version",
                     "CTX_get_min_proto_version", "CTX_get_max_proto_version",
                     "set_min_proto_version", "set_max_proto_version",
-                    "get_min_proto_version", "get_max_proto_version");
+                    "get_min_proto_version", "get_max_proto_version",
+                    "CTX_get_security_level", "CTX_set_security_level",
+                    "get_security_level", "set_security_level",
+                    "EC_KEY_generate_key", "EVP_PKEY_assign_EC_KEY");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing NetSSLeay method: " + e.getMessage());
@@ -2300,13 +2362,16 @@ public class NetSSLeay extends PerlModuleBase {
 
     // Parse DER-encoded private key (PKCS#1 RSA or PKCS#8)
     private static PrivateKey parsePrivateKeyDer(byte[] der) {
-        // First try PKCS#8 format
-        try {
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(der);
-            return KeyFactory.getInstance("RSA").generatePrivate(spec);
-        } catch (Exception e) {
-            // Not PKCS#8, try wrapping as PKCS#1 → PKCS#8
+        // First try PKCS#8 format (works for RSA, EC, and other key types)
+        PKCS8EncodedKeySpec pkcs8Spec = new PKCS8EncodedKeySpec(der);
+        for (String algo : new String[]{"RSA", "EC", "DSA", "EdDSA"}) {
+            try {
+                return KeyFactory.getInstance(algo).generatePrivate(pkcs8Spec);
+            } catch (Exception e) {
+                // try next algorithm
+            }
         }
+        // Not PKCS#8, try wrapping as PKCS#1 → PKCS#8
         try {
             byte[] pkcs8 = wrapPkcs1InPkcs8(der);
             PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
