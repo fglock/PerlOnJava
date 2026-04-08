@@ -1,11 +1,11 @@
 # LWP::Protocol::https Support for PerlOnJava
 
-## Status: Phase 2 + Tier 2.5 + Tier 3 Phase 1 complete, Net::SSLeay 1975/1975 (100% pass)
+## Status: Phase 2 + Tier 2.5 + Tier 3 Phase 1.5 complete, Net::SSLeay 2101/2101 (100% pass)
 
 **Branch**: `feature/lwp-protocol-https`
 **PR**: #461
 **Date started**: 2026-04-08
-**Last updated**: 2026-04-08 (Tier 3 Phase 1 complete)
+**Last updated**: 2026-04-08 (Tier 3 Phase 1.5 complete)
 
 ## Background
 
@@ -52,21 +52,21 @@ and constants are available for code that probes `defined &Net::SSLeay::FOO`.
 
 ## Current Test Results
 
-### Net::SSLeay 1.96 — 1975/1975 subtests pass (100%)
+### Net::SSLeay 1.96 — 2101/2101 subtests pass (100%)
 
 ```
-Files=48, Tests=1975
-16 test programs pass with 0 failures.
-4 failing programs (bail out before completing — need unimplemented functions).
-28 programs skip (need fork or threads).
+Files=48, Tests=2101
+46 test programs pass with 0 failures.
+2 failing programs (bail out before completing — need X509 creation + CRL functions).
 ```
 
 Key tests all pass: `03_use`, `04_basic`, `05_passwd_cb`, `09_ctx_new`, `10_rand`,
 `15_bio`, `20_functions`, `21_constants`, `30_error`, `31_rsa_generate_key`,
-`32_x509_get_cert_info` (746/746), `37_asn1_time`, `38_priv-key`, `50_digest`.
+`32_x509_get_cert_info` (746/746), `36_verify` (105/105), `37_asn1_time`,
+`38_priv-key`, `39_pkcs12` (17/17), `50_digest`.
 
-All 16 passing test programs have 0 subtest failures. The 4 failing programs
-bail out on unimplemented functions (PKCS12, CRL, X509 creation, verify params).
+All 46 passing test programs have 0 subtest failures. The 2 failing programs
+bail out on unimplemented functions (X509 creation, CRL).
 
 ### IO::Socket::SSL 2.098 — Most tests fork-blocked
 
@@ -319,7 +319,7 @@ checks SSL response headers.  Our implementation should handle this since
 
 ## Progress Tracking
 
-### Current Status: Tier 3 Phase 1.5 in progress (PKCS12 + verify infrastructure)
+### Current Status: Tier 3 Phase 1.5 complete
 
 ### Completed Phases
 - [x] Phase 0: Investigation (2026-04-08)
@@ -426,13 +426,28 @@ checks SSL response headers.  Our implementation should handle this since
   - 32_x509_get_cert_info.t: 746/746 (was 0), 05_passwd_cb.t: 36/36 (was 0)
   - Files: NetSSLeay.java, lwp_protocol_https.md
 
+- [x] Net::SSLeay Tier 3 Phase 1.5 — PKCS12, verify, OBJ functions (2026-04-08)
+  - Phase 1.5a: P_PKCS12_load_file with Java KeyStore + manual DER parser fallback
+    for unencrypted PKCS12 files that Java's built-in KeyStore can't handle (JDK 24)
+  - X509_verify with PrivateKey→PublicKey extraction for RSA CRT keys
+  - X509_NAME_cmp with DER-based comparison
+  - Phase 1.5b: Full X509_VERIFY_PARAM lifecycle (new/free/inherit/set1/flags/purpose/trust/depth/time)
+  - OBJ_txt2obj, OBJ_txt2nid, OBJ_ln2nid, OBJ_sn2nid, OBJ_cmp
+  - Proper X509_verify_cert with chain building and issuer verification
+  - X509_STORE_CTX_get_error, X509_STORE_free, X509_STORE_CTX_free
+  - PEM_X509_INFO_read_bio, sk_X509_INFO_num/value, P_X509_INFO_get_x509
+  - sk_X509_new_null, sk_X509_push, sk_X509_free, X509_STORE_set1_param
+  - X509_V_* constants, X509_PURPOSE/TRUST constants, X509_CHECK flags
+  - PKCS OIDs added to OID database (NID_pkcs=2, NID_md5=4)
+  - Net::SSLeay test results: 0/1975 → 0/2101 failures (46 test programs pass)
+  - 36_verify.t: 105/105 (was 0), 39_pkcs12.t: 17/17 (was 0)
+  - Files: NetSSLeay.java, lwp_protocol_https.md
+
 ### Next Steps
 
-1. **Phase 1.5a** — Implement `P_PKCS12_load_file` (quick win: 17 tests, 1 function)
-2. **Phase 1.5b** — `X509_verify`, `X509_NAME_cmp`, OBJ_* lookup functions, X509_VERIFY_PARAM_*, verify constants
-3. **Phase 2** — X509 creation/signing (33_x509_create_cert.t) — requires BouncyCastle or manual DER
-4. **Phase 3** — CRL functions (34_x509_crl.t) — requires BouncyCastle
-5. **Run `./jcpan -t LWP::Protocol::https`** to see current results
+1. **Phase 2** — X509 creation/signing (33_x509_create_cert.t) — needs EVP_PKEY_new, X509_new, X509_sign, etc.
+2. **Phase 3** — CRL functions (34_x509_crl.t) — needs d2i_X509_CRL_bio, X509_CRL_*, etc.
+3. **Run `./jcpan -t LWP::Protocol::https`** to see current results
 
 ## Async Framework Analysis
 
