@@ -3,146 +3,98 @@
 ## Goal
 
 Add the original CPAN Text::CSV 2.06 test suite to `src/test/resources/module/Text-CSV/`
-and make all tests pass against the **bundled** Text::CSV implementation (Java-backed via
-Apache Commons CSV).
+and make all tests pass against a bundled Text::CSV stack that uses Java as the XS backend.
 
-## Architecture
+## Architecture (Revised)
 
-The bundled Text::CSV has two layers:
-- **Perl side**: `src/main/perl/lib/Text/CSV.pm` — constructor, accessors, convenience methods
-- **Java side**: `src/main/java/org/perlonjava/runtime/perlmodule/TextCsv.java` — core `parse()`
-  and `combine()` using Apache Commons CSV
+Instead of reimplementing hundreds of methods in our simplified CSV.pm, we now use the
+**original CPAN modules** with Java replacing XS:
 
-The CPAN tests were written for Text::CSV + Text::CSV_PP (pure Perl backend). The bundled
-version is simpler but needs API compatibility for the tests to pass.
+```
+Text::CSV (CPAN 2.06 wrapper)
+  └─ tries Text::CSV_XS first, falls back to Text::CSV_PP
+       │
+       ├─ Text::CSV_XS (our Java-backed module)
+       │    └─ inherits from Text::CSV_PP
+       │    └─ $VERSION = "1.61" (satisfies >= 1.60 check)
+       │    └─ XSLoader::load('TextCsv') for Java parse/combine
+       │    └─ overrides parse()/combine() with Java acceleration
+       │
+       └─ Text::CSV_PP (CPAN 2.06, 6454 lines, pure Perl)
+            └─ complete implementation: all accessors, meta_info,
+               callbacks, types, formula, etc.
+```
+
+**Files:**
+- `src/main/perl/lib/Text/CSV.pm` — CPAN 2.06 wrapper (146 lines of code)
+- `src/main/perl/lib/Text/CSV_PP.pm` — CPAN 2.06 pure-Perl backend (6454 lines)
+- `src/main/perl/lib/Text/CSV_XS.pm` — our Java-backed XS replacement
+- `src/main/java/org/perlonjava/runtime/perlmodule/TextCsv.java` — Java parse/combine
+
+**Why this approach:**
+- The CPAN `Text::CSV_PP` already passes 39/40 tests (52,356/52,360 subtests) on PerlOnJava
+  (documented in `dev/modules/text_csv_fix_plan.md`)
+- All complex logic (accessors, meta_info, callbacks, types, formula, etc.) is handled
+  by the battle-tested CPAN code
+- Java only needs to implement the performance-critical parse/combine operations
+- No need to reimplement hundreds of methods
 
 ## Test Files
 
 40 test files + `t/util.pl` helper + 2 CSV data files copied from Text-CSV-2.06 CPAN
 distribution to `src/test/resources/module/Text-CSV/`.
 
-## Current Status
+## Implementation Plan
 
-- **Baseline run**: 2/40 pass (60_samples.t, and one other)
-- **Root cause**: Most failures are due to missing methods/accessors, not core parse/combine bugs
+### Phase 1: Bundle CPAN Modules
 
-## Implementation Phases
+1. Replace `src/main/perl/lib/Text/CSV.pm` with CPAN 2.06 wrapper
+2. Copy `Text/CSV_PP.pm` from CPAN to `src/main/perl/lib/Text/`
+3. Create `Text/CSV_XS.pm` that inherits from `Text::CSV_PP`:
+   - `$VERSION = "1.61"` (passes Text::CSV's `>= 1.60` check)
+   - Inherits all methods from CSV_PP via `@ISA`
+   - Exports same constants/functions
+   - Later: override parse/combine with Java acceleration
 
-### Phase 1: Missing Methods (Easy) — DONE partially
+### Phase 2: Fix TextCsv.java Registration
 
-Methods already added to CSV.pm:
-- `version()` — returns `$VERSION`
-- `status()` — returns `_STATUS` (last parse/combine result)
-- `error_input()` — returns `_ERROR_INPUT` (input that caused last error)
-- `is_pp()` / `is_xs()` — return 0 (neither pure Perl nor XS; Java backend)
-- `module()` — returns "Text::CSV"
+The existing `TextCsv.java` registers methods on `Text::CSV` package. After the refactor:
+- Either update it to register on `Text::CSV_XS` package
+- Or disable it if Text::CSV_PP handles everything
+- The XSLoader::load('TextCsv') call in old CSV.pm needs to be removed/updated
 
-### Phase 2: Constructor Fixes
+### Phase 3: Run Tests and Debug
 
-| Fix | Impact |
-|-----|--------|
-| Attribute validation in `new()` | t/81_subclass.t, t/12_acc.t |
-| Global error state for class-method `error_diag()` | t/81_subclass.t |
-| `ref $class \|\| $class` for object-method `new()` | t/10_base.t |
-| Attribute aliases: `sep`→`sep_char`, `quote`→`quote_char`, `escape`→`escape_char`, `quote_always`→`always_quote`, `verbose_diag`→`diag_verbose` | t/12_acc.t |
+With CPAN modules bundled, most tests should pass immediately (39/40 based on prior work).
+Known remaining issue from `text_csv_fix_plan.md`:
+- t/70_rt.t: 4 subtest failures (raw non-UTF-8 bytes, IO::Handle edge cases)
 
-### Phase 3: Accessor Methods
+### Phase 4: Java Acceleration (Optional, Future)
 
-Many tests (especially t/12_acc.t with 245 tests) exercise getter/setter methods for every
-attribute. Need to add generic accessors for:
+Override `parse()` and `combine()` in `Text::CSV_XS` to delegate to Java:
+- `Parse($str, $fields, $fflags)` — Java via XSLoader
+- `Combine(\$str, \@fields, $useIO)` — Java via XSLoader
+- `SetDiag($code, $msg)` — Java error management
+- `_cache_set` / `_cache_get_eolt` — Java cache
 
-| Method | Default | Notes |
-|--------|---------|-------|
-| `sep` / `sep_char` | `,` | Already exists |
-| `quote` / `quote_char` | `"` | Already exists, fix undef accept |
-| `escape_char` | undef | Already exists |
-| `binary` | 0 | Already exists, fix setter to use `@_` |
-| `auto_diag` | 0 | Already exists |
-| `always_quote` | 0 | Already exists |
-| `eol` | undef | Already exists |
-| `allow_loose_quotes` | 0 | Need accessor |
-| `allow_loose_escapes` | 0 | Need accessor |
-| `allow_unquoted_escape` | 0 | Need accessor |
-| `allow_whitespace` | 0 | Need accessor |
-| `blank_is_undef` | 0 | Need accessor |
-| `empty_is_undef` | 0 | Need accessor |
-| `quote_empty` | 0 | Need accessor |
-| `quote_space` | 1 | Need accessor |
-| `quote_binary` | 1 | Need accessor |
-| `quote_null` / `escape_null` | 1 | Need accessor |
-| `decode_utf8` | 1 | Need accessor |
-| `keep_meta_info` | 0 | Need accessor |
-| `strict` | 0 | Need accessor |
-| `strict_eol` | 0 | Need accessor |
-| `formula` | 'none' | Need accessor |
-| `verbatim` | 0 | Need accessor |
-| `diag_verbose` | 0 | Need accessor |
-| `undef_str` | undef | Need accessor |
-| `comment_str` | undef | Need accessor |
-| `skip_empty_rows` | 0 | Need accessor |
-| `record_number` | 0 | Need accessor (read-only, incremented by getline) |
-| `backend` | class method | Returns backend module name |
-| `known_attributes` | class/instance | Returns list of all known attribute names |
+This is optional since CSV_PP already works. Add it for performance.
 
-### Phase 4: Meta Info & Flags
+## XS API Contract (for future Java implementation)
 
-Tests in t/15_flags.t (229 tests) require per-field metadata tracking:
-- `meta_info()` — returns arrayref of per-field flag bitmasks after parse
-- `is_quoted($n)` — check if field N was quoted
-- `is_binary($n)` — check if field N contained binary chars
-- `is_missing($n)` — check if field N was missing
+The XS module must provide these C-level functions (via XSLoader):
 
-This requires changes to the Java `parse()` method to track metadata.
-
-### Phase 5: Constants Export
-
-t/16_import.t tests constant exports:
-- Type constants: `PV` (0), `IV` (1), `NV` (2), `CSV_TYPE_PV`, `CSV_TYPE_IV`, `CSV_TYPE_NV`
-- Flag constants: `CSV_FLAGS_IS_QUOTED`, `CSV_FLAGS_IS_BINARY`, `CSV_FLAGS_ERROR_IN_FIELD`, `CSV_FLAGS_IS_MISSING`
-
-Some flag constants already exist. Need to add type constants and proper `import()` method.
-
-### Phase 6: EOL Handling in combine/string
-
-The CPAN Text::CSV_PP appends `eol` to `string()` output after `combine()`.
-The bundled version only appends eol in `print()`. Need to change `combine()` to
-include eol in the stored string.
-
-### Phase 7: File I/O Improvements
-
-- `eof()` method — track EOF state from last getline
-- `getline_hr_all()` — read all rows as hashrefs
-- Fix `print()` to die on non-ARRAY argument (not just return 0)
-- Fix `csv()` to handle instance method calls (`$csv->csv(...)`)
-
-### Phase 8: Types Support
-
-t/30_types.t tests column type coercion:
-- `types()` getter/setter
-- Type constants for IV/NV/PV coercion during parse
-
-### Phase 9: Advanced Features (if needed)
-
-These are lower priority and may require significant work:
-- Binary mode enforcement (reject `\n`/`\r` without `binary => 1`)
-- Callback support (t/79_callbacks.t)
-- Fragment parsing (t/78_fragment.t)
-- Formula handling (t/66_formula.t)
-- Strict mode (t/71_strict.t)
-- Stream support (t/92_stream.t)
-- UTF-8 handling (t/50_utf8.t, t/51_utf8.t)
-- Comment handling (t/47_comment.t)
-
-### Tests Expected to Need Special Handling
-
-| Test | Issue |
-|------|-------|
-| t/00_pod.t | Needs Test::Pod — skip if not available |
-| t/55_combi.t | 25,119 subtests — combinatorial, may be slow |
-| t/70_rt.t | Contains raw non-UTF-8 bytes, 20,469 subtests |
-| t/71_pp.t | Tests PP-specific internals |
-| t/76_magic.t | Requires Tie::Scalar |
-| t/85_util.t | Requires Encode with advanced encodings |
+| XS Method | Called From | Purpose |
+|-----------|------------|---------|
+| `Parse($str, $fields, $fflags)` | `parse()` | Core CSV parsing |
+| `Combine(\$str, \@fields, $useIO)` | `combine()`, `print()` | Core CSV combining |
+| `SetDiag($code, $msg?)` | everywhere | Error diagnostics |
+| `_cache_set($idx, $val)` | accessor setters | XS state cache |
+| `_cache_get_eolt()` | `eol_type()` | EOL type detection |
+| `_cache_diag()` | debugging | Cache dump |
+| `print($io, $fields)` | `print()` | Direct IO print |
+| `getline($io)` | `getline()` | Direct IO getline |
+| `getline_all($io, ...)` | `getline_all()` | Batch IO getline |
+| `error_input()` | `error_input()` | Last error input |
 
 ## Progress Tracking
 
@@ -150,16 +102,16 @@ These are lower priority and may require significant work:
 
 ### Completed
 - [x] Copy CPAN test files to module/Text-CSV/ (2026-04-08)
-- [x] Add version(), status(), error_input(), is_pp(), is_xs(), module()
-- [x] Add attribute validation in new()
-- [x] Fix quote_char/sep_char to accept undef
-- [x] Add global error state for class-method error_diag()
-- [x] Fix new() to handle object-method calls (ref $class || $class)
+- [x] Architecture decision: use CPAN Text::CSV + CSV_PP + Java-backed CSV_XS
+- [x] Analyzed XS API contract from Text-CSV_XS-1.61 source
+
+### In Progress
+- [ ] Bundle CPAN Text::CSV.pm (replace our custom one)
+- [ ] Bundle CPAN Text::CSV_PP.pm
+- [ ] Create Text::CSV_XS.pm (inherits from CSV_PP)
 
 ### Next Steps
-1. Add all missing accessor methods (AUTOLOAD or explicit)
-2. Add meta_info/is_quoted/is_binary/is_missing
-3. Fix EOL in combine/string
-4. Add eof(), getline_hr_all(), types()
-5. Add constants export (PV, IV, NV)
-6. Run tests iteratively and fix remaining failures
+1. Handle TextCsv.java registration (update or disable)
+2. Build and run tests
+3. Debug any remaining failures
+4. (Future) Add Java acceleration for parse/combine

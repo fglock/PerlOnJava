@@ -29,6 +29,15 @@ public class DataSection {
     private static final Set<String> placeholderCreated = new HashSet<>();
 
     /**
+     * Resets all static state for DataSection.
+     * Called between test runs to prevent stale state from interfering.
+     */
+    public static void reset() {
+        processedPackages.clear();
+        placeholderCreated.clear();
+    }
+
+    /**
      * Creates a placeholder DATA filehandle for a package early in parsing.
      * This ensures the DATA filehandle exists during BEGIN block execution.
      *
