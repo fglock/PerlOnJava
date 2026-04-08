@@ -299,6 +299,42 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar __SUB__;
 
     /**
+     * Captured RuntimeScalar variables from the enclosing scope.
+     * Set by {@link #makeCodeObject} for closures that capture lexical variables.
+     * Used to properly track blessed object lifetimes across closure boundaries:
+     * captured variables' blessed refs should not be destroyed at the inner scope
+     * exit, but only when the closure itself is released.
+     */
+    public RuntimeScalar[] capturedScalars;
+
+    /**
+     * Release captured variable references. Called when this closure is being
+     * discarded (scope exit, undef, or reassignment of the variable holding
+     * this CODE ref). Decrements {@code captureCount} on each captured scalar,
+     * and if it reaches zero, defers the blessed ref decrement via MortalList.
+     * <p>
+     * Handles cascading: if a captured scalar itself holds a CODE ref with
+     * captures, those are released recursively.
+     */
+    public void releaseCaptures() {
+        if (capturedScalars != null) {
+            RuntimeScalar[] scalars = capturedScalars;
+            capturedScalars = null;  // null out first to prevent re-entry
+            for (RuntimeScalar s : scalars) {
+                s.captureCount--;
+                if (s.captureCount == 0) {
+                    // If the captured scalar itself holds a CODE ref with captures,
+                    // release those recursively (handles nested closures).
+                    if (s.type == RuntimeScalarType.CODE && s.value instanceof RuntimeCode innerCode) {
+                        innerCode.releaseCaptures();
+                    }
+                    MortalList.deferDecrementIfTracked(s);
+                }
+            }
+        }
+    }
+
+    /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
      * @param prototype  the prototype of the subroutine
@@ -1395,6 +1431,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (packageName != null) {
             code.packageName = packageName;
         }
+
+        // Extract captured RuntimeScalar fields for closure DESTROY tracking.
+        // Each instance field of type RuntimeScalar (except __SUB__) is a
+        // captured lexical variable. We store them so that releaseCaptures()
+        // can decrement blessed ref refCounts when the closure is discarded.
+        Field[] allFields = clazz.getDeclaredFields();
+        List<RuntimeScalar> captured = new ArrayList<>();
+        for (Field f : allFields) {
+            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
+                RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
+                if (capturedVar != null) {
+                    captured.add(capturedVar);
+                    capturedVar.captureCount++;
+                }
+            }
+        }
+        if (!captured.isEmpty()) {
+            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+        }
+
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
         // Set the __SUB__ instance field
@@ -2128,6 +2184,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeScalar tailCodeRef = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
+                }
+                // Mortal-ize blessed refs with refCount==0 in void-context calls.
+                // These are objects that were created but never stored in a named
+                // variable (e.g., discarded return values from constructors).
+                if (callContext == RuntimeContextType.VOID) {
+                    MortalList.mortalizeForVoidDiscard(result);
                 }
                 return result;
             } catch (PerlNonLocalReturnException e) {

@@ -78,6 +78,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean ioOwner;
 
+    /**
+     * Number of closures that have captured this RuntimeScalar variable.
+     * When {@code captureCount > 0}, {@link #scopeExitCleanup} skips the
+     * blessed ref decrement because a closure still holds a reference to
+     * this variable. The count is incremented in
+     * {@link RuntimeCode#makeCodeObject} and decremented in
+     * {@link RuntimeCode#releaseCaptures}.
+     */
+    public int captureCount;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -886,6 +896,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
                 && oldGlob.globName == null) {
             oldGlob.ioHolderCount--;
+        }
+
+        // Release captured variables if overwriting a CODE ref with captures.
+        // This handles cases like: $code = sub { $obj }; $code = undef;
+        if (this.type == RuntimeScalarType.CODE && this.value instanceof RuntimeCode oldCode) {
+            oldCode.releaseCaptures();
         }
 
         // Track refCount for blessed objects with DESTROY.
@@ -1862,7 +1878,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar undefine() {
         // Special handling for CODE type - don't set the ref to undef,
         // just clear the code from the global symbol table
-        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode) {
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code) {
+            // Release captured variables before discarding this CODE ref
+            code.releaseCaptures();
             // Clear the code value but keep the type as CODE
             this.value = new RuntimeCode((String) null, null);
             // Invalidate the method resolution cache
@@ -1976,6 +1994,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
+
+        // Skip ALL cleanup if this variable is captured by a closure.
+        // The closure still holds a reference to this RuntimeScalar, so
+        // we must not decrement blessed ref refCounts or release CODE captures.
+        // Cleanup will happen later when the closure itself is released
+        // (via releaseCaptures).
+        if (scalar.captureCount > 0) return;
+
+        // Release captured variables if this scalar holds a CODE ref that
+        // is being cleaned up. When a closure goes out of scope, its
+        // captured variables' blessed refs need their refCounts decremented.
+        if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
+            code.releaseCaptures();
+        }
 
         // Existing: IO fd recycling for anonymous filehandle globs
         if (scalar.ioOwner && scalar.type == GLOBREFERENCE

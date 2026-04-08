@@ -261,7 +261,7 @@ public class EmitControlFlow {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
-                        "deferDecrementIfTracked",
+                        "deferDecrementIfNotCaptured",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                         false);
             }

@@ -54,6 +54,18 @@ public class MortalList {
     }
 
     /**
+     * Like {@link #deferDecrementIfTracked}, but skips the decrement if the
+     * scalar is captured by a closure ({@code captureCount > 0}).
+     * Used by the explicit {@code return} bytecode path which bypasses
+     * {@link RuntimeScalar#scopeExitCleanup}.
+     */
+    public static void deferDecrementIfNotCaptured(RuntimeScalar scalar) {
+        if (!active || scalar == null) return;
+        if (scalar.captureCount > 0) return;
+        deferDecrementIfTracked(scalar);
+    }
+
+    /**
      * Defer DESTROY for tracked blessed refs in a collection being cleared.
      * <p>
      * Container stores (via copy constructor) now increment refCount for tracked
@@ -133,6 +145,25 @@ public class MortalList {
                 for (RuntimeScalar val : hash.elements.values()) {
                     deferDecrementRecursive(val);
                 }
+            }
+        }
+    }
+
+    /**
+     * Mortal-ize blessed refs with refCount==0 in a RuntimeList that will be
+     * discarded (void-context call result). Without this, objects that were
+     * blessed but never stored in a named variable would leak.
+     * Only processes elements with refCount==0 (never-stored objects).
+     */
+    public static void mortalizeForVoidDiscard(RuntimeList result) {
+        if (!active || result == null) return;
+        for (RuntimeBase elem : result.elements) {
+            if (elem instanceof RuntimeScalar scalar
+                    && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase base
+                    && base.blessId != 0 && base.refCount == 0) {
+                base.refCount = 1;
+                pending.add(base);
             }
         }
     }
