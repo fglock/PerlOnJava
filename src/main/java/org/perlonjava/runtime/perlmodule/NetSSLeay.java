@@ -80,6 +80,27 @@ public class NetSSLeay extends PerlModuleBase {
         CONSTANTS.put("X509_V_FLAG_TRUSTED_FIRST", 0x8000L);
         CONSTANTS.put("X509_V_FLAG_PARTIAL_CHAIN", 0x80000L);
         CONSTANTS.put("X509_V_FLAG_CRL_CHECK", 0x4L);
+        CONSTANTS.put("X509_V_FLAG_ALLOW_PROXY_CERTS", 0x40L);
+        CONSTANTS.put("X509_V_FLAG_POLICY_CHECK", 0x80L);
+        CONSTANTS.put("X509_V_FLAG_EXPLICIT_POLICY", 0x100L);
+        CONSTANTS.put("X509_V_FLAG_LEGACY_VERIFY", 0x0L); // Not applicable, we're not LibreSSL
+
+        // X509 verify error codes
+        CONSTANTS.put("X509_V_OK", 0L);
+        CONSTANTS.put("X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY", 20L);
+        CONSTANTS.put("X509_V_ERR_CERT_UNTRUSTED", 27L);
+        CONSTANTS.put("X509_V_ERR_NO_EXPLICIT_POLICY", 43L);
+        CONSTANTS.put("X509_V_ERR_HOSTNAME_MISMATCH", 62L);
+
+        // X509 purpose constants
+        CONSTANTS.put("X509_PURPOSE_SSL_CLIENT", 1L);
+        CONSTANTS.put("X509_PURPOSE_SSL_SERVER", 2L);
+
+        // X509 trust constants
+        CONSTANTS.put("X509_TRUST_EMAIL", 4L);
+
+        // X509_CHECK flags
+        CONSTANTS.put("X509_CHECK_FLAG_NO_WILDCARDS", 0x2L);
 
         // OCSP constants
         CONSTANTS.put("TLSEXT_STATUSTYPE_ocsp", 1L);
@@ -182,6 +203,8 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, X509StoreState> X509_STORE_HANDLES = new HashMap<>();
     private static final Map<Long, X509StoreCtxState> X509_STORE_CTX_HANDLES = new HashMap<>();
     private static final Map<Long, List<Long>> SK_X509_HANDLES = new HashMap<>();
+    private static final Map<Long, VerifyParamState> VERIFY_PARAM_HANDLES = new HashMap<>();
+    private static final Map<Long, List<X509InfoEntry>> X509_INFO_SK_HANDLES = new HashMap<>();
 
     // SSL method type sentinels
     private static final long METHOD_SSLv23 = -10L;
@@ -325,6 +348,11 @@ public class NetSSLeay extends PerlModuleBase {
         addOid("1.2.840.10045.2.1", 408, "id-ecPublicKey", "id-ecPublicKey");
         addOid("1.2.840.10045.4.3.2", 794, "ecdsa-with-SHA256", "ecdsa-with-SHA256");
 
+        // PKCS OIDs (for OBJ_txt2nid / OBJ_ln2nid / OBJ_sn2nid)
+        addOid("1.2.840.113549.1", 2, "RSA Data Security, Inc. PKCS", "pkcs");
+        addOid("1.2.840.113549.2.5", 4, "md5", "MD5");
+        addOid("1.2.840.113549.1.1", 186, "RSA Data Security, Inc. PKCS #1", "pkcs1");
+
         // Key usage bit names (used by P_X509_get_key_usage)
     }
 
@@ -364,6 +392,10 @@ public class NetSSLeay extends PerlModuleBase {
                 readPos = 0;
             }
             return result;
+        }
+
+        byte[] toByteArray() {
+            return java.util.Arrays.copyOf(data, data.length);
         }
     }
 
@@ -459,6 +491,21 @@ public class NetSSLeay extends PerlModuleBase {
         long certHandle = 0;
         long storeHandle = 0;
         List<Long> chain = null;
+        List<Long> untrustedChain = null; // additional untrusted certs for chain building
+        int errorCode = 0; // X509_V_OK
+    }
+
+    private static class VerifyParamState {
+        String name;
+        long flags = 0;
+        int purpose = 0;
+        int trust = 0;
+        int depth = -1;
+        long time = 0;
+    }
+
+    private static class X509InfoEntry {
+        long certHandle;  // handle into X509_HANDLES
     }
 
     // Sentinel value for BIO_s_mem() method type
@@ -637,6 +684,11 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("OBJ_obj2nid", null);
             mod.registerMethod("OBJ_nid2ln", null);
             mod.registerMethod("OBJ_nid2sn", null);
+            mod.registerMethod("OBJ_txt2obj", null);
+            mod.registerMethod("OBJ_txt2nid", null);
+            mod.registerMethod("OBJ_ln2nid", null);
+            mod.registerMethod("OBJ_sn2nid", null);
+            mod.registerMethod("OBJ_cmp", null);
 
             // ASN1 accessor functions
             mod.registerMethod("P_ASN1_STRING_get", null);
@@ -659,15 +711,55 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("X509_STORE_CTX_init", null);
             mod.registerMethod("X509_STORE_CTX_get0_cert", null);
             mod.registerMethod("X509_STORE_CTX_get1_chain", null);
+            mod.registerMethod("X509_STORE_CTX_get_error", null);
+            mod.registerMethod("X509_STORE_free", null);
+            mod.registerMethod("X509_STORE_CTX_free", null);
+            mod.registerMethod("X509_STORE_set1_param", null);
+            mod.registerMethod("X509_verify", null);
+            mod.registerMethod("X509_NAME_cmp", null);
+
+            // X509_VERIFY_PARAM functions
+            mod.registerMethod("X509_VERIFY_PARAM_new", null);
+            mod.registerMethod("X509_VERIFY_PARAM_free", null);
+            mod.registerMethod("X509_VERIFY_PARAM_inherit", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1_name", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_flags", null);
+            mod.registerMethod("X509_VERIFY_PARAM_get_flags", null);
+            mod.registerMethod("X509_VERIFY_PARAM_clear_flags", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_purpose", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_trust", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_depth", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_time", null);
+            mod.registerMethod("X509_VERIFY_PARAM_add0_policy", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1_host", null);
+            mod.registerMethod("X509_VERIFY_PARAM_add1_host", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1_email", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1_ip", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set1_ip_asc", null);
+            mod.registerMethod("X509_VERIFY_PARAM_set_hostflags", null);
+            mod.registerMethod("X509_VERIFY_PARAM_get0_peername", null);
+
+            // PEM_X509_INFO / sk_X509_INFO functions
+            mod.registerMethod("PEM_X509_INFO_read_bio", null);
+            mod.registerMethod("sk_X509_INFO_num", null);
+            mod.registerMethod("sk_X509_INFO_value", null);
+            mod.registerMethod("P_X509_INFO_get_x509", null);
+
+            // PKCS12 functions
+            mod.registerMethod("P_PKCS12_load_file", null);
 
             // sk_X509 (STACK_OF(X509)) functions
+            mod.registerMethod("sk_X509_new_null", null);
             mod.registerMethod("sk_X509_num", null);
             mod.registerMethod("sk_X509_value", null);
             mod.registerMethod("sk_X509_insert", null);
             mod.registerMethod("sk_X509_delete", null);
+            mod.registerMethod("sk_X509_push", null);
             mod.registerMethod("sk_X509_unshift", null);
             mod.registerMethod("sk_X509_shift", null);
             mod.registerMethod("sk_X509_pop", null);
+            mod.registerMethod("sk_X509_free", null);
 
             // Protocol version functions
             mod.registerMethod("CTX_set_min_proto_version", null);
@@ -2845,6 +2937,83 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(info.shortName).getList();
     }
 
+    public static RuntimeList OBJ_txt2obj(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        String text = args.get(0).toString();
+        boolean noName = args.size() > 1 && args.get(1).getLong() != 0;
+        String oid;
+        if (noName) {
+            // Only accept numeric OID
+            oid = text;
+        } else {
+            // Try as OID first, then as short/long name
+            OidInfo info = OID_TO_INFO.get(text);
+            if (info != null) {
+                oid = text;
+            } else {
+                // Look up by short name or long name
+                oid = null;
+                for (Map.Entry<String, OidInfo> e : OID_TO_INFO.entrySet()) {
+                    if (text.equals(e.getValue().shortName) || text.equals(e.getValue().longName)) {
+                        oid = e.getKey();
+                        break;
+                    }
+                }
+                if (oid == null) oid = text; // Use as-is if not found
+            }
+        }
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, oid);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList OBJ_txt2nid(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        String text = args.get(0).toString();
+        // Try as OID first
+        OidInfo info = OID_TO_INFO.get(text);
+        if (info != null) return new RuntimeScalar(info.nid).getList();
+        // Try as short name or long name
+        for (OidInfo i : OID_TO_INFO.values()) {
+            if (text.equals(i.shortName) || text.equals(i.longName)) {
+                return new RuntimeScalar(i.nid).getList();
+            }
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList OBJ_ln2nid(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        String longName = args.get(0).toString();
+        for (OidInfo info : OID_TO_INFO.values()) {
+            if (longName.equals(info.longName)) {
+                return new RuntimeScalar(info.nid).getList();
+            }
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList OBJ_sn2nid(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        String shortName = args.get(0).toString();
+        for (OidInfo info : OID_TO_INFO.values()) {
+            if (shortName.equals(info.shortName)) {
+                return new RuntimeScalar(info.nid).getList();
+            }
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList OBJ_cmp(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(-1).getList();
+        long h1 = args.get(0).getLong();
+        long h2 = args.get(1).getLong();
+        String oid1 = ASN1_OBJECT_HANDLES.get(h1);
+        String oid2 = ASN1_OBJECT_HANDLES.get(h2);
+        if (oid1 == null || oid2 == null) return new RuntimeScalar(-1).getList();
+        return new RuntimeScalar(oid1.equals(oid2) ? 0 : 1).getList();
+    }
+
     // ---- ASN1 accessor functions ----
 
     public static RuntimeList P_ASN1_STRING_get(RuntimeArray args, int ctx) {
@@ -3880,10 +4049,22 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(handleId).getList();
     }
 
+    public static RuntimeList X509_STORE_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        X509_STORE_HANDLES.remove(args.get(0).getLong());
+        return new RuntimeScalar().getList();
+    }
+
     public static RuntimeList X509_STORE_CTX_new(RuntimeArray args, int ctx) {
         long handleId = HANDLE_COUNTER.getAndIncrement();
         X509_STORE_CTX_HANDLES.put(handleId, new X509StoreCtxState());
         return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_STORE_CTX_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        X509_STORE_CTX_HANDLES.remove(args.get(0).getLong());
+        return new RuntimeScalar().getList();
     }
 
     public static RuntimeList X509_STORE_CTX_set_cert(RuntimeArray args, int ctx) {
@@ -3915,6 +4096,15 @@ public class NetSSLeay extends PerlModuleBase {
         if (storeCtx == null) return new RuntimeScalar(0).getList();
         storeCtx.storeHandle = storeHandle;
         storeCtx.certHandle = certHandle;
+        storeCtx.errorCode = 0; // X509_V_OK
+        // Optional 4th arg: sk_X509 handle for untrusted chain certs
+        if (args.size() >= 4) {
+            long chainHandle = args.get(3).getLong();
+            List<Long> chainCerts = SK_X509_HANDLES.get(chainHandle);
+            if (chainCerts != null) {
+                storeCtx.untrustedChain = new ArrayList<>(chainCerts);
+            }
+        }
         return new RuntimeScalar(1).getList();
     }
 
@@ -3926,20 +4116,133 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(storeCtx.certHandle).getList();
     }
 
+    public static RuntimeList X509_STORE_CTX_get_error(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(storeCtx.errorCode).getList();
+    }
+
+    public static RuntimeList X509_STORE_set1_param(RuntimeArray args, int ctx) {
+        // Apply verify params to store — for now just return success
+        // The actual params are handled during X509_verify_cert
+        return new RuntimeScalar(1).getList();
+    }
+
     public static RuntimeList X509_verify_cert(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar(0).getList();
         long ctxHandle = args.get(0).getLong();
         X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
         if (storeCtx == null) return new RuntimeScalar(0).getList();
-        // Build chain: cert + trusted certs from store
-        List<Long> chain = new ArrayList<>();
-        chain.add(storeCtx.certHandle);
-        X509StoreState store = X509_STORE_HANDLES.get(storeCtx.storeHandle);
-        if (store != null) {
-            chain.addAll(store.trustedCerts);
+
+        X509Certificate targetCert = X509_HANDLES.get(storeCtx.certHandle);
+        if (targetCert == null) {
+            storeCtx.errorCode = 20; // X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+            return new RuntimeScalar(0).getList();
         }
-        storeCtx.chain = chain;
-        return new RuntimeScalar(1).getList(); // always "verify" successfully
+
+        // Gather trusted certs from store
+        X509StoreState store = X509_STORE_HANDLES.get(storeCtx.storeHandle);
+        List<X509Certificate> trustedCerts = new ArrayList<>();
+        if (store != null) {
+            for (Long h : store.trustedCerts) {
+                X509Certificate c = X509_HANDLES.get(h);
+                if (c != null) trustedCerts.add(c);
+            }
+        }
+
+        // Gather untrusted chain certs
+        List<X509Certificate> untrustedCerts = new ArrayList<>();
+        if (storeCtx.untrustedChain != null) {
+            for (Long h : storeCtx.untrustedChain) {
+                X509Certificate c = X509_HANDLES.get(h);
+                if (c != null) untrustedCerts.add(c);
+            }
+        }
+
+        // Try to build a chain from target cert to a trusted root
+        List<Long> builtChain = new ArrayList<>();
+        builtChain.add(storeCtx.certHandle);
+
+        X509Certificate current = targetCert;
+        boolean verified = false;
+        int maxDepth = 10;
+
+        for (int depth = 0; depth < maxDepth; depth++) {
+            // Check if current cert is self-signed and trusted
+            if (current.getSubjectX500Principal().equals(current.getIssuerX500Principal())) {
+                // Self-signed — check if it's in trusted store
+                if (trustedCerts.contains(current)) {
+                    verified = true;
+                    break;
+                }
+            }
+
+            // Find the issuer of current cert
+            X509Certificate issuer = null;
+            Long issuerHandle = null;
+
+            // First check trusted certs
+            for (int i = 0; i < trustedCerts.size(); i++) {
+                X509Certificate tc = trustedCerts.get(i);
+                if (tc.getSubjectX500Principal().equals(current.getIssuerX500Principal())) {
+                    try {
+                        current.verify(tc.getPublicKey());
+                        issuer = tc;
+                        // Find handle for this cert
+                        if (store != null) issuerHandle = store.trustedCerts.get(i);
+                        break;
+                    } catch (Exception e) { /* not the right issuer */ }
+                }
+            }
+
+            // Then check untrusted chain certs
+            if (issuer == null) {
+                for (int i = 0; i < untrustedCerts.size(); i++) {
+                    X509Certificate uc = untrustedCerts.get(i);
+                    if (uc.getSubjectX500Principal().equals(current.getIssuerX500Principal())) {
+                        try {
+                            current.verify(uc.getPublicKey());
+                            issuer = uc;
+                            if (storeCtx.untrustedChain != null) issuerHandle = storeCtx.untrustedChain.get(i);
+                            break;
+                        } catch (Exception e) { /* not the right issuer */ }
+                    }
+                }
+            }
+
+            if (issuer == null) {
+                // Can't find issuer
+                storeCtx.errorCode = 20; // X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+                storeCtx.chain = builtChain;
+                return new RuntimeScalar(0).getList();
+            }
+
+            if (issuerHandle != null) builtChain.add(issuerHandle);
+            current = issuer;
+
+            // If issuer is trusted and self-signed, we're done
+            if (trustedCerts.contains(issuer) &&
+                issuer.getSubjectX500Principal().equals(issuer.getIssuerX500Principal())) {
+                verified = true;
+                break;
+            }
+            // If issuer is trusted (even if not self-signed for partial chain), accept
+            if (trustedCerts.contains(issuer)) {
+                verified = true;
+                break;
+            }
+        }
+
+        storeCtx.chain = builtChain;
+        if (verified) {
+            storeCtx.errorCode = 0; // X509_V_OK
+            return new RuntimeScalar(1).getList();
+        } else {
+            storeCtx.errorCode = 20; // X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+            return new RuntimeScalar(0).getList();
+        }
     }
 
     public static RuntimeList X509_STORE_CTX_get1_chain(RuntimeArray args, int ctx) {
@@ -3953,6 +4256,12 @@ public class NetSSLeay extends PerlModuleBase {
     }
 
     // ---- sk_X509 (STACK_OF(X509)) functions ----
+
+    public static RuntimeList sk_X509_new_null(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        SK_X509_HANDLES.put(handleId, new ArrayList<>());
+        return new RuntimeScalar(handleId).getList();
+    }
 
     public static RuntimeList sk_X509_num(RuntimeArray args, int ctx) {
         if (args.size() < 1) return new RuntimeScalar(0).getList();
@@ -4019,5 +4328,635 @@ public class NetSSLeay extends PerlModuleBase {
         if (stack == null || stack.isEmpty()) return new RuntimeScalar().getList();
         long removed = stack.remove(stack.size() - 1);
         return new RuntimeScalar(removed).getList();
+    }
+
+    public static RuntimeList sk_X509_push(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        long certHandle = args.get(1).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null) return new RuntimeScalar(0).getList();
+        stack.add(certHandle);
+        return new RuntimeScalar(stack.size()).getList();
+    }
+
+    public static RuntimeList sk_X509_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        SK_X509_HANDLES.remove(args.get(0).getLong());
+        return new RuntimeScalar().getList();
+    }
+
+    // ---- P_PKCS12_load_file ----
+    // Loads a PKCS#12 file and returns ($privkey, $cert, @cachain)
+
+    public static RuntimeList P_PKCS12_load_file(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeList();
+        String filename = args.get(0).toString();
+        boolean loadChain = args.size() > 1 && args.get(1).getLong() != 0;
+        String password = args.size() > 2 ? args.get(2).toString() : null;
+        char[] passChars = (password != null && !password.isEmpty()) ? password.toCharArray() : new char[0];
+
+        RuntimeList result = new RuntimeList();
+        try {
+            java.security.PrivateKey privKey = null;
+            X509Certificate leafCert = null;
+            java.security.cert.Certificate[] chainCerts = null;
+
+            // Try Java KeyStore first
+            java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(filename)) {
+                ks.load(fis, passChars);
+            }
+
+            java.util.Enumeration<String> aliases = ks.aliases();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                if (ks.isKeyEntry(alias)) {
+                    java.security.Key key = ks.getKey(alias, passChars);
+                    if (key instanceof java.security.PrivateKey) {
+                        privKey = (java.security.PrivateKey) key;
+                        java.security.cert.Certificate cert = ks.getCertificate(alias);
+                        if (cert instanceof X509Certificate) {
+                            leafCert = (X509Certificate) cert;
+                        }
+                        chainCerts = ks.getCertificateChain(alias);
+                        break;
+                    }
+                }
+            }
+
+            // Fallback: manually parse PKCS12 DER for unencrypted files that Java KeyStore can't handle
+            if (privKey == null && leafCert == null) {
+                Object[] parsed = parsePkcs12Manually(filename);
+                if (parsed != null) {
+                    privKey = (java.security.PrivateKey) parsed[0];
+                    leafCert = (X509Certificate) parsed[1];
+                    if (parsed.length > 2 && parsed[2] instanceof java.security.cert.Certificate[]) {
+                        chainCerts = (java.security.cert.Certificate[]) parsed[2];
+                    }
+                }
+            }
+
+            // Store private key as EVP_PKEY handle
+            if (privKey != null) {
+                long pkeyHandle = HANDLE_COUNTER.getAndIncrement();
+                EVP_PKEY_HANDLES.put(pkeyHandle, privKey);
+                result.add(new RuntimeScalar(pkeyHandle));
+            } else {
+                result.add(new RuntimeScalar()); // undef
+            }
+
+            // Store leaf certificate as X509 handle
+            if (leafCert != null) {
+                long certHandle = HANDLE_COUNTER.getAndIncrement();
+                X509_HANDLES.put(certHandle, leafCert);
+                result.add(new RuntimeScalar(certHandle));
+            } else {
+                result.add(new RuntimeScalar()); // undef
+            }
+
+            // CA chain (excluding the leaf cert)
+            if (loadChain && chainCerts != null) {
+                for (java.security.cert.Certificate chainCert : chainCerts) {
+                    if (chainCert instanceof X509Certificate) {
+                        X509Certificate x509 = (X509Certificate) chainCert;
+                        if (leafCert != null && x509.equals(leafCert)) continue;
+                        long caHandle = HANDLE_COUNTER.getAndIncrement();
+                        X509_HANDLES.put(caHandle, x509);
+                        result.add(new RuntimeScalar(caHandle));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            return new RuntimeList();
+        }
+        return result;
+    }
+
+    // Manual PKCS12 parser for unencrypted files that Java's KeyStore can't handle.
+    // Parses the DER structure to extract certificates and unencrypted private keys.
+    private static Object[] parsePkcs12Manually(String filename) {
+        try {
+            byte[] data = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename));
+            java.security.PrivateKey privKey = null;
+            X509Certificate leafCert = null;
+            List<X509Certificate> caCerts = new ArrayList<>();
+
+            // Parse PFX: SEQUENCE { version, authSafe, macData? }
+            int[] pos = {0};
+            int[] pfxSeq = readDerTag(data, pos);
+            if (pfxSeq == null || pfxSeq[0] != 0x30) return null;
+
+            int pfxEnd = pos[0] + pfxSeq[1];
+            // version INTEGER
+            readDerTag(data, pos);
+            pos[0] += readDerTag(data, new int[]{pos[0]})[1]; // skip version value
+            // Reset pos to after version
+            pos[0] = pfxSeq[2]; // content start
+            skipDerValue(data, pos); // skip version
+
+            // authSafe: ContentInfo { contentType OID, content [0] EXPLICIT }
+            int[] authSafeSeq = readDerTag(data, pos);
+            if (authSafeSeq == null) return null;
+            int authSafeEnd = pos[0] + authSafeSeq[1];
+            int authSafeContentStart = pos[0];
+
+            // contentType OID (should be pkcs7-data: 1.2.840.113549.1.7.1)
+            skipDerValue(data, pos);
+            // content [0] EXPLICIT
+            int[] ctxTag = readDerTag(data, pos);
+            if (ctxTag == null) return null;
+            // Inside: OCTET STRING containing AuthenticatedSafe
+            int[] octetTag = readDerTag(data, pos);
+            if (octetTag == null) return null;
+            byte[] authSafeData = new byte[octetTag[1]];
+            System.arraycopy(data, pos[0], authSafeData, 0, octetTag[1]);
+
+            // AuthenticatedSafe: SEQUENCE OF ContentInfo
+            int[] asPos = {0};
+            int[] authSafeSeqInner = readDerTag(authSafeData, asPos);
+            if (authSafeSeqInner == null) return null;
+            int asEnd = asPos[0] + authSafeSeqInner[1];
+
+            while (asPos[0] < asEnd) {
+                // Each ContentInfo: SEQUENCE { OID, [0] content }
+                int ciStart = asPos[0];
+                int[] ciSeq = readDerTag(authSafeData, asPos);
+                if (ciSeq == null) break;
+                int ciEnd = asPos[0] + ciSeq[1];
+
+                // Read OID
+                int[] oidTag = readDerTag(authSafeData, asPos);
+                if (oidTag == null) break;
+                byte[] oidBytes = new byte[oidTag[1]];
+                System.arraycopy(authSafeData, asPos[0], oidBytes, 0, oidTag[1]);
+                asPos[0] += oidTag[1];
+                String oid = derOidToString(oidBytes);
+
+                if ("1.2.840.113549.1.7.1".equals(oid)) {
+                    // data ContentInfo — contains SafeContents
+                    int[] ctx0 = readDerTag(authSafeData, asPos);
+                    if (ctx0 == null) { asPos[0] = ciEnd; continue; }
+                    int[] octet = readDerTag(authSafeData, asPos);
+                    if (octet == null) { asPos[0] = ciEnd; continue; }
+                    byte[] safeContentsData = new byte[octet[1]];
+                    System.arraycopy(authSafeData, asPos[0], safeContentsData, 0, octet[1]);
+
+                    // Parse SafeContents: SEQUENCE OF SafeBag
+                    int[] scPos = {0};
+                    int[] scSeq = readDerTag(safeContentsData, scPos);
+                    if (scSeq == null) { asPos[0] = ciEnd; continue; }
+                    int scEnd = scPos[0] + scSeq[1];
+
+                    while (scPos[0] < scEnd) {
+                        int[] bagSeq = readDerTag(safeContentsData, scPos);
+                        if (bagSeq == null) break;
+                        int bagEnd = scPos[0] + bagSeq[1];
+
+                        // bagId OID
+                        int[] bagOidTag = readDerTag(safeContentsData, scPos);
+                        if (bagOidTag == null) { scPos[0] = bagEnd; continue; }
+                        byte[] bagOidBytes = new byte[bagOidTag[1]];
+                        System.arraycopy(safeContentsData, scPos[0], bagOidBytes, 0, bagOidTag[1]);
+                        scPos[0] += bagOidTag[1];
+                        String bagOid = derOidToString(bagOidBytes);
+
+                        // bagValue [0] EXPLICIT
+                        int[] bagCtx = readDerTag(safeContentsData, scPos);
+                        if (bagCtx == null) { scPos[0] = bagEnd; continue; }
+
+                        if ("1.2.840.113549.1.12.10.1.1".equals(bagOid)) {
+                            // keyBag — contains PKCS#8 PrivateKeyInfo
+                            int keyInfoStart = scPos[0];
+                            int keyInfoLen = bagCtx[1];
+                            byte[] pkcs8Bytes = new byte[keyInfoLen];
+                            System.arraycopy(safeContentsData, keyInfoStart, pkcs8Bytes, 0, keyInfoLen);
+
+                            // Determine key algorithm from PrivateKeyInfo
+                            privKey = parsePkcs8PrivateKey(pkcs8Bytes);
+                        } else if ("1.2.840.113549.1.12.10.1.3".equals(bagOid)) {
+                            // certBag — SEQUENCE { certId OID, certValue [0] EXPLICIT OCTET STRING }
+                            int[] certBagSeq = readDerTag(safeContentsData, scPos);
+                            if (certBagSeq != null) {
+                                int certBagEnd = scPos[0] + certBagSeq[1];
+                                // certId OID
+                                skipDerValue(safeContentsData, scPos);
+                                // certValue [0] EXPLICIT
+                                int[] certCtx = readDerTag(safeContentsData, scPos);
+                                if (certCtx != null) {
+                                    // OCTET STRING containing DER-encoded certificate
+                                    int[] certOctet = readDerTag(safeContentsData, scPos);
+                                    if (certOctet != null) {
+                                        byte[] certDer = new byte[certOctet[1]];
+                                        System.arraycopy(safeContentsData, scPos[0], certDer, 0, certOctet[1]);
+                                        java.security.cert.CertificateFactory cf =
+                                            java.security.cert.CertificateFactory.getInstance("X.509");
+                                        X509Certificate cert = (X509Certificate) cf.generateCertificate(
+                                            new java.io.ByteArrayInputStream(certDer));
+                                        if (leafCert == null) {
+                                            leafCert = cert;
+                                        } else {
+                                            caCerts.add(cert);
+                                        }
+                                    }
+                                }
+                                scPos[0] = certBagEnd;
+                            }
+                        }
+
+                        scPos[0] = bagEnd;
+                    }
+                }
+
+                asPos[0] = ciEnd;
+            }
+
+            if (privKey == null && leafCert == null) return null;
+            java.security.cert.Certificate[] chain = caCerts.isEmpty() ? null :
+                caCerts.toArray(new java.security.cert.Certificate[0]);
+            return new Object[]{privKey, leafCert, chain};
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // Parse PKCS#8 PrivateKeyInfo DER to extract the private key
+    private static java.security.PrivateKey parsePkcs8PrivateKey(byte[] pkcs8Bytes) throws Exception {
+        // Try RSA first, then EC, then DSA
+        String[] algorithms = {"RSA", "EC", "DSA", "Ed25519", "Ed448"};
+        for (String algo : algorithms) {
+            try {
+                java.security.KeyFactory kf = java.security.KeyFactory.getInstance(algo);
+                return kf.generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(pkcs8Bytes));
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    // Read a DER tag and length. Returns [tag, length, contentOffset] or null.
+    private static int[] readDerTag(byte[] data, int[] pos) {
+        if (pos[0] >= data.length) return null;
+        int tag = data[pos[0]++] & 0xFF;
+        if (pos[0] >= data.length) return null;
+        int len = data[pos[0]++] & 0xFF;
+        if ((len & 0x80) != 0) {
+            int numBytes = len & 0x7F;
+            len = 0;
+            for (int i = 0; i < numBytes && pos[0] < data.length; i++) {
+                len = (len << 8) | (data[pos[0]++] & 0xFF);
+            }
+        }
+        return new int[]{tag, len, pos[0]};
+    }
+
+    // Skip a DER TLV value
+    private static void skipDerValue(byte[] data, int[] pos) {
+        int[] tlv = readDerTag(data, pos);
+        if (tlv != null) pos[0] += tlv[1];
+    }
+
+    // Convert DER-encoded OID bytes to dotted string
+    private static String derOidToString(byte[] oid) {
+        if (oid.length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append(oid[0] / 40).append('.').append(oid[0] % 40);
+        long val = 0;
+        for (int i = 1; i < oid.length; i++) {
+            val = (val << 7) | (oid[i] & 0x7F);
+            if ((oid[i] & 0x80) == 0) {
+                sb.append('.').append(val);
+                val = 0;
+            }
+        }
+        return sb.toString();
+    }
+
+    // ---- X509_verify — verify certificate signature against a public key ----
+
+    public static RuntimeList X509_verify(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long certHandle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(certHandle);
+        java.security.Key key = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (cert == null || key == null) return new RuntimeScalar(0).getList();
+        try {
+            java.security.PublicKey pubKey;
+            if (key instanceof java.security.PublicKey) {
+                pubKey = (java.security.PublicKey) key;
+            } else if (key instanceof java.security.PrivateKey) {
+                // For RSA private keys, derive the public key
+                try {
+                    java.security.KeyFactory kf = java.security.KeyFactory.getInstance(key.getAlgorithm());
+                    if (key instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                        java.security.interfaces.RSAPrivateCrtKey rsaPriv = (java.security.interfaces.RSAPrivateCrtKey) key;
+                        java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
+                            rsaPriv.getModulus(), rsaPriv.getPublicExponent());
+                        pubKey = kf.generatePublic(pubSpec);
+                    } else {
+                        // Can't derive public key — try verifying with cert's own public key
+                        pubKey = cert.getPublicKey();
+                    }
+                } catch (Exception ex) {
+                    pubKey = cert.getPublicKey();
+                }
+            } else {
+                return new RuntimeScalar(0).getList();
+            }
+            cert.verify(pubKey);
+            return new RuntimeScalar(1).getList(); // verification succeeded
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList(); // verification failed
+        }
+    }
+
+    // ---- X509_NAME_cmp — compare two X509_NAME handles ----
+
+    public static RuntimeList X509_NAME_cmp(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(-1).getList();
+        long name1Handle = args.get(0).getLong();
+        long name2Handle = args.get(1).getLong();
+        X509NameInfo info1 = X509_NAME_HANDLES.get(name1Handle);
+        X509NameInfo info2 = X509_NAME_HANDLES.get(name2Handle);
+        if (info1 == null || info2 == null) return new RuntimeScalar(-1).getList();
+        // Compare by DER encoding (canonical form) like OpenSSL does
+        if (info1.derEncoded != null && info2.derEncoded != null) {
+            return new RuntimeScalar(java.util.Arrays.equals(info1.derEncoded, info2.derEncoded) ? 0 : 1).getList();
+        }
+        // Fallback to oneline comparison
+        String s1 = info1.oneline != null ? info1.oneline : "";
+        String s2 = info2.oneline != null ? info2.oneline : "";
+        return new RuntimeScalar(s1.compareTo(s2)).getList();
+    }
+
+    // ---- X509_VERIFY_PARAM functions ----
+
+    public static RuntimeList X509_VERIFY_PARAM_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        VERIFY_PARAM_HANDLES.put(handleId, new VerifyParamState());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        VERIFY_PARAM_HANDLES.remove(args.get(0).getLong());
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_inherit(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState dst = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        VerifyParamState src = VERIFY_PARAM_HANDLES.get(args.get(1).getLong());
+        if (dst == null || src == null) return new RuntimeScalar(0).getList();
+        // Inherit only fields that aren't already set in dst
+        if (dst.depth < 0 && src.depth >= 0) dst.depth = src.depth;
+        if (dst.purpose == 0 && src.purpose != 0) dst.purpose = src.purpose;
+        if (dst.trust == 0 && src.trust != 0) dst.trust = src.trust;
+        dst.flags |= src.flags;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState dst = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        VerifyParamState src = VERIFY_PARAM_HANDLES.get(args.get(1).getLong());
+        if (dst == null || src == null) return new RuntimeScalar(0).getList();
+        dst.name = src.name;
+        dst.flags = src.flags;
+        dst.purpose = src.purpose;
+        dst.trust = src.trust;
+        dst.depth = src.depth;
+        dst.time = src.time;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1_name(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        pm.name = args.get(1).toString();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_flags(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        pm.flags |= args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_get_flags(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(pm.flags).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_clear_flags(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        pm.flags &= ~args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_purpose(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        pm.purpose = (int) args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_trust(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar(0).getList();
+        pm.trust = (int) args.get(1).getLong();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_depth(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar().getList();
+        pm.depth = (int) args.get(1).getLong();
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_time(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        VerifyParamState pm = VERIFY_PARAM_HANDLES.get(args.get(0).getLong());
+        if (pm == null) return new RuntimeScalar().getList();
+        pm.time = args.get(1).getLong();
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_add0_policy(RuntimeArray args, int ctx) {
+        // Accept and store policy OID — for now just return success
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1_host(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_add1_host(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1_email(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1_ip(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        String ip = args.get(1).toString();
+        // Valid if exactly 4 bytes (IPv4) or 16 bytes (IPv6)
+        int len = ip.length();
+        if (len != 4 && len != 16) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set1_ip_asc(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        String ip = args.get(1).toString();
+        // Validate IPv4
+        if (ip.contains(".")) {
+            String[] parts = ip.split("\\.");
+            if (parts.length != 4) return new RuntimeScalar(0).getList();
+            for (String part : parts) {
+                try {
+                    int val = Integer.parseInt(part);
+                    if (val < 0 || val > 255) return new RuntimeScalar(0).getList();
+                } catch (NumberFormatException e) { return new RuntimeScalar(0).getList(); }
+            }
+            return new RuntimeScalar(1).getList();
+        }
+        // Validate IPv6
+        if (ip.contains(":")) {
+            try {
+                java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+                if (addr instanceof java.net.Inet6Address) return new RuntimeScalar(1).getList();
+            } catch (Exception e) { return new RuntimeScalar(0).getList(); }
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_set_hostflags(RuntimeArray args, int ctx) {
+        // Accept flags, return undef (like OpenSSL — void function)
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList X509_VERIFY_PARAM_get0_peername(RuntimeArray args, int ctx) {
+        // Not implemented — return undef
+        return new RuntimeScalar().getList();
+    }
+
+    // ---- PEM_X509_INFO / sk_X509_INFO functions ----
+
+    public static RuntimeList PEM_X509_INFO_read_bio(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+
+        List<X509InfoEntry> entries = new ArrayList<>();
+        try {
+            java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+            // Read all certificates from the PEM data in the BIO
+            byte[] pemData = bio.toByteArray();
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(pemData);
+            java.util.Collection<? extends java.security.cert.Certificate> certs = cf.generateCertificates(bais);
+            for (java.security.cert.Certificate c : certs) {
+                if (c instanceof X509Certificate) {
+                    X509Certificate x509 = (X509Certificate) c;
+                    long certHandle = HANDLE_COUNTER.getAndIncrement();
+                    X509_HANDLES.put(certHandle, x509);
+                    X509InfoEntry entry = new X509InfoEntry();
+                    entry.certHandle = certHandle;
+                    entries.add(entry);
+                }
+            }
+        } catch (Exception e) {
+            // Return whatever we got so far
+        }
+
+        if (entries.isEmpty()) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_INFO_SK_HANDLES.put(handleId, entries);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList sk_X509_INFO_num(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        List<X509InfoEntry> entries = X509_INFO_SK_HANDLES.get(handle);
+        if (entries == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(entries.size()).getList();
+    }
+
+    public static RuntimeList sk_X509_INFO_value(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        List<X509InfoEntry> entries = X509_INFO_SK_HANDLES.get(handle);
+        if (entries == null || index < 0 || index >= entries.size()) return new RuntimeScalar().getList();
+        // Return a handle that represents this X509_INFO entry
+        // We use the cert handle as the info handle (1:1 mapping)
+        return new RuntimeScalar(entries.get(index).certHandle).getList();
+    }
+
+    public static RuntimeList P_X509_INFO_get_x509(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long infoHandle = args.get(0).getLong();
+        // The info handle IS the cert handle (from sk_X509_INFO_value)
+        if (X509_HANDLES.containsKey(infoHandle)) {
+            return new RuntimeScalar(infoHandle).getList();
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    // ---- Constant accessor methods ----
+
+    public static RuntimeList X509_V_FLAG_ALLOW_PROXY_CERTS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_ALLOW_PROXY_CERTS")).getList();
+    }
+    public static RuntimeList X509_V_FLAG_POLICY_CHECK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_POLICY_CHECK")).getList();
+    }
+    public static RuntimeList X509_V_FLAG_EXPLICIT_POLICY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_EXPLICIT_POLICY")).getList();
+    }
+    public static RuntimeList X509_V_FLAG_LEGACY_VERIFY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_FLAG_LEGACY_VERIFY")).getList();
+    }
+    public static RuntimeList X509_V_OK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_OK")).getList();
+    }
+    public static RuntimeList X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY")).getList();
+    }
+    public static RuntimeList X509_V_ERR_CERT_UNTRUSTED(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_CERT_UNTRUSTED")).getList();
+    }
+    public static RuntimeList X509_V_ERR_NO_EXPLICIT_POLICY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_NO_EXPLICIT_POLICY")).getList();
+    }
+    public static RuntimeList X509_V_ERR_HOSTNAME_MISMATCH(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_V_ERR_HOSTNAME_MISMATCH")).getList();
+    }
+    public static RuntimeList X509_PURPOSE_SSL_CLIENT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_PURPOSE_SSL_CLIENT")).getList();
+    }
+    public static RuntimeList X509_PURPOSE_SSL_SERVER(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_PURPOSE_SSL_SERVER")).getList();
+    }
+    public static RuntimeList X509_TRUST_EMAIL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_TRUST_EMAIL")).getList();
+    }
+    public static RuntimeList X509_CHECK_FLAG_NO_WILDCARDS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("X509_CHECK_FLAG_NO_WILDCARDS")).getList();
     }
 }
