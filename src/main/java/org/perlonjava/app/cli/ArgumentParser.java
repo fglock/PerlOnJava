@@ -719,6 +719,10 @@ public class ArgumentParser {
             System.out.println("    git_commit_date: " + Configuration.gitCommitDate);
             System.out.println();
 
+            // Print Perl 5-compatible "Compiled at" line
+            // Parsed by App::perlbrew and other tools via: perl -V | grep "Compiled at"
+            System.out.println("  Compiled at " + Configuration.buildTimestamp);
+
             System.out.println("  JVM properties:");
             System.getProperties().forEach((key, value) ->
                     System.out.println("    " + key + ": " + value));

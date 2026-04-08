@@ -137,6 +137,16 @@ tasks.register('injectGitInfo') {
                 /(gitCommitDate\s*=\s*)"[^"]*"/,
                 "\$1\"${gitCommitDate}\""
             )
+
+            // Generate build timestamp in Perl 5 "Compiled at" format: "Mon DD YYYY HH:MM:SS"
+            def now = new java.util.Date()
+            def buildTimestamp = new java.text.SimpleDateFormat("MMM dd yyyy HH:mm:ss", java.util.Locale.ENGLISH).format(now)
+            // Perl uses single-digit day with leading space (e.g., "Apr  7" not "Apr 07")
+            buildTimestamp = buildTimestamp.replaceAll(/^(\w{3}) 0/, '$1  ')
+            content = content.replaceAll(
+                /(buildTimestamp\s*=\s*)"[^"]*"/,
+                "\$1\"${buildTimestamp}\""
+            )
             
             configFile.text = content
             logger.lifecycle("Injected git info: ${gitCommitId} (${gitCommitDate})")
