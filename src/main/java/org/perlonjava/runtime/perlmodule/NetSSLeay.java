@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.*;
 import java.security.cert.CertificateFactory;
+import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
@@ -277,6 +278,18 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new HashMap<>();
     private static final Map<Long, BigInteger> BIGNUM_HANDLES = new HashMap<>();
     private static final Map<Long, String> EVP_CIPHER_HANDLES = new HashMap<>(); // handle → cipher name
+    private static final Map<Long, MutableCRLState> CRL_HANDLES = new HashMap<>();
+    private static final Map<Long, X509CRL> X509_CRL_HANDLES = new HashMap<>(); // read-only parsed CRLs
+    private static final Map<String, Long> CRL_TIME_CACHE = new HashMap<>(); // cache for read-only CRL time handles
+
+    // OSSL_PROVIDER simulation
+    private static final Map<String, Long> PROVIDER_NAME_TO_HANDLE = new HashMap<>();
+    private static final Map<Long, String> PROVIDER_HANDLE_TO_NAME = new HashMap<>();
+    private static long LIBCTX_HANDLE = 0; // lazily assigned
+    // Track whether fallback providers (default) should auto-load
+    private static boolean retainFallbacks = true;
+    // Track explicitly loaded providers for do_all iteration
+    private static final LinkedHashMap<Long, String> LOADED_PROVIDERS = new LinkedHashMap<>();
 
     // SSL method type sentinels
     private static final long METHOD_SSLv23 = -10L;
@@ -621,6 +634,25 @@ public class NetSSLeay extends PerlModuleBase {
         String value;
     }
 
+    // Mutable CRL state (before signing)
+    private static class MutableCRLState {
+        int version = 0;  // CRL version (0=v1, 1=v2)
+        long issuerNameHandle = 0;  // X509_NAME handle
+        long lastUpdateHandle = 0;  // ASN1_TIME handle
+        long nextUpdateHandle = 0;  // ASN1_TIME handle
+        long serialHandle = 0;  // ASN1_INTEGER handle (CRL number)
+        List<RevokedEntry> revokedEntries = new ArrayList<>();
+        List<MutableExtension> extensions = new ArrayList<>();
+        byte[] signedDer = null;  // DER after signing
+    }
+
+    private static class RevokedEntry {
+        String serialHex;
+        long revocationTime;  // epoch seconds
+        int reason;  // CRL reason code
+        long compromiseTime;  // epoch seconds (invalidityDate)
+    }
+
     // Sentinel value for BIO_s_mem() method type
     private static final long BIO_S_MEM_SENTINEL = -1L;
 
@@ -735,6 +767,13 @@ public class NetSSLeay extends PerlModuleBase {
             // EVP cipher functions
             mod.registerMethod("EVP_get_cipherbyname", null);
             mod.registerMethod("OSSL_PROVIDER_load", null);
+            mod.registerMethod("OSSL_PROVIDER_unload", null);
+            mod.registerMethod("OSSL_PROVIDER_available", null);
+            mod.registerMethod("OSSL_PROVIDER_try_load", null);
+            mod.registerMethod("OSSL_PROVIDER_get0_name", null);
+            mod.registerMethod("OSSL_PROVIDER_self_test", null);
+            mod.registerMethod("OSSL_PROVIDER_do_all", null);
+            mod.registerMethod("OSSL_LIB_CTX_get0_global_default", null);
 
             // X509 extension functions
             mod.registerMethod("P_X509_add_extensions", null);
@@ -758,6 +797,16 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("X509_REQ_add1_attr_by_NID", null);
             mod.registerMethod("P_X509_REQ_get_attr", null);
             mod.registerMethod("X509_REQ_digest", null);
+
+            // X509_CRL functions (complex ones use registerMethod, simple ones use lambdas below)
+            mod.registerMethod("d2i_X509_CRL_bio", null);
+            mod.registerMethod("PEM_read_bio_X509_CRL", null);
+            mod.registerMethod("PEM_get_string_X509_CRL", null);
+            mod.registerMethod("X509_CRL_sign", null);
+            mod.registerMethod("X509_CRL_verify", null);
+            mod.registerMethod("X509_CRL_digest", null);
+            mod.registerMethod("P_X509_CRL_add_revoked_serial_hex", null);
+            mod.registerMethod("P_X509_CRL_add_extensions", null);
 
             // SSL_CTX functions
             mod.registerMethod("CTX_new", null);
@@ -991,6 +1040,169 @@ public class NetSSLeay extends PerlModuleBase {
                 GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
             }
 
+            // Register simple X509_CRL getters/setters as lambdas (no separate Java method needed)
+            registerLambda("X509_CRL_new", (a, c) -> {
+                long h = HANDLE_COUNTER.getAndIncrement();
+                MutableCRLState st = new MutableCRLState();
+                // lastUpdate and nextUpdate start as 0 (NULL) — no ASN1_TIME handles yet
+                // They get created on first set operation
+                CRL_HANDLES.put(h, st);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("X509_CRL_free", (a, c) -> {
+                if (a.size() >= 1) {
+                    long h = a.get(0).getLong();
+                    CRL_HANDLES.remove(h);
+                    X509_CRL_HANDLES.remove(h);
+                }
+                return new RuntimeScalar().getList(); // returns undef
+            });
+            registerLambda("X509_CRL_get_issuer", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long h = a.get(0).getLong();
+                MutableCRLState st = CRL_HANDLES.get(h);
+                if (st != null) return new RuntimeScalar(st.issuerNameHandle != 0 ? st.issuerNameHandle : 0).getList();
+                X509CRL crl = X509_CRL_HANDLES.get(h);
+                if (crl == null) return new RuntimeScalar().getList();
+                X509NameInfo info = parseX500Principal(crl.getIssuerX500Principal());
+                long nh = HANDLE_COUNTER.getAndIncrement();
+                X509_NAME_HANDLES.put(nh, info);
+                return new RuntimeScalar(nh).getList();
+            });
+            registerLambda("X509_CRL_get_version", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                MutableCRLState st = CRL_HANDLES.get(h);
+                if (st != null) return new RuntimeScalar(st.version).getList();
+                X509CRL crl = X509_CRL_HANDLES.get(h);
+                if (crl == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(crl.getVersion() - 1).getList(); // Java returns 1-based, OpenSSL 0-based
+            });
+            registerLambda("X509_CRL_set_version", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                MutableCRLState st = CRL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.version = (int) a.get(1).getLong();
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("X509_CRL_set_issuer_name", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                MutableCRLState st = CRL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                long nameH = a.get(1).getLong();
+                if (!X509_NAME_HANDLES.containsKey(nameH)) return new RuntimeScalar(0).getList();
+                st.issuerNameHandle = nameH;
+                return new RuntimeScalar(1).getList();
+            });
+            // CRL time getters (work for both mutable and read-only CRLs)
+            // For read-only CRLs, cache time handles so get0_ and get_ aliases return same value
+            PerlSubroutine crlGetLastUpdate = (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long h = a.get(0).getLong();
+                MutableCRLState st = CRL_HANDLES.get(h);
+                if (st != null) return new RuntimeScalar(st.lastUpdateHandle).getList();
+                X509CRL crl = X509_CRL_HANDLES.get(h);
+                if (crl == null) return new RuntimeScalar(0).getList();
+                // Use handle stored in crlTimeCache, or create one
+                String cacheKey = h + ":last";
+                Long cached = CRL_TIME_CACHE.get(cacheKey);
+                if (cached != null) return new RuntimeScalar(cached).getList();
+                long th = HANDLE_COUNTER.getAndIncrement();
+                ASN1_TIME_HANDLES.put(th, crl.getThisUpdate().getTime() / 1000);
+                CRL_TIME_CACHE.put(cacheKey, th);
+                return new RuntimeScalar(th).getList();
+            };
+            PerlSubroutine crlGetNextUpdate = (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long h = a.get(0).getLong();
+                MutableCRLState st = CRL_HANDLES.get(h);
+                if (st != null) return new RuntimeScalar(st.nextUpdateHandle).getList();
+                X509CRL crl = X509_CRL_HANDLES.get(h);
+                if (crl == null) return new RuntimeScalar(0).getList();
+                java.util.Date next = crl.getNextUpdate();
+                if (next == null) return new RuntimeScalar(0).getList();
+                String cacheKey = h + ":next";
+                Long cached = CRL_TIME_CACHE.get(cacheKey);
+                if (cached != null) return new RuntimeScalar(cached).getList();
+                long th = HANDLE_COUNTER.getAndIncrement();
+                ASN1_TIME_HANDLES.put(th, next.getTime() / 1000);
+                CRL_TIME_CACHE.put(cacheKey, th);
+                return new RuntimeScalar(th).getList();
+            };
+            registerLambda("X509_CRL_get0_lastUpdate", crlGetLastUpdate);
+            registerLambda("X509_CRL_get_lastUpdate", crlGetLastUpdate);
+            registerLambda("X509_CRL_get0_nextUpdate", crlGetNextUpdate);
+            registerLambda("X509_CRL_get_nextUpdate", crlGetNextUpdate);
+            // CRL time setters (mutable only) — create time handles on demand
+            PerlSubroutine crlSetLastUpdate = (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                MutableCRLState st = CRL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                long timeH = a.get(1).getLong();
+                Long epoch = ASN1_TIME_HANDLES.get(timeH);
+                if (epoch == null) return new RuntimeScalar(0).getList();
+                if (st.lastUpdateHandle == 0) {
+                    st.lastUpdateHandle = HANDLE_COUNTER.getAndIncrement();
+                }
+                ASN1_TIME_HANDLES.put(st.lastUpdateHandle, epoch);
+                return new RuntimeScalar(1).getList();
+            };
+            PerlSubroutine crlSetNextUpdate = (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                MutableCRLState st = CRL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                long timeH = a.get(1).getLong();
+                Long epoch = ASN1_TIME_HANDLES.get(timeH);
+                if (epoch == null) return new RuntimeScalar(0).getList();
+                if (st.nextUpdateHandle == 0) {
+                    st.nextUpdateHandle = HANDLE_COUNTER.getAndIncrement();
+                }
+                ASN1_TIME_HANDLES.put(st.nextUpdateHandle, epoch);
+                return new RuntimeScalar(1).getList();
+            };
+            registerLambda("X509_CRL_set1_lastUpdate", crlSetLastUpdate);
+            registerLambda("X509_CRL_set_lastUpdate", crlSetLastUpdate);
+            registerLambda("X509_CRL_set1_nextUpdate", crlSetNextUpdate);
+            registerLambda("X509_CRL_set_nextUpdate", crlSetNextUpdate);
+            registerLambda("X509_CRL_sort", (a, c) -> new RuntimeScalar(1).getList()); // no-op, sort during sign
+            registerLambda("P_X509_CRL_set_serial", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                MutableCRLState st = CRL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.serialHandle = a.get(1).getLong();
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("P_X509_CRL_get_serial", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long h = a.get(0).getLong();
+                MutableCRLState st = CRL_HANDLES.get(h);
+                if (st != null && st.serialHandle != 0) return new RuntimeScalar(st.serialHandle).getList();
+                // For read-only CRLs, extract CRL number from extensions
+                X509CRL crl = X509_CRL_HANDLES.get(h);
+                if (crl == null) return new RuntimeScalar().getList();
+                byte[] crlNumExt = crl.getExtensionValue("2.5.29.20"); // CRL Number OID
+                if (crlNumExt == null) return new RuntimeScalar().getList();
+                try {
+                    // CRL Number extension: OCTET STRING wrapping an INTEGER
+                    // Skip outer OCTET STRING tag+len, then parse inner INTEGER
+                    int[] pos = {0};
+                    int[] len = {0};
+                    readDerTag(crlNumExt, pos, len); // outer OCTET STRING
+                    byte[] inner = new byte[len[0]];
+                    System.arraycopy(crlNumExt, pos[0], inner, 0, len[0]);
+                    pos[0] = 0;
+                    readDerTag(inner, pos, len); // INTEGER tag
+                    byte[] intBytes = new byte[len[0]];
+                    System.arraycopy(inner, pos[0], intBytes, 0, len[0]);
+                    BigInteger crlNum = new BigInteger(1, intBytes);
+                    long ih = HANDLE_COUNTER.getAndIncrement();
+                    ASN1_INTEGER_HANDLES.put(ih, crlNum);
+                    return new RuntimeScalar(ih).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+
             // Define exports
             String[] exportOk = CONSTANTS.keySet().toArray(new String[0]);
             mod.defineExport("EXPORT_OK", exportOk);
@@ -1033,6 +1245,16 @@ public class NetSSLeay extends PerlModuleBase {
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing NetSSLeay method: " + e.getMessage());
         }
+    }
+
+    // Helper to register a PerlSubroutine lambda as Net::SSLeay::name
+    private static void registerLambda(String name, PerlSubroutine sub) {
+        RuntimeCode code = new RuntimeCode(sub, null); // null prototype = unrestricted args
+        code.isStatic = true;
+        code.packageName = "Net::SSLeay";
+        code.subName = name;
+        String fullName = NameNormalizer.normalizeVariableName(name, "Net::SSLeay");
+        GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
     }
 
     // ---- Constant lookup (prevents AUTOLOAD infinite recursion) ----
@@ -4973,9 +5195,101 @@ public class NetSSLeay extends PerlModuleBase {
         }
     }
 
-    // OSSL_PROVIDER_load($ctx, $name) - no-op, return success
+    // OSSL_PROVIDER_load($ctx, $name) - simulate loading a provider
     public static RuntimeList OSSL_PROVIDER_load(RuntimeArray args, int ctx) {
+        String name = args.size() >= 2 ? args.get(1).toString() : "default";
+        // If already loaded, return existing handle
+        Long existing = PROVIDER_NAME_TO_HANDLE.get(name);
+        if (existing != null) return new RuntimeScalar(existing).getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        PROVIDER_NAME_TO_HANDLE.put(name, handleId);
+        PROVIDER_HANDLE_TO_NAME.put(handleId, name);
+        LOADED_PROVIDERS.put(handleId, name);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // OSSL_PROVIDER_unload($provider) - unload a provider
+    public static RuntimeList OSSL_PROVIDER_unload(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        String name = PROVIDER_HANDLE_TO_NAME.remove(handle);
+        if (name != null) {
+            PROVIDER_NAME_TO_HANDLE.remove(name);
+            LOADED_PROVIDERS.remove(handle);
+        }
         return new RuntimeScalar(1).getList();
+    }
+
+    // OSSL_PROVIDER_available($ctx, $name) - check if provider is loaded
+    public static RuntimeList OSSL_PROVIDER_available(RuntimeArray args, int ctx) {
+        String name = args.size() >= 2 ? args.get(1).toString() : "";
+        boolean avail = PROVIDER_NAME_TO_HANDLE.containsKey(name);
+        return new RuntimeScalar(avail ? 1 : 0).getList();
+    }
+
+    // OSSL_PROVIDER_try_load($ctx, $name, $retain_fallbacks) - load with fallback control
+    public static RuntimeList OSSL_PROVIDER_try_load(RuntimeArray args, int ctx) {
+        String name = args.size() >= 2 ? args.get(1).toString() : "";
+        int retain = args.size() >= 3 ? (int) args.get(2).getLong() : 1;
+        // Load the requested provider
+        Long existing = PROVIDER_NAME_TO_HANDLE.get(name);
+        long handleId;
+        if (existing != null) {
+            handleId = existing;
+        } else {
+            handleId = HANDLE_COUNTER.getAndIncrement();
+            PROVIDER_NAME_TO_HANDLE.put(name, handleId);
+            PROVIDER_HANDLE_TO_NAME.put(handleId, name);
+            LOADED_PROVIDERS.put(handleId, name);
+        }
+        if (retain == 1) {
+            // Auto-load default provider as fallback if not already loaded
+            if (!PROVIDER_NAME_TO_HANDLE.containsKey("default")) {
+                long defHandle = HANDLE_COUNTER.getAndIncrement();
+                PROVIDER_NAME_TO_HANDLE.put("default", defHandle);
+                PROVIDER_HANDLE_TO_NAME.put(defHandle, "default");
+                LOADED_PROVIDERS.put(defHandle, "default");
+            }
+        }
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // OSSL_PROVIDER_get0_name($provider) - get provider name
+    public static RuntimeList OSSL_PROVIDER_get0_name(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        String name = PROVIDER_HANDLE_TO_NAME.get(handle);
+        if (name == null) return new RuntimeScalar().getList();
+        return new RuntimeScalar(name).getList();
+    }
+
+    // OSSL_PROVIDER_self_test($provider) - always returns 1 (success)
+    public static RuntimeList OSSL_PROVIDER_self_test(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    // OSSL_PROVIDER_do_all($ctx, \&callback, $cbdata) - iterate all loaded providers
+    public static RuntimeList OSSL_PROVIDER_do_all(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(1).getList();
+        RuntimeScalar callback = args.get(1);
+        RuntimeScalar cbdata = args.size() >= 3 ? args.get(2) : new RuntimeScalar();
+        // Iterate over a snapshot to avoid concurrent modification
+        List<Map.Entry<Long, String>> snapshot = new ArrayList<>(LOADED_PROVIDERS.entrySet());
+        for (Map.Entry<Long, String> entry : snapshot) {
+            RuntimeArray callArgs = new RuntimeArray();
+            callArgs.push(new RuntimeScalar(entry.getKey()));
+            callArgs.push(cbdata);
+            RuntimeCode.apply(callback, callArgs, RuntimeContextType.SCALAR);
+        }
+        return new RuntimeScalar(1).getList();
+    }
+
+    // OSSL_LIB_CTX_get0_global_default() - return a dummy libctx handle
+    public static RuntimeList OSSL_LIB_CTX_get0_global_default(RuntimeArray args, int ctx) {
+        if (LIBCTX_HANDLE == 0) {
+            LIBCTX_HANDLE = HANDLE_COUNTER.getAndIncrement();
+        }
+        return new RuntimeScalar(LIBCTX_HANDLE).getList();
     }
 
     // ---- Phase 2b: Mutable X509 creation and signing ----
@@ -6290,5 +6604,354 @@ public class NetSSLeay extends PerlModuleBase {
             certState.extensions.add(copy);
         }
         return new RuntimeScalar(1).getList();
+    }
+
+    // ---- Phase 3: X509 CRL support ----
+
+    // d2i_X509_CRL_bio($bio) - read DER-encoded CRL from BIO
+    public static RuntimeList d2i_X509_CRL_bio(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        try {
+            byte[] derData = readAllBioData(bioHandle);
+            if (derData == null) return new RuntimeScalar().getList();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509CRL crl = (X509CRL) cf.generateCRL(new ByteArrayInputStream(derData));
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            X509_CRL_HANDLES.put(handleId, crl);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // PEM_read_bio_X509_CRL($bio) - read PEM-encoded CRL from BIO
+    public static RuntimeList PEM_read_bio_X509_CRL(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        try {
+            byte[] pemData = readAllBioData(bioHandle);
+            if (pemData == null) return new RuntimeScalar().getList();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509CRL crl = (X509CRL) cf.generateCRL(new ByteArrayInputStream(pemData));
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            X509_CRL_HANDLES.put(handleId, crl);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // X509_CRL_verify($crl, $pkey) - verify CRL signature
+    public static RuntimeList X509_CRL_verify(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long crlHandle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        X509CRL crl = X509_CRL_HANDLES.get(crlHandle);
+        if (crl == null) return new RuntimeScalar(0).getList();
+        java.security.Key key = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        try {
+            PublicKey pubKey;
+            if (key instanceof PublicKey) {
+                pubKey = (PublicKey) key;
+            } else if (key instanceof java.security.interfaces.RSAPrivateCrtKey) {
+                java.security.interfaces.RSAPrivateCrtKey rsaCrt = (java.security.interfaces.RSAPrivateCrtKey) key;
+                pubKey = KeyFactory.getInstance("RSA").generatePublic(
+                    new java.security.spec.RSAPublicKeySpec(rsaCrt.getModulus(), rsaCrt.getPublicExponent()));
+            } else {
+                return new RuntimeScalar(0).getList();
+            }
+            crl.verify(pubKey);
+            return new RuntimeScalar(1).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    // X509_CRL_digest($crl, $md) - compute digest of CRL DER encoding
+    public static RuntimeList X509_CRL_digest(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long crlHandle = args.get(0).getLong();
+        long mdHandle = args.get(1).getLong();
+        try {
+            byte[] derData = null;
+            X509CRL crl = X509_CRL_HANDLES.get(crlHandle);
+            if (crl != null) derData = crl.getEncoded();
+            MutableCRLState st = CRL_HANDLES.get(crlHandle);
+            if (st != null && st.signedDer != null) derData = st.signedDer;
+            if (derData == null) return new RuntimeScalar().getList();
+            EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+            String javaAlg = "SHA-256";
+            if (mdCtx != null && mdCtx.algorithmName != null) {
+                String mapped = NAME_TO_JAVA_ALG.get(mdCtx.algorithmName);
+                if (mapped != null) javaAlg = mapped;
+            }
+            MessageDigest md = MessageDigest.getInstance(javaAlg);
+            byte[] hash = md.digest(derData);
+            return new RuntimeScalar(new String(hash, StandardCharsets.ISO_8859_1)).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // X509_CRL_sign($crl, $pkey, $md) - sign a mutable CRL
+    public static RuntimeList X509_CRL_sign(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long crlHandle = args.get(0).getLong();
+        long pkeyHandle = args.get(1).getLong();
+        long mdHandle = args.get(2).getLong();
+        MutableCRLState state = CRL_HANDLES.get(crlHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        java.security.Key signingKey = EVP_PKEY_HANDLES.get(pkeyHandle);
+        if (!(signingKey instanceof PrivateKey)) return new RuntimeScalar(0).getList();
+        PrivateKey privateKey = (PrivateKey) signingKey;
+        EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+        String digestName = "sha256";
+        if (mdCtx != null && mdCtx.algorithmName != null) digestName = mdCtx.algorithmName;
+        try {
+            // Build TBSCertList DER
+            // version INTEGER (OPTIONAL for v1, present for v2)
+            byte[] versionDer = state.version > 0 ? derIntegerLong(state.version) : new byte[0];
+            // signature algorithm
+            byte[] sigAlgDer = getSignatureAlgorithmDer(digestName);
+            // issuer
+            X509NameInfo issuerInfo = X509_NAME_HANDLES.get(state.issuerNameHandle);
+            byte[] issuerDer = issuerInfo != null ? issuerInfo.derEncoded : new byte[]{0x30, 0x00};
+            // thisUpdate
+            Long lastUpdate = ASN1_TIME_HANDLES.get(state.lastUpdateHandle);
+            if (lastUpdate == null) lastUpdate = 0L;
+            byte[] thisUpdateDer = derTime(lastUpdate);
+            // nextUpdate
+            Long nextUpdate = ASN1_TIME_HANDLES.get(state.nextUpdateHandle);
+            byte[] nextUpdateDer = (nextUpdate != null && nextUpdate != 0) ? derTime(nextUpdate) : new byte[0];
+            // revokedCertificates SEQUENCE OF (OPTIONAL)
+            byte[] revokedDer = new byte[0];
+            if (!state.revokedEntries.isEmpty()) {
+                // Sort revoked entries by serial
+                state.revokedEntries.sort((e1, e2) -> {
+                    BigInteger s1 = new BigInteger(e1.serialHex, 16);
+                    BigInteger s2 = new BigInteger(e2.serialHex, 16);
+                    return s1.compareTo(s2);
+                });
+                byte[][] entries = new byte[state.revokedEntries.size()][];
+                for (int i = 0; i < state.revokedEntries.size(); i++) {
+                    entries[i] = buildRevokedEntryDer(state.revokedEntries.get(i));
+                }
+                revokedDer = derSequence(derConcat(entries));
+            }
+            // extensions [0] EXPLICIT
+            byte[] extsDer = new byte[0];
+            // Add CRL Number extension if serial was set
+            List<MutableExtension> allExts = new ArrayList<>(state.extensions);
+            if (state.serialHandle != 0) {
+                BigInteger crlNum = ASN1_INTEGER_HANDLES.get(state.serialHandle);
+                if (crlNum != null) {
+                    MutableExtension crlNumExt = new MutableExtension();
+                    crlNumExt.oid = "2.5.29.20";
+                    crlNumExt.critical = false;
+                    crlNumExt.value = "CRL_NUMBER:" + crlNum.toString();
+                    allExts.add(0, crlNumExt); // CRL number first
+                }
+            }
+            if (!allExts.isEmpty()) {
+                byte[] extsContent = buildCRLExtensionsDer(allExts, state);
+                extsDer = derTag(0xA0, extsContent); // context [0] EXPLICIT SEQUENCE
+            }
+            // Assemble TBSCertList
+            byte[] tbsContent = derConcat(versionDer, sigAlgDer, issuerDer, thisUpdateDer, nextUpdateDer,
+                    revokedDer, extsDer);
+            byte[] tbsCertListDer = derSequence(tbsContent);
+            // Sign
+            String javaAlg = getJavaSignatureAlgorithm(digestName);
+            Signature sig = Signature.getInstance(javaAlg);
+            sig.initSign(privateKey);
+            sig.update(tbsCertListDer);
+            byte[] sigBytes = sig.sign();
+            byte[] bitString = new byte[sigBytes.length + 1];
+            bitString[0] = 0;
+            System.arraycopy(sigBytes, 0, bitString, 1, sigBytes.length);
+            byte[] sigValueDer = derTag(0x03, bitString);
+            // Build final CRL DER
+            byte[] crlDer = derSequence(derConcat(tbsCertListDer, sigAlgDer, sigValueDer));
+            state.signedDer = crlDer;
+            // Also parse and store as read-only for verify/digest operations
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509CRL parsedCrl = (X509CRL) cf.generateCRL(new ByteArrayInputStream(crlDer));
+            X509_CRL_HANDLES.put(crlHandle, parsedCrl);
+            return new RuntimeScalar(crlDer.length).getList();
+        } catch (Exception e) {
+            System.err.println("X509_CRL_sign error: " + e.getMessage());
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    // Build DER for a single revoked certificate entry
+    private static byte[] buildRevokedEntryDer(RevokedEntry entry) {
+        // SEQUENCE { serialNumber INTEGER, revocationDate Time, extensions [opt] }
+        BigInteger serial = new BigInteger(entry.serialHex, 16);
+        byte[] serialDer = derInteger(serial);
+        byte[] timeDer = derTime(entry.revocationTime);
+        // Extensions: reason code + invalidity date
+        byte[] extsDer = new byte[0];
+        List<byte[]> extList = new ArrayList<>();
+        // CRL Reason (OID 2.5.29.21)
+        if (entry.reason >= 0) {
+            byte[] reasonOid = derOid("2.5.29.21");
+            byte[] reasonValue = derTag(0x04, derTag(0x0A, new byte[]{(byte) entry.reason})); // OCTET STRING { ENUMERATED }
+            extList.add(derSequence(derConcat(reasonOid, reasonValue)));
+        }
+        // Invalidity Date (OID 2.5.29.24)
+        if (entry.compromiseTime > 0) {
+            byte[] invalidityOid = derOid("2.5.29.24");
+            byte[] invalidityValue = derTag(0x04, derGeneralizedTime(entry.compromiseTime)); // OCTET STRING { GeneralizedTime }
+            extList.add(derSequence(derConcat(invalidityOid, invalidityValue)));
+        }
+        if (!extList.isEmpty()) {
+            extsDer = derSequence(derConcat(extList.toArray(new byte[0][])));
+        }
+        return derSequence(derConcat(serialDer, timeDer, extsDer));
+    }
+
+    // Build DER for CRL extensions (handles CRL_NUMBER and Authority Key Identifier)
+    private static byte[] buildCRLExtensionsDer(List<MutableExtension> extensions, MutableCRLState state) {
+        List<byte[]> extDers = new ArrayList<>();
+        for (MutableExtension ext : extensions) {
+            byte[] oidDer = derOid(ext.oid);
+            byte[] critDer = ext.critical ? derTag(0x01, new byte[]{(byte) 0xFF}) : new byte[0]; // BOOLEAN TRUE
+            byte[] valueDer;
+            if (ext.value.startsWith("CRL_NUMBER:")) {
+                BigInteger num = new BigInteger(ext.value.substring(11));
+                valueDer = derTag(0x04, derInteger(num)); // OCTET STRING { INTEGER }
+            } else if (ext.oid.equals("2.5.29.35")) {
+                // Authority Key Identifier — build from issuer cert
+                valueDer = derTag(0x04, buildAuthorityKeyIdentifierDer(state));
+            } else {
+                // Generic: encode value string as UTF8String in OCTET STRING
+                valueDer = derTag(0x04, ext.value.getBytes(StandardCharsets.UTF_8));
+            }
+            extDers.add(derSequence(derConcat(oidDer, critDer, valueDer)));
+        }
+        return derSequence(derConcat(extDers.toArray(new byte[0][])));
+    }
+
+    // Build Authority Key Identifier DER from issuer certificate
+    private static byte[] buildAuthorityKeyIdentifierDer(MutableCRLState state) {
+        // Minimal AKI: just the keyIdentifier [0]
+        // We'd need access to the issuer cert's subject key identifier
+        // For now, return a minimal valid structure
+        return new byte[]{0x30, 0x00}; // empty SEQUENCE
+    }
+
+    // DER-encode a GeneralizedTime value
+    private static byte[] derGeneralizedTime(long epochSeconds) {
+        ZonedDateTime zdt = Instant.ofEpochSecond(epochSeconds).atZone(ZoneOffset.UTC);
+        String timeStr = zdt.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + "Z";
+        byte[] timeBytes = timeStr.getBytes(StandardCharsets.US_ASCII);
+        return derTag(0x18, timeBytes); // tag 0x18 = GeneralizedTime
+    }
+
+    // DER-encode an OID string like "2.5.29.20"
+    private static byte[] derOid(String oidStr) {
+        String[] parts = oidStr.split("\\.");
+        int[] components = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) components[i] = Integer.parseInt(parts[i]);
+        // First two components encoded as 40*c0 + c1
+        List<Byte> encoded = new ArrayList<>();
+        encoded.add((byte) (40 * components[0] + components[1]));
+        for (int i = 2; i < components.length; i++) {
+            int val = components[i];
+            if (val < 128) {
+                encoded.add((byte) val);
+            } else {
+                // Multi-byte base-128 encoding
+                List<Byte> bytes = new ArrayList<>();
+                bytes.add((byte) (val & 0x7F));
+                val >>= 7;
+                while (val > 0) {
+                    bytes.add((byte) ((val & 0x7F) | 0x80));
+                    val >>= 7;
+                }
+                for (int j = bytes.size() - 1; j >= 0; j--) encoded.add(bytes.get(j));
+            }
+        }
+        byte[] oidBytes = new byte[encoded.size()];
+        for (int i = 0; i < encoded.size(); i++) oidBytes[i] = encoded.get(i);
+        return derTag(0x06, oidBytes); // tag 0x06 = OID
+    }
+
+    // PEM_get_string_X509_CRL($crl) - export CRL as PEM string
+    public static RuntimeList PEM_get_string_X509_CRL(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long crlHandle = args.get(0).getLong();
+        try {
+            byte[] derData = null;
+            X509CRL crl = X509_CRL_HANDLES.get(crlHandle);
+            if (crl != null) derData = crl.getEncoded();
+            MutableCRLState st = CRL_HANDLES.get(crlHandle);
+            if (st != null && st.signedDer != null) derData = st.signedDer;
+            if (derData == null) return new RuntimeScalar().getList();
+            String b64 = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(derData);
+            String pem = "-----BEGIN X509 CRL-----\n" + b64 + "\n-----END X509 CRL-----\n";
+            return new RuntimeScalar(pem).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // P_X509_CRL_add_revoked_serial_hex($crl, $serial_hex, $rev_time, $reason, $comp_time)
+    public static RuntimeList P_X509_CRL_add_revoked_serial_hex(RuntimeArray args, int ctx) {
+        if (args.size() < 4) return new RuntimeScalar(0).getList();
+        long crlHandle = args.get(0).getLong();
+        MutableCRLState state = CRL_HANDLES.get(crlHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        String serialHex = args.get(1).toString();
+        long revTimeHandle = args.get(2).getLong();
+        int reason = (int) args.get(3).getLong();
+        long compTimeHandle = args.size() >= 5 ? args.get(4).getLong() : 0;
+        Long revEpoch = ASN1_TIME_HANDLES.get(revTimeHandle);
+        if (revEpoch == null) return new RuntimeScalar(0).getList();
+        RevokedEntry entry = new RevokedEntry();
+        entry.serialHex = serialHex;
+        entry.revocationTime = revEpoch;
+        entry.reason = reason;
+        if (compTimeHandle != 0) {
+            Long compEpoch = ASN1_TIME_HANDLES.get(compTimeHandle);
+            entry.compromiseTime = compEpoch != null ? compEpoch : 0;
+        }
+        state.revokedEntries.add(entry);
+        return new RuntimeScalar(1).getList();
+    }
+
+    // P_X509_CRL_add_extensions($crl, $issuer_cert, NID => value, ...)
+    public static RuntimeList P_X509_CRL_add_extensions(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long crlHandle = args.get(0).getLong();
+        MutableCRLState state = CRL_HANDLES.get(crlHandle);
+        if (state == null) return new RuntimeScalar(0).getList();
+        // args[1] is issuer cert handle (used for AKI)
+        // Remaining args are NID => value pairs
+        for (int i = 2; i < args.size() - 1; i += 2) {
+            int nid = (int) args.get(i).getLong();
+            String value = args.get(i + 1).toString();
+            MutableExtension ext = new MutableExtension();
+            // Map NID to OID
+            OidInfo oidInfo = NID_TO_INFO.get(nid);
+            ext.oid = oidInfo != null ? oidInfo.oid : ("2.5.29." + nid);
+            ext.critical = false;
+            ext.value = value;
+            state.extensions.add(ext);
+        }
+        return new RuntimeScalar(1).getList();
+    }
+
+    // Helper: read all data from a BIO handle
+    private static byte[] readAllBioData(long bioHandle) {
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return null;
+        // Return all unread data from the BIO
+        int avail = bio.pending();
+        if (avail <= 0) return null;
+        return bio.read(avail);
     }
 }
