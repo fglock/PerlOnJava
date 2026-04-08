@@ -245,10 +245,13 @@ as Perl itself.
    ```bash
    rm -rf .perlonjava/
    ```
-   Then verify the bundled version loads correctly:
+   Then verify the bundled version and all its dependencies load correctly:
    ```bash
    ./jperl -e 'use Module::Name; print "ok\n"'
    ```
+   If this fails with a "Can't locate Dependency/Module.pm" error, the dependency
+   is not bundled. You must bundle all dependencies too — bundled modules must be
+   fully self-contained with no CPAN installs required.
 
 ## Common Patterns
 
@@ -413,8 +416,10 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Run upstream CPAN tests if applicable: `./jcpan -t Module::Name`
 
 ### Cleanup
+- [ ] Check all dependencies are also bundled: `./jperl -e 'use Module::Name'` should not pull anything from `.perlonjava/`
 - [ ] Remove `.perlonjava/` directory so the bundled version is used: `rm -rf .perlonjava/`
-- [ ] Verify bundled version loads: `./jperl -e 'use Module::Name; print "ok\n"'`
+- [ ] Verify bundled version loads without `.perlonjava/`: `./jperl -e 'use Module::Name; print "ok\n"'`
+- [ ] If it fails, identify the missing dependency and bundle it too (bundled modules must be fully self-contained)
 
 ### Documentation
 - [ ] Add POD with AUTHOR and COPYRIGHT sections
