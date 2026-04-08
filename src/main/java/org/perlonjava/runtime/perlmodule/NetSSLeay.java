@@ -3,13 +3,25 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * Minimal Net::SSLeay stub for PerlOnJava.
@@ -74,6 +86,7 @@ public class NetSSLeay extends PerlModuleBase {
         CONSTANTS.put("V_OCSP_CERTSTATUS_GOOD", 0L);
 
         // TLS version constants
+        CONSTANTS.put("SSL3_VERSION", 0x0300L);
         CONSTANTS.put("TLS1_VERSION", 0x0301L);
         CONSTANTS.put("TLS1_1_VERSION", 0x0302L);
         CONSTANTS.put("TLS1_2_VERSION", 0x0303L);
@@ -152,6 +165,29 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, MemoryBIO> BIO_HANDLES = new HashMap<>();
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new HashMap<>();
     private static final Map<Long, KeyPair> RSA_HANDLES = new HashMap<>();
+    private static final Map<Long, Long> ASN1_TIME_HANDLES = new HashMap<>();  // handle → epoch seconds
+    private static final Map<Long, SslCtxState> CTX_HANDLES = new HashMap<>();
+    private static final Map<Long, SslState> SSL_HANDLES = new HashMap<>();
+    private static final Map<Long, PrivateKey> EVP_PKEY_HANDLES = new HashMap<>();
+
+    // SSL method type sentinels
+    private static final long METHOD_SSLv23 = -10L;
+    private static final long METHOD_SSLv23_CLIENT = -11L;
+    private static final long METHOD_SSLv23_SERVER = -12L;
+    private static final long METHOD_TLSv1 = -13L;
+    private static final long METHOD_TLS = -14L;
+    private static final long METHOD_TLS_CLIENT = -15L;
+    private static final long METHOD_TLS_SERVER = -16L;
+
+    // Valid TLS protocol versions for validation
+    private static final Set<Long> VALID_PROTO_VERSIONS = new HashSet<>(Arrays.asList(
+            0L,       // automatic
+            0x0300L,  // SSL3
+            0x0301L,  // TLS 1.0
+            0x0302L,  // TLS 1.1
+            0x0303L,  // TLS 1.2
+            0x0304L   // TLS 1.3
+    ));
 
     // OpenSSL NID constants
     private static final Map<String, Integer> NAME_TO_NID = new HashMap<>();
@@ -258,6 +294,30 @@ public class NetSSLeay extends PerlModuleBase {
         }
     }
 
+    // Inner class: SSL_CTX state
+    private static class SslCtxState {
+        String role; // "generic", "client", "server"
+        long minProtoVersion = 0; // 0 = automatic
+        long maxProtoVersion = 0; // 0 = automatic
+
+        SslCtxState(String role) {
+            this.role = role;
+        }
+    }
+
+    // Inner class: SSL state
+    private static class SslState {
+        String role;
+        long minProtoVersion;
+        long maxProtoVersion;
+
+        SslState(SslCtxState ctx) {
+            this.role = ctx.role;
+            this.minProtoVersion = ctx.minProtoVersion;
+            this.maxProtoVersion = ctx.maxProtoVersion;
+        }
+    }
+
     // Sentinel value for BIO_s_mem() method type
     private static final long BIO_S_MEM_SENTINEL = -1L;
 
@@ -335,6 +395,52 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("RSA_generate_key", null);
             mod.registerMethod("RSA_free", null);
 
+            // ASN1_TIME functions
+            mod.registerMethod("ASN1_TIME_new", null);
+            mod.registerMethod("ASN1_TIME_set", null);
+            mod.registerMethod("ASN1_TIME_free", null);
+            mod.registerMethod("P_ASN1_TIME_put2string", null);
+            mod.registerMethod("P_ASN1_UTCTIME_put2string", null);
+            mod.registerMethod("P_ASN1_TIME_get_isotime", null);
+            mod.registerMethod("P_ASN1_TIME_set_isotime", null);
+            mod.registerMethod("X509_gmtime_adj", null);
+
+            // PEM functions
+            mod.registerMethod("PEM_read_bio_PrivateKey", null);
+
+            // EVP_PKEY functions
+            mod.registerMethod("EVP_PKEY_free", null);
+
+            // SSL_CTX functions
+            mod.registerMethod("CTX_new", null);
+            mod.registerMethod("CTX_v23_new", null);
+            mod.registerMethod("CTX_new_with_method", null);
+            mod.registerMethod("CTX_free", null);
+            mod.registerMethod("SSLv23_method", null);
+            mod.registerMethod("SSLv23_client_method", null);
+            mod.registerMethod("SSLv23_server_method", null);
+            mod.registerMethod("TLSv1_method", null);
+            mod.registerMethod("TLS_method", null);
+            mod.registerMethod("TLS_client_method", null);
+            mod.registerMethod("TLS_server_method", null);
+
+            // SSL functions
+            // "new" is registered as "new" — Perl calls Net::SSLeay::new($ctx)
+            mod.registerMethod("new", "SSL_new", null);
+            mod.registerMethod("SSL_free", null);
+            mod.registerMethod("in_connect_init", null);
+            mod.registerMethod("in_accept_init", null);
+
+            // Protocol version functions
+            mod.registerMethod("CTX_set_min_proto_version", null);
+            mod.registerMethod("CTX_set_max_proto_version", null);
+            mod.registerMethod("CTX_get_min_proto_version", null);
+            mod.registerMethod("CTX_get_max_proto_version", null);
+            mod.registerMethod("set_min_proto_version", null);
+            mod.registerMethod("set_max_proto_version", null);
+            mod.registerMethod("get_min_proto_version", null);
+            mod.registerMethod("get_max_proto_version", null);
+
             // EVP digest functions
             mod.registerMethod("EVP_get_digestbyname", null);
             mod.registerMethod("EVP_MD_CTX_create", null);
@@ -398,7 +504,20 @@ public class NetSSLeay extends PerlModuleBase {
                     "EVP_sha1", "EVP_sha224", "EVP_sha256", "EVP_sha384", "EVP_sha512",
                     "EVP_md5", "EVP_MD_get0_name", "EVP_MD_get0_description",
                     "EVP_MD_get_type", "P_EVP_MD_list_all",
-                    "MD5", "SHA1", "SHA256", "SHA512", "RIPEMD160");
+                    "MD5", "SHA1", "SHA256", "SHA512", "RIPEMD160",
+                    "ASN1_TIME_new", "ASN1_TIME_set", "ASN1_TIME_free",
+                    "P_ASN1_TIME_put2string", "P_ASN1_UTCTIME_put2string",
+                    "P_ASN1_TIME_get_isotime", "P_ASN1_TIME_set_isotime",
+                    "X509_gmtime_adj",
+                    "PEM_read_bio_PrivateKey", "EVP_PKEY_free",
+                    "CTX_new", "CTX_v23_new", "CTX_new_with_method", "CTX_free",
+                    "SSLv23_method", "SSLv23_client_method", "SSLv23_server_method",
+                    "TLSv1_method", "TLS_method", "TLS_client_method", "TLS_server_method",
+                    "SSL_free", "in_connect_init", "in_accept_init",
+                    "CTX_set_min_proto_version", "CTX_set_max_proto_version",
+                    "CTX_get_min_proto_version", "CTX_get_max_proto_version",
+                    "set_min_proto_version", "set_max_proto_version",
+                    "get_min_proto_version", "get_max_proto_version");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing NetSSLeay method: " + e.getMessage());
@@ -814,10 +933,18 @@ public class NetSSLeay extends PerlModuleBase {
     }
 
     public static RuntimeList BIO_new_file(RuntimeArray args, int ctx) {
-        // BIO_new_file(filename, mode) - not fully supported, return handle for in-memory
-        long handleId = HANDLE_COUNTER.getAndIncrement();
-        BIO_HANDLES.put(handleId, new MemoryBIO());
-        return new RuntimeScalar(handleId).getList();
+        // BIO_new_file(filename, mode) - create BIO and load file contents
+        String filename = args.size() > 0 ? args.get(0).toString() : "";
+        try {
+            byte[] fileData = Files.readAllBytes(Paths.get(filename));
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            MemoryBIO bio = new MemoryBIO();
+            bio.write(fileData);
+            BIO_HANDLES.put(handleId, bio);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList(); // return 0 (false) on failure
+        }
     }
 
     public static RuntimeList BIO_free(RuntimeArray args, int ctx) {
@@ -1389,6 +1516,10 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(CONSTANTS.get("TLS1_VERSION")).getList();
     }
 
+    public static RuntimeList SSL3_VERSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(CONSTANTS.get("SSL3_VERSION")).getList();
+    }
+
     public static RuntimeList TLS1_1_VERSION(RuntimeArray args, int ctx) {
         return new RuntimeScalar(CONSTANTS.get("TLS1_1_VERSION")).getList();
     }
@@ -1541,5 +1672,504 @@ public class NetSSLeay extends PerlModuleBase {
 
     public static RuntimeList OPENSSL_VERSION_STRING(RuntimeArray args, int ctx) {
         return new RuntimeScalar(CONSTANTS.get("OPENSSL_VERSION_STRING")).getList();
+    }
+
+    // ---- ASN1_TIME functions (backed by epoch seconds + java.time formatting) ----
+
+    public static RuntimeList ASN1_TIME_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_TIME_HANDLES.put(handleId, 0L); // epoch 0 initially
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList ASN1_TIME_set(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handleId = args.get(0).getLong();
+        long epoch = args.get(1).getLong();
+        if (!ASN1_TIME_HANDLES.containsKey(handleId)) return new RuntimeScalar(0).getList();
+        ASN1_TIME_HANDLES.put(handleId, epoch);
+        return new RuntimeScalar(handleId).getList(); // returns the time pointer on success
+    }
+
+    public static RuntimeList ASN1_TIME_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        ASN1_TIME_HANDLES.remove(handleId);
+        return new RuntimeScalar().getList();
+    }
+
+    // Format: "May 16 20:39:37 2033 GMT"
+    private static final DateTimeFormatter ASN1_TIME_FMT = DateTimeFormatter.ofPattern(
+            "MMM dd HH:mm:ss yyyy 'GMT'", Locale.ENGLISH);
+
+    public static RuntimeList P_ASN1_TIME_put2string(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        Long epoch = ASN1_TIME_HANDLES.get(handleId);
+        if (epoch == null) return new RuntimeScalar().getList();
+        ZonedDateTime zdt = Instant.ofEpochSecond(epoch).atZone(ZoneOffset.UTC);
+        // Ensure single-space padding for day (not zero-padded): "May  6" not "May 06"
+        String formatted = zdt.format(ASN1_TIME_FMT);
+        return new RuntimeScalar(formatted).getList();
+    }
+
+    public static RuntimeList P_ASN1_UTCTIME_put2string(RuntimeArray args, int ctx) {
+        // Same as P_ASN1_TIME_put2string for our purposes
+        return P_ASN1_TIME_put2string(args, ctx);
+    }
+
+    public static RuntimeList P_ASN1_TIME_get_isotime(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        Long epoch = ASN1_TIME_HANDLES.get(handleId);
+        if (epoch == null) return new RuntimeScalar().getList();
+        String iso = Instant.ofEpochSecond(epoch).toString(); // e.g. "2033-05-16T20:39:37Z"
+        return new RuntimeScalar(iso).getList();
+    }
+
+    public static RuntimeList P_ASN1_TIME_set_isotime(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handleId = args.get(0).getLong();
+        String isoTime = args.get(1).toString();
+        if (!ASN1_TIME_HANDLES.containsKey(handleId)) return new RuntimeScalar(0).getList();
+        try {
+            long epoch = Instant.parse(isoTime).getEpochSecond();
+            ASN1_TIME_HANDLES.put(handleId, epoch);
+            return new RuntimeScalar(1).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    public static RuntimeList X509_gmtime_adj(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handleId = args.get(0).getLong();
+        long offsetSeconds = args.get(1).getLong();
+        if (!ASN1_TIME_HANDLES.containsKey(handleId)) return new RuntimeScalar(0).getList();
+        long epoch = Instant.now().getEpochSecond() + offsetSeconds;
+        ASN1_TIME_HANDLES.put(handleId, epoch);
+        return new RuntimeScalar(handleId).getList(); // returns the time pointer on success
+    }
+
+    // ---- BIO_new_file fix: actually read file contents ----
+
+    // Override the existing BIO_new_file to load file data into a MemoryBIO
+    // (The old implementation created an empty BIO — now we read the actual file)
+
+    // ---- PEM_read_bio_PrivateKey (parse PEM private key from BIO) ----
+
+    public static RuntimeList PEM_read_bio_PrivateKey(RuntimeArray args, int ctx) {
+        // PEM_read_bio_PrivateKey($bio, [$cb_or_undef], [$password])
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+
+        // Get password (from callback or direct string)
+        String password = null;
+        if (args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF) {
+            password = args.get(2).toString();
+        } else if (args.size() > 1 && args.get(1).type == RuntimeScalarType.CODE) {
+            // Call callback to get password
+            RuntimeArray cbArgs = new RuntimeArray();
+            RuntimeList resultList = RuntimeCode.apply(args.get(1), cbArgs, RuntimeContextType.SCALAR);
+            password = resultList.getFirst().toString();
+        }
+
+        try {
+            // Read all BIO data as string
+            byte[] allData = bio.read(bio.pending());
+            String pem = new String(allData, StandardCharsets.ISO_8859_1);
+
+            // Parse PEM
+            byte[] derBytes = parsePemPrivateKey(pem, password);
+            if (derBytes == null) return new RuntimeScalar().getList();
+
+            // Parse the DER-encoded key
+            PrivateKey privKey = parsePrivateKeyDer(derBytes);
+            if (privKey == null) return new RuntimeScalar().getList();
+
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            EVP_PKEY_HANDLES.put(handleId, privKey);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList(); // return undef on any error
+        }
+    }
+
+    public static RuntimeList EVP_PKEY_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        EVP_PKEY_HANDLES.remove(handleId);
+        return new RuntimeScalar().getList();
+    }
+
+    // Parse PEM text, handling encrypted or unencrypted RSA private keys
+    private static byte[] parsePemPrivateKey(String pem, String password) throws Exception {
+        // Strip headers/footers and collect base64 data
+        String[] lines = pem.split("\n");
+        StringBuilder b64 = new StringBuilder();
+        boolean inBody = false;
+        boolean encrypted = false;
+        String dekInfo = null;
+
+        for (String line : lines) {
+            line = line.trim();
+            if (line.startsWith("-----BEGIN")) {
+                inBody = true;
+                continue;
+            }
+            if (line.startsWith("-----END")) {
+                break;
+            }
+            if (!inBody) continue;
+            if (line.startsWith("Proc-Type:") && line.contains("ENCRYPTED")) {
+                encrypted = true;
+                continue;
+            }
+            if (line.startsWith("DEK-Info:")) {
+                dekInfo = line.substring("DEK-Info:".length()).trim();
+                continue;
+            }
+            if (line.isEmpty()) continue;
+            b64.append(line);
+        }
+
+        byte[] derData = Base64.getDecoder().decode(b64.toString());
+
+        if (encrypted) {
+            if (password == null || password.isEmpty()) return null;
+            if (dekInfo == null) return null;
+            derData = decryptPemBody(derData, dekInfo, password);
+            if (derData == null) return null;
+        }
+
+        return derData;
+    }
+
+    // Decrypt an encrypted PEM body using DEK-Info header
+    private static byte[] decryptPemBody(byte[] encrypted, String dekInfo, String password) {
+        try {
+            // Parse DEK-Info: "AES-128-CBC,<hex IV>"
+            String[] parts = dekInfo.split(",", 2);
+            if (parts.length < 2) return null;
+            String algorithm = parts[0].trim();
+            byte[] iv = hexToBytes(parts[1].trim());
+
+            // Determine cipher and key length
+            String cipherAlg;
+            int keyLen;
+            if (algorithm.startsWith("AES-128")) {
+                cipherAlg = "AES/CBC/PKCS5Padding";
+                keyLen = 16;
+            } else if (algorithm.startsWith("AES-192")) {
+                cipherAlg = "AES/CBC/PKCS5Padding";
+                keyLen = 24;
+            } else if (algorithm.startsWith("AES-256")) {
+                cipherAlg = "AES/CBC/PKCS5Padding";
+                keyLen = 32;
+            } else if (algorithm.startsWith("DES-EDE3")) {
+                cipherAlg = "DESede/CBC/PKCS5Padding";
+                keyLen = 24;
+            } else if (algorithm.startsWith("DES-CBC") || algorithm.equals("DES")) {
+                cipherAlg = "DES/CBC/PKCS5Padding";
+                keyLen = 8;
+            } else {
+                return null; // unsupported algorithm
+            }
+
+            // Derive key using OpenSSL EVP_BytesToKey (MD5-based)
+            byte[] key = evpBytesToKey(password, iv, keyLen);
+
+            // Decrypt
+            String keyAlg = cipherAlg.startsWith("DESede") ? "DESede"
+                    : cipherAlg.startsWith("DES") ? "DES" : "AES";
+            Cipher cipher = Cipher.getInstance(cipherAlg);
+            cipher.init(Cipher.DECRYPT_MODE,
+                    new SecretKeySpec(key, keyAlg),
+                    new IvParameterSpec(iv));
+            return cipher.doFinal(encrypted);
+        } catch (Exception e) {
+            return null; // decryption failed (wrong password, etc.)
+        }
+    }
+
+    // OpenSSL EVP_BytesToKey key derivation (MD5-based)
+    private static byte[] evpBytesToKey(String password, byte[] salt, int keyLen) throws Exception {
+        MessageDigest md5 = MessageDigest.getInstance("MD5");
+        byte[] passBytes = password.getBytes(StandardCharsets.ISO_8859_1);
+        byte[] key = new byte[keyLen];
+        byte[] d = new byte[0];
+        int offset = 0;
+        while (offset < keyLen) {
+            md5.reset();
+            if (d.length > 0) md5.update(d);
+            md5.update(passBytes);
+            md5.update(salt, 0, Math.min(8, salt.length));
+            d = md5.digest();
+            int toCopy = Math.min(d.length, keyLen - offset);
+            System.arraycopy(d, 0, key, offset, toCopy);
+            offset += toCopy;
+        }
+        return key;
+    }
+
+    // Parse DER-encoded private key (PKCS#1 RSA or PKCS#8)
+    private static PrivateKey parsePrivateKeyDer(byte[] der) {
+        // First try PKCS#8 format
+        try {
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(der);
+            return KeyFactory.getInstance("RSA").generatePrivate(spec);
+        } catch (Exception e) {
+            // Not PKCS#8, try wrapping as PKCS#1 → PKCS#8
+        }
+        try {
+            byte[] pkcs8 = wrapPkcs1InPkcs8(der);
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
+            return KeyFactory.getInstance("RSA").generatePrivate(spec);
+        } catch (Exception e) {
+            // Also try EC
+        }
+        try {
+            byte[] pkcs8 = wrapPkcs1InPkcs8(der);
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
+            return KeyFactory.getInstance("EC").generatePrivate(spec);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // Wrap PKCS#1 RSA key in PKCS#8 envelope
+    private static byte[] wrapPkcs1InPkcs8(byte[] pkcs1) {
+        // AlgorithmIdentifier for RSA: SEQUENCE { OID 1.2.840.113549.1.1.1, NULL }
+        byte[] rsaOid = {0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01};
+        byte[] nullTag = {0x05, 0x00};
+        byte[] algId = derSequence(derConcat(rsaOid, nullTag));
+        byte[] version = {0x02, 0x01, 0x00}; // INTEGER 0
+        byte[] octetString = derTag(0x04, pkcs1); // OCTET STRING wrapping PKCS#1
+        return derSequence(derConcat(version, algId, octetString));
+    }
+
+    // DER encoding helpers
+    private static byte[] derSequence(byte[] content) {
+        return derTag(0x30, content);
+    }
+
+    private static byte[] derTag(int tag, byte[] content) {
+        byte[] lenBytes = derLength(content.length);
+        byte[] result = new byte[1 + lenBytes.length + content.length];
+        result[0] = (byte) tag;
+        System.arraycopy(lenBytes, 0, result, 1, lenBytes.length);
+        System.arraycopy(content, 0, result, 1 + lenBytes.length, content.length);
+        return result;
+    }
+
+    private static byte[] derLength(int length) {
+        if (length < 128) {
+            return new byte[]{(byte) length};
+        } else if (length < 256) {
+            return new byte[]{(byte) 0x81, (byte) length};
+        } else {
+            return new byte[]{(byte) 0x82, (byte) (length >> 8), (byte) (length & 0xff)};
+        }
+    }
+
+    private static byte[] derConcat(byte[]... arrays) {
+        int totalLen = 0;
+        for (byte[] a : arrays) totalLen += a.length;
+        byte[] result = new byte[totalLen];
+        int pos = 0;
+        for (byte[] a : arrays) {
+            System.arraycopy(a, 0, result, pos, a.length);
+            pos += a.length;
+        }
+        return result;
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    // ---- SSL_CTX functions ----
+
+    private static String roleFromMethod(long method) {
+        if (method == METHOD_SSLv23_CLIENT || method == METHOD_TLS_CLIENT) return "client";
+        if (method == METHOD_SSLv23_SERVER || method == METHOD_TLS_SERVER) return "server";
+        return "generic";
+    }
+
+    public static RuntimeList CTX_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        CTX_HANDLES.put(handleId, new SslCtxState("generic"));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList CTX_v23_new(RuntimeArray args, int ctx) {
+        return CTX_new(args, ctx);
+    }
+
+    public static RuntimeList CTX_new_with_method(RuntimeArray args, int ctx) {
+        long method = args.size() > 0 ? args.get(0).getLong() : METHOD_TLS;
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        CTX_HANDLES.put(handleId, new SslCtxState(roleFromMethod(method)));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList CTX_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        CTX_HANDLES.remove(handleId);
+        return new RuntimeScalar().getList();
+    }
+
+    // SSL method functions — return sentinel values
+    public static RuntimeList SSLv23_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_SSLv23).getList();
+    }
+
+    public static RuntimeList SSLv23_client_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_SSLv23_CLIENT).getList();
+    }
+
+    public static RuntimeList SSLv23_server_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_SSLv23_SERVER).getList();
+    }
+
+    public static RuntimeList TLSv1_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_TLSv1).getList();
+    }
+
+    public static RuntimeList TLS_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_TLS).getList();
+    }
+
+    public static RuntimeList TLS_client_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_TLS_CLIENT).getList();
+    }
+
+    public static RuntimeList TLS_server_method(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(METHOD_TLS_SERVER).getList();
+    }
+
+    // ---- SSL functions ----
+
+    public static RuntimeList SSL_new(RuntimeArray args, int ctx) {
+        // Net::SSLeay::new($ctx) — create an SSL handle from a CTX
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        SSL_HANDLES.put(handleId, new SslState(ctxState));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList SSL_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        SSL_HANDLES.remove(handleId);
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList in_connect_init(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handleId = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(handleId);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        // Client SSLs are in connect init, server SSLs are not
+        return new RuntimeScalar("server".equals(ssl.role) ? 0 : 1).getList();
+    }
+
+    public static RuntimeList in_accept_init(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handleId = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(handleId);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        // Server SSLs are in accept init, client SSLs are not
+        return new RuntimeScalar("server".equals(ssl.role) ? 1 : 0).getList();
+    }
+
+    // ---- Protocol version get/set ----
+
+    public static RuntimeList CTX_set_min_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        long version = args.get(1).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar(0).getList();
+        if (!VALID_PROTO_VERSIONS.contains(version)) return new RuntimeScalar(0).getList();
+        ctxState.minProtoVersion = version;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList CTX_set_max_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        long version = args.get(1).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar(0).getList();
+        if (!VALID_PROTO_VERSIONS.contains(version)) return new RuntimeScalar(0).getList();
+        ctxState.maxProtoVersion = version;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList CTX_get_min_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(ctxState.minProtoVersion).getList();
+    }
+
+    public static RuntimeList CTX_get_max_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(ctxState.maxProtoVersion).getList();
+    }
+
+    public static RuntimeList set_min_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long sslHandle = args.get(0).getLong();
+        long version = args.get(1).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        if (!VALID_PROTO_VERSIONS.contains(version)) return new RuntimeScalar(0).getList();
+        ssl.minProtoVersion = version;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList set_max_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long sslHandle = args.get(0).getLong();
+        long version = args.get(1).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        if (!VALID_PROTO_VERSIONS.contains(version)) return new RuntimeScalar(0).getList();
+        ssl.maxProtoVersion = version;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList get_min_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long sslHandle = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(ssl.minProtoVersion).getList();
+    }
+
+    public static RuntimeList get_max_proto_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long sslHandle = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(ssl.maxProtoVersion).getList();
     }
 }
