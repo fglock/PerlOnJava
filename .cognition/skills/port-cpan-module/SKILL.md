@@ -221,11 +221,33 @@ as Perl itself.
    ./jperl /tmp/test.pl
    ```
 
-3. **Build and verify:**
+3. **Install/test modules with `jcpan`:**
+
+   Use `./jcpan` to install and test CPAN modules:
+   ```bash
+   ./jcpan Module::Name            # Install a module
+   ./jcpan -t Module::Name         # Test a module (download + install + run upstream tests)
+   ```
+   `jcpan` installs modules into the `.perlonjava/` directory in the project root.
+
+4. **Build and verify:**
    ```bash
    make dev   # Quick build (no tests)
    ./jperl -e 'use Module::Name; ...'
    make       # Full build with tests before committing
+   ```
+
+5. **Cleanup `.perlonjava/` after bundling:**
+
+   When all tests pass and the module is bundled into the project (i.e. its `.pm` and
+   `.java` files are in `src/main/perl/lib/` and `src/main/java/`), remove the
+   `.perlonjava/` directory so the bundled version is used instead of the jcpan-installed copy:
+   ```bash
+   rm -rf .perlonjava/
+   ```
+   Then verify the bundled version loads correctly:
+   ```bash
+   ./jperl -e 'use Module::Name; print "ok\n"'
    ```
 
 ## Common Patterns
@@ -389,6 +411,10 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Test edge cases identified in XS code
 - [ ] Run bundled module tests if applicable: `make test-bundled-modules`
 - [ ] Run upstream CPAN tests if applicable: `./jcpan -t Module::Name`
+
+### Cleanup
+- [ ] Remove `.perlonjava/` directory so the bundled version is used: `rm -rf .perlonjava/`
+- [ ] Verify bundled version loads: `./jperl -e 'use Module::Name; print "ok\n"'`
 
 ### Documentation
 - [ ] Add POD with AUTHOR and COPYRIGHT sections
