@@ -327,6 +327,7 @@ public class EmitBlock {
                                 "(I)V", false);
                     }
                 }
+
             }
         } finally {
             if (preEvalForNode != null) {

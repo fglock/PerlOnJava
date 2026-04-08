@@ -732,6 +732,8 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
+            // (Return-path cleanup is emitted at each 'return' site in handleReturnOperator.)
+
             // Check for non-local control flow markers (LAST/NEXT/REDO/GOTO).
             // TAILCALL is now handled at call sites, so we only see non-TAILCALL markers here.
             // For eval blocks, these are errors. For normal subs, we just propagate (return with marker).

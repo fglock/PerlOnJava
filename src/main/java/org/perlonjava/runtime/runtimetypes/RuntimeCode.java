@@ -2023,6 +2023,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // Flush deferred mortal decrements from the caller's previous statement.
+        // This is the secondary flush point — ensures DESTROY fires before the
+        // callee runs, even if no assignment occurred between statements.
+        MortalList.flush();
+
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), a, callContext);
@@ -2272,6 +2277,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
+        MortalList.flush();
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
@@ -2439,6 +2445,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
+        MortalList.flush();
 
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {

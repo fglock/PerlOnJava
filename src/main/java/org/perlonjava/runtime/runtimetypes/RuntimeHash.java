@@ -455,6 +455,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(k);
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
+                    // Schedule deferred refCount decrement — fires at next safe point
+                    // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
+                    // when the caller captures the return value.
+                    MortalList.deferDecrementIfTracked(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();
@@ -474,6 +478,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(key);
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
+                    // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
+                    MortalList.deferDecrementIfTracked(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();

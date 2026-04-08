@@ -248,6 +248,27 @@ public class EmitControlFlow {
             }
         }
 
+        // Defer refCount decrements for blessed my-scalars in scope.
+        // Explicit 'return' jumps to returnLabel, bypassing per-scope
+        // emitScopeExitNullStores. Without this, local variables holding blessed
+        // references keep refCount > 0 after the method returns, preventing DESTROY.
+        // Spill the return value, emit cleanup, then reload.
+        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(0);
+        if (!scalarIndices.isEmpty()) {
+            JavaClassInfo.SpillRef spillRef = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
+            ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
+            for (int idx : scalarIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "deferDecrementIfTracked",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
+            ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+            ctx.javaClassInfo.releaseSpillRef(spillRef);
+        }
+
         ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
     }

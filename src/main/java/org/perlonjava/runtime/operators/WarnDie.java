@@ -488,6 +488,8 @@ public class WarnDie {
             System.err.println(errorMessage);
             throw new PerlExitException(1);
         }
+        // Global destruction: walk stashes for tracked blessed objects
+        GlobalDestruction.runGlobalDestruction();
         RuntimeIO.closeAllHandles();
         // Use $? as the final exit code - END blocks may have modified it
         int finalExitCode = getGlobalVariable("main::?").getInt();

@@ -13,6 +13,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // Index to the class that this reference belongs
     public int blessId;
 
+    // Reference count for blessed objects with DESTROY.
+    // Four-state lifecycle counter:
+    //   -1                = Not tracked (unblessed, or blessed without DESTROY)
+    //    0                = Tracked, zero counted containers (fresh from bless)
+    //   >0                = Being tracked; N named-variable containers exist
+    //   Integer.MIN_VALUE = DESTROY already called (or in progress)
+    // MUST be explicitly initialized to -1 (Java defaults int to 0, which would
+    // mean "tracked, zero containers" — silently breaking all unblessed objects).
+    public int refCount = -1;
+
     /**
      * Adds this entity to the specified RuntimeList.
      *

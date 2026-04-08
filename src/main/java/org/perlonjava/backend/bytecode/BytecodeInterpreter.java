@@ -156,6 +156,18 @@ public class BytecodeInterpreter {
                                 // No operation
                             }
 
+                            case Opcodes.MORTAL_FLUSH -> {
+                                // Flush deferred mortal decrements (FREETMPS equivalent)
+                                MortalList.flush();
+                            }
+
+                            case Opcodes.SCOPE_EXIT_CLEANUP -> {
+                                // Scope-exit cleanup for a my-scalar register
+                                int reg = bytecode[pc++];
+                                RuntimeScalar.scopeExitCleanup((RuntimeScalar) registers[reg]);
+                                registers[reg] = null;
+                            }
+
                             case Opcodes.RETURN -> {
                                 // Return from subroutine: return rd
                                 int retReg = bytecode[pc++];

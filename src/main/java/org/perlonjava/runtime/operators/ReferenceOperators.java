@@ -32,7 +32,25 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            ((RuntimeBase) runtimeScalar.value).setBlessId(NameNormalizer.getBlessId(str));
+
+            RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
+            int newBlessId = NameNormalizer.getBlessId(str);
+
+            if (referent.refCount >= 0) {
+                // Re-bless: update class, keep refCount
+                referent.setBlessId(newBlessId);
+                if (!DestroyDispatch.classHasDestroy(newBlessId, str)) {
+                    // New class has no DESTROY — stop tracking
+                    referent.refCount = -1;
+                }
+            } else {
+                // First bless (or previously untracked)
+                referent.setBlessId(newBlessId);
+                if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
+                    referent.refCount = 0;  // Start tracking (zero containers counted)
+                }
+                // If no DESTROY, leave refCount = -1 (untracked)
+            }
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");
         }

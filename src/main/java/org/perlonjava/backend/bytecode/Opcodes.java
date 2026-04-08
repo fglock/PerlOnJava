@@ -2198,6 +2198,20 @@ public class Opcodes {
      */
     public static final short RETURN_NONLOCAL = 461;
 
+    /**
+     * Flush deferred mortal decrements at statement boundary.
+     * Equivalent to Perl 5's FREETMPS.
+     * Format: MORTAL_FLUSH (no operands)
+     */
+    public static final short MORTAL_FLUSH = 462;
+
+    /**
+     * Scope-exit cleanup for a my-scalar register.
+     * Calls RuntimeScalar.scopeExitCleanup() and nulls the register.
+     * Format: SCOPE_EXIT_CLEANUP reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP = 463;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

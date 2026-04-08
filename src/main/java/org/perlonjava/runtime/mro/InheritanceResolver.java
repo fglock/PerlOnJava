@@ -146,6 +146,8 @@ public class InheritanceResolver {
         isaStateCache.clear();
         // Also clear the inline method cache in RuntimeCode
         RuntimeCode.clearInlineMethodCache();
+        // Clear DESTROY-related caches (destroyClasses BitSet and destroyMethodCache)
+        DestroyDispatch.invalidateCache();
     }
 
     /**

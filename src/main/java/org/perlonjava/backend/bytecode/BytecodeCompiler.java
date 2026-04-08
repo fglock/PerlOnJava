@@ -296,7 +296,19 @@ public class BytecodeCompiler implements Visitor {
 
     private void exitScope() {
         if (!scopeIndices.isEmpty()) {
-            symbolTable.exitScope(scopeIndices.pop());
+            int scopeIdx = scopeIndices.pop();
+
+            // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
+            // This calls RuntimeScalar.scopeExitCleanup() which handles:
+            // 1. IO fd recycling for anonymous filehandle globs
+            // 2. refCount decrement for blessed references with DESTROY
+            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+            for (int reg : scalarIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                emitReg(reg);
+            }
+
+            symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
                 nextRegister = savedNextRegister.pop();
             }
@@ -1012,6 +1024,7 @@ public class BytecodeCompiler implements Visitor {
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
             recycleTemporaryRegisters();
+
         }
 
         // Use the saved result reg from the last meaningful statement if subsequent

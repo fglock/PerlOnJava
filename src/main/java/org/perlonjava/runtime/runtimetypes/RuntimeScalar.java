@@ -875,8 +875,35 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldGlob.ioHolderCount--;
         }
 
+        // Track refCount for blessed objects with DESTROY.
+        // Save old referent BEFORE the assignment (for correct DESTROY ordering —
+        // Perl 5 semantics: DESTROY sees the new state of the variable, not the old)
+        RuntimeBase oldBase = null;
+        if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
+            oldBase = (RuntimeBase) this.value;
+        }
+
+        // Increment new value's refCount (>= 0 means tracked; -1 means untracked)
+        if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
+            RuntimeBase nb = (RuntimeBase) value.value;
+            if (nb.refCount >= 0) nb.refCount++;
+        }
+
+        // Do the assignment
         this.type = value.type;
         this.value = value.value;
+
+        // Decrement old value's refCount AFTER assignment
+        if (oldBase != null && oldBase.refCount > 0 && --oldBase.refCount == 0) {
+            oldBase.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(oldBase);
+        }
+
+        // Flush deferred mortal decrements. This is the primary flush point for
+        // the mortal mechanism — called after every assignment involving references.
+        // Cost when MortalList.active is false: one boolean check (trivially predicted).
+        MortalList.flush();
+
         return this;
     }
 
@@ -1821,6 +1848,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             InheritanceResolver.invalidateCache();
             return this;
         }
+
+        // Decrement refCount for blessed references with DESTROY
+        RuntimeBase oldBase = null;
+        if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value instanceof RuntimeBase base
+                && base.refCount > 0) {
+            oldBase = base;
+        }
+
         // Close IO handles when dropping a glob reference.
         // This mimics Perl's internal sv_clear behavior where IO handles are closed
         // when the glob's reference count drops to zero (independent of DESTROY).
@@ -1828,6 +1863,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
+
+        // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
+        if (oldBase != null && --oldBase.refCount == 0) {
+            oldBase.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(oldBase);
+        }
+
         return this;
     }
 
@@ -1906,7 +1948,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @see RuntimeIO#processAbandonedGlobs()
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
+        if (scalar == null) return;
+
+        // Existing: IO fd recycling for anonymous filehandle globs
+        if (scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             RuntimeScalar ioSlot = glob.getIO();
@@ -1918,6 +1963,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 io.unregisterFileno();
             }
         }
+
+        // Defer refCount decrement for blessed references with DESTROY.
+        // Uses MortalList to defer the decrement until the next safe point
+        // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
+        // when the same referent is on the JVM stack as a return value.
+        MortalList.deferDecrementIfTracked(scalar);
     }
 
     public RuntimeScalar defined() {
@@ -2427,6 +2478,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+
+            // Decrement refCount of the CURRENT value being displaced.
+            // Do NOT increment the restored value — it already has the correct
+            // refCount from its original counting (it was never decremented during save).
+            if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && this.value instanceof RuntimeBase displacedBase
+                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                displacedBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(displacedBase);
+            }
+
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = previousState.value;
