@@ -292,6 +292,48 @@ public class NetSSLeay extends PerlModuleBase {
     // Track explicitly loaded providers for do_all iteration
     private static final LinkedHashMap<Long, String> LOADED_PROVIDERS = new LinkedHashMap<>();
 
+    /**
+     * Resets all mutable static state so that tests running in the same JVM
+     * don't leak handles, providers, or other state between each other.
+     * Called from GlobalVariable.resetAllGlobals().
+     */
+    public static void resetState() {
+        HANDLE_COUNTER.set(1);
+        BIO_HANDLES.clear();
+        EVP_MD_CTX_HANDLES.clear();
+        RSA_HANDLES.clear();
+        ASN1_TIME_HANDLES.clear();
+        CTX_HANDLES.clear();
+        SSL_HANDLES.clear();
+        EVP_PKEY_HANDLES.clear();
+        X509_HANDLES.clear();
+        X509_NAME_HANDLES.clear();
+        X509_NAME_ENTRY_HANDLES.clear();
+        ASN1_OBJECT_HANDLES.clear();
+        ASN1_STRING_HANDLES.clear();
+        ASN1_INTEGER_HANDLES.clear();
+        X509_EXT_HANDLES.clear();
+        X509_STORE_HANDLES.clear();
+        X509_STORE_CTX_HANDLES.clear();
+        SK_X509_HANDLES.clear();
+        VERIFY_PARAM_HANDLES.clear();
+        X509_INFO_SK_HANDLES.clear();
+        MUTABLE_X509_HANDLES.clear();
+        X509_REQ_HANDLES.clear();
+        BIGNUM_HANDLES.clear();
+        EVP_CIPHER_HANDLES.clear();
+        EC_KEY_HANDLES.clear();
+        CRL_HANDLES.clear();
+        X509_CRL_HANDLES.clear();
+        CRL_TIME_CACHE.clear();
+        PROVIDER_NAME_TO_HANDLE.clear();
+        PROVIDER_HANDLE_TO_NAME.clear();
+        LIBCTX_HANDLE = 0;
+        retainFallbacks = true;
+        LOADED_PROVIDERS.clear();
+        ERROR_QUEUE.remove();
+    }
+
     // SSL method type sentinels
     private static final long METHOD_SSLv23 = -10L;
     private static final long METHOD_SSLv23_CLIENT = -11L;
@@ -1780,7 +1822,7 @@ public class NetSSLeay extends PerlModuleBase {
         if (maxBytes == -1) {
             // Return actual file size
             try {
-                java.io.File f = new java.io.File(filename);
+                java.io.File f = RuntimeIO.resolvePath(filename).toFile();
                 if (f.exists()) {
                     return new RuntimeScalar(f.length()).getList();
                 }
@@ -1814,7 +1856,7 @@ public class NetSSLeay extends PerlModuleBase {
         // BIO_new_file(filename, mode) - create BIO and load file contents
         String filename = args.size() > 0 ? args.get(0).toString() : "";
         try {
-            byte[] fileData = Files.readAllBytes(Paths.get(filename));
+            byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
             long handleId = HANDLE_COUNTER.getAndIncrement();
             MemoryBIO bio = new MemoryBIO();
             bio.write(fileData);
@@ -2775,7 +2817,7 @@ public class NetSSLeay extends PerlModuleBase {
 
     private static RuntimeList loadPrivateKeyFile(String filename, RuntimeScalar cb, RuntimeScalar ud) {
         try {
-            byte[] fileData = Files.readAllBytes(Paths.get(filename));
+            byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
             String pem = new String(fileData, StandardCharsets.ISO_8859_1);
 
             // Get password via callback
@@ -4619,7 +4661,7 @@ public class NetSSLeay extends PerlModuleBase {
 
             // Try Java KeyStore first
             java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
-            try (java.io.FileInputStream fis = new java.io.FileInputStream(filename)) {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(RuntimeIO.resolvePath(filename).toFile())) {
                 ks.load(fis, passChars);
             }
 
@@ -4692,7 +4734,7 @@ public class NetSSLeay extends PerlModuleBase {
     // Parses the DER structure to extract certificates and unencrypted private keys.
     private static Object[] parsePkcs12Manually(String filename) {
         try {
-            byte[] data = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename));
+            byte[] data = java.nio.file.Files.readAllBytes(RuntimeIO.resolvePath(filename));
             java.security.PrivateKey privKey = null;
             X509Certificate leafCert = null;
             List<X509Certificate> caCerts = new ArrayList<>();

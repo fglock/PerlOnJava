@@ -10,6 +10,7 @@ import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 
@@ -188,7 +189,10 @@ public class ModuleTestExecutionTest {
 
             CompilerOptions options = new CompilerOptions();
             options.code = content;
-            options.fileName = filename;
+            // Set fileName relative to the module directory (CWD) so $0, FindBin, etc. resolve correctly
+            // e.g., "module/Net-SSLeay/t/local/05_passwd_cb.t" -> "t/local/05_passwd_cb.t"
+            Path moduleDirRel = Paths.get("module", filename.split("[/\\\\]")[1]);
+            options.fileName = Paths.get(filename).subpath(moduleDirRel.getNameCount(), Paths.get(filename).getNameCount()).toString();
 
             // Add the path to the Perl modules (absolute path since we changed CWD)
             Path perlLibPath = Paths.get(originalUserDir, "src/main/perl/lib");
@@ -215,6 +219,35 @@ public class ModuleTestExecutionTest {
             }
         } catch (Exception e) {
             Throwable rootCause = getRootCause(e);
+
+            // Handle PerlExitException: exit(0) is success, non-zero is failure
+            if (rootCause instanceof PerlExitException exitException) {
+                if (exitException.getExitCode() != 0) {
+                    // Check TAP output for details before failing
+                    String output = outputStream.toString();
+                    for (String line : output.lines().toList()) {
+                        if (line.trim().startsWith("not ok") && !line.contains("# TODO")) {
+                            fail("Test failure in " + filename + " (exit " + exitException.getExitCode() + "): " + line);
+                            return;
+                        }
+                    }
+                    fail("Test " + filename + " exited with code " + exitException.getExitCode());
+                }
+                // exit(0) — check TAP output for any failures before declaring success
+                String output = outputStream.toString();
+                for (String line : output.lines().toList()) {
+                    if (line.trim().startsWith("not ok") && !line.contains("# TODO")) {
+                        fail("Test failure in " + filename + ": " + line);
+                        return;
+                    }
+                    if (line.trim().startsWith("Bail out!")) {
+                        fail("Test bailed out in " + filename + ": " + line);
+                        return;
+                    }
+                }
+                return;  // exit(0) with clean TAP = success
+            }
+
             System.err.println("Root cause error in " + filename + ":");
             rootCause.printStackTrace(System.err);
             String msg = rootCause.getMessage();

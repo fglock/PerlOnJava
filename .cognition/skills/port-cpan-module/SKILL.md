@@ -8,6 +8,15 @@
 - INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
 - This warning exists because completed work was lost during debugging
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER MODIFY OR DELETE TESTS ⚠️⚠️⚠️
+
+**Tests are the source of truth. If a test fails, fix the code, not the test.**
+
+- NEVER remove a test file because it fails — fix the underlying bug instead
+- NEVER edit a test to make it pass — the test defines correct behavior
+- If a test cannot pass yet due to a known limitation, leave it in place and document the issue
+- This applies to ALL tests: unit tests, bundled module tests, and upstream CPAN tests
+
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
 ## When to Use This Skill
