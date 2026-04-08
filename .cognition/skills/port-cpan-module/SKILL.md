@@ -181,15 +181,25 @@ as Perl itself.
 | `make dev` | Build only, skip tests (for quick iteration during development) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
-1. **Create test files in `src/test/resources/module/`:**
+1. **Add tests to `src/test/resources/module/`:**
 
-   Tests for bundled modules go under `src/test/resources/module/Module-Name/t/`.
-   Follow the existing pattern (see `module/XML-Parser/t/` for reference).
-   Support files (sample data, configs) go in `module/Module-Name/t/samples/` or similar.
+   Every bundled module MUST have tests in `src/test/resources/module/Module-Name/t/`.
+   This is how CI verifies the module keeps working across changes.
+
+   **How to populate the test directory:**
+   - Download the upstream CPAN distribution (e.g. from MetaCPAN or via `./jcpan`)
+   - Copy the `t/` directory from the distribution into `src/test/resources/module/Module-Name/t/`
+   - Also copy any support files the tests need (sample data, test certificates, etc.)
+   - All included tests MUST pass: `make test-bundled-modules`
 
    ```
    src/test/resources/module/
-   └── Module-Name/
+   ├── XML-Parser/          # existing example
+   │   └── t/
+   │       ├── cdata.t
+   │       ├── encoding.t
+   │       └── samples/
+   └── Module-Name/         # your new module
        └── t/
            ├── basic.t
            ├── feature.t
@@ -412,7 +422,8 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code
-- [ ] Run bundled module tests if applicable: `make test-bundled-modules`
+- [ ] Copy upstream CPAN tests into `src/test/resources/module/Module-Name/t/`
+- [ ] Run bundled module tests: `make test-bundled-modules`
 - [ ] Run upstream CPAN tests if applicable: `./jcpan -t Module::Name`
 
 ### Cleanup
