@@ -35,11 +35,9 @@ public class DestroyDispatch {
     public static boolean classHasDestroy(int blessId, String className) {
         int idx = Math.abs(blessId);
         if (destroyClasses.get(idx)) return true;
-        // First time for this class — check hierarchy
+        // First time for this class — check hierarchy.
+        // findMethodInHierarchy already falls through to AUTOLOAD if no explicit DESTROY exists.
         RuntimeScalar m = InheritanceResolver.findMethodInHierarchy("DESTROY", className, null, 0);
-        if (m == null) {
-            m = InheritanceResolver.findMethodInHierarchy("AUTOLOAD", className, null, 0);
-        }
         if (m != null) {
             destroyClasses.set(idx);
             // Activate the mortal mechanism now that we know DESTROY classes exist
@@ -91,13 +89,16 @@ public class DestroyDispatch {
         }
 
         if (destroyMethod == null || destroyMethod.type != RuntimeScalarType.CODE) {
-            // No DESTROY — check AUTOLOAD
-            RuntimeScalar autoloadRef = InheritanceResolver.findMethodInHierarchy(
-                    "AUTOLOAD", className, null, 0);
-            if (autoloadRef == null) return;
-            GlobalVariable.getGlobalVariable(className + "::AUTOLOAD")
-                    .set(new RuntimeScalar(className + "::DESTROY"));
-            destroyMethod = autoloadRef;
+            return; // No DESTROY and no AUTOLOAD found
+        }
+
+        // If findMethodInHierarchy returned an AUTOLOAD sub (because no explicit DESTROY
+        // exists), we need to set $AUTOLOAD before calling it. The method resolver sets
+        // autoloadVariableName on the RuntimeCode when it falls through to the AUTOLOAD pass.
+        RuntimeCode code = (RuntimeCode) destroyMethod.value;
+        if (code.autoloadVariableName != null) {
+            String fullMethodName = className + "::DESTROY";
+            GlobalVariable.getGlobalVariable(code.autoloadVariableName).set(fullMethodName);
         }
 
         try {
@@ -128,6 +129,23 @@ public class DestroyDispatch {
             RuntimeArray args = new RuntimeArray();
             args.push(self);
             RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+
+            // Cascading destruction: after DESTROY runs, walk the destroyed object's
+            // internal fields for any blessed references and defer their refCount
+            // decrements. This ensures nested objects (e.g., $self->{inner}) are
+            // destroyed when their parent is destroyed.
+            // 
+            // Note: RuntimeCode.apply() calls MortalList.flush() at the top, which
+            // clears all pending entries. So we must walk AFTER apply returns and
+            // process the cascading entries immediately (flush them inline) rather
+            // than relying on the caller's popAndFlush loop to pick them up.
+            if (referent instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeArray arr) {
+                MortalList.scopeExitCleanupArray(arr);
+                MortalList.flush();
+            }
 
             // Restore saved globals
             GlobalVariable.getGlobalVariable("main::@").type = savedDollarAt.type;

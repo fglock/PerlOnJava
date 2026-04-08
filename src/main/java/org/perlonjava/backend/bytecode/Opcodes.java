@@ -2226,6 +2226,22 @@ public class Opcodes {
      */
     public static final short MORTAL_POP_FLUSH = 465;
 
+    /**
+     * Scope-exit cleanup for a my-hash register.
+     * Walks hash values recursively for tracked blessed references
+     * and defers refCount decrements via MortalList.
+     * Format: SCOPE_EXIT_CLEANUP_HASH reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP_HASH = 466;
+
+    /**
+     * Scope-exit cleanup for a my-array register.
+     * Walks array elements recursively for tracked blessed references
+     * and defers refCount decrements via MortalList.
+     * Format: SCOPE_EXIT_CLEANUP_ARRAY reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP_ARRAY = 467;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -453,10 +453,17 @@ public class Operator {
                 // Ensure length is within bounds
                 length = Math.min(length, size - offset);
 
-                // Remove elements
+                // Remove elements — defer refCount decrement for tracked blessed refs.
+                // The removed elements are returned to the caller, which stores them
+                // in a new container (incrementing refCount). The deferred decrement
+                // accounts for the removal from the source array.
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
                     RuntimeBase removed = runtimeArray.elements.remove(offset);
-                    removedElements.elements.add(removed != null ? removed : new RuntimeScalar());
+                    if (removed != null) {
+                        removedElements.elements.add(removed);
+                    } else {
+                        removedElements.elements.add(new RuntimeScalar());
+                    }
                 }
 
                 // Add new elements

@@ -102,7 +102,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
-                yield result != null ? result : scalarUndef;
+                if (result != null) {
+                    yield result;
+                }
+                yield scalarUndef;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
@@ -128,7 +131,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
-                yield result != null ? result : scalarUndef;
+                if (result != null) {
+                    yield result;
+                }
+                yield scalarUndef;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);

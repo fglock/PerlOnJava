@@ -327,6 +327,18 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(reg);
             }
 
+            // Walk hash/array variables for nested blessed references.
+            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
+            for (int reg : hashIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                emitReg(reg);
+            }
+            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+            for (int reg : arrayIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                emitReg(reg);
+            }
+
             // Pop mark and flush only entries added since the mark
             if (flush) {
                 emit(Opcodes.MORTAL_POP_FLUSH);

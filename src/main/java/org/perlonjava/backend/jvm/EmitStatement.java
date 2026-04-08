@@ -109,6 +109,27 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                     false);
         }
+        // Phase 1b: Walk hash/array variables for nested blessed references.
+        // When a hash/array goes out of scope, any blessed refs stored inside
+        // (or nested inside sub-containers) need their refCounts decremented.
+        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
+        for (int idx : arrayIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                    false);
+        }
         // Phase 2: Null all my variable slots to help GC collect associated objects.
         // For anonymous filehandle globs, this makes them unreachable so the
         // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.

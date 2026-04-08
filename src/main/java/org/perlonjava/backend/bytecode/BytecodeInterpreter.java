@@ -178,6 +178,20 @@ public class BytecodeInterpreter {
                                 registers[reg] = null;
                             }
 
+                            case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
+                                // Scope-exit cleanup for a my-hash register
+                                int reg = bytecode[pc++];
+                                MortalList.scopeExitCleanupHash((RuntimeHash) registers[reg]);
+                                registers[reg] = null;
+                            }
+
+                            case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
+                                // Scope-exit cleanup for a my-array register
+                                int reg = bytecode[pc++];
+                                MortalList.scopeExitCleanupArray((RuntimeArray) registers[reg]);
+                                registers[reg] = null;
+                            }
+
                             case Opcodes.RETURN -> {
                                 // Return from subroutine: return rd
                                 int retReg = bytecode[pc++];

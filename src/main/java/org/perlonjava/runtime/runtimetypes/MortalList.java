@@ -80,6 +80,63 @@ public class MortalList {
         }
     }
 
+    /**
+     * Recursively walk a RuntimeHash's values and defer refCount decrements
+     * for any tracked blessed references found (including inside nested
+     * arrays/hashes). Called at scope exit for {@code my %hash} variables.
+     */
+    public static void scopeExitCleanupHash(RuntimeHash hash) {
+        if (!active || hash == null) return;
+        for (RuntimeScalar val : hash.elements.values()) {
+            deferDecrementRecursive(val);
+        }
+    }
+
+    /**
+     * Recursively walk a RuntimeArray's elements and defer refCount decrements
+     * for any tracked blessed references found (including inside nested
+     * arrays/hashes). Called at scope exit for {@code my @array} variables.
+     */
+    public static void scopeExitCleanupArray(RuntimeArray arr) {
+        if (!active || arr == null) return;
+        for (RuntimeScalar elem : arr.elements) {
+            deferDecrementRecursive(elem);
+        }
+    }
+
+    /**
+     * Recursively process a scalar value: if it holds a reference to a
+     * tracked blessed object, defer a decrement. If it holds a reference
+     * to an unblessed container (array/hash), recurse into its elements.
+     */
+    private static void deferDecrementRecursive(RuntimeScalar scalar) {
+        if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
+        if (!(scalar.value instanceof RuntimeBase base)) return;
+
+        if (base.blessId != 0) {
+            if (base.refCount > 0) {
+                // Blessed and tracked with positive refCount: defer decrement
+                pending.add(base);
+            } else if (base.refCount == 0) {
+                // Blessed but refCount=0: container didn't increment (e.g., anonymous
+                // array constructor). Bump to 1 so flush triggers DESTROY.
+                base.refCount = 1;
+                pending.add(base);
+            }
+        } else {
+            // Unblessed container: recurse into its elements
+            if (base instanceof RuntimeArray arr) {
+                for (RuntimeScalar elem : arr.elements) {
+                    deferDecrementRecursive(elem);
+                }
+            } else if (base instanceof RuntimeHash hash) {
+                for (RuntimeScalar val : hash.elements.values()) {
+                    deferDecrementRecursive(val);
+                }
+            }
+        }
+    }
+
     // Mark stack for scoped flushing (analogous to Perl 5's SAVETMPS).
     // Each mark records the pending list size at scope entry, so that
     // popAndFlush() only processes entries added within that scope.
