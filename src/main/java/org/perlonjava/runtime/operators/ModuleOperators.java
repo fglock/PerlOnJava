@@ -688,6 +688,10 @@ public class ModuleOperators {
             // when execution completes normally. Without this, $@ from inner
             // eval { die ... } blocks would leak through to the caller.
             GlobalVariable.setGlobalVariable("main::@", "");
+        } catch (PerlExitException e) {
+            // Let exit() propagate through do/require - it should terminate the process,
+            // not be caught as a file-loading error
+            throw e;
         } catch (Throwable t) {
             // For require, if there was a compilation failure, we need to handle %INC specially
             if (isRequire && setINC) {

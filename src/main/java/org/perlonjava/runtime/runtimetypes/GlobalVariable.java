@@ -157,6 +157,9 @@ public class GlobalVariable {
             // NetSSLeay not loaded; ignore
         }
 
+        // Reset lib module static state (ORIG_INC)
+        org.perlonjava.runtime.perlmodule.Lib.resetState();
+
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
         globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());

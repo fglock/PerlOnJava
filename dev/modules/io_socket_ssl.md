@@ -109,19 +109,22 @@ Not suitable for CI.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 1 complete
 
 ### Completed
 - [x] Net::SSLeay bundled tests: 92/92 passing (2026-04-08)
 - [x] File path resolution fix in NetSSLeay.java (RuntimeIO.resolvePath)
 - [x] NetSSLeay.resetState() for test isolation
 - [x] ModuleTestExecutionTest.java PerlExitException + FindBin fixes
+- [x] Phase 1: Bundle pure-logic tests (2026-04-08)
+  - 3 public_suffix_lib tests bundled and passing
+  - 01loadmodule.t and verify_hostname_standalone.t excluded: they test
+    the CPAN version (Net::SSLeay-based), not our bundled shim (Java SSLEngine)
+  - Fix: recv() typeglob prototype parsing (comma precedence instead of =~ level)
 
 ### Next Steps
-1. Copy pure-logic test files to `src/test/resources/module/IO-Socket-SSL/t/`
-2. Run `make test-bundled-modules` and investigate failures
-3. Fix any Net::SSLeay or IO::Socket::SSL issues found
-4. Commit and push
+- No further action needed for IO::Socket::SSL test bundling
+- The remaining 36 fork-based tests and 2 network tests are not bundleable
 
 ### Not Planned
 - Fork-based tests (36 tests) — requires fork support
