@@ -1,11 +1,11 @@
 # LWP::Protocol::https Support for PerlOnJava
 
-## Status: Phase 2 + Tier 2 complete, Net::SSLeay 1118/1118 (100% pass), async framework analysis done
+## Status: Phase 2 + Tier 2.5 + Tier 3 Phase 1 complete, Net::SSLeay 1975/1975 (100% pass)
 
 **Branch**: `feature/lwp-protocol-https`
 **PR**: #461
 **Date started**: 2026-04-08
-**Last updated**: 2026-04-08 (Tier 2 complete)
+**Last updated**: 2026-04-08 (Tier 3 Phase 1 complete)
 
 ## Background
 
@@ -52,20 +52,21 @@ and constants are available for code that probes `defined &Net::SSLeay::FOO`.
 
 ## Current Test Results
 
-### Net::SSLeay 1.96 — 1118/1118 subtests pass (100%)
+### Net::SSLeay 1.96 — 1975/1975 subtests pass (100%)
 
 ```
-Files=48, Tests=1118
-9 test programs pass with 0 failures.
-39 test programs bail out (need OpenSSL C API or fork).
+Files=48, Tests=1975
+16 test programs pass with 0 failures.
+4 failing programs (bail out before completing — need unimplemented functions).
+28 programs skip (need fork or threads).
 ```
 
-Key tests all pass: `03_use`, `04_basic`, `20_functions`, `21_constants`,
-`10_rand`, `15_bio`, `30_error`, `31_rsa_generate_key`, `50_digest`.
+Key tests all pass: `03_use`, `04_basic`, `05_passwd_cb`, `09_ctx_new`, `10_rand`,
+`15_bio`, `20_functions`, `21_constants`, `30_error`, `31_rsa_generate_key`,
+`32_x509_get_cert_info` (746/746), `37_asn1_time`, `38_priv-key`, `50_digest`.
 
-All 9 passing test programs have 0 subtest failures. The 39 program failures
-are tests that bail out before running because they need the full OpenSSL C
-API (CTX_new, X509, etc.) or fork. They run 0/N subtests.
+All 16 passing test programs have 0 subtest failures. The 4 failing programs
+bail out on unimplemented functions (PKCS12, CRL, X509 creation, verify params).
 
 ### IO::Socket::SSL 2.098 — Most tests fork-blocked
 
@@ -182,17 +183,80 @@ algorithm names.
 *Previously estimated 2-3 days. Would pass ~5 more test programs and bring
 Net::SSLeay from 1035/1043 to potentially ~1300+ subtests passing.*
 
-**Tier 3 — Full OpenSSL object model (diminishing returns)**
-These require implementing the CTX/SSL/X509 object lifecycle, which is complex
-and provides no benefit since our IO::Socket::SSL uses Java directly:
-- `CTX_new` / `SSL_new` / `set_fd` / `connect` / `read` / `write` / `free`
-- `X509_new` / `X509_set_pubkey` / `X509_sign` (cert creation)
-- `X509_VERIFY_PARAM_*` (verify parameter tuning)
-- Plus most tests need `fork()` for server/client pairs
-- *Effort: 2-3 weeks.  Would still fail tests that need fork.*
+**Tier 2.5 — ASN1_TIME, PEM keys, SSL_CTX/SSL lifecycle (DONE — 1189/1189 subtests pass)**
+Three more test programs now pass (was 9, now 12). 67 additional subtests.
 
-**Recommendation**: Tier 1 and Tier 2 are done. Tier 3 is not justified — the
-effort/reward ratio is poor and fork-dependent tests would still fail.
+| Group | Functions | Java backend | Test file | Subtests | Effort |
+|-------|-----------|-------------|-----------|----------|--------|
+| ASN1_TIME | `ASN1_TIME_new/set/free`, `P_ASN1_TIME_put2string`, `P_ASN1_UTCTIME_put2string`, `P_ASN1_TIME_get_isotime/set_isotime`, `X509_gmtime_adj` | `java.time.Instant` | 37_asn1_time.t | 10 | Easy |
+| PEM keys | `PEM_read_bio_PrivateKey` (unencrypted + encrypted with password callback), `EVP_PKEY_free`, `BIO_new_file` fix (now reads files) | `KeyFactory`, `Cipher` (EVP_BytesToKey KDF) | 38_priv-key.t | 10 | Medium |
+| SSL_CTX/SSL | `CTX_new/v23_new/new_with_method/free`, `SSLv23_method/client/server`, `TLS_method/client/server`, `TLSv1_method`, `SSL_new/free`, `in_connect_init/in_accept_init`, `CTX_set/get_min/max_proto_version`, `set/get_min/max_proto_version`, `SSL3_VERSION` | Opaque handle maps with role + version state | 09_ctx_new.t | 44 | Medium |
+
+**Tier 3 — X509 with BouncyCastle (3 phases)**
+
+Adding BouncyCastle (`bcprov-jdk18on` ~5.8MB, `bcpkix-jdk18on` ~1.1MB) enables
+X509 certificate parsing, creation, signing, and CRL management.
+
+*Phase 1 — X509 reading + password callbacks (DONE — 1975/1975 subtests pass)*
+
+| Group | Functions | Java/BC backend | Test file | Subtests | Status |
+|-------|-----------|----------------|-----------|----------|--------|
+| PEM/X509 parsing | `PEM_read_bio_X509`, `X509_free` | `CertificateFactory` | 32_x509_get_cert_info.t | 746/746 | ✅ |
+| X509 reading | `X509_get_subject/issuer_name`, `X509_get_version/serialNumber`, `X509_get_notBefore/notAfter`, `X509_get_pubkey`, `X509_get_subjectAltNames`, `X509_get_ext_by_NID/get_ext` | `java.security.cert.X509Certificate` | 32_x509_get_cert_info.t | (included) | ✅ |
+| X509_NAME | `X509_NAME_new/hash`, `X509_NAME_oneline`, `X509_NAME_print_ex`, `X509_NAME_entry_count`, `X509_NAME_get_entry`, `X509_NAME_ENTRY_get_data/object` | `X500Principal` + DER parsing | 32_x509_get_cert_info.t | (included) | ✅ |
+| OBJ/NID | `OBJ_obj2nid`, `OBJ_nid2sn`, `OBJ_nid2ln`, `OBJ_obj2txt` | Static NID↔OID lookup table (~40 OIDs) | 32_x509_get_cert_info.t | (included) | ✅ |
+| ASN1 | `P_ASN1_INTEGER_get_hex/dec`, `P_ASN1_STRING_get` (raw bytes + UTF-8 decode) | `BigInteger`, byte[] | 32_x509_get_cert_info.t | (included) | ✅ |
+| X509 digest | `X509_pubkey_digest` (BIT STRING extraction), `X509_digest`, `X509_get_fingerprint` | `MessageDigest` | 32_x509_get_cert_info.t | (included) | ✅ |
+| X509 extensions | `X509V3_EXT_print` (keyUsage, extKeyUsage, SAN, issuerAltName, basicConstraints, AKI, SKI, CRL DPs, cert policies, AIA), `X509_EXTENSION_get_data/object/critical` | DER parsing + formatting | 32_x509_get_cert_info.t | (included) | ✅ |
+| EVP_PKEY | `EVP_PKEY_bits/size/security_bits/id` | `java.security.PublicKey` | 32_x509_get_cert_info.t | (included) | ✅ |
+| P_X509 convenience | `P_X509_get_crl_distribution_points`, `P_X509_get_key_usage`, `P_X509_get_netscape_cert_type`, `P_X509_get_ext_key_usage`, `P_X509_get_signature_alg`, `P_X509_get_pubkey_alg` | DER parsing | 32_x509_get_cert_info.t | (included) | ✅ |
+| X509_STORE | `X509_STORE_new`, `X509_STORE_CTX_new/init/set_cert/get0_cert/get1_chain`, `X509_STORE_add_cert`, `X509_verify_cert`, `sk_X509_num/value/insert/delete/unshift/shift/pop` | Java cert chain | 32_x509_get_cert_info.t | (included) | ✅ |
+| Passwd callback | `CTX_set_default_passwd_cb/userdata`, `CTX_use_PrivateKey_file`, SSL-level equivalents | Wire PEM decryption through CTX state + `RuntimeCode.apply()` | 05_passwd_cb.t | 36/36 | ✅ |
+
+*Phase 1.5a — PKCS12 loading (next)*
+
+| Group | Functions | Java backend | Test file | Subtests | Effort |
+|-------|-----------|-------------|-----------|----------|--------|
+| PKCS12 | `P_PKCS12_load_file` | `java.security.KeyStore("PKCS12")` | 39_pkcs12.t | 17 | Easy |
+
+All other functions in 39_pkcs12.t are already implemented (X509_get_subject_name, X509_NAME_oneline).
+
+*Phase 1.5b — X509_verify + OBJ_* functions + verify infrastructure (next)*
+
+| Group | Functions | Java backend | Test file | Subtests | Effort |
+|-------|-----------|-------------|-----------|----------|--------|
+| X509_verify | `X509_verify($cert, $pkey)` | `cert.verify(publicKey)` | 33_x509_create_cert.t | unblocks first test | Easy |
+| X509_NAME_cmp | `X509_NAME_cmp` | Name hash comparison | 33_x509_create_cert.t | unblocks test 3 | Easy |
+| OBJ lookup | `OBJ_txt2obj`, `OBJ_txt2nid`, `OBJ_ln2nid`, `OBJ_sn2nid`, `OBJ_cmp`, `OBJ_nid2obj` | Static lookup tables | 36_verify.t | ~16 tests | Easy |
+| Verify params | `X509_VERIFY_PARAM_new/free/set_flags/get_flags/clear_flags/inherit/set1/set1_name/set_purpose/set_trust/set_depth/set_time/add0_policy/set1_host/add1_host/set1_email/set1_ip/set1_ip_asc/set_hostflags/get0_peername` | Parameter bag class | 36_verify.t | ~30 tests | Medium |
+| Store/CTX cleanup | `X509_STORE_free`, `X509_STORE_CTX_free`, `X509_STORE_CTX_get_error` | GC + error tracking | 36_verify.t | enables verify tests | Easy |
+| X509_V_* constants | `X509_V_OK`, `X509_V_FLAG_*`, `X509_V_ERR_*`, `X509_PURPOSE_*`, `X509_TRUST_*`, `X509_CHECK_FLAG_*` | Constant table | 36_verify.t | enables verify tests | Easy |
+| PEM cert chain | `PEM_X509_INFO_read_bio`, `sk_X509_INFO_num/value`, `P_X509_INFO_get_x509`, `sk_X509_new_null`, `sk_X509_push/free` | Cert chain parsing | 36_verify.t | ~20 tests | Medium |
+
+Note: 36_verify.t has ~39 tests that need fork for SSL client/server — those will remain skipped.
+
+*Phase 2 — X509 creation and signing (future — requires BouncyCastle or manual DER)*
+
+| Group | Functions | Backend | Test file | Subtests |
+|-------|-----------|---------|-----------|----------|
+| X509 creation | `X509_new`, `X509_set_version/subject/issuer/pubkey/serialNumber`, `X509_sign`, `PEM_get_string_X509` | `X509v3CertificateBuilder` or manual DER | 33_x509_create_cert.t | 141 |
+| X509_REQ | `X509_REQ_new/sign/verify`, `X509_REQ_set/get_*` | `PKCS10CertificationRequestBuilder` | 33_x509_create_cert.t | (included) |
+| X509_NAME building | `X509_NAME_add_entry_by_NID/OBJ/txt` | `X500NameBuilder` | 33_x509_create_cert.t | (included) |
+| EVP_PKEY lifecycle | `EVP_PKEY_new`, `EVP_PKEY_assign_RSA`, `RSA_get_key_parameters`, `BN_dup` | Key handle management | 33_x509_create_cert.t | (included) |
+| PEM writing | `PEM_get_string_X509/PrivateKey/X509_REQ` | PEM encoding | 33_x509_create_cert.t | (included) |
+| ASN1 integers | `ASN1_INTEGER_set/get/new/free`, `P_ASN1_INTEGER_set_hex/dec` | BigInteger | 33_x509_create_cert.t | (included) |
+
+*Phase 3 — CRL (future — requires BouncyCastle or manual DER)*
+
+| Group | Functions | Backend | Test file | Subtests |
+|-------|-----------|---------|-----------|----------|
+| CRL reading | `d2i_X509_CRL_bio`, `PEM_read_bio_X509_CRL`, `X509_CRL_get_issuer/version`, `X509_CRL_get0_lastUpdate/nextUpdate`, `X509_CRL_digest`, `X509_CRL_verify` | `CertificateFactory.generateCRL()` | 34_x509_crl.t | ~25 |
+| CRL creation | `X509_CRL_new`, `X509_CRL_set_version/issuer_name`, `X509_CRL_set1_lastUpdate/nextUpdate`, `X509_CRL_sign`, `P_X509_CRL_add_revoked_serial_hex`, `P_X509_CRL_add_extensions` | `X509v2CRLBuilder` (BC) | 34_x509_crl.t | ~28 |
+
+**Not fixable** (need fork or deprecated protocols):
+- `06_tcpecho.t`, `07_sslecho.t`, `08_pipe.t`, `11_read.t` — need fork
+- `40_npn_support.t` — NPN is dead + needs fork
+- `41_alpn_support.t` through `47_keylog.t` — need fork for server/client
 
 ## IO::Socket::SSL Test Outlook
 
@@ -255,7 +319,7 @@ checks SSL response headers.  Our implementation should handle this since
 
 ## Progress Tracking
 
-### Current Status: Phase 2 + Tier 2 complete, HTTPS client working, Net::SSLeay 1118/1118
+### Current Status: Tier 3 Phase 1.5 in progress (PKCS12 + verify infrastructure)
 
 ### Completed Phases
 - [x] Phase 0: Investigation (2026-04-08)
@@ -333,14 +397,42 @@ checks SSL response headers.  Our implementation should handle this since
   - Net::SSLeay test results: 8/1043 → 0/1118 failures (100% pass)
   - Files: NetSSLeay.java, Net/SSLeay.pm, lwp_protocol_https.md
 
+- [x] Net::SSLeay Tier 2.5 — ASN1_TIME, PEM keys, SSL_CTX/SSL (2026-04-08)
+  - ASN1_TIME: new/set/free, put2string, isotime get/set, X509_gmtime_adj
+    backed by epoch seconds + java.time (10 subtests)
+  - PEM keys: BIO_new_file fix (reads files), PEM_read_bio_PrivateKey with
+    PKCS#1→PKCS#8 conversion, encrypted PEM via EVP_BytesToKey (10 subtests)
+  - SSL_CTX/SSL: CTX_new/v23_new/new_with_method/free, method functions,
+    SSL_new/free, in_connect_init/in_accept_init, proto version get/set,
+    SSL3_VERSION constant (44 subtests)
+  - Net::SSLeay test results: 0/1122 → 0/1189 failures (3 more tests pass)
+  - Files: NetSSLeay.java
+
+- [x] Net::SSLeay Tier 3 Phase 1 — X509 reading + password callbacks (2026-04-08)
+  - Implemented ~77 new functions in NetSSLeay.java (~1500+ lines)
+  - X509 certificate parsing via standard Java CertificateFactory (no BouncyCastle needed)
+  - X509_NAME via custom DER parsing of X500Principal
+  - Comprehensive OID↔NID↔name mapping (~40 OIDs via OidInfo class)
+  - X509V3_EXT_print for 10 extension types (keyUsage, extKeyUsage, SAN, etc.)
+  - X509_pubkey_digest with proper BIT STRING extraction from SubjectPublicKeyInfo
+  - P_ASN1_STRING_get with raw bytes vs UTF-8 decoded mode
+  - X509_get_subjectAltNames with raw binary IP addresses and otherName DER parsing
+  - P_X509_get_ext_key_usage properly skips unknown OIDs in NID/name modes
+  - X509_STORE/CTX infrastructure for certificate chain verification
+  - sk_X509 stack operations (num/value/insert/delete/unshift/shift/pop)
+  - Password callbacks via CTX_set_default_passwd_cb + RuntimeCode.apply()
+  - EVP_PKEY attribute accessors (size/bits/security_bits/id)
+  - Net::SSLeay test results: 0/1189 → 0/1975 failures (16 test programs pass)
+  - 32_x509_get_cert_info.t: 746/746 (was 0), 05_passwd_cb.t: 36/36 (was 0)
+  - Files: NetSSLeay.java, lwp_protocol_https.md
+
 ### Next Steps
 
-1. **Run `./jcpan -t LWP::Protocol::https`** to see current results
-   - `example.t` is the key target — validates the full HTTPS client stack
-
-2. **Fix Client-SSL-Version header** (returned as undef)
-
-3. **IO::Poll implementation** — needed for async frameworks (see below)
+1. **Phase 1.5a** — Implement `P_PKCS12_load_file` (quick win: 17 tests, 1 function)
+2. **Phase 1.5b** — `X509_verify`, `X509_NAME_cmp`, OBJ_* lookup functions, X509_VERIFY_PARAM_*, verify constants
+3. **Phase 2** — X509 creation/signing (33_x509_create_cert.t) — requires BouncyCastle or manual DER
+4. **Phase 3** — CRL functions (34_x509_crl.t) — requires BouncyCastle
+5. **Run `./jcpan -t LWP::Protocol::https`** to see current results
 
 ## Async Framework Analysis
 

@@ -2,16 +2,16 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.io.ByteArrayInputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.SecureRandom;
+import java.security.*;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.security.auth.x500.X500Principal;
 
 /**
  * Minimal Net::SSLeay stub for PerlOnJava.
@@ -168,7 +169,19 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new HashMap<>();  // handle → epoch seconds
     private static final Map<Long, SslCtxState> CTX_HANDLES = new HashMap<>();
     private static final Map<Long, SslState> SSL_HANDLES = new HashMap<>();
-    private static final Map<Long, PrivateKey> EVP_PKEY_HANDLES = new HashMap<>();
+    private static final Map<Long, java.security.Key> EVP_PKEY_HANDLES = new HashMap<>();
+
+    // X509 handle maps
+    private static final Map<Long, X509Certificate> X509_HANDLES = new HashMap<>();
+    private static final Map<Long, X509NameInfo> X509_NAME_HANDLES = new HashMap<>();
+    private static final Map<Long, X509NameEntry> X509_NAME_ENTRY_HANDLES = new HashMap<>();
+    private static final Map<Long, String> ASN1_OBJECT_HANDLES = new HashMap<>(); // handle → OID string
+    private static final Map<Long, Asn1StringValue> ASN1_STRING_HANDLES = new HashMap<>();
+    private static final Map<Long, BigInteger> ASN1_INTEGER_HANDLES = new HashMap<>();
+    private static final Map<Long, X509ExtInfo> X509_EXT_HANDLES = new HashMap<>();
+    private static final Map<Long, X509StoreState> X509_STORE_HANDLES = new HashMap<>();
+    private static final Map<Long, X509StoreCtxState> X509_STORE_CTX_HANDLES = new HashMap<>();
+    private static final Map<Long, List<Long>> SK_X509_HANDLES = new HashMap<>();
 
     // SSL method type sentinels
     private static final long METHOD_SSLv23 = -10L;
@@ -230,6 +243,89 @@ public class NetSSLeay extends PerlModuleBase {
         CONSTANTS.put("NID_sha3_256", 1097L);
         CONSTANTS.put("NID_sha3_512", 1099L);
         CONSTANTS.put("NID_ripemd160", 117L);
+    }
+
+    // Comprehensive OID ↔ NID ↔ long name ↔ short name mapping
+    private static class OidInfo {
+        final String oid;
+        final int nid;
+        final String longName;
+        final String shortName;
+        OidInfo(String oid, int nid, String longName, String shortName) {
+            this.oid = oid;
+            this.nid = nid;
+            this.longName = longName;
+            this.shortName = shortName;
+        }
+    }
+
+    private static final Map<String, OidInfo> OID_TO_INFO = new HashMap<>();
+    private static final Map<Integer, OidInfo> NID_TO_INFO = new HashMap<>();
+
+    private static void addOid(String oid, int nid, String longName, String shortName) {
+        OidInfo info = new OidInfo(oid, nid, longName, shortName);
+        OID_TO_INFO.put(oid, info);
+        NID_TO_INFO.put(nid, info);
+    }
+
+    static {
+        // X.500 distinguished name attributes
+        addOid("2.5.4.3", 13, "commonName", "CN");
+        addOid("2.5.4.4", 15, "surname", "SN");
+        addOid("2.5.4.5", 16, "serialNumber", "serialNumber");
+        addOid("2.5.4.6", 14, "countryName", "C");
+        addOid("2.5.4.7", 19, "localityName", "L");
+        addOid("2.5.4.8", 20, "stateOrProvinceName", "ST");
+        addOid("2.5.4.9", 660, "streetAddress", "street");
+        addOid("2.5.4.10", 17, "organizationName", "O");
+        addOid("2.5.4.11", 18, "organizationalUnitName", "OU");
+        addOid("2.5.4.12", 99, "title", "title");
+        addOid("2.5.4.42", 100, "givenName", "GN");
+        addOid("2.5.4.43", 101, "initials", "initials");
+        addOid("2.5.4.46", 509, "dnQualifier", "dnQualifier");
+        addOid("1.2.840.113549.1.9.1", 48, "emailAddress", "emailAddress");
+        addOid("0.9.2342.19200300.100.1.25", 391, "domainComponent", "DC");
+        addOid("0.9.2342.19200300.100.1.1", 390, "userId", "UID");
+
+        // X.509v3 extension OIDs
+        addOid("2.5.29.14", 82, "X509v3 Subject Key Identifier", "subjectKeyIdentifier");
+        addOid("2.5.29.15", 83, "X509v3 Key Usage", "keyUsage");
+        addOid("2.5.29.17", 85, "X509v3 Subject Alternative Name", "subjectAltName");
+        addOid("2.5.29.18", 86, "X509v3 Issuer Alternative Name", "issuerAltName");
+        addOid("2.5.29.19", 87, "X509v3 Basic Constraints", "basicConstraints");
+        addOid("2.5.29.31", 103, "X509v3 CRL Distribution Points", "crlDistributionPoints");
+        addOid("2.5.29.32", 89, "X509v3 Certificate Policies", "certificatePolicies");
+        addOid("2.5.29.35", 90, "X509v3 Authority Key Identifier", "authorityKeyIdentifier");
+        addOid("2.5.29.37", 126, "X509v3 Extended Key Usage", "extendedKeyUsage");
+        addOid("1.3.6.1.5.5.7.1.1", 177, "Authority Information Access", "authorityInfoAccess");
+        addOid("2.5.29.36", 807, "Policy Constraints", "policyConstraints");
+        addOid("1.3.6.1.5.5.7.1.3", 1019, "Biometric Info", "biometricInfo");
+        addOid("2.16.840.1.113730.1.1", 71, "Netscape Cert Type", "nsCertType");
+
+        // Extended Key Usage OIDs
+        addOid("1.3.6.1.5.5.7.3.1", 129, "TLS Web Server Authentication", "serverAuth");
+        addOid("1.3.6.1.5.5.7.3.2", 130, "TLS Web Client Authentication", "clientAuth");
+        addOid("1.3.6.1.5.5.7.3.3", 131, "Code Signing", "codeSigning");
+        addOid("1.3.6.1.5.5.7.3.4", 132, "E-mail Protection", "emailProtection");
+        addOid("1.3.6.1.5.5.7.3.8", 133, "Time Stamping", "timeStamping");
+        addOid("1.3.6.1.5.5.7.3.9", 180, "OCSP Signing", "OCSPSigning");
+        addOid("1.3.6.1.5.5.7.3.17", 1022, "ipsec Internet Key Exchange", "ipsecIKE");
+        addOid("1.3.6.1.4.1.311.2.1.21", 134, "Microsoft Individual Code Signing", "msCodeInd");
+        addOid("1.3.6.1.4.1.311.2.1.22", 135, "Microsoft Commercial Code Signing", "msCodeCom");
+        addOid("1.3.6.1.4.1.311.10.3.1", 136, "Microsoft Trust List Signing", "msCTLSign");
+        addOid("1.3.6.1.4.1.311.10.3.4", 138, "Microsoft Encrypted File System", "msEFS");
+
+        // Signature algorithm OIDs
+        addOid("1.2.840.113549.1.1.1", 6, "rsaEncryption", "rsaEncryption");
+        addOid("1.2.840.113549.1.1.4", 8, "md5WithRSAEncryption", "RSA-MD5");
+        addOid("1.2.840.113549.1.1.5", 65, "sha1WithRSAEncryption", "RSA-SHA1");
+        addOid("1.2.840.113549.1.1.11", 668, "sha256WithRSAEncryption", "RSA-SHA256");
+        addOid("1.2.840.113549.1.1.12", 669, "sha384WithRSAEncryption", "RSA-SHA384");
+        addOid("1.2.840.113549.1.1.13", 670, "sha512WithRSAEncryption", "RSA-SHA512");
+        addOid("1.2.840.10045.2.1", 408, "id-ecPublicKey", "id-ecPublicKey");
+        addOid("1.2.840.10045.4.3.2", 794, "ecdsa-with-SHA256", "ecdsa-with-SHA256");
+
+        // Key usage bit names (used by P_X509_get_key_usage)
     }
 
     private static void addDigest(String opensslName, int nid, String javaAlg) {
@@ -299,6 +395,8 @@ public class NetSSLeay extends PerlModuleBase {
         String role; // "generic", "client", "server"
         long minProtoVersion = 0; // 0 = automatic
         long maxProtoVersion = 0; // 0 = automatic
+        RuntimeScalar passwdCb = null;       // password callback CODE ref
+        RuntimeScalar passwdUserdata = null;  // password callback userdata
 
         SslCtxState(String role) {
             this.role = role;
@@ -310,12 +408,57 @@ public class NetSSLeay extends PerlModuleBase {
         String role;
         long minProtoVersion;
         long maxProtoVersion;
+        RuntimeScalar passwdCb = null;
+        RuntimeScalar passwdUserdata = null;
+        long ctxHandle; // reference to parent CTX
 
-        SslState(SslCtxState ctx) {
+        SslState(SslCtxState ctx, long ctxHandle) {
             this.role = ctx.role;
             this.minProtoVersion = ctx.minProtoVersion;
             this.maxProtoVersion = ctx.maxProtoVersion;
+            this.ctxHandle = ctxHandle;
         }
+    }
+
+    // Inner classes for X509 support
+    private static class X509NameEntry {
+        String oid;
+        byte[] rawBytes;   // raw DER value bytes
+        String dataUtf8;   // decoded Unicode string
+    }
+
+    private static class X509NameInfo {
+        List<X509NameEntry> entries = new ArrayList<>();
+        String oneline;
+        String rfc2253;
+        byte[] derEncoded;
+    }
+
+    private static class Asn1StringValue {
+        byte[] rawBytes;  // raw DER value bytes
+        String utf8Data;  // decoded Unicode string
+        Asn1StringValue(byte[] raw, String utf8) {
+            this.rawBytes = raw;
+            this.utf8Data = utf8;
+        }
+    }
+
+    private static class X509ExtInfo {
+        String oid;
+        boolean critical;
+        byte[] value; // raw DER value
+        X509Certificate cert; // back-reference
+        int index;
+    }
+
+    private static class X509StoreState {
+        List<Long> trustedCerts = new ArrayList<>();
+    }
+
+    private static class X509StoreCtxState {
+        long certHandle = 0;
+        long storeHandle = 0;
+        List<Long> chain = null;
     }
 
     // Sentinel value for BIO_s_mem() method type
@@ -348,7 +491,7 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("hello", null);
 
             // Version info
-            mod.registerMethod("SSLeay", null);
+            mod.registerMethod("SSLeay", "");  // empty proto so SSLeay < 0x... parses correctly
             mod.registerMethod("SSLeay_version", null);
             mod.registerMethod("OpenSSL_version", null);
             mod.registerMethod("OpenSSL_version_num", null);
@@ -407,9 +550,14 @@ public class NetSSLeay extends PerlModuleBase {
 
             // PEM functions
             mod.registerMethod("PEM_read_bio_PrivateKey", null);
+            mod.registerMethod("PEM_read_bio_X509", null);
 
             // EVP_PKEY functions
             mod.registerMethod("EVP_PKEY_free", null);
+            mod.registerMethod("EVP_PKEY_size", null);
+            mod.registerMethod("EVP_PKEY_bits", null);
+            mod.registerMethod("EVP_PKEY_security_bits", null);
+            mod.registerMethod("EVP_PKEY_id", null);
 
             // SSL_CTX functions
             mod.registerMethod("CTX_new", null);
@@ -430,6 +578,96 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("SSL_free", null);
             mod.registerMethod("in_connect_init", null);
             mod.registerMethod("in_accept_init", null);
+
+            // Password callback functions (CTX-level)
+            mod.registerMethod("CTX_set_default_passwd_cb", null);
+            mod.registerMethod("CTX_set_default_passwd_cb_userdata", null);
+            mod.registerMethod("CTX_use_PrivateKey_file", null);
+
+            // Password callback functions (SSL-level)
+            mod.registerMethod("set_default_passwd_cb", null);
+            mod.registerMethod("set_default_passwd_cb_userdata", null);
+            mod.registerMethod("use_PrivateKey_file", null);
+
+            // X509 functions
+            mod.registerMethod("X509_free", null);
+            mod.registerMethod("X509_get_pubkey", null);
+            mod.registerMethod("X509_get_subject_name", null);
+            mod.registerMethod("X509_get_issuer_name", null);
+            mod.registerMethod("X509_get_subjectAltNames", null);
+            mod.registerMethod("X509_subject_name_hash", null);
+            mod.registerMethod("X509_issuer_name_hash", null);
+            mod.registerMethod("X509_issuer_and_serial_hash", null);
+            mod.registerMethod("X509_get_fingerprint", null);
+            mod.registerMethod("X509_pubkey_digest", null);
+            mod.registerMethod("X509_digest", null);
+            mod.registerMethod("X509_get0_notBefore", null);
+            mod.registerMethod("X509_getm_notBefore", null);
+            mod.registerMethod("X509_get_notBefore", null);
+            mod.registerMethod("X509_get0_notAfter", null);
+            mod.registerMethod("X509_getm_notAfter", null);
+            mod.registerMethod("X509_get_notAfter", null);
+            mod.registerMethod("X509_get_serialNumber", null);
+            mod.registerMethod("X509_get0_serialNumber", null);
+            mod.registerMethod("X509_get_version", null);
+            mod.registerMethod("X509_get_ext_count", null);
+            mod.registerMethod("X509_get_ext", null);
+            mod.registerMethod("X509_verify_cert", null);
+
+            // X509_NAME functions
+            mod.registerMethod("X509_NAME_new", null);
+            mod.registerMethod("X509_NAME_hash", null);
+            mod.registerMethod("X509_NAME_entry_count", null);
+            mod.registerMethod("X509_NAME_oneline", null);
+            mod.registerMethod("X509_NAME_print_ex", null);
+            mod.registerMethod("X509_NAME_get_entry", null);
+
+            // X509_NAME_ENTRY functions
+            mod.registerMethod("X509_NAME_ENTRY_get_data", null);
+            mod.registerMethod("X509_NAME_ENTRY_get_object", null);
+
+            // X509_EXTENSION functions
+            mod.registerMethod("X509_EXTENSION_get_data", null);
+            mod.registerMethod("X509_EXTENSION_get_object", null);
+            mod.registerMethod("X509_EXTENSION_get_critical", null);
+            mod.registerMethod("X509V3_EXT_print", null);
+
+            // OBJ/NID functions
+            mod.registerMethod("OBJ_obj2txt", null);
+            mod.registerMethod("OBJ_obj2nid", null);
+            mod.registerMethod("OBJ_nid2ln", null);
+            mod.registerMethod("OBJ_nid2sn", null);
+
+            // ASN1 accessor functions
+            mod.registerMethod("P_ASN1_STRING_get", null);
+            mod.registerMethod("P_ASN1_INTEGER_get_hex", null);
+            mod.registerMethod("P_ASN1_INTEGER_get_dec", null);
+
+            // P_X509 convenience functions
+            mod.registerMethod("P_X509_get_crl_distribution_points", null);
+            mod.registerMethod("P_X509_get_key_usage", null);
+            mod.registerMethod("P_X509_get_netscape_cert_type", null);
+            mod.registerMethod("P_X509_get_ext_key_usage", null);
+            mod.registerMethod("P_X509_get_signature_alg", null);
+            mod.registerMethod("P_X509_get_pubkey_alg", null);
+
+            // X509_STORE / X509_STORE_CTX functions
+            mod.registerMethod("X509_STORE_new", null);
+            mod.registerMethod("X509_STORE_CTX_new", null);
+            mod.registerMethod("X509_STORE_CTX_set_cert", null);
+            mod.registerMethod("X509_STORE_add_cert", null);
+            mod.registerMethod("X509_STORE_CTX_init", null);
+            mod.registerMethod("X509_STORE_CTX_get0_cert", null);
+            mod.registerMethod("X509_STORE_CTX_get1_chain", null);
+
+            // sk_X509 (STACK_OF(X509)) functions
+            mod.registerMethod("sk_X509_num", null);
+            mod.registerMethod("sk_X509_value", null);
+            mod.registerMethod("sk_X509_insert", null);
+            mod.registerMethod("sk_X509_delete", null);
+            mod.registerMethod("sk_X509_unshift", null);
+            mod.registerMethod("sk_X509_shift", null);
+            mod.registerMethod("sk_X509_pop", null);
 
             // Protocol version functions
             mod.registerMethod("CTX_set_min_proto_version", null);
@@ -2066,7 +2304,7 @@ public class NetSSLeay extends PerlModuleBase {
         SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
         if (ctxState == null) return new RuntimeScalar().getList();
         long handleId = HANDLE_COUNTER.getAndIncrement();
-        SSL_HANDLES.put(handleId, new SslState(ctxState));
+        SSL_HANDLES.put(handleId, new SslState(ctxState, ctxHandle));
         return new RuntimeScalar(handleId).getList();
     }
 
@@ -2171,5 +2409,1615 @@ public class NetSSLeay extends PerlModuleBase {
         SslState ssl = SSL_HANDLES.get(sslHandle);
         if (ssl == null) return new RuntimeScalar(0).getList();
         return new RuntimeScalar(ssl.maxProtoVersion).getList();
+    }
+
+    // ---- Password callback functions (CTX-level) ----
+
+    public static RuntimeList CTX_set_default_passwd_cb(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar().getList();
+        ctxState.passwdCb = args.get(1);
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList CTX_set_default_passwd_cb_userdata(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar().getList();
+        ctxState.passwdUserdata = args.get(1);
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList CTX_use_PrivateKey_file(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        String filename = args.get(1).toString();
+        SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
+        if (ctxState == null) return new RuntimeScalar(0).getList();
+        return loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
+    }
+
+    // SSL-level password callback functions
+    public static RuntimeList set_default_passwd_cb(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long sslHandle = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar().getList();
+        ssl.passwdCb = args.get(1);
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList set_default_passwd_cb_userdata(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long sslHandle = args.get(0).getLong();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar().getList();
+        ssl.passwdUserdata = args.get(1);
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList use_PrivateKey_file(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long sslHandle = args.get(0).getLong();
+        String filename = args.get(1).toString();
+        SslState ssl = SSL_HANDLES.get(sslHandle);
+        if (ssl == null) return new RuntimeScalar(0).getList();
+        // SSL-level callback takes precedence over CTX-level
+        RuntimeScalar cb = ssl.passwdCb;
+        RuntimeScalar ud = ssl.passwdUserdata;
+        if (cb == null) {
+            // Fall back to CTX-level callback
+            SslCtxState ctxState = CTX_HANDLES.get(ssl.ctxHandle);
+            if (ctxState != null) {
+                cb = ctxState.passwdCb;
+                ud = ctxState.passwdUserdata;
+            }
+        }
+        return loadPrivateKeyFile(filename, cb, ud);
+    }
+
+    private static RuntimeList loadPrivateKeyFile(String filename, RuntimeScalar cb, RuntimeScalar ud) {
+        try {
+            byte[] fileData = Files.readAllBytes(Paths.get(filename));
+            String pem = new String(fileData, StandardCharsets.ISO_8859_1);
+
+            // Get password via callback
+            String password = null;
+            if (cb != null && cb.type == RuntimeScalarType.CODE) {
+                RuntimeArray cbArgs = new RuntimeArray();
+                cbArgs.push(new RuntimeScalar(0)); // rwflag = 0 (reading)
+                if (ud != null) {
+                    cbArgs.push(ud);
+                } else {
+                    cbArgs.push(new RuntimeScalar()); // undef
+                }
+                RuntimeList result = RuntimeCode.apply(cb, cbArgs, RuntimeContextType.SCALAR);
+                password = result.getFirst().toString();
+            }
+
+            byte[] derBytes = parsePemPrivateKey(pem, password);
+            if (derBytes == null) return new RuntimeScalar(0).getList();
+
+            PrivateKey privKey = parsePrivateKeyDer(derBytes);
+            if (privKey == null) return new RuntimeScalar(0).getList();
+
+            return new RuntimeScalar(1).getList(); // success
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList(); // failure
+        }
+    }
+
+    // ---- PEM_read_bio_X509 (parse X509 certificate from BIO) ----
+
+    public static RuntimeList PEM_read_bio_X509(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long bioHandle = args.get(0).getLong();
+        MemoryBIO bio = BIO_HANDLES.get(bioHandle);
+        if (bio == null) return new RuntimeScalar().getList();
+
+        try {
+            byte[] allData = bio.read(bio.pending());
+            String pem = new String(allData, StandardCharsets.ISO_8859_1);
+
+            // Extract PEM certificate block
+            int beginIdx = pem.indexOf("-----BEGIN CERTIFICATE-----");
+            if (beginIdx < 0) return new RuntimeScalar().getList();
+            int endIdx = pem.indexOf("-----END CERTIFICATE-----", beginIdx);
+            if (endIdx < 0) return new RuntimeScalar().getList();
+            String certBlock = pem.substring(beginIdx, endIdx + "-----END CERTIFICATE-----".length());
+
+            // Parse certificate
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(
+                    new ByteArrayInputStream(certBlock.getBytes(StandardCharsets.ISO_8859_1)));
+
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            X509_HANDLES.put(handleId, cert);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    public static RuntimeList X509_free(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handleId = args.get(0).getLong();
+        X509_HANDLES.remove(handleId);
+        return new RuntimeScalar().getList();
+    }
+
+    // ---- X509 accessor functions ----
+
+    public static RuntimeList X509_get_pubkey(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        try {
+            PublicKey pubKey = cert.getPublicKey();
+            long handleId = HANDLE_COUNTER.getAndIncrement();
+            EVP_PKEY_HANDLES.put(handleId, pubKey);
+            return new RuntimeScalar(handleId).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    public static RuntimeList X509_get_subject_name(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        X509NameInfo nameInfo = parseX500Principal(cert.getSubjectX500Principal());
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_NAME_HANDLES.put(handleId, nameInfo);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_get_issuer_name(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        X509NameInfo nameInfo = parseX500Principal(cert.getIssuerX500Principal());
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_NAME_HANDLES.put(handleId, nameInfo);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // Parse X500Principal into X509NameInfo by decoding DER
+    private static X509NameInfo parseX500Principal(X500Principal principal) {
+        X509NameInfo info = new X509NameInfo();
+        info.derEncoded = principal.getEncoded();
+        info.rfc2253 = principal.getName("RFC2253");
+
+        // Parse DER to extract individual entries in forward order
+        try {
+            byte[] der = info.derEncoded;
+            // DER structure: SEQUENCE { SET { SEQUENCE { OID, value } }* }
+            if (der.length < 2 || der[0] != 0x30) return info;
+            int[] pos = {0};
+            int[] seqLen = {0};
+            readDerTag(der, pos, seqLen); // outer SEQUENCE
+            int endPos = pos[0] + seqLen[0];
+
+            while (pos[0] < endPos) {
+                // Each RDN is a SET
+                readDerTag(der, pos, seqLen); // SET
+                int setEnd = pos[0] + seqLen[0];
+                while (pos[0] < setEnd) {
+                    // Each attribute is a SEQUENCE { OID, value }
+                    readDerTag(der, pos, seqLen); // SEQUENCE
+                    int attrEnd = pos[0] + seqLen[0];
+
+                    // Read OID
+                    readDerTag(der, pos, seqLen); // OID tag
+                    byte[] oidBytes = new byte[seqLen[0]];
+                    System.arraycopy(der, pos[0], oidBytes, 0, seqLen[0]);
+                    String oid = decodeOid(oidBytes);
+                    pos[0] += seqLen[0];
+
+                    // Read value (any string type)
+                    int valueTag = der[pos[0]] & 0xFF;
+                    readDerTag(der, pos, seqLen);
+                    byte[] valueBytes = new byte[seqLen[0]];
+                    System.arraycopy(der, pos[0], valueBytes, 0, seqLen[0]);
+                    pos[0] += seqLen[0];
+
+                    X509NameEntry entry = new X509NameEntry();
+                    entry.oid = oid;
+                    entry.rawBytes = valueBytes; // always store raw DER bytes
+                    // Decode value based on tag
+                    if (valueTag == 0x0C) { // UTF8String
+                        entry.dataUtf8 = new String(valueBytes, StandardCharsets.UTF_8);
+                    } else if (valueTag == 0x16) { // IA5String
+                        entry.dataUtf8 = new String(valueBytes, StandardCharsets.US_ASCII);
+                    } else if (valueTag == 0x13) { // PrintableString
+                        entry.dataUtf8 = new String(valueBytes, StandardCharsets.US_ASCII);
+                    } else if (valueTag == 0x1E) { // BMPString
+                        entry.dataUtf8 = new String(valueBytes, StandardCharsets.UTF_16BE);
+                    } else {
+                        entry.dataUtf8 = new String(valueBytes, StandardCharsets.UTF_8);
+                    }
+                    info.entries.add(entry);
+
+                    pos[0] = attrEnd; // skip to end of SEQUENCE
+                }
+                pos[0] = setEnd; // skip to end of SET
+            }
+        } catch (Exception e) {
+            // Fall back to RFC2253 parsing if DER parsing fails
+        }
+
+        // Build oneline format: "/C=US/O=Org/CN=Name"
+        StringBuilder oneline = new StringBuilder();
+        for (X509NameEntry entry : info.entries) {
+            OidInfo oidInfo = OID_TO_INFO.get(entry.oid);
+            String name = oidInfo != null ? oidInfo.shortName : entry.oid;
+            oneline.append("/").append(name).append("=").append(entry.dataUtf8);
+        }
+        info.oneline = oneline.toString();
+
+        return info;
+    }
+
+    // Read a DER tag and length, advancing pos[0] past the tag+length header
+    private static void readDerTag(byte[] der, int[] pos, int[] contentLen) {
+        pos[0]++; // skip tag byte
+        int len = der[pos[0]] & 0xFF;
+        pos[0]++;
+        if (len < 128) {
+            contentLen[0] = len;
+        } else if (len == 0x81) {
+            contentLen[0] = der[pos[0]] & 0xFF;
+            pos[0]++;
+        } else if (len == 0x82) {
+            contentLen[0] = ((der[pos[0]] & 0xFF) << 8) | (der[pos[0] + 1] & 0xFF);
+            pos[0] += 2;
+        } else if (len == 0x83) {
+            contentLen[0] = ((der[pos[0]] & 0xFF) << 16) | ((der[pos[0] + 1] & 0xFF) << 8)
+                    | (der[pos[0] + 2] & 0xFF);
+            pos[0] += 3;
+        } else {
+            contentLen[0] = 0;
+        }
+    }
+
+    // Decode a DER-encoded OID to dotted string form
+    private static String decodeOid(byte[] oidBytes) {
+        if (oidBytes.length == 0) return "";
+        StringBuilder sb = new StringBuilder();
+        // First byte encodes first two components
+        int first = oidBytes[0] & 0xFF;
+        sb.append(first / 40).append('.').append(first % 40);
+        long value = 0;
+        for (int i = 1; i < oidBytes.length; i++) {
+            value = (value << 7) | (oidBytes[i] & 0x7F);
+            if ((oidBytes[i] & 0x80) == 0) {
+                sb.append('.').append(value);
+                value = 0;
+            }
+        }
+        return sb.toString();
+    }
+
+    // X509_NAME functions
+    public static RuntimeList X509_NAME_new(RuntimeArray args, int ctx) {
+        X509NameInfo nameInfo = new X509NameInfo();
+        nameInfo.oneline = "";
+        nameInfo.rfc2253 = "";
+        nameInfo.derEncoded = new byte[]{0x30, 0x00}; // empty SEQUENCE
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_NAME_HANDLES.put(handleId, nameInfo);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_NAME_hash(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long nameHandle = args.get(0).getLong();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar(0).getList();
+        try {
+            // OpenSSL uses SHA-1 of the canonical DER form, first 4 bytes as LE uint32
+            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+            byte[] hash = sha1.digest(nameInfo.derEncoded);
+            long result = ((long)(hash[0] & 0xFF))
+                    | ((long)(hash[1] & 0xFF) << 8)
+                    | ((long)(hash[2] & 0xFF) << 16)
+                    | ((long)(hash[3] & 0xFF) << 24);
+            return new RuntimeScalar(result).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    public static RuntimeList X509_NAME_entry_count(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long nameHandle = args.get(0).getLong();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(nameInfo.entries.size()).getList();
+    }
+
+    public static RuntimeList X509_NAME_oneline(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long nameHandle = args.get(0).getLong();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar("").getList();
+        return new RuntimeScalar(nameInfo.oneline).getList();
+    }
+
+    public static RuntimeList X509_NAME_print_ex(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long nameHandle = args.get(0).getLong();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null) return new RuntimeScalar("").getList();
+        // Default: RFC2253 format (reverse order, comma-separated)
+        // Build from entries in reverse order
+        StringBuilder sb = new StringBuilder();
+        for (int i = nameInfo.entries.size() - 1; i >= 0; i--) {
+            if (sb.length() > 0) sb.append(",");
+            X509NameEntry entry = nameInfo.entries.get(i);
+            OidInfo oidInfo = OID_TO_INFO.get(entry.oid);
+            String name = oidInfo != null ? oidInfo.shortName : entry.oid;
+            sb.append(name).append("=").append(entry.dataUtf8);
+        }
+        return new RuntimeScalar(sb.toString()).getList();
+    }
+
+    public static RuntimeList X509_NAME_get_entry(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long nameHandle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        X509NameInfo nameInfo = X509_NAME_HANDLES.get(nameHandle);
+        if (nameInfo == null || index < 0 || index >= nameInfo.entries.size())
+            return new RuntimeScalar().getList();
+        X509NameEntry entry = nameInfo.entries.get(index);
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_NAME_ENTRY_HANDLES.put(handleId, entry);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // X509_NAME_ENTRY accessor functions
+    public static RuntimeList X509_NAME_ENTRY_get_data(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long entryHandle = args.get(0).getLong();
+        X509NameEntry entry = X509_NAME_ENTRY_HANDLES.get(entryHandle);
+        if (entry == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_STRING_HANDLES.put(handleId, new Asn1StringValue(entry.rawBytes, entry.dataUtf8));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_NAME_ENTRY_get_object(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long entryHandle = args.get(0).getLong();
+        X509NameEntry entry = X509_NAME_ENTRY_HANDLES.get(entryHandle);
+        if (entry == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, entry.oid);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // ---- OBJ/NID functions ----
+
+    public static RuntimeList OBJ_obj2txt(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long objHandle = args.get(0).getLong();
+        String oid = ASN1_OBJECT_HANDLES.get(objHandle);
+        if (oid == null) return new RuntimeScalar("").getList();
+        boolean numericOnly = args.size() > 1 && args.get(1).getLong() != 0;
+        if (numericOnly) {
+            return new RuntimeScalar(oid).getList();
+        }
+        // Return long name if known, else OID
+        OidInfo info = OID_TO_INFO.get(oid);
+        if (info != null) return new RuntimeScalar(info.longName).getList();
+        return new RuntimeScalar(oid).getList();
+    }
+
+    public static RuntimeList OBJ_obj2nid(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long objHandle = args.get(0).getLong();
+        String oid = ASN1_OBJECT_HANDLES.get(objHandle);
+        if (oid == null) return new RuntimeScalar(0).getList();
+        OidInfo info = OID_TO_INFO.get(oid);
+        if (info == null) return new RuntimeScalar(0).getList(); // NID_undef
+        return new RuntimeScalar(info.nid).getList();
+    }
+
+    public static RuntimeList OBJ_nid2ln(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        int nid = (int) args.get(0).getLong();
+        OidInfo info = NID_TO_INFO.get(nid);
+        if (info == null) return new RuntimeScalar().getList();
+        return new RuntimeScalar(info.longName).getList();
+    }
+
+    public static RuntimeList OBJ_nid2sn(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        int nid = (int) args.get(0).getLong();
+        OidInfo info = NID_TO_INFO.get(nid);
+        if (info == null) return new RuntimeScalar().getList();
+        return new RuntimeScalar(info.shortName).getList();
+    }
+
+    // ---- ASN1 accessor functions ----
+
+    public static RuntimeList P_ASN1_STRING_get(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long handle = args.get(0).getLong();
+        Asn1StringValue sv = ASN1_STRING_HANDLES.get(handle);
+        if (sv == null) return new RuntimeScalar("").getList();
+        boolean utf8Decode = args.size() > 1 && args.get(1).getLong() != 0;
+        if (utf8Decode) {
+            return new RuntimeScalar(sv.utf8Data).getList();
+        } else {
+            return bytesToPerlString(sv.rawBytes).getList();
+        }
+    }
+
+    public static RuntimeList P_ASN1_INTEGER_get_hex(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long handle = args.get(0).getLong();
+        BigInteger val = ASN1_INTEGER_HANDLES.get(handle);
+        if (val == null) return new RuntimeScalar("").getList();
+        String hex = val.toString(16).toUpperCase();
+        // Pad to even length
+        if (hex.length() % 2 != 0) hex = "0" + hex;
+        return new RuntimeScalar(hex).getList();
+    }
+
+    public static RuntimeList P_ASN1_INTEGER_get_dec(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar("").getList();
+        long handle = args.get(0).getLong();
+        BigInteger val = ASN1_INTEGER_HANDLES.get(handle);
+        if (val == null) return new RuntimeScalar("").getList();
+        return new RuntimeScalar(val.toString()).getList();
+    }
+
+    // ---- X509 certificate field accessors ----
+
+    public static RuntimeList X509_get_subjectAltNames(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeList();
+        RuntimeList result = new RuntimeList();
+        try {
+            Collection<List<?>> sans = cert.getSubjectAlternativeNames();
+            if (sans != null) {
+                for (List<?> san : sans) {
+                    int type = (Integer) san.get(0);
+                    Object value = san.get(1);
+                    result.add(new RuntimeScalar(type));
+                    switch (type) {
+                        case 7: // GEN_IPADD — return raw binary bytes
+                            result.add(ipAddressToRawBytes(value.toString()));
+                            break;
+                        case 0: // GEN_OTHERNAME — parse DER to extract value
+                            if (value instanceof byte[]) {
+                                result.add(new RuntimeScalar(parseOtherName((byte[]) value)));
+                            } else {
+                                result.add(new RuntimeScalar(value.toString()));
+                            }
+                            break;
+                        default: // GEN_EMAIL(1), GEN_DNS(2), GEN_URI(6), GEN_RID(8), etc.
+                            result.add(new RuntimeScalar(value.toString()));
+                            break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // no SANs
+        }
+        return result;
+    }
+
+    // Convert an IP address string to raw binary bytes (4 for IPv4, 16 for IPv6)
+    private static RuntimeScalar ipAddressToRawBytes(String ip) {
+        try {
+            java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+            byte[] raw = addr.getAddress();
+            return bytesToPerlString(raw);
+        } catch (Exception e) {
+            return new RuntimeScalar(ip);
+        }
+    }
+
+    // Parse an otherName DER encoding to extract the value string
+    // OtherName ::= SEQUENCE { type-id OID, value [0] EXPLICIT ANY }
+    private static String parseOtherName(byte[] der) {
+        try {
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(der, pos, len); // outer SEQUENCE
+            // Read the OID
+            readDerTag(der, pos, len); // OID tag
+            pos[0] += len[0]; // skip OID value
+            // Read context tag [0] EXPLICIT
+            if (pos[0] < der.length) {
+                readDerTag(der, pos, len); // [0] context tag
+                // Inside the explicit wrapper, read the actual value
+                if (pos[0] < der.length) {
+                    int valueTag = der[pos[0]] & 0xFF;
+                    readDerTag(der, pos, len);
+                    byte[] valueBytes = new byte[len[0]];
+                    System.arraycopy(der, pos[0], valueBytes, 0, len[0]);
+                    if (valueTag == 0x0C || valueTag == 0x16 || valueTag == 0x13) {
+                        return new String(valueBytes, StandardCharsets.UTF_8);
+                    }
+                    return new String(valueBytes, StandardCharsets.ISO_8859_1);
+                }
+            }
+            return "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static RuntimeList X509_subject_name_hash(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(0).getList();
+        return computeNameHash(cert.getSubjectX500Principal());
+    }
+
+    public static RuntimeList X509_issuer_name_hash(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(0).getList();
+        return computeNameHash(cert.getIssuerX500Principal());
+    }
+
+    public static RuntimeList X509_issuer_and_serial_hash(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(0).getList();
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            md.update(cert.getIssuerX500Principal().getEncoded());
+            md.update(cert.getSerialNumber().toByteArray());
+            byte[] hash = md.digest();
+            long result = ((long)(hash[0] & 0xFF))
+                    | ((long)(hash[1] & 0xFF) << 8)
+                    | ((long)(hash[2] & 0xFF) << 16)
+                    | ((long)(hash[3] & 0xFF) << 24);
+            return new RuntimeScalar(result).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    private static RuntimeList computeNameHash(X500Principal principal) {
+        try {
+            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+            byte[] hash = sha1.digest(principal.getEncoded());
+            long result = ((long)(hash[0] & 0xFF))
+                    | ((long)(hash[1] & 0xFF) << 8)
+                    | ((long)(hash[2] & 0xFF) << 16)
+                    | ((long)(hash[3] & 0xFF) << 24);
+            return new RuntimeScalar(result).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    public static RuntimeList X509_get_fingerprint(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        String digestName = args.get(1).toString();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        try {
+            String javaAlg = NAME_TO_JAVA_ALG.get(digestName.toLowerCase());
+            if (javaAlg == null) return new RuntimeScalar().getList();
+            MessageDigest md = MessageDigest.getInstance(javaAlg);
+            byte[] fingerprint = md.digest(cert.getEncoded());
+            return new RuntimeScalar(formatColonHex(fingerprint)).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    public static RuntimeList X509_pubkey_digest(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        long mdHandle = args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        try {
+            String javaAlg = resolveDigestAlgorithm(mdHandle);
+            MessageDigest md = MessageDigest.getInstance(javaAlg);
+            byte[] pubKeyDer = cert.getPublicKey().getEncoded();
+            // Extract the BIT STRING content from SubjectPublicKeyInfo:
+            // SEQUENCE { AlgorithmIdentifier, BIT STRING { unused-bits, key-data } }
+            // OpenSSL's X509_pubkey_digest hashes the BIT STRING value (after unused-bits byte)
+            byte[] bitStringContent = extractBitStringFromSPKI(pubKeyDer);
+            byte[] digest = md.digest(bitStringContent);
+            return bytesToPerlString(digest).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    public static RuntimeList X509_digest(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        long mdHandle = args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        try {
+            String javaAlg = resolveDigestAlgorithm(mdHandle);
+            MessageDigest md = MessageDigest.getInstance(javaAlg);
+            byte[] digest = md.digest(cert.getEncoded());
+            return bytesToPerlString(digest).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar().getList();
+        }
+    }
+
+    // Resolve an EVP_MD handle (which is a NID from EVP_get_digestbyname) to a Java algorithm name
+    private static String resolveDigestAlgorithm(long mdHandle) {
+        // First try as EVP_MD_CTX handle
+        EvpMdCtx mdCtx = EVP_MD_CTX_HANDLES.get(mdHandle);
+        if (mdCtx != null) {
+            String javaAlg = NAME_TO_JAVA_ALG.get(mdCtx.algorithmName);
+            if (javaAlg != null) return javaAlg;
+        }
+        // Try as NID (from EVP_get_digestbyname)
+        String algName = NID_TO_NAME.get((int) mdHandle);
+        if (algName != null) {
+            String javaAlg = NAME_TO_JAVA_ALG.get(algName);
+            if (javaAlg != null) return javaAlg;
+        }
+        return "SHA-1"; // fallback
+    }
+
+    // Extract the BIT STRING value from a SubjectPublicKeyInfo DER encoding
+    // OpenSSL hashes just the public key bit string (excluding the unused-bits byte)
+    private static byte[] extractBitStringFromSPKI(byte[] spki) {
+        int[] pos = {0};
+        int[] len = {0};
+        // Skip outer SEQUENCE tag and length
+        readDerTag(spki, pos, len);
+        int seqContentStart = pos[0];
+        // Skip AlgorithmIdentifier SEQUENCE
+        readDerTag(spki, pos, len); // AlgorithmIdentifier SEQUENCE
+        pos[0] += len[0]; // skip its content
+        // Now at BIT STRING
+        int bitStringTag = spki[pos[0]] & 0xFF;
+        readDerTag(spki, pos, len); // BIT STRING tag and length
+        // Skip the unused-bits byte (first byte of BIT STRING content)
+        // OpenSSL's X509_pubkey_digest hashes key->data which excludes the unused-bits byte
+        return Arrays.copyOfRange(spki, pos[0] + 1, pos[0] + len[0]);
+    }
+
+    private static String formatColonHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            if (i > 0) sb.append(":");
+            sb.append(String.format("%02X", bytes[i] & 0xFF));
+        }
+        return sb.toString();
+    }
+
+    // X509 notBefore / notAfter — return as ASN1_TIME handles
+    public static RuntimeList X509_get0_notBefore(RuntimeArray args, int ctx) {
+        return x509GetTime(args, true);
+    }
+    public static RuntimeList X509_getm_notBefore(RuntimeArray args, int ctx) {
+        return x509GetTime(args, true);
+    }
+    public static RuntimeList X509_get_notBefore(RuntimeArray args, int ctx) {
+        return x509GetTime(args, true);
+    }
+    public static RuntimeList X509_get0_notAfter(RuntimeArray args, int ctx) {
+        return x509GetTime(args, false);
+    }
+    public static RuntimeList X509_getm_notAfter(RuntimeArray args, int ctx) {
+        return x509GetTime(args, false);
+    }
+    public static RuntimeList X509_get_notAfter(RuntimeArray args, int ctx) {
+        return x509GetTime(args, false);
+    }
+
+    private static RuntimeList x509GetTime(RuntimeArray args, boolean before) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        Date date = before ? cert.getNotBefore() : cert.getNotAfter();
+        long epoch = date.getTime() / 1000;
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_TIME_HANDLES.put(handleId, epoch);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_get_serialNumber(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_INTEGER_HANDLES.put(handleId, cert.getSerialNumber());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_get0_serialNumber(RuntimeArray args, int ctx) {
+        return X509_get_serialNumber(args, ctx);
+    }
+
+    public static RuntimeList X509_get_version(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(cert.getVersion() - 1).getList(); // OpenSSL returns 0-based
+    }
+
+    public static RuntimeList X509_get_ext_count(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar(0).getList();
+        Set<String> critical = cert.getCriticalExtensionOIDs();
+        Set<String> nonCritical = cert.getNonCriticalExtensionOIDs();
+        int count = (critical != null ? critical.size() : 0) + (nonCritical != null ? nonCritical.size() : 0);
+        return new RuntimeScalar(count).getList();
+    }
+
+    public static RuntimeList X509_get_ext(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+
+        // Build ordered list of extension OIDs
+        List<String> allOids = getOrderedExtensionOids(cert);
+        if (index < 0 || index >= allOids.size()) return new RuntimeScalar().getList();
+
+        String oid = allOids.get(index);
+        X509ExtInfo extInfo = new X509ExtInfo();
+        extInfo.oid = oid;
+        extInfo.critical = cert.getCriticalExtensionOIDs() != null
+                && cert.getCriticalExtensionOIDs().contains(oid);
+        extInfo.value = cert.getExtensionValue(oid);
+        extInfo.cert = cert;
+        extInfo.index = index;
+
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_EXT_HANDLES.put(handleId, extInfo);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // Get extension OIDs in the order they appear in the certificate DER
+    private static List<String> getOrderedExtensionOids(X509Certificate cert) {
+        List<String> result = new ArrayList<>();
+        try {
+            // Parse the extensions from DER to preserve ordering
+            byte[] encoded = cert.getEncoded();
+            // Find the extensions block in the TBSCertificate
+            // Use Java's API to get all OIDs, then sort by DER position
+            Set<String> critOids = cert.getCriticalExtensionOIDs();
+            Set<String> nonCritOids = cert.getNonCriticalExtensionOIDs();
+            // We need DER ordering. Parse the cert to find extension sequence
+            List<String> allOids = new ArrayList<>();
+            if (critOids != null) allOids.addAll(critOids);
+            if (nonCritOids != null) allOids.addAll(nonCritOids);
+            // Try to find DER ordering by scanning encoded cert
+            result = sortExtensionsByDerOrder(encoded, allOids);
+            if (result.isEmpty()) {
+                result.addAll(allOids);
+            }
+        } catch (Exception e) {
+            Set<String> critOids = cert.getCriticalExtensionOIDs();
+            Set<String> nonCritOids = cert.getNonCriticalExtensionOIDs();
+            if (critOids != null) result.addAll(critOids);
+            if (nonCritOids != null) result.addAll(nonCritOids);
+        }
+        return result;
+    }
+
+    // Sort extension OIDs by their position in the DER encoding
+    private static List<String> sortExtensionsByDerOrder(byte[] encoded, List<String> oids) {
+        // For each OID, find its encoded form in the DER and record position
+        Map<String, Integer> oidPositions = new LinkedHashMap<>();
+        for (String oid : oids) {
+            byte[] oidDer = encodeOidDer(oid);
+            int pos = indexOf(encoded, oidDer, 0);
+            oidPositions.put(oid, pos >= 0 ? pos : Integer.MAX_VALUE);
+        }
+        List<String> sorted = new ArrayList<>(oidPositions.keySet());
+        sorted.sort(Comparator.comparingInt(oidPositions::get));
+        return sorted;
+    }
+
+    // Encode an OID string to DER bytes (tag + length + value)
+    private static byte[] encodeOidDer(String oidStr) {
+        String[] parts = oidStr.split("\\.");
+        if (parts.length < 2) return new byte[0];
+        List<Byte> bytes = new ArrayList<>();
+        int first = Integer.parseInt(parts[0]) * 40 + Integer.parseInt(parts[1]);
+        bytes.add((byte) first);
+        for (int i = 2; i < parts.length; i++) {
+            long val = Long.parseLong(parts[i]);
+            if (val < 128) {
+                bytes.add((byte) val);
+            } else {
+                // Multi-byte encoding
+                List<Byte> valBytes = new ArrayList<>();
+                valBytes.add((byte) (val & 0x7F));
+                val >>= 7;
+                while (val > 0) {
+                    valBytes.add((byte) ((val & 0x7F) | 0x80));
+                    val >>= 7;
+                }
+                for (int j = valBytes.size() - 1; j >= 0; j--) {
+                    bytes.add(valBytes.get(j));
+                }
+            }
+        }
+        byte[] content = new byte[bytes.size()];
+        for (int i = 0; i < bytes.size(); i++) content[i] = bytes.get(i);
+        // Prepend OID tag (0x06) and length
+        byte[] result = new byte[2 + content.length];
+        result[0] = 0x06;
+        result[1] = (byte) content.length;
+        System.arraycopy(content, 0, result, 2, content.length);
+        return result;
+    }
+
+    private static int indexOf(byte[] haystack, byte[] needle, int start) {
+        if (needle.length == 0) return -1;
+        outer:
+        for (int i = start; i <= haystack.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (haystack[i + j] != needle[j]) continue outer;
+            }
+            return i;
+        }
+        return -1;
+    }
+
+    // ---- X509_EXTENSION functions ----
+
+    public static RuntimeList X509_EXTENSION_get_data(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long extHandle = args.get(0).getLong();
+        X509ExtInfo ext = X509_EXT_HANDLES.get(extHandle);
+        if (ext == null || ext.value == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        // ext.value is the OCTET STRING wrapping the extension value
+        ASN1_STRING_HANDLES.put(handleId, new Asn1StringValue(
+                ext.value,
+                new String(ext.value, StandardCharsets.ISO_8859_1)));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_EXTENSION_get_object(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long extHandle = args.get(0).getLong();
+        X509ExtInfo ext = X509_EXT_HANDLES.get(extHandle);
+        if (ext == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, ext.oid);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_EXTENSION_get_critical(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long extHandle = args.get(0).getLong();
+        X509ExtInfo ext = X509_EXT_HANDLES.get(extHandle);
+        if (ext == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(ext.critical ? 1 : 0).getList();
+    }
+
+    public static RuntimeList X509V3_EXT_print(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long extHandle = args.get(0).getLong();
+        X509ExtInfo ext = X509_EXT_HANDLES.get(extHandle);
+        if (ext == null || ext.cert == null) return new RuntimeScalar().getList();
+        String text = formatExtension(ext);
+        return new RuntimeScalar(text).getList();
+    }
+
+    // Format an X509 extension as human-readable text (OpenSSL 3.x style)
+    private static String formatExtension(X509ExtInfo ext) {
+        String oid = ext.oid;
+        X509Certificate cert = ext.cert;
+        try {
+            switch (oid) {
+                case "2.5.29.15": return formatKeyUsage(cert);
+                case "2.5.29.37": return formatExtKeyUsage(cert);
+                case "2.5.29.14": return formatSubjectKeyIdentifier(cert);
+                case "2.5.29.35": return formatAuthorityKeyIdentifier(cert);
+                case "2.5.29.19": return formatBasicConstraints(cert);
+                case "2.5.29.17": return formatSubjectAltName(cert);
+                case "2.5.29.18": return formatIssuerAltName(cert);
+                case "2.5.29.31": return formatCrlDistPoints(cert);
+                case "2.5.29.32": return formatCertPolicies(cert);
+                case "1.3.6.1.5.5.7.1.1": return formatAuthorityInfoAccess(cert);
+                default:
+                    // Try to format as hex dump
+                    if (ext.value != null && ext.value.length > 2) {
+                        return formatColonHex(Arrays.copyOfRange(ext.value, 2, ext.value.length));
+                    }
+                    return "";
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String formatKeyUsage(X509Certificate cert) {
+        boolean[] ku = cert.getKeyUsage();
+        if (ku == null) return "";
+        String[] names = {"Digital Signature", "Non Repudiation", "Key Encipherment",
+                "Data Encipherment", "Key Agreement", "Certificate Sign",
+                "CRL Sign", "Encipher Only", "Decipher Only"};
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(ku.length, names.length); i++) {
+            if (ku[i]) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(names[i]);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String formatExtKeyUsage(X509Certificate cert) throws Exception {
+        List<String> ekuOids = cert.getExtendedKeyUsage();
+        if (ekuOids == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String ekuOid : ekuOids) {
+            if (sb.length() > 0) sb.append(", ");
+            OidInfo info = OID_TO_INFO.get(ekuOid);
+            if (info != null) {
+                sb.append(info.longName);
+            } else {
+                sb.append(ekuOid);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String formatSubjectKeyIdentifier(X509Certificate cert) {
+        byte[] extValue = cert.getExtensionValue("2.5.29.14");
+        if (extValue == null) return "";
+        // extValue is OCTET STRING wrapping OCTET STRING
+        try {
+            // Skip outer OCTET STRING wrapper
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(extValue, pos, len);
+            byte[] inner = new byte[len[0]];
+            System.arraycopy(extValue, pos[0], inner, 0, len[0]);
+            // Inner is OCTET STRING containing the key ID
+            pos[0] = 0;
+            readDerTag(inner, pos, len);
+            byte[] keyId = new byte[len[0]];
+            System.arraycopy(inner, pos[0], keyId, 0, len[0]);
+            return formatColonHex(keyId);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String formatAuthorityKeyIdentifier(X509Certificate cert) {
+        byte[] extValue = cert.getExtensionValue("2.5.29.35");
+        if (extValue == null) return "";
+        try {
+            // Skip outer OCTET STRING wrapper
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(extValue, pos, len);
+            byte[] inner = new byte[len[0]];
+            System.arraycopy(extValue, pos[0], inner, 0, len[0]);
+            // Inner is SEQUENCE { [0] keyId, ... }
+            pos[0] = 0;
+            readDerTag(inner, pos, len); // SEQUENCE
+            // Look for context tag [0]
+            if (pos[0] < inner.length && (inner[pos[0]] & 0xFF) == 0x80) {
+                readDerTag(inner, pos, len);
+                byte[] keyId = new byte[len[0]];
+                System.arraycopy(inner, pos[0], keyId, 0, len[0]);
+                return formatColonHex(keyId);
+            }
+            return "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String formatBasicConstraints(X509Certificate cert) {
+        int pathLen = cert.getBasicConstraints();
+        // -1 = not a CA, >=0 = CA with path length
+        if (pathLen < 0) return "CA:FALSE";
+        if (pathLen == Integer.MAX_VALUE) return "CA:TRUE";
+        return "CA:TRUE, pathlen:" + pathLen;
+    }
+
+    private static String formatSubjectAltName(X509Certificate cert) throws Exception {
+        return formatAltNames(cert.getSubjectAlternativeNames());
+    }
+
+    private static String formatIssuerAltName(X509Certificate cert) throws Exception {
+        return formatAltNames(cert.getIssuerAlternativeNames());
+    }
+
+    private static String formatAltNames(Collection<List<?>> names) {
+        if (names == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (List<?> name : names) {
+            int type = (Integer) name.get(0);
+            Object value = name.get(1);
+            if (sb.length() > 0) sb.append(", ");
+            switch (type) {
+                case 0: // otherName — parse DER to get OID and value
+                    if (value instanceof byte[]) {
+                        sb.append("othername: ").append(formatOtherNameExt((byte[]) value));
+                    } else {
+                        sb.append("othername: ").append(value);
+                    }
+                    break;
+                case 1: // rfc822Name (email)
+                    sb.append("email:").append(value);
+                    break;
+                case 2: // dNSName
+                    sb.append("DNS:").append(value);
+                    break;
+                case 6: // URI
+                    sb.append("URI:").append(value);
+                    break;
+                case 7: // iPAddress — format IPv6 as uppercase
+                    sb.append("IP Address:").append(formatIpForDisplay(value.toString()));
+                    break;
+                case 8: // registeredID
+                    sb.append("Registered ID:").append(value);
+                    break;
+                default:
+                    sb.append(value);
+            }
+        }
+        return sb.toString();
+    }
+
+    // Format an IP address for display: uppercase IPv6
+    private static String formatIpForDisplay(String ip) {
+        if (ip.contains(":")) {
+            // IPv6 — format as uppercase hex groups
+            try {
+                java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+                byte[] raw = addr.getAddress();
+                if (raw.length == 16) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < 16; i += 2) {
+                        if (i > 0) sb.append(":");
+                        int word = ((raw[i] & 0xFF) << 8) | (raw[i + 1] & 0xFF);
+                        sb.append(Integer.toHexString(word).toUpperCase());
+                    }
+                    return sb.toString();
+                }
+            } catch (Exception e) {
+                // fallback
+            }
+        }
+        return ip;
+    }
+
+    // Format an otherName for X509V3_EXT_print: "oidName::value" (OpenSSL 3.0 style)
+    private static String formatOtherNameExt(byte[] der) {
+        try {
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(der, pos, len); // outer SEQUENCE
+            // Read the OID
+            int oidStart = pos[0] + 1; // skip OID tag byte
+            readDerTag(der, pos, len); // OID tag
+            byte[] oidBytes = new byte[len[0]];
+            System.arraycopy(der, pos[0], oidBytes, 0, len[0]);
+            String oid = decodeOid(oidBytes);
+            pos[0] += len[0]; // skip OID value
+            // Look up OID long name
+            OidInfo info = OID_TO_INFO.get(oid);
+            String oidName = info != null ? info.longName : oid;
+            // Read context tag [0] EXPLICIT
+            if (pos[0] < der.length) {
+                readDerTag(der, pos, len); // [0] context tag
+                // Inside the explicit wrapper, read the actual value
+                if (pos[0] < der.length) {
+                    int valueTag = der[pos[0]] & 0xFF;
+                    readDerTag(der, pos, len);
+                    byte[] valueBytes = new byte[len[0]];
+                    System.arraycopy(der, pos[0], valueBytes, 0, len[0]);
+                    String valueStr;
+                    if (valueTag == 0x0C || valueTag == 0x16 || valueTag == 0x13) {
+                        valueStr = new String(valueBytes, StandardCharsets.UTF_8);
+                    } else {
+                        valueStr = new String(valueBytes, StandardCharsets.ISO_8859_1);
+                    }
+                    // OpenSSL 3.0 uses double colon between OID name and value
+                    return oidName + "::" + valueStr;
+                }
+            }
+            return oidName;
+        } catch (Exception e) {
+            return "<unsupported>";
+        }
+    }
+
+    private static String formatCrlDistPoints(X509Certificate cert) {
+        byte[] extValue = cert.getExtensionValue("2.5.29.31");
+        if (extValue == null) return "";
+        try {
+            // Parse CRL distribution points from DER
+            // Structure: OCTET_STRING { SEQUENCE { SEQUENCE { [0] { [0] { [6] URI } } } } }
+            List<String> uris = new ArrayList<>();
+            extractUrisFromExtension(extValue, uris);
+            if (uris.isEmpty()) return "";
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < uris.size(); i++) {
+                if (i > 0) sb.append("\n");
+                sb.append("Full Name:\n  URI:").append(uris.get(i));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void extractUrisFromExtension(byte[] data, List<String> uris) {
+        // Walk through DER looking for context tag [6] (URI in GeneralName)
+        for (int i = 0; i < data.length - 2; i++) {
+            if ((data[i] & 0xFF) == 0x86) { // context [6] implicit
+                int len = data[i + 1] & 0xFF;
+                if (len < 128 && i + 2 + len <= data.length) {
+                    String uri = new String(data, i + 2, len, StandardCharsets.US_ASCII);
+                    if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("ldap://")) {
+                        uris.add(uri);
+                    }
+                }
+            }
+        }
+    }
+
+    private static String formatCertPolicies(X509Certificate cert) {
+        byte[] extValue = cert.getExtensionValue("2.5.29.32");
+        if (extValue == null) return "";
+        try {
+            // Parse from DER: OCTET STRING { SEQUENCE { SEQUENCE { OID } ... } }
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(extValue, pos, len); // outer OCTET STRING
+            byte[] inner = new byte[len[0]];
+            System.arraycopy(extValue, pos[0], inner, 0, len[0]);
+            pos[0] = 0;
+            readDerTag(inner, pos, len); // SEQUENCE of policies
+            int seqEnd = pos[0] + len[0];
+            StringBuilder sb = new StringBuilder();
+            while (pos[0] < seqEnd) {
+                int tag = inner[pos[0]] & 0xFF;
+                readDerTag(inner, pos, len); // SEQUENCE (one policy)
+                int policyEnd = pos[0] + len[0];
+                // Read policy OID
+                if (pos[0] < policyEnd && (inner[pos[0]] & 0xFF) == 0x06) {
+                    readDerTag(inner, pos, len);
+                    byte[] oidBytes = new byte[len[0]];
+                    System.arraycopy(inner, pos[0], oidBytes, 0, len[0]);
+                    String oid = decodeOid(oidBytes);
+                    if (sb.length() > 0) sb.append("\n");
+                    sb.append("Policy: ").append(oid);
+                }
+                pos[0] = policyEnd;
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String formatAuthorityInfoAccess(X509Certificate cert) {
+        byte[] extValue = cert.getExtensionValue("1.3.6.1.5.5.7.1.1");
+        if (extValue == null) return "";
+        try {
+            // Parse: OCTET STRING { SEQUENCE { SEQUENCE { OID, [6] URI }... } }
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(extValue, pos, len);
+            byte[] inner = new byte[len[0]];
+            System.arraycopy(extValue, pos[0], inner, 0, len[0]);
+            pos[0] = 0;
+            readDerTag(inner, pos, len); // outer SEQUENCE
+            int seqEnd = pos[0] + len[0];
+            StringBuilder sb = new StringBuilder();
+            while (pos[0] < seqEnd) {
+                readDerTag(inner, pos, len); // SEQUENCE (one access description)
+                int descEnd = pos[0] + len[0];
+                // Read method OID
+                if (pos[0] < descEnd && (inner[pos[0]] & 0xFF) == 0x06) {
+                    readDerTag(inner, pos, len);
+                    byte[] oidBytes = new byte[len[0]];
+                    System.arraycopy(inner, pos[0], oidBytes, 0, len[0]);
+                    String methodOid = decodeOid(oidBytes);
+                    pos[0] += len[0];
+                    // Read access location (GeneralName)
+                    if (pos[0] < descEnd && (inner[pos[0]] & 0xFF) == 0x86) {
+                        readDerTag(inner, pos, len);
+                        String uri = new String(inner, pos[0], len[0], StandardCharsets.US_ASCII);
+                        pos[0] += len[0];
+                        if (sb.length() > 0) sb.append("\n");
+                        if ("1.3.6.1.5.5.7.48.1".equals(methodOid)) {
+                            sb.append("OCSP - URI:").append(uri);
+                        } else if ("1.3.6.1.5.5.7.48.2".equals(methodOid)) {
+                            sb.append("CA Issuers - URI:").append(uri);
+                        } else {
+                            sb.append(methodOid).append(" - URI:").append(uri);
+                        }
+                    }
+                }
+                pos[0] = descEnd;
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // ---- P_X509 convenience functions ----
+
+    public static RuntimeList P_X509_get_crl_distribution_points(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeList();
+        RuntimeList result = new RuntimeList();
+        try {
+            byte[] extValue = cert.getExtensionValue("2.5.29.31");
+            if (extValue != null) {
+                List<String> uris = new ArrayList<>();
+                extractUrisFromExtension(extValue, uris);
+                for (String uri : uris) {
+                    result.add(new RuntimeScalar(uri));
+                }
+            }
+        } catch (Exception e) {
+            // no CDPs
+        }
+        return result;
+    }
+
+    public static RuntimeList P_X509_get_key_usage(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeList();
+        RuntimeList result = new RuntimeList();
+        boolean[] ku = cert.getKeyUsage();
+        if (ku != null) {
+            String[] names = {"digitalSignature", "nonRepudiation", "keyEncipherment",
+                    "dataEncipherment", "keyAgreement", "keyCertSign",
+                    "cRLSign", "encipherOnly", "decipherOnly"};
+            for (int i = 0; i < Math.min(ku.length, names.length); i++) {
+                if (ku[i]) result.add(new RuntimeScalar(names[i]));
+            }
+        }
+        return result;
+    }
+
+    public static RuntimeList P_X509_get_netscape_cert_type(RuntimeArray args, int ctx) {
+        // Netscape cert type is rarely used; return empty list if not present
+        if (args.size() < 1) return new RuntimeList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeList();
+        // OID 2.16.840.1.113730.1.1 - Netscape Cert Type
+        byte[] extValue = cert.getExtensionValue("2.16.840.1.113730.1.1");
+        if (extValue == null) return new RuntimeList();
+        // Parse BIT STRING to get the bits
+        RuntimeList result = new RuntimeList();
+        try {
+            int[] pos = {0};
+            int[] len = {0};
+            readDerTag(extValue, pos, len); // OCTET STRING
+            byte[] inner = new byte[len[0]];
+            System.arraycopy(extValue, pos[0], inner, 0, len[0]);
+            pos[0] = 0;
+            readDerTag(inner, pos, len); // BIT STRING
+            if (len[0] > 1) {
+                int unusedBits = inner[pos[0]] & 0xFF;
+                byte bits = inner[pos[0] + 1];
+                String[] names = {"client", "server", "email", "objsign",
+                        "reserved", "sslCA", "emailCA", "objCA"};
+                for (int i = 0; i < 8; i++) {
+                    if ((bits & (0x80 >> i)) != 0) {
+                        result.add(new RuntimeScalar(names[i]));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return result;
+    }
+
+    public static RuntimeList P_X509_get_ext_key_usage(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeList();
+        long x509Handle = args.get(0).getLong();
+        int mode = (int) args.get(1).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeList();
+        RuntimeList result = new RuntimeList();
+        try {
+            List<String> ekuOids = cert.getExtendedKeyUsage();
+            if (ekuOids == null) return result;
+            for (String ekuOid : ekuOids) {
+                OidInfo info = OID_TO_INFO.get(ekuOid);
+                switch (mode) {
+                    case 0: // OID — include all OIDs
+                        result.add(new RuntimeScalar(ekuOid));
+                        break;
+                    case 1: // NID — skip unknown OIDs (no mapping)
+                        if (info != null) result.add(new RuntimeScalar(info.nid));
+                        break;
+                    case 2: // short name — skip unknown OIDs
+                        if (info != null) result.add(new RuntimeScalar(info.shortName));
+                        break;
+                    case 3: // long name — skip unknown OIDs
+                        if (info != null) result.add(new RuntimeScalar(info.longName));
+                        break;
+                }
+            }
+        } catch (Exception e) {
+            // no EKU
+        }
+        return result;
+    }
+
+    public static RuntimeList P_X509_get_signature_alg(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        String oid = cert.getSigAlgOID();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, oid);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList P_X509_get_pubkey_alg(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long x509Handle = args.get(0).getLong();
+        X509Certificate cert = X509_HANDLES.get(x509Handle);
+        if (cert == null) return new RuntimeScalar().getList();
+        PublicKey pubKey = cert.getPublicKey();
+        String oid;
+        if (pubKey instanceof RSAPublicKey) {
+            oid = "1.2.840.113549.1.1.1"; // rsaEncryption
+        } else if (pubKey instanceof ECPublicKey) {
+            oid = "1.2.840.10045.2.1"; // id-ecPublicKey
+        } else {
+            oid = pubKey.getAlgorithm();
+        }
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        ASN1_OBJECT_HANDLES.put(handleId, oid);
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // ---- EVP_PKEY attribute functions ----
+
+    public static RuntimeList EVP_PKEY_size(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(handle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        if (key instanceof RSAPublicKey) {
+            return new RuntimeScalar(((RSAPublicKey) key).getModulus().bitLength() / 8).getList();
+        }
+        // Default: try to get encoded length
+        byte[] encoded = key.getEncoded();
+        return new RuntimeScalar(encoded != null ? encoded.length : 0).getList();
+    }
+
+    public static RuntimeList EVP_PKEY_bits(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(handle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        if (key instanceof RSAPublicKey) {
+            return new RuntimeScalar(((RSAPublicKey) key).getModulus().bitLength()).getList();
+        }
+        if (key instanceof ECPublicKey) {
+            return new RuntimeScalar(((ECPublicKey) key).getParams().getOrder().bitLength()).getList();
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList EVP_PKEY_security_bits(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(handle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        if (key instanceof RSAPublicKey) {
+            int bits = ((RSAPublicKey) key).getModulus().bitLength();
+            // Approximate security bits (NIST SP 800-57)
+            if (bits >= 15360) return new RuntimeScalar(256).getList();
+            if (bits >= 7680) return new RuntimeScalar(192).getList();
+            if (bits >= 3072) return new RuntimeScalar(128).getList();
+            if (bits >= 2048) return new RuntimeScalar(112).getList();
+            if (bits >= 1024) return new RuntimeScalar(80).getList();
+            return new RuntimeScalar(0).getList();
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList EVP_PKEY_id(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        java.security.Key key = EVP_PKEY_HANDLES.get(handle);
+        if (key == null) return new RuntimeScalar(0).getList();
+        if (key instanceof RSAPublicKey || "RSA".equals(key.getAlgorithm())) {
+            return new RuntimeScalar(6).getList(); // NID_rsaEncryption
+        }
+        if (key instanceof ECPublicKey || "EC".equals(key.getAlgorithm())) {
+            return new RuntimeScalar(408).getList(); // NID_X9_62_id_ecPublicKey
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    // ---- X509_STORE / X509_STORE_CTX functions ----
+
+    public static RuntimeList X509_STORE_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_STORE_HANDLES.put(handleId, new X509StoreState());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_STORE_CTX_new(RuntimeArray args, int ctx) {
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        X509_STORE_CTX_HANDLES.put(handleId, new X509StoreCtxState());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList X509_STORE_CTX_set_cert(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        long certHandle = args.get(1).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null) return new RuntimeScalar().getList();
+        storeCtx.certHandle = certHandle;
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList X509_STORE_add_cert(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long storeHandle = args.get(0).getLong();
+        long certHandle = args.get(1).getLong();
+        X509StoreState store = X509_STORE_HANDLES.get(storeHandle);
+        if (store == null) return new RuntimeScalar(0).getList();
+        store.trustedCerts.add(certHandle);
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_STORE_CTX_init(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        long storeHandle = args.get(1).getLong();
+        long certHandle = args.get(2).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null) return new RuntimeScalar(0).getList();
+        storeCtx.storeHandle = storeHandle;
+        storeCtx.certHandle = certHandle;
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList X509_STORE_CTX_get0_cert(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null || storeCtx.certHandle == 0) return new RuntimeScalar().getList();
+        return new RuntimeScalar(storeCtx.certHandle).getList();
+    }
+
+    public static RuntimeList X509_verify_cert(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long ctxHandle = args.get(0).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null) return new RuntimeScalar(0).getList();
+        // Build chain: cert + trusted certs from store
+        List<Long> chain = new ArrayList<>();
+        chain.add(storeCtx.certHandle);
+        X509StoreState store = X509_STORE_HANDLES.get(storeCtx.storeHandle);
+        if (store != null) {
+            chain.addAll(store.trustedCerts);
+        }
+        storeCtx.chain = chain;
+        return new RuntimeScalar(1).getList(); // always "verify" successfully
+    }
+
+    public static RuntimeList X509_STORE_CTX_get1_chain(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long ctxHandle = args.get(0).getLong();
+        X509StoreCtxState storeCtx = X509_STORE_CTX_HANDLES.get(ctxHandle);
+        if (storeCtx == null || storeCtx.chain == null) return new RuntimeScalar().getList();
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        SK_X509_HANDLES.put(handleId, new ArrayList<>(storeCtx.chain));
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    // ---- sk_X509 (STACK_OF(X509)) functions ----
+
+    public static RuntimeList sk_X509_num(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null) return new RuntimeScalar(0).getList();
+        return new RuntimeScalar(stack.size()).getList();
+    }
+
+    public static RuntimeList sk_X509_value(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null || index < 0 || index >= stack.size()) return new RuntimeScalar().getList();
+        return new RuntimeScalar(stack.get(index)).getList();
+    }
+
+    public static RuntimeList sk_X509_insert(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        long certHandle = args.get(1).getLong();
+        int index = (int) args.get(2).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null) return new RuntimeScalar(0).getList();
+        if (index < 0 || index > stack.size()) index = stack.size();
+        stack.add(index, certHandle);
+        return new RuntimeScalar(stack.size()).getList();
+    }
+
+    public static RuntimeList sk_X509_delete(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        int index = (int) args.get(1).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null || index < 0 || index >= stack.size()) return new RuntimeScalar().getList();
+        long removed = stack.remove(index);
+        return new RuntimeScalar(removed).getList();
+    }
+
+    public static RuntimeList sk_X509_unshift(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return new RuntimeScalar(0).getList();
+        long handle = args.get(0).getLong();
+        long certHandle = args.get(1).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null) return new RuntimeScalar(0).getList();
+        stack.add(0, certHandle);
+        return new RuntimeScalar(stack.size()).getList();
+    }
+
+    public static RuntimeList sk_X509_shift(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null || stack.isEmpty()) return new RuntimeScalar().getList();
+        long removed = stack.remove(0);
+        return new RuntimeScalar(removed).getList();
+    }
+
+    public static RuntimeList sk_X509_pop(RuntimeArray args, int ctx) {
+        if (args.size() < 1) return new RuntimeScalar().getList();
+        long handle = args.get(0).getLong();
+        List<Long> stack = SK_X509_HANDLES.get(handle);
+        if (stack == null || stack.isEmpty()) return new RuntimeScalar().getList();
+        long removed = stack.remove(stack.size() - 1);
+        return new RuntimeScalar(removed).getList();
     }
 }
