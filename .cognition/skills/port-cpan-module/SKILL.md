@@ -179,10 +179,36 @@ as Perl itself.
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
 | `make dev` | Build only, skip tests (for quick iteration during development) |
+| `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
-1. **Create test file:** `src/test/resources/module_name.t`
+1. **Create test files in `src/test/resources/module/`:**
 
-2. **Compare with system Perl:**
+   Tests for bundled modules go under `src/test/resources/module/Module-Name/t/`.
+   Follow the existing pattern (see `module/XML-Parser/t/` for reference).
+   Support files (sample data, configs) go in `module/Module-Name/t/samples/` or similar.
+
+   ```
+   src/test/resources/module/
+   └── Module-Name/
+       └── t/
+           ├── basic.t
+           ├── feature.t
+           └── samples/
+               └── test-data.txt
+   ```
+
+   These tests are run by `make test-bundled-modules`, NOT by `make` (which runs unit tests only).
+
+2. **Test with `jcpan` if the module is on CPAN:**
+
+   If the module has an upstream CPAN distribution with its own test suite,
+   run it to verify compatibility:
+   ```bash
+   ./jcpan -t Module::Name
+   ```
+   This downloads the CPAN distribution, installs it, and runs the upstream tests.
+
+3. **Compare with system Perl:**
    ```bash
    # Create test script
    cat > /tmp/test.pl << 'EOF'
@@ -361,10 +387,15 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code
+- [ ] Run bundled module tests if applicable: `make test-bundled-modules`
+- [ ] Run upstream CPAN tests if applicable: `./jcpan -t Module::Name`
 
 ### Documentation
 - [ ] Add POD with AUTHOR and COPYRIGHT sections
 - [ ] Credit original authors
+- [ ] Update `docs/about/changelog.md` — add module to "Add modules:" list in the current unreleased version
+- [ ] Update `docs/reference/feature-matrix.md` — add entry in the appropriate section (Core modules / Non-core modules) with status icon and description
+- [ ] Update `README.md` if the module is notable enough to mention in the Features list
 
 ## Example: Time::Piece Port
 
