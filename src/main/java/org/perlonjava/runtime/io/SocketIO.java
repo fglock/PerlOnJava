@@ -604,12 +604,23 @@ public class SocketIO implements IOHandle {
     public RuntimeScalar write(String string) {
         var data = string.getBytes(StandardCharsets.ISO_8859_1);
         try {
+            // Ensure non-blocking connect has completed before writing
+            if (!ensureConnected()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarFalse;
+            }
+
             // Use channel-based I/O for non-blocking sockets to avoid
             // IllegalBlockingModeException from stream-based I/O,
             // and also when outputStream is not available (NIO-created sockets)
             if (socketChannel != null && (!blocking || outputStream == null)) {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
                 int written = socketChannel.write(buf);
+                if (written == 0) {
+                    // Would block — set EWOULDBLOCK
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarFalse;
+                }
                 return written > 0 ? scalarTrue : scalarFalse;
             }
 
@@ -642,6 +653,35 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Ensures that a non-blocking connection has completed before attempting I/O.
+     * In Java NIO, after a non-blocking connect(), you must call finishConnect()
+     * before reading or writing. select() reports OP_CONNECT readiness but
+     * deliberately doesn't call finishConnect() (to support IO::Socket's
+     * reconnect-based workflow). Other code paths (Net::HTTP::NB, etc.) write
+     * directly after select, so we finishConnect() lazily here.
+     *
+     * @return true if the connection is ready for I/O, false if still pending
+     * @throws IOException if the connection failed
+     */
+    private boolean ensureConnected() throws IOException {
+        if (socketChannel != null && socketChannel.isConnectionPending()) {
+            boolean finished = socketChannel.finishConnect();
+            if (finished) {
+                this.socket = socketChannel.socket();
+                if (this.inputStream == null) {
+                    this.inputStream = socket.getInputStream();
+                }
+                if (this.outputStream == null) {
+                    this.outputStream = socket.getOutputStream();
+                }
+                return true;
+            }
+            return false; // still pending
+        }
+        return true; // already connected or no pending connection
+    }
+
+    /**
      * Low-level read from the socket (sysread equivalent).
      * Reads raw bytes without buffering, suitable for use by HTTP::Daemon and similar.
      *
@@ -651,6 +691,12 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar sysread(int length) {
         try {
+            // Ensure non-blocking connect has completed before reading
+            if (!ensureConnected()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarUndef;
+            }
+
             // Use channel-based I/O for non-blocking sockets to avoid
             // IllegalBlockingModeException from stream-based I/O.
             // Also use channel I/O when inputStream is not available
@@ -700,6 +746,12 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar syswrite(String data) {
         try {
+            // Ensure non-blocking connect has completed before writing
+            if (!ensureConnected()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarUndef;
+            }
+
             byte[] bytes = new byte[data.length()];
             for (int i = 0; i < data.length(); i++) {
                 bytes[i] = (byte) (data.charAt(i) & 0xFF);
