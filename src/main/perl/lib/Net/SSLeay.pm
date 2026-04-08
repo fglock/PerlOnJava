@@ -369,15 +369,26 @@ our $trace = 0;
 
 sub die_if_ssl_error {
     my $msg = shift || '';
-    # Only die if there are pending SSL errors in the error queue
-    my $err = Net::SSLeay::ERR_get_error();
-    if ($err) {
-        die "$$: $msg\n";
-    }
+    my $err = print_errs($msg);
+    die "$$: $msg\n" if $err;
 }
 sub die_now {
     my $msg = shift || 'Died';
+    print_errs($msg);
     die "$$: $msg\n";
+}
+
+# print_errs - drains the error queue, formats each error, warns if $trace is on
+sub print_errs {
+    my ($prefix) = @_;
+    $prefix = '' unless defined $prefix;
+    my ($err, $errs, $count) = (0, '', 0);
+    while ($err = Net::SSLeay::ERR_get_error()) {
+        $count++;
+        $errs .= "$prefix $$: $count - " . Net::SSLeay::ERR_error_string($err) . "\n";
+    }
+    warn $errs if $trace && $errs;
+    return $errs;
 }
 
 sub do_https   { _not_implemented("do_https") }

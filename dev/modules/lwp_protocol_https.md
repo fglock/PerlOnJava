@@ -143,12 +143,12 @@ implement because they're not on the code path.
 | `66_curves.t` | EC curve selection | None — JVM auto-negotiates | Partial |
 | `67_sigalgs.t` | Signature algorithm config | None | Partial |
 
-#### The 8 remaining subtest failures — require real OpenSSL
+#### The 8 remaining subtest failures — RESOLVED by Tier 2
 
-| Test | Subtests | Issue |
-|------|----------|-------|
-| `31_rsa_generate_key.t` #1-6 | RSA key generation + callbacks | Needs native `RSA_generate_key` |
-| `50_digest.t` #1-2 | EVP digest init, digest list | Needs native `EVP_MD_CTX_new` |
+| Test | Subtests | Issue | Status |
+|------|----------|-------|--------|
+| `31_rsa_generate_key.t` #1-6 | RSA key generation + callbacks | `RSA_generate_key` → `KeyPairGenerator` | ✅ 14/14 pass |
+| `50_digest.t` #1-2 | EVP digest init, digest list | `EVP_MD_CTX_new` → `MessageDigest` | ✅ 206/206 pass |
 
 ### What could realistically be implemented
 
@@ -162,19 +162,27 @@ Three tiers of effort:
   `OPENSSL_info` (with all OPENSSL_INFO_* type constants)
 - Added SSLeay_version type constants (`SSLEAY_VERSION`, `SSLEAY_CFLAGS`, etc.)
 - Fixed `die_now`/`die_if_ssl_error` stubs to match real Net::SSLeay behavior
-- *Remaining 8 failures require native OpenSSL — cannot fix with stubs.*
 
-**Tier 2 — Useful Net::SSLeay functions (enables broader ecosystem)**
-These functions have direct Java equivalents and could be useful to modules
-beyond IO::Socket::SSL (e.g., if someone uses Net::SSLeay directly):
-- `RAND_bytes` / `RAND_status` → `SecureRandom`
-- `MD5` / `SHA1` / `SHA256` / `EVP_get_digestbyname` → `MessageDigest`
-- `P_PKCS12_load_file` → `KeyStore.getInstance("PKCS12")`
-- `PEM_read_bio_X509` / `X509_get_subject_name` / `X509_NAME_oneline` → `X509Certificate`
-- `BIO_new` / `BIO_s_mem` / `BIO_read` / `BIO_write` → `ByteArrayOutputStream`
-- Error queue (`ERR_put_error`, `ERR_get_error`, `ERR_error_string`)
-- *Effort: 2-3 days.  Would pass ~5 more test programs (10_rand, 15_bio,
-  30_error, 39_pkcs12, 50_digest).*
+**Tier 2 — Java-backed OpenSSL function implementations (DONE — 1118/1118 subtests pass)**
+All 9 passing test programs now have 0 failures (was 8 failures in 2 programs).
+83 additional subtests gained from 5 newly-passing test programs.
+
+| Group | Functions | Java backend | Test file | Subtests | Effort |
+|-------|-----------|-------------|-----------|----------|--------|
+| RAND | `RAND_status`, `RAND_poll`, `RAND_bytes`, `RAND_pseudo_bytes`, `RAND_priv_bytes`, `RAND_file_name`, `RAND_load_file` | `SecureRandom` | 10_rand.t | 53 | Easy |
+| Error queue | `ERR_put_error` (+ existing `ERR_get_error`, `ERR_error_string`) | Thread-local `Deque<Long>` | 30_error.t | 8 more | Easy |
+| BIO (memory) | `BIO_s_mem`, `BIO_new`, `BIO_write`, `BIO_pending`, `BIO_read`, `BIO_free` | `ByteArrayOutputStream` | 15_bio.t | 7 | Medium |
+| RSA keygen | `RSA_generate_key(bits, e, cb, userdata)` | `KeyPairGenerator("RSA")` | 31_rsa_generate_key.t | 14 | Medium |
+| EVP digest | `EVP_MD_CTX_create/destroy`, `EVP_get_digestbyname`, `EVP_DigestInit/_ex`, `EVP_DigestUpdate`, `EVP_DigestFinal/_ex`, `EVP_Digest`, `EVP_MD_type/size`, `EVP_MD_CTX_md`, `EVP_sha1/sha256/sha512`, `P_EVP_MD_list_all`, `MD2/MD4/MD5/RIPEMD160/SHA1/SHA256/SHA512`, `EVP_MD_get0_name/description`, `EVP_MD_get_type`, `NID_sha512` | `MessageDigest` | 50_digest.t | 206 | Medium-Hard |
+
+Implementation approach: All functions are registered in `NetSSLeay.java` via
+`registerMethod()`. Opaque handles (BIO, EVP_MD_CTX, RSA) use RuntimeScalar
+wrapping Java objects, accessed via `value` field casting. The EVP digest API
+uses `java.security.MessageDigest` with an internal map of OpenSSL NID → Java
+algorithm names.
+
+*Previously estimated 2-3 days. Would pass ~5 more test programs and bring
+Net::SSLeay from 1035/1043 to potentially ~1300+ subtests passing.*
 
 **Tier 3 — Full OpenSSL object model (diminishing returns)**
 These require implementing the CTX/SSL/X509 object lifecycle, which is complex
