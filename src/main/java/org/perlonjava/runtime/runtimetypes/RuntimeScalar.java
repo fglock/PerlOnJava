@@ -775,15 +775,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * after storing a tracked reference in a container, if MortalList is active.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
-        if ((scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
+        if ((scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base) {
+            if (base.refCount >= 0) {
+                base.refCount++;
+            } else if (base.refCount == -1) {
+                base.refCount = 1;  // Begin tracking from first container store
+            }
         }
     }
 
     // Inlineable fast path for set(RuntimeScalar)
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
+            // When refCount tracking is active, reference stores must go through
+            // setLarge to properly increment/decrement refCounts. Without this,
+            // stores into hash elements, array elements, etc. would miss refCount
+            // updates, causing premature weak-ref clearing.
+            if (MortalList.active && ((this.type | value.type) & REFERENCE_BIT) != 0) {
+                return setLarge(value);
+            }
             this.type = value.type;
             this.value = value.value;
             return this;
@@ -916,10 +926,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Weak refs don't count toward refCount, so skip refCount decrement later.
         boolean thisWasWeak = (oldBase != null && WeakRefRegistry.removeWeakRef(this, oldBase));
 
-        // Increment new value's refCount (>= 0 means tracked; -1 means untracked)
+        // Increment new value's refCount (>= 0 means tracked; -1 means untracked).
+        // When MortalList is active (DESTROY/weaken in use), lazily begin tracking
+        // untracked objects on their first named-variable store. This enables
+        // deterministic weak-ref clearing: when the last setLarge-tracked reference
+        // is dropped, all weak refs to the object are nullified.
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
-            if (nb.refCount >= 0) nb.refCount++;
+            if (nb.refCount >= 0) {
+                nb.refCount++;
+            } else if (nb.refCount == -1 && MortalList.active) {
+                nb.refCount = 1;  // Begin tracking from first store
+            }
         }
 
         // Do the assignment
@@ -1902,6 +1920,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
+
+        // Flush any deferred mortal decrements that accumulated from sub returns
+        // or scope exits. This ensures refCounts are up-to-date before we
+        // decrement for this undefine — otherwise we'd see a stale refCount
+        // and miss the 0-transition that should trigger DESTROY/weak-ref clearing.
+        MortalList.flush();
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
         if (oldBase != null) {

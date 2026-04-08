@@ -124,18 +124,20 @@ public class MortalList {
         if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
         if (!(scalar.value instanceof RuntimeBase base)) return;
 
-        if (base.blessId != 0) {
-            if (base.refCount > 0) {
-                // Blessed and tracked with positive refCount: defer decrement
-                pending.add(base);
-            } else if (base.refCount == 0) {
-                // Blessed but refCount=0: container didn't increment (e.g., anonymous
-                // array constructor). Bump to 1 so flush triggers DESTROY.
-                base.refCount = 1;
-                pending.add(base);
-            }
-        } else {
-            // Unblessed container: recurse into its elements
+        if (base.refCount > 0) {
+            // Tracked with positive refCount: defer decrement.
+            // This covers both blessed objects (DESTROY) and unblessed objects
+            // with weak refs (deterministic weak-ref clearing).
+            pending.add(base);
+        } else if (base.refCount == 0 && base.blessId != 0) {
+            // Blessed but refCount=0: container didn't increment (e.g., anonymous
+            // array constructor). Bump to 1 so flush triggers DESTROY.
+            base.refCount = 1;
+            pending.add(base);
+        }
+
+        // Also recurse into unblessed containers to find nested blessed/tracked refs
+        if (base.blessId == 0) {
             if (base instanceof RuntimeArray arr) {
                 for (RuntimeScalar elem : arr.elements) {
                     deferDecrementRecursive(elem);
