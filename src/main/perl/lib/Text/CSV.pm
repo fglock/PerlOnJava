@@ -22,9 +22,39 @@ use constant cacheKey => "_CSVFormat";
 
 # Additional pure-Perl convenience methods
 
+# Known valid attributes for Text::CSV
+my %_valid_attributes = map { $_ => 1 } qw(
+    sep_char quote_char escape_char binary auto_diag always_quote
+    eol allow_loose_quotes allow_whitespace blank_is_undef
+    empty_is_undef quote_empty quote_space quote_binary decode_utf8
+    keep_meta_info strict formula column_names sep allow_loose_escapes
+    allow_unquoted_escape verbatim diag_verbose undef_str comment_str
+    sep_set skip_empty_rows
+);
+
+# Global error state for class-method error_diag()
+our $_global_error_code = 0;
+our $_global_error_str  = '';
+our $_global_error_pos  = 0;
+
 sub new {
     my $class = shift;
+    $class = ref $class || $class;
     my %args = @_ == 1 && ref $_[0] eq 'HASH' ? %{$_[0]} : @_;
+
+    # Validate attributes
+    for my $key (keys %args) {
+        next if $_valid_attributes{$key};
+        $_global_error_code = 1000;
+        $_global_error_str  = "INI - Unknown attribute '$key'";
+        $_global_error_pos  = 0;
+        return undef;
+    }
+
+    # Handle 'sep' as alias for 'sep_char'
+    if (exists $args{sep}) {
+        $args{sep_char} = delete $args{sep};
+    }
 
     # Set default attributes
     my $self = {
@@ -36,6 +66,8 @@ sub new {
         always_quote       => 0,
         eol                => undef,
         allow_loose_quotes => 0,
+        allow_loose_escapes => 0,
+        allow_unquoted_escape => 0,
         allow_whitespace   => 0,
         blank_is_undef     => 0,
         empty_is_undef     => 0,
@@ -46,39 +78,75 @@ sub new {
         keep_meta_info     => 0,
         strict             => 0,
         formula            => 'none',
+        verbatim           => 0,
+        diag_verbose       => 0,
+        undef_str          => undef,
+        comment_str        => undef,
         column_names       => [],
 
-        # Clear error state
+        # Internal state
         _ERROR_CODE        => 0,
         _ERROR_STR         => '',
         _ERROR_POS         => 0,
         _ERROR_FIELD       => 0,
+        _STATUS            => 0,
+        _ERROR_INPUT       => undef,
 
         %args
     };
 
+    # Clear global error on success
+    $_global_error_code = 0;
+    $_global_error_str  = '';
+    $_global_error_pos  = 0;
+
     return bless $self, $class;
 }
 
-sub sep_char {
-    my ($self, $sep) = @_;
+sub version { return $VERSION }
 
-    if (defined $sep) {
-        die "sep_char must be a single character" unless length($sep) == 1;
+sub status {
+    my $self = shift;
+    return $self->{_STATUS};
+}
+
+sub error_input {
+    my $self = shift;
+    return $self->{_ERROR_INPUT};
+}
+
+sub is_pp { return 0 }
+sub is_xs { return 0 }
+
+sub module {
+    return "Text::CSV";
+}
+
+sub sep_char {
+    my $self = shift;
+
+    if (@_ > 0) {
+        my $sep = shift;
+        if (defined $sep) {
+            die "sep_char must be a single character" unless length($sep) == 1;
+        }
         $self->{sep_char} = $sep;
-        delete $self->{+cacheKey}; # Invalidate cache if needed
+        delete $self->{+cacheKey};
     }
 
     return $self->{sep_char};
 }
 
 sub quote_char {
-    my ($self, $quote) = @_;
+    my $self = shift;
 
-    if (defined $quote) {
-        die "quote_char must be a single character" unless length($quote) == 1;
+    if (@_ > 0) {
+        my $quote = shift;
+        if (defined $quote) {
+            die "quote_char must be a single character" unless length($quote) == 1;
+        }
         $self->{quote_char} = $quote;
-        delete $self->{+cacheKey}; # Invalidate cache if needed
+        delete $self->{+cacheKey};
     }
 
     return $self->{quote_char};
@@ -159,7 +227,7 @@ sub getline {
 
     # Parse the line
     if ($self->parse($line)) {
-        return $self->fields;
+        return [$self->fields];
     }
 
     return undef;
@@ -205,7 +273,14 @@ sub error_diag {
 
     unless (ref $self) {
         # Class method call - return last global error
-        return "";
+        if (wantarray) {
+            return (
+                $_global_error_code // 0,
+                $_global_error_str // "",
+                $_global_error_pos // 0,
+            );
+        }
+        return $_global_error_str // "";
     }
 
     # Instance method call
