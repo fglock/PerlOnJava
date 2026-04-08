@@ -1,8 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Design Plan  
-**Version**: 2.0  
+**Version**: 3.0  
 **Created**: 2026-04-08  
+**Updated**: 2026-04-08 (v3.0 — bytecode trace findings, revised refCount encoding)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #450 (WIP, open), `dev/modules/poe.md` (DestroyManager attempt)
 
@@ -121,18 +122,30 @@ this targeted approach works in this codebase.
 Performance is critical — refcount overhead must not regress the hot path. The design uses
 several interlocking optimizations to achieve near-zero overhead for common operations.
 
-### 4.1 Three-State refCount (Eliminates `destroyCalled` boolean)
+### 4.1 Four-State refCount (Eliminates `destroyCalled` boolean)
 
 Instead of a separate `destroyCalled` boolean, encode the destruction state in `refCount`:
 
 ```
-refCount == 0                  →  Not tracked (unblessed, or blessed without DESTROY)
-refCount > 0                   →  Being tracked; N strong references exist
+refCount == -1                 →  Not tracked (unblessed, or blessed without DESTROY)
+refCount == 0                  →  Tracked, zero counted containers (fresh from bless)
+refCount > 0                   →  Being tracked; N named-variable containers exist
 refCount == Integer.MIN_VALUE  →  DESTROY already called (or in progress)
 ```
 
+**Why four states instead of three**: Bytecode analysis (see §4A) revealed that the
+RuntimeScalar created by `bless()` is almost always a temporary — it lives in a JVM
+local or interpreter register and travels through the return chain without being
+explicitly cleaned up. Setting `refCount = 0` at bless time (instead of 1) means the
+bless-time container is not counted. Only when the value is copied into a named `my`
+variable via `setLarge()` does refCount increment to 1.
+
 This eliminates one field from `RuntimeBase` and replaces three separate checks
 (`blessId != 0`, `hasDestroy`, `destroyCalled`) with a single integer comparison.
+
+The field is initialized as `refCount = -1` (untracked) in `RuntimeBase`. This means
+all objects — unblessed references, arrays, hashes — start as untracked by default.
+Only `bless()` for a class with DESTROY sets `refCount = 0` to begin tracking.
 
 ### 4.2 Zero Fast-Path Cost
 
@@ -152,36 +165,59 @@ All reference types have `type >= 0x8000` (REFERENCE_BIT), so they ALWAYS take t
 path through `setLarge()`. **Refcount logic lives only in `setLarge()`**, meaning the hot
 path (int/double/string/undef/boolean assignments) pays zero cost.
 
-### 4.3 Unified Gate: `refCount > 0`
+### 4.3 Unified Gate: `refCount >= 0`
 
 In `setLarge()`, the entire refcount block is:
 
 ```java
 // NEW: Track blessed-object refCount (after existing ioHolderCount block)
+
+// Save old referent BEFORE the assignment (for correct DESTROY ordering)
+RuntimeBase oldBase = null;
+if ((this.type & REFERENCE_BIT) != 0 && this.value != null) {
+    oldBase = (RuntimeBase) this.value;
+}
+
+// Increment new value's refCount
 if ((value.type & REFERENCE_BIT) != 0) {
     RuntimeBase newBase = (RuntimeBase) value.value;
-    if (newBase.refCount > 0) newBase.refCount++;
+    if (newBase.refCount >= 0) newBase.refCount++;
 }
-if ((this.type & REFERENCE_BIT) != 0 && this.value != null) {
-    RuntimeBase oldBase = (RuntimeBase) this.value;
-    if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
-        oldBase.refCount = Integer.MIN_VALUE;
-        DestroyDispatch.callDestroy(oldBase);
-    }
+
+// Do the assignment
+this.type = value.type;
+this.value = value.value;
+
+// Decrement old value's refCount AFTER assignment (Perl 5 semantics:
+// DESTROY sees the new state of the variable, not the old)
+if (oldBase != null && oldBase.refCount > 0 && --oldBase.refCount == 0) {
+    oldBase.refCount = Integer.MIN_VALUE;
+    DestroyDispatch.callDestroy(oldBase);
 }
 ```
+
+**DESTROY ordering**: In Perl 5, assignment completes before the old value's refcount
+drops. If DESTROY accesses the variable being assigned to, it sees the new value:
+```perl
+our $global;
+sub DESTROY { print $global }
+$global = MyObj->new;
+$global = "new_value";  # Perl 5: DESTROY sees "new_value", not the old object
+```
+The code above ensures this by saving oldBase, performing the assignment, then
+decrementing. This requires one extra local variable but is necessary for correctness.
 
 **Cost for the common case** (unblessed reference, or blessed without DESTROY):
 1. `(type & REFERENCE_BIT) != 0` — one bitwise AND, true (we're in setLarge with a ref)
 2. Cast `value` to `RuntimeBase` — zero cost (type reinterpretation)
-3. `refCount > 0` — one integer comparison, **false** → branch not taken
+3. `refCount >= 0` — one integer comparison, **false** (untracked = -1) → branch not taken
 
 Total overhead: **one integer comparison per reference assignment** for untracked objects.
 
 ### 4.4 Only Track Classes with DESTROY
 
 At `bless()` time, check if the class defines DESTROY (or AUTOLOAD). If not, leave
-`refCount == 0`. The `refCount > 0` gate in `setLarge()` skips all tracking.
+`refCount == -1`. The `refCount >= 0` gate in `setLarge()` skips all tracking.
 
 Use a `BitSet` indexed by `|blessId|` to cache the result per class:
 
@@ -218,11 +254,18 @@ This handles the vast majority of real-world patterns. The remaining cases (bles
 stranded inside a collected array/hash) get eventual DESTROY via the Cleaner.
 
 **Optional future optimization**: Add a `boolean containsTrackedRef` flag to
-`RuntimeArray`/`RuntimeHash`. Set on store when `refCount > 0`. At scope exit, only
+`RuntimeArray`/`RuntimeHash`. Set on store when `refCount >= 0`. At scope exit, only
 iterate if the flag is set. This makes deterministic collection cleanup cheap for the
 common case (flag is false for 99%+ of collections).
 
-### 4.6 DESTROY Method Caching
+### 4.6 REFERENCE_BIT Accessibility
+
+`REFERENCE_BIT` is currently `private` in `RuntimeScalarType`. The refcount code in
+`setLarge()` needs direct access to it (using `RuntimeScalarType.isReference()` adds
+an unnecessary method call + READONLY_SCALAR unwrap check per call). Make it
+package-private or add a public constant for the bitmask.
+
+### 4.7 DESTROY Method Caching
 
 Cache the resolved DESTROY method per `blessId` to avoid hierarchy traversal on every call:
 
@@ -233,13 +276,13 @@ private static final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCach
 
 Invalidate alongside `destroyClasses` BitSet when inheritance changes.
 
-### 4.7 No Cleaner Overhead Until Needed
+### 4.8 No Cleaner Overhead Until Needed
 
-The Cleaner sentinel registration (Phase 5) adds overhead at `bless()` time: creating a
+The Cleaner sentinel registration (Phase 4) adds overhead at `bless()` time: creating a
 sentinel object, a lambda, and registering with the Cleaner thread. This is deferred to
-a later phase. Phases 1-4 provide deterministic DESTROY without any Cleaner cost.
+a later phase. Phases 1-3 provide deterministic DESTROY without any Cleaner cost.
 
-### 4.8 Memory Impact: Zero
+### 4.9 Memory Impact: Zero
 
 Adding a single `int refCount` to `RuntimeBase`:
 
@@ -258,17 +301,127 @@ RuntimeScalar layout (current):              RuntimeScalar layout (proposed):
 **Zero additional memory cost** — the new field fits in existing alignment padding.
 (Verified: RuntimeBase has only `blessId`; RuntimeScalar adds `type`, `value`, `ioOwner`.)
 
-### 4.9 Optimization Summary
+### 4.10 Optimization Summary
 
 | Optimization | What it avoids | Cost |
 |-------------|----------------|------|
-| Three-state refCount | Separate `destroyCalled` field | One fewer field per object |
+| Four-state refCount | Separate `destroyCalled` field; overcounting from bless temp | One fewer field per object |
 | Fast-path bypass | Any refcount work on int/double/string/undef | Zero — refs always take slow path |
-| `refCount > 0` gate | Tracking unblessed or no-DESTROY objects | One integer comparison |
+| `refCount >= 0` gate | Tracking unblessed or no-DESTROY objects | One integer comparison |
 | `destroyClasses` BitSet | DESTROY lookup on every bless() | One bit check per bless() |
 | Defer collection cleanup | O(n) iteration at scope exit | Eventual via GC for collections |
 | DESTROY method cache | Hierarchy traversal on every DESTROY call | One map lookup |
-| No Cleaner until Phase 5 | Sentinel object + lambda + thread registration | Zero until Phase 5 |
+| No Cleaner until Phase 4 | Sentinel object + lambda + thread registration | Zero until Phase 4 |
+| Post-assignment DESTROY | Incorrect variable state during DESTROY | One extra local variable |
+
+---
+
+## 4A. Bytecode Trace: How Values Flow Through Function Returns
+
+This section documents the findings from disassembling `my $x = make_obj()` through
+both the JVM backend (`--disassemble`) and the interpreter backend (`--int`), and
+reading the source for every method in the chain.
+
+### 4A.1 Key Findings
+
+1. **Both backends share the same runtime methods.** The interpreter's `MY_SCALAR` opcode
+   calls `addToScalar()` → `set()` → `setLarge()`, exactly like the JVM backend's emitted
+   `invokevirtual addToScalar`.
+
+2. **No copies through the return chain.** `return $obj` wraps the SAME RuntimeScalar
+   Java object in a RuntimeList (`getList()` = `new RuntimeList(this)`). `RuntimeCode.apply()`
+   returns it directly. `RuntimeList.scalar()` returns the same object (`return this`).
+
+3. **Copies happen only at `my` declarations and assignments.** `addToScalar(target)` calls
+   `target.set(this)` → `setLarge()`, which copies `type` and `value` fields (shallow copy).
+
+4. **The return epilogue does NOT call `emitScopeExitNullStores`.** The `return` statement
+   jumps to `returnLabel` → `materializeSpecialVarsInResult` → `popToLocalLevel` → `ARETURN`.
+   No scope cleanup for `my` variables on the return path.
+
+5. **`emitScopeExitNullStores` IS emitted for all normal scope exits** (blocks, loops,
+   if/else branches). It calls `scopeExitCleanup()` on ALL `my $`-prefixed scalars in scope,
+   then nulls all `my` variable slots.
+
+### 4A.2 The Overcounting Problem
+
+Each function boundary creates a "traveling" RuntimeScalar container that gets a refCount
+increment when its value is copied into a named variable via `setLarge()`, but the traveling
+container itself is never decremented because JVM doesn't hook local variable cleanup.
+
+**Trace for `{ my $obj = Foo->new; }` with original `refCount=1` design:**
+```
+Foo::new:
+  createHashRef()  → rs_new (type=HASHREFERENCE, value=RuntimeHash)
+  bless()          → refCount = 1       ← counts rs_new as a container
+  return           → RuntimeList wraps rs_new by reference (no copy)
+
+Caller:
+  .scalar()        → extracts rs_new (same object) into temp local7
+  NEW RuntimeScalar → rs_obj ($obj)
+  rs_obj.setLarge(rs_new):
+    increment: refCount 1 → 2          ← counts rs_obj
+    old was UNDEF: no decrement
+  
+  scopeExitCleanup($obj) → refCount 2 → 1
+  null local27
+
+  temp local7 (rs_new) still has .value = RuntimeHash → NEVER cleaned up
+  refCount = 1, but 0 reachable containers → DESTROY doesn't fire!
+```
+
+**The same trace with revised `refCount=0` design:**
+```
+Foo::new:
+  bless()          → refCount = 0       ← rs_new NOT counted (it's a temporary)
+
+Caller:
+  rs_obj.setLarge(rs_new):
+    increment: refCount 0 → 1          ← only rs_obj is counted
+
+  scopeExitCleanup($obj) → refCount 1 → 0 → DESTROY fires! ✓
+```
+
+### 4A.3 Impact Per Function Boundary
+
+| Pattern | refCount at undef (v2.0, init=1) | refCount at undef (v3.0, init=0) | Deterministic? |
+|---------|:---:|:---:|:---:|
+| `{ my $o = Foo->new; }` | 1 (leak) | **0 → DESTROY** | ✓ v3.0 |
+| `my $x = Foo->new; undef $x;` | 1 (leak) | **0 → DESTROY** | ✓ v3.0 |
+| `my $x = make_obj(); undef $x;` | 2 (leak) | 1 (leak) | Cleaner needed |
+| `my $x = wrapper(make_obj()); undef $x;` | 3 (leak) | 2 (leak) | Cleaner needed |
+
+**Rule**: Objects created and consumed in the same scope or its direct caller get
+deterministic DESTROY. Objects that cross 2+ function boundaries accumulate +1 overcounting
+per boundary after the first. The Cleaner safety net (Phase 4) handles these cases.
+
+### 4A.4 Why This Is Acceptable
+
+The overwhelming majority of real-world DESTROY use cases are scope-based:
+- **Scope guards** (`Guard`, `Scope::Guard`, `autodie::Scope::Guard`): object created
+  and destroyed in the same scope → deterministic ✓
+- **IO handles** (`IO::Handle`, `File::Temp`): typically `my $fh = IO::File->new(...)`
+  → one boundary → deterministic ✓
+- **POE wheels** (`delete $heap->{wheel}`): hash delete, no function boundary →
+  deterministic ✓
+
+The problematic pattern (returning objects through multiple wrappers) is less common and
+is handled by the Cleaner with eventual timing.
+
+### 4A.5 Future Mitigation: Clone-on-Return (Optional)
+
+If the Cleaner latency proves problematic, deterministic DESTROY for returned objects can
+be achieved by cloning the return value in the return epilogue:
+
+1. Before `ARETURN`, create a new RuntimeScalar
+2. Copy `type`/`value` from the return variable into the clone (`setLarge()` → refCount++)
+3. Call `scopeExitCleanup()` on the original variable (refCount--)
+4. Return the clone
+
+This adds one object allocation + one `set()` per return. The infrastructure already
+exists — `cloneScalars()` is already called in the return path when `usesLocal` is true.
+This optimization could be applied selectively (only for functions that return blessed
+references, detectable at compile time in some cases).
 
 ---
 
@@ -279,17 +432,17 @@ Blessed object created via bless()
         │
         ├── classHasDestroy(blessId)?
         │       │
-        │    NO: leave refCount=0 (untracked, zero overhead)
+        │    NO: leave refCount=-1 (untracked, zero overhead)
         │       │
-        │    YES: set refCount=1
+        │    YES: set refCount=0 (tracked, zero containers — bless temp not counted)
         │         │
-        │         ├── [Phase 5] Register Cleaner sentinel
+        │         ├── [Phase 4] Register Cleaner sentinel
         │         │
         │         ▼
         │   ┌─────────────────────────────────────────────────┐
         │   │  Targeted Reference Counting (setLarge, etc.)    │
         │   │                                                   │
-        │   │  refCount > 0:  increment on store                │
+        │   │  refCount >= 0: increment on store                │
         │   │  refCount > 0:  decrement on overwrite/undef/exit │
         │   │                                                   │
         │   │  --refCount == 0?  ──YES──►  Set MIN_VALUE        │
@@ -308,8 +461,8 @@ Blessed object created via bless()
 ```
 
 **Key principles**:
-- Deterministic DESTROY for common cases (refcounting)
-- Eventual DESTROY for escaped references (Cleaner, Phase 5)
+- Deterministic DESTROY for single-boundary patterns (refcounting with init=0)
+- Eventual DESTROY for multi-boundary escaped references (Cleaner, Phase 4)
 - `refCount == Integer.MIN_VALUE` prevents double-DESTROY from either path
 - Zero overhead for unblessed objects and blessed objects without DESTROY
 
@@ -323,8 +476,8 @@ Add a single field to `RuntimeBase`:
 
 ```java
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
-    public int blessId;     // existing: class identity
-    public int refCount;    // NEW: three-state lifecycle counter
+    public int blessId;             // existing: class identity
+    public int refCount = -1;       // NEW: four-state lifecycle counter (-1 = untracked)
 }
 ```
 
@@ -334,7 +487,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
 | Location | Code path |
 |----------|-----------|
-| Scalar assignment | `RuntimeScalar.setLarge()` — new value has `refCount > 0` |
+| Scalar assignment | `RuntimeScalar.setLarge()` — new value has `refCount >= 0` |
 | Hash element store | Via `RuntimeScalar.set()` on the element → `setLarge()` |
 | Array element store | Via `RuntimeScalar.set()` on the element → `setLarge()` |
 
@@ -366,20 +519,29 @@ private RuntimeScalar setLarge(RuntimeScalar value) {
     }
 
     // NEW: refCount tracking for blessed objects with DESTROY
-    if ((value.type & REFERENCE_BIT) != 0) {
-        RuntimeBase nb = (RuntimeBase) value.value;
-        if (nb.refCount > 0) nb.refCount++;
-    }
+    // Save old referent BEFORE assignment (for correct DESTROY ordering — see §4.3)
+    RuntimeBase oldBase = null;
     if ((this.type & REFERENCE_BIT) != 0 && this.value != null) {
-        RuntimeBase ob = (RuntimeBase) this.value;
-        if (ob.refCount > 0 && --ob.refCount == 0) {
-            ob.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(ob);
-        }
+        oldBase = (RuntimeBase) this.value;
     }
 
+    // Increment new value's refCount (>= 0 means tracked; -1 means untracked)
+    if ((value.type & REFERENCE_BIT) != 0) {
+        RuntimeBase nb = (RuntimeBase) value.value;
+        if (nb.refCount >= 0) nb.refCount++;
+    }
+
+    // Do the assignment
     this.type = value.type;
     this.value = value.value;
+
+    // Decrement old value's refCount AFTER assignment
+    // (Perl 5 semantics: DESTROY sees new state of the variable)
+    if (oldBase != null && oldBase.refCount > 0 && --oldBase.refCount == 0) {
+        oldBase.refCount = Integer.MIN_VALUE;
+        DestroyDispatch.callDestroy(oldBase);
+    }
+
     return this;
 }
 ```
@@ -397,21 +559,29 @@ public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar cla
     RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
     int newBlessId = NameNormalizer.getBlessId(str);
 
-    if (referent.refCount > 0) {
+    if (referent.refCount >= 0) {
         // Re-bless: update class, keep refCount, update Cleaner
         referent.setBlessId(newBlessId);
-        DestroyDispatch.updateCleaner(referent, str);  // Phase 5
+        DestroyDispatch.updateCleaner(referent, str);  // Phase 4
     } else {
         // First bless (or previously untracked)
         referent.setBlessId(newBlessId);
         if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
-            referent.refCount = 1;  // Start tracking
-            DestroyDispatch.registerCleaner(referent, str);  // Phase 5
+            referent.refCount = 0;  // Start tracking (zero containers counted)
+            DestroyDispatch.registerCleaner(referent, str);  // Phase 4
         }
+        // If no DESTROY, leave refCount = -1 (untracked)
     }
     return runtimeScalar;
 }
 ```
+
+**Why `refCount = 0` instead of 1**: The RuntimeScalar returned by `bless()` is
+typically a temporary that travels through the return chain without being explicitly
+cleaned up (see §4A.2). Setting refCount=0 means the bless-time container is NOT
+counted. Only when the value is copied into a named `my` variable via `setLarge()`
+does refCount increment to 1. This eliminates the +1 overcounting at the first
+function boundary.
 
 ### 6.4 Scope Exit Cleanup
 
@@ -442,14 +612,14 @@ public static void scopeExitCleanup(RuntimeScalar scalar) {
 ```perl
 my $hashref = {};
 my $copy = $hashref;     # copy exists BEFORE blessing
-bless $hashref, 'Foo';   # refCount set to 1, but there are 2 containers
+bless $hashref, 'Foo';   # refCount set to 0, but there are 2 containers
 ```
 
-The `$copy` was stored before `blessId` was set, so `refCount > 0` was false at that time
+The `$copy` was stored before `blessId` was set, so `refCount >= 0` was false at that time
 and no increment occurred. `refCount` undercounts by the number of pre-bless copies.
 
 **Impact**: DESTROY may fire while `$copy` still references the object.  
-**Mitigation**: The GC safety net (Phase 5) provides eventual correctness.  
+**Mitigation**: The GC safety net (Phase 4) provides eventual correctness.  
 **In practice**: The overwhelmingly common pattern is `bless {}, 'Class'` inside `new()`,
 where there are no pre-bless copies.
 
@@ -515,7 +685,7 @@ public class WeakRefRegistry {
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(base);
             if (weakRefs != null) weakRefs.remove(ref);
-            if (base.refCount > 0) base.refCount++;
+            if (base.refCount >= 0) base.refCount++;  // restore strong count
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
     }
@@ -547,14 +717,14 @@ of the source's weakness. The weakness is a property of the SOURCE RuntimeScalar
 ### 7.5 Weak Refs Without DESTROY (Unblessed Referents)
 
 `weaken()` is useful for unblessed references too (breaking circular refs for GC).
-For unblessed objects (`refCount == 0`, untracked), `weaken()` sets the flag in the
+For unblessed objects (`refCount == -1`, untracked), `weaken()` sets the flag in the
 external registry but doesn't adjust refCount.
 
 The "becomes undef when strong refs gone" behavior for unblessed weak refs uses
 `java.lang.ref.WeakReference<Object>` internally:
 
 ```java
-// In weaken() for untracked referents (refCount == 0):
+// In weaken() for untracked referents (refCount == -1):
 ref.value = new WeakReferenceWrapper(ref.value);
 // On dereference, if WeakReference.get() returns null → set to undef
 ```
@@ -569,7 +739,7 @@ This provides non-deterministic but correct "becomes undef" behavior via GC.
 
 Targeted refcounting misses some cases:
 - Objects stored in pre-bless copies (refCount undercounted)
-- Temporary RuntimeScalars from function returns (refCount overcounted — delays DESTROY)
+- Objects passing through multiple function-return boundaries (refCount may overcount by +1 per boundary — mitigated by `refCount=0` at bless, but not fully eliminated for deeply nested returns)
 - Blessed refs stranded in arrays/hashes that go out of scope without deterministic cleanup
 
 The Cleaner provides eventual correctness: if refCount never reaches 0,
@@ -673,7 +843,7 @@ public static void callDestroy(RuntimeBase referent) {
     // Clear weak refs BEFORE calling DESTROY
     WeakRefRegistry.clearWeakRefsTo(referent);
 
-    // Cancel Cleaner registration (if Phase 5 active)
+    // Cancel Cleaner registration (if Phase 4 active)
     cancelCleaner(referent);
 
     doCallDestroy(referent, className);
@@ -747,7 +917,7 @@ Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         RuntimeScalar val = entry.getValue();
         if ((val.type & REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
-                && base.refCount > 0) {
+                && base.refCount >= 0) {
             base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(base);
         }
@@ -763,7 +933,7 @@ Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 
 **Goal**: Add `refCount` field, create `DestroyDispatch` class. No behavior change.
 
-- Add `int refCount` to `RuntimeBase` (default 0 = untracked)
+- Add `int refCount` to `RuntimeBase` (default -1 = untracked)
 - Create `DestroyDispatch.java` with `callDestroy()`, `doCallDestroy()`, `classHasDestroy()`
 - Create `destroyClasses` BitSet and `destroyMethodCache`
 - Hook `InheritanceResolver.invalidateCache()` to clear both caches
@@ -775,11 +945,11 @@ Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 
 **Goal**: DESTROY works for the common case — single lexical, undef, hash delete.
 
-- Hook `RuntimeScalar.setLarge()` — increment/decrement for `refCount > 0`
+- Hook `RuntimeScalar.setLarge()` — increment/decrement for `refCount >= 0`
 - Hook `RuntimeScalar.undefine()` — decrement
 - Hook `RuntimeScalar.scopeExitCleanup()` — decrement
 - Hook `RuntimeHash.delete()` — decrement on removed blessed values
-- Initialize `refCount = 1` in `ReferenceOperators.bless()` for DESTROY classes
+- Initialize `refCount = 0` in `ReferenceOperators.bless()` for DESTROY classes
 - Handle re-bless (don't reset refCount)
 
 **Files**: `RuntimeScalar.java`, `ReferenceOperators.java`, `RuntimeHash.java`  
@@ -827,7 +997,7 @@ Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 **Goal**: Deterministic DESTROY for blessed refs in lexical arrays/hashes at scope exit.
 
 - Add `boolean containsTrackedRef` to `RuntimeArray`/`RuntimeHash`
-- Set flag when a `refCount > 0` element is stored
+- Set flag when a `refCount >= 0` element is stored
 - Add `scopeExitCleanup(RuntimeArray)` and `scopeExitCleanup(RuntimeHash)`
 - Extend `emitScopeExitNullStores()` to call cleanup on array/hash lexicals
 
@@ -995,7 +1165,7 @@ done_testing();
 |------|--------|------------|------------|
 | **Missed decrement point** — a code path drops a blessed ref without decrementing | DESTROY never fires (leak) | Medium | Cleaner safety net (Phase 4) catches it; audit all assignment/drop paths |
 | **Overcounting from temporaries** — function returns create transient RuntimeScalars that increment but don't decrement | DESTROY delayed until Cleaner fires | Medium | Acceptable — Cleaner provides eventual correctness |
-| **Performance regression** — refCount checks slow the critical path | Throughput drop | Low | Fast-path bypass; `refCount > 0` gate skips 99% of refs; benchmark before/after |
+| **Performance regression** — refCount checks slow the critical path | Throughput drop | Low | Fast-path bypass; `refCount >= 0` gate skips 99% of refs; benchmark before/after |
 | **Interference with IO lifecycle** — refCount decrement triggers premature DESTROY on IO-blessed objects | IO corruption | Low | Test IO::Handle, File::Temp explicitly; separate code paths for IO vs DESTROY |
 | **Cleaner thread context** — DESTROY called from daemon thread has different context | Thread-local state mismatch, unexpected behavior | Low | Document; most DESTROY methods don't depend on thread-local state |
 | **Double-DESTROY from race** — refcount path and Cleaner fire concurrently | Duplicate side effects | Low | `Integer.MIN_VALUE` is set atomically (single int write); consider `volatile` |
@@ -1018,9 +1188,10 @@ If the whole approach fails, close PR #450 and document findings for future refe
 1. **Pre-bless copies are undercounted**: References copied before `bless()` don't get
    counted. DESTROY may fire while those copies still exist. Mitigated by Cleaner safety net.
 
-2. **Temporary RuntimeScalar overcounting**: Function return values create transient containers
-   that increment refCount but may not decrement deterministically. This delays DESTROY but
-   doesn't prevent it (Cleaner catches it eventually).
+2. **Temporary RuntimeScalar overcounting (mostly mitigated)**: With `refCount=0` at bless
+   time, single-boundary returns (the common case) work correctly — the bless-time temporary
+   is not counted. Multi-boundary returns (deeply nested helper chains) may still overcount
+   by +1 per extra boundary. The Cleaner safety net handles these cases.
 
 3. **Blessed refs in collections**: Without Phase 6, blessed refs inside lexical arrays/hashes
    that go out of scope get non-deterministic DESTROY timing (Cleaner handles it).
@@ -1103,16 +1274,16 @@ Two objects pointing to each other: refCounts never reach 0.
 
 ### Re-bless to Different Class
 ```perl
-bless $obj, 'Foo';  # Foo has DESTROY — refCount = 1
+bless $obj, 'Foo';  # Foo has DESTROY — refCount = 0 (at bless time)
 bless $obj, 'Bar';  # Bar has no DESTROY
 ```
-On re-bless: if new class has no DESTROY, set `refCount = 0` (stop tracking) and cancel
+On re-bless: if new class has no DESTROY, set `refCount = -1` (stop tracking) and cancel
 Cleaner. If new class has DESTROY, keep refCount, update Cleaner class name.
 
 ### Tied Variables
 Tied variables already have DESTROY via `tieCallIfExists("DESTROY")`.
-The refCount-based DESTROY only fires for `refCount > 0` objects. Tied variable types
-don't get `refCount = 1` at bless time (they use separate tied DESTROY path).
+The refCount-based DESTROY only fires for `refCount >= 0` objects. Tied variable types
+don't get `refCount = 0` at bless time (they use separate tied DESTROY path).
 
 ### DESTROY During Global Destruction
 Destruction order is unpredictable. DESTROY methods should check `${^GLOBAL_PHASE}`:
