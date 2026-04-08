@@ -240,6 +240,80 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Get the underlying java.net.Socket.
+     * Used by IO::Socket::SSL to wrap the socket with SSLSocket.
+     *
+     * @return the underlying Socket, or null if not available
+     */
+    public Socket getSocket() {
+        return this.socket;
+    }
+
+    /**
+     * Replace the underlying socket and update I/O streams.
+     * Used by IOSocketSSL to install an already-handshaken SSLSocket.
+     *
+     * @param newSocket the new socket (typically an SSLSocket)
+     * @throws java.io.IOException if getting streams from the socket fails
+     */
+    public void replaceSocket(Socket newSocket) throws java.io.IOException {
+        this.socket = newSocket;
+        this.inputStream = newSocket.getInputStream();
+        this.outputStream = newSocket.getOutputStream();
+        this.socketChannel = null; // NIO not usable after SSL wrapping
+    }
+
+    /**
+     * Upgrade this socket to SSL/TLS by wrapping it with an SSLSocket.
+     * After this call, all reads and writes go through the SSL layer.
+     * Uses javax.net.ssl.SSLSocketFactory to create the SSL socket.
+     *
+     * @param host       the hostname for SNI (Server Name Indication)
+     * @param port       the port number
+     * @param sslContext the SSLContext to use (null for default)
+     * @return true on success
+     * @throws IOException if the SSL handshake fails
+     */
+    public boolean upgradeToSSL(String host, int port, javax.net.ssl.SSLContext sslContext) throws Exception {
+        if (socket == null) {
+            throw new IllegalStateException("No socket available to upgrade to SSL");
+        }
+
+        javax.net.ssl.SSLSocketFactory factory;
+        if (sslContext != null) {
+            factory = sslContext.getSocketFactory();
+        } else {
+            factory = (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+        }
+
+        // Wrap the existing connected socket with SSL
+        javax.net.ssl.SSLSocket sslSocket = (javax.net.ssl.SSLSocket) factory.createSocket(
+                socket, host, port, true /* autoClose */);
+
+        // Configure SNI
+        javax.net.ssl.SSLParameters params = sslSocket.getSSLParameters();
+        if (host != null && !host.isEmpty() && !host.matches("^[\\d.]+$") && !host.contains(":")) {
+            // Only set SNI for hostnames, not IP addresses
+            params.setServerNames(java.util.List.of(new javax.net.ssl.SNIHostName(host)));
+        }
+        // Enable endpoint identification for hostname verification
+        params.setEndpointIdentificationAlgorithm("HTTPS");
+        sslSocket.setSSLParameters(params);
+
+        // Perform the TLS handshake
+        sslSocket.startHandshake();
+
+        // Replace socket and streams — all subsequent I/O goes through SSL
+        this.socket = sslSocket;
+        this.inputStream = sslSocket.getInputStream();
+        this.outputStream = sslSocket.getOutputStream();
+        // NIO SocketChannel is no longer usable after SSL wrapping
+        this.socketChannel = null;
+
+        return true;
+    }
+
+    /**
      * Get the current blocking mode of the socket.
      *
      * @return true if blocking, false if non-blocking

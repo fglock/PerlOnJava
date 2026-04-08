@@ -352,7 +352,7 @@ level instead of the HTTP client level.
 
 ## Progress Tracking
 
-### Current Status: Phase 0 complete — investigation done
+### Current Status: Phase 2 complete, Phase 3 in progress
 
 ### Completed Phases
 - [x] Phase 0: Investigation (2026-04-08)
@@ -363,16 +363,54 @@ level instead of the HTTP client level.
   - Designed Java-backed IO::Socket::SSL architecture
   - Created this plan document
 
+- [x] Phase 1: Socket constants + Net::SSLeay stub (2026-04-08)
+  - Added MSG_PEEK, MSG_OOB, MSG_DONTROUTE, MSG_DONTWAIT to Socket.java/Socket.pm
+  - Exported SO_RCVBUF, SO_SNDBUF (were defined but not registered)
+  - Added CR, LF, CRLF string constants for :crlf tag
+  - Created NetSSLeay.java with ~40 constants, no-op init functions,
+    working constant() lookup (prevents AUTOLOAD infinite recursion)
+  - Created bundled Net/SSLeay.pm Perl stub
+  - Verified: `use Net::SSLeay; Net::SSLeay::VERIFY_PEER()` works
+  - All unit tests pass
+
+- [x] Phase 2: Java IO::Socket::SSL Core Implementation (2026-04-08)
+  - Created `IOSocketSSL.java` — Java XS backend with _start_ssl, _get_cipher,
+    _get_sslversion, _peer_certificate_*, _stop_ssl, _is_ssl, capability queries
+  - Created `IO/Socket/SSL.pm` — Perl module inheriting IO::Socket::IP
+    with configure(), connect_SSL(), start_SSL(), get_cipher(), etc.
+  - Added `replaceSocket(Socket)` to SocketIO.java for SSL socket swapping
+  - Fixed select() in IOOperator.java for SSL sockets (null NIO channel):
+    SSL sockets now report always-ready for reads/writes since NIO selector
+    can't monitor SSLSocket streams
+  - Worked around PerlOnJava Timeout bug: IO::Socket::IP non-blocking connect
+    with io_socket_timeout fails, so SSL.pm clears the timeout field
+  - SNI hostname correctly resolved from PeerAddr (not just peerhost IP)
+  - Files: IOSocketSSL.java, SocketIO.java, IO/Socket/SSL.pm, IOOperator.java
+  - **Verified**: `LWP::UserAgent->new->get("https://www.google.com/")` returns 200
+  - **Verified**: Certificate verification (both enabled and disabled)
+  - **Verified**: SSL headers (cipher, cert subject/issuer) populated correctly
+  - All unit tests pass
+
 ### Next Steps
-1. Implement Phase 1 (Socket constants + Net::SSLeay stub)
-2. Implement Phase 2 (Java IO::Socket::SSL core)
-3. Run `./jcpan -t LWP::Protocol::https` to validate
-4. Implement Phase 3 (cert inspection + test fixes)
+1. Fix Client-SSL-Version header (returned as undef by LWP::Protocol::https)
+2. Run LWP::Protocol::https test suite
+3. Implement IO::Socket::SSL::Utils if needed for tests
+4. Consider Phase 4 features (SSLEngine for non-blocking)
 
 ### Open Questions
 - Should IO::Socket::SSL::Utils (cert generation for tests) be implemented in
   Java, or should those tests be skipped for now?
 - Should we support non-blocking SSL (SSLEngine) in Phase 2, or defer to
   Phase 4?
-- Do we need to bundle a `Net::SSLeay.pm` or is a Java-only module sufficient?
-  (Answer: need Perl stub for `@EXPORT` / `%EXPORT_TAGS` declarations)
+- ~~Do we need to bundle a `Net::SSLeay.pm` or is a Java-only module sufficient?~~
+  (Answer: need Perl stub for `@EXPORT` / `%EXPORT_TAGS` declarations — done)
+
+### Known Limitations
+- IO::Socket::IP Timeout parameter: Non-blocking connect with Timeout causes
+  "Input/output error" in PerlOnJava. Our IO::Socket::SSL::configure() works
+  around this by clearing io_socket_timeout before calling SUPER::configure.
+- SSL sockets always report "ready" in select(): Since SSLSocket doesn't expose
+  NIO channels, select() can't accurately poll SSL sockets. This works for
+  LWP (which just needs to know data is available) but may cause busy-loops
+  with event-driven frameworks.
+- httpbin.org cert not trusted by JVM default CA store (site-specific issue)
