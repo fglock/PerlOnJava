@@ -54,6 +54,8 @@ public class Encode extends PerlModuleBase {
 
         CHARSET_ALIASES.put("latin1", StandardCharsets.ISO_8859_1);
         CHARSET_ALIASES.put("Latin1", StandardCharsets.ISO_8859_1);
+        CHARSET_ALIASES.put("latin-1", StandardCharsets.ISO_8859_1);
+        CHARSET_ALIASES.put("Latin-1", StandardCharsets.ISO_8859_1);
         CHARSET_ALIASES.put("iso-8859-1", StandardCharsets.ISO_8859_1);
         CHARSET_ALIASES.put("ISO-8859-1", StandardCharsets.ISO_8859_1);
 
@@ -129,6 +131,7 @@ public class Encode extends PerlModuleBase {
             CHARSET_ALIASES.put("UTF32BE", utf32be);
             CHARSET_ALIASES.put("utf-32be", utf32be);
             CHARSET_ALIASES.put("UTF-32BE", utf32be);
+            CHARSET_ALIASES.put("UTF32-BE", utf32be);
         } catch (Exception ignored) {
         }
         try {
@@ -137,6 +140,7 @@ public class Encode extends PerlModuleBase {
             CHARSET_ALIASES.put("UTF32LE", utf32le);
             CHARSET_ALIASES.put("utf-32le", utf32le);
             CHARSET_ALIASES.put("UTF-32LE", utf32le);
+            CHARSET_ALIASES.put("UTF32-LE", utf32le);
         } catch (Exception ignored) {
         }
     }
@@ -414,7 +418,8 @@ public class Encode extends PerlModuleBase {
         // Check substitution modes
         if ((check & PERLQQ) != 0) {
             if (isEncode) {
-                return "\\x{" + Integer.toHexString(codePoint).toUpperCase() + "}";
+                String hex = String.format("%04X", codePoint);
+                return "\\x{" + hex + "}";
             } else {
                 return "\\x" + String.format("%02X", codePoint & 0xFF);
             }
@@ -423,7 +428,7 @@ public class Encode extends PerlModuleBase {
             return "&#" + codePoint + ";";
         }
         if ((check & XMLCREF) != 0) {
-            return "&#x" + Integer.toHexString(codePoint).toUpperCase() + ";";
+            return "&#x" + Integer.toHexString(codePoint) + ";";
         }
 
         // RETURN_ON_ERR (FB_QUIET): stop processing, return what we have so far
@@ -444,6 +449,11 @@ public class Encode extends PerlModuleBase {
     public static RuntimeList encode(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
             throw new IllegalStateException("Bad number of arguments for encode");
+        }
+
+        // Return undef if input string is undef
+        if (!args.get(1).getDefinedBoolean()) {
+            return scalarUndef.getList();
         }
 
         String encodingName = args.get(0).toString();
@@ -538,6 +548,11 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for decode");
         }
 
+        // Return undef if input octets is undef
+        if (!args.get(1).getDefinedBoolean()) {
+            return scalarUndef.getList();
+        }
+
         String encodingName = args.get(0).toString();
         String octets = args.get(1).toString();
         int check = parseCheck(args, 2);
@@ -617,6 +632,11 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for encode_utf8");
         }
 
+        // Return undef if input is undef
+        if (!args.get(0).getDefinedBoolean()) {
+            return scalarUndef.getList();
+        }
+
         String string = args.get(0).toString();
         byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
 
@@ -631,6 +651,11 @@ public class Encode extends PerlModuleBase {
     public static RuntimeList decode_utf8(RuntimeArray args, int ctx) {
         if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for decode_utf8");
+        }
+
+        // Return undef if input is undef
+        if (!args.get(0).getDefinedBoolean()) {
+            return scalarUndef.getList();
         }
 
         String octets = args.get(0).toString();
@@ -727,6 +752,11 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for Encode::Encoding::encode");
         }
 
+        // Return undef if input string is undef
+        if (!args.get(1).getDefinedBoolean()) {
+            return scalarUndef.getList();
+        }
+
         RuntimeScalar self = args.get(0);
         String string = args.get(1).toString();
 
@@ -751,6 +781,11 @@ public class Encode extends PerlModuleBase {
     public static RuntimeList encoding_decode(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
             throw new IllegalStateException("Bad number of arguments for Encode::Encoding::decode");
+        }
+
+        // Return undef if input octets is undef
+        if (!args.get(1).getDefinedBoolean()) {
+            return scalarUndef.getList();
         }
 
         RuntimeScalar self = args.get(0);
@@ -816,6 +851,7 @@ public class Encode extends PerlModuleBase {
                 String decoded = new String(bytes, fromCharset);
                 byte[] encoded = decoded.getBytes(toCharset);
                 octetsRef.set(new String(encoded, StandardCharsets.ISO_8859_1));
+                octetsRef.type = BYTE_STRING;
                 return new RuntimeScalar(decoded.length()).getList();
             }
 
@@ -851,6 +887,7 @@ public class Encode extends PerlModuleBase {
 
             // Update the original scalar in-place
             octetsRef.set(new String(encoded, StandardCharsets.ISO_8859_1));
+            octetsRef.type = BYTE_STRING;
 
             // Return the number of characters converted
             return new RuntimeScalar(decoded.length()).getList();
@@ -869,6 +906,13 @@ public class Encode extends PerlModuleBase {
         }
         RuntimeScalar arg = args.get(0);
         boolean wasUtf8 = (arg.type != BYTE_STRING);
+        if (!wasUtf8) {
+            // Re-decode the byte string as UTF-8 to get proper characters
+            // e.g., bytes \xC3\xA9 -> character U+00E9 (é)
+            String s = arg.toString();
+            byte[] bytes = s.getBytes(StandardCharsets.ISO_8859_1);
+            arg.set(new String(bytes, StandardCharsets.UTF_8));
+        }
         // Set the UTF-8 flag (change type to STRING)
         arg.type = STRING;
         return new RuntimeScalar(wasUtf8).getList();
