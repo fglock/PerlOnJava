@@ -454,12 +454,15 @@ public class Operator {
                 length = Math.min(length, size - offset);
 
                 // Remove elements — defer refCount decrement for tracked blessed refs.
-                // The removed elements are returned to the caller, which stores them
+                // The removed elements are returned to the caller, which may store them
                 // in a new container (incrementing refCount). The deferred decrement
                 // accounts for the removal from the source array.
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
                     RuntimeBase removed = runtimeArray.elements.remove(offset);
                     if (removed != null) {
+                        if (removed instanceof RuntimeScalar rs) {
+                            MortalList.deferDecrementIfTracked(rs);
+                        }
                         removedElements.elements.add(removed);
                     } else {
                         removedElements.elements.add(new RuntimeScalar());
