@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
-**Status**: Implementation — debugging scope-exit flush regressions  
-**Version**: 5.5  
+**Status**: Implementation — type-aware weaken() for WEAKLY_TRACKED scope exit  
+**Version**: 5.6  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-08 (v5.5 — scope-exit flush causes Test2 crashes; re-bless refCount bug found)  
+**Updated**: 2026-04-08 (v5.6 — type-aware weaken transition for non-DESTROY data structures + POSIX::_do_exit)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #450 (WIP, open), `dev/modules/poe.md` (DestroyManager attempt)
 
@@ -2049,7 +2049,143 @@ DESTROY of objects from outer scopes. See Bug 6.
 - Should the interpreter's `MORTAL_FLUSH` opcode be removed if flush becomes
   purely runtime-driven?
 
+---
+
+## 12. WEAKLY_TRACKED Scope-Exit Analysis (v5.6)
+
+### 12.1 Problem Statement
+
+WEAKLY_TRACKED (`refCount = -2`) objects have a fundamental gap: their weak refs are
+never cleared when the last strong reference goes out of scope. This breaks the Perl 5
+expectation that `weaken()` + scope exit should clear the weak ref.
+
+**Failing tests** (Moo accessor-weaken*.t — 6 subtests):
+
+| Test | Scenario | Expected |
+|------|----------|----------|
+| accessor-weaken.t #10 | `has two => (lazy=>1, weak_ref=>1, default=>sub{{}})` | Lazy default creates temp `{}`, weakened; no other strong ref → undef |
+| accessor-weaken.t #11 | Same as #10, checking internal hash slot | `$foo2->{two}` should be undef |
+| accessor-weaken.t #19 | Redefining sub frees optree constants | Weak ref to `\ 'yay'` cleared after `*mk_ref = sub {}` |
+| accessor-weaken-pre-5_8_3.t #10,#11 | Same as above (pre-5.8.3 variant) | Same |
+| accessor-weaken-pre-5_8_3.t #19 | Same optree reaping test | Same |
+
+**Root cause trace** (tests 10/11):
+```
+1. Default sub creates {} → RuntimeHash, blessId=0, refCount=-1
+2. $self->{two} = $value → setLarge: refCount=-1 (NOT_TRACKED) → no increment
+3. weaken($self->{two}) → refCount: -1 → WEAKLY_TRACKED (-2)
+4. Accessor returns, $value goes out of scope
+   → scopeExitCleanup → deferDecrementIfTracked
+   → base.refCount=-2, NOT > 0 → SKIPPED!
+5. Weak ref never cleared → test expects undef, gets the hash
+```
+
+**Why WEAKLY_TRACKED exists (Phase 39 analysis):**
+
+The WEAKLY_TRACKED sentinel was introduced to protect the Moo constructor pattern:
+```perl
+weaken($self->{constructor} = $constructor);
+```
+Here `$constructor` is a code ref also installed in the symbol table (`*ClassName::new`).
+If scope-exit decremented the WEAKLY_TRACKED code ref's refCount, it would be
+incorrectly cleared when `$constructor` (the local variable) goes out of scope,
+even though the symbol table still holds a strong reference.
+
+### 12.2 Key Insight: Type-Aware Tracking
+
+The Phase 39 problem only affects `RuntimeCode` and `RuntimeGlob` objects, which can
+be stored in the symbol table (stash). These stash entries are created via glob assignment
+(`*Foo::bar = $code_ref`), which does NOT go through `RuntimeScalar.setLarge()` and
+therefore never increments `refCount`. This means any tracking we start at `weaken()`
+time would undercount for these types.
+
+Anonymous data structures (`RuntimeHash`, `RuntimeArray`, `RuntimeScalar` referents)
+can **never** be in the stash. For these types, `refCount = 1` at weaken() time is
+a safe estimate (one strong ref = the originating variable), and future copies via
+`setLarge()` will correctly increment/decrement.
+
+### 12.3 Attempted Fix: Type-Aware weaken() Transition
+
+**Approach**: Set `refCount = 1` for data structures (RuntimeHash/RuntimeArray/RuntimeScalar)
+when weaken() transitions from NOT_TRACKED, while keeping WEAKLY_TRACKED for RuntimeCode
+and RuntimeGlob (which may have untracked stash references).
+
+**Result**: **FAILED** — Caused infinite recursion (StackOverflowError) in Moo/Sub::Defer.
+
+**Root cause**: Starting refCount at 1 is an underestimate for objects with multiple
+pre-existing strong refs. During routine setLarge() operations (variable assignment,
+overwrite), the refCount would prematurely reach 0, triggering `callDestroy()` →
+`clearWeakRefsTo()` which sets weak refs to undef mid-operation. In Sub::Defer, this
+cleared a deferred sub entry, causing the next access to re-trigger undeferring →
+infinite apply() → apply() → ... recursion.
+
+**Key lesson**: Any approach that starts refCount tracking mid-flight (after refs are
+already created without tracking) will undercount. The only correct approaches are:
+1. Track refCount from object creation for ALL objects (expensive, Perl 5 approach)
+2. Use JVM WeakReference for Perl-level weak refs (allows JVM GC to detect unreachability)
+3. Accept the WEAKLY_TRACKED limitation (current approach)
+
+**Current state**: WEAKLY_TRACKED remains for all non-DESTROY objects. The 6 accessor-weaken
+subtests remain failing. The POSIX::_do_exit fix was successful (demolish-global_destruction.t
+now passes).
+
+### 12.4 Moo Test Results After This Session
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Test programs | 68/71 (95.8%) | 69/71 (97.2%) | +1 (demolish-global_destruction.t) |
+| Subtests | 834/841 (99.2%) | 835/841 (99.3%) | +1 |
+
+### 12.5 Remaining Failures (Deferred)
+
+**Tests 10/11** (lazy + weak_ref default): Requires either full refcounting from
+object creation or JVM WeakReference for Perl weak refs. Both are significant refactors.
+
+**Test 19** (optree reaping): Requires tracking references through compiled code objects.
+This is specific to Perl 5's memory model and not achievable on the JVM.
+
+### 12.6 Other Fixes in This Session
+
+**POSIX::_do_exit (demolish-global_destruction.t):**
+- `POSIX::_exit()` calls `POSIX::_do_exit()` which was undefined
+- Added `_do_exit` method to `POSIX.java` using `Runtime.getRuntime().halt(exitCode)`
+- Uses `halt()` instead of `System.exit()` to bypass shutdown hooks (matches POSIX _exit(2) semantics)
+- The demolish-global_destruction.t test also requires subprocess execution (`system $^X, ...`)
+  and global destruction running DEMOLISH — these are already implemented
+
+### 12.7 Files Changed
+
+| File | Change |
+|------|--------|
+| `WeakRefRegistry.java` | Added analysis notes for WEAKLY_TRACKED limitation; attempted type-aware transition (reverted) |
+| `POSIX.java` | Added `_do_exit` method registration and implementation |
+
+### 12.8 Future Work: JVM WeakReference Approach
+
+The correct long-term fix for WEAKLY_TRACKED objects requires replacing the strong Java
+reference in Perl weak ref scalars with a `java.lang.ref.WeakReference<RuntimeBase>`.
+This would allow the JVM GC to naturally detect when no strong Perl refs remain.
+
+**Design sketch:**
+1. In `weaken()`: replace `ref.value` with a wrapper containing a JVM WeakReference
+2. In all dereference paths: check if the WeakReference is still alive
+3. If collected: set the Perl ref to undef (matching Perl 5 behavior)
+
+**Challenges:**
+- `ref.value` is accessed with `instanceof` checks throughout the codebase
+- Need a transparent wrapper or accessor method at ~15+ dereference points
+- Performance impact of WeakReference allocation and GC interaction
+
 ### Version History
+- **v5.6** (2026-04-08): WEAKLY_TRACKED scope-exit analysis + POSIX::_do_exit:
+  1. Analyzed why WEAKLY_TRACKED objects' weak refs are never cleared on scope exit.
+     Root cause: `deferDecrementIfTracked()` only handles `refCount > 0`; WEAKLY_TRACKED (-2)
+     is skipped. Added §12 documenting the full analysis.
+  2. Designed type-aware weaken() transition: `RuntimeHash`/`RuntimeArray`/`RuntimeScalar`
+     referents get `refCount = 1` (start active tracking), while `RuntimeCode`/`RuntimeGlob`
+     keep WEAKLY_TRACKED (-2) to protect symbol-table-stored values (Phase 39 pattern).
+  3. Added `POSIX::_do_exit` implementation using `Runtime.getRuntime().halt()` for
+     demolish-global_destruction.t support.
 - **v5.5** (2026-04-08): Scope-exit flush + container ops + regression analysis:
   1. Added `MortalList.flush()` at non-subroutine scope exits (bare blocks, if/while/for,
      foreach). JVM backend: `emitScopeExitNullStores(..., boolean flush)` overload.

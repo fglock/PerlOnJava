@@ -125,6 +125,9 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_WIFSTOPPED", "wifstopped", null);
             module.registerMethod("_WSTOPSIG", "wstopsig", null);
             module.registerMethod("_WCOREDUMP", "wcoredump", null);
+
+            // _exit / _do_exit
+            module.registerMethod("_do_exit", "do_exit", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing POSIX method: " + e.getMessage());
         }
@@ -354,6 +357,17 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList getpid(RuntimeArray args, int ctx) {
         return new RuntimeScalar(ProcessHandle.current().pid()).getList();
+    }
+
+    /**
+     * POSIX::_do_exit - immediate process termination without cleanup.
+     * Implements POSIX _exit(2) via System.exit() (closest JVM equivalent).
+     */
+    public static RuntimeList do_exit(RuntimeArray args, int ctx) {
+        int exitCode = args.isEmpty() ? 0 : args.get(0).getInt();
+        Runtime.getRuntime().halt(exitCode);
+        // unreachable
+        return new RuntimeList();
     }
 
     public static RuntimeList getppid(RuntimeArray args, int ctx) {

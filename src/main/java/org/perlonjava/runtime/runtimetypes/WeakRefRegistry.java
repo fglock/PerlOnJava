@@ -62,6 +62,13 @@ public class WeakRefRegistry {
             // Use WEAKLY_TRACKED (-2) to prevent setLarge() from incrementing/
             // decrementing refCount for this object. Strong refs aren't counted
             // for these objects — clearing happens via scope exit or explicit undef.
+            //
+            // NOTE: Starting active tracking (refCount=1) was attempted but caused
+            // infinite recursion in Moo/Sub::Defer. The problem: refCount=1 is an
+            // underestimate for objects with multiple pre-existing strong refs.
+            // Routine setLarge overwrites would prematurely decrement to 0, clearing
+            // weak refs mid-operation and triggering cascade failures.
+            // See §12 in destroy_weaken_plan.md for full analysis.
             MortalList.active = true;
             base.refCount = WEAKLY_TRACKED;
         } else if (base.refCount > 0) {
