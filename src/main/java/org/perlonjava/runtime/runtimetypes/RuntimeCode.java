@@ -1824,7 +1824,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
-        if (!args.isEmpty()) {
+        boolean hasExplicitExpr = !args.isEmpty();
+        if (hasExplicitExpr) {
             frame = args.getFirst().getInt();
         }
 
@@ -1859,6 +1860,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+
+                // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
+                // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
+                if (hasExplicitExpr) {
 
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
@@ -1990,6 +1995,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         res.add(RuntimeScalarCache.scalarUndef);
                     }
                 }
+                } // end if (hasExplicitExpr)
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
