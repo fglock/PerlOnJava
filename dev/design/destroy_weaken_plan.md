@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Design Plan  
-**Version**: 4.0  
+**Version**: 5.1  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-08 (v4.0 — review fixes: Cleaner sentinel reachability, WeakRefRegistry pinning, missing refcount hooks, VarHandle CAS)  
+**Updated**: 2026-04-08 (v5.1 — replaced trackedObjects set with stash-walking at shutdown to avoid pinning objects in memory)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #450 (WIP, open), `dev/modules/poe.md` (DestroyManager attempt)
 
@@ -19,7 +19,8 @@ This document is the implementation plan for two tightly coupled Perl features:
 Both features require knowing when the "last strong reference" to an object is gone.
 Perl 5 solves this with reference counting; PerlOnJava runs on the JVM's tracing GC.
 This plan bridges that gap with targeted reference counting for blessed objects,
-complemented by a GC safety net for escaped references.
+with global destruction at shutdown as the safety net for escaped references —
+matching Perl 5's own semantics for circular references and missed decrements.
 
 ### 1.1 Why This Matters
 
@@ -93,8 +94,9 @@ then reconstructed a proxy object to pass as `$_[0]` to DESTROY.
 3. **Fundamental limitation**: Cleaner's cleaning action cannot hold a strong reference to
    the tracked object. Proxy reconstruction can't replicate tied/magic/overloaded behavior.
 
-**Lesson**: DESTROY must receive the *real* object, not a proxy. The Cleaner API can work
-if we track a sentinel object instead of the referent directly (see Section 8).
+**Lesson**: DESTROY must receive the *real* object, not a proxy. GC-based approaches
+have a fundamental tension: DESTROY needs the object alive, but GC triggers when it's
+dying. Refcounting avoids this by calling DESTROY deterministically before GC.
 
 ---
 
@@ -107,13 +109,23 @@ if we track a sentinel object instead of the referent directly (see Section 8).
 | C | **Scope-based without refcounting** (PR #450 style) | Simple, deterministic for single-scope | Wrong for returned objects, objects stored in outer scopes — 20+ failures (see §2.1) | Rejected: incorrect without refcount |
 | D | **Compile-time escape analysis** | Zero runtime overhead for proven-local objects | Impossible to do perfectly (dynamic dispatch, eval, closures, `push @global, $obj`) | Rejected: too incomplete |
 | E | **Explicit destructor registration** (`defer { $obj->cleanup }`) | Simple, deterministic, no refcounting | Not compatible with Perl 5 semantics; breaks existing modules | Rejected: not Perl-compatible |
-| **F** | **Targeted refcounting for blessed-with-DESTROY + Cleaner safety net** | Deterministic for common cases; eventual for edge cases; zero overhead for unblessed | Complexity; may miss decrements in obscure paths | **Chosen** |
+| **F** | **Targeted refcounting for blessed-with-DESTROY + global destruction at shutdown** | Deterministic for common cases; zero overhead for unblessed; matches Perl 5 semantics for cycles | May miss decrements in obscure paths; overcounted objects delayed to shutdown | **Chosen** |
 
 **Why F**: It's the only approach that provides correct timing for the common case (lexical
-scope, explicit undef, hash delete) while still handling escaped references. The key insight
-is that we don't need to refcount ALL objects — only the small subset that are blessed AND
-whose class defines DESTROY. The existing `ioHolderCount` pattern on `RuntimeGlob` proves
-this targeted approach works in this codebase.
+scope, explicit undef, hash delete) while still handling escaped references via global
+destruction — the same strategy Perl 5 uses. The key insight is that we don't need to
+refcount ALL objects — only the small subset that are blessed AND whose class defines
+DESTROY. The existing `ioHolderCount` pattern on `RuntimeGlob` proves this targeted
+approach works in this codebase.
+
+**Why not a Cleaner safety net**: v4.0 of this plan included a `java.lang.ref.Cleaner`
+sentinel pattern as a GC-based fallback. Analysis revealed a fundamental flaw: the
+Cleaner needs the object alive for DESTROY, but holding the object alive prevents the
+sentinel from becoming phantom-reachable. The workaround (separate sentinel/trigger
+indirection) adds significant complexity, 8 bytes per RuntimeBase instance, and thread
+safety concerns — all for cases that Perl 5 itself handles the same way (DESTROY at
+global destruction). Dropping the Cleaner eliminates Phase 4, removes threading
+concerns, and reduces per-object memory overhead to +4 bytes (fits in alignment padding).
 
 ---
 
@@ -238,11 +250,11 @@ static boolean classHasDestroy(int blessId, String className) {
 Clear the `BitSet` on `InheritanceResolver.invalidateCache()` (when `@ISA` changes or
 methods are redefined).
 
-### 4.5 Defer Collection Cleanup to GC Safety Net
+### 4.5 Defer Collection Cleanup
 
 Iterating arrays/hashes at scope exit is O(n) per collection. Instead of doing this
-deterministically, rely on the Cleaner safety net (Section 8) for blessed refs inside
-collections that go out of scope.
+deterministically for all collections, defer to global destruction for blessed refs
+inside collections that go out of scope.
 
 Deterministic DESTROY covers:
 - Scalar lexicals going out of scope (`scopeExitCleanup`)
@@ -251,7 +263,8 @@ Deterministic DESTROY covers:
 - Scalar overwrite (`$obj = other_value`)
 
 This handles the vast majority of real-world patterns. The remaining cases (blessed refs
-stranded inside a collected array/hash) get eventual DESTROY via the Cleaner.
+stranded inside a collected array/hash) get DESTROY at global destruction — the same
+behavior as Perl 5 for circular references.
 
 **Optional future optimization**: Add a `boolean containsTrackedRef` flag to
 `RuntimeArray`/`RuntimeHash`. Set on store when `refCount >= 0`. At scope exit, only
@@ -276,18 +289,49 @@ private static final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCach
 
 Invalidate alongside `destroyClasses` BitSet when inheritance changes.
 
-### 4.8 No Cleaner Overhead Until Needed
+### 4.8 Global Destruction via Stash Walking
 
-The Cleaner sentinel registration (Phase 4) adds overhead at `bless()` time: creating a
-sentinel object, a lambda, and registering with the Cleaner thread. This is deferred to
-a later phase. Phases 1-3 provide deterministic DESTROY without any Cleaner cost.
+At shutdown, the global destruction hook walks all package stashes and global
+variables to find objects with `refCount >= 0` that still need DESTROY. No
+persistent tracking set is needed during program execution — the `refCount`
+field on `RuntimeBase` is the sole tracking mechanism.
+
+This avoids pinning objects in memory. Without a global set holding strong
+references, overcounted objects (where `refCount` stays > 0 after all user
+references are gone) are collected by the JVM's tracing GC. Their DESTROY
+does not fire, but no memory leaks either. This is a deliberate trade-off:
+the JVM's ability to reclaim memory for unreachable objects is preserved.
+
+Objects that ARE reachable at shutdown (global variables, stash entries, closures
+still on the call stack) get deterministic DESTROY during global destruction.
+
+#### Alternative: Tracked-Objects Set
+
+If testing reveals that too many DESTROY calls are missed at shutdown (objects
+unreachable from stashes but with overcounted `refCount`), a `trackedObjects`
+set can be reintroduced as an opt-in:
+
+```java
+private static final Set<RuntimeBase> trackedObjects =
+    Collections.newSetFromMap(new IdentityHashMap<>());
+```
+
+This set would be populated at `bless()` time and drained at DESTROY time.
+At shutdown, the hook walks the set instead of stashes. The cost is that every
+entry is a strong reference, pinning the object and its entire reachable graph
+in memory until shutdown — reintroducing Perl 5's circular-reference leak
+behavior, plus leaking non-circular overcounted objects. For short-lived
+programs this is fine; for long-running servers it can accumulate significantly.
+
+The stash-walking approach is preferred as the default because it preserves
+the JVM's memory management advantage over Perl 5.
 
 ### 4.9 Memory Impact: Zero
 
-Adding fields to `RuntimeBase` (Phase 1: `refCount`; Phase 4: `destroyTrigger`, `destroySentinel`):
+Adding `refCount` to `RuntimeBase`:
 
 ```
-RuntimeScalar layout (current):              RuntimeScalar layout (Phase 1):
+RuntimeScalar layout (current):              RuntimeScalar layout (with refCount):
   Object header:          12 bytes             Object header:          12 bytes
   RuntimeBase.blessId:     4 bytes             RuntimeBase.blessId:     4 bytes
   RuntimeScalar.type:      4 bytes             RuntimeBase.refCount:    4 bytes  ← NEW
@@ -296,27 +340,11 @@ RuntimeScalar layout (current):              RuntimeScalar layout (Phase 1):
   ─────────────────────────                    RuntimeScalar.ioOwner:   1 byte
   Total: 25 bytes → pad to 32                  ─────────────────────────
                                                Total: 29 bytes → pad to 32
-
-RuntimeScalar layout (Phase 4, with Cleaner fields):
-  Object header:          12 bytes
-  RuntimeBase.blessId:     4 bytes
-  RuntimeBase.refCount:    4 bytes
-  RuntimeBase.destroyTrigger: 4 bytes  ← NEW (compressed oops ref, null for 99%+ of objects)
-  RuntimeBase.destroySentinel: 4 bytes ← NEW (compressed oops ref, null for 99%+ of objects)
-  RuntimeScalar.type:      4 bytes
-  RuntimeScalar.value:     4 bytes
-  RuntimeScalar.ioOwner:   1 byte
-  ─────────────────────────
-  Total: 37 bytes → pad to 40           ← +8 bytes vs current (Phase 4 only)
 ```
 
-**Phase 1 memory cost: zero** — `refCount` fits in existing alignment padding.
-
-**Phase 4 memory cost: +8 bytes per RuntimeScalar** — `destroyTrigger` and
-`destroySentinel` are `Object` references (4 bytes each with compressed oops).
-Both are `null` for unblessed objects and blessed objects without DESTROY, so the
-JVM stores them as zero. For the small subset of tracked objects, the 8 bytes are
-negligible compared to the object graph they represent.
+**Memory cost: zero** — `refCount` (4 bytes) fits in existing alignment padding.
+No additional fields or data structures are needed during program execution.
+Global destruction uses stash walking (no persistent tracking overhead).
 
 ### 4.10 Optimization Summary
 
@@ -326,9 +354,9 @@ negligible compared to the object graph they represent.
 | Fast-path bypass | Any refcount work on int/double/string/undef | Zero — refs always take slow path |
 | `refCount >= 0` gate | Tracking unblessed or no-DESTROY objects | One integer comparison |
 | `destroyClasses` BitSet | DESTROY lookup on every bless() | One bit check per bless() |
-| Defer collection cleanup | O(n) iteration at scope exit | Eventual via GC for collections |
+| Defer collection cleanup | O(n) iteration at scope exit | Global destruction for collections |
 | DESTROY method cache | Hierarchy traversal on every DESTROY call | One map lookup |
-| No Cleaner until Phase 4 | Sentinel object + lambda + thread registration | Zero until Phase 4 |
+| Stash walking at shutdown | Persistent tracking set that pins objects in memory | One-time stash scan at exit |
 | Post-assignment DESTROY | Incorrect variable state during DESTROY | One extra local variable |
 
 ---
@@ -405,12 +433,13 @@ Caller:
 |---------|:---:|:---:|:---:|
 | `{ my $o = Foo->new; }` | 1 (leak) | **0 → DESTROY** | ✓ v3.0 |
 | `my $x = Foo->new; undef $x;` | 1 (leak) | **0 → DESTROY** | ✓ v3.0 |
-| `my $x = make_obj(); undef $x;` | 2 (leak) | 1 (leak) | Cleaner needed |
-| `my $x = wrapper(make_obj()); undef $x;` | 3 (leak) | 2 (leak) | Cleaner needed |
+| `my $x = make_obj(); undef $x;` | 2 (leak) | 1 (leak) | Global destruction |
+| `my $x = wrapper(make_obj()); undef $x;` | 3 (leak) | 2 (leak) | Global destruction |
 
 **Rule**: Objects created and consumed in the same scope or its direct caller get
 deterministic DESTROY. Objects that cross 2+ function boundaries accumulate +1 overcounting
-per boundary after the first. The Cleaner safety net (Phase 4) handles these cases.
+per boundary after the first. Global destruction at shutdown handles these cases —
+matching Perl 5 behavior for circular references.
 
 ### 4A.4 Why This Is Acceptable
 
@@ -423,11 +452,12 @@ The overwhelming majority of real-world DESTROY use cases are scope-based:
   deterministic ✓
 
 The problematic pattern (returning objects through multiple wrappers) is less common and
-is handled by the Cleaner with eventual timing.
+is handled by global destruction at shutdown — the same way Perl 5 handles circular
+references. DESTROY fires, just not immediately.
 
 ### 4A.5 Future Mitigation: Clone-on-Return (Optional)
 
-If the Cleaner latency proves problematic, deterministic DESTROY for returned objects can
+If the delayed-until-shutdown timing proves problematic, deterministic DESTROY for returned objects can
 be achieved by cloning the return value in the return epilogue:
 
 1. Before `ARETURN`, create a new RuntimeScalar
@@ -453,8 +483,6 @@ Blessed object created via bless()
         │       │
         │    YES: set refCount=0 (tracked, zero containers — bless temp not counted)
         │         │
-        │         ├── [Phase 4] Register Cleaner sentinel
-        │         │
         │         ▼
         │   ┌─────────────────────────────────────────────────┐
         │   │  Targeted Reference Counting (setLarge, etc.)    │
@@ -467,21 +495,24 @@ Blessed object created via bless()
         │   └─────────────────────────────────────────────────┘
         │         │                            │
         │         │ refCount leaked?           │ refCount = MIN_VALUE
-        │         │ (missed decrement)         │
+        │         │ (missed decrement)         │ (DESTROY already called)
         │         ▼                            ▼
-        │   ┌──────────────┐           ┌──────────────┐
-        │   │ Cleaner fires │──────────►│ Skip (already │
-        │   │ (GC fallback) │ checks    │  MIN_VALUE)   │
-        │   └──────────────┘ refCount  └──────────────┘
+        │   ┌──────────────────┐        ┌──────────────┐
+        │   │ Global destruction│        │ Already done  │
+        │   │ (shutdown hook    │        │ (skip)        │
+        │   │  walks stashes    │        └──────────────┘
+        │   │  for refCount>=0) │
+        │   └──────────────────┘
         │
-        └── continue (no refcount tracking, no Cleaner)
+        └── continue (no refcount tracking)
 ```
 
 **Key principles**:
 - Deterministic DESTROY for single-boundary patterns (refcounting with init=0)
-- Eventual DESTROY for multi-boundary escaped references (Cleaner, Phase 4)
-- `refCount == Integer.MIN_VALUE` prevents double-DESTROY from either path
+- Global destruction at shutdown for missed references (matching Perl 5 behavior)
+- `refCount == Integer.MIN_VALUE` prevents double-DESTROY
 - Zero overhead for unblessed objects and blessed objects without DESTROY
+- No Cleaner, no daemon threads, no sentinel objects
 
 ---
 
@@ -489,14 +520,12 @@ Blessed object created via bless()
 
 ### 6.1 The refCount Field
 
-Add fields to `RuntimeBase`:
+Add one field to `RuntimeBase`:
 
 ```java
 public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScalar> {
     public int blessId;             // existing: class identity
     public int refCount = -1;       // NEW: four-state lifecycle counter (-1 = untracked)
-    public Object destroyTrigger;   // NEW (Phase 4): DestroyTrigger companion, null if untracked
-    public Object destroySentinel;  // NEW (Phase 4): Cleaner sentinel object, null if untracked
 }
 ```
 
@@ -504,11 +533,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 fields to `0`, which would mean "tracked, zero containers" — silently breaking all
 unblessed objects. The `= -1` initializer is load-bearing.
 
-The `destroyTrigger` and `destroySentinel` fields are `Object` (not typed) to avoid
-a compile-time dependency on `DestroyDispatch` from `RuntimeBase`. They are only
-non-null for blessed objects with DESTROY (Phase 4). Storing these on the referent
-(instead of in a global `IdentityHashMap`) is critical for the Cleaner to work —
-see §8.2 for why a global map prevents GC.
+The field fits in the existing 8-byte alignment padding (see §4.9), so the per-object
+memory cost is zero.
 
 ### 6.2 Refcount Tracking Points
 
@@ -638,15 +664,17 @@ public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar cla
     int newBlessId = NameNormalizer.getBlessId(str);
 
     if (referent.refCount >= 0) {
-        // Re-bless: update class, keep refCount, update Cleaner
+        // Re-bless: update class, keep refCount
         referent.setBlessId(newBlessId);
-        DestroyDispatch.updateCleaner(referent, str);  // Phase 4
+        if (!DestroyDispatch.classHasDestroy(newBlessId, str)) {
+            // New class has no DESTROY — stop tracking
+            referent.refCount = -1;
+        }
     } else {
         // First bless (or previously untracked)
         referent.setBlessId(newBlessId);
         if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
             referent.refCount = 0;  // Start tracking (zero containers counted)
-            DestroyDispatch.registerCleaner(referent, str);  // Phase 4
         }
         // If no DESTROY, leave refCount = -1 (untracked)
     }
@@ -697,7 +725,7 @@ The `$copy` was stored before `blessId` was set, so `refCount >= 0` was false at
 and no increment occurred. `refCount` undercounts by the number of pre-bless copies.
 
 **Impact**: DESTROY may fire while `$copy` still references the object.  
-**Mitigation**: The GC safety net (Phase 4) provides eventual correctness.  
+**Mitigation**: Global destruction at shutdown provides a safety net.  
 **In practice**: The overwhelmingly common pattern is `bless {}, 'Class'` inside `new()`,
 where there are no pre-bless copies.
 
@@ -725,15 +753,11 @@ my $copy = $weak;                 # BEFORE undef: copy is STRONG, not weak
 
 Weak ref tracking uses external maps to avoid memory overhead on every RuntimeScalar.
 
-**Critical design constraint**: The `referentToWeakRefs` reverse map must NOT hold
-strong references to the referent as keys. If it did, the referent would be
-reachable from the registry GC root, preventing GC, preventing the Cleaner safety
-net from ever firing, and creating a permanent memory leak for objects with
-overcounted refCounts. We use an `IdentityHashMap` keyed by the referent, but
-entries are always removed in `clearWeakRefsTo()` (called from both the refcount
-path and the Cleaner path) before or during DESTROY. For additional safety, we
-also clean up stale entries in `weaken()` if a referent's refCount is already
-`MIN_VALUE`.
+**Critical design constraint**: The `referentToWeakRefs` reverse map holds
+strong references to the referent as keys. This is acceptable because entries are
+always removed in `clearWeakRefsTo()` (called when refCount reaches 0 or during
+global destruction). For additional safety, we also clean up stale entries in
+`weaken()` if a referent's refCount is already `MIN_VALUE`.
 
 ```java
 public class WeakRefRegistry {
@@ -793,8 +817,7 @@ public class WeakRefRegistry {
 ### 7.3 Clearing Weak Refs on DESTROY
 
 When `refCount` reaches 0, before calling DESTROY. This method also removes the
-entry from `referentToWeakRefs`, which is critical to avoid pinning the referent
-in the registry:
+entry from `referentToWeakRefs` to avoid pinning the referent in the registry:
 
 ```java
 public static void clearWeakRefsTo(RuntimeBase referent) {
@@ -851,157 +874,20 @@ cleared reference, it updates the RuntimeScalar in-place to UNDEF and returns nu
 
 ---
 
-## 8. Part 3: GC Safety Net (Cleaner Sentinel Pattern)
+## 8. [Removed] GC Safety Net
 
-### 8.1 Why We Need a Safety Net
+**Note**: v4.0 included a Cleaner sentinel pattern (§8.1-8.4) as a GC-based fallback
+for escaped references. This was removed in v5.0 because:
 
-Targeted refcounting misses some cases:
-- Objects stored in pre-bless copies (refCount undercounted)
-- Objects passing through multiple function-return boundaries (refCount may overcount by +1 per boundary — mitigated by `refCount=0` at bless, but not fully eliminated for deeply nested returns)
-- Blessed refs stranded in arrays/hashes that go out of scope without deterministic cleanup
+1. **Fundamental flaw**: The cleaning action must hold the referent alive for DESTROY,
+   but this keeps the sentinel reachable, preventing the Cleaner from ever firing.
+2. **Unnecessary complexity**: Perl 5 uses the same fallback strategy we now use —
+   DESTROY fires at global destruction for objects that escape refcounting.
+3. **Thread safety overhead**: The Cleaner runs on a daemon thread, requiring VarHandle
+   CAS for refCount transitions. Without the Cleaner, all refcounting is single-threaded.
+4. **Memory overhead**: Required +8 bytes per RuntimeBase for trigger/sentinel fields.
 
-The Cleaner provides eventual correctness: if refCount never reaches 0,
-DESTROY still fires when the object becomes GC-unreachable.
-
-### 8.2 The Sentinel Pattern
-
-The Cleaner API constraint: the cleaning action must NOT hold a strong reference
-to the registered object. We solve this with a sentinel indirection.
-
-**Critical design constraint**: No global strong-reference map (`IdentityHashMap`,
-etc.) may hold the referent or sentinel as a key/value, because that would keep
-the sentinel reachable from GC roots, preventing the Cleaner from ever firing.
-Instead, ownership flows only through the referent:
-
-```
-RuntimeScalar ──► RuntimeHash (referent)
-                      │
-                      ├──► int refCount           (on RuntimeBase)
-                      │
-                      └──► DestroyTrigger (stored on referent via field)
-                               │
-                               ├──► WeakReference<RuntimeBase>  (weak back-pointer)
-                               ├──► className (String)
-                               ├──► cleanable (Cleaner.Cleanable)
-                               │
-                               └──► sentinel (Object)
-                                       │
-                                    registered with Cleaner
-                                       │
-                                    cleaning action holds ──► DestroyTrigger
-                                    (does NOT hold sentinel or referent directly)
-```
-
-When all user-level RuntimeScalars pointing to the referent are GC'd:
-1. RuntimeHash (referent) becomes unreachable from user code
-2. DestroyTrigger becomes unreachable (only reachable via referent)
-3. `sentinel` becomes unreachable (only reachable via DestroyTrigger)
-4. Cleaner detects sentinel is phantom-reachable, fires the action
-5. Action accesses DestroyTrigger → `WeakReference.get()` → referent → calls DESTROY
-6. After DESTROY, Cleaner releases the action → trigger → referent can be GC'd
-
-**Why WeakReference in the cleaning action**: The cleaning action must be able to
-access the referent to pass it to DESTROY. But the action cannot hold a strong
-reference to the referent (that would prevent GC). Instead, DestroyTrigger holds
-a `WeakReference<RuntimeBase>`. The Cleaner fires the action while the sentinel
-is phantom-reachable but before the referent is finalized — at this point
-`WeakReference.get()` may return null. To ensure the referent survives until
-DESTROY completes, the sentinel is the *only* weakly-tracked object. The referent
-is kept alive by the DestroyTrigger (strong reference) which is itself kept alive
-by the cleaning action's closure. The sentinel is a separate Object that is NOT
-referenced by the cleaning action, allowing it to become phantom-reachable.
-
-**Corrected reference chain for the cleaning action**:
-```
-cleaning action closure ──► DestroyTrigger ──► referent (strong)
-                                            ──► className
-sentinel (separate Object, NOT held by action) ── registered with Cleaner
-```
-
-The sentinel becomes phantom-reachable when no user code references the referent.
-But the referent is still alive (held by the action's closure via DestroyTrigger).
-This ensures DESTROY receives the real, live object.
-
-**This avoids the proxy problem**: DESTROY receives the actual object, not a reconstruction.
-
-### 8.3 Implementation
-
-```java
-public class DestroyDispatch {
-    private static final Cleaner cleaner = Cleaner.create();
-
-    /**
-     * Companion object stored ON the referent (via RuntimeBase.destroyTrigger).
-     * No global map holds this — ownership is: referent → trigger.
-     * The cleaning action's closure holds a strong ref to this trigger,
-     * which holds a strong ref to the referent, keeping it alive for DESTROY.
-     */
-    static class DestroyTrigger {
-        final RuntimeBase referent;       // strong ref — keeps referent alive for DESTROY
-        String className;                 // mutable for re-bless
-        Cleaner.Cleanable cleanable;
-
-        DestroyTrigger(RuntimeBase referent, String className) {
-            this.referent = referent;
-            this.className = className;
-        }
-    }
-
-    // No IdentityHashMap<RuntimeBase, ...> — that would create a GC root
-    // preventing the sentinel from becoming phantom-reachable.
-    // Instead, the trigger is stored on RuntimeBase.destroyTrigger (see §6.1).
-
-    public static void registerCleaner(RuntimeBase referent, String className) {
-        DestroyTrigger trigger = new DestroyTrigger(referent, className);
-
-        // The sentinel is a plain Object whose sole purpose is to be registered
-        // with the Cleaner. It is stored on the referent so it becomes
-        // unreachable when the referent does. It is NOT referenced by the
-        // cleaning action's closure.
-        Object sentinel = new Object();
-        referent.destroySentinel = sentinel;     // prevents premature GC of sentinel
-        referent.destroyTrigger = trigger;       // allows cancelCleaner to find it
-
-        // The cleaning action captures `trigger` (NOT `sentinel` and NOT `referent`
-        // directly). This keeps the referent alive via trigger.referent.
-        trigger.cleanable = cleaner.register(sentinel, () -> {
-            if (trigger.referent.refCount != Integer.MIN_VALUE) {
-                trigger.referent.refCount = Integer.MIN_VALUE;
-                WeakRefRegistry.clearWeakRefsTo(trigger.referent);
-                doCallDestroy(trigger.referent, trigger.className);
-            }
-        });
-    }
-
-    public static void cancelCleaner(RuntimeBase referent) {
-        if (referent.destroyTrigger != null) {
-            DestroyTrigger trigger = (DestroyTrigger) referent.destroyTrigger;
-            if (trigger.cleanable != null) {
-                trigger.cleanable.clean();   // cancels the Cleaner registration
-            }
-            referent.destroyTrigger = null;
-            referent.destroySentinel = null;
-        }
-    }
-
-    public static void updateCleaner(RuntimeBase referent, String newClassName) {
-        if (referent.destroyTrigger instanceof DestroyTrigger trigger) {
-            trigger.className = newClassName;
-        }
-    }
-}
-```
-
-### 8.4 Coordination Between Refcount and Cleaner
-
-The `refCount == Integer.MIN_VALUE` state is the single coordination point:
-
-| Path | What happens |
-|------|--------------|
-| Refcount → 0 | Set `MIN_VALUE`, call DESTROY, cancel Cleaner |
-| Cleaner fires | Check `refCount != MIN_VALUE`; if true, set `MIN_VALUE` and call DESTROY; if false, skip |
-
-No separate `destroyCalled` flag needed.
+The replacement is simpler: stash walking at shutdown (see §4.8 and §10.2).
 
 ---
 
@@ -1017,9 +903,6 @@ public static void callDestroy(RuntimeBase referent) {
 
     // Clear weak refs BEFORE calling DESTROY
     WeakRefRegistry.clearWeakRefsTo(referent);
-
-    // Cancel Cleaner registration (if Phase 4 active)
-    cancelCleaner(referent);
 
     doCallDestroy(referent, className);
 }
@@ -1096,65 +979,60 @@ public static String globalPhase = "RUN";  // START → CHECK → INIT → RUN �
 
 ### 10.2 Shutdown Hook
 
-The shutdown hook must walk more than just global scalars, because blessed objects
-can live inside global arrays, global hashes, stash entries, and closures. The hook
-also needs to flush the Cleaner queue for objects that escaped refcount tracking.
+The shutdown hook walks all package stashes and global variables to find objects
+with `refCount >= 0` that still need DESTROY. This covers globals, stash entries,
+and values inside global arrays and hashes. No persistent tracking set is maintained
+during execution (see §4.8 for rationale).
 
 ```java
 Runtime.getRuntime().addShutdownHook(new Thread(() -> {
     GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
 
-    // Phase A: Walk all package variables containing blessed refs
-    // (order is unpredictable, matching Perl)
-    for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.getAllGlobals()) {
-        RuntimeScalar val = entry.getValue();
+    // Helper to call DESTROY on a scalar if it holds a tracked blessed ref
+    Consumer<RuntimeScalar> destroyIfTracked = (val) -> {
         if ((val.type & REFERENCE_BIT) != 0
                 && val.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(base);
         }
+    };
+
+    // Walk all package scalars
+    for (Map.Entry<String, RuntimeScalar> entry : GlobalVariable.getAllGlobals()) {
+        destroyIfTracked.accept(entry.getValue());
     }
 
-    // Phase B: Walk global arrays and hashes for blessed ref elements
+    // Walk global arrays for blessed ref elements
     for (RuntimeArray arr : GlobalVariable.getAllGlobalArrays()) {
         for (RuntimeScalar elem : arr) {
-            if ((elem.type & REFERENCE_BIT) != 0
-                    && elem.value instanceof RuntimeBase base
-                    && base.refCount >= 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
-        }
-    }
-    for (RuntimeHash hash : GlobalVariable.getAllGlobalHashes()) {
-        for (RuntimeScalar elem : hash) {
-            if ((elem.type & REFERENCE_BIT) != 0
-                    && elem.value instanceof RuntimeBase base
-                    && base.refCount >= 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
-            }
+            destroyIfTracked.accept(elem);
         }
     }
 
-    // Phase C: Flush Cleaner queue for escaped references
-    // Cleaner runs on a daemon thread which may not execute during shutdown.
-    // Hint the GC to collect remaining objects and process the Cleaner queue.
-    System.gc();
-    try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-    System.gc();
+    // Walk global hashes for blessed ref values
+    for (RuntimeHash hash : GlobalVariable.getAllGlobalHashes()) {
+        for (RuntimeScalar elem : hash.values()) {
+            destroyIfTracked.accept(elem);
+        }
+    }
 }));
 ```
 
-**Known limitation**: Lexical variables in still-active closures and deeply nested
-structures are not walked. Objects reachable only through closures get DESTROY
-via the Cleaner (Phase C GC hint) or not at all. This matches Perl 5's behavior
-where global destruction order is unpredictable and some DESTROY methods may not
-run if the process is forcibly killed.
+**What this catches**: All blessed-with-DESTROY objects reachable from package
+variables, stash entries, global arrays, and global hashes.
+
+**What this misses**: Overcounted objects that are no longer reachable from any
+global. The JVM GC collects these without calling DESTROY. This is acceptable:
+the alternative (a `trackedObjects` set) pins those objects in memory until
+shutdown, which is worse for long-running programs. See §4.8 for discussion.
 
 **Note**: `GlobalVariable.getAllGlobalArrays()` and `getAllGlobalHashes()` do not
-exist yet — they need to be added as part of Phase 5 implementation.
+exist yet — they need to be added as part of Phase 4 implementation.
+
+**Known limitation**: Destruction order is unpredictable, matching Perl 5 behavior
+where global destruction order is not guaranteed. DESTROY methods should check
+`${^GLOBAL_PHASE}` if they need to handle shutdown specially.
 
 ---
 
@@ -1162,13 +1040,11 @@ exist yet — they need to be added as part of Phase 5 implementation.
 
 ### Phase 1: Infrastructure (2-4 hours)
 
-**Goal**: Add `refCount` field and Cleaner support fields, create `DestroyDispatch` class. No behavior change.
+**Goal**: Add `refCount` field, create `DestroyDispatch` class. No behavior change.
 
 - Add `int refCount = -1` to `RuntimeBase` (MUST be explicitly `-1`, not default `0`)
-- Add `Object destroyTrigger` and `Object destroySentinel` to `RuntimeBase` (both null initially)
 - Create `DestroyDispatch.java` with `callDestroy()`, `doCallDestroy()`, `classHasDestroy()`
 - Create `destroyClasses` BitSet and `destroyMethodCache`
-- Add `VarHandle REF_COUNT_HANDLE` for thread-safe CAS transitions (see §18 Q1)
 - Hook `InheritanceResolver.invalidateCache()` to clear both caches
 
 **Files**: `RuntimeBase.java`, `DestroyDispatch.java` (NEW), `InheritanceResolver.java`  
@@ -1202,24 +1078,12 @@ exist yet — they need to be added as part of Phase 5 implementation.
 **Files**: `WeakRefRegistry.java` (NEW), `ScalarUtil.java`, `Builtin.java`, `DestroyDispatch.java`  
 **Validation**: `make` passes + `weaken.t` unit test passes.
 
-### Phase 4: GC Safety Net (4-8 hours)
-
-**Goal**: Objects that escape scope tracking are eventually DESTROY'd.
-
-- Implement Cleaner sentinel pattern in `DestroyDispatch`
-- Register at `bless()` time for DESTROY classes
-- Cancel on deterministic DESTROY
-- Fire on GC for escaped references
-
-**Files**: `DestroyDispatch.java`, `ReferenceOperators.java`  
-**Validation**: Escaped-reference test passes.
-
-### Phase 5: Global Destruction + Polish (4-8 hours)
+### Phase 4: Global Destruction + Polish (4-8 hours)
 
 **Goal**: Complete lifecycle support.
 
 - Implement `${^GLOBAL_PHASE}` with DESTRUCT value
-- Add JVM shutdown hook (walk global scalars, arrays, hashes; flush Cleaner queue)
+- Add JVM shutdown hook that walks global stashes for `refCount >= 0` objects
 - Add `GlobalVariable.getAllGlobalArrays()` and `getAllGlobalHashes()` methods
 - `Devel::GlobalDestruction` compatibility
 - Protect global variables (`$@`, `$!`, `$?`, etc.) in DESTROY calls
@@ -1228,7 +1092,7 @@ exist yet — they need to be added as part of Phase 5 implementation.
 **Files**: `GlobalContext.java`, `GlobalVariable.java`, `Main.java`, `DestroyDispatch.java`  
 **Validation**: Global destruction test passes.
 
-### Phase 6: Collection Cleanup (optional, 4-8 hours)
+### Phase 5: Collection Cleanup (optional, 4-8 hours)
 
 **Goal**: Deterministic DESTROY for blessed refs in lexical arrays/hashes at scope exit.
 
@@ -1454,16 +1318,14 @@ done_testing();
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| **Missed decrement point** — a code path drops a blessed ref without decrementing | DESTROY never fires (leak) | Medium | Cleaner safety net (Phase 4) catches it; audit all assignment/drop paths |
-| **Overcounting from temporaries** — function returns create transient RuntimeScalars that increment but don't decrement | DESTROY delayed until Cleaner fires | Medium | Acceptable — Cleaner provides eventual correctness |
+| **Missed decrement point** — a code path drops a blessed ref without decrementing | DESTROY delayed to global destruction | Medium | Global destruction catches it; audit all assignment/drop paths |
+| **Overcounting from temporaries** — function returns create transient RuntimeScalars that increment but don't decrement | DESTROY delayed to global destruction | Medium | Acceptable — matches Perl 5 behavior for circular refs |
 | **Performance regression** — refCount checks slow the critical path | Throughput drop | Low | Fast-path bypass; `refCount >= 0` gate skips 99% of refs; benchmark before/after |
 | **Interference with IO lifecycle** — refCount decrement triggers premature DESTROY on IO-blessed objects | IO corruption | Low | Test IO::Handle, File::Temp explicitly; separate code paths for IO vs DESTROY |
-| **Cleaner thread context** — DESTROY called from daemon thread has different context | Thread-local state mismatch, unexpected behavior | Low | Document; most DESTROY methods don't depend on thread-local state |
-| **Double-DESTROY from race** — refcount path and Cleaner fire concurrently | Duplicate side effects | Low | Use `VarHandle` CAS for refCount transitions to MIN_VALUE (see §18 Q1) |
 | **Existing test regressions** — refCount logic has a bug that breaks existing tests | Build failure | Medium | Phase 1 adds field only (no behavior change); Phase 2 is independently testable; run `make` after every change |
 | **`local` save/restore bypasses refCount** — `dynamicSaveState`/`dynamicRestoreState` do raw field copies without adjusting refCount | Incorrect DESTROY timing or missed DESTROY with `local $blessed_ref` | Medium | Hook both methods to decrement/increment; see §6.2 notes |
 | **Copy constructor bypasses refCount** — `new RuntimeScalar(scalar)` copies type/value without calling `setLarge()` | Undercounting from `RuntimeHash.delete()`, `RuntimeArray.pop()`, etc. | Medium | Audit all callers; add explicit decrements in `delete()`/`pop()`/`shift()`/`splice()` |
-| **Array mutation methods not hooked** — `pop()`, `shift()`, `splice()` remove blessed refs without decrement | DESTROY delayed or missed for blessed objects in arrays | Medium | Add explicit refCount decrements in Phase 2; see §6.2 notes |
+| **Array mutation methods not hooked** — `pop()`, `shift()`, `splice()` remove blessed refs without decrement | DESTROY delayed for blessed objects in arrays | Medium | Add explicit refCount decrements in Phase 2; see §6.2 notes |
 
 ### Rollback Plan
 
@@ -1471,7 +1333,7 @@ Each phase is independently revertable:
 - Phase 1: Remove `refCount` field (no behavior change to revert)
 - Phase 2: Remove hooks in `setLarge()`/`undefine()`/`scopeExitCleanup()` and bless()
 - Phase 3: Revert `ScalarUtil.java` to stubs, remove `WeakRefRegistry.java`
-- Phase 4+: Remove Cleaner registration
+- Phase 4: Remove shutdown hook
 
 If the whole approach fails, close PR #450 and document findings for future reference.
 
@@ -1480,26 +1342,21 @@ If the whole approach fails, close PR #450 and document findings for future refe
 ## 14. Known Limitations
 
 1. **Pre-bless copies are undercounted**: References copied before `bless()` don't get
-   counted. DESTROY may fire while those copies still exist. Mitigated by Cleaner safety net.
+   counted. DESTROY may fire while those copies still exist. Global destruction provides
+   a safety net.
 
 2. **Temporary RuntimeScalar overcounting (mostly mitigated)**: With `refCount=0` at bless
    time, single-boundary returns (the common case) work correctly — the bless-time temporary
    is not counted. Multi-boundary returns (deeply nested helper chains) may still overcount
-   by +1 per extra boundary. The Cleaner safety net handles these cases.
+   by +1 per extra boundary. These objects get DESTROY at global destruction.
 
-3. **Blessed refs in collections**: Without Phase 6, blessed refs inside lexical arrays/hashes
-   that go out of scope get non-deterministic DESTROY timing (Cleaner handles it).
+3. **Blessed refs in collections**: Without Phase 5, blessed refs inside lexical arrays/hashes
+   that go out of scope get DESTROY at global destruction (not immediately at scope exit).
 
 4. **Circular references without weaken()**: refCounts never reach 0. DESTROY fires at global
-   destruction (shutdown hook) or via Cleaner when the cycle becomes unreachable.
+   destruction (shutdown hook). This matches Perl 5 behavior exactly.
 
-5. **Non-deterministic timing for Cleaner-path DESTROY**: Depends on GC pressure. Tests that
-   assert immediate DESTROY timing for escaped objects will fail.
-
-6. **DESTROY from Cleaner runs on daemon thread**: Different thread context than main Perl
-   execution. Could cause issues with thread-local state, though this is rare in practice.
-
-7. **`Internals::SvREFCNT` remains inaccurate**: Returns 1 (constant). Real refCount is only
+5. **`Internals::SvREFCNT` remains inaccurate**: Returns 1 (constant). Real refCount is only
    tracked for blessed objects with DESTROY. Making `SvREFCNT` accurate for all objects
    would require Alternative A (full refcounting), which is rejected for performance.
 
@@ -1517,8 +1374,7 @@ If the whole approach fails, close PR #450 and document findings for future refe
 | POE::Wheel DESTROY fires on `delete $heap->{wheel}` | 2 | POE wheel tests |
 | No measurable performance regression | 2 | Benchmark `make test-unit` timing before/after (< 5% regression) |
 | Returned objects not prematurely destroyed | 2 | "Return value not destroyed" test in `destroy.t` |
-| Escaped refs eventually destroyed | 4 | Test with `System.gc()` hint |
-| Global destruction fires for package vars | 5 | `${^GLOBAL_PHASE}` test |
+| Global destruction fires for tracked objects | 4 | `${^GLOBAL_PHASE}` test |
 
 ---
 
@@ -1527,7 +1383,7 @@ If the whole approach fails, close PR #450 and document findings for future refe
 ### New Files
 | File | Phase | Purpose |
 |------|-------|---------|
-| `DestroyDispatch.java` | 1 | Central DESTROY logic, caching, Cleaner registration |
+| `DestroyDispatch.java` | 1 | Central DESTROY logic and caching |
 | `WeakRefRegistry.java` | 3 | External registry for weak references |
 | `src/test/resources/unit/destroy.t` | 2 | DESTROY unit tests |
 | `src/test/resources/unit/weaken.t` | 3 | Weak reference unit tests |
@@ -1535,7 +1391,7 @@ If the whole approach fails, close PR #450 and document findings for future refe
 ### Modified Files
 | File | Phase | Changes |
 |------|-------|---------|
-| `RuntimeBase.java` | 1 | Add `int refCount = -1`, `Object destroyTrigger`, `Object destroySentinel` fields |
+| `RuntimeBase.java` | 1 | Add `int refCount = -1` field |
 | `InheritanceResolver.java` | 1 | Cache invalidation hook for `destroyClasses`/`destroyMethodCache` |
 | `RuntimeScalar.java` | 2 | Hook `setLarge()`, `undefine()`, `scopeExitCleanup()`, `dynamicRestoreState()` |
 | `ReferenceOperators.java` | 2 | Initialize refCount in `bless()`, handle re-bless |
@@ -1543,9 +1399,10 @@ If the whole approach fails, close PR #450 and document findings for future refe
 | `RuntimeArray.java` | 2 | Hook `pop()`, `shift()`, `splice()` for refcount decrement |
 | `ScalarUtil.java` | 3 | Replace `weaken`/`isweak`/`unweaken` stubs |
 | `Builtin.java` | 3 | Update `builtin::weaken`, `builtin::is_weak`, `builtin::unweaken` |
-| `GlobalVariable.java` | 5 | `${^GLOBAL_PHASE}` support, `getAllGlobalArrays()`, `getAllGlobalHashes()` |
-| `Main.java` | 5 | Global destruction shutdown hook |
-| `EmitStatement.java` | 6 | Optional: emit cleanup calls for array/hash lexicals |
+| `GlobalContext.java` | 4 | `${^GLOBAL_PHASE}` support |
+| `GlobalVariable.java` | 4 | `getAllGlobalArrays()`, `getAllGlobalHashes()` for stash walking |
+| `Main.java` | 4 | Global destruction shutdown hook |
+| `EmitStatement.java` | 5 | Optional: emit cleanup calls for array/hash lexicals |
 
 ---
 
@@ -1563,7 +1420,7 @@ This matches Perl 5 behavior (DESTROY is called once per object).
 
 ### Circular References
 Two objects pointing to each other: refCounts never reach 0.
-- Without `weaken()`: DESTROY fires at global destruction (shutdown hook) or via Cleaner
+- Without `weaken()`: DESTROY fires at global destruction (shutdown hook) — same as Perl 5
 - With `weaken()`: the weak link doesn't count, so the cycle breaks correctly
 
 ### Re-bless to Different Class
@@ -1571,8 +1428,8 @@ Two objects pointing to each other: refCounts never reach 0.
 bless $obj, 'Foo';  # Foo has DESTROY — refCount = 0 (at bless time)
 bless $obj, 'Bar';  # Bar has no DESTROY
 ```
-On re-bless: if new class has no DESTROY, set `refCount = -1` (stop tracking) and cancel
-Cleaner. If new class has DESTROY, keep refCount, update Cleaner class name.
+On re-bless: if new class has no DESTROY, set `refCount = -1` (stop tracking).
+If new class has DESTROY, keep refCount.
 
 ### Tied Variables
 Tied variables already have DESTROY via `tieCallIfExists("DESTROY")`.
@@ -1593,68 +1450,30 @@ sub DESTROY {
 ## 18. Open Questions
 
 1. **Thread safety for refCount?**
-   - Cleaner runs on a daemon thread. `refCount` could be decremented concurrently.
-   - `int` writes are atomic on JVM, but compound read-modify-write (`--refCount`) is not.
-   - `volatile` alone is insufficient: it ensures visibility but `--refCount` is still
-     a non-atomic read-modify-write. Two threads could both read `refCount == 1`,
-     both decrement to 0, and both call DESTROY.
-   - **Recommendation**: Use `java.lang.invoke.VarHandle` for the critical transition.
-     The `--refCount` decrement in the main thread uses a plain (non-volatile) decrement
-     for performance. The DESTROY-triggering path uses `VarHandle.compareAndSet()` to
-     atomically transition from 0 to `MIN_VALUE`:
-     ```java
-     // In the main thread (setLarge, scopeExitCleanup, etc.):
-     if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
-         // CAS to prevent double-DESTROY with Cleaner thread
-         if (REF_COUNT_HANDLE.compareAndSet(oldBase, 0, Integer.MIN_VALUE)) {
-             DestroyDispatch.callDestroy(oldBase);
-         }
-     }
-     
-     // In the Cleaner thread:
-     if (REF_COUNT_HANDLE.compareAndSet(trigger.referent, 
-             trigger.referent.refCount, Integer.MIN_VALUE)) {
-         // Only one thread wins the CAS
-         doCallDestroy(trigger.referent, trigger.className);
-     }
-     ```
-     The VarHandle is a static field on DestroyDispatch, initialized once:
-     ```java
-     private static final VarHandle REF_COUNT_HANDLE;
-     static {
-         try {
-             REF_COUNT_HANDLE = MethodHandles.lookup().findVarHandle(
-                 RuntimeBase.class, "refCount", int.class);
-         } catch (ReflectiveOperationException e) {
-             throw new ExceptionInInitializerError(e);
-         }
-     }
-     ```
-     This adds zero overhead to the common path (plain `--refCount`) and only uses
-     CAS for the rare DESTROY transition. `AtomicInteger` would add 16 bytes per
-     object and is unnecessary.
+   - Without the Cleaner, all refCount operations happen on the main Perl execution thread.
+   - Perl code is single-threaded (PerlOnJava doesn't support Perl threads).
+   - **No thread safety mechanism needed.** Plain `--refCount` and `++refCount` are sufficient.
+   - If Java threading via inline Java is used in the future, refCount operations would need
+     synchronization, but that's a separate concern.
 
 2. **Should we track refCount for ALL blessed objects or only DESTROY classes?**
    - Tracking all blessed: simpler, but overhead for classes without DESTROY.
    - Tracking only DESTROY classes: faster, but needs cache invalidation on method changes.
    - **Recommendation**: Only DESTROY classes (using `destroyClasses` BitSet).
 
-3. **Should Phase 6 (collection cleanup) be implemented?**
-   - Without it, blessed refs in collections get non-deterministic DESTROY.
+3. **Should Phase 5 (collection cleanup) be implemented?**
+   - Without it, blessed refs in collections get DESTROY at global destruction.
    - The `containsTrackedRef` flag makes it cheap for the common case.
-   - **Recommendation**: Defer to Phase 6. Implement only if real-world modules need it.
+   - **Recommendation**: Defer to Phase 5. Implement only if real-world modules need it.
 
 ---
 
 ## 19. References
 
 - Perl `perlobj` DESTROY documentation: https://perldoc.perl.org/perlobj#Destructors
-- Java Cleaner API: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/Cleaner.html
 - PR #450 (WIP): https://github.com/fglock/PerlOnJava/pull/450
 - `dev/modules/poe.md` — DestroyManager attempt and lessons
 - `dev/design/object_lifecycle.md` — earlier design proposal
-- Jython FinalizeTrigger pattern: companion object with `finalize()`
-- JRuby Cleaner migration: https://github.com/jruby/jruby/issues/8328
 
 ---
 
@@ -1669,3 +1488,21 @@ sub DESTROY {
 1. Implement Phase 1 (Infrastructure)
 2. Implement Phase 2 (Scalar Refcounting + DESTROY)
 3. Validate with `make` and `destroy.t` unit test
+
+### Version History
+- **v5.1** (2026-04-08): Replaced `trackedObjects` set with stash-walking at shutdown.
+  The set pinned every tracked object in memory (preventing JVM GC from collecting
+  overcounted/circular objects), reintroducing Perl 5's memory leak behavior. Stash
+  walking at shutdown avoids this: overcounted unreachable objects are GC'd (no DESTROY,
+  but no memory leak either). The `trackedObjects` set is documented as an alternative
+  in §4.8 if testing shows too many missed DESTROY calls.
+- **v5.0** (2026-04-08): Removed Cleaner/sentinel mechanism entirely. Replaced with
+  refcounting + global destruction at shutdown, matching Perl 5 semantics. Eliminated
+  `destroyTrigger`/`destroySentinel` fields from RuntimeBase (saving +8 bytes/object).
+  Removed Phase 4 (Cleaner), removed threading concerns, added `trackedObjects` set
+  for efficient global destruction. Renumbered phases: old Phase 5→4, old Phase 6→5.
+- **v4.0** (2026-04-08): Review fixes — Cleaner sentinel reachability, WeakRefRegistry
+  pinning, missing refcount hooks, VarHandle CAS, type reconstruction in DESTROY dispatch.
+- **v3.0**: Revised `refCount=0` at bless time to fix overcounting.
+- **v2.0**: Initial targeted refcounting + Cleaner design.
+- **v1.0**: Initial design proposal.
