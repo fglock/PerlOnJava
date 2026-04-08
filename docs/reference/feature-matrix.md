@@ -751,6 +751,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **XML::Parser** module backed by JDK SAX (replaces native libexpat XS).
 - ✅  **YAML::PP** module.
 - ✅  **YAML** module.
+- ✅  **IO::Socket::SSL** module backed by Java `javax.net.ssl` SSLEngine.
+- ✅  **Net::SSLeay** module backed by Java security APIs (2327 CPAN tests pass).
 
 ### DBI module
 
