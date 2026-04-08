@@ -159,8 +159,18 @@ public class NetSSLeay extends PerlModuleBase {
             GlobalVariable.getGlobalVariable("main::!").set(new RuntimeScalar(0));
             return new RuntimeScalar(val).getList();
         }
-        // Set errno to EINVAL to signal "unknown constant"
-        GlobalVariable.getGlobalVariable("main::!").set(new RuntimeScalar(22)); // EINVAL
+        // Distinguish OpenSSL constant names from function names:
+        // - ALL_CAPS names (like AD_CLOSE_NOTIFY) are OpenSSL macros → ENOENT
+        //   This makes AUTOLOAD croak "Your vendor has not defined SSLeay macro ..."
+        // - Other names (like doesnt_exist) are not constants → EINVAL
+        //   This makes AUTOLOAD fall through to AutoLoader for .al file lookup
+        if (name.length() > 0 && (name.charAt(0) == '_' || Character.isUpperCase(name.charAt(0)))) {
+            // Looks like an OpenSSL constant name — set ENOENT ("not supported")
+            GlobalVariable.getGlobalVariable("main::!").set(new RuntimeScalar(2)); // ENOENT
+        } else {
+            // Not a constant name — set EINVAL ("invalid") to trigger AutoLoader
+            GlobalVariable.getGlobalVariable("main::!").set(new RuntimeScalar(22)); // EINVAL
+        }
         return new RuntimeScalar(0).getList();
     }
 

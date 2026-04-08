@@ -55,9 +55,69 @@ our %EXPORT_TAGS = (
 # Variables that IO::Socket::SSL accesses
 our $trace = 0;
 
-# AUTOLOAD for any remaining constant lookups.
-# Uses the Java-backed constant() function which returns 0 + sets $! = EINVAL
-# for unknown names, preventing infinite recursion.
+# ---- Pure Perl utility functions (stubs) ----
+# These are defined in the real Net::SSLeay as autoloaded Perl functions.
+# We provide minimal stubs so they're "autoloadable" (findable), even though
+# they require OpenSSL functionality we don't have.
+
+sub die_if_ssl_error { die "SSL error (PerlOnJava stub)" if $_[0] }
+sub die_now          { die $_[0] || "Died" }
+
+sub do_https   { _not_implemented("do_https") }
+sub get_http   { _not_implemented("get_http") }
+sub get_http4  { _not_implemented("get_http4") }
+sub get_https  { _not_implemented("get_https") }
+sub get_https3 { _not_implemented("get_https3") }
+sub get_https4 { _not_implemented("get_https4") }
+sub get_httpx  { _not_implemented("get_httpx") }
+sub get_httpx4 { _not_implemented("get_httpx4") }
+sub post_http  { _not_implemented("post_http") }
+sub post_http4 { _not_implemented("post_http4") }
+sub post_https { _not_implemented("post_https") }
+sub post_https3 { _not_implemented("post_https3") }
+sub post_https4 { _not_implemented("post_https4") }
+sub post_httpx  { _not_implemented("post_httpx") }
+sub post_httpx4 { _not_implemented("post_httpx4") }
+sub sslcat      { _not_implemented("sslcat") }
+sub tcpcat      { _not_implemented("tcpcat") }
+sub tcpxcat     { _not_implemented("tcpxcat") }
+
+sub dump_peer_certificate      { _not_implemented("dump_peer_certificate") }
+sub set_cert_and_key           { _not_implemented("set_cert_and_key") }
+sub set_server_cert_and_key    { _not_implemented("set_server_cert_and_key") }
+
+sub make_form {
+    my @pairs;
+    while (@_) {
+        my ($k, $v) = (shift, shift);
+        push @pairs, "$k=" . _url_encode($v // '');
+    }
+    return join('&', @pairs);
+}
+
+sub make_headers {
+    my @h;
+    while (@_) {
+        my ($k, $v) = (shift, shift);
+        push @h, "$k: $v\r\n";
+    }
+    return join('', @h) . "\r\n";
+}
+
+sub _url_encode {
+    my $s = shift;
+    $s =~ s/([^A-Za-z0-9\-_.~])/sprintf("%%%02X", ord($1))/ge;
+    return $s;
+}
+
+sub _not_implemented {
+    die "Net::SSLeay::$_[0] is not implemented in PerlOnJava (no OpenSSL backend)\n";
+}
+
+# AUTOLOAD mimics the real Net::SSLeay AUTOLOAD behavior:
+#   - constant() succeeds ($! == 0): cache the constant as a sub
+#   - constant() fails with EINVAL: not a constant name, try AutoLoader for .al files
+#   - constant() fails with other errno (ENOENT): known-but-unavailable OpenSSL macro
 sub AUTOLOAD {
     my $constname;
     our $AUTOLOAD;
@@ -65,14 +125,22 @@ sub AUTOLOAD {
     return if $constname eq 'DESTROY';
 
     my $val = constant($constname);
-    if ($! == 0) {
-        # Successfully resolved constant — install as a sub for future calls
-        no strict 'refs';
-        *{$AUTOLOAD} = sub { $val };
-        goto &$AUTOLOAD;
+    if ($! != 0) {
+        if ($! =~ /((Invalid)|(not valid))/i || $!{EINVAL}) {
+            # Not a constant — fall through to AutoLoader for .al file lookup
+            require AutoLoader;
+            $AutoLoader::AUTOLOAD = $AUTOLOAD;
+            goto &AutoLoader::AUTOLOAD;
+        }
+        else {
+            require Carp;
+            Carp::croak("Your vendor has not defined SSLeay macro $constname");
+        }
     }
-    require Carp;
-    Carp::croak("Net::SSLeay constant '$constname' not defined (PerlOnJava stub)");
+    # Successfully resolved constant — install as a sub for future calls
+    no strict 'refs';
+    eval "sub $AUTOLOAD { $val }";
+    goto &$AUTOLOAD;
 }
 
 1;
