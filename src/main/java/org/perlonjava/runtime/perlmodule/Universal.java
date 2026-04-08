@@ -107,6 +107,9 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
+            case GLOBREFERENCE:
+            case FORMAT:
+            case CODE:
             case REGEX:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
@@ -349,6 +352,10 @@ public class Universal extends PerlModuleBase {
             case REFERENCE:
             case ARRAYREFERENCE:
             case HASHREFERENCE:
+            case GLOBREFERENCE:
+            case FORMAT:
+            case CODE:
+            case REGEX:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
                     throw new PerlCompilerException("Object is not blessed into a package");
