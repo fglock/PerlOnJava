@@ -1030,30 +1030,50 @@ public class RegexPreprocessor {
             } else if (c3 == '?' && c4 == '{') {
                 // Handle (??{ ... }) recursive/dynamic regex patterns
                 // These insert a regex pattern at runtime based on code execution
-                // Replace with no-op group since we can't execute code during matching
-                sb.append("(?:");  // Non-capturing group as placeholder
 
-                // Skip the (??{ part
-                offset += 4;
+                // Skip the (??{ part to find the code content
+                int codeStart = offset + 4;
+                int codeOffset = codeStart;
 
                 // Find the closing }
                 int braceCount = 1;
-                while (offset < length && braceCount > 0) {
-                    int ch = s.codePointAt(offset);
+                while (codeOffset < length && braceCount > 0) {
+                    int ch = s.codePointAt(codeOffset);
                     if (ch == '{') {
                         braceCount++;
                     } else if (ch == '}') {
                         braceCount--;
                     }
-                    offset++;
+                    if (braceCount > 0) {
+                        codeOffset++;
+                    }
+                }
+                // codeOffset points at the closing '}'
+                String codeBlock = s.substring(codeStart, codeOffset).trim();
+                offset = codeOffset + 1; // Skip past '}'
+
+                // For simple constant expressions, inline the value as a regex pattern.
+                // (??{1}) means "evaluate 1 and use result as pattern" → matches literal "1"
+                // (??{"[x]"}) → matches character class [x]
+                if (isSimpleConstant(codeBlock)) {
+                    String value = evaluateSimpleConstant(codeBlock);
+                    if (value != null) {
+                        // Insert the constant value as a non-capturing group pattern.
+                        // Run through handleRegex to process any regex constructs
+                        // (e.g. (?[...]) from regex_sets transformation).
+                        sb.append("(?:");
+                        handleRegex(value, 0, sb, regexFlags, false);
+                    } else {
+                        // Fallback: empty non-capturing group
+                        sb.append("(?:");
+                    }
+                } else {
+                    // Non-constant: replace with empty non-capturing group
+                    sb.append("(?:");
                 }
 
-                // Close the non-capturing group and skip past ')'
-                sb.append(")");
-                if (offset < length && s.charAt(offset) == ')') {
-                    offset++;
-                }
-                return offset;
+                // offset now points at ')' closing the (??{...}) construct
+                // Fall through to common ')' handling at end of handleParentheses
             } else if (c3 == '(') {
                 // Handle (?(condition)yes|no) conditionals
                 // handleConditionalPattern processes the entire conditional including its closing )
@@ -2251,5 +2271,34 @@ public class RegexPreprocessor {
         // Simple arithmetic expressions (for pack.t compatibility)
         // Just check if it looks like a number-only expression
         return codeBlock.matches("[\\d\\s+\\-*/().eE]+");
+    }
+
+    /**
+     * Evaluates a simple constant code block expression and returns its string value.
+     * Used by (??{...}) to inline constant patterns.
+     *
+     * @param codeBlock The code block content
+     * @return The string value, or null if it can't be evaluated
+     */
+    private static String evaluateSimpleConstant(String codeBlock) {
+        if (codeBlock.equals("undef")) {
+            return "";
+        }
+
+        // String literals — strip quotes and return content
+        if (codeBlock.startsWith("\"") && codeBlock.endsWith("\"")) {
+            return codeBlock.substring(1, codeBlock.length() - 1);
+        }
+        if (codeBlock.startsWith("'") && codeBlock.endsWith("'")) {
+            return codeBlock.substring(1, codeBlock.length() - 1);
+        }
+
+        // Numeric literals and simple arithmetic — return as-is (matches literal digits)
+        if (codeBlock.matches("[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?")) {
+            return codeBlock;
+        }
+
+        // Simple arithmetic — too complex to evaluate, return null
+        return null;
     }
 }

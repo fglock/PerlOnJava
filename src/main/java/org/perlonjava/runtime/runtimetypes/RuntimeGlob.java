@@ -837,10 +837,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
 
-        savedCode.dynamicSaveState();
-        savedArray.dynamicSaveState();
-        savedHash.dynamicSaveState();
-        savedScalar.dynamicSaveState();
+        // Replace global table entries with NEW empty objects instead of mutating the
+        // existing ones in-place. This is critical because the existing objects may be
+        // aliased (e.g., via *glob = $blessed_ref), and calling dynamicSaveState() on
+        // them would clear/corrupt the original blessed reference's data.
+        GlobalVariable.globalVariables.put(this.globName, new RuntimeScalar());
+        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        RuntimeScalar newCode = new RuntimeScalar();
+        GlobalVariable.globalCodeRefs.put(this.globName, newCode);
+        // Also redirect pinnedCodeRefs to the new empty code for the local scope.
+        // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
+        // assignments during the local scope would mutate the saved snapshot instead
+        // of the new empty code, making the restore a no-op.
+        GlobalVariable.replacePinnedCodeRef(this.globName, newCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -888,17 +898,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // which is now an independent orphaned glob (matching Perl 5 GV behavior).
         GlobalVariable.globalIORefs.put(snap.globName, this);
 
+        // Restore saved objects directly - they were never mutated, so no
+        // dynamicRestoreState() call is needed.
         GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
-        snap.scalar.dynamicRestoreState();
-
         GlobalVariable.globalHashes.put(snap.globName, snap.hash);
-        snap.hash.dynamicRestoreState();
-
         GlobalVariable.globalArrays.put(snap.globName, snap.array);
-        snap.array.dynamicRestoreState();
-
         GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
-        snap.code.dynamicRestoreState();
+        // Also restore the pinned code ref so getGlobalCodeRef() returns the
+        // original code object again.
+        GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();

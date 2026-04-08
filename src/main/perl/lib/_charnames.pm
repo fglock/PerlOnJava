@@ -137,7 +137,13 @@ my sub populate_txt {
   return if $txt;
 
   $txt = do "unicore/Name.pl";
-  Internals::SvREADONLY($txt, 1) if defined $txt;
+  if (!defined $txt || $txt eq '') {
+    # unicore/Name.pl not available (e.g. on PerlOnJava);
+    # set $txt to a truthy placeholder so we don't retry and crash.
+    # viacode() will fall back to _java_viacode() for name lookups.
+    $txt = "# unavailable\n";
+  }
+  Internals::SvREADONLY($txt, 1);
 }
 
 my sub alias (%aliases) { # Set up aliases
@@ -807,13 +813,14 @@ sub viacode ($arg) {
       return $algorithmic;
     }
 
-    # PerlOnJava: use Java's ICU4J for name lookup when unicore/Name.pl is unavailable
-    if (!$txt && defined &_charnames::_java_viacode) {
-      my $java_name = _charnames::_java_viacode(CORE::hex $hex);
-      if (defined $java_name && $java_name ne '') {
-        $viacode{$hex} = $java_name;
-        return $java_name;
-      }
+    # Try Java-backed ICU4J name lookup if available (PerlOnJava).
+    # This provides complete Unicode name data without needing unicore/Name.pl.
+    if (defined &_java_viacode) {
+        my $java_name = _java_viacode(CORE::hex $hex);
+        if (defined $java_name && $java_name ne '') {
+            $viacode{$hex} = $java_name;
+            return $java_name;
+        }
     }
 
     # Return the official name, if exists.  It's unclear to me (khw) at

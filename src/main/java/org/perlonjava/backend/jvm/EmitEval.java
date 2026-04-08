@@ -61,6 +61,22 @@ public class EmitEval {
     }
 
     /**
+     * Emits the appropriate bytecode instruction for pushing an integer constant.
+     * Handles values beyond BIPUSH's signed byte range (-128..127).
+     */
+    private static void emitIntConstant(MethodVisitor mv, int value) {
+        if (value >= 0 && value <= 5) {
+            mv.visitInsn(Opcodes.ICONST_0 + value);
+        } else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+            mv.visitIntInsn(Opcodes.BIPUSH, value);
+        } else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
+            mv.visitIntInsn(Opcodes.SIPUSH, value);
+        } else {
+            mv.visitLdcInsn(value);
+        }
+    }
+
+    /**
      * Handles the emission of bytecode for the Perl 'eval' operator.
      *
      * <h3>Bytecode Generation Flow</h3>
@@ -554,7 +570,7 @@ public class EmitEval {
         // Stack: [RuntimeScalar(String), String]
 
         // Build array of runtime values for captured variables
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        emitIntConstant(mv, newEnv.length - skipVariables);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
         // Stack: [RuntimeScalar(String), String, Object[]]
 
@@ -568,7 +584,7 @@ public class EmitEval {
                 continue;
             }
             mv.visitInsn(Opcodes.DUP);
-            mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+            emitIntConstant(mv, index - skipVariables);
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
             mv.visitInsn(Opcodes.AASTORE);
         }
@@ -625,7 +641,7 @@ public class EmitEval {
 
         // Build array of runtime values for captured variables
         // These are passed to evalStringHelper so BEGIN blocks can access outer lexical variables
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        emitIntConstant(mv, newEnv.length - skipVariables);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
         // Stack: [RuntimeScalar(String), String, Object[]]
 
@@ -634,7 +650,7 @@ public class EmitEval {
             if (index >= skipVariables) {
                 String varName = newEnv[index];
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                emitIntConstant(mv, index - skipVariables);
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
                 mv.visitInsn(Opcodes.AASTORE);
             }
@@ -684,7 +700,7 @@ public class EmitEval {
 
         // Create array of parameter types for the constructor
         // Each captured variable becomes a constructor parameter (including null gaps)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        emitIntConstant(mv, newEnv.length - skipVariables);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Class");
         // Stack: [Class, Class[]]
 
@@ -693,7 +709,7 @@ public class EmitEval {
         // getVariableDescriptor handles nulls gracefully (returns RuntimeScalar descriptor)
         for (int i = 0; i < newEnv.length - skipVariables; i++) {
             mv.visitInsn(Opcodes.DUP);
-            mv.visitIntInsn(Opcodes.BIPUSH, i);
+            emitIntConstant(mv, i);
             String descriptor = EmitterMethodCreator.getVariableDescriptor(newEnv[i + skipVariables]);
             mv.visitLdcInsn(Type.getType(descriptor));
             mv.visitInsn(Opcodes.AASTORE);
@@ -712,7 +728,7 @@ public class EmitEval {
         // Stack: [Constructor]
 
         // Create array for constructor arguments (captured variable values)
-        mv.visitIntInsn(Opcodes.BIPUSH, newEnv.length - skipVariables);
+        emitIntConstant(mv, newEnv.length - skipVariables);
         mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
         // Stack: [Constructor, Object[]]
 
@@ -721,7 +737,7 @@ public class EmitEval {
             if (index >= skipVariables) {
                 String varName = newEnv[index];
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitIntInsn(Opcodes.BIPUSH, index - skipVariables);
+                emitIntConstant(mv, index - skipVariables);
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.symbolTable.getVariableIndex(varName));
                 mv.visitInsn(Opcodes.AASTORE);
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Put variable " + emitterVisitor.ctx.symbolTable.getVariableIndex(varName) + " at parameter #" + (index - skipVariables) + " " + varName);

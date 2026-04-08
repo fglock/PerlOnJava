@@ -190,7 +190,9 @@ public abstract class StringSegmentParser {
                 if (TokenUtils.peek(parser).text.equals("[")) {
                     // This is @{[...]} - create anonymous array reference and dereference
                     // Parse the entire {...} content as a block
-                    parser.tokenIndex--; // Back up to re-parse the '{'
+                    // Restore to saved position (before '{') so parseBlock sees the '{'
+                    // (can't just decrement by 1 because peek() may have skipped whitespace)
+                    parser.tokenIndex = savedIndex;
                     TokenUtils.consume(parser); // Re-consume the '{'
 
                     try {

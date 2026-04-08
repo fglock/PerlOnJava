@@ -521,17 +521,19 @@ sub _create_install_makefile {
     my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
     
-    # Build PL_FILES commands
+    # Build PL_FILES commands (prefixed with - so failures are non-fatal;
+    # many .PL scripts generate optional CLI tools that aren't needed for
+    # the module's core functionality)
     my @pl_cmds;
     if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
         for my $pl (sort keys %{$args->{PL_FILES}}) {
             my $target = $args->{PL_FILES}{$pl};
             if (ref $target eq 'ARRAY') {
                 for my $t (@$target) {
-                    push @pl_cmds, "\t$perl $pl $t";
+                    push @pl_cmds, "\t-$perl $pl $t";
                 }
             } else {
-                push @pl_cmds, "\t$perl $pl $target";
+                push @pl_cmds, "\t-$perl $pl $target";
             }
         }
     }

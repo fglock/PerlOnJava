@@ -229,6 +229,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             return;
         }
 
+        // For tied arrays, iterate via size()/get() to dispatch through FETCHSIZE/FETCH
+        // (ArrayList.iterator() bypasses TieArray's overridden methods)
+        if (this.type == TIED_ARRAY) {
+            List<RuntimeScalar> targetElements = array.elements;
+            int size = this.size();
+            for (int i = 0; i < size; i++) {
+                RuntimeScalar element = this.get(i);
+                RuntimeScalar v = new RuntimeScalar();
+                element.addToScalar(v);
+                targetElements.add(v);
+            }
+            return;
+        }
+
         List<RuntimeScalar> targetElements = array.elements;
 
         // If pushing array onto itself, make a copy to avoid ConcurrentModificationException
@@ -656,7 +670,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     TieArray.tiedStore(this, getScalarInt(index), element);
                     index++;
                 }
-                yield this;
+                // Return the materialized list instead of `this` to avoid calling
+                // FETCHSIZE/FETCH on the tied array after assignment.
+                // CLEAR may have replaced the glob (e.g., *a = []), making the
+                // tied object invalid. The result should reflect the RHS values.
+                yield materializedList;
             }
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
@@ -712,6 +730,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Just wrap the array itself so the scalar context behavior is preserved
         if (this.scalarContextSize != null) {
             return new RuntimeList(this);
+        }
+
+        // For tied arrays, iterate via size()/get() to dispatch through FETCHSIZE/FETCH
+        // (ArrayList.iterator() bypasses TieArray's overridden methods)
+        if (this.type == TIED_ARRAY) {
+            RuntimeList result = new RuntimeList();
+            int size = this.size();
+            for (int i = 0; i < size; i++) {
+                RuntimeScalar element = this.get(i);
+                result.elements.add(new RuntimeScalar(element));
+            }
+            return result;
         }
 
         // Otherwise, copy all elements to ensure independence from the original array
@@ -1068,9 +1098,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (RuntimeBase element : elements) {
-            if (element != null) {
-                sb.append(element);
+        if (this.type == TIED_ARRAY) {
+            int size = this.size();
+            for (int i = 0; i < size; i++) {
+                sb.append(this.get(i));
+            }
+        } else {
+            for (RuntimeBase element : elements) {
+                if (element != null) {
+                    sb.append(element);
+                }
             }
         }
         return sb.toString();

@@ -131,6 +131,16 @@ public class XSLoader extends PerlModuleBase {
                 loadJarShimOverrides(moduleName);
                 return scalarTrue.getList();
             }
+            // Check if a ::PP companion module is already loaded in %INC.
+            // Many CPAN modules (Params::Util, List::MoreUtils, etc.) pre-load
+            // a pure-Perl fallback before calling XSLoader::load, and wire it
+            // up after XSLoader::load returns. Return success so the PP wiring
+            // code is reached.
+            String ppKey = moduleName.replace("::", "/") + "/PP.pm";
+            RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+            if (inc != null && inc.exists(ppKey).getBoolean()) {
+                return scalarTrue.getList();
+            }
             // Error message matches pattern /object version|loadable object/ that many
             // CPAN modules (DateTime, JSON::XS, etc.) expect for pure Perl fallback
             return WarnDie.die(

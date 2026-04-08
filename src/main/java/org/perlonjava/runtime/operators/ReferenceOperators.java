@@ -194,6 +194,10 @@ public class ReferenceOperators {
             case GLOBREFERENCE:
                 if (runtimeScalar.value == null) {
                     str = "GLOB";
+                } else if (runtimeScalar.value instanceof RuntimeIO) {
+                    // IO slot access (*{$fh}{IO}) returns IO::Handle class in Perl 5
+                    blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+                    str = blessId == 0 ? "IO::Handle" : NameNormalizer.getBlessStr(blessId);
                 } else {
                     blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                     str = blessId == 0 ? "GLOB" : NameNormalizer.getBlessStr(blessId);

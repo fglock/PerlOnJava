@@ -17,6 +17,7 @@ import java.util.Set;
  */
 public class VariableCollectorVisitor implements Visitor {
     private final Set<String> variables;
+    private boolean hasEvalString = false;
 
     /**
      * Create a new VariableCollectorVisitor.
@@ -27,6 +28,15 @@ public class VariableCollectorVisitor implements Visitor {
         this.variables = variables;
     }
 
+    /**
+     * Returns true if the traversed AST contains an eval STRING (not eval BLOCK).
+     * When eval STRING is present, any variable could be referenced at runtime,
+     * so closure variable filtering should be disabled.
+     */
+    public boolean hasEvalString() {
+        return hasEvalString;
+    }
+
     @Override
     public void visit(IdentifierNode node) {
         // Leaf node - nothing to traverse
@@ -34,13 +44,26 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        // Check if this is a variable reference (sigil + identifier)
         String op = node.operator;
+
+        // Detect eval STRING (eval BLOCK is represented as a SubroutineNode, not here).
+        // When eval STRING is present, any variable could be referenced dynamically
+        // at runtime, so we must capture all visible variables.
+        if (op.equals("eval") || op.equals("evalbytes")) {
+            hasEvalString = true;
+        }
+
+        // Check if this is a variable reference (sigil + identifier)
         if ((op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&"))
                 && node.operand instanceof IdentifierNode idNode) {
             // This is a variable reference
             String varName = op + idNode.name;
             variables.add(varName);
+        }
+
+        // $#arr references @arr (array last index)
+        if (op.equals("$#") && node.operand instanceof IdentifierNode idNode) {
+            variables.add("@" + idNode.name);
         }
 
         // Visit operand if it exists
@@ -51,12 +74,16 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        // $a{key}, @a{keys}, %a{keys} all access hash %a
         if ("{".equals(node.operator) && node.left instanceof OperatorNode leftOp
-                && "$".equals(leftOp.operator) && leftOp.operand instanceof IdentifierNode idNode) {
+                && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
+                && leftOp.operand instanceof IdentifierNode idNode) {
             variables.add("%" + idNode.name);
         }
+        // $a[idx], @a[indices], %a[indices] all access array @a
         if ("[".equals(node.operator) && node.left instanceof OperatorNode leftOp
-                && "$".equals(leftOp.operator) && leftOp.operand instanceof IdentifierNode idNode) {
+                && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
+                && leftOp.operand instanceof IdentifierNode idNode) {
             variables.add("@" + idNode.name);
         }
         if (node.left != null) {
@@ -80,6 +107,9 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
+        if (node.handle != null) {
+            node.handle.accept(this);
+        }
         if (node.elements != null) {
             for (Node element : node.elements) {
                 if (element != null) {
@@ -193,6 +223,9 @@ public class VariableCollectorVisitor implements Visitor {
         }
         if (node.catchBlock != null) {
             node.catchBlock.accept(this);
+        }
+        if (node.finallyBlock != null) {
+            node.finallyBlock.accept(this);
         }
     }
 

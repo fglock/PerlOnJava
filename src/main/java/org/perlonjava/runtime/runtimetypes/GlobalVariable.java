@@ -463,6 +463,20 @@ public class GlobalVariable {
     }
 
     /**
+     * Replaces the pinned code ref for a glob during local scope.
+     * Called by RuntimeGlob.dynamicSaveState() so that assignments during the
+     * local scope go to the new empty code object instead of the saved one.
+     *
+     * @param key     The glob name key.
+     * @param codeRef The new RuntimeScalar to pin (typically a new empty one).
+     */
+    static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
+        if (pinnedCodeRefs.containsKey(key)) {
+            pinnedCodeRefs.put(key, codeRef);
+        }
+    }
+
+    /**
      * Checks if a global code reference exists AND is defined (has a real subroutine),
      * without auto-creating an entry.
      *
