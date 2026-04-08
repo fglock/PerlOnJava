@@ -198,6 +198,12 @@ public class ModuleTestExecutionTest {
             Path perlLibPath = Paths.get(originalUserDir, "src/main/perl/lib");
             RuntimeArray.push(options.inc, new RuntimeScalar(perlLibPath.toString()));
 
+            // Auto-add module-specific lib/ directory if it exists (for test dependencies)
+            Path moduleLibPath = moduleDir.resolve("lib");
+            if (Files.isDirectory(moduleLibPath)) {
+                RuntimeArray.push(options.inc, new RuntimeScalar(moduleLibPath.toAbsolutePath().toString()));
+            }
+
             PerlLanguageProvider.executePerlCode(options, true);
 
             // Verify TAP output
