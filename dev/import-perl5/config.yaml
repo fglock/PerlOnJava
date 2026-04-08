@@ -219,6 +219,7 @@ imports:
   # From core library
   - source: perl5/lib/_charnames.pm
     target: src/main/perl/lib/_charnames.pm
+    patch: _charnames.pm.patch
 
   # From core library
   - source: perl5/lib/charnames.pm
