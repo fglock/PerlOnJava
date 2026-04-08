@@ -33,16 +33,15 @@ public class TextCsv extends PerlModuleBase {
 
     /**
      * Initializes and registers all Text::CSV methods.
+     *
+     * NOTE: Registration is intentionally disabled because Text::CSV now
+     * delegates to Text::CSV_XS (which inherits from Text::CSV_PP).
+     * Registering Java-backed parse/combine on "Text::CSV" would override
+     * the pure-Perl implementations inherited through the CPAN wrapper.
      */
     public static void initialize() {
-        TextCsv csv = new TextCsv();
-        try {
-            // Register core CSV methods (high-level methods now in Perl)
-            csv.registerMethod("parse", null);
-            csv.registerMethod("combine", null);
-        } catch (NoSuchMethodException e) {
-            System.err.println("Warning: Missing Text::CSV method: " + e.getMessage());
-        }
+        // No-op: Java-backed CSV methods are no longer used.
+        // The CPAN Text::CSV wrapper + Text::CSV_PP handle everything.
     }
 
     /**

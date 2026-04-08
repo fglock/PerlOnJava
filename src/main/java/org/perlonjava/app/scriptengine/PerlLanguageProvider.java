@@ -57,6 +57,7 @@ public class PerlLanguageProvider {
     public static void resetAll() {
         globalInitialized = false;
         resetAllGlobals();
+        DataSection.reset();
     }
 
     /**
