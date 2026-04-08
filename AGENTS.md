@@ -172,7 +172,16 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 4. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
-   gh pr create --title "Title" --body "Description"
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
+   ```
+   **IMPORTANT: Never use `--body` with inline text containing backticks.** Bash
+   interprets backticks as command substitution, silently corrupting the PR body.
+   Always write the body to a temp file first and use `--body-file`:
+   ```bash
+   cat > /tmp/pr_body.md << 'EOF'
+   PR body with `backticks` and other markdown...
+   EOF
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
 
 5. **Wait for review** before merging
