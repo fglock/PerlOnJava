@@ -3,24 +3,45 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.nio.charset.Charset;
-import java.nio.charset.IllegalCharsetNameException;
-import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnsupportedCharsetException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.*;
+import java.util.*;
 
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 
 /**
  * The Encode module for PerlOnJava.
  * Provides character encoding/decoding functionality similar to Perl's Encode module.
+ * Uses Java's java.nio.charset API for encoding support.
  */
 public class Encode extends PerlModuleBase {
 
     private static final Map<String, Charset> CHARSET_ALIASES = new HashMap<>();
+
+    // Encode check-flag bit constants (from Perl's encode.h)
+    // These are bitmask values used by the $check parameter.
+    private static final int DIE_ON_ERR = 0x0001;          // Croak on error
+    private static final int WARN_ON_ERR = 0x0002;         // Warn on error
+    private static final int RETURN_ON_ERR = 0x0004;       // Return on error (don't die)
+    private static final int LEAVE_SRC = 0x0008;           // Don't modify source
+    private static final int ONLY_PRAGMA_WARNINGS = 0x0000; // Not a flag bit in Perl 5
+    private static final int PERLQQ = 0x0100;              // \x{HHHH} substitution
+    private static final int HTMLCREF = 0x0200;            // &#DDDD; substitution
+    private static final int XMLCREF = 0x0400;             // &#xHHHH; substitution
+    private static final int STOP_AT_PARTIAL = 0x0800;     // Stop at partial character
+
+    // Composite fallback constants
+    private static final int FB_DEFAULT_VAL = 0;                                     // 0
+    private static final int FB_CROAK_VAL = DIE_ON_ERR;                              // 1
+    private static final int FB_QUIET_VAL = RETURN_ON_ERR;                           // 4
+    private static final int FB_WARN_VAL = RETURN_ON_ERR | WARN_ON_ERR;             // 6
+    private static final int FB_PERLQQ_VAL = PERLQQ | LEAVE_SRC;                    // 264
+    private static final int FB_HTMLCREF_VAL = HTMLCREF | LEAVE_SRC;                // 520
+    private static final int FB_XMLCREF_VAL = XMLCREF | LEAVE_SRC;                  // 1032
 
     static {
         // Initialize common charset aliases
@@ -28,6 +49,8 @@ public class Encode extends PerlModuleBase {
         CHARSET_ALIASES.put("UTF8", StandardCharsets.UTF_8);
         CHARSET_ALIASES.put("utf-8", StandardCharsets.UTF_8);
         CHARSET_ALIASES.put("UTF-8", StandardCharsets.UTF_8);
+        // Perl's internal UTF-8 encoding (loose)
+        CHARSET_ALIASES.put("utf-8-strict", StandardCharsets.UTF_8);
 
         CHARSET_ALIASES.put("latin1", StandardCharsets.ISO_8859_1);
         CHARSET_ALIASES.put("Latin1", StandardCharsets.ISO_8859_1);
@@ -143,6 +166,7 @@ public class Encode extends PerlModuleBase {
                 "FB_DEFAULT", "FB_CROAK", "FB_QUIET", "FB_WARN",
                 "FB_PERLQQ", "FB_HTMLCREF", "FB_XMLCREF",
                 "LEAVE_SRC", "DIE_ON_ERR", "WARN_ON_ERR", "RETURN_ON_ERR",
+                "PERLQQ", "HTMLCREF", "XMLCREF",
                 "STOP_AT_PARTIAL", "ONLY_PRAGMA_WARNINGS");
         try {
             encode.registerMethod("encode", null);
@@ -174,6 +198,7 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("define_encoding", null);
             encode.registerMethod("encodings", null);
             encode.registerMethod("resolve_alias", null);
+            encode.registerMethod("perlio_ok", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -203,82 +228,74 @@ public class Encode extends PerlModuleBase {
         }
     }
 
-    // Encode constants (check bits)
-    private static final int FB_DEFAULT = 0;
-    private static final int FB_QUIET = 1;
-    private static final int FB_WARN = 2;
-    private static final int FB_CROAK = 4;
-    private static final int FB_PERLQQ_VAL = 256;  // PERLQQ
-    private static final int FB_HTMLCREF_VAL = 512;
-    private static final int FB_XMLCREF_VAL = 1024;
+    // --- Constant accessor methods ---
 
     public static RuntimeList FB_DEFAULT(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_DEFAULT).getList();
+        return new RuntimeScalar(FB_DEFAULT_VAL).getList();
     }
 
     public static RuntimeList FB_CROAK(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_CROAK).getList();
+        return new RuntimeScalar(FB_CROAK_VAL).getList();
     }
 
     public static RuntimeList FB_QUIET(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_QUIET).getList();
+        return new RuntimeScalar(FB_QUIET_VAL).getList();
     }
 
     public static RuntimeList FB_WARN(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_WARN).getList();
+        return new RuntimeScalar(FB_WARN_VAL).getList();
     }
 
     public static RuntimeList FB_PERLQQ(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_PERLQQ_VAL | FB_WARN).getList();  // 264
+        return new RuntimeScalar(FB_PERLQQ_VAL).getList();
     }
 
     public static RuntimeList FB_HTMLCREF(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_HTMLCREF_VAL | FB_WARN).getList();  // 514
+        return new RuntimeScalar(FB_HTMLCREF_VAL).getList();
     }
 
     public static RuntimeList FB_XMLCREF(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_XMLCREF_VAL | FB_WARN).getList();  // 1026
+        return new RuntimeScalar(FB_XMLCREF_VAL).getList();
     }
 
     public static RuntimeList PERLQQ(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_PERLQQ_VAL).getList();  // 256
+        return new RuntimeScalar(PERLQQ).getList();
     }
 
     public static RuntimeList HTMLCREF(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_HTMLCREF_VAL).getList();  // 512
+        return new RuntimeScalar(HTMLCREF).getList();
     }
 
     public static RuntimeList XMLCREF(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(FB_XMLCREF_VAL).getList();  // 1024
+        return new RuntimeScalar(XMLCREF).getList();
     }
 
     public static RuntimeList DIE_ON_ERR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(1).getList();
+        return new RuntimeScalar(DIE_ON_ERR).getList();
     }
 
     public static RuntimeList WARN_ON_ERR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(2).getList();
+        return new RuntimeScalar(WARN_ON_ERR).getList();
     }
 
     public static RuntimeList RETURN_ON_ERR(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(4).getList();
+        return new RuntimeScalar(RETURN_ON_ERR).getList();
     }
 
     public static RuntimeList LEAVE_SRC(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(8).getList();
+        return new RuntimeScalar(LEAVE_SRC).getList();
     }
 
     public static RuntimeList ONLY_PRAGMA_WARNINGS(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(16).getList();
+        return new RuntimeScalar(ONLY_PRAGMA_WARNINGS).getList();
     }
 
     public static RuntimeList STOP_AT_PARTIAL(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(32).getList();
+        return new RuntimeScalar(STOP_AT_PARTIAL).getList();
     }
 
     /**
      * define_encoding($obj, $name, ...) - registers an encoding object.
-     * This is a no-op in PerlOnJava since encodings are handled natively in Java.
      */
     public static RuntimeList define_encoding(RuntimeArray args, int ctx) {
         // Register the encoding object in %Encode::Encoding hash
@@ -296,16 +313,40 @@ public class Encode extends PerlModuleBase {
     }
 
     /**
-     * encodings() - returns a list of available encoding names.
+     * encodings([$class]) - returns a list of available encoding names.
+     * Returns all encodings from both the Java Charset API and the CHARSET_ALIASES map.
      */
     public static RuntimeList encodings(RuntimeArray args, int ctx) {
         RuntimeList list = new RuntimeList();
-        list.add(new RuntimeScalar("ascii"));
-        list.add(new RuntimeScalar("utf8"));
-        list.add(new RuntimeScalar("utf-8"));
-        list.add(new RuntimeScalar("iso-8859-1"));
-        list.add(new RuntimeScalar("latin1"));
+        Set<String> names = new TreeSet<>();
+
+        // Add Perl-style canonical names from our alias map
+        names.add("ascii");
+        names.add("utf8");
+        names.add("utf-8-strict");
+
+        // Add all available Java charsets
+        for (Map.Entry<String, Charset> entry : Charset.availableCharsets().entrySet()) {
+            String name = entry.getKey();
+            names.add(name);
+            // Also add aliases
+            for (String alias : entry.getValue().aliases()) {
+                names.add(alias);
+            }
+        }
+
+        for (String name : names) {
+            list.add(new RuntimeScalar(name));
+        }
         return list;
+    }
+
+    /**
+     * perlio_ok($encoding) - checks if encoding can be used with PerlIO layers.
+     * Returns 0 for now (PerlIO encoding layers not fully supported on JVM).
+     */
+    public static RuntimeList perlio_ok(RuntimeArray args, int ctx) {
+        return scalarFalse.getList();
     }
 
     /**
@@ -314,13 +355,87 @@ public class Encode extends PerlModuleBase {
     public static RuntimeList resolve_alias(RuntimeArray args, int ctx) {
         if (args.size() > 0) {
             String name = args.get(0).toString();
-            Charset cs = getCharset(name);
-            if (cs != null) {
+            try {
+                Charset cs = getCharset(name);
                 return new RuntimeScalar(cs.name()).getList();
+            } catch (Exception e) {
+                // Fall through to return undef
             }
         }
-        return new RuntimeScalar().getList();  // undef if not found
+        return scalarUndef.getList();
     }
+
+    // --- Helper: parse the $check parameter ---
+
+    /**
+     * Parses the $check argument into an integer bitmask.
+     * If $check is undef or not provided, returns FB_DEFAULT (0).
+     */
+    private static int parseCheck(RuntimeArray args, int checkArgIndex) {
+        if (args.size() > checkArgIndex) {
+            RuntimeScalar checkArg = args.get(checkArgIndex);
+            if (checkArg.getDefinedBoolean()) {
+                return checkArg.getInt();
+            }
+        }
+        return FB_DEFAULT_VAL;
+    }
+
+    /**
+     * Handles an encoding error according to the $check flags.
+     * Returns the replacement string for the unmappable character, or null to skip it.
+     * Throws PerlCompilerException for FB_CROAK.
+     */
+    private static String handleEncodingError(int check, int codePoint, String encodingName, boolean isEncode) {
+        String direction = isEncode ? "encode" : "decode";
+
+        // Check DIE_ON_ERR (FB_CROAK)
+        if ((check & DIE_ON_ERR) != 0) {
+            if (isEncode) {
+                throw new PerlCompilerException("\"\\x{" + Integer.toHexString(codePoint).toUpperCase()
+                        + "}\" does not map to " + encodingName);
+            } else {
+                throw new PerlCompilerException("" + encodingName + " \"\\x"
+                        + String.format("%02X", codePoint & 0xFF) + "\" does not map to Unicode");
+            }
+        }
+
+        // Check WARN_ON_ERR (FB_WARN)
+        if ((check & WARN_ON_ERR) != 0) {
+            if (isEncode) {
+                System.err.println("\"\\x{" + Integer.toHexString(codePoint).toUpperCase()
+                        + "}\" does not map to " + encodingName);
+            } else {
+                System.err.println("" + encodingName + " \"\\x"
+                        + String.format("%02X", codePoint & 0xFF) + "\" does not map to Unicode");
+            }
+        }
+
+        // Check substitution modes
+        if ((check & PERLQQ) != 0) {
+            if (isEncode) {
+                return "\\x{" + Integer.toHexString(codePoint).toUpperCase() + "}";
+            } else {
+                return "\\x" + String.format("%02X", codePoint & 0xFF);
+            }
+        }
+        if ((check & HTMLCREF) != 0) {
+            return "&#" + codePoint + ";";
+        }
+        if ((check & XMLCREF) != 0) {
+            return "&#x" + Integer.toHexString(codePoint).toUpperCase() + ";";
+        }
+
+        // RETURN_ON_ERR (FB_QUIET): stop processing, return what we have so far
+        if ((check & RETURN_ON_ERR) != 0) {
+            return null; // Signal to stop processing
+        }
+
+        // FB_DEFAULT: substitute with replacement character and continue
+        return isEncode ? "?" : "\uFFFD";
+    }
+
+    // --- Core encode/decode methods ---
 
     /**
      * encode($encoding, $string [, $check])
@@ -333,17 +448,85 @@ public class Encode extends PerlModuleBase {
 
         String encodingName = args.get(0).toString();
         String string = args.get(1).toString();
-        // TODO: Handle $check parameter (args.get(2)) for error handling modes
+        int check = parseCheck(args, 2);
 
-        try {
-            Charset charset = getCharset(encodingName);
+        Charset charset = getCharset(encodingName);
+
+        if (check == FB_DEFAULT_VAL) {
+            // Fast path: no error handling, use Java's default replacement
             byte[] bytes = string.getBytes(charset);
-
-            // Return the encoded bytes as a byte string, inside a list
             return new RuntimeScalar(bytes).getList();
-        } catch (Exception e) {
-            throw new RuntimeException("Cannot encode string to " + encodingName + ": " + e.getMessage());
         }
+
+        // Slow path: character-by-character encoding with error handling
+        CharsetEncoder encoder = charset.newEncoder();
+        encoder.onMalformedInput(CodingErrorAction.REPORT);
+        encoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+
+        StringBuilder result = new StringBuilder();
+        CharBuffer input = CharBuffer.wrap(string);
+        ByteBuffer output = ByteBuffer.allocate((int) (string.length() * encoder.maxBytesPerChar()) + 4);
+
+        while (input.hasRemaining()) {
+            encoder.reset();
+            CoderResult cr = encoder.encode(input, output, true);
+            // Flush any buffered output
+            output.flip();
+            byte[] chunk = new byte[output.remaining()];
+            output.get(chunk);
+            for (byte b : chunk) {
+                result.append((char) (b & 0xFF));
+            }
+            output.clear();
+
+            if (cr.isUnmappable() || cr.isMalformed()) {
+                int badChar = input.get(); // consume the bad character
+                String replacement = handleEncodingError(check, badChar, encodingName, true);
+                if (replacement == null) {
+                    // FB_QUIET: stop processing, put back unprocessed chars
+                    // Update source if LEAVE_SRC is not set
+                    if ((check & LEAVE_SRC) == 0 && args.size() > 1) {
+                        // Set $string to the remaining unprocessed input
+                        StringBuilder remaining = new StringBuilder();
+                        remaining.append((char) badChar);
+                        while (input.hasRemaining()) {
+                            remaining.append(input.get());
+                        }
+                        args.get(1).set(remaining.toString());
+                    }
+                    break;
+                }
+                // Append replacement as raw bytes
+                for (int i = 0; i < replacement.length(); i++) {
+                    result.append(replacement.charAt(i));
+                }
+            } else if (cr.isOverflow()) {
+                // Output buffer too small, expand and retry
+                output = ByteBuffer.allocate(output.capacity() * 2);
+            }
+        }
+
+        // Flush encoder
+        encoder.reset();
+        output.clear();
+        encoder.encode(CharBuffer.allocate(0), output, true);
+        encoder.flush(output);
+        output.flip();
+        while (output.hasRemaining()) {
+            result.append((char) (output.get() & 0xFF));
+        }
+
+        // Build BYTE_STRING result
+        RuntimeScalar resultScalar = new RuntimeScalar();
+        resultScalar.type = BYTE_STRING;
+        resultScalar.value = result.toString();
+
+        // Update source if LEAVE_SRC is not set (remove processed chars)
+        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0 && args.size() > 1) {
+            args.get(1).set("");
+        }
+
+        return resultScalar.getList();
     }
 
     /**
@@ -357,21 +540,72 @@ public class Encode extends PerlModuleBase {
 
         String encodingName = args.get(0).toString();
         String octets = args.get(1).toString();
-        // TODO: Handle $check parameter (args.get(2)) for error handling modes
+        int check = parseCheck(args, 2);
 
-        try {
-            Charset charset = getCharset(encodingName);
-            // Convert the string to bytes assuming it contains raw octets
-            byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
-            // Trim orphan trailing bytes for fixed-width encodings
-            // (Perl's Encode silently drops incomplete trailing code units)
-            bytes = trimOrphanBytes(bytes, charset);
+        Charset charset = getCharset(encodingName);
+
+        // Convert the string to bytes assuming it contains raw octets
+        byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+        // Trim orphan trailing bytes for fixed-width encodings
+        bytes = trimOrphanBytes(bytes, charset);
+
+        if (check == FB_DEFAULT_VAL) {
+            // Fast path: no error handling
             String decoded = new String(bytes, charset);
-
             return new RuntimeScalar(decoded).getList();
-        } catch (Exception e) {
-            throw new RuntimeException("Cannot decode string from " + encodingName + ": " + e.getMessage());
         }
+
+        // Slow path: decode with error handling
+        CharsetDecoder decoder = charset.newDecoder();
+        decoder.onMalformedInput(CodingErrorAction.REPORT);
+        decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+
+        ByteBuffer input = ByteBuffer.wrap(bytes);
+        CharBuffer output = CharBuffer.allocate(bytes.length * 2 + 4);
+        StringBuilder result = new StringBuilder();
+
+        while (input.hasRemaining()) {
+            decoder.reset();
+            CoderResult cr = decoder.decode(input, output, true);
+            output.flip();
+            result.append(output);
+            output.clear();
+
+            if (cr.isMalformed() || cr.isUnmappable()) {
+                int badByte = input.get() & 0xFF; // consume the bad byte
+                String replacement = handleEncodingError(check, badByte, encodingName, false);
+                if (replacement == null) {
+                    // FB_QUIET: stop processing
+                    if ((check & LEAVE_SRC) == 0 && args.size() > 1) {
+                        // Set $octets to remaining unprocessed bytes
+                        byte[] remaining = new byte[input.remaining() + 1];
+                        remaining[0] = (byte) badByte;
+                        input.get(remaining, 1, input.remaining());
+                        args.get(1).set(new String(remaining, StandardCharsets.ISO_8859_1));
+                        args.get(1).type = BYTE_STRING;
+                    }
+                    break;
+                }
+                result.append(replacement);
+            } else if (cr.isOverflow()) {
+                output = CharBuffer.allocate(output.capacity() * 2);
+            }
+        }
+
+        // Flush decoder
+        decoder.reset();
+        output.clear();
+        decoder.decode(ByteBuffer.allocate(0), output, true);
+        decoder.flush(output);
+        output.flip();
+        result.append(output);
+
+        // Update source if LEAVE_SRC is not set
+        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0 && args.size() > 1) {
+            args.get(1).set("");
+        }
+
+        return new RuntimeScalar(result.toString()).getList();
     }
 
     /**
@@ -386,7 +620,7 @@ public class Encode extends PerlModuleBase {
         String string = args.get(0).toString();
         byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
 
-        // Return the encoded bytes as a string, inside a list
+        // Return the encoded bytes as a byte string
         return new RuntimeScalar(bytes).getList();
     }
 
@@ -400,22 +634,32 @@ public class Encode extends PerlModuleBase {
         }
 
         String octets = args.get(0).toString();
-        // TODO: Handle $check parameter (args.get(1)) for error handling modes
+        int check = parseCheck(args, 1);
 
-        try {
-            // Convert the string to bytes assuming it contains raw octets
-            byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+        // Convert the string to bytes assuming it contains raw octets
+        byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+
+        if (check == FB_DEFAULT_VAL) {
+            // Fast path
             String decoded = new String(bytes, StandardCharsets.UTF_8);
-
             return new RuntimeScalar(decoded).getList();
-        } catch (Exception e) {
-            throw new RuntimeException("Cannot decode UTF-8 string: " + e.getMessage());
         }
+
+        // Slow path with error handling - delegate to decode()
+        RuntimeArray decodeArgs = new RuntimeArray();
+        decodeArgs.push(new RuntimeScalar("utf-8-strict"));
+        decodeArgs.push(args.get(0));
+        if (args.size() > 1) {
+            decodeArgs.push(args.get(1));
+        }
+        return decode(decodeArgs, ctx);
     }
 
     /**
      * is_utf8($string [, $check])
      * Tests whether the UTF8 flag is turned on in the string.
+     * In Perl, this simply checks the SvUTF8 flag, not the content.
+     * If $check is true, also validates the string is well-formed UTF-8.
      */
     public static RuntimeList is_utf8(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -423,16 +667,27 @@ public class Encode extends PerlModuleBase {
         }
 
         RuntimeScalar arg = args.get(0);
-        if (arg.type == BYTE_STRING) {
-            return RuntimeScalarCache.scalarFalse.getList();
+
+        // Check the UTF-8 flag (type != BYTE_STRING means UTF-8 flag is on)
+        boolean hasUtf8Flag = (arg.type != BYTE_STRING);
+
+        if (!hasUtf8Flag) {
+            return scalarFalse.getList();
         }
-        String s = arg.toString();
-        for (int i = 0; i < s.length(); i++) {
-            if (s.charAt(i) > 255) {
-                return RuntimeScalarCache.scalarTrue.getList();
+
+        // If $check is provided and true, validate the string is well-formed UTF-8
+        if (args.size() > 1 && args.get(1).getBoolean()) {
+            String s = arg.toString();
+            // Check that the string is valid (no surrogates, etc.)
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (Character.isSurrogate(c)) {
+                    return scalarFalse.getList();
+                }
             }
         }
-        return RuntimeScalarCache.scalarFalse.getList();
+
+        return RuntimeScalarCache.scalarTrue.getList();
     }
 
     /**
@@ -482,8 +737,8 @@ public class Encode extends PerlModuleBase {
         try {
             Charset charset = getCharset(charsetName);
             byte[] bytes = string.getBytes(charset);
-            // Return as byte string (ISO-8859-1 preserves raw bytes)
-            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1)).getList();
+            // Return as BYTE_STRING
+            return new RuntimeScalar(bytes).getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot encode string with " + charsetName + ": " + e.getMessage());
         }
@@ -543,7 +798,7 @@ public class Encode extends PerlModuleBase {
         RuntimeScalar octetsRef = args.get(0);
         String fromEnc = args.get(1).toString();
         String toEnc = args.get(2).toString();
-        // TODO: Handle $check parameter (args.get(3)) for error handling modes
+        int check = parseCheck(args, 3);
 
         try {
             Charset fromCharset = getCharset(fromEnc);
@@ -554,12 +809,45 @@ public class Encode extends PerlModuleBase {
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
 
             // Decode from source encoding
-            // Trim orphan trailing bytes for fixed-width encodings
             bytes = trimOrphanBytes(bytes, fromCharset);
-            String decoded = new String(bytes, fromCharset);
 
-            // Encode to target encoding
-            byte[] encoded = decoded.getBytes(toCharset);
+            if (check == FB_DEFAULT_VAL) {
+                // Fast path
+                String decoded = new String(bytes, fromCharset);
+                byte[] encoded = decoded.getBytes(toCharset);
+                octetsRef.set(new String(encoded, StandardCharsets.ISO_8859_1));
+                return new RuntimeScalar(decoded.length()).getList();
+            }
+
+            // Slow path: decode with error handling, then encode
+            // First decode
+            CharsetDecoder decoder = fromCharset.newDecoder();
+            decoder.onMalformedInput(CodingErrorAction.REPORT);
+            decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+
+            ByteBuffer input = ByteBuffer.wrap(bytes);
+            CharBuffer output = CharBuffer.allocate(bytes.length * 2 + 4);
+            StringBuilder decoded = new StringBuilder();
+
+            while (input.hasRemaining()) {
+                decoder.reset();
+                CoderResult cr = decoder.decode(input, output, true);
+                output.flip();
+                decoded.append(output);
+                output.clear();
+
+                if (cr.isMalformed() || cr.isUnmappable()) {
+                    int badByte = input.get() & 0xFF;
+                    String replacement = handleEncodingError(check, badByte, fromEnc, false);
+                    if (replacement == null) {
+                        break; // FB_QUIET
+                    }
+                    decoded.append(replacement);
+                }
+            }
+
+            // Then encode to target
+            byte[] encoded = decoded.toString().getBytes(toCharset);
 
             // Update the original scalar in-place
             octetsRef.set(new String(encoded, StandardCharsets.ISO_8859_1));
@@ -571,25 +859,38 @@ public class Encode extends PerlModuleBase {
         }
     }
 
+    /**
+     * _utf8_on($string)
+     * Turns on the UTF-8 flag on the string. Returns the previous state of the flag.
+     */
     public static RuntimeList _utf8_on(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
             throw new IllegalStateException("Bad number of arguments for _utf8_on");
         }
-        return scalarUndef.getList();
+        RuntimeScalar arg = args.get(0);
+        boolean wasUtf8 = (arg.type != BYTE_STRING);
+        // Set the UTF-8 flag (change type to STRING)
+        arg.type = STRING;
+        return new RuntimeScalar(wasUtf8).getList();
     }
 
+    /**
+     * _utf8_off($string)
+     * Turns off the UTF-8 flag on the string. Returns the previous state of the flag.
+     */
     public static RuntimeList _utf8_off(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
             throw new IllegalStateException("Bad number of arguments for _utf8_off");
         }
         RuntimeScalar arg = args.get(0);
-        if (arg.type != BYTE_STRING) {
+        boolean wasUtf8 = (arg.type != BYTE_STRING);
+        if (wasUtf8) {
             String s = arg.toString();
             byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
             arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
             arg.type = BYTE_STRING;
         }
-        return scalarUndef.getList();
+        return new RuntimeScalar(wasUtf8).getList();
     }
 
     /**
@@ -609,7 +910,7 @@ public class Encode extends PerlModuleBase {
         if (codeUnitSize > 1) {
             int remainder = bytes.length % codeUnitSize;
             if (remainder != 0) {
-                bytes = Arrays.copyOf(bytes, bytes.length - remainder);
+                bytes = java.util.Arrays.copyOf(bytes, bytes.length - remainder);
             }
         }
         return bytes;
