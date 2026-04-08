@@ -679,28 +679,28 @@ Moo tests run via `jcpan -t Moo`. Recent fixes (Phases 12-13) should improve pas
 
 ### Current Status
 
-**Test Results (after Phase 39 - DESTROY/weaken integration fix):**
-- **Moo**: 64/71 test programs passing (90.1%), 801/813 subtests passing (98.5%)
-- **Mo**: 28/28 test programs passing (100%), 144/144 subtests passing (100%)
+**Test Results (after Phase 41 - caller/local @_ fixes):**
+- **Moo**: 68/71 test programs passing (95.8%), 834/841 subtests passing (99.2%)
+- **Mo**: 28/28 test programs passing (100%), 144/144 subtests (100%)
 
 Note: DESTROY and weaken were implemented in the `feature/destroy-weaken` branch (PR #464).
 The integration exposed a bug where `weaken()` on non-DESTROY objects caused premature
 weak reference clearing on scope exit, breaking Moo's constructor installation (Phase 39).
 
-**Remaining Failures:**
-1. **accessor-weaken*.t** (6 failures) - Weak ref not cleared when last strong ref removed (improved from 20)
+**Remaining Failures (3 test programs, 7 subtests):**
+1. **accessor-weaken*.t** (6 failures) - Weak ref not cleared when last strong ref removed (WEAKLY_TRACKED limitation)
 2. **demolish-global_destruction.t** (1 failure) - `${^GLOBAL_PHASE}` not implemented
-3. **demolish-throw.t** (2 failures) - DEMOLISH error not properly converted to warning
-4. **accessor-isa.t** (2 failures) - Lazy builder returns `$self` instead of built value
-5. **accessor-trigger.t** (0 subtests failed, but parse error) - `_trigger_one` method dispatch issue
-6. **overloaded-coderefs.t** (1 failure) - Sub::Quoted inlined coercion overload
 
-**Improvements from DESTROY/weaken implementation:**
+**Improvements from DESTROY/weaken implementation + fixes:**
 - demolish-basics.t: 0/3 → 3/3 (PASS)
 - demolish-bugs-eats_exceptions.t: 0/4 → 4/4 (PASS)
 - demolish-bugs-eats_mini.t: 0/3 → 3/3 (PASS)
+- demolish-throw.t: 0/3 → 3/3 (PASS)
 - no-moo.t: 0/5 → 5/5 (PASS)
-- accessor-weaken*.t: 16/19 → 16/19 per file (weak ref clearing still partial)
+- accessor-isa.t: 24/26 → 26/26 (PASS)
+- accessor-trigger.t: 31/31 → 31/31 (PASS, no more parse error)
+- overloaded-coderefs.t: 9/10 → 10/10 (PASS)
+- accessor-weaken*.t: 16/19 per file (weak ref clearing still partial)
 
 ### Next Steps - Missing Features Roadmap
 
@@ -758,6 +758,41 @@ should not destroy the referent.
 - `src/main/java/org/perlonjava/runtime/runtimetypes/MortalList.java`
 
 **Result**: Moo tests went from 14/71 → 64/71 test programs passing
+
+#### Phase 40: Fix caller() without EXPR to return 3 elements (Completed)
+**Enables**: demolish-throw.t (2 failures → 0)  
+**Status**: Completed 2026-04-08
+
+**Root cause**: `caller` without arguments returned 11 elements (same as `caller(EXPR)`).
+Perl distinguishes: `caller` (no args) → 3 elements, `caller(EXPR)` → 11 elements.
+Extra undef elements caused "uninitialized value in join" warnings in Moo's DEMOLISH
+error handling path, masking the expected "(in cleanup)" warning.
+
+**Fix**: Added `hasExplicitExpr` flag in `RuntimeCode.callerWithSub()`. When `args.isEmpty()`
+(no argument), only return 3 elements in list context.
+
+**Files changed**:
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java`
+
+#### Phase 41: Fix local @_ in JVM backend (Completed)
+**Enables**: accessor-isa.t (2 failures → 0), accessor-trigger.t (parse error → pass),
+             overloaded-coderefs.t (1 failure → 0)  
+**Status**: Completed 2026-04-08
+
+**Root cause**: `local @_` in JVM backend localized global `@main::_` instead of register
+`@_` (JVM local slot 1). The `@_` variable is declared as "our" but read as lexical (special
+case in EmitVariable). Localization in `EmitOperatorLocal.java` treated it as a regular
+"our" variable, localizing the global. But `$_[0]` reads from the register — so `local @_`
+had no effect on subsequent `$_[0]` reads.
+
+**Fix**: In `EmitOperatorLocal.java`, excluded `@_` from the global localization path
+(`isOurVariable && !varName.equals("@_")`). This makes `@_` fall through to the generic
+lexical localization path via `DynamicVariableManager.pushLocalVariable()`.
+
+**Files changed**:
+- `src/main/java/org/perlonjava/backend/jvm/EmitOperatorLocal.java`
+
+**Result**: Moo tests went from 64/71 → 68/71 test programs passing (99.2% subtests)
 
 #### Phase 33: B::Deparse Stub Implementation (Completed)
 **Enables**: overloaded-coderefs.t (10 tests) → **FIXED**  
@@ -823,13 +858,13 @@ Tests 15 and 18 are now fixed. Tests 27-28 were also fixed by Phase 29 and 37 (s
 | 1 | ~~DESTROY (31)~~ | ~~6 tests~~ | **Completed** | ~~High~~ |
 | 2 | ~~Weak References (32)~~ | ~~25 tests~~ | **Completed** | ~~High~~ |
 | 3 | ~~weaken scope fix (39)~~ | ~~57 tests~~ | **Completed** | ~~Low~~ |
-| 4 | accessor-trigger.t | 1 test prog | Investigating | Medium |
-| 5 | accessor-isa.t (lazy builder) | 2 subtests | Investigating | Medium |
-| 6 | demolish-throw.t | 2 subtests | Open | Medium |
-| 7 | demolish-global_destruction.t | 1 subtest | Open (needs `${^GLOBAL_PHASE}`) | Low |
+| 4 | ~~caller no-args (40)~~ | ~~2 subtests~~ | **Completed** | ~~Low~~ |
+| 5 | ~~local @_ JVM (41)~~ | ~~4 test progs~~ | **Completed** | ~~Low~~ |
+| 6 | demolish-global_destruction.t | 1 subtest | Open (needs `${^GLOBAL_PHASE}`) | Low |
+| 7 | accessor-weaken*.t | 6 subtests | WEAKLY_TRACKED limitation | High |
 
 **Current state**:
-- Moo: 64/71 test programs (90.1%), 801/813 subtests (98.5%)
+- Moo: 68/71 test programs (95.8%), 834/841 subtests (99.2%)
 - Mo: 28/28 test programs (100%), 144/144 subtests (100%)
 
 ### PR Information
