@@ -162,8 +162,14 @@ public class DestroyDispatch {
             if (msg == null) msg = e.getClass().getName();
             // Use WarnDie.warn() (not Warnings.warn()) so the warning routes
             // through $SIG{__WARN__}, matching Perl 5 semantics.
+            // Perl 5 prefixes DESTROY warnings with \t and preserves the
+            // original message's trailing newline (adding one only if absent).
+            String warning = "\t(in cleanup) " + msg;
+            if (!warning.endsWith("\n")) {
+                warning += "\n";
+            }
             WarnDie.warn(
-                    new RuntimeScalar("(in cleanup) " + msg + "\n"),
+                    new RuntimeScalar(warning),
                     new RuntimeScalar(""));
         }
     }
