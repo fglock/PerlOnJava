@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 2 IN PROGRESS -- 17/108 test programs pass (was 8/109)
+## Status: Phase 2 IN PROGRESS -- 47/108 test programs pass (was 8/109)
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
@@ -76,30 +76,44 @@ pattern.t, routes.t, types.t -- all unblocked by Mojo::Util now loading.
 8 tests passed before Phase 1 (cache, date, eventemitter, json_pointer, signatures,
 plus skipped/partial tests).
 
-### After Phase 2 (17/108 passing, in progress)
+### After Phase 2 (47/108 passing)
 
 | Metric | Count |
 |--------|-------|
 | Total test programs | 108 |
-| Passed (t/mojo/) | 13 of 63 |
-| Passed (t/mojolicious/) | 4 of 43 |
-| Passed (t/pod*) | 0 of 2 |
-| **Total Passed** | **17** |
+| Passed (t/mojo/) | 34 of 63 |
+| Passed (t/mojolicious/) | 11 of 43 |
+| Passed (t/pod*) | 2 of 2 |
+| **Total Passed** | **47** |
 
-#### New passes from Phase 2 (2 gained so far)
+#### New passes from Phase 2 (32 gained)
 
-| Test File | Unblocked By |
-|-----------|-------------|
-| t/mojo/dynamic_methods.t | `can('SUPER::can')` fix in Universal.java |
-| t/mojolicious/dispatch.t | `can('SUPER::can')` fix in Universal.java |
+**t/mojo/** (21 new):
+base_util.t, bytestream.t(30/31), daemon_ipv6_tls.t, dynamic_methods.t, hypnotoad.t,
+ioloop_ipv6.t, ioloop_tls.t, json_xs.t, log.t, morbo.t, prefork.t,
+promise_async_await.t, reactor_ev.t, reactor_poll.t, subprocess.t, subprocess_ev.t,
+tls.t, user_agent.t, user_agent_online.t, user_agent_socks.t, user_agent_tls.t,
+user_agent_unix.t, websocket_proxy_tls.t
 
-#### Near-passing tests
+**t/mojolicious/** (7 new):
+app.t, command.t, commands.t, dispatch.t, lite_app.t, renderer.t, sse_lite_app.t
 
-| Test File | Subtests | Blocker |
-|-----------|----------|---------|
-| t/mojo/collection.t | 21/22 | TO_JSON: JSON number encoding (`[1]` → `["1"]`) |
-| t/mojo/bytestream.t | 28/30 | `\p{PosixSpace}` (FIXED), `local *STDOUT = $fh` IO redirect |
-| t/mojo/loader.t | 12/15 | Minor issues |
+**t/pod** (2 new): pod.t, pod_coverage.t
+
+#### Near-passing tests (1-2 subtests from passing)
+
+| Test File | Subtests | Single Failing Subtest |
+|-----------|----------|----------------------|
+| t/mojo/util.t | 50/51 | "decode (invalid UTF-8)" |
+| t/mojo/bytestream.t | 30/31 | "gzip/gunzip" subtest has no tests |
+| t/mojo/collection.t | 18/19 | "TO_JSON" — JSON number encoding |
+| t/mojo/content.t | 7/8 | "128-bit content length" |
+| t/mojo/cookiejar.t | 21/22 | "invalid expiration" — max_age->expires |
+| t/mojo/transactor.t | 21/22 | "Multipart form with real file" — no tests |
+| t/mojo/url.t | 36/38 | 2 Unicode/IDNA subtests |
+| t/mojo/websocket_frames.t | 14/15 | "64-bit text frame roundtrip" |
+| t/mojo/parameters.t | 18/19 | "Unicode" |
+| t/mojo/base.t | 8/9 | "Weaken" (known limitation) |
 
 ### Remaining Failed Tests by Root Cause
 
@@ -521,7 +535,7 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 
 ## Progress Tracking
 
-### Current Status: Phase 2 IN PROGRESS -- 17/108
+### Current Status: Phase 2 IN PROGRESS -- 47/108
 
 ### Completed
 - [x] Initial analysis and test baseline (2026-04-09): 8/109 tests pass
@@ -538,7 +552,8 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - [x] Phase 2: Anonymous glob NPE fix in RuntimeGlob.java (2026-04-09)
 - [x] Phase 2: 13 ASCII POSIX char classes in UnicodeResolver.java (2026-04-09)
 - [x] Phase 2: Zero-length match bumpalong in RuntimeRegex.java (2026-04-09)
-- [x] Mojo test count: 15/108 -> 17/108 (2026-04-09)
+- [x] Phase 2: `local *STDOUT = $fh` IO redirection fix in RuntimeGlob.java (2026-04-09)
+- [x] Mojo test count: 15/108 -> 47/108 (2026-04-09)
 
 ### Files Created/Modified in Phase 1
 - `src/main/perl/lib/Digest/SHA.pm` -- HMAC functions added to @EXPORT_OK
