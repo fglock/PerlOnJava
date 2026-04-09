@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.ByteBuffer;
@@ -456,16 +457,25 @@ public class Encode extends PerlModuleBase {
 
         // Check WARN_ON_ERR (FB_WARN)
         if ((check & WARN_ON_ERR) != 0) {
+            String warnMsg;
             if (isEncode) {
-                System.err.println("\"\\x{" + Integer.toHexString(codePoints[0])
-                        + "}\" does not map to " + encodingName);
+                warnMsg = "\"\\x{" + Integer.toHexString(codePoints[0])
+                        + "}\" does not map to " + encodingName;
             } else {
                 StringBuilder hexBytes = new StringBuilder();
                 for (int cp : codePoints) {
                     hexBytes.append("\\x").append(String.format("%02X", cp & 0xFF));
                 }
-                System.err.println("" + encodingName + " \""
-                        + hexBytes + "\" does not map to Unicode");
+                warnMsg = "" + encodingName + " \""
+                        + hexBytes + "\" does not map to Unicode";
+            }
+            // Use Perl's warn mechanism so $SIG{__WARN__} can intercept.
+            // When ONLY_PRAGMA_WARNINGS is set, check lexical 'utf8' warning scope;
+            // otherwise always emit the warning regardless of lexical scope.
+            if ((check & ONLY_PRAGMA_WARNINGS) != 0) {
+                WarnDie.warnWithCategory(new RuntimeScalar(warnMsg), new RuntimeScalar(""), "utf8");
+            } else {
+                WarnDie.warn(new RuntimeScalar(warnMsg), new RuntimeScalar(""));
             }
         }
 

@@ -479,7 +479,8 @@ Result: PASS
   - Phase 4: Shared `encodeWithCharset()`/`decodeWithCharset()` helpers for full `$check` in OO API
   - Phase 5: Coderef fallback callbacks (`parseCheck()`, `getCheckCodeRef()`, `handleEncodingError()`)
   - Phase 6: Error location fix — removed `org.perlonjava.runtime.perlmodule` from PerlCompilerException stack scan; lowercase hex in encode errors
-  - **Result**: Encode CPAN tests 38/44 files, utf8warnings.t 12/12, utf32warnings.t 22/38
+  - Phase 6b: FB_WARN through Perl warn + ONLY_PRAGMA_WARNINGS; same perlmodule fix in WarnDie
+  - **Result**: Encode CPAN tests 38/44 files, utf8warnings.t 12/12, utf32warnings.t 24/38, mime_header_iso2022jp.t 14/14
 
 ### Next Steps — Encode Remaining Fixes
 
@@ -528,6 +529,24 @@ Multi-byte decode errors pass all malformed bytes as separate args.
 
 **Files**: `PerlCompilerException.java`, `Encode.java`
 
+#### Phase 6b: Encode — FB_WARN through Perl warn + ONLY_PRAGMA_WARNINGS ✅ (2026-04-09)
+
+**Implemented**: Three fixes:
+1. `handleEncodingError()` FB_WARN now uses `WarnDie.warn()` instead of
+   `System.err.println()`, enabling `$SIG{__WARN__}` capture.
+2. When `ONLY_PRAGMA_WARNINGS` flag is set, uses `WarnDie.warnWithCategory("utf8")`
+   which respects lexical `no warnings 'utf8'` scope. Without the flag, uses
+   plain `WarnDie.warn()` which always emits.
+3. `WarnDie.getPerlLocationFromStack()` and `getWarningBitsFromCurrentContext()`
+   no longer match `org.perlonjava.runtime.perlmodule` frames — consistent with
+   the PerlCompilerException fix from Phase 6.
+
+**Result**: utf32warnings.t 24/38 (was 22/38). Remaining failures need either
+full Encode::Unicode Perl implementation (for "UTF-16 surrogate" messages) or
+PerlIO :encoding() layer support.
+
+**Files**: `Encode.java`, `WarnDie.java`
+
 #### Phase 7: Encode — piconv.t (blib pragma)
 
 **Problem**: piconv.t spawns subprocesses with `$^X -Mblib=$blib $script`.
@@ -572,10 +591,10 @@ Low priority — marginal test for a deprecated feature.
 | from_to.t | 0/3 | **3/3** | **3/3** | Done |
 | jis7-fallback.t | 2/3 | **3/3** | **3/3** | Done |
 | utf8warnings.t | 1/12 | 1/12 | **12/12** | Done (Phases 5-6) |
-| decode.t | 10/17 | 10/17 | 10/17 | Needs glob aliasing (runtime) |
-| utf32warnings.t | 0/38 | 4/38 | 22/38 | Needs PerlIO :encoding() layer |
-| mime_header_iso2022jp.t | 2/14 | 2/14 | 2/14 | Phase 7 (Perl encoding lookup) |
-| piconv.t | 1/5 | 1/5 | 1/5 | Phase 7 (blib stub) |
+| decode.t | 10/17 | 10/17 | 10/17 | Glob aliasing by string name |
+| utf32warnings.t | 0/38 | 4/38 | 24/38 | Encode::Unicode stub + PerlIO |
+| mime_header_iso2022jp.t | 2/14 | 2/14 | **14/14** | Done (Phase 3) |
+| piconv.t | 1/5 | 1/5 | 3/5 | Subprocess IPC issues |
 | taint.t | 1933/3858 | 1933/3858 | 1933/3858 | Deferred (taint tracking) |
 | encoding-locale.t | 0/3 | 0/3 | 0/3 | Deferred (deprecated pragma) |
 

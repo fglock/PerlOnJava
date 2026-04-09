@@ -283,8 +283,10 @@ public class WarnDie {
         Throwable t = new Throwable();
         for (StackTraceElement element : t.getStackTrace()) {
             String className = element.getClassName();
-            if (className.contains("org.perlonjava.anon") ||
-                    className.contains("org.perlonjava.runtime.perlmodule")) {
+            // Only look at compiled Perl frames for warning bits.
+            // Skip perlmodule frames (Java-implemented builtins) — they don't
+            // have lexical warning scopes; we want the Perl caller's scope.
+            if (className.contains("org.perlonjava.anon")) {
                 // Found a Perl frame - look up its warning bits
                 String bits = org.perlonjava.runtime.WarningBitsRegistry.get(className);
                 if (bits != null) {
@@ -328,12 +330,13 @@ public class WarnDie {
         }
 
         // Fall back to JVM stack scanning for compiled Perl frames
+        // Note: we skip org.perlonjava.runtime.perlmodule frames because those are
+        // Java-implemented Perl builtins — we want the Perl caller's location.
         Throwable t = new Throwable();
         HashMap<ByteCodeSourceMapper.SourceLocation, String> locationToClassName = new HashMap<>();
         for (StackTraceElement element : t.getStackTrace()) {
             String className = element.getClassName();
-            if (className.contains("org.perlonjava.anon") ||
-                    className.contains("org.perlonjava.runtime.perlmodule")) {
+            if (className.contains("org.perlonjava.anon")) {
                 var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
                 if (loc != null && loc.sourceFileName() != null && !loc.sourceFileName().isEmpty()) {
                     return " at " + loc.sourceFileName() + " line " + loc.lineNumber();
