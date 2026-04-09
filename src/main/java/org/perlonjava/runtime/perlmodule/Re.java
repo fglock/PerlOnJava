@@ -2,11 +2,14 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
 
 /**
  * The Re class provides functionalities similar to the Perl re module.
@@ -84,7 +87,15 @@ public class Re extends PerlModuleBase {
             // Normalize quotes if present
             opt = opt.replace("\"", "").replace("'", "").trim();
             
-            if (opt.equalsIgnoreCase("strict")) {
+            if (opt.equals("is_regexp")) {
+                // Export re::is_regexp to caller's namespace
+                // Determine caller package
+                RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+                String caller = callerList.scalar().toString();
+                RuntimeScalar sourceCode = getGlobalCodeRef("re::is_regexp");
+                RuntimeScalar targetCode = getGlobalCodeRef(caller + "::is_regexp");
+                targetCode.set(sourceCode);
+            } else if (opt.equalsIgnoreCase("strict")) {
                 // Enable categories used by our preprocessor warnings
                 Warnings.warningManager.enableWarning("experimental::re_strict");
                 Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");

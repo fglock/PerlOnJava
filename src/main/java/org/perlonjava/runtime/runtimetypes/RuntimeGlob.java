@@ -321,6 +321,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar set(RuntimeGlob value) {
         markGlobAsAssigned();
 
+        // Anonymous globs (from "open my $fh, ...") have no global name.
+        // Just copy the IO slot — no aliasing needed.
+        // This matches Perl 5: *STDOUT = $lexical_fh only replaces the IO slot.
+        if (value.globName == null) {
+            this.IO = value.IO;
+            // Also update the global IO entry for this glob
+            if (this.globName != null) {
+                RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
+                targetIO.IO = value.IO;
+            }
+            return value.scalar();
+        }
+
         if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
             InheritanceResolver.invalidateCache();

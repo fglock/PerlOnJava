@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 1 COMPLETE -- 15/108 test programs pass (was 8/109)
+## Status: Phase 2 IN PROGRESS -- 17/108 test programs pass (was 8/109)
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
@@ -76,6 +76,31 @@ pattern.t, routes.t, types.t -- all unblocked by Mojo::Util now loading.
 8 tests passed before Phase 1 (cache, date, eventemitter, json_pointer, signatures,
 plus skipped/partial tests).
 
+### After Phase 2 (17/108 passing, in progress)
+
+| Metric | Count |
+|--------|-------|
+| Total test programs | 108 |
+| Passed (t/mojo/) | 13 of 63 |
+| Passed (t/mojolicious/) | 4 of 43 |
+| Passed (t/pod*) | 0 of 2 |
+| **Total Passed** | **17** |
+
+#### New passes from Phase 2 (2 gained so far)
+
+| Test File | Unblocked By |
+|-----------|-------------|
+| t/mojo/dynamic_methods.t | `can('SUPER::can')` fix in Universal.java |
+| t/mojolicious/dispatch.t | `can('SUPER::can')` fix in Universal.java |
+
+#### Near-passing tests
+
+| Test File | Subtests | Blocker |
+|-----------|----------|---------|
+| t/mojo/collection.t | 21/22 | TO_JSON: JSON number encoding (`[1]` → `["1"]`) |
+| t/mojo/bytestream.t | 28/30 | `\p{PosixSpace}` (FIXED), `local *STDOUT = $fh` IO redirect |
+| t/mojo/loader.t | 12/15 | Minor issues |
+
 ### Remaining Failed Tests by Root Cause
 
 | Root Cause | Tests Affected | Severity |
@@ -84,9 +109,13 @@ plus skipped/partial tests).
 | ~~Compress::Raw::Zlib missing~~ | ~~100~~ | **FIXED** |
 | ~~IO::Poll not available~~ | ~~100~~ | **FIXED** |
 | ~~Hash::Util::FieldHash missing~~ | ~~5~~ | **FIXED** |
-| DynamicMethods empty method name | ~15 | **High** -- `Can't locate object method ""` |
-| `is_regexp` on unblessed ref | ~5 | **High** -- Mojo::Collection |
-| `toGlob` is null (glob coercion) | ~3 | Medium -- bytestream/file ops |
+| ~~DynamicMethods empty method name~~ | ~~15~~ | **FIXED** (`can('SUPER::can')` in Universal.java) |
+| ~~`is_regexp` export missing~~ | ~~5~~ | **FIXED** (`re::is_regexp` export in Re.java) |
+| ~~`toGlob` is null (glob coercion)~~ | ~~3~~ | **FIXED** (anonymous glob null guard in RuntimeGlob.java) |
+| ~~ASCII POSIX char classes~~ | ~~2~~ | **FIXED** (13 `\p{PosixXxx}` variants in UnicodeResolver.java) |
+| `local *STDOUT = $fh` IO redirect | ~2 | **Medium** -- bare `print` not redirected (see Issue 7) |
+| JSON number encoding | ~10 | **High** -- `[1]` becomes `["1"]`, deep scalar type issue |
+| DOM `/g` regex zero-length match | ~5 | **High** -- HTML parser uses complex alternation patterns |
 | IO::Poll `_poll()` runtime behavior | ~20 | **High** -- IOLoop/reactor/daemon tests |
 | fork() not supported | ~3 (subprocess) | Known limitation |
 | Parser indirect method bug | 1 | Low -- monkey_patch + Test::More |
@@ -305,6 +334,58 @@ require fork. Only `Subprocess` (for running blocking code in a child process) n
 **Workaround**: Mojolicious applications can use Java threading via inline Java as an
 alternative to Subprocess.
 
+---
+
+### Issue 7: `local *STDOUT = $fh` IO redirection incomplete -- IN PROGRESS
+
+**Status**: **TODO** (Phase 2)
+
+**Impact**: ~2 tests (bytestream.t "say and autojoin", others using IO capture patterns).
+
+**Error**: After `local *STDOUT = $fh`, bare `print "hello"` still goes to the original
+STDOUT instead of the redirected file handle.
+
+**Root cause**: `RuntimeGlob.set(RuntimeGlob value)` replaces the IO slot but **never
+updates `RuntimeIO.selectedHandle`**. There are two paths for `print`:
+
+| Path | Resolution | Status |
+|------|-----------|--------|
+| `print STDOUT "hi"` (explicit) | Name-based lookup via `GlobalVariable.getGlobalIO()` | **Works** |
+| `print "hi"` (bare) | Static `RuntimeIO.selectedHandle` | **Broken** |
+
+When `local *STDOUT` runs, `dynamicSaveState()` correctly saves the original
+`selectedHandle` and creates a stub IO pointing `selectedHandle` to it. When the
+subsequent `*STDOUT = $fh` assignment runs, `set(RuntimeGlob)` replaces `this.IO` with
+the file's IO (so explicit `print STDOUT` works via name lookup), but leaves
+`selectedHandle` pointing to the orphaned stub.
+
+By contrast, `open(STDOUT, '>', $file)` works correctly because it calls `setIO()` which
+has the `selectedHandle` update check (lines 568-570 and 592-596 in RuntimeGlob.java).
+
+**Fix**: In `RuntimeGlob.set(RuntimeGlob value)`, add `selectedHandle` update logic
+in both the anonymous glob path and the named glob path, mirroring what `setIO()` does:
+
+```java
+// Before replacing this.IO, save old IO for selectedHandle check
+RuntimeIO oldRuntimeIO = null;
+if (this.IO != null && this.IO.value instanceof RuntimeIO rio) {
+    oldRuntimeIO = rio;
+}
+// ... existing IO replacement ...
+// After replacing IO, update selectedHandle if needed
+if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle) {
+    if (newIO.value instanceof RuntimeIO newRIO) {
+        RuntimeIO.selectedHandle = newRIO;
+    }
+}
+```
+
+`dynamicRestoreState()` already correctly restores the original `selectedHandle`, so the
+restore path needs no changes.
+
+**File**: `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeGlob.java`, method
+`set(RuntimeGlob value)`, lines ~327-335 (anonymous path) and ~367-372 (named path).
+
 ## Implementation Plan
 
 ### Phase 1: Unblock Mojo::Util compile-time loading -- IN PROGRESS
@@ -440,7 +521,7 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 
 ## Progress Tracking
 
-### Current Status: Phase 1 COMPLETE -- Phase 2 next
+### Current Status: Phase 2 IN PROGRESS -- 17/108
 
 ### Completed
 - [x] Initial analysis and test baseline (2026-04-09): 8/109 tests pass
@@ -452,6 +533,12 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - [x] Verified Mojo::Util and Mojo::Base load successfully (2026-04-09)
 - [x] All unit tests pass (`make` succeeds) (2026-04-09)
 - [x] Mojo test count: 8/109 -> 15/108 (2026-04-09)
+- [x] Phase 2: `re::is_regexp` export in Re.java (2026-04-09)
+- [x] Phase 2: `can('SUPER::can')` fix in Universal.java (2026-04-09)
+- [x] Phase 2: Anonymous glob NPE fix in RuntimeGlob.java (2026-04-09)
+- [x] Phase 2: 13 ASCII POSIX char classes in UnicodeResolver.java (2026-04-09)
+- [x] Phase 2: Zero-length match bumpalong in RuntimeRegex.java (2026-04-09)
+- [x] Mojo test count: 15/108 -> 17/108 (2026-04-09)
 
 ### Files Created/Modified in Phase 1
 - `src/main/perl/lib/Digest/SHA.pm` -- HMAC functions added to @EXPORT_OK
@@ -463,12 +550,18 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - `src/main/java/org/perlonjava/runtime/perlmodule/Socket.java` -- Added inet_pton, inet_ntop
 - `src/main/perl/lib/Socket.pm` -- Added inet_pton, inet_ntop to @EXPORT
 
-### Next Steps (Phase 2)
-1. Investigate DynamicMethods empty method name error (`Can't locate object method ""`)
-2. Fix `is_regexp` on unblessed reference (Mojo::Collection)
-3. Fix `toGlob` null pointer (bytestream/file operations)
-4. Investigate remaining test failures for low-hanging fruit
-5. IO::Poll `_poll()` runtime testing with actual sockets
+### Files Modified in Phase 2
+- `src/main/java/org/perlonjava/runtime/perlmodule/Re.java` -- `re::is_regexp` export
+- `src/main/java/org/perlonjava/runtime/perlmodule/Universal.java` -- `SUPER::` in can()
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeGlob.java` -- anonymous glob null guard + selectedHandle fix
+- `src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java` -- 13 PosixXxx properties
+- `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` -- zero-length match bumpalong
+
+### Next Steps (Phase 2 continued)
+1. Fix `local *STDOUT = $fh` IO redirection (Issue 7) -- selectedHandle not updated
+2. Investigate JSON number encoding issue for broader test impact
+3. Re-run full Mojo test suite and update counts
+4. IO::Poll `_poll()` runtime testing with actual sockets (Phase 3 prep)
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8

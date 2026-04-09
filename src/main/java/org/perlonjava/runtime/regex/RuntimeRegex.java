@@ -611,16 +611,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             startPos = isPosDefined ? posScalar.getInt() : 0;
             
             // Check if previous call had zero-length match at this position (for SCALAR context)
-            // This prevents infinite loops in: while ($str =~ /pat/g)  
+            // This prevents infinite loops in: while ($str =~ /pat/g)
+            // Perl 5 bumps pos() by 1 after a zero-length match to make progress
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
                 String patternKey = regex.patternString;
                 if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
-                    // Previous match was zero-length at this position - fail to break loop
-                    // Only reset pos if /c flag is not set (keepCurrentPosition)
-                    if (!regex.regexFlags.keepCurrentPosition()) {
-                        posScalar.set(scalarUndef);
+                    // Bumpalong: advance by 1 character and retry the match
+                    startPos++;
+                    if (startPos > inputStr.length()) {
+                        // Past end of string, fail
+                        if (!regex.regexFlags.keepCurrentPosition()) {
+                            posScalar.set(scalarUndef);
+                        }
+                        return RuntimeScalarCache.scalarFalse;
                     }
-                    return RuntimeScalarCache.scalarFalse;
+                    posScalar.set(startPos);
+                    RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                    isPosDefined = true;
                 }
             }
         }
