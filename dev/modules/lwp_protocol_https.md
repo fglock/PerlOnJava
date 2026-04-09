@@ -1,11 +1,11 @@
 # LWP::Protocol::https Support for PerlOnJava
 
-## Status: LWP::Protocol::https ALL TESTS PASS, Encode 36/44 (77.3%), Net::SSLeay 2101/2101 (100%)
+## Status: LWP::Protocol::https ALL TESTS PASS, Encode 38/44 (77.7%), Net::SSLeay 2101/2101 (100%)
 
 **Branch**: `feature/lwp-protocol-https`
 **PR**: #461
 **Date started**: 2026-04-08
-**Last updated**: 2026-04-08 (LWP::Protocol::https passing, Encode overhaul complete)
+**Last updated**: 2026-04-09 (Encode Phases 3-6 complete, utf8warnings.t 12/12)
 
 ## Background
 
@@ -474,94 +474,59 @@ Result: PASS
   - from_to() sets BYTE_STRING on result
   - **Result**: Encode CPAN tests 36/44 files, 6796/8793 (77.3%)
 
+- [x] Encode.java overhaul — Phases 3-6 (2026-04-09)
+  - Phase 3: Perl-registered encoding lookup (`lookupPerlEncoding()`, `dispatchToEncodingObject()`, `find_mime_encoding()`)
+  - Phase 4: Shared `encodeWithCharset()`/`decodeWithCharset()` helpers for full `$check` in OO API
+  - Phase 5: Coderef fallback callbacks (`parseCheck()`, `getCheckCodeRef()`, `handleEncodingError()`)
+  - Phase 6: Error location fix — removed `org.perlonjava.runtime.perlmodule` from PerlCompilerException stack scan; lowercase hex in encode errors
+  - **Result**: Encode CPAN tests 38/44 files, utf8warnings.t 12/12, utf32warnings.t 22/38
+
 ### Next Steps — Encode Remaining Fixes
 
-The 8 remaining failing/incomplete Encode test files break down into doable
+The 6 remaining failing/incomplete Encode test files break down into doable
 fixes and deferred items:
 
-#### Phase 3: Encode — Perl-registered encoding lookup (from_to.t test 2, mime_header_iso2022jp.t)
+#### Phase 3: Encode — Perl-registered encoding lookup ✅ (2026-04-09)
 
-**Problem**: Java-side `encode()`/`decode()` bypass `%Encode::Encoding` where
-Perl modules like `Encode::MIME::Header::ISO_2022_JP` register virtual
-encodings via `define_encoding()`. The Java code goes straight to
-`getCharset()` which only knows Java Charsets.
+**Implemented**: `lookupPerlEncoding()` checks `%Encode::Encoding` hash before
+Java charsets. `dispatchToEncodingObject()` calls Perl-level encode/decode
+methods. `find_encoding()` now checks `%Encode::Encoding` first.
+`find_mime_encoding()` added (delegates to `find_encoding`).
 
-**Fix**: Before calling `getCharset()`, check `%Encode::Encoding` for a
-Perl-registered encoding object. If found, call its `->encode()`/`->decode()`
-method instead of using the Java charset path.
+**Files**: `Encode.java`
 
-```java
-// In encode() and decode(), before getCharset():
-RuntimeHash encodingHash = GlobalVariable.getGlobalHash("Encode::Encoding");
-RuntimeScalar encObj = encodingHash.get(encodingName);
-if (encObj != null && encObj.getDefinedBoolean()) {
-    // Delegate to Perl-level encoding object
-    RuntimeArray methodArgs = new RuntimeArray();
-    methodArgs.push(encObj);
-    methodArgs.push(args.get(1));  // string/octets
-    if (args.size() > 2) methodArgs.push(args.get(2));  // $check
-    return RuntimeCode.call(encObj, "encode"/"decode", methodArgs, ctx);
-}
-```
+#### Phase 4: Encode — $check support in encoding_encode/encoding_decode ✅ (2026-04-09)
 
-**Impact**: Fixes mime_header_iso2022jp.t (12 tests) and from_to.t test 2
-($check during re-encode). Also enables any CPAN module that registers custom
-encodings.
+**Implemented**: Extracted shared `encodeWithCharset()` and `decodeWithCharset()`
+helpers from `encode()`/`decode()`. Both `encoding_encode()` and
+`encoding_decode()` now use these shared helpers with full `$check` support
+including coderef fallbacks.
 
-**Effort**: Medium — architectural change but well-contained.
+**Files**: `Encode.java`
 
-**Files**: `Encode.java` (encode, decode, from_to methods)
+#### Phase 5: Encode — Coderef fallback callbacks ✅ (2026-04-09)
 
-#### Phase 4: Encode — $check support in encoding_encode/encoding_decode
+**Implemented**: `parseCheck()` detects CODE references and returns
+`RETURN_ON_ERR | LEAVE_SRC`. `getCheckCodeRef()` extracts the actual coderef.
+`handleEncodingError()` invokes the coderef with unmappable codepoints (encode)
+or bad bytes (decode) and uses the return value as replacement text.
+Multi-byte decode errors pass all malformed bytes as separate args.
 
-**Problem**: `Encode::Encoding->encode()`/`->decode()` (the OO method path
-via `find_encoding()` objects) ignores the `$check` parameter entirely. Uses
-simple `string.getBytes(charset)` instead of the character-by-character
-encoder with error handling.
+**Files**: `Encode.java`
 
-**Fix**: Refactor the error-handling encode/decode logic from `encode()`/
-`decode()` into shared helper methods. Then call those helpers from both the
-functional API and the OO API.
+#### Phase 6: Encode — Error location reporting ✅ (2026-04-09)
 
-**Impact**: Fixes utf32warnings.t (up to ~26 of 38 tests — the rest need
-PerlIO `:encoding()` layer support).
+**Implemented**: Two fixes:
+1. `PerlCompilerException.buildErrorMessage()` no longer matches
+   `org.perlonjava.runtime.perlmodule` frames during stack scanning. Java-
+   implemented Perl builtins now correctly report the Perl caller's location
+   (matching Perl 5 behavior for XS modules).
+2. Encode error hex case: removed `.toUpperCase()` from encode-direction
+   FB_CROAK/FB_WARN messages (Perl uses lowercase `\x{d800}`).
 
-**Effort**: Medium — refactoring existing code, no new concepts.
+**Result**: utf8warnings.t 12/12 (was 8/12 after Phase 5).
 
-**Files**: `Encode.java` (encoding_encode, encoding_decode)
-
-#### Phase 5: Encode — Coderef fallback callbacks (utf8warnings.t)
-
-**Problem**: When `$check` is a coderef (not an integer), `parseCheck()`
-calls `getInt()` on a CODE reference, which crashes. Perl allows passing a
-sub as the fallback handler: `encode($enc, $str, sub { ... })`.
-
-**Fix**: In `parseCheck()`, detect coderef arguments and store them
-separately. In `handleEncodingError()`, if a coderef is stored, call it with
-the unmappable character ordinal and use its return value as the replacement.
-
-**Impact**: Fixes utf8warnings.t tests 3, 6, 9, 12 (coderef tests).
-
-**Effort**: Medium — need to thread the coderef through the encode/decode
-pipeline.
-
-**Files**: `Encode.java` (parseCheck, handleEncodingError, encode, decode)
-
-#### Phase 6: Encode — Error location reporting (utf8warnings.t)
-
-**Problem**: FB_CROAK error messages report `"at Encode.java line 395"`
-instead of the Perl caller's file and line. The `PerlCompilerException`
-thrown by `handleEncodingError()` gets its location from the Java throw site.
-
-**Fix**: Capture the Perl caller context and include it in the error message
-string, or use a different exception mechanism that preserves Perl-side
-location info.
-
-**Impact**: Fixes utf8warnings.t tests 2, 5, 8, 11 (error message tests).
-
-**Effort**: Medium — depends on how PerlCompilerException captures location.
-
-**Files**: `Encode.java` (handleEncodingError)
+**Files**: `PerlCompilerException.java`, `Encode.java`
 
 #### Phase 7: Encode — piconv.t (blib pragma)
 
@@ -597,22 +562,22 @@ Low priority — marginal test for a deprecated feature.
 
 ### Encode Test Results Summary
 
-| Test file | Before | After Phase 2 | Remaining fix |
-|-----------|--------|---------------|---------------|
-| undef.t | 1/3857 | **3857/3857** | Done |
-| isa.t | 964/964 | **964/964** | Done |
-| utf8ref.t | 8/12 | **12/12** | Done |
-| xml.t | 0/1 | **1/1** | Done |
-| cow.t | 2/4 | **4/4** | Done |
-| from_to.t | 0/3 | **3/3** | Done |
-| jis7-fallback.t | 2/3 | **3/3** | Done |
-| decode.t | 10/17 | 10/17 | Needs glob aliasing (runtime) |
-| utf32warnings.t | 0/38 | 4/38 | Phase 4 ($check in OO API) |
-| mime_header_iso2022jp.t | 2/14 | 2/14 | Phase 3 (Perl encoding lookup) |
-| utf8warnings.t | 1/12 | 1/12 | Phase 5-6 (coderef + error loc) |
-| piconv.t | 1/5 | 1/5 | Phase 7 (blib stub) |
-| taint.t | 1933/3858 | 1933/3858 | Deferred (taint tracking) |
-| encoding-locale.t | 0/3 | 0/3 | Deferred (deprecated pragma) |
+| Test file | Before | After Phase 2 | After Phase 6 | Remaining fix |
+|-----------|--------|---------------|---------------|---------------|
+| undef.t | 1/3857 | **3857/3857** | **3857/3857** | Done |
+| isa.t | 964/964 | **964/964** | **964/964** | Done |
+| utf8ref.t | 8/12 | **12/12** | **12/12** | Done |
+| xml.t | 0/1 | **1/1** | **1/1** | Done |
+| cow.t | 2/4 | **4/4** | **4/4** | Done |
+| from_to.t | 0/3 | **3/3** | **3/3** | Done |
+| jis7-fallback.t | 2/3 | **3/3** | **3/3** | Done |
+| utf8warnings.t | 1/12 | 1/12 | **12/12** | Done (Phases 5-6) |
+| decode.t | 10/17 | 10/17 | 10/17 | Needs glob aliasing (runtime) |
+| utf32warnings.t | 0/38 | 4/38 | 22/38 | Needs PerlIO :encoding() layer |
+| mime_header_iso2022jp.t | 2/14 | 2/14 | 2/14 | Phase 7 (Perl encoding lookup) |
+| piconv.t | 1/5 | 1/5 | 1/5 | Phase 7 (blib stub) |
+| taint.t | 1933/3858 | 1933/3858 | 1933/3858 | Deferred (taint tracking) |
+| encoding-locale.t | 0/3 | 0/3 | 0/3 | Deferred (deprecated pragma) |
 
 ## Async Framework Analysis
 

@@ -28,7 +28,7 @@ public class Encode extends PerlModuleBase {
     private static final int WARN_ON_ERR = 0x0002;         // Warn on error
     private static final int RETURN_ON_ERR = 0x0004;       // Return on error (don't die)
     private static final int LEAVE_SRC = 0x0008;           // Don't modify source
-    private static final int ONLY_PRAGMA_WARNINGS = 0x0000; // Not a flag bit in Perl 5
+    private static final int ONLY_PRAGMA_WARNINGS = 0x0010; // Use lexical warnings only
     private static final int PERLQQ = 0x0100;              // \x{HHHH} substitution
     private static final int HTMLCREF = 0x0200;            // &#DDDD; substitution
     private static final int XMLCREF = 0x0400;             // &#xHHHH; substitution
@@ -162,7 +162,8 @@ public class Encode extends PerlModuleBase {
                 "ONLY_PRAGMA_WARNINGS", "STOP_AT_PARTIAL",
                 "FB_DEFAULT", "encode", "decode", "encode_utf8", "decode_utf8",
                 "is_utf8", "find_encoding", "from_to", "_utf8_on", "_utf8_off",
-                "define_encoding", "encodings", "perlio_ok", "resolve_alias");
+                "define_encoding", "encodings", "perlio_ok", "resolve_alias",
+                "find_mime_encoding");
         encode.defineExportTag("fallbacks",
                 "FB_DEFAULT", "FB_CROAK", "FB_QUIET", "FB_WARN",
                 "FB_PERLQQ", "FB_HTMLCREF", "FB_XMLCREF");
@@ -203,6 +204,7 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("encodings", null);
             encode.registerMethod("resolve_alias", null);
             encode.registerMethod("perlio_ok", null);
+            encode.registerMethod("find_mime_encoding", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Encode method: " + e.getMessage());
         }
@@ -374,11 +376,18 @@ public class Encode extends PerlModuleBase {
     /**
      * Parses the $check argument into an integer bitmask.
      * If $check is undef or not provided, returns FB_DEFAULT (0).
+     * If $check is a CODE reference, returns FB_WARN_VAL as default behavior
+     * (the coderef is extracted separately via getCheckCodeRef).
      */
     private static int parseCheck(RuntimeArray args, int checkArgIndex) {
         if (args.size() > checkArgIndex) {
             RuntimeScalar checkArg = args.get(checkArgIndex);
             if (checkArg.getDefinedBoolean()) {
+                // Check if $check is a CODE reference (coderef fallback)
+                if (checkArg.type == RuntimeScalarType.CODE) {
+                    // Coderef implies RETURN_ON_ERR behavior with custom handling
+                    return RETURN_ON_ERR | LEAVE_SRC;
+                }
                 return checkArg.getInt();
             }
         }
@@ -386,49 +395,98 @@ public class Encode extends PerlModuleBase {
     }
 
     /**
+     * Extracts a CODE reference from the $check argument, or null if not a coderef.
+     */
+    private static RuntimeScalar getCheckCodeRef(RuntimeArray args, int checkArgIndex) {
+        if (args.size() > checkArgIndex) {
+            RuntimeScalar checkArg = args.get(checkArgIndex);
+            if (checkArg.type == RuntimeScalarType.CODE) {
+                return checkArg;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Handles an encoding error according to the $check flags.
      * Returns the replacement string for the unmappable character, or null to skip it.
      * Throws PerlCompilerException for FB_CROAK.
      */
-    private static String handleEncodingError(int check, int codePoint, String encodingName, boolean isEncode) {
-        String direction = isEncode ? "encode" : "decode";
+    private static String handleEncodingError(int check, RuntimeScalar codeRef, int codePoint, String encodingName, boolean isEncode) {
+        return handleEncodingError(check, codeRef, new int[]{codePoint}, encodingName, isEncode);
+    }
+
+    /**
+     * Handles an encoding error according to the $check flags.
+     * For decode errors, codePoints may contain multiple bad bytes.
+     * Returns the replacement string for the unmappable character(s), or null to skip.
+     * Throws PerlCompilerException for FB_CROAK.
+     */
+    private static String handleEncodingError(int check, RuntimeScalar codeRef, int[] codePoints, String encodingName, boolean isEncode) {
+        // If a coderef fallback is provided, call it
+        if (codeRef != null) {
+            RuntimeArray cbArgs = new RuntimeArray();
+            if (isEncode) {
+                // For encode: pass the unmappable codepoint
+                cbArgs.push(new RuntimeScalar(codePoints[0]));
+            } else {
+                // For decode: pass each bad byte as separate arg
+                for (int cp : codePoints) {
+                    cbArgs.push(new RuntimeScalar(cp & 0xFF));
+                }
+            }
+            RuntimeList result = RuntimeCode.apply(codeRef, cbArgs, RuntimeContextType.SCALAR);
+            return result.scalar().toString();
+        }
 
         // Check DIE_ON_ERR (FB_CROAK)
         if ((check & DIE_ON_ERR) != 0) {
             if (isEncode) {
-                throw new PerlCompilerException("\"\\x{" + Integer.toHexString(codePoint).toUpperCase()
+                throw new PerlCompilerException("\"\\x{" + Integer.toHexString(codePoints[0])
                         + "}\" does not map to " + encodingName);
             } else {
-                throw new PerlCompilerException("" + encodingName + " \"\\x"
-                        + String.format("%02X", codePoint & 0xFF) + "\" does not map to Unicode");
+                StringBuilder hexBytes = new StringBuilder();
+                for (int cp : codePoints) {
+                    hexBytes.append("\\x").append(String.format("%02X", cp & 0xFF));
+                }
+                throw new PerlCompilerException("" + encodingName + " \""
+                        + hexBytes + "\" does not map to Unicode");
             }
         }
 
         // Check WARN_ON_ERR (FB_WARN)
         if ((check & WARN_ON_ERR) != 0) {
             if (isEncode) {
-                System.err.println("\"\\x{" + Integer.toHexString(codePoint).toUpperCase()
+                System.err.println("\"\\x{" + Integer.toHexString(codePoints[0])
                         + "}\" does not map to " + encodingName);
             } else {
-                System.err.println("" + encodingName + " \"\\x"
-                        + String.format("%02X", codePoint & 0xFF) + "\" does not map to Unicode");
+                StringBuilder hexBytes = new StringBuilder();
+                for (int cp : codePoints) {
+                    hexBytes.append("\\x").append(String.format("%02X", cp & 0xFF));
+                }
+                System.err.println("" + encodingName + " \""
+                        + hexBytes + "\" does not map to Unicode");
             }
         }
 
         // Check substitution modes
         if ((check & PERLQQ) != 0) {
             if (isEncode) {
-                String hex = String.format("%04X", codePoint);
+                String hex = String.format("%04X", codePoints[0]);
                 return "\\x{" + hex + "}";
             } else {
-                return "\\x" + String.format("%02X", codePoint & 0xFF);
+                StringBuilder sb = new StringBuilder();
+                for (int cp : codePoints) {
+                    sb.append("\\x").append(String.format("%02X", cp & 0xFF));
+                }
+                return sb.toString();
             }
         }
         if ((check & HTMLCREF) != 0) {
-            return "&#" + codePoint + ";";
+            return "&#" + codePoints[0] + ";";
         }
         if ((check & XMLCREF) != 0) {
-            return "&#x" + Integer.toHexString(codePoint) + ";";
+            return "&#x" + Integer.toHexString(codePoints[0]) + ";";
         }
 
         // RETURN_ON_ERR (FB_QUIET): stop processing, return what we have so far
@@ -445,6 +503,7 @@ public class Encode extends PerlModuleBase {
     /**
      * encode($encoding, $string [, $check])
      * Encodes a string from Perl's internal format to the specified encoding.
+     * $encoding can be a string name or a blessed encoding object.
      */
     public static RuntimeList encode(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
@@ -456,9 +515,23 @@ public class Encode extends PerlModuleBase {
             return scalarUndef.getList();
         }
 
-        String encodingName = args.get(0).toString();
+        RuntimeScalar encodingArg = args.get(0);
+
+        // Check if the encoding argument is already a blessed encoding object
+        if (RuntimeScalarType.isReference(encodingArg)) {
+            return dispatchToEncodingObject(encodingArg, "encode", args, 1, 2, ctx);
+        }
+
+        // Check %Encode::Encoding for Perl-registered encodings
+        String encodingName = encodingArg.toString();
+        RuntimeScalar perlEncObj = lookupPerlEncoding(encodingName);
+        if (perlEncObj != null) {
+            return dispatchToEncodingObject(perlEncObj, "encode", args, 1, 2, ctx);
+        }
+
         String string = args.get(1).toString();
         int check = parseCheck(args, 2);
+        RuntimeScalar codeRef = getCheckCodeRef(args, 2);
 
         Charset charset = getCharset(encodingName);
 
@@ -468,7 +541,17 @@ public class Encode extends PerlModuleBase {
             return new RuntimeScalar(bytes).getList();
         }
 
-        // Slow path: character-by-character encoding with error handling
+        // Use shared encode helper
+        return encodeWithCharset(string, charset, encodingName, check, codeRef, args, 1).getList();
+    }
+
+    /**
+     * Shared encode logic used by both encode() and encoding_encode().
+     * Returns a BYTE_STRING RuntimeScalar.
+     */
+    private static RuntimeScalar encodeWithCharset(String string, Charset charset, String encodingName,
+                                                    int check, RuntimeScalar codeRef,
+                                                    RuntimeArray srcArgs, int srcArgIndex) {
         CharsetEncoder encoder = charset.newEncoder();
         encoder.onMalformedInput(CodingErrorAction.REPORT);
         encoder.onUnmappableCharacter(CodingErrorAction.REPORT);
@@ -491,27 +574,23 @@ public class Encode extends PerlModuleBase {
 
             if (cr.isUnmappable() || cr.isMalformed()) {
                 int badChar = input.get(); // consume the bad character
-                String replacement = handleEncodingError(check, badChar, encodingName, true);
+                String replacement = handleEncodingError(check, codeRef, badChar, encodingName, true);
                 if (replacement == null) {
                     // FB_QUIET: stop processing, put back unprocessed chars
-                    // Update source if LEAVE_SRC is not set
-                    if ((check & LEAVE_SRC) == 0 && args.size() > 1) {
-                        // Set $string to the remaining unprocessed input
+                    if ((check & LEAVE_SRC) == 0 && srcArgs != null && srcArgs.size() > srcArgIndex) {
                         StringBuilder remaining = new StringBuilder();
                         remaining.append((char) badChar);
                         while (input.hasRemaining()) {
                             remaining.append(input.get());
                         }
-                        args.get(1).set(remaining.toString());
+                        srcArgs.get(srcArgIndex).set(remaining.toString());
                     }
                     break;
                 }
-                // Append replacement as raw bytes
                 for (int i = 0; i < replacement.length(); i++) {
                     result.append(replacement.charAt(i));
                 }
             } else if (cr.isOverflow()) {
-                // Output buffer too small, expand and retry
                 output = ByteBuffer.allocate(output.capacity() * 2);
             }
         }
@@ -532,16 +611,18 @@ public class Encode extends PerlModuleBase {
         resultScalar.value = result.toString();
 
         // Update source if LEAVE_SRC is not set (remove processed chars)
-        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0 && args.size() > 1) {
-            args.get(1).set("");
+        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0
+                && srcArgs != null && srcArgs.size() > srcArgIndex) {
+            srcArgs.get(srcArgIndex).set("");
         }
 
-        return resultScalar.getList();
+        return resultScalar;
     }
 
     /**
      * decode($encoding, $octets [, $check])
      * Decodes a string from the specified encoding to Perl's internal format.
+     * $encoding can be a string name or a blessed encoding object.
      */
     public static RuntimeList decode(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
@@ -553,9 +634,23 @@ public class Encode extends PerlModuleBase {
             return scalarUndef.getList();
         }
 
-        String encodingName = args.get(0).toString();
+        RuntimeScalar encodingArg = args.get(0);
+
+        // Check if the encoding argument is already a blessed encoding object
+        if (RuntimeScalarType.isReference(encodingArg)) {
+            return dispatchToEncodingObject(encodingArg, "decode", args, 1, 2, ctx);
+        }
+
+        // Check %Encode::Encoding for Perl-registered encodings
+        String encodingName = encodingArg.toString();
+        RuntimeScalar perlEncObj = lookupPerlEncoding(encodingName);
+        if (perlEncObj != null) {
+            return dispatchToEncodingObject(perlEncObj, "decode", args, 1, 2, ctx);
+        }
+
         String octets = args.get(1).toString();
         int check = parseCheck(args, 2);
+        RuntimeScalar codeRef = getCheckCodeRef(args, 2);
 
         Charset charset = getCharset(encodingName);
 
@@ -570,7 +665,17 @@ public class Encode extends PerlModuleBase {
             return new RuntimeScalar(decoded).getList();
         }
 
-        // Slow path: decode with error handling
+        // Use shared decode helper
+        return decodeWithCharset(bytes, charset, encodingName, check, codeRef, args, 1).getList();
+    }
+
+    /**
+     * Shared decode logic used by both decode() and encoding_decode().
+     * Returns a STRING RuntimeScalar.
+     */
+    private static RuntimeScalar decodeWithCharset(byte[] bytes, Charset charset, String encodingName,
+                                                    int check, RuntimeScalar codeRef,
+                                                    RuntimeArray srcArgs, int srcArgIndex) {
         CharsetDecoder decoder = charset.newDecoder();
         decoder.onMalformedInput(CodingErrorAction.REPORT);
         decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
@@ -587,17 +692,23 @@ public class Encode extends PerlModuleBase {
             output.clear();
 
             if (cr.isMalformed() || cr.isUnmappable()) {
-                int badByte = input.get() & 0xFF; // consume the bad byte
-                String replacement = handleEncodingError(check, badByte, encodingName, false);
+                int malformedLen = cr.length();
+                // Collect all malformed/unmappable bytes
+                int[] badBytes = new int[malformedLen];
+                for (int i = 0; i < malformedLen; i++) {
+                    badBytes[i] = input.get() & 0xFF;
+                }
+                String replacement = handleEncodingError(check, codeRef, badBytes, encodingName, false);
                 if (replacement == null) {
                     // FB_QUIET: stop processing
-                    if ((check & LEAVE_SRC) == 0 && args.size() > 1) {
-                        // Set $octets to remaining unprocessed bytes
-                        byte[] remaining = new byte[input.remaining() + 1];
-                        remaining[0] = (byte) badByte;
-                        input.get(remaining, 1, input.remaining());
-                        args.get(1).set(new String(remaining, StandardCharsets.ISO_8859_1));
-                        args.get(1).type = BYTE_STRING;
+                    if ((check & LEAVE_SRC) == 0 && srcArgs != null && srcArgs.size() > srcArgIndex) {
+                        byte[] remaining = new byte[input.remaining() + malformedLen];
+                        for (int i = 0; i < malformedLen; i++) {
+                            remaining[i] = (byte) badBytes[i];
+                        }
+                        input.get(remaining, malformedLen, input.remaining());
+                        srcArgs.get(srcArgIndex).set(new String(remaining, StandardCharsets.ISO_8859_1));
+                        srcArgs.get(srcArgIndex).type = BYTE_STRING;
                     }
                     break;
                 }
@@ -616,11 +727,12 @@ public class Encode extends PerlModuleBase {
         result.append(output);
 
         // Update source if LEAVE_SRC is not set
-        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0 && args.size() > 1) {
-            args.get(1).set("");
+        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0
+                && srcArgs != null && srcArgs.size() > srcArgIndex) {
+            srcArgs.get(srcArgIndex).set("");
         }
 
-        return new RuntimeScalar(result.toString()).getList();
+        return new RuntimeScalar(result.toString());
     }
 
     /**
@@ -718,9 +830,8 @@ public class Encode extends PerlModuleBase {
     /**
      * find_encoding($encoding)
      * Returns a blessed Encode::Encoding object for the given encoding name.
-     * The object supports ->encode($string) and ->decode($octets) methods.
-     * Note: This is the Java fast path for known charsets. The Perl wrapper
-     * in Encode.pm adds Encode::Alias fallback for custom aliases like "locale".
+     * First checks %Encode::Encoding for Perl-registered encodings,
+     * then falls back to Java Charset lookup.
      */
     public static RuntimeList find_encoding(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -728,6 +839,12 @@ public class Encode extends PerlModuleBase {
         }
 
         String encodingName = args.get(0).toString();
+
+        // Check %Encode::Encoding for Perl-registered encodings first
+        RuntimeScalar perlEncObj = lookupPerlEncoding(encodingName);
+        if (perlEncObj != null) {
+            return perlEncObj.getList();
+        }
 
         try {
             Charset charset = getCharset(encodingName);
@@ -741,6 +858,18 @@ public class Encode extends PerlModuleBase {
             // Return undef if encoding not found
             return scalarUndef.getList();
         }
+    }
+
+    /**
+     * find_mime_encoding($mime_name)
+     * Looks up an encoding by its MIME name. Delegates to find_encoding
+     * after checking %Encode::MIME_Name or similar mapping.
+     * In practice, most MIME names match charset names directly.
+     */
+    public static RuntimeList find_mime_encoding(RuntimeArray args, int ctx) {
+        // Delegate to find_encoding — it checks %Encode::Encoding first,
+        // then Java charsets, which covers MIME names like "UTF-8", "ISO-8859-1"
+        return find_encoding(args, ctx);
     }
 
     /**
@@ -764,11 +893,20 @@ public class Encode extends PerlModuleBase {
         RuntimeHash hash = (RuntimeHash) self.value;
         String charsetName = hash.get("Name").toString();
 
+        int check = parseCheck(args, 2);
+        RuntimeScalar codeRef = getCheckCodeRef(args, 2);
+
         try {
             Charset charset = getCharset(charsetName);
-            byte[] bytes = string.getBytes(charset);
-            // Return as BYTE_STRING
-            return new RuntimeScalar(bytes).getList();
+
+            if (check == FB_DEFAULT_VAL) {
+                // Fast path: no error handling
+                byte[] bytes = string.getBytes(charset);
+                return new RuntimeScalar(bytes).getList();
+            }
+
+            // Slow path with error handling
+            return encodeWithCharset(string, charset, charsetName, check, codeRef, args, 1).getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot encode string with " + charsetName + ": " + e.getMessage());
         }
@@ -795,13 +933,22 @@ public class Encode extends PerlModuleBase {
         RuntimeHash hash = (RuntimeHash) self.value;
         String charsetName = hash.get("Name").toString();
 
+        int check = parseCheck(args, 2);
+        RuntimeScalar codeRef = getCheckCodeRef(args, 2);
+
         try {
             Charset charset = getCharset(charsetName);
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
-            // Trim orphan trailing bytes for fixed-width encodings
             bytes = trimOrphanBytes(bytes, charset);
-            String decoded = new String(bytes, charset);
-            return new RuntimeScalar(decoded).getList();
+
+            if (check == FB_DEFAULT_VAL) {
+                // Fast path: no error handling
+                String decoded = new String(bytes, charset);
+                return new RuntimeScalar(decoded).getList();
+            }
+
+            // Slow path with error handling
+            return decodeWithCharset(bytes, charset, charsetName, check, codeRef, args, 1).getList();
         } catch (Exception e) {
             throw new RuntimeException("Cannot decode octets with " + charsetName + ": " + e.getMessage());
         }
@@ -834,6 +981,7 @@ public class Encode extends PerlModuleBase {
         String fromEnc = args.get(1).toString();
         String toEnc = args.get(2).toString();
         int check = parseCheck(args, 3);
+        RuntimeScalar codeRef = getCheckCodeRef(args, 3);
 
         try {
             Charset fromCharset = getCharset(fromEnc);
@@ -855,38 +1003,15 @@ public class Encode extends PerlModuleBase {
                 return new RuntimeScalar(decoded.length()).getList();
             }
 
-            // Slow path: decode with error handling, then encode
-            // First decode
-            CharsetDecoder decoder = fromCharset.newDecoder();
-            decoder.onMalformedInput(CodingErrorAction.REPORT);
-            decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+            // Slow path: decode with error handling using shared helper
+            RuntimeScalar decodedScalar = decodeWithCharset(bytes, fromCharset, fromEnc, check, codeRef, null, -1);
+            String decoded = decodedScalar.toString();
 
-            ByteBuffer input = ByteBuffer.wrap(bytes);
-            CharBuffer output = CharBuffer.allocate(bytes.length * 2 + 4);
-            StringBuilder decoded = new StringBuilder();
-
-            while (input.hasRemaining()) {
-                decoder.reset();
-                CoderResult cr = decoder.decode(input, output, true);
-                output.flip();
-                decoded.append(output);
-                output.clear();
-
-                if (cr.isMalformed() || cr.isUnmappable()) {
-                    int badByte = input.get() & 0xFF;
-                    String replacement = handleEncodingError(check, badByte, fromEnc, false);
-                    if (replacement == null) {
-                        break; // FB_QUIET
-                    }
-                    decoded.append(replacement);
-                }
-            }
-
-            // Then encode to target
-            byte[] encoded = decoded.toString().getBytes(toCharset);
+            // Then encode to target with error handling
+            RuntimeScalar encodedScalar = encodeWithCharset(decoded, toCharset, toEnc, check, codeRef, null, -1);
 
             // Update the original scalar in-place
-            octetsRef.set(new String(encoded, StandardCharsets.ISO_8859_1));
+            octetsRef.set(encodedScalar.value);
             octetsRef.type = BYTE_STRING;
 
             // Return the number of characters converted
@@ -935,6 +1060,42 @@ public class Encode extends PerlModuleBase {
             arg.type = BYTE_STRING;
         }
         return new RuntimeScalar(wasUtf8).getList();
+    }
+
+    /**
+     * Looks up a Perl-registered encoding object in %Encode::Encoding.
+     * Returns the encoding object (blessed hashref) or null if not found.
+     */
+    private static RuntimeScalar lookupPerlEncoding(String encodingName) {
+        RuntimeHash encodingHash = GlobalVariable.getGlobalHash("Encode::Encoding");
+        if (encodingHash != null) {
+            RuntimeScalar encObj = encodingHash.get(encodingName);
+            if (encObj != null && encObj.getDefinedBoolean()) {
+                return encObj;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Dispatches an encode or decode call to a Perl encoding object's method.
+     * Calls $encObj->encode($string, $check) or $encObj->decode($octets, $check).
+     */
+    private static RuntimeList dispatchToEncodingObject(RuntimeScalar encObj, String method,
+                                                         RuntimeArray origArgs, int stringArgIndex,
+                                                         int checkArgIndex, int ctx) {
+        RuntimeArray callArgs = new RuntimeArray();
+        callArgs.push(origArgs.get(stringArgIndex));
+        if (origArgs.size() > checkArgIndex) {
+            callArgs.push(origArgs.get(checkArgIndex));
+        }
+        return RuntimeCode.call(
+                encObj,
+                new RuntimeScalar(method),
+                null,
+                callArgs,
+                ctx
+        );
     }
 
     /**
