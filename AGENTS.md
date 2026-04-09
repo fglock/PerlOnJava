@@ -172,6 +172,13 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
+- **Commit Attribution:** AI-assisted commits must include attribution markers in the commit message (see [AI_POLICY.md](AI_POLICY.md)):
+  ```
+  Generated with [TOOL_NAME](TOOL_DOCS_URL)
+
+  Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
+  ```
+  Replace `TOOL_NAME` with the AI tool's name (e.g. Devin, Copilot, Claude), `TOOL_DOCS_URL` with a link to its documentation, and `TOOL_BOT_EMAIL` with the tool's GitHub bot email address (e.g. `158243242+devin-ai-integration[bot]@users.noreply.github.com`).
 - **Always include `src/main/java/org/perlonjava/core/Configuration.java` in commits and PRs** - This file contains the git commit ID and date that help users identify the exact PerlOnJava version when reporting issues. Running `make` automatically updates this file via the `injectGitInfo` Gradle task. Always stage it before committing:
   ```bash
   make  # Updates Configuration.java with current commit ID

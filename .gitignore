@@ -96,3 +96,11 @@ cpan_build_dir/
 *.jfr
 report.txt
 exiftool_results.json
+
+# Ignore stray temp/test artifacts
+bad???
+bad????
+test-*.html
+
+# Ignore generated lib/ directory at top level
+/lib/
