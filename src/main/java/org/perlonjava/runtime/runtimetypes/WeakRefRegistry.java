@@ -61,10 +61,9 @@ public class WeakRefRegistry {
             MortalList.active = true;
             base.refCount = WEAKLY_TRACKED;
         } else if (base.refCount > 0) {
-            // DESTROY-tracked or birth-tracked object: decrement strong count
-            // (weak ref doesn't count). Clear refCountOwned because weaken's
-            // DEC consumes the ownership — the weak scalar should not trigger
-            // another DEC on scope exit or overwrite.
+            // Decrement strong count (weak ref doesn't count).
+            // Clear refCountOwned because weaken's DEC consumes the ownership —
+            // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
                 if (base.blessId != 0) {
@@ -81,6 +80,19 @@ public class WeakRefRegistry {
                     // unreachable (scope exit or explicit undef).
                     base.refCount = WEAKLY_TRACKED;
                 }
+            } else if (base.blessId == 0) {
+                // Unblessed object with remaining strong refs: transition to
+                // WEAKLY_TRACKED because the mortal/refCount mechanism can't
+                // accurately count all references for unblessed objects.
+                // Many code paths (copy constructors, argument passing, return
+                // values) don't go through setLarge(), so refCount undercounts
+                // the actual strong references. Without this transition, a
+                // mortal flush can bring refCount to 0 and trigger
+                // clearWeakRefsTo while the object is still alive (e.g.,
+                // Sub::Quote coercion coderefs passed inline to Moo's has()).
+                // Since unblessed objects don't have DESTROY, there's no
+                // semantic cost to switching off refCount tracking.
+                base.refCount = WEAKLY_TRACKED;
             }
         }
     }
