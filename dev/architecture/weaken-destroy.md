@@ -158,10 +158,12 @@ changes or methods are redefined.
 **`callDestroy(referent)` flow:**
 
 1. **Precondition:** Caller has already set `refCount = MIN_VALUE`.
-2. If referent is `RuntimeCode`, calls `releaseCaptures()`.
-3. Looks up class name from `blessId`. If unblessed, returns.
-4. Calls `WeakRefRegistry.clearWeakRefsTo(referent)` (only for blessed objects
-   — Strategy A moves this after the className check).
+2. Calls `WeakRefRegistry.clearWeakRefsTo(referent)` -- clears all weak
+   references pointing to this object (for both blessed and unblessed
+   referents; unblessed referents typically have no weak refs registered).
+3. If referent is `RuntimeCode`, calls `releaseCaptures()`.
+4. Looks up class name from `blessId`. If unblessed, returns (no DESTROY
+   to call, but weak refs and captures have already been cleaned up).
 5. Resolves DESTROY method via cache or `InheritanceResolver`.
 6. Handles AUTOLOAD: sets `$AUTOLOAD = "ClassName::DESTROY"`.
 7. Saves/restores `$@` around the call (DESTROY must not clobber `$@`).
@@ -198,6 +200,8 @@ programs that don't use DESTROY.
 | `deferDecrementIfTracked(scalar)` | Guarded: skips if `!active`, `!refCountOwned`, or referent's `refCount <= 0`. Clears `refCountOwned` before deferring. |
 | `deferDecrementIfNotCaptured(scalar)` | Like above but also skips if `captureCount > 0`. Used by explicit `return`. |
 | `deferDestroyForContainerClear(elements)` | For `%hash = ()` / `@array = ()`. Handles owned refs and never-stored blessed objects (bumps refCount 0 -> 1 to ensure DESTROY fires). |
+| `scopeExitCleanupHash(hash)` | Recursively walks a hash's values, deferring refCount decrements for tracked blessed refs (including inside nested containers). Called at scope exit for `my %hash` and during cascading destruction in `callDestroy`. |
+| `scopeExitCleanupArray(arr)` | Same as above but for arrays. Called at scope exit for `my @array` and during cascading destruction. |
 | `flush()` | **Primary flush point.** Processes all pending entries: decrements refCount, fires DESTROY on those hitting 0. Uses index-based loop because DESTROY may add new entries. |
 | `pushMark()` / `popAndFlush()` | Scoped flushing -- only processes entries added since the last mark. |
 | `mortalizeForVoidDiscard(result)` | For void-context call results: ensures never-stored blessed objects still get DESTROY. |
