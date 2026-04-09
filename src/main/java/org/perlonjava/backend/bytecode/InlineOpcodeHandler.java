@@ -940,7 +940,9 @@ public class InlineOpcodeHandler {
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
-        RuntimeList result = ListOperators.map(list, closure, ctx);
+        // Pass outer @_ (register 1) so map blocks can access $_[0], $_[1], etc.
+        RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
+        RuntimeList result = ListOperators.map(list, closure, outerArgs, ctx);
         registers[rd] = result;
         return pc;
     }
@@ -960,7 +962,9 @@ public class InlineOpcodeHandler {
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
-        RuntimeList result = ListOperators.grep(list, closure, ctx);
+        // Pass outer @_ (register 1) so grep blocks can access $_[0], $_[1], etc.
+        RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
+        RuntimeList result = ListOperators.grep(list, closure, outerArgs, ctx);
         registers[rd] = result;
         return pc;
     }

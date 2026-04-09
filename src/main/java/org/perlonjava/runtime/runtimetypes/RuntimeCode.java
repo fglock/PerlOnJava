@@ -1446,12 +1446,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
                                 if (autoloadVariableName != null) {
                                     String methodName = method.toString();
-                                    // Use the original calling class (perlClassName), not the class
-                                    // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
-                                    // even when AUTOLOAD is inherited from Base.
-                                    String perlClassName = NameNormalizer.getBlessStr(blessId);
-                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-                                    getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    // Only set $AUTOLOAD when dispatching to AUTOLOAD as a fallback
+                                    // (method name != "AUTOLOAD"). When calling AUTOLOAD directly
+                                    // (e.g., $self->SUPER::AUTOLOAD), the caller has already set it.
+                                    if (!methodName.equals("AUTOLOAD")) {
+                                        // Use the original calling class (perlClassName), not the class
+                                        // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
+                                        // even when AUTOLOAD is inherited from Base.
+                                        String perlClassName = NameNormalizer.getBlessStr(blessId);
+                                        String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+                                        getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    }
                                 }
                                 
                                 // Prefer PerlSubroutine interface over MethodHandle
@@ -1499,7 +1504,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             String autoloadVariableName = code.autoloadVariableName;
-                            if (autoloadVariableName != null) {
+                            if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                                 // Use the original calling class, not where AUTOLOAD was found
                                 String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
@@ -1674,7 +1679,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).autoloadVariableName);
 
             String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
-            if (autoloadVariableName != null) {
+            if (autoloadVariableName != null
+                    && !methodName.equals("AUTOLOAD") && !methodName.endsWith("::AUTOLOAD")) {
                 // The inherited method is an autoloaded subroutine
                 // Set the $AUTOLOAD variable to the name of the method that was called
 

@@ -9,7 +9,9 @@ and many CPAN modules. This document tracks the work needed to make
 ## Current Status
 
 **Branch:** `feature/type-tiny-support`
-**Module version:** Type::Tiny 2.010001 (310 test programs)
+**Module version:** Type::Tiny 2.010001 (375 test programs)
+**Pass rate:** 99.3% (2900/2920 individual tests, 333/375 files passing)
+**Phase:** 5c complete (2026-04-09)
 
 ### Baseline Results
 
@@ -354,27 +356,39 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
   - Files: `CompileBinaryOperator.java`, `InlineOpcodeHandler.java`, `ScalarUtils.java`
   - Tests fixed: structured.t (100/115 → 110/115), basic.t (82/83 → 83/83),
     rt86239.t (4/6 → 6/6), rt90096.t (0/3 → 3/3), extra-params.t (4/7 → 7/7)
+- [x] Phase 5c: numify overload, AUTOLOAD dispatch, interpreter grep/map outer @_ (2026-04-09)
+  - **Numify overload:** `Overload.numify()` could return a STRING (e.g., "3.1" from
+    a `0+` handler). `getNumberLarge()` now converts string results to proper numeric
+    types, fixing `0+$obj` returning truncated integer instead of float.
+  - **AUTOLOAD $AUTOLOAD persistence:** `autoloadVariableName` was permanently set on
+    RuntimeCode objects after first AUTOLOAD fallback resolution. This caused
+    `$self->SUPER::AUTOLOAD(@_)` to overwrite `$AUTOLOAD` with garbage. Fixed by
+    skipping `$AUTOLOAD` assignment when the method name IS "AUTOLOAD" (direct call,
+    not fallback dispatch).
+  - **Interpreter grep/map outer @_:** Bytecode interpreter's `executeGrep`/`executeMap`
+    didn't pass the enclosing sub's `@_` to grep/map blocks, unlike the JVM backend.
+    Fixed by reading register 1 (always `@_`) and passing it as `outerArgs`.
+  - Files: `RuntimeScalar.java`, `RuntimeCode.java`, `InlineOpcodeHandler.java`
+  - Tests fixed: structured.t (110/115 → 115/115), Bitfield/basic.t (80/81 → 81/81),
+    ConstrainedObject/basic.t (24/27 → 27/27), multisig-custom-message.t (15/18 → 21/21)
 
-### Remaining 10 Failing Tests (28 individual failures)
+### Remaining 8 Failing Tests (20 individual failures)
 
 | Test | Result | Root Cause |
 |------|--------|-----------|
-| `structured.t` | 110/115 | Dict+Slurpy[HashRef/Map] combo fails (5 tests) |
-| `ConstrainedObject/basic.t` | 24/27 | `with_attribute_values` inline eval issue |
+| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs (`sub { "DUMMY" }` vs `sub { 0; }`) |
 | `Moo/exceptions.t` | 13/15 | Accessor exception metadata |
-| `multisig-custom-message.t` | 15/18 | `${^_TYPE_PARAMS_MULTISIG}` caret var returns undef |
 | `lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
 | `Type-Tie/01basic.t` | 15/17 | Tied array edge cases |
 | `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
 | `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
 | `Type-Tie/basic.t` | 1/2 | Tie-related |
-| `Type-Tiny-Bitfield/basic.t` | 80/81 | AUTOLOAD error msg differs from method-not-found |
 | `v2-returns.t` | 4/5 | Multi + return types subtest |
 
 ### Next Steps
-1. Investigate Dict+Slurpy[HashRef] failures (likely different grep/context issue in nested eval)
-2. Investigate `${^_TYPE_PARAMS_MULTISIG}` caret variable handling
-3. Address Tie-related failures (may require deeper tie infrastructure work)
+1. Investigate v2-returns.t wantarray context propagation through goto-installed closures
+2. Address Tie-related failures (may require deeper tie infrastructure work)
+3. Investigate Moo/exceptions.t accessor exception metadata
 
 ### Open Questions
 - `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
