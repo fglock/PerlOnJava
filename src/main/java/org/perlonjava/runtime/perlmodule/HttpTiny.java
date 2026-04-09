@@ -86,6 +86,7 @@ public class HttpTiny extends PerlModuleBase {
             responseMap.put("status", new RuntimeScalar(response.statusCode()));
             responseMap.put("reason", new RuntimeScalar(getStatusReason(response.statusCode())));
             responseMap.put("content", new RuntimeScalar(response.body()));
+            responseMap.put("url", new RuntimeScalar(response.uri().toString()));
 
             // Collect headers
             RuntimeHash responseHeaders = new RuntimeHash();
@@ -101,16 +102,49 @@ public class HttpTiny extends PerlModuleBase {
     }
 
     private static String getStatusReason(int statusCode) {
-        // Simple status reason mapping (you might want to expand this)
         return switch (statusCode) {
+            case 100 -> "Continue";
+            case 101 -> "Switching Protocols";
             case 200 -> "OK";
             case 201 -> "Created";
+            case 202 -> "Accepted";
+            case 203 -> "Non-Authoritative Information";
             case 204 -> "No Content";
+            case 205 -> "Reset Content";
+            case 206 -> "Partial Content";
+            case 300 -> "Multiple Choices";
+            case 301 -> "Moved Permanently";
+            case 302 -> "Found";
+            case 303 -> "See Other";
+            case 304 -> "Not Modified";
+            case 305 -> "Use Proxy";
+            case 307 -> "Temporary Redirect";
+            case 308 -> "Permanent Redirect";
             case 400 -> "Bad Request";
             case 401 -> "Unauthorized";
             case 403 -> "Forbidden";
             case 404 -> "Not Found";
+            case 405 -> "Method Not Allowed";
+            case 406 -> "Not Acceptable";
+            case 407 -> "Proxy Authentication Required";
+            case 408 -> "Request Timeout";
+            case 409 -> "Conflict";
+            case 410 -> "Gone";
+            case 411 -> "Length Required";
+            case 412 -> "Precondition Failed";
+            case 413 -> "Payload Too Large";
+            case 414 -> "URI Too Long";
+            case 415 -> "Unsupported Media Type";
+            case 416 -> "Range Not Satisfiable";
+            case 417 -> "Expectation Failed";
+            case 422 -> "Unprocessable Entity";
+            case 429 -> "Too Many Requests";
             case 500 -> "Internal Server Error";
+            case 501 -> "Not Implemented";
+            case 502 -> "Bad Gateway";
+            case 503 -> "Service Unavailable";
+            case 504 -> "Gateway Timeout";
+            case 505 -> "HTTP Version Not Supported";
             default -> "Unknown Status";
         };
     }
@@ -118,7 +152,8 @@ public class HttpTiny extends PerlModuleBase {
     private static HttpClient createHttpClient(RuntimeHash options) {
         HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(options.get("timeout").getLong() * 1000L))
-                .version(HttpClient.Version.HTTP_1_1);
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NORMAL);
 
         // Configure SSL context if SSL verification is disabled
         if (!options.get("verify_SSL").getBoolean()) {
@@ -204,49 +239,88 @@ public class HttpTiny extends PerlModuleBase {
         String filePath = args.get(2).toString();
         RuntimeHash options = args.size() > 3 ? args.get(3).hashDeref() : new RuntimeHash();
 
+        RuntimeHash instanceHash = self.hashDeref();
+
+        // Build request headers
+        RuntimeHash reqHeaders = options.exists("headers").getBoolean()
+                ? options.get("headers").hashDeref() : new RuntimeHash();
+
         File file = new File(filePath);
         if (file.exists()) {
             // Set If-Modified-Since header
             long lastModified = file.lastModified();
             SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
             dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
-            String ifModifiedSince = dateFormat.format(new Date(lastModified));
-
-            RuntimeHash headers = options.exists("headers").getBoolean()
-                    ? options.get("headers").hashDeref() : new RuntimeHash();
-            headers.put("If-Modified-Since", new RuntimeScalar(ifModifiedSince));
-            options.put("headers", headers.createReference());
+            reqHeaders.put("If-Modified-Since", new RuntimeScalar(dateFormat.format(new Date(lastModified))));
         }
 
-        // Perform the request
-        RuntimeArray requestArgs = new RuntimeArray();
-        RuntimeArray.push(requestArgs, self);
-        RuntimeArray.push(requestArgs, new RuntimeScalar("GET"));
-        RuntimeArray.push(requestArgs, new RuntimeScalar(url));
-        RuntimeArray.push(requestArgs, options.createReference());
+        // Build HTTP request
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET();
+        requestBuilder.header("User-Agent", instanceHash.get("agent").toString());
+        reqHeaders.elements.forEach((key, value) ->
+                requestBuilder.header(key, value.toString())
+        );
 
-        RuntimeList response = request(requestArgs, ctx);
-        RuntimeHash responseHash = ((RuntimeScalar) response.elements.get(0)).hashDeref();
+        try {
+            HttpClient client = createHttpClient(instanceHash);
+            // Use byte[] body handler to preserve binary content
+            HttpResponse<byte[]> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofByteArray());
 
-        // Check if the request was successful or not modified
-        boolean success = responseHash.get("success").getBoolean() || responseHash.get("status").getLong() == 304;
-        if (success && responseHash.get("status").getLong() != 304) {
-            // Write response content to file
-            try (FileOutputStream fos = new FileOutputStream(file)) {
-                fos.write(responseHash.get("content").toString().getBytes());
+            int statusCode = response.statusCode();
+            boolean success = (statusCode >= 200 && statusCode < 300) || statusCode == 304;
+
+            if (success && statusCode != 304) {
+                // Ensure parent directory exists
+                File parent = file.getParentFile();
+                if (parent != null && !parent.exists()) {
+                    parent.mkdirs();
+                }
+                // Write binary content directly to file
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(response.body());
+                }
+
+                // Update file modification time if Last-Modified header is present
+                Optional<String> lastModified = response.headers().firstValue("last-modified");
+                if (lastModified.isPresent()) {
+                    SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
+                    dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+                    Date lastModifiedDate = dateFormat.parse(lastModified.get());
+                    Files.setLastModifiedTime(file.toPath(), FileTime.fromMillis(lastModifiedDate.getTime()));
+                }
             }
 
-            // Update file modification time if Last-Modified header is present
-            RuntimeHash headers = responseHash.get("headers").hashDeref();
-            if (headers.exists("last-modified").getBoolean()) {
-                String lastModifiedStr = headers.get("last-modified").toString();
-                SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
-                dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
-                Date lastModifiedDate = dateFormat.parse(lastModifiedStr);
-                Files.setLastModifiedTime(file.toPath(), FileTime.fromMillis(lastModifiedDate.getTime()));
-            }
+            // Build Perl response hash
+            RuntimeHash responseMap = new RuntimeHash();
+            responseMap.put("success", new RuntimeScalar(statusCode >= 200 && statusCode < 300));
+            responseMap.put("status", new RuntimeScalar(statusCode));
+            responseMap.put("reason", new RuntimeScalar(getStatusReason(statusCode)));
+            responseMap.put("content", new RuntimeScalar(""));
+            responseMap.put("url", new RuntimeScalar(response.uri().toString()));
+
+            RuntimeHash responseHeaders = new RuntimeHash();
+            response.headers().map().forEach((key, value) ->
+                    responseHeaders.put(key.toLowerCase(), new RuntimeScalar(String.join(", ", value)))
+            );
+            responseMap.put("headers", responseHeaders.createReference());
+
+            return responseMap.createReference().getList();
+        } catch (IOException | InterruptedException e) {
+            // Return 599 error response like HTTP::Tiny does
+            String errMsg = e.getMessage() != null ? e.getMessage() : e.toString();
+            RuntimeHash responseMap = new RuntimeHash();
+            responseMap.put("success", new RuntimeScalar(""));
+            responseMap.put("status", new RuntimeScalar(599));
+            responseMap.put("reason", new RuntimeScalar("Internal Exception"));
+            responseMap.put("content", new RuntimeScalar(errMsg));
+            responseMap.put("url", new RuntimeScalar(url));
+            RuntimeHash responseHeaders = new RuntimeHash();
+            responseHeaders.put("content-type", new RuntimeScalar("text/plain"));
+            responseHeaders.put("content-length", new RuntimeScalar(errMsg.length()));
+            responseMap.put("headers", responseHeaders.createReference());
+            return responseMap.createReference().getList();
         }
-
-        return response;
     }
 }
