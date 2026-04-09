@@ -715,27 +715,133 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - `src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java` -- scalar context for deflateInit/inflateInit
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` -- ++Boolean and --Boolean fix
 
-### Next Steps (Phase 4: template and near-miss tests)
+### Phase 4 Plan: Root Cause Analysis and Targeted Fixes
 
-The highest-impact remaining targets:
+Phase 4 targets **~150+ failing subtests across 15 test files**, grouped by
+root cause. Fixes are ordered by impact (most failures fixed per change).
 
-1. **template.t** (150/196): 46 subtests still failing. These may be blocking
-   remaining `*_lite_app.t` tests. Investigate the failure pattern.
+#### Root Cause Summary (all remaining failures)
 
-2. **Near-miss t/mojo/ tests** (still 1-2 from passing):
-   - bytestream.t (30/31): gzip subtest still has no tests
-   - collection.t (18/19): JSON number encoding
-   - exception.t (14/15): caller() path issue
-   - request.t (32/33): 1 failing subtest (gzip?)
-   - response.t (28/29): 1 new failing subtest
-   - transactor.t: Now timing out (was 21/22)
+| # | Root Cause | Failures | Test Files Affected |
+|---|-----------|----------|---------------------|
+| RC1 | Mojo::DOM CSS selector engine broken | 49 | restful_lite_app.t |
+| RC2 | Exception line-number mapping in templates | 42 | template.t, lite_app.t |
+| RC3 | Double-render / reactor corruption (404 paths) | 38+ | production_app.t, tag_helper_lite_app.t, exception_lite_app.t |
+| RC4 | Layout/include/content_for rendering | 5 | layouted_lite_app.t |
+| RC5 | IO::Compress::Gzip broken | 3 | response.t, request.t, bytestream.t |
+| RC6 | Missing `re::regexp_pattern()` | 3 | dispatcher_lite_app.t, restful_lite_app.t |
+| RC7 | Mojo::Template `render_file()` returns path | 2 | template.t |
+| RC8 | Config file template preprocessing | 2 | json_config_lite_app.t, yaml_config_lite_app.t |
+| RC9 | JSON numbers serialized as strings | 1 | websocket_lite_app.t |
+| RC10 | Cookie persistence in Test::Mojo | 1 | group_lite_app.t |
+| RC11 | `continue` block not implemented | 1 | lite_app.t |
+| RC12 | Bareword detection in templates | 1 | template.t |
+| RC13 | transactor.t timeout regression | ? | transactor.t |
 
-3. **Near-miss t/mojolicious/ tests**:
-   - lite_app.t (298/302): 4 subtests from passing
-   - group_lite_app.t (65/66): 1 subtest from passing
-   - websocket_lite_app.t (34/35): 1 subtest from passing
-   - tag_helper_lite_app.t (78/90): 12 subtests from passing
-   - production_app.t (71/95): 24 subtests from passing
+#### Detailed Failure Inventory
+
+**t/mojo/ failures (near-miss):**
+
+| Test File | Score | Failing Subtests | Root Cause |
+|-----------|-------|------------------|------------|
+| template.t | 150/196 | 39 exception line-mapping, 2 render_file, 4 code context, 1 bareword | RC2, RC7, RC12 |
+| response.t | 28/29 | #29 gzip compressed response | RC5 |
+| request.t | 32/33 | #33 gzip compressed request | RC5 |
+| bytestream.t | 30/31 | #31 gzip/gunzip | RC5 |
+| collection.t | 18/19 | JSON number encoding | RC9 |
+| exception.t | 14/15 | caller() absolute paths | Minor |
+| transactor.t | timeout | Was 21/22, now times out | RC13 |
+
+**t/mojolicious/ failures:**
+
+| Test File | Score | Failing Subtests | Root Cause |
+|-----------|-------|------------------|------------|
+| restful_lite_app.t | 41/91 | 49 CSS selector `undef`, 1 500-for-404 | RC1, RC6 |
+| production_app.t | 71/95 | 24 double-render + timeout on 404 paths | RC3 |
+| tag_helper_lite_app.t | 78/90 | 12 double-render + timeout on form POSTs | RC3 |
+| layouted_lite_app.t | 30/35 | 5 layout/include/content_for issues | RC4 |
+| lite_app.t | 298/302 | 3 exception annotation, 1 `continue` block | RC2, RC11 |
+| dispatcher_lite_app.t | 11/13 | 2 missing `regexp_pattern()` | RC6 |
+| exception_lite_app.t | timeout | Connect timeout after first subtest | RC3 |
+| websocket_lite_app.t | 34/35 | 1 JSON numbers as strings | RC9 |
+| json_config_lite_app.t | 2/3 | 1 template preprocessing | RC8 |
+| yaml_config_lite_app.t | 2/3 | 1 template preprocessing | RC8 |
+| group_lite_app.t | 65/66 | 1 cookie persistence | RC10 |
+
+#### Fix Priority and Implementation Plan
+
+**Tier 1 — High Impact (fixes 90+ subtests, may flip 3+ test files)**
+
+1. **RC1: Fix Mojo::DOM CSS selector engine** (~49 failures)
+   - `Mojo::DOM->at('html > body')` and `->at('just')` return `undef`
+   - The HTTP response is correct; CSS selector parsing in `Mojo::DOM::CSS` fails
+   - Likely a regex or string operation in the CSS parser not working in PerlOnJava
+   - Debug: `./jperl -e 'use Mojo::DOM; my $d = Mojo::DOM->new("<html><body>hi</body></html>"); print $d->at("html > body")->text'`
+
+2. **RC3: Fix double-render / reactor corruption** (~38+ failures)
+   - `Mojo::Reactor::Poll: I/O watcher failed: A response has already been rendered at Controller.pm line 189`
+   - Happens on 404 paths and form submissions; reactor breaks, connections hang until timeout
+   - Likely PerlOnJava's exception handling differs in the Mojo dispatch pipeline
+   - Affects production_app.t, tag_helper_lite_app.t, exception_lite_app.t
+
+3. **RC2: Fix exception line-number mapping in templates** (~42 failures)
+   - `Mojo::Exception->lines_before/line/lines_after` report test-file line numbers
+   - The exception context reads from the wrong source (test file vs template)
+   - Mojo::Template relies on `caller()` and `die` line annotations; PerlOnJava may
+     not propagate eval'd source locations correctly
+
+**Tier 2 — Medium Impact (fixes ~15 subtests, may flip 3+ test files)**
+
+4. **RC6: Implement `re::regexp_pattern()`** (~3 failures, unblocks error pages)
+   - Listed as TODO in `Re.java:34`
+   - Returns `(pattern, modifiers)` in list context, `(?flags:pattern)` in scalar
+   - Called by Mojo's `mojo/debug.html.ep` error template
+   - Fixes dispatcher_lite_app.t (2), restful_lite_app.t 500-for-404 (1)
+
+5. **RC5: Fix IO::Compress::Gzip** (~3 failures)
+   - `IO::Compress::Gzip->new()` returns `undef`; `close()` then fails
+   - Our `CompressRawZlib.java` handles Deflate/Inflate but Gzip wrapper not working
+   - Fixes bytestream.t, request.t, response.t (all need just 1 more subtest)
+
+6. **RC4: Fix layout/include/content_for rendering** (~5 failures)
+   - Layout wrapping lost when templates use `include`
+   - Route defaults not merged into stash before action callback
+   - `content_for` blocks from hooks/inner templates don't propagate
+   - Fixes layouted_lite_app.t (30/35 → 35/35)
+
+7. **RC8: Fix config file template preprocessing** (~2 failures)
+   - Mojo::Template should strip `%# comment` lines from JSON/YAML config files
+   - Related to `render_file()` issue (RC7)
+   - Fixes json_config_lite_app.t and yaml_config_lite_app.t (both 2/3 → 3/3)
+
+**Tier 3 — Low Impact / Deferred**
+
+8. **RC9: JSON number encoding** (~1 failure) — Fundamental SV type tracking issue
+9. **RC10: Cookie persistence** (~1 failure) — Cookie jar or `//` operator issue
+10. **RC11: `continue` block** (~1 failure) — Language feature not yet implemented
+11. **RC7: `render_file()` path** (~2 failures) — `Mojo::Template::render_file` bug
+12. **RC12: Bareword detection** (~1 failure) — `use strict` enforcement in sandboxes
+13. **RC13: transactor.t timeout regression** — Was 21/22, investigate what changed
+
+#### Projected Impact
+
+If Tier 1 fixes succeed:
+- restful_lite_app.t: 41/91 → ~90/91 (file passes)
+- production_app.t: 71/95 → ~95/95 (file passes)
+- tag_helper_lite_app.t: 78/90 → ~90/90 (file passes)
+- exception_lite_app.t: timeout → passes
+- template.t: 150/196 → ~190/196
+
+If Tier 1+2 fixes succeed:
+- dispatcher_lite_app.t: 11/13 → 13/13 (file passes)
+- bytestream.t: 30/31 → 31/31 (file passes)
+- request.t: 32/33 → 33/33 (file passes)
+- response.t: 28/29 → 29/29 (file passes)
+- layouted_lite_app.t: 30/35 → 35/35 (file passes)
+- json_config_lite_app.t: 2/3 → 3/3 (file passes)
+- yaml_config_lite_app.t: 2/3 → 3/3 (file passes)
+
+**Estimated new total: 65/108 → ~75-80/108 test files passing**
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
