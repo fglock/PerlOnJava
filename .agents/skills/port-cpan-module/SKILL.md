@@ -19,6 +19,10 @@
 
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
+**Authoritative reference:** `docs/guides/module-porting.md` — always defer to that document for
+naming conventions, directory layout, and checklists. This skill provides step-by-step
+guidance for the AI agent; the guide is the source of truth for contributors.
+
 ## When to Use This Skill
 
 - User asks to add a CPAN module to PerlOnJava
@@ -77,7 +81,7 @@ PerlOnJava supports three types of modules:
    - Whether those dependencies exist in PerlOnJava
 
 6. **Check available Java libraries:**
-   - Review `pom.xml` and `build.gradle` for already-imported dependencies
+   - Review `build.gradle` for already-imported dependencies
    - Common libraries already available: Gson, jnr-posix, jnr-ffi, SnakeYAML, etc.
    - Consider if a Java library can replace the XS functionality directly
 
@@ -93,7 +97,7 @@ PerlOnJava supports three types of modules:
 **Naming convention:** `Module::Name` → `ModuleName.java`
 - `Time::Piece` → `TimePiece.java`
 - `Digest::MD5` → `DigestMD5.java`
-- `DBI` → `DBI.java`
+- `DBI` → `DBI.java` (all-caps modules keep their casing)
 
 **Basic structure:**
 ```java
@@ -190,7 +194,12 @@ as Perl itself.
 | `make dev` | Build only, skip tests (for quick iteration during development) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
-1. **Add tests to `src/test/resources/module/`:**
+1. **Create module test directory:** `src/test/resources/module/Module-Name/t/`
+   - Add `.t` test files inside `t/`
+   - Add supporting data as sibling directories (`samples/`, `files/`, etc.)
+   - `ModuleTestExecutionTest.java` auto-discovers all `.t` files under `module/*/t/`
+   - Each test runs with `chdir` set to the module's root (e.g., `module/Module-Name/`)
+   - Use `JPERL_TEST_FILTER=Module-Name` to run only matching tests
 
    Every bundled module MUST have tests in `src/test/resources/module/Module-Name/t/`.
    This is how CI verifies the module keeps working across changes.
@@ -251,9 +260,10 @@ as Perl itself.
 
 4. **Build and verify:**
    ```bash
-   make dev   # Quick build (no tests)
+   make dev                    # Quick build (no tests)
    ./jperl -e 'use Module::Name; ...'
-   make       # Full build with tests before committing
+   make test-bundled-modules   # Module-specific tests
+   make                        # Full build with all tests before committing
    ```
 
 5. **Cleanup `.perlonjava/` after bundling:**
@@ -271,6 +281,18 @@ as Perl itself.
    If this fails with a "Can't locate Dependency/Module.pm" error, the dependency
    is not bundled. You must bundle all dependencies too — bundled modules must be
    fully self-contained with no CPAN installs required.
+
+### Importing Core Perl Modules
+
+If the module's `.pm` files come from the Perl 5 source tree (core modules),
+use `dev/import-perl5/sync.pl` instead of copying them manually:
+
+1. Add entries to `dev/import-perl5/config.yaml` (source/target pairs)
+2. Run `perl dev/import-perl5/sync.pl`
+3. If the module needs PerlOnJava-specific changes, mark it `protected: true`
+   and optionally provide a patch in `dev/import-perl5/patches/`
+
+See `docs/guides/module-porting.md` for full details on the sync workflow.
 
 ## Common Patterns
 
@@ -416,7 +438,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Study XS code to understand C algorithms and edge cases
 - [ ] Identify XS functions that need Java implementation
 - [ ] Check dependencies exist in PerlOnJava
-- [ ] Check `build.gradle`/`pom.xml` for usable Java libraries
+- [ ] Check `build.gradle` for usable Java libraries
 - [ ] Check `nativ/` package for POSIX functionality
 - [ ] Review existing similar modules for patterns
 
@@ -425,6 +447,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Create `Module/Name.pm` with pure Perl code
 - [ ] Add proper author/copyright attribution
 - [ ] Register all methods in `initialize()`
+- [ ] Create `src/test/resources/module/Module-Name/t/` with test files
 
 ### Testing
 - [ ] Build compiles without errors: `make dev` (NEVER use raw mvn/gradlew)
@@ -492,6 +515,9 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 
 ## References
 
-- Module porting guide: `docs/guides/module-porting.md`
+- **Module porting guide (authoritative):** `docs/guides/module-porting.md`
+- **Dual-backend design doc:** `dev/design/DUAL_BACKEND_CPAN_MODULES.md` — for Option B (CPAN modules with Java XS)
+- **Core module import tool:** `dev/import-perl5/sync.pl` + `dev/import-perl5/config.yaml`
+- **Module test runner:** `src/test/java/org/perlonjava/ModuleTestExecutionTest.java`
 - Existing modules: `src/main/java/org/perlonjava/runtime/perlmodule/`
 - Runtime types: `src/main/java/org/perlonjava/runtime/runtimetypes/`

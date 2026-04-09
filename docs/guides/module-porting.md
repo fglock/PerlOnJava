@@ -63,7 +63,7 @@ XSLoader maps Perl module names to Java class names:
 
 | Perl Module | Java Class | Java File |
 |---|---|---|
-| `DBI` | `org.perlonjava.runtime.perlmodule.Dbi` | `Dbi.java` |
+| `DBI` | `org.perlonjava.runtime.perlmodule.DBI` | `DBI.java` |
 | `Text::CSV` | `org.perlonjava.runtime.perlmodule.TextCsv` | `TextCsv.java` |
 | `Time::HiRes` | `org.perlonjava.runtime.perlmodule.TimeHiRes` | `TimeHiRes.java` |
 | `MIME::Base64` | `org.perlonjava.runtime.perlmodule.MIMEBase64` | `MIMEBase64.java` |
