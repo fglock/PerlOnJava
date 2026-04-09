@@ -227,6 +227,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
 
+                // Mark as an imported override for overridable built-in operators.
+                // In Perl 5, typeglob CODE assignment (e.g., *time = \&Time::HiRes::time
+                // from Exporter imports) sets the GvIMPORTED_CV flag, which allows the
+                // imported sub to override the built-in keyword. Simply defining
+                // 'sub close { }' does NOT set this flag. We emulate this by setting
+                // isSubs for any CODE typeglob assignment — the parser only checks
+                // isSubs for names in the OVERRIDABLE_OP set, so marking non-overridable
+                // names has no effect.
+                GlobalVariable.isSubs.put(this.globName, true);
+
                 // Increment package generation counter for mro::get_pkg_gen
                 int lastColonIdx = this.globName.lastIndexOf("::");
                 if (lastColonIdx > 0) {
