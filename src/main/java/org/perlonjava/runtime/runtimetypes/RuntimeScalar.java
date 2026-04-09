@@ -762,6 +762,33 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return setLarge(value);
     }
 
+    /**
+     * Set value while preserving BYTE_STRING type when possible.
+     * Used by .= (string concat-assign) to prevent UTF-8 flag contamination
+     * of binary buffers. In PerlOnJava, upgrading from BYTE_STRING to STRING
+     * doesn't change the underlying chars (unlike Perl where bytes > 127 get
+     * re-encoded), so preserving BYTE_STRING is safe when all chars fit in Latin-1.
+     */
+    public RuntimeScalar setPreservingByteString(RuntimeScalar value) {
+        boolean wasByteString = (this.type == BYTE_STRING);
+        this.set(value);
+        if (wasByteString && this.type == STRING) {
+            // Check if all chars fit in Latin-1 (single byte)
+            String s = this.toString();
+            boolean allLatin1 = true;
+            for (int i = 0; i < s.length(); i++) {
+                if (s.charAt(i) > 255) {
+                    allLatin1 = false;
+                    break;
+                }
+            }
+            if (allLatin1) {
+                this.type = BYTE_STRING;
+            }
+        }
+        return this;
+    }
+
     // Slow path for set(RuntimeScalar)
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {

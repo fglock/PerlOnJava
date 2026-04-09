@@ -313,7 +313,12 @@ public class EmitBinaryOperator {
                 throw new RuntimeException("No operator handler found for base operator: " + baseOperator);
             }
             // assign to the Lvalue
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            // For .= use setPreservingByteString to prevent UTF-8 flag contamination of binary buffers
+            if (node.operator.equals(".=")) {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "setPreservingByteString", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            } else {
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            }
             
             // For string concat assign (.=), invalidate pos() since string was modified
             if (node.operator.equals(".=")) {

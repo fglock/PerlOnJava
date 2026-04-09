@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators.unpack;
 import org.perlonjava.runtime.operators.UnpackState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -70,10 +71,12 @@ public class StringFormatHandler implements FormatHandler {
 
             output.add(new RuntimeScalar(str));
         } else {
-            // In byte mode, read from buffer
+            // In byte mode, read from buffer — always ISO-8859-1 (BYTE_STRING)
             ByteBuffer buffer = state.getBuffer();
             String str = readString(buffer, count, isStarCount);
-            output.add(new RuntimeScalar(str));
+            RuntimeScalar rs = new RuntimeScalar(str);
+            rs.type = RuntimeScalarType.BYTE_STRING;
+            output.add(rs);
         }
     }
 

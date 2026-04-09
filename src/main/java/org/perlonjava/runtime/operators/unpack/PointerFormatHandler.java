@@ -8,6 +8,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+
 public class PointerFormatHandler implements FormatHandler {
     private final boolean bigEndian;
 
@@ -65,7 +67,9 @@ public class PointerFormatHandler implements FormatHandler {
                 if (str != null) {
                     result.add(new RuntimeScalar(str));
                 } else {
-                    result.add(new RuntimeScalar(""));
+                    RuntimeScalar empty = new RuntimeScalar("");
+                    empty.type = BYTE_STRING;
+                    result.add(empty);
                 }
             }
         }

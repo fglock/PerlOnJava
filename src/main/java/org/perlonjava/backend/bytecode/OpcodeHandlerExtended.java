@@ -298,11 +298,31 @@ public class OpcodeHandlerExtended {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         RuntimeScalar target = (RuntimeScalar) registers[rd];
+        // Remember if target was BYTE_STRING before concatenation.
+        // In PerlOnJava, "upgrading" from BYTE_STRING to STRING doesn't change bytes
+        // (unlike Perl where bytes > 127 get re-encoded), so we preserve BYTE_STRING
+        // in .= to prevent false UTF-8 flag contamination of binary buffers.
+        boolean wasByteString = (target.type == RuntimeScalarType.BYTE_STRING);
         RuntimeScalar result = StringOperators.stringConcat(
                 target,
                 (RuntimeScalar) registers[rs]
         );
         target.set(result);
+        // Preserve BYTE_STRING type when the target was byte string and the result
+        // still fits in Latin-1 (all chars <= 255)
+        if (wasByteString && target.type == RuntimeScalarType.STRING) {
+            String s = target.toString();
+            boolean fits = true;
+            for (int i = 0; i < s.length(); i++) {
+                if (s.charAt(i) > 255) {
+                    fits = false;
+                    break;
+                }
+            }
+            if (fits) {
+                target.type = RuntimeScalarType.BYTE_STRING;
+            }
+        }
         // Invalidate pos() - any string modification should reset pos to undef
         RuntimePosLvalue.invalidatePos(target);
         return pc;

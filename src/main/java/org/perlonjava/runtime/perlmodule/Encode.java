@@ -815,8 +815,9 @@ public class Encode extends PerlModuleBase {
 
         RuntimeScalar arg = args.get(0);
 
-        // Check the UTF-8 flag (type != BYTE_STRING means UTF-8 flag is on)
-        boolean hasUtf8Flag = (arg.type != BYTE_STRING);
+        // Check the UTF-8 flag: only STRING type has it set.
+        // INTEGER, DOUBLE, UNDEF, REFERENCE etc. don't have the UTF-8 flag in Perl.
+        boolean hasUtf8Flag = (arg.type == STRING);
 
         if (!hasUtf8Flag) {
             return scalarFalse.getList();
@@ -1040,8 +1041,8 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for _utf8_on");
         }
         RuntimeScalar arg = args.get(0);
-        boolean wasUtf8 = (arg.type != BYTE_STRING);
-        if (!wasUtf8) {
+        boolean wasUtf8 = (arg.type == STRING);
+        if (arg.type == BYTE_STRING) {
             // Re-decode the byte string as UTF-8 to get proper characters
             // e.g., bytes \xC3\xA9 -> character U+00E9 (é)
             String s = arg.toString();
@@ -1062,13 +1063,13 @@ public class Encode extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for _utf8_off");
         }
         RuntimeScalar arg = args.get(0);
-        boolean wasUtf8 = (arg.type != BYTE_STRING);
+        boolean wasUtf8 = (arg.type == STRING);
         if (wasUtf8) {
             String s = arg.toString();
             byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
             arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
-            arg.type = BYTE_STRING;
         }
+        arg.type = BYTE_STRING;
         return new RuntimeScalar(wasUtf8).getList();
     }
 

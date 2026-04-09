@@ -126,7 +126,16 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         }
 
         // Update the parent RuntimeScalar with the modified string
-        lvalue.set(new RuntimeScalar(updatedValue.toString()));
+        RuntimeScalar updated = new RuntimeScalar(updatedValue.toString());
+        // Preserve BYTE_STRING type: if the parent was a byte string and the replacement
+        // doesn't introduce UTF-8 characters, keep the result as BYTE_STRING.
+        // In Perl, substr assignment on a byte string with a byte replacement stays bytes.
+        if (lvalue.type == RuntimeScalarType.BYTE_STRING &&
+                (value.type == RuntimeScalarType.BYTE_STRING ||
+                 value.type != RuntimeScalarType.STRING)) {
+            updated.type = RuntimeScalarType.BYTE_STRING;
+        }
+        lvalue.set(updated);
 
         return this;
     }
