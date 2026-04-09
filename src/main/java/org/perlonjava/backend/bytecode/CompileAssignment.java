@@ -57,11 +57,23 @@ public class CompileAssignment {
                         // For reserved variables like @_, use register-based localization
                         if (bc.isReservedVariable(varName)) {
                             int regIdx = bc.getVariableRegister(varName);
+                            // If RHS and LHS use the same register (e.g. local @_ = @_),
+                            // PUSH_LOCAL_VARIABLE would clear the array before ARRAY_SET_FROM_LIST
+                            // can read from it. Copy RHS to a temp register first.
+                            int srcReg = valueReg;
+                            if (valueReg == regIdx) {
+                                srcReg = bc.allocateRegister();
+                                bc.emit(Opcodes.NEW_ARRAY);
+                                bc.emitReg(srcReg);
+                                bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                bc.emitReg(srcReg);
+                                bc.emitReg(valueReg);
+                            }
                             bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                             bc.emitReg(regIdx);
                             bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bc.emitReg(regIdx);
-                            bc.emitReg(valueReg);
+                            bc.emitReg(srcReg);
                             bc.lastResultReg = regIdx;
                             return true;
                         }

@@ -10,8 +10,8 @@ and many CPAN modules. This document tracks the work needed to make
 
 **Branch:** `feature/type-tiny-support`
 **Module version:** Type::Tiny 2.010001 (375 test programs)
-**Pass rate:** 99.3% (2900/2920 individual tests, 333/375 files passing)
-**Phase:** 5c complete (2026-04-09)
+**Pass rate:** 98.9% (3130/3166 individual tests, 345/375 files passing via `jcpan -t`)
+**Phase:** 5d complete (2026-04-09)
 
 ### Baseline Results
 
@@ -371,24 +371,75 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
   - Files: `RuntimeScalar.java`, `RuntimeCode.java`, `InlineOpcodeHandler.java`
   - Tests fixed: structured.t (110/115 → 115/115), Bitfield/basic.t (80/81 → 81/81),
     ConstrainedObject/basic.t (24/27 → 27/27), multisig-custom-message.t (15/18 → 21/21)
+- [x] Phase 5d: Fix `local @_ = @_` bug in interpreter backend (2026-04-09)
+  - **Root cause:** In `CompileAssignment.java`, when compiling `local @_ = @_`, the
+    RHS `@_` evaluated to register 1 (the @_ register). Then `PUSH_LOCAL_VARIABLE reg1`
+    cleared that same register before `ARRAY_SET_FROM_LIST` could read from it, resulting
+    in `local @_ = @_` always producing an empty `@_`.
+  - **Fix:** When `valueReg == regIdx` (source and destination are the same register),
+    copy the RHS to a temporary register via `NEW_ARRAY` + `ARRAY_SET_FROM_LIST` before
+    calling `PUSH_LOCAL_VARIABLE`.
+  - **JVM backend:** Not affected — already clones the RHS list before localizing
+    (see `EmitVariable.java` line 956).
+  - Files: `CompileAssignment.java`
+  - Tests fixed: v2-returns.t (4/5 → 5/5), structured.t (already passing),
+    Type-Tiny-Bitfield/basic.t (already passing via Phase 5c AUTOLOAD fix)
+  - Total test count increased from 2920 → 3166 (246 more tests now executing)
+    because `local @_ = @_` fix unlocked previously-dying code paths in
+    Type::Params::Alternatives multisig dispatch.
 
-### Remaining 8 Failing Tests (20 individual failures)
+### Remaining 30 Failing Test Files (36 individual subtest failures)
+
+**Tests that pass all subtests but exit non-zero (4 files, 0 real failures):**
+
+| Test | Subtests | Issue |
+|------|----------|-------|
+| `t/00-begin.t` | 0/0 | Return::Type version check (optional dep) |
+| `Eval-TypeTiny/basic.t` | 3/3 ok | Dies after done_testing (`\=` ref alias) |
+| `Type-Tiny-Enum/basic.t` | 17/17 ok | Dies after done_testing (`->values` on unblessed ref) |
+| `Type-Params/v2-multi.t` | 1/1 ok | Dies after done_testing (multisig alternative fails) |
+
+**Tests with 0 subtests (11 files, missing features/deps):**
+
+| Test | Issue |
+|------|-------|
+| `Eval-TypeTiny/aliases-native.t` | `\$var = \$other` ref aliasing not supported |
+| `Eval-TypeTiny/aliases-tie.t` | TIESCALAR not found (class loading issue) |
+| `Type-Library/exportables.t` | `+Rainbow` sub not found (exporter edge case) |
+| `Type-Registry/lexical.t` | `builtin::export_lexically` not implemented |
+| `Type-Tiny-Enum/exporter_lexical.t` | `builtin::export_lexically` not implemented |
+| `Type-Tiny-Intersection/cmp.t` | Syntax error `,=> Int` (parser limitation) |
+| `Types-Standard/strmatch-allow-callbacks.t` | `(?{...})` code blocks in regex |
+| `Types-Standard/strmatch-avoid-callbacks.t` | `(?{...})` code blocks in regex |
+| `Types-Standard/tied.t` | Unsupported variable type for `tie()` |
+| `Moo/coercion-inlining-avoidance.t` | Dies early (Moo coercion issue) |
+| `gh1.t` | Dies early |
+
+**Tests with actual subtest failures (15 files, 36 failures):**
 
 | Test | Result | Root Cause |
 |------|--------|-----------|
-| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs (`sub { "DUMMY" }` vs `sub { 0; }`) |
-| `Moo/exceptions.t` | 13/15 | Accessor exception metadata |
-| `lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
+| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs |
+| `Eval-TypeTiny/lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
+| `Type-Library/exportables-duplicated.t` | 0/1 | Warning message format mismatch |
+| `Type-Params/multisig-gotonext.t` | 1/6 | `goto &next` doesn't propagate `@_` correctly |
 | `Type-Tie/01basic.t` | 15/17 | Tied array edge cases |
 | `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
 | `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
-| `Type-Tie/basic.t` | 1/2 | Tie-related |
-| `v2-returns.t` | 4/5 | Multi + return types subtest |
+| `Type-Tie/basic.t` | 1/2 | Unsupported tie on arrays |
+| `Type-Tiny-Enum/sorter.t` | 0/1 | Custom sort with `$a`/`$b` cmp callback |
+| `Type-Tiny/list-methods.t` | 0/2 | Custom sort with numeric comparator |
+| `Moo/basic.t` | 4/5 | Moo isa coercion |
+| `Moo/coercion.t` | 9/19 | Moo coercion inlining |
+| `Moo/exceptions.t` | 13/15 | Exception `->value` metadata |
+| `Moo/inflation.t` | 9/11 | Moo → Moose inflation |
+| `gh14.t` | 0/1 | Deep coercion edge case |
 
 ### Next Steps
-1. Investigate v2-returns.t wantarray context propagation through goto-installed closures
-2. Address Tie-related failures (may require deeper tie infrastructure work)
-3. Investigate Moo/exceptions.t accessor exception metadata
+1. Investigate `multisig-gotonext.t` — `goto &next_handler` with `@_` propagation
+2. Investigate sort comparator callbacks (`sorter.t`, `list-methods.t`)
+3. Address Tie-related failures (may require deeper tie infrastructure work)
+4. Investigate Moo coercion failures (5 test files)
 
 ### Open Questions
 - `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
