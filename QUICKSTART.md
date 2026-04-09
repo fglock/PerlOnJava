@@ -6,7 +6,7 @@ Get PerlOnJava running in 5 minutes.
 
 - **Java Development Kit (JDK) 22 or later**
 - **Git** for cloning the repository
-- **Make** (optional - can use Gradle directly)
+- **Make** (contributors should always use `make`; see [CONTRIBUTING.md](CONTRIBUTING.md))
 
 ### Verify You Have JDK Installed
 
@@ -40,7 +40,7 @@ cd PerlOnJava
 make
 ```
 
-The `make` command compiles the project and runs the fast unit tests. The complete build with tests typically completes in ~30 seconds.
+The `make` command builds the project and runs all unit tests. The complete build with tests typically completes in ~30 seconds.
 
 **Build troubleshooting:**
 

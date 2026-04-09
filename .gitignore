@@ -75,6 +75,8 @@ dev/prompts/CONTROL_FLOW_FIX_INSTRUCTIONS.md
 !QUICKSTART.md
 !CONTRIBUTING.md
 !AGENTS.md
+!SECURITY.md
+!AI_POLICY.md
 test_*.log
 test_*.json
 

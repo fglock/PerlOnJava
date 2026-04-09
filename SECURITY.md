@@ -4,6 +4,12 @@
 
 Only the latest release of PerlOnJava receives security fixes. We recommend always running the most recent version.
 
+## Relationship to Perl 5
+
+PerlOnJava is an **independent project** that implements the Perl 5 language on the JVM. It is not part of the Perl core distribution and is not maintained by the Perl core developers. The [Perl security team](https://perldoc.perl.org/perlsecpolicy) (`perl-security@perl.org`) does **not** handle security issues in PerlOnJava — please do not report PerlOnJava vulnerabilities to them.
+
+If you are unsure whether a bug is in PerlOnJava or in Perl itself, report it to PerlOnJava first using the channels below. We will coordinate with the Perl security team if the issue turns out to affect the upstream Perl interpreter.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in PerlOnJava, please **do not** open a public GitHub issue. Instead, use one of the following private disclosure channels:
@@ -76,6 +82,8 @@ PerlOnJava supports calling Java classes and methods from Perl (JSR-223). This s
 
 PerlOnJava depends on third-party Java libraries and bundles Perl modules. These dependencies may themselves contain vulnerabilities.
 
+**AI-generated code**: AI coding assistants may introduce security-sensitive patterns (e.g., unsanitized input reaching `eval` or `system`, exposed secrets, insecure defaults). All AI-assisted contributions undergo the same review process as human-written code, with particular attention to the risk areas described in this document. See [AI_POLICY.md](AI_POLICY.md) for PerlOnJava's AI-assisted development policy and attribution practices.
+
 **Java dependencies**: Keep your dependencies up to date and monitor them with tools such as [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) or GitHub's Dependabot.
 
 **Bundled Perl modules**: Check the [CPAN Security Advisory Database](https://security.metacpan.org/) and the [CPANSA feed](https://github.com/CPAN-Security/cpansa-feed) for known vulnerabilities in Perl modules.
@@ -93,6 +101,7 @@ Use with vulnerability scanning tools like [OWASP Dependency-Track](https://depe
 - **Disable or restrict Java integration** when it is not needed.
 - **Sanitize all inputs** before they reach any dynamic code execution constructs (`eval`, `system`, `exec`, etc.).
 - **Keep PerlOnJava updated** to the latest release.
+- **Keep your JVM updated** — JVM vulnerabilities affect all PerlOnJava users.
 - **Monitor your Java dependencies** for known CVEs.
 
 ## Out of Scope
@@ -111,7 +120,7 @@ We are grateful to security researchers who responsibly disclose vulnerabilities
 ## Related Resources
 
 - [CPAN Security Group](https://security.metacpan.org/) - CVE Numbering Authority for Perl/CPAN
-- [Perl Security Policy](https://perldoc.perl.org/perlsecpolicy) - Security handling for Perl itself
+- [Perl Security Policy](https://perldoc.perl.org/perlsecpolicy) - Security handling for the Perl core interpreter (independent from PerlOnJava; see [Relationship to Perl 5](#relationship-to-perl-5))
 - [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/) - Vulnerability scanner for Java dependencies
 - [GitHub Security Advisories](https://github.com/fglock/PerlOnJava/security/advisories) - Published advisories for this project
 
