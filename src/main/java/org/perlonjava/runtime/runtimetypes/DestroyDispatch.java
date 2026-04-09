@@ -111,13 +111,14 @@ public class DestroyDispatch {
             GlobalVariable.getGlobalVariable(code.autoloadVariableName).set(fullMethodName);
         }
 
-        try {
-            // Perl requires: local($@, $!, $?) around DESTROY
-            // Save global status variables
-            RuntimeScalar savedDollarAt = new RuntimeScalar();
-            savedDollarAt.type = GlobalVariable.getGlobalVariable("main::@").type;
-            savedDollarAt.value = GlobalVariable.getGlobalVariable("main::@").value;
+        // Perl requires: local($@) around DESTROY — save before try so it
+        // is restored even when DESTROY throws (die inside DESTROY).
+        RuntimeScalar savedDollarAt = new RuntimeScalar();
+        RuntimeScalar dollarAt = GlobalVariable.getGlobalVariable("main::@");
+        savedDollarAt.type = dollarAt.type;
+        savedDollarAt.value = dollarAt.value;
 
+        try {
             // Build $self reference to pass as $_[0]
             RuntimeScalar self = new RuntimeScalar();
             // Determine the reference type based on the referent's runtime class
@@ -156,24 +157,24 @@ public class DestroyDispatch {
                 MortalList.scopeExitCleanupArray(arr);
                 MortalList.flush();
             }
-
-            // Restore saved globals
-            GlobalVariable.getGlobalVariable("main::@").type = savedDollarAt.type;
-            GlobalVariable.getGlobalVariable("main::@").value = savedDollarAt.value;
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg == null) msg = e.getClass().getName();
             // Use WarnDie.warn() (not Warnings.warn()) so the warning routes
             // through $SIG{__WARN__}, matching Perl 5 semantics.
-            // Perl 5 prefixes DESTROY warnings with \t and preserves the
-            // original message's trailing newline (adding one only if absent).
+            // Perl 5 prefixes DESTROY warnings with \t. Do NOT add \n — let
+            // WarnDie.warn() handle the " at file line N\n" suffix naturally.
+            // If msg already ends with \n (e.g., die "msg\n"), warn suppresses
+            // the suffix. If msg doesn't (e.g., die $ref), warn appends it.
             String warning = "\t(in cleanup) " + msg;
-            if (!warning.endsWith("\n")) {
-                warning += "\n";
-            }
             WarnDie.warn(
                     new RuntimeScalar(warning),
                     new RuntimeScalar(""));
+        } finally {
+            // Restore $@ — must happen whether DESTROY succeeded or threw.
+            // Without this, die inside DESTROY would clobber the caller's $@.
+            dollarAt.type = savedDollarAt.type;
+            dollarAt.value = savedDollarAt.value;
         }
     }
 }

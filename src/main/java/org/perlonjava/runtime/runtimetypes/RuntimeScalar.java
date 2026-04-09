@@ -785,9 +785,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Container stores use the copy constructor which doesn't increment refCount
      * (to avoid over-counting for temporary copies). This method should be called
      * after storing a tracked reference in a container, if MortalList is active.
+     * <p>
+     * Skips elements that already have {@code refCountOwned == true}, meaning they
+     * were created via {@code set()} / {@code setLarge()} rather than the copy
+     * constructor, and their refCount was already incremented at creation time.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
-        if ((scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
+        if (scalar != null && !scalar.refCountOwned
+                && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
             scalar.refCountOwned = true;
@@ -959,8 +964,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             }
-            // Note: WEAKLY_TRACKED (-2) objects are not decremented here.
-            // Their weak refs are cleared via scope exit or explicit undef.
+        }
+
+        // Handle WEAKLY_TRACKED objects being overwritten: clear weak refs.
+        // These objects have refCount == -2 and their strong refs don't have
+        // refCountOwned=true (they were set before tracking started).
+        if (oldBase != null && !thisWasWeak && !this.refCountOwned
+                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            oldBase.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(oldBase);
         }
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
@@ -2075,6 +2087,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
         // when the same referent is on the JVM stack as a return value.
         MortalList.deferDecrementIfTracked(scalar);
+
+        // Handle WEAKLY_TRACKED objects: clear weak refs when strong ref exits scope.
+        // These objects transitioned from untracked (-1) to WEAKLY_TRACKED (-2) in
+        // weaken(), so their strong refs don't have refCountOwned=true. We detect the
+        // drop by checking the scalar holds a non-weak reference to a WEAKLY_TRACKED object.
+        // This is a heuristic — may clear prematurely if other strong refs exist.
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                && !WeakRefRegistry.isweak(scalar)) {
+            base.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(base);
+        }
     }
 
     public RuntimeScalar defined() {

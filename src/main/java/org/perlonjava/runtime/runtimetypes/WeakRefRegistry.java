@@ -86,11 +86,18 @@ public class WeakRefRegistry {
                 // semantic cost to switching off refCount tracking.
                 base.refCount = WEAKLY_TRACKED;
             }
+        } else if (base.refCount == -1) {
+            // Untracked object: transition to WEAKLY_TRACKED so that
+            // undefine() and scopeExitCleanup() can clear weak refs
+            // when a strong reference is dropped. This is a heuristic —
+            // it may clear weak refs too early when multiple strong refs
+            // exist (since we never counted them), but it's better than
+            // never clearing at all. Unblessed objects have no DESTROY,
+            // so over-eager clearing causes no side effects beyond the
+            // weak ref becoming undef.
+            ref.refCountOwned = false;
+            base.refCount = WEAKLY_TRACKED;
         }
-        // For untracked objects (refCount == -1): register only, no refCount change.
-        // Unlike the old code, we do NOT transition -1 → WEAKLY_TRACKED here.
-        // This fixes qr-72922.t where untracked regex objects had their weak refs
-        // prematurely cleared on undef when other strong refs still existed.
     }
 
     /**

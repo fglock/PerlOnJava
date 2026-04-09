@@ -88,9 +88,19 @@ public class EmitStatement {
      * @param flush      If true, emit scoped MortalList flush around null stores
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
-        // Phase 0: Push mark BEFORE cleanup so popAndFlush only drains
-        // entries added by scopeExitCleanup in Phase 1 (not older entries).
+        // Phase 0: Flush any previously-pending MortalList entries BEFORE
+        // pushing the mark. Without this, deferred decrements from method
+        // returns (deferDecrementIfNotCaptured) within this block are stranded
+        // below the mark and never processed by popAndFlush, causing refCount
+        // inflation and preventing DESTROY from firing at scope exit.
+        // Then push mark so popAndFlush only drains entries added by
+        // scopeExitCleanup in Phase 1.
         if (flush) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "flush",
+                    "()V",
+                    false);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "pushMark",
