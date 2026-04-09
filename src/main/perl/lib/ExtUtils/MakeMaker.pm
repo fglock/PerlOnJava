@@ -579,7 +579,9 @@ pm_to_blib:
 $install_cmds_str
 
 # Copy to blib/lib for test compatibility (make test uses PERL5LIB=./blib/lib)
+# Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both)
 pure_all:
+\t\@mkdir -p blib/arch
 $blib_cmds_str
 
 # Process PL_FILES
