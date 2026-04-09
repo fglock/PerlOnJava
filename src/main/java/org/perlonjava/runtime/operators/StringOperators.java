@@ -335,8 +335,11 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        String aStr = runtimeScalar.toString();
+        // b.toString() may trigger FETCH for tied vars, potentially modifying runtimeScalar.
+        // Read b first so runtimeScalar.toString() reflects any FETCH side-effects,
+        // matching Perl's behavior where the left SV is read after tied-var resolution.
         String bStr = b.toString();
+        String aStr = runtimeScalar.toString();
 
         // In Perl, concatenation produces a UTF-8 string only if at least one
         // operand has the UTF-8 flag on (STRING type). Non-STRING types
