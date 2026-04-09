@@ -68,6 +68,13 @@ public class DestroyDispatch {
         // Clear weak refs BEFORE calling DESTROY (or returning for unblessed objects)
         WeakRefRegistry.clearWeakRefsTo(referent);
 
+        // Release closure captures when a CODE ref's refCount hits 0.
+        // This allows captured variables to be properly cleaned up
+        // (e.g., blessed objects in captured scalars can fire DESTROY).
+        if (referent instanceof RuntimeCode code) {
+            code.releaseCaptures();
+        }
+
         String className = NameNormalizer.getBlessStr(referent.blessId);
         if (className == null) return;
 

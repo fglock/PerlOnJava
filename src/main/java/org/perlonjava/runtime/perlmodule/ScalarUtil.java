@@ -26,11 +26,6 @@ public class ScalarUtil extends PerlModuleBase {
     public static void initialize() {
         ScalarUtil scalarUtil = new ScalarUtil();
         scalarUtil.initializeExporter(); // Use the base class method to initialize the exporter
-        // Activate refCount tracking early so that all objects created after
-        // `use Scalar::Util` get proper reference counting via setLarge().
-        // This enables deterministic weak-ref clearing: when the last strong ref
-        // is removed, all weak refs to the object are nullified immediately.
-        MortalList.active = true;
         // Set $VERSION so CPAN.pm can detect our bundled version
         GlobalVariable.getGlobalVariable("Scalar::Util::VERSION").set(new RuntimeScalar("1.63"));
         scalarUtil.defineExport("EXPORT_OK", "blessed", "refaddr", "reftype", "weaken", "unweaken", "isweak",

@@ -53,6 +53,7 @@ public class ReferenceOperators {
                         // already holds a reference that was never counted (because
                         // tracking wasn't active at assignment time). Count it as 1.
                         referent.refCount = 1;
+                        runtimeScalar.refCountOwned = true;
                     } else {
                         // First bless (e.g., inside new()): the RuntimeScalar is a
                         // temporary that will be copied into a named variable via

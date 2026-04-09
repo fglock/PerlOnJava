@@ -58,27 +58,19 @@ public class WeakRefRegistry {
                 .add(ref);
 
         if (base.refCount == -1) {
-            // Non-DESTROY object: mark as weakly tracked.
-            // Use WEAKLY_TRACKED (-2) to prevent setLarge() from incrementing/
-            // decrementing refCount for this object. Strong refs aren't counted
-            // for these objects — clearing happens via scope exit or explicit undef.
-            //
-            // NOTE: Starting active tracking (refCount=1) was attempted but caused
-            // infinite recursion in Moo/Sub::Defer. The problem: refCount=1 is an
-            // underestimate for objects with multiple pre-existing strong refs.
-            // Routine setLarge overwrites would prematurely decrement to 0, clearing
-            // weak refs mid-operation and triggering cascade failures.
-            // See §12 in destroy_weaken_plan.md for full analysis.
             MortalList.active = true;
             base.refCount = WEAKLY_TRACKED;
         } else if (base.refCount > 0) {
-            // DESTROY-tracked object: decrement strong count (weak ref doesn't count)
+            // DESTROY-tracked or birth-tracked object: decrement strong count
+            // (weak ref doesn't count). Clear refCountOwned because weaken's
+            // DEC consumes the ownership — the weak scalar should not trigger
+            // another DEC on scope exit or overwrite.
+            ref.refCountOwned = false;
             if (--base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             }
         }
-        // refCount == 0 or WEAKLY_TRACKED: already tracked, just added to maps
     }
 
     /**
@@ -96,7 +88,10 @@ public class WeakRefRegistry {
         if (ref.value instanceof RuntimeBase base) {
             Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(base);
             if (weakRefs != null) weakRefs.remove(ref);
-            if (base.refCount >= 0) base.refCount++;  // restore strong count
+            if (base.refCount >= 0) {
+                base.refCount++;  // restore strong count
+                ref.refCountOwned = true;  // restore ownership
+            }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
     }

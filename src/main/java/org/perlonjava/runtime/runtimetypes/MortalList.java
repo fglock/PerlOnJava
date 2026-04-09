@@ -36,13 +36,17 @@ public class MortalList {
 
     /**
      * Convenience: check if a RuntimeScalar holds a tracked reference
-     * and schedule a deferred decrement if so.
+     * and schedule a deferred decrement if so. Only fires if the scalar
+     * owns a refCount increment (refCountOwned == true), preventing
+     * spurious decrements from copies that never incremented.
      */
     public static void deferDecrementIfTracked(RuntimeScalar scalar) {
         if (!active || scalar == null) return;
+        if (!scalar.refCountOwned) return;
         if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
+                scalar.refCountOwned = false;
                 pending.add(base);
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
@@ -69,19 +73,21 @@ public class MortalList {
     /**
      * Defer DESTROY for tracked blessed refs in a collection being cleared.
      * <p>
-     * Container stores (via copy constructor) now increment refCount for tracked
-     * objects. When clearing, we need to defer decrement for all tracked elements.
+     * Only decrements elements that own a refCount (refCountOwned == true).
+     * Elements stored via copy constructor (no setLarge) are skipped.
+     * Never-stored blessed objects (refCount == 0) are bumped to ensure DESTROY fires.
      */
     public static void deferDestroyForContainerClear(Iterable<RuntimeScalar> elements) {
         if (!active) return;
         for (RuntimeScalar scalar : elements) {
             if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && scalar.value instanceof RuntimeBase base) {
-                if (base.refCount > 0) {
-                    // Tracked object: defer decrement (may trigger DESTROY if last ref)
+                if (scalar.refCountOwned && base.refCount > 0) {
+                    // Tracked object with owned refCount: defer decrement
+                    scalar.refCountOwned = false;
                     pending.add(base);
-                } else if (base.refCount == 0) {
-                    // Object with refCount 0: bump to 1 so flush triggers DESTROY
+                } else if (base.blessId != 0 && base.refCount == 0) {
+                    // Never-stored blessed object: bump to 1 so flush triggers DESTROY
                     base.refCount = 1;
                     pending.add(base);
                 }
@@ -117,27 +123,32 @@ public class MortalList {
 
     /**
      * Recursively process a scalar value: if it holds a reference to a
-     * tracked blessed object, defer a decrement. If it holds a reference
-     * to an unblessed container (array/hash), recurse into its elements.
+     * tracked blessed object and owns a refCount, defer a decrement.
+     * If it holds a reference to an unblessed container, recurse into
+     * its elements.
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
         if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
         if (!(scalar.value instanceof RuntimeBase base)) return;
 
-        if (base.refCount > 0) {
-            // Tracked with positive refCount: defer decrement.
-            // This covers both blessed objects (DESTROY) and unblessed objects
-            // with weak refs (deterministic weak-ref clearing).
-            pending.add(base);
-        } else if (base.refCount == 0 && base.blessId != 0) {
-            // Blessed but refCount=0: container didn't increment (e.g., anonymous
-            // array constructor). Bump to 1 so flush triggers DESTROY.
-            base.refCount = 1;
-            pending.add(base);
-        }
-
-        // Also recurse into unblessed containers to find nested blessed/tracked refs
-        if (base.blessId == 0) {
+        if (base.blessId != 0) {
+            if (scalar.refCountOwned && base.refCount > 0) {
+                // Blessed, tracked, and this scalar owns the refCount: defer decrement
+                scalar.refCountOwned = false;
+                pending.add(base);
+            } else if (base.refCount == 0) {
+                // Blessed but refCount=0: container didn't increment (e.g., anonymous
+                // array constructor). Bump to 1 so flush triggers DESTROY.
+                base.refCount = 1;
+                pending.add(base);
+            }
+        } else {
+            // Unblessed reference: check if this scalar owns a refCount
+            if (scalar.refCountOwned && base.refCount > 0) {
+                scalar.refCountOwned = false;
+                pending.add(base);
+            }
+            // Also recurse into unblessed containers to find nested blessed refs
             if (base instanceof RuntimeArray arr) {
                 for (RuntimeScalar elem : arr.elements) {
                     deferDecrementRecursive(elem);

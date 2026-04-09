@@ -1449,6 +1449,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (!captured.isEmpty()) {
             code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+            // Enable refCount tracking for closures with captures.
+            // When the CODE ref's refCount drops to 0, releaseCaptures()
+            // fires (via DestroyDispatch.callDestroy), letting captured
+            // blessed objects run DESTROY.
+            if (MortalList.active) {
+                code.refCount = 0;
+            }
         }
 
         RuntimeScalar codeRef = new RuntimeScalar(code);
