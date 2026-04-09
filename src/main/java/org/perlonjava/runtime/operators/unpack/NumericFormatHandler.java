@@ -214,79 +214,22 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            // For UTF-8 strings, q/Q formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
-            if (state.isUTF8Data() && state.isCharacterMode()) {
-                ByteBuffer buffer = state.getBuffer();
-                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
-
-                for (int i = 0; i < count; i++) {
-                    if (state.remainingCodePoints() < 8) {
-                        break;
-                    }
-                    long value;
-                    if (isBigEndian) {
-                        value = ((long) (state.nextCodePoint() & 0xFF) << 56) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
-                                ((long) (state.nextCodePoint() & 0xFF));
-                    } else {
-                        value = ((long) (state.nextCodePoint() & 0xFF)) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
-                                ((long) (state.nextCodePoint() & 0xFF) << 56);
-                    }
-
-                    if (signed) {
-                        output.add(new RuntimeScalar(value));
-                    } else {
-                        // For unsigned Q, use double for values > Long.MAX_VALUE
-                        if (value >= 0) {
-                            output.add(new RuntimeScalar(value));
-                        } else {
-                            // Convert to unsigned via double
-                            output.add(new RuntimeScalar(value + 18446744073709551616.0));
-                        }
-                    }
-                }
-                return;
-            }
-
-            // For non-UTF-8 strings, use byte buffer logic
-            boolean wasCharacterMode = state.isCharacterMode();
-            if (wasCharacterMode) {
-                state.switchToByteMode();
-            }
-
-            ByteBuffer buffer = state.getBuffer();
-
-            for (int i = 0; i < count; i++) {
-                if (buffer.remaining() < 8) {
-                    break;
-                }
-                long value = buffer.getLong();
-                if (signed) {
-                    output.add(new RuntimeScalar(value));
-                } else {
-                    // For unsigned Q, use double for values > Long.MAX_VALUE
-                    if (value >= 0) {
-                        output.add(new RuntimeScalar(value));
-                    } else {
-                        output.add(new RuntimeScalar(value + 18446744073709551616.0));
-                    }
-                }
-            }
-
-            if (wasCharacterMode) {
-                state.switchToCharacterMode();
-            }
+            // ========================================================================
+            // DO NOT IMPLEMENT q/Q unpack — PerlOnJava is a 32-bit Perl (ivsize=4).
+            //
+            // Enabling q/Q causes cascading test regressions because many Perl tests
+            // gate 64-bit code paths behind `eval { pack 'q', 0 }`. When q/Q works:
+            //   - op/pack.t: +25 new failures (q/Q edge cases with extreme values)
+            //   - op/sprintf2.t: +24 new failures (%lld/%llu formats unlocked)
+            //   - Other tests may assume use64bitint semantics throughout
+            //
+            // If you need 64-bit pack/unpack for a specific module (e.g. Mojo::WebSocket),
+            // the module should use its 32-bit fallback path instead:
+            //   MODERN ? pack('Q>', $len) : pack('NN', 0, $len & 0xffffffff)
+            //
+            // See also: NumericPackHandler.java case 'q'/'Q', SprintfFormatParser.java
+            // ========================================================================
+            throw new PerlCompilerException("Invalid type '" + (signed ? "q" : "Q") + "' in unpack");
         }
 
         @Override

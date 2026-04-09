@@ -200,11 +200,7 @@ public class SubroutineParser {
         // If a package name follows, then it looks like a indirect method
         // Unless the subName looks like an operator
         // Unless the subName has a prototype with `*`
-        // Unless the subName is a known subroutine (imported/declared functions take
-        // precedence over indirect method syntax per perlobj: "If there is a subroutine
-        // with the same name as the method in your current package, Perl will call that
-        // subroutine instead." This matches the !subExists check at line 279 for $var.)
-        if (!subExists && peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
+        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
@@ -246,7 +242,11 @@ public class SubroutineParser {
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
             // - Name contains '::' (qualified names are always treated as packages in indirect syntax)
-            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))) {
+            //   UNLESS the calling sub exists and it's followed by '(' — then it's a function call
+            //   like: is MojoMonkeyTest::bar(), "bar" (per perlobj: declared functions take precedence)
+            if ((isPackage != null && !isPackage)
+                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
+                    || (subExists && packageName.contains("::") && token.text.equals("("))) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax
