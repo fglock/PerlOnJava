@@ -572,11 +572,50 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - `src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java` -- 13 PosixXxx properties
 - `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` -- zero-length match bumpalong
 
-### Next Steps (Phase 2 continued)
-1. Fix `local *STDOUT = $fh` IO redirection (Issue 7) -- selectedHandle not updated
-2. Investigate JSON number encoding issue for broader test impact
-3. Re-run full Mojo test suite and update counts
-4. IO::Poll `_poll()` runtime testing with actual sockets (Phase 3 prep)
+### Next Steps (Phase 2 near-miss fixes)
+
+These fixes target tests that are 1-2 subtests from passing (47→55+ projected):
+
+#### Fix A: `Scalar::Util::looks_like_number` broken for strings (ONE-LINE FIX)
+- **File**: `ScalarUtil.java` line 259
+- **Bug**: Only checks internal type (INTEGER/DOUBLE), returns false for numeric strings like `"86400"`
+- **Fix**: Delegate to existing `ScalarUtils.looksLikeNumber()` which already handles all types correctly
+- **Unblocks**: cookiejar.t (max_age→expires), content.t (128-bit content length), potentially others
+- **Effort**: 1 minute
+
+#### Fix B: `tie` with blessed ref invocant passes wrong `$_[0]`
+- **File**: `TieOperators.java` lines 38-71
+- **Bug**: When `tie *$obj, $obj` is called with a blessed ref, the invocant is stringified to a class name.
+  `RuntimeCode.call()` then prepends the string as `$_[0]` instead of the blessed object.
+  `IO::Compress::Base::TIEHANDLE` checks `ref($_[0])`, gets `""`, and dies.
+- **Fix**: Use the blessed ref as invocant (not a string), don't prepend classArg to args
+- **Unblocks**: bytestream.t gzip/gunzip, and potentially gzip-dependent tests across the suite
+- **Effort**: 15 minutes
+
+#### Fix C: `Encode::decode` ignores `$check` parameter (wide char detection)
+- **File**: `Encode.java` lines 496-518 (`encoding_decode`) and line 353 (`decode`)
+- **Bug**: The `$check` parameter is read but ignored. Java's `getBytes(ISO_8859_1)` silently
+  replaces wide chars (>255) with `?`, and `new String(bytes, charset)` never throws on
+  malformed input. When `$check=1` (FB_CROAK), Perl would die on invalid input.
+- **Fix**: Before `getBytes(ISO_8859_1)`, detect chars >255 and croak if `$check & 1`.
+  Also: use `CharsetDecoder` with `CodingErrorAction.REPORT` for strict decoding.
+- **Unblocks**: util.t "decode (invalid UTF-8)"
+- **Effort**: 30 minutes
+
+#### Fix D: `pack`/`unpack` Q/q 64-bit integer support
+- **File**: `NumericPackHandler.java` lines 322-325, `NumericFormatHandler.java` lines 216-218
+- **Bug**: `pack('Q>', $n)` and `unpack('Q>', $bytes)` throw "Invalid type" instead of
+  packing/unpacking 8-byte big-endian integers. Java's `long` is natively 64-bit.
+- **Fix**: Implement Q/q handlers using `ByteBuffer.putLong()`/`getLong()` (similar to existing N/n)
+- **Unblocks**: websocket_frames.t "64-bit text frame roundtrip"
+- **Effort**: 30 minutes
+
+#### Not fixing in this round
+- **collection.t TO_JSON**: JSON number encoding — deep scalar type tracking issue, not quick
+- **parameters.t Unicode**: URL encoding of wide chars — needs investigation of Mojo::Util url_escape
+- **base.t Weaken**: Known limitation (weaken is no-op on JVM)
+- **transactor.t multipart**: Needs file upload investigation
+- **url.t IDNA/punycode**: Not implemented
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
