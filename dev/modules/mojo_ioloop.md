@@ -1,10 +1,11 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Initial Analysis -- 8/109 test programs pass
+## Status: Phase 1 COMPLETE -- 15/108 test programs pass (was 8/109)
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
 - **Branch**: `docs/mojo-ioloop-plan`
+- **PR**: https://github.com/fglock/PerlOnJava/pull/467
 - **Test command**: `./jcpan -t Mojo::IOLoop`
 - **Build system**: MakeMaker (125 files installed successfully)
 
@@ -19,188 +20,203 @@ Mojolicious 9.42 is pure Perl (no XS required for core functionality), making it
 good candidate for PerlOnJava. The module installs and configures cleanly. Test failures
 are concentrated around a small number of missing features that cascade broadly.
 
+## Design Principle: Reuse CPAN Perl Code, Replace Only XS
+
+For each missing module, **use the original CPAN `.pm` file and replace only the XS/C
+portions with a Java backend**. This maximizes compatibility, reduces maintenance burden,
+and ensures features like export tags, parameter validation, and edge-case handling come
+from the battle-tested upstream code.
+
+| Module | Approach |
+|--------|----------|
+| `Digest::SHA` | Already bundled; just fix `@EXPORT_OK` |
+| `Hash::Util::FieldHash` | No-op shim (100% XS module; GC cleanup unnecessary on JVM) |
+| `Compress::Raw::Zlib` | CPAN `.pm` + Java XS backend (`CompressRawZlib.java`) |
+| `IO::Poll` | CPAN `.pm` + Java XS backend (`IOPoll.java`) |
+
 ## Test Results Summary
+
+### After Phase 1 (15/108 passing)
 
 | Metric | Count |
 |--------|-------|
-| Total test programs | 109 |
-| Passed | 8 (including 1 skipped) |
-| Failed | 101 |
-| Subtests run | 40 (all passed) |
+| Total test programs | 108 |
+| Passed (t/mojo/) | 12 of 63 |
+| Passed (t/mojolicious/) | 3 of 43 |
+| Passed (t/pod*) | 0 of 2 |
+| **Total Passed** | **15** |
 
-### Passing Tests (8/109)
+#### Passing Tests (15/108)
 
-| Test File | Result | Notes |
-|-----------|--------|-------|
-| t/mojo/cache.t | **ok** | Pure data structure, no Mojo::Util dependency |
-| t/mojo/date.t | **ok** | Date parsing/formatting |
-| t/mojo/eventemitter.t | **ok** | Event subscription/emission |
-| t/mojo/json_pointer.t | **ok** | JSON Pointer (RFC 6901) |
-| t/mojo/signatures.t | **ok** | Subroutine signature support |
-| t/mojo/promise_async_await.t | skipped | Developer-only test |
-| t/mojo/base_util.t | partial | 2/4 subtests pass, then dies (see Issue 4) |
+| Test File | Category |
+|-----------|----------|
+| t/mojo/cache.t | Pure data structure |
+| t/mojo/cookie.t | HTTP cookies |
+| t/mojo/date.t | Date parsing |
+| t/mojo/eventemitter.t | Event subscription |
+| t/mojo/headers.t | HTTP headers |
+| t/mojo/home.t | Home directory |
+| t/mojo/json_pointer.t | JSON Pointer (RFC 6901) |
+| t/mojo/proxy.t | Proxy configuration |
+| t/mojo/reactor_detect.t | Reactor detection |
+| t/mojo/roles.t | Role composition |
+| t/mojo/signatures.t | Subroutine signatures |
+| t/mojo/sse.t | Server-sent events |
+| t/mojolicious/pattern.t | URL pattern matching |
+| t/mojolicious/routes.t | Routing |
+| t/mojolicious/types.t | MIME types |
 
-### Failed Tests by Root Cause
+#### New passes from Phase 1 (7 gained)
+
+cookie.t, headers.t, home.t, proxy.t, reactor_detect.t, roles.t, sse.t,
+pattern.t, routes.t, types.t -- all unblocked by Mojo::Util now loading.
+
+### Initial Baseline (8/109)
+
+8 tests passed before Phase 1 (cache, date, eventemitter, json_pointer, signatures,
+plus skipped/partial tests).
+
+### Remaining Failed Tests by Root Cause
 
 | Root Cause | Tests Affected | Severity |
 |------------|---------------|----------|
-| Digest::SHA missing HMAC exports | ~90 | **Critical** -- blocks Mojo::Util loading |
-| IO::Poll not available | ~60+ (runtime) | **Critical** -- blocks Mojo::Reactor::Poll |
-| Hash::Util::FieldHash missing | ~5 directly | **High** -- blocks Mojo::DynamicMethods |
-| Compress::Raw::Zlib missing | ~2 directly | Medium -- blocks HTTP compression |
-| Parser indirect method bug | 1 | Low -- affects monkey_patch + Test::More |
+| ~~Digest::SHA missing HMAC exports~~ | ~~90~~ | **FIXED** |
+| ~~Compress::Raw::Zlib missing~~ | ~~100~~ | **FIXED** |
+| ~~IO::Poll not available~~ | ~~100~~ | **FIXED** |
+| ~~Hash::Util::FieldHash missing~~ | ~~5~~ | **FIXED** |
+| DynamicMethods empty method name | ~15 | **High** -- `Can't locate object method ""` |
+| `is_regexp` on unblessed ref | ~5 | **High** -- Mojo::Collection |
+| `toGlob` is null (glob coercion) | ~3 | Medium -- bytestream/file ops |
+| IO::Poll `_poll()` runtime behavior | ~20 | **High** -- IOLoop/reactor/daemon tests |
 | fork() not supported | ~3 (subprocess) | Known limitation |
+| Parser indirect method bug | 1 | Low -- monkey_patch + Test::More |
+
+**Key insight**: `Mojo::Util` has THREE compile-time blockers, not just one:
+1. `use Digest::SHA qw(hmac_sha1_hex ...)` (line 7) -- needs HMAC in @EXPORT_OK
+2. `use IO::Compress::Gzip` (line ~12) -- chains to `Compress::Raw::Zlib`
+3. `use IO::Poll qw(POLLIN POLLPRI)` (line 13) -- needs IO::Poll module
+
+All three must be fixed before Mojo::Util loads.
 
 ## Blocking Issues (Ordered by Impact)
 
-### Issue 1: Digest::SHA HMAC functions not in @EXPORT_OK (CRITICAL)
+### Issue 1: Digest::SHA HMAC functions not in @EXPORT_OK -- FIXED
 
-**Impact**: Blocks ~90% of all test programs. Almost every Mojolicious module depends
-on `Mojo::Util`, which fails to compile.
+**Status**: **DONE**
+
+**Impact**: Blocks ~90% of all test programs via `Mojo::Util` line 7.
 
 **Error**:
 ```
 "hmac_sha1_hex" is not exported by the Digest::SHA module
-Can't continue after import errors at .../Mojo/Util.pm line 7.
 ```
 
-**Root cause**: PerlOnJava's `Digest::SHA.pm` defines `hmac_sha1_hex` and other HMAC
-functions (lines 133-201) but does not include them in `@EXPORT_OK` (line 27). Standard
-Perl 5's `Digest::SHA` exports all HMAC functions.
+**Fix applied**: Added `@HMAC_FUNCTIONS` array to `@EXPORT_OK` and `%EXPORT_TAGS{all}`
+in `src/main/perl/lib/Digest/SHA.pm`. The HMAC function implementations already existed.
 
-**What Mojo::Util imports** (line 7):
-```perl
-use Digest::SHA qw(hmac_sha1_hex sha1 sha1_hex);
-```
-- `sha1` -- already in @EXPORT_OK
-- `sha1_hex` -- already in @EXPORT_OK
-- `hmac_sha1_hex` -- **missing from @EXPORT_OK** (but implemented!)
-
-**Fix**: Add HMAC functions to `@EXPORT_OK` in
-`src/main/perl/lib/Digest/SHA.pm` (lines 17-27):
-
-```perl
-our @SHA_FUNCTIONS = qw(
-    sha1        sha1_hex        sha1_base64
-    sha224      sha224_hex      sha224_base64
-    sha256      sha256_hex      sha256_base64
-    sha384      sha384_hex      sha384_base64
-    sha512      sha512_hex      sha512_base64
-    sha512224   sha512224_hex   sha512224_base64
-    sha512256   sha512256_hex   sha512256_base64
-);
-
-our @HMAC_FUNCTIONS = qw(
-    hmac_sha1       hmac_sha1_hex       hmac_sha1_base64
-    hmac_sha224     hmac_sha224_hex     hmac_sha224_base64
-    hmac_sha256     hmac_sha256_hex     hmac_sha256_base64
-    hmac_sha384     hmac_sha384_hex     hmac_sha384_base64
-    hmac_sha512     hmac_sha512_hex     hmac_sha512_base64
-    hmac_sha512224  hmac_sha512224_hex  hmac_sha512224_base64
-    hmac_sha512256  hmac_sha512256_hex  hmac_sha512256_base64
-);
-
-our @EXPORT_OK = (@SHA_FUNCTIONS, @HMAC_FUNCTIONS);
-```
-
-**Effort**: Trivial (5 minutes). The implementations already exist and work correctly.
+**File**: `src/main/perl/lib/Digest/SHA.pm` (modified)
 
 ---
 
-### Issue 2: IO::Poll not available (CRITICAL)
+### Issue 2: IO::Poll not available (CRITICAL) -- FIXED
 
-**Impact**: Blocks the entire IOLoop event reactor at runtime. Even after fixing Issue 1,
-Mojo::Reactor::Poll cannot function without `IO::Poll::_poll()`.
+**Status**: **DONE**
 
-**Error** (would appear at runtime after Issue 1 is fixed):
+**Impact**: Blocks Mojo::Util at compile time (line 13: `use IO::Poll qw(POLLIN POLLPRI)`),
+and blocks Mojo::Reactor::Poll at runtime.
+
+**Error**:
 ```
 Can't locate IO/Poll.pm in @INC
 ```
 
 **Who needs it**:
-- `Mojo::Util` line 13: `use IO::Poll qw(POLLIN POLLPRI);`
+- `Mojo::Util` line 13: `use IO::Poll qw(POLLIN POLLPRI);` (compile-time)
 - `Mojo::Reactor::Poll` line 5: `use IO::Poll qw(POLLERR POLLHUP POLLIN POLLNVAL POLLOUT POLLPRI);`
 - `Mojo::Util::_readable()` and `Mojo::Reactor::Poll::one_tick()` call `IO::Poll::_poll()`
 
-**What `_poll` does**: Wraps the POSIX `poll()` syscall:
+**Approach**: Use CPAN `IO::Poll.pm` (IO-1.55, 208 lines, pure Perl OO wrapper) with
+an added `XSLoader::load('IO::Poll', $VERSION)` line. Only the XS `_poll()` function
+and the poll constants need Java implementation.
+
+**XS functions to implement** (from `IO.xs` lines 254-286):
+
+| XS Function | Description |
+|-------------|-------------|
+| `_poll($timeout_ms, $fd1, $mask1, $fd2, $mask2, ...)` | Core poll syscall wrapper |
+
+Plus 11 constants from XS BOOT section:
+
+| Constant | Value | Export |
+|----------|-------|--------|
+| POLLIN | 0x0001 | @EXPORT |
+| POLLPRI | 0x0002 | @EXPORT_OK |
+| POLLOUT | 0x0004 | @EXPORT |
+| POLLERR | 0x0008 | @EXPORT |
+| POLLHUP | 0x0010 | @EXPORT |
+| POLLNVAL | 0x0020 | @EXPORT |
+| POLLRDNORM | 0x0040 | @EXPORT_OK |
+| POLLWRNORM | POLLOUT | @EXPORT_OK |
+| POLLRDBAND | 0x0080 | @EXPORT_OK |
+| POLLWRBAND | 0x0100 | @EXPORT_OK |
+| POLLNORM | POLLRDNORM | @EXPORT_OK |
+
+**Critical `_poll()` semantics**:
+- Takes timeout in ms (-1=block, 0=non-blocking, >0=wait)
+- Takes flat list of (fd, event_mask) pairs
+- **Modifies event_mask arguments in-place** with returned revents
+- Returns count of ready fds, or -1 on error
+- Mojolicious calls `_poll()` directly (bypasses OO layer)
+
+**How Mojolicious uses it**:
 ```perl
-# _poll($timeout_ms, $fd1, $mask1, $fd2, $mask2, ...)
-# Modifies mask values in-place with returned events
-# Returns count of ready file descriptors
-IO::Poll::_poll($timeout, @fd_event_pairs)
+# Mojo::Util::_readable
+sub _readable { !!(IO::Poll::_poll(@_[0, 1], my $m = POLLIN | POLLPRI) > 0) }
+
+# Mojo::Reactor::Poll::one_tick
+my @poll = map { $_ => $self->{io}{$_}{mode} } keys %{$self->{io}};
+if (IO::Poll::_poll($timeout, @poll) > 0) {
+    while (my ($fd, $mode) = splice @poll, 0, 2) {
+        # $mode now contains revents (modified in-place)
+    }
+}
 ```
 
-**Fix**: Create a Java XS backend for `IO::Poll` using `java.nio.channels.Selector`:
-- File: `src/main/perl/lib/IO/Poll.pm` (pure-Perl OO wrapper + constant exports)
-- File: `src/main/java/org/perlonjava/runtime/perlmodule/IOPoll.java` (Java backend)
-- Export constants: POLLIN=1, POLLPRI=2, POLLOUT=4, POLLERR=8, POLLHUP=16, POLLNVAL=32
-- Implement `_poll()` function that maps JVM file descriptors to NIO channels
+**Java implementation plan**: Reuse `IOOperator.selectWithNIO()` infrastructure which
+already maps PerlOnJava's virtual filenos to NIO channels for both socket and non-socket
+handles.
 
-**Effort**: Significant (1-2 days). Requires mapping PerlOnJava's file descriptor model
-to Java NIO selectors.
+**Files to create**:
+- `src/main/perl/lib/IO/Poll.pm` -- CPAN source + `XSLoader::load`
+- `src/main/java/org/perlonjava/runtime/perlmodule/IOPoll.java` -- `_poll()` + constants
 
-**Alternative**: A lighter approach would implement only the functional `_poll()` interface
-that Mojolicious uses (not the full OO `IO::Poll` API), since Mojo bypasses the OO layer
-and calls `_poll()` directly.
+**Effort**: ~1 day (leveraging existing `selectWithNIO()` infrastructure).
 
 ---
 
-### Issue 3: Hash::Util::FieldHash missing (HIGH)
+### Issue 3: Hash::Util::FieldHash missing -- FIXED
 
-**Impact**: Blocks `Mojo::DynamicMethods` (used for plugin-registered helper methods),
-which cascades to tests using Mojolicious::Lite apps with plugins.
+**Status**: **DONE**
 
-**Error**:
-```
-Can't locate Hash/Util/FieldHash.pm in @INC
-```
+**Impact**: Blocks `Mojo::DynamicMethods` (used for plugin-registered helper methods).
 
-**Tests directly affected**:
-- t/mojo/dynamic_methods.t
-- t/mojolicious/embedded_lite_app.t
-- t/mojolicious/json_config_lite_app.t (partially)
-- t/mojolicious/lite_app.t
-- t/mojolicious/twinkle_lite_app.t
+**Approach**: No-op shim. `Hash::Util::FieldHash` is 100% XS with no reusable pure Perl.
+Its purpose (GC-triggered hash entry cleanup) is unnecessary on JVM where tracing GC
+handles circular references natively. This is consistent with `weaken()` being a no-op.
 
-**How Mojo::DynamicMethods uses it** (lines 4, 30-39):
-```perl
-use Hash::Util::FieldHash qw(fieldhash);
-state %dyn_methods;
-state $setup = do { fieldhash %dyn_methods; 1 };
-$dyn_methods{$object}{$name} = $code;
-```
-
-The `fieldhash` function converts a hash to use object identity as keys with automatic
-cleanup on garbage collection (inside-out object pattern).
-
-**Fix**: Create a pure-Perl no-op shim at `src/main/perl/lib/Hash/Util/FieldHash.pm`:
-
-```perl
-package Hash::Util::FieldHash;
-use strict;
-use warnings;
-our $VERSION = '1.26';
-use Exporter 'import';
-our @EXPORT_OK = qw(fieldhash fieldhashes);
-
-# No-op: hash works as-is, just no GC-triggered cleanup.
-# PerlOnJava's JVM GC handles circular references natively.
-sub fieldhash (\%) { $_[0] }
-sub fieldhashes { fieldhash($_) for @_; @_ }
-
-1;
-```
-
-**Why a no-op is sufficient**: Mojolicious only calls `fieldhash %dyn_methods` once,
-then uses the hash normally with object refs as keys. The only downside is entries won't
-auto-clean on GC -- this is a minor memory leak but functionally harmless, and consistent
-with PerlOnJava's approach to `weaken()` (also a no-op).
-
-**Effort**: Trivial (5 minutes).
+**File created**: `src/main/perl/lib/Hash/Util/FieldHash.pm`
+- Exports all 7 public functions: `fieldhash`, `fieldhashes`, `idhash`, `idhashes`,
+  `id`, `id_2obj`, `register`
+- `fieldhash(\%)` / `idhash(\%)` return hash ref (no-op)
+- `id($)` delegates to `Scalar::Util::refaddr`
+- `id_2obj($)` returns undef (reverse mapping not implementable without tracking)
+- `register(@)` returns `$obj` (no-op)
 
 ---
 
-### Issue 4: Indirect method call parser bug (LOW)
+### Issue 4: Indirect method call parser bug (LOW) -- NOT STARTED
+
+**Status**: **TODO** (Phase 4)
 
 **Impact**: 1 test (t/mojo/base_util.t, 2 of 4 subtests).
 
@@ -217,60 +233,67 @@ as indirect method call `MojoMonkeyTest::bar->is(...)` instead of function call
 `is(MojoMonkeyTest::bar(), ...)`.
 
 This happens because `MojoMonkeyTest::bar` was installed at runtime via `monkey_patch`
-(typeglob assignment) so the parser doesn't see it at compile time. When the potential
-"class name" contains `::` and the sub is unknown at compile time, the backtrack
-condition at line 245 fails to trigger.
+(typeglob assignment) so the parser doesn't see it at compile time.
 
-The same code works for `MojoMonkeyTest::foo()` because `foo` was defined with `sub`
-at compile time.
+**Fix location**: `SubroutineParser.java`, line 245. When the calling function (`is`)
+is known to exist AND the potential class name is followed by `(`, prefer function-call
+interpretation.
 
-**Fix location**: `SubroutineParser.java`, line 245. Add `subExists` check to the
-backtrack condition -- when the calling function (`is`) is known to exist AND the
-potential class name is followed by `(`, prefer function-call interpretation:
-
-```java
-// Add: (subExists && token.text.equals("("))
-if ((subExists && token.text.equals("("))
-    || (isPackage != null && !isPackage)
-    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))) {
-    parser.tokenIndex = currentIndex2;
-```
-
-**Effort**: Small (30 minutes, needs careful testing to avoid regressions).
+**Effort**: Small (30 minutes, needs careful regression testing).
 
 ---
 
-### Issue 5: Compress::Raw::Zlib missing (MEDIUM)
+### Issue 5: Compress::Raw::Zlib missing -- PARTIALLY DONE (needs CPAN .pm switch)
 
-**Impact**: Blocks HTTP response decompression (`Mojo::Content`) and WebSocket
-compression (`Mojo::Transaction::WebSocket`). Affects t/mojo/request.t directly.
+**Status**: **IN PROGRESS** -- Java backend created, .pm needs replacement with CPAN version
 
-**Error**:
-```
-Can't load module Compress::Raw::Zlib
-```
+**Impact**: Compile-time blocker for Mojo::Util via the chain:
+`Mojo::Util` -> `use IO::Compress::Gzip` -> `Compress::Raw::Zlib`
 
-**What Mojolicious needs**:
-- `Compress::Raw::Zlib::Inflate->new(WindowBits => WANT_GZIP)` -- HTTP gunzip
-- `Compress::Raw::Zlib::Deflate->new(...)` -- WebSocket compression
-- Constants: `WANT_GZIP`, `Z_STREAM_END`, `Z_SYNC_FLUSH`
+Also blocks HTTP response decompression (`Mojo::Content`) and WebSocket compression.
 
-**Existing infrastructure**: PerlOnJava already has `Compress::Zlib` with a Java backend
-(`CompressZlib.java`, 617 lines) using `java.util.zip.Deflater/Inflater/GZIPOutputStream`.
-However, `Compress::Raw::Zlib` is the lower-level OO stream API that Mojolicious uses.
+**Current state**: Java backend `CompressRawZlib.java` (854 lines) implements all core
+XS functions using `java.util.zip.Deflater/Inflater`. A custom `.pm` file was created
+but **should be replaced with the CPAN version**.
 
-**Fix**: Create `CompressRawZlib.java` reusing `java.util.zip` from existing code:
-- Register as `Compress::Raw::Zlib`
-- Implement `_deflateInit()` / `_inflateInit()` returning blessed stream objects
-- Implement stream methods: `inflate`, `deflate`, `flush`, `total_out`, etc.
-- Export zlib constants
+**Why switch to CPAN .pm**: The current custom 186-line `.pm` is missing critical features
+that the CPAN 603-line `.pm` provides:
 
-**Effort**: Significant (1-2 days). Already tracked as P8 priority in
-`dev/modules/smoke_test_investigation.md`.
+| Feature | Custom .pm | CPAN .pm | Impact |
+|---------|-----------|----------|--------|
+| `%DEFLATE_CONSTANTS` / `@DEFLATE_CONSTANTS` | Missing | Present | **Breaks IO::Compress::Adapter::Deflate** |
+| `ParseParameters()` | Missing | Present | Needed internally by constructors |
+| `Parameters` class (full validation) | 30-line stub | 180 lines | Less robust |
+| `deflateParams` Perl wrapper | In Java directly | Calls `_deflateParams()` | No named-param support |
+| STORABLE_freeze/thaw stubs | Missing | Present | Prevents serialization crashes |
+| InflateScan classes | Missing | Present | Missing feature |
+| WindowBits=0 adjustment | Missing | Present | Edge case bugs |
+
+**Java-side changes needed to use CPAN .pm**:
+
+1. Rename `deflateParams` registration to `_deflateParams` in deflateStream methods
+   (CPAN .pm defines Perl wrapper `deflateParams` that calls `$self->_deflateParams(...)`)
+
+2. Add `deflateTune` stub (return Z_OK -- not supported by `java.util.zip.Deflater`)
+
+3. Set `$Compress::Raw::Zlib::XS_VERSION = "2.222"` in `initialize()`
+
+**CPAN .pm syntax concern**: Line 168 uses indirect object syntax
+(`my $p = new Compress::Raw::Zlib::Parameters()`). PerlOnJava supports indirect object
+syntax, and since `CompressRawZlib.java` is loaded via XSLoader, the class should be
+known at compile time.
+
+**Files**:
+- `src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java` (created, needs minor edits)
+- `src/main/perl/lib/Compress/Raw/Zlib.pm` (replace with CPAN version)
+
+**CPAN source location**: `/Users/fglock/.perlonjava/lib/Compress/Raw/Zlib.pm` (v2.222)
 
 ---
 
 ### Issue 6: fork() not supported (KNOWN LIMITATION)
+
+**Status**: **Won't fix** (JVM limitation)
 
 **Impact**: `Mojo::IOLoop::Subprocess` cannot work. Affects t/mojo/subprocess.t and
 t/mojo/subprocess_ev.t.
@@ -279,48 +302,77 @@ t/mojo/subprocess_ev.t.
 I/O multiplexing. The core IOLoop, HTTP server/client, WebSockets, and timers do not
 require fork. Only `Subprocess` (for running blocking code in a child process) needs it.
 
-**Workaround**: Not fixable without JVM process forking. Mojolicious applications can
-use Java threading via inline Java as an alternative to Subprocess.
+**Workaround**: Mojolicious applications can use Java threading via inline Java as an
+alternative to Subprocess.
 
 ## Implementation Plan
 
-### Phase 1: Quick Wins (unblock module loading)
+### Phase 1: Unblock Mojo::Util compile-time loading -- IN PROGRESS
 
-**Goal**: Get Mojo::Util and Mojo::Base to load successfully, enabling ~90% of tests
-to at least start running.
+**Goal**: Fix all three compile-time blockers so Mojo::Util loads, enabling ~90% of
+tests to at least start running.
 
-| Task | File | Effort |
-|------|------|--------|
-| Add HMAC functions to Digest::SHA @EXPORT_OK | `src/main/perl/lib/Digest/SHA.pm` | 5 min |
-| Create Hash::Util::FieldHash no-op shim | `src/main/perl/lib/Hash/Util/FieldHash.pm` | 5 min |
+| Task | Status | File |
+|------|--------|------|
+| 1a. Add HMAC to Digest::SHA @EXPORT_OK | **DONE** | `src/main/perl/lib/Digest/SHA.pm` |
+| 1b. Create Hash::Util::FieldHash shim | **DONE** | `src/main/perl/lib/Hash/Util/FieldHash.pm` |
+| 1c. Compress::Raw::Zlib Java backend | **DONE** | `CompressRawZlib.java` (854 lines) |
+| 1d. Replace Compress::Raw::Zlib .pm with CPAN | **TODO** | Use CPAN .pm + minor Java edits |
+| 1e. Create IO::Poll Java backend + CPAN .pm | **TODO** | `IOPoll.java` + CPAN `IO/Poll.pm` |
 
-**Expected outcome**: Tests that don't need IO::Poll at runtime should pass (cache.t,
-date.t, eventemitter.t, json_pointer.t, signatures.t already pass; expect collection.t,
-bytestream.t, json.t, url.t, path.t, parameters.t, headers.t, cookie.t, template.t,
-roles.t, dom.t, exception.t, file.t, log.t, loader.t, and others to start passing).
+**Remaining work**: Replace custom Compress::Raw::Zlib .pm with CPAN version (with Java
+XS backend adjustments), then implement IO::Poll.
 
-### Phase 2: Event Loop (unblock IOLoop)
+**Expected outcome**: Mojo::Util and Mojo::Base load. Tests that don't use IOLoop at
+runtime should pass (~25 test programs).
 
-**Goal**: Get `Mojo::Reactor::Poll` working so the IOLoop can process I/O events.
+### Phase 2: Triage new failures and fix data-structure tests
 
-| Task | File | Effort |
-|------|------|--------|
-| Implement IO::Poll Java backend | `IOPoll.java` + `IO/Poll.pm` | 1-2 days |
+**Goal**: After Mojo::Util loads, many tests will start running but may hit new errors.
+Run the full test suite, categorize failures, and fix issues in pure-Perl data structure
+tests (collection, bytestream, json, url, path, parameters, headers, cookies, template,
+dom, etc.) that don't require networking.
 
-**Expected outcome**: IOLoop-dependent tests should start running: ioloop.t, daemon.t,
-user_agent.t, websocket.t, and all Test::Mojo-based integration tests.
+| Task | Effort |
+|------|--------|
+| Re-run `./jcpan -t Mojo::IOLoop` and categorize results | 30 min |
+| Fix new compile/runtime errors in non-IOLoop tests | 1-2 days |
+| Update test counts in this document | 5 min |
 
-### Phase 3: HTTP Compression
+**Expected outcome**: 25-40 test programs passing.
 
-**Goal**: Get Compress::Raw::Zlib working for HTTP content encoding.
+### Phase 3: Event Loop (runtime IOLoop functionality)
 
-| Task | File | Effort |
-|------|------|--------|
-| Implement Compress::Raw::Zlib Java backend | `CompressRawZlib.java` | 1-2 days |
+**Goal**: Get `Mojo::Reactor::Poll::one_tick()` working with real sockets so the IOLoop
+can process I/O events, timers, and connections.
 
-**Expected outcome**: request.t, response.t, and compressed content tests should pass.
+IO::Poll's `_poll()` is implemented in Phase 1 for compile-time constant export, but
+**runtime functionality** (actual polling of socket file descriptors) needs validation
+and likely debugging with real IOLoop tests.
 
-### Phase 4: Parser Fix
+| Task | Effort |
+|------|--------|
+| Validate `_poll()` with `Mojo::Reactor::Poll::one_tick()` | 1 day |
+| Debug fd-to-NIO-channel mapping for sockets | 1 day |
+| Get t/mojo/ioloop.t basic tests passing | 1 day |
+
+**Expected outcome**: t/mojo/ioloop.t timer and basic I/O tests pass. Foundation for
+HTTP server/client.
+
+### Phase 4: HTTP and WebSocket tests
+
+**Goal**: Get Mojo::UserAgent, Mojo::Server::Daemon, and Test::Mojo working so the
+integration tests (`*_lite_app.t`) can run.
+
+| Task | Effort |
+|------|--------|
+| Fix socket/HTTP issues found in daemon.t, user_agent.t | 2-3 days |
+| Get Test::Mojo embedded server working | 1-2 days |
+| Validate websocket_frames.t | 1 day |
+
+**Expected outcome**: 50-70 test programs passing including lite_app tests.
+
+### Phase 5: Parser Fix
 
 **Goal**: Fix indirect method call disambiguation for runtime-installed subs.
 
@@ -330,73 +382,93 @@ user_agent.t, websocket.t, and all Test::Mojo-based integration tests.
 
 **Expected outcome**: base_util.t should fully pass (4/4 subtests).
 
+### Phase 6: Polish and remaining failures
+
+**Goal**: Address remaining test failures, document known limitations, update test counts.
+
+| Task | Effort |
+|------|--------|
+| Fix remaining pure-Perl test failures | 1-2 days |
+| Document fork()-dependent tests as expected failures | 30 min |
+| Final test count update and summary | 30 min |
+
+**Expected outcome**: 70-90+ test programs passing. Remaining failures are fork/subprocess
+(known limitation) or edge cases.
+
 ## Dependency Chain
 
 ```
-Mojo::Util  ← requires Digest::SHA HMAC exports (Issue 1)
-  └─ uses IO::Poll for _readable() (Issue 2)
+Mojo::Util (compile-time requirements):
+  ├─ use Digest::SHA qw(hmac_sha1_hex sha1 sha1_hex)  ← Issue 1 (FIXED)
+  ├─ use IO::Compress::Gzip                            ← Issue 5 (IN PROGRESS)
+  │     └─ requires Compress::Raw::Zlib
+  └─ use IO::Poll qw(POLLIN POLLPRI)                   ← Issue 2 (TODO)
 
-Mojo::Base  ← requires Mojo::Util
-  └─ optionally loads Hash::Util::FieldHash for DynamicMethods (Issue 3)
+Mojo::Base ← requires Mojo::Util
+  └─ optionally loads Hash::Util::FieldHash             ← Issue 3 (FIXED)
 
-Mojo::Reactor::Poll  ← requires IO::Poll (Issue 2)
+Mojo::Reactor::Poll ← requires IO::Poll (runtime _poll())
   └─ core of Mojo::IOLoop
 
-Mojo::IOLoop  ← requires Mojo::Reactor::Poll
-  └─ Mojo::IOLoop::Subprocess requires fork() (Issue 6, known limitation)
+Mojo::IOLoop ← requires Mojo::Reactor::Poll
+  └─ Mojo::IOLoop::Subprocess requires fork()           ← Issue 6 (won't fix)
 
-Mojo::Content  ← requires Compress::Raw::Zlib for gzip (Issue 5)
-
-Almost all Mojolicious modules  ← require Mojo::Base  ← require Mojo::Util
+Almost all Mojolicious modules ← require Mojo::Base ← require Mojo::Util
 ```
 
-## Tests Likely to Pass After Each Phase
+## Tests Expected to Pass After Phase 1
 
-### After Phase 1 (Digest::SHA + FieldHash fixes)
 Tests that don't depend on IOLoop at runtime:
 - t/mojo/cache.t (already passes)
 - t/mojo/date.t (already passes)
 - t/mojo/eventemitter.t (already passes)
 - t/mojo/json_pointer.t (already passes)
 - t/mojo/signatures.t (already passes)
-- t/mojo/collection.t (likely)
-- t/mojo/bytestream.t (likely)
-- t/mojo/json.t (likely)
-- t/mojo/url.t (likely)
-- t/mojo/path.t (likely)
-- t/mojo/parameters.t (likely)
-- t/mojo/headers.t (likely)
-- t/mojo/cookie.t, t/mojo/cookiejar.t (likely)
-- t/mojo/template.t (likely)
-- t/mojo/roles.t (likely)
-- t/mojo/dom.t (likely)
-- t/mojo/exception.t (likely)
-- t/mojo/file.t (likely)
-- t/mojo/log.t (likely)
-- t/mojo/loader.t (likely)
+- t/mojo/collection.t, t/mojo/bytestream.t, t/mojo/json.t (likely)
+- t/mojo/url.t, t/mojo/path.t, t/mojo/parameters.t (likely)
+- t/mojo/headers.t, t/mojo/cookie.t, t/mojo/cookiejar.t (likely)
+- t/mojo/template.t, t/mojo/roles.t, t/mojo/dom.t (likely)
+- t/mojo/exception.t, t/mojo/file.t, t/mojo/log.t, t/mojo/loader.t (likely)
 - t/mojo/dynamic_methods.t (likely, with FieldHash shim)
-- t/mojo/home.t (likely)
-- t/mojo/sse.t (likely)
-- t/mojo/websocket.t (data framing tests, likely)
-- t/mojolicious/pattern.t (likely)
-- t/mojolicious/routes.t (likely)
-- t/mojolicious/types.t (likely)
+- t/mojo/home.t, t/mojo/sse.t (likely)
+- t/mojolicious/pattern.t, t/mojolicious/routes.t, t/mojolicious/types.t (likely)
 
-### After Phase 2 (IO::Poll)
-All tests using Test::Mojo embedded server:
-- t/mojo/ioloop.t
-- t/mojo/daemon.t
-- t/mojo/user_agent.t
-- t/mojo/websocket_frames.t
-- t/mojolicious/lite_app.t
-- t/mojolicious/*_lite_app.t (most)
-- t/mojolicious/app.t
+IOLoop-dependent tests (need Phase 2 runtime _poll()):
+- t/mojo/ioloop.t, t/mojo/daemon.t, t/mojo/user_agent.t
+- t/mojolicious/lite_app.t and other *_lite_app.t tests
 - t/test/mojo.t
 
-### After Phase 3 (Compress::Raw::Zlib)
-- t/mojo/request.t
-- t/mojo/response.t (compressed content tests)
-- t/mojo/content.t
+## Progress Tracking
+
+### Current Status: Phase 1 COMPLETE -- Phase 2 next
+
+### Completed
+- [x] Initial analysis and test baseline (2026-04-09): 8/109 tests pass
+- [x] Issue 1: Digest::SHA HMAC exports (2026-04-09)
+- [x] Issue 3: Hash::Util::FieldHash no-op shim (2026-04-09)
+- [x] Issue 5: Compress::Raw::Zlib -- CPAN .pm + CompressRawZlib.java backend (2026-04-09)
+- [x] Issue 2: IO::Poll -- CPAN .pm + IOPoll.java backend with _poll() + 11 constants (2026-04-09)
+- [x] Socket: Added inet_pton/inet_ntop to Socket.java and Socket.pm (2026-04-09)
+- [x] Verified Mojo::Util and Mojo::Base load successfully (2026-04-09)
+- [x] All unit tests pass (`make` succeeds) (2026-04-09)
+- [x] Mojo test count: 8/109 -> 15/108 (2026-04-09)
+
+### Files Created/Modified in Phase 1
+- `src/main/perl/lib/Digest/SHA.pm` -- HMAC functions added to @EXPORT_OK
+- `src/main/perl/lib/Hash/Util/FieldHash.pm` -- NEW, no-op shim
+- `src/main/perl/lib/Compress/Raw/Zlib.pm` -- REPLACED with CPAN version
+- `src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java` -- NEW, Java XS backend
+- `src/main/perl/lib/IO/Poll.pm` -- NEW, CPAN source + XSLoader
+- `src/main/java/org/perlonjava/runtime/perlmodule/IOPoll.java` -- NEW, _poll() + constants
+- `src/main/java/org/perlonjava/runtime/perlmodule/Socket.java` -- Added inet_pton, inet_ntop
+- `src/main/perl/lib/Socket.pm` -- Added inet_pton, inet_ntop to @EXPORT
+
+### Next Steps (Phase 2)
+1. Investigate DynamicMethods empty method name error (`Can't locate object method ""`)
+2. Fix `is_regexp` on unblessed reference (Mojo::Collection)
+3. Fix `toGlob` null pointer (bytestream/file operations)
+4. Investigate remaining test failures for low-hanging fruit
+5. IO::Poll `_poll()` runtime testing with actual sockets
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
