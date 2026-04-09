@@ -55,8 +55,10 @@ package B::SV {
 
     sub REFCNT {
         # JVM uses tracing GC, not reference counting.
-        # Return 0 to indicate objects are always reclaimable.
-        return 0;
+        # Return 1 as a reasonable default for compatibility.
+        # This aligns with Internals::SvREFCNT() and Devel::Peek::SvREFCNT()
+        # which also return 1, and makes is_oneref() checks pass.
+        return 1;
     }
 
     sub RV {
@@ -169,7 +171,10 @@ package B::CV {
     }
     
     sub START {
-        return B::OP->new();
+        # Return a B::COP (control op) so optree walkers find file/line info.
+        # Real Perl returns the first op of the sub body; for PerlOnJava we
+        # return a COP with the best location info we have.
+        return B::COP->new("-e", 0);
     }
     
     sub ROOT {
@@ -257,8 +262,9 @@ package B::OP {
     }
     
     sub next {
-        # Return undef to terminate traversal
-        return;
+        # Return B::NULL to terminate traversal (matches real Perl behavior).
+        # Code that walks the optree checks ref($op) eq "B::NULL" to stop.
+        return B::NULL->new();
     }
 }
 
@@ -267,6 +273,38 @@ package B::NULL {
     sub new {
         my $class = shift;
         return bless {}, $class;
+    }
+
+    sub next {
+        # NULL is terminal -- return self to prevent infinite loops
+        return $_[0];
+    }
+}
+
+package B::COP {
+    # COP = "control op" -- carries file and line number metadata.
+    # In real Perl, COP nodes are scattered through the optree at statement
+    # boundaries. In PerlOnJava we synthesize one per CV with the best
+    # location info available.
+    our @ISA = ('B::OP');
+
+    sub new {
+        my ($class, $file, $line) = @_;
+        return bless { file => $file // "-e", line => $line // 0 }, $class;
+    }
+
+    sub file {
+        my $self = shift;
+        return $self->{file};
+    }
+
+    sub line {
+        my $self = shift;
+        return $self->{line};
+    }
+
+    sub next {
+        return B::NULL->new();
     }
 }
 
