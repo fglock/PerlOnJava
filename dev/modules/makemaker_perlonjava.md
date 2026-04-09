@@ -337,4 +337,4 @@ jperl Makefile.PL
 
 - `cpan_client.md` - CPAN client status
 - `docs/guides/module-porting.md` - Module porting guide
-- `.cognition/skills/port-cpan-module/` - Port CPAN module skill
+- `.agents/skills/port-cpan-module/` - Port CPAN module skill

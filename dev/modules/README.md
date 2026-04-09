@@ -99,7 +99,7 @@ PERL_PARAMS_UTIL_PP=1 ./jcpan -t Class::Load
 
 - [AGENTS.md](../../AGENTS.md) - Project guidelines
 - [docs/guides/module-porting.md](../../docs/guides/module-porting.md) - User-facing porting guide
-- `.cognition/skills/port-cpan-module/` - AI skill for porting modules
+- `.agents/skills/port-cpan-module/` - AI skill for porting modules
 
 ## Document Index
 

@@ -230,9 +230,9 @@ git add -A && git commit -m "Fix <what> by <how>
 
 <Details of the bug and fix>
 
-Generated with [Devin](https://cli.devin.ai/docs)
+Generated with [TOOL_NAME](TOOL_DOCS_URL)
 
-Co-Authored-By: Devin <noreply@cognition.ai>"
+Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>"
 ```
 
 ### 3. Push branch and create PR
@@ -247,7 +247,7 @@ gh pr create --title "Fix: description" --body "## Summary
 - [ ] Unit tests pass
 - [ ] Reproducer now works correctly
 
-Generated with [Devin](https://cli.devin.ai/docs)"
+Generated with [TOOL_NAME](TOOL_DOCS_URL)"
 ```
 
 ### 4. After PR is merged, clean up

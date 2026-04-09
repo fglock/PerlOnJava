@@ -188,7 +188,7 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 ## Available Skills
 
-See `.cognition/skills/` for specialized debugging and development skills:
+See `.agents/skills/` for specialized debugging and development skills:
 - `debug-perlonjava` - General debugging
 - `interpreter-parity` - JVM vs interpreter parity issues
 - `debug-exiftool` - ExifTool test debugging

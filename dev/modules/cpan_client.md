@@ -14,7 +14,7 @@ This document tracks CPAN client support for PerlOnJava. The `jcpan` command pro
 - **DateTime** - Full functionality including timezone support (99.7% test pass rate)
 
 **Known Limitations:**
-- XS modules require manual porting (see `.cognition/skills/port-cpan-module/`)
+- XS modules require manual porting (see `.agents/skills/port-cpan-module/`)
 - Module::Build-only modules need Module::Build installed separately
 - Tests that heavily use fork may fail or skip
 - Safe.pm compartment restrictions are not enforced (uses trusted eval)
@@ -411,5 +411,5 @@ The fix allows CPAN::Meta::YAML to properly parse MYMETA.yml files, enabling CPA
 
 - `xsloader.md` - XSLoader/Java integration
 - `makemaker_perlonjava.md` - ExtUtils::MakeMaker implementation
-- `.cognition/skills/port-cpan-module/` - Skill for porting CPAN modules
+- `.agents/skills/port-cpan-module/` - Skill for porting CPAN modules
 - `docs/guides/using-cpan-modules.md` - User documentation
