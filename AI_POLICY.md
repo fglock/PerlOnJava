@@ -31,10 +31,12 @@ PerlOnJava uses AI coding assistants as part of its development workflow. This d
 AI-assisted commits include two markers in the commit message:
 
 ```
-Generated with [Devin](https://cli.devin.ai/docs)
+Generated with [TOOL_NAME](TOOL_DOCS_URL)
 
-Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
 ```
+
+Replace `TOOL_NAME` with the AI tool's name (e.g. Devin, Copilot, Claude), `TOOL_DOCS_URL` with a link to its documentation, and `TOOL_BOT_EMAIL` with the tool's GitHub bot email address (e.g. `158243242+devin-ai-integration[bot]@users.noreply.github.com`).
 
 - **`Generated with`** — identifies the tool and links to its documentation.
 - **`Co-Authored-By`** — a GitHub-recognized trailer that shows the AI tool as a co-author in the commit UI. GitHub renders this as a visible avatar and link on the commit.
