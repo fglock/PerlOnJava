@@ -91,6 +91,8 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("unpack_sockaddr_in", null);
             socket.registerMethod("inet_aton", null);
             socket.registerMethod("inet_ntoa", null);
+            socket.registerMethod("inet_pton", null);
+            socket.registerMethod("inet_ntop", null);
             socket.registerMethod("sockaddr_in", null);
             socket.registerMethod("getnameinfo", null);
             socket.registerMethod("getaddrinfo", null);
@@ -309,6 +311,99 @@ public class Socket extends PerlModuleBase {
                     ipBytes[2] & 0xFF, ipBytes[3] & 0xFF);
 
             return new RuntimeScalar(ipAddress).getList();
+
+        } catch (Exception e) {
+            return scalarUndef.getList();
+        }
+    }
+
+    /**
+     * inet_pton(ADDRESS_FAMILY, HOSTNAME)
+     * Converts a text IP address to binary form.
+     * AF_INET: returns 4-byte binary address
+     * AF_INET6: returns 16-byte binary address
+     * Returns undef on failure.
+     */
+    public static RuntimeList inet_pton(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return scalarUndef.getList();
+        }
+
+        try {
+            int family = args.get(0).getInt();
+            String hostname = args.get(1).toString();
+
+            InetAddress addr = InetAddress.getByName(hostname);
+            byte[] bytes = addr.getAddress();
+
+            // AF_INET (2) expects 4 bytes, AF_INET6 (typically 10 or 30) expects 16 bytes
+            if (family == 2) { // AF_INET
+                if (bytes.length != 4) {
+                    return scalarUndef.getList();
+                }
+            } else if (family == 10 || family == 23 || family == 30) { // AF_INET6 (Linux=10, Win=23, macOS=30)
+                if (bytes.length != 16) {
+                    // If given an IPv4 address for AF_INET6, map to IPv6
+                    if (bytes.length == 4) {
+                        byte[] mapped = new byte[16];
+                        mapped[10] = (byte) 0xFF;
+                        mapped[11] = (byte) 0xFF;
+                        System.arraycopy(bytes, 0, mapped, 12, 4);
+                        bytes = mapped;
+                    } else {
+                        return scalarUndef.getList();
+                    }
+                }
+            } else {
+                return scalarUndef.getList();
+            }
+
+            RuntimeScalar result = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
+            result.type = RuntimeScalarType.BYTE_STRING;
+            return result.getList();
+
+        } catch (Exception e) {
+            return scalarUndef.getList();
+        }
+    }
+
+    /**
+     * inet_ntop(ADDRESS_FAMILY, IP_ADDRESS)
+     * Converts a binary IP address to text form.
+     * AF_INET: 4-byte binary -> "x.x.x.x"
+     * AF_INET6: 16-byte binary -> "x:x:x:x:x:x:x:x"
+     * Returns undef on failure.
+     */
+    public static RuntimeList inet_ntop(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return scalarUndef.getList();
+        }
+
+        try {
+            int family = args.get(0).getInt();
+            byte[] ipBytes = args.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+
+            if (family == 2) { // AF_INET
+                if (ipBytes.length != 4) {
+                    return scalarUndef.getList();
+                }
+                InetAddress addr = InetAddress.getByAddress(ipBytes);
+                return new RuntimeScalar(addr.getHostAddress()).getList();
+            } else if (family == 10 || family == 23 || family == 30) { // AF_INET6
+                if (ipBytes.length != 16) {
+                    return scalarUndef.getList();
+                }
+                InetAddress addr = InetAddress.getByAddress(ipBytes);
+                // Java's getHostAddress may include scope id, strip it
+                String result = addr.getHostAddress();
+                int pctIdx = result.indexOf('%');
+                if (pctIdx >= 0) {
+                    result = result.substring(0, pctIdx);
+                }
+                return new RuntimeScalar(result).getList();
+            } else {
+                return scalarUndef.getList();
+            }
 
         } catch (Exception e) {
             return scalarUndef.getList();

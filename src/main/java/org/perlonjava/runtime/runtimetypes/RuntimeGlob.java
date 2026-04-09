@@ -321,6 +321,34 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public RuntimeScalar set(RuntimeGlob value) {
         markGlobAsAssigned();
 
+        // Anonymous globs (from "open my $fh, ...") have no global name.
+        // Just copy the IO slot — no aliasing needed.
+        // This matches Perl 5: *STDOUT = $lexical_fh only replaces the IO slot.
+        if (value.globName == null) {
+            // Save old IO for selectedHandle check (needed for local *STDOUT = $fh)
+            RuntimeIO oldRuntimeIO = null;
+            if (this.IO != null && this.IO.value instanceof RuntimeIO rio) {
+                oldRuntimeIO = rio;
+            }
+
+            this.IO = value.IO;
+            // Also update the global IO entry for this glob
+            if (this.globName != null) {
+                RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
+                targetIO.IO = value.IO;
+            }
+
+            // Update selectedHandle if the old IO was the currently selected output handle.
+            // This ensures that `local *STDOUT = $fh` redirects bare `print` (no filehandle)
+            // to the new handle, not just explicit `print STDOUT`.
+            if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+                    && value.IO != null && value.IO.value instanceof RuntimeIO newRIO) {
+                RuntimeIO.selectedHandle = newRIO;
+            }
+
+            return value.scalar();
+        }
+
         if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
             InheritanceResolver.invalidateCache();
@@ -355,8 +383,21 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Must update BOTH this.IO (for detached copies) AND the global glob's IO
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
         RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
+
+        // Save old IO for selectedHandle check (needed for local *STDOUT = *OTHER)
+        RuntimeIO oldRuntimeIO = null;
+        if (this.IO != null && this.IO.value instanceof RuntimeIO rio) {
+            oldRuntimeIO = rio;
+        }
+
         this.IO = sourceIO.IO;
         targetIO.IO = sourceIO.IO;
+
+        // Update selectedHandle if the old IO was the currently selected output handle
+        if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+                && sourceIO.IO != null && sourceIO.IO.value instanceof RuntimeIO newRIO) {
+            RuntimeIO.selectedHandle = newRIO;
+        }
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);

@@ -242,7 +242,11 @@ public class SubroutineParser {
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
             // - Name contains '::' (qualified names are always treated as packages in indirect syntax)
-            if ((isPackage != null && !isPackage) || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))) {
+            //   UNLESS the calling sub exists and it's followed by '(' — then it's a function call
+            //   like: is MojoMonkeyTest::bar(), "bar" (per perlobj: declared functions take precedence)
+            if ((isPackage != null && !isPackage)
+                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
+                    || (subExists && packageName.contains("::") && token.text.equals("("))) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax

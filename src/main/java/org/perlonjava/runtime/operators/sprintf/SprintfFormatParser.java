@@ -525,8 +525,17 @@ public class SprintfFormatParser {
             if (spec.lengthModifier != null) {
                 String combo = spec.lengthModifier + spec.conversionChar;
 
-                // Quad formats (ll, L, q) with integer conversions are not supported
-                // (ivsize=4, no use64bitint)
+                // ========================================================================
+                // DO NOT REMOVE this validation — PerlOnJava is a 32-bit Perl (ivsize=4).
+                //
+                // Quad formats (ll, L, q) with integer conversions must remain INVALID.
+                // Many Perl tests gate 64-bit code behind `eval { pack 'q', 0 }` and
+                // `$Config{d_quad}`. If %lld/%llu formats work but the rest of the 64-bit
+                // infrastructure doesn't, tests fail with wrong results.
+                //
+                // See also: NumericPackHandler.java case 'q'/'Q',
+                //           NumericFormatHandler.java QuadHandler
+                // ========================================================================
                 if (spec.lengthModifier.equals("ll") || spec.lengthModifier.equals("L") || spec.lengthModifier.equals("q")) {
                     String intConversions = "diuDUoOxXbB";
                     if (intConversions.indexOf(spec.conversionChar) >= 0) {

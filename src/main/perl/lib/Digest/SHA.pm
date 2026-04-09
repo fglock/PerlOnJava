@@ -24,9 +24,19 @@ our @SHA_FUNCTIONS = qw(
     sha512256   sha512256_hex   sha512256_base64
 );
 
-our @EXPORT_OK = @SHA_FUNCTIONS;
+our @HMAC_FUNCTIONS = qw(
+    hmac_sha1       hmac_sha1_hex       hmac_sha1_base64
+    hmac_sha224     hmac_sha224_hex     hmac_sha224_base64
+    hmac_sha256     hmac_sha256_hex     hmac_sha256_base64
+    hmac_sha384     hmac_sha384_hex     hmac_sha384_base64
+    hmac_sha512     hmac_sha512_hex     hmac_sha512_base64
+    hmac_sha512224  hmac_sha512224_hex  hmac_sha512224_base64
+    hmac_sha512256  hmac_sha512256_hex  hmac_sha512256_base64
+);
+
+our @EXPORT_OK = (@SHA_FUNCTIONS, @HMAC_FUNCTIONS);
 our %EXPORT_TAGS = (
-    all => [@SHA_FUNCTIONS],
+    all => [@SHA_FUNCTIONS, @HMAC_FUNCTIONS],
 );
 
 # Algorithm validation

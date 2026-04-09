@@ -398,6 +398,34 @@ public class UnicodeResolver {
                 case "Hex_Digit":
                 case "XDigit":
                     return wrapProperty("IsHex_Digit", negated);
+                // ASCII-only POSIX character classes (PosixXxx variants)
+                // These match only ASCII characters, unlike their XPosix counterparts
+                case "PosixAlnum":
+                    return negated ? "[^a-zA-Z0-9]" : "[a-zA-Z0-9]";
+                case "PosixAlpha":
+                    return negated ? "[^a-zA-Z]" : "[a-zA-Z]";
+                case "PosixBlank":
+                    return negated ? "[^ \\t]" : "[ \\t]";
+                case "PosixCntrl":
+                    return negated ? "[^\\x00-\\x1f\\x7f]" : "[\\x00-\\x1f\\x7f]";
+                case "PosixDigit":
+                    return negated ? "[^0-9]" : "[0-9]";
+                case "PosixGraph":
+                    return negated ? "[^!-~]" : "[!-~]";
+                case "PosixLower":
+                    return negated ? "[^a-z]" : "[a-z]";
+                case "PosixPrint":
+                    return negated ? "[^ -~]" : "[ -~]";
+                case "PosixPunct":
+                    return negated ? "[^!-/:-@\\[-`{-~]" : "[!-/:-@\\[-`{-~]";
+                case "PosixSpace":
+                    return negated ? "[^ \\t\\n\\r\\f\\x0b]" : "[ \\t\\n\\r\\f\\x0b]";
+                case "PosixUpper":
+                    return negated ? "[^A-Z]" : "[A-Z]";
+                case "PosixWord":
+                    return negated ? "[^a-zA-Z0-9_]" : "[a-zA-Z0-9_]";
+                case "PosixXDigit":
+                    return negated ? "[^0-9a-fA-F]" : "[0-9a-fA-F]";
                 case "XIDS":
                 case "XIDStart":
                 case "XID_Start":

@@ -321,7 +321,21 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'q':
                 case 'Q':
-                    // 64-bit quads not supported (ivsize=4, no use64bitint)
+                    // ========================================================================
+                    // DO NOT IMPLEMENT q/Q pack — PerlOnJava is a 32-bit Perl (ivsize=4).
+                    //
+                    // Enabling q/Q causes cascading test regressions because many Perl tests
+                    // gate 64-bit code paths behind `eval { pack 'q', 0 }`. When q/Q works:
+                    //   - op/pack.t: +25 new failures (q/Q edge cases with extreme values)
+                    //   - op/sprintf2.t: +24 new failures (%lld/%llu formats unlocked)
+                    //   - Other tests may assume use64bitint semantics throughout
+                    //
+                    // If you need 64-bit pack/unpack for a specific module (e.g. Mojo::WebSocket),
+                    // the module should use its 32-bit fallback path instead:
+                    //   MODERN ? pack('Q>', $len) : pack('NN', 0, $len & 0xffffffff)
+                    //
+                    // See also: NumericFormatHandler.java QuadHandler, SprintfFormatParser.java
+                    // ========================================================================
                     throw new PerlCompilerException("Invalid type '" + format + "' in pack");
                 case 'f':
                     // Float (4 bytes) - use endianness if specified

@@ -47,6 +47,11 @@ use constant _IOFBF => 0;  # Fully buffered
 use constant _IOLBF => 1;  # Line buffered
 use constant _IONBF => 2;  # Unbuffered
 
+# Constants for seek (from Fcntl, but IO::Handle also provides them)
+use constant SEEK_SET => 0;
+use constant SEEK_CUR => 1;
+use constant SEEK_END => 2;
+
 # Check if Java backend methods are available (registered by IOHandle.initialize())
 # The _sync function is registered directly into IO::Handle namespace by Java code
 our $has_java_backend = defined &IO::Handle::_sync;
