@@ -1960,6 +1960,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (--oldBase.refCount == 0) {
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);
+                } else if (oldBase.blessId == 0 && WeakRefRegistry.hasWeakRefsTo(oldBase)) {
+                    // Unblessed object with overcounted refCount: force-clear weak refs
+                    // on explicit undef. Birth-tracked anonymous hashes accumulate
+                    // overcounting through function boundaries (e.g., Moo's constructor
+                    // chain), so refCount may never reach 0 even when all user-visible
+                    // strong refs are gone. Since unblessed objects have no DESTROY,
+                    // force-clearing is safe — the only side effect is weak refs becoming
+                    // undef, which is exactly what the user expects after explicit undef.
+                    oldBase.refCount = Integer.MIN_VALUE;
+                    WeakRefRegistry.clearWeakRefsTo(oldBase);
                 }
             }
         }

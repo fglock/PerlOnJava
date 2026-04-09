@@ -75,17 +75,16 @@ public class WeakRefRegistry {
                 // No strong refs remain — trigger DESTROY + clear weak refs.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
-            } else if (base.blessId == 0) {
-                // Unblessed tracked object with remaining strong refs: transition to
-                // WEAKLY_TRACKED because closure captures and temporary copies
-                // via new RuntimeScalar(RuntimeScalar) aren't tracked in refCount.
-                // Without this transition, a mortal flush can bring refCount to 0
-                // and trigger clearWeakRefsTo while the object is still alive
-                // (e.g., Sub::Quote deferred coderefs captured by closures).
-                // Since unblessed objects don't have DESTROY, there's no
-                // semantic cost to switching off refCount tracking.
-                base.refCount = WEAKLY_TRACKED;
             }
+            // Note: we do NOT transition unblessed tracked objects to WEAKLY_TRACKED
+            // here anymore. The previous transition (base.blessId == 0 → WEAKLY_TRACKED)
+            // caused premature clearing of weak refs when ANY strong ref exited scope,
+            // even though other strong refs still existed (e.g., Moo's CODE refs in
+            // glob slots). Birth-tracked objects maintain accurate refCounts through
+            // setLarge(), so we can trust the count. The concern about untracked copies
+            // (new RuntimeScalar(RuntimeScalar)) is mitigated by the fact that such
+            // copies don't decrement refCount on cleanup (refCountOwned=false), so
+            // they can't cause false-positive refCount==0 destruction.
         } else if (base.refCount == -1) {
             // Untracked object: transition to WEAKLY_TRACKED so that
             // undefine() and scopeExitCleanup() can clear weak refs
