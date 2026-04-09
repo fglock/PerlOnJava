@@ -254,7 +254,9 @@ public class EmitControlFlow {
         // references keep refCount > 0 after the method returns, preventing DESTROY.
         // Spill the return value, emit cleanup, then reload.
         java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(0);
-        if (!scalarIndices.isEmpty()) {
+        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(0);
+        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(0);
+        if (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty()) {
             JavaClassInfo.SpillRef spillRef = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
             ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
             for (int idx : scalarIndices) {
@@ -263,6 +265,24 @@ public class EmitControlFlow {
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "deferDecrementIfNotCaptured",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
+            // Also process hash/array variables — their elements may hold tracked
+            // references that need refCount decrements on scope exit.
+            for (int idx : hashIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupHash",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                        false);
+            }
+            for (int idx : arrayIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupArray",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
                         false);
             }
             ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);

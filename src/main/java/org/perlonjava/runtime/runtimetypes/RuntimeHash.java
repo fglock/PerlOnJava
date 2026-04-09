@@ -251,7 +251,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
                     this.elements.put(key, val);
-                    if (MortalList.active) RuntimeScalar.incrementRefCountForContainerStore(val);
+                    RuntimeScalar.incrementRefCountForContainerStore(val);
                 }
 
                 // Create a RuntimeArray that wraps this hash
@@ -571,14 +571,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // accurately count strong references. Anonymous hashes are only
         // reachable through references (no lexical variable slot), so
         // refCount is complete and reaching 0 means truly no strong refs.
-        if (MortalList.active && this.refCount == -1) {
+        if (this.refCount == -1) {
             this.refCount = 0;
         }
         RuntimeScalar result = createReference();
-        if (MortalList.active) {
-            for (RuntimeScalar elem : this.elements.values()) {
-                RuntimeScalar.incrementRefCountForContainerStore(elem);
-            }
+        for (RuntimeScalar elem : this.elements.values()) {
+            RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
         return result;
     }

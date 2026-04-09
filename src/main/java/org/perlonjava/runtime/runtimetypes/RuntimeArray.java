@@ -656,10 +656,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // Increment refCount for tracked references stored in the array.
                 // addToArray creates copies via the copy constructor (which doesn't
                 // increment refCount), so we do it here for the final container store.
-                if (MortalList.active) {
-                    for (RuntimeScalar elem : this.elements) {
-                        RuntimeScalar.incrementRefCountForContainerStore(elem);
-                    }
+                for (RuntimeScalar elem : this.elements) {
+                    RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
 
                 // Create a new array with scalarContextSize set for assignment return value
@@ -721,10 +719,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReferenceWithTrackedElements() {
-        if (MortalList.active) {
-            for (RuntimeScalar elem : this.elements) {
-                RuntimeScalar.incrementRefCountForContainerStore(elem);
-            }
+        for (RuntimeScalar elem : this.elements) {
+            RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;

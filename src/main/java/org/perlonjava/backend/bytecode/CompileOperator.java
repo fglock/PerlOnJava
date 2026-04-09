@@ -923,16 +923,37 @@ public class CompileOperator {
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 if (node.operand != null) {
                     node.operand.accept(bytecodeCompiler);
-                    int exprReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
-                    bytecodeCompiler.emitReg(exprReg);
                 } else {
                     int undefReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                     bytecodeCompiler.emitReg(undefReg);
-                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
-                    bytecodeCompiler.emitReg(undefReg);
                 }
+                int exprReg = bytecodeCompiler.lastResultReg;
+
+                // Emit scope exit cleanup for all my-scalars, my-hashes, and my-arrays
+                // in the subroutine scope (scope 0). Explicit 'return' bypasses the
+                // normal scope exit cleanup at block end, so we must do it here.
+                // Skip the exprReg (return value register) — SCOPE_EXIT_CLEANUP nulls
+                // the register, which would destroy the return value if it's a my-variable.
+                java.util.List<Integer> scalarIdxs = bytecodeCompiler.symbolTable.getMyScalarIndicesInScope(0);
+                for (int idx : scalarIdxs) {
+                    if (idx == exprReg) continue;
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                    bytecodeCompiler.emitReg(idx);
+                }
+                java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
+                for (int idx : hashIdxs) {
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                    bytecodeCompiler.emitReg(idx);
+                }
+                java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
+                for (int idx : arrayIdxs) {
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                    bytecodeCompiler.emitReg(idx);
+                }
+
+                bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
+                bytecodeCompiler.emitReg(exprReg);
                 bytecodeCompiler.lastResultReg = -1;
             }
             case "last", "next", "redo" -> {

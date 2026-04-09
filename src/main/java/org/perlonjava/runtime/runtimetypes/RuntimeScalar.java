@@ -802,7 +802,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for set(RuntimeScalar)
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
-            if (MortalList.active && ((this.type | value.type) & REFERENCE_BIT) != 0) {
+            if (((this.type | value.type) & REFERENCE_BIT) != 0) {
                 return setLarge(value);
             }
             this.type = value.type;
@@ -919,11 +919,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldGlob.ioHolderCount--;
         }
 
-        // Release captured variables if overwriting a CODE ref with captures.
-        // This handles cases like: $code = sub { $obj }; $code = undef;
-        if (this.type == RuntimeScalarType.CODE && this.value instanceof RuntimeCode oldCode) {
-            oldCode.releaseCaptures();
-        }
+        // NOTE: Do NOT release captures here on CODE overwrite.
+        // releaseCaptures() must only fire when the CODE ref's refCount truly
+        // reaches 0 (via DestroyDispatch.callDestroy). Releasing on every
+        // overwrite is wrong because other variables may still hold the same
+        // CODE ref — e.g., the stash entry *Foo::bar holds the constructor
+        // while a local variable also holds it. Overwriting the local should
+        // not release the captures that the stash's copy still needs.
+        // For untracked CODE refs (refCount == -1), the JVM GC handles cleanup.
 
         // Track refCount for blessed objects with DESTROY.
         // Save old referent BEFORE the assignment (for correct DESTROY ordering —
@@ -939,11 +942,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Increment new value's refCount (>= 0 means tracked; -1 means untracked).
         // Only increment for objects already being tracked (refCount >= 0).
-        // Do NOT transition -1→1 here: the object may already have N untracked
-        // strong references (from stores before MortalList.active or fast-path stores).
-        // Starting at 1 would undercount, causing premature weak-ref clearing when
-        // weaken() decrements 1→0 (e.g., Sub::Defer infinite goto loop).
-        // Objects born after MortalList.active start at 0 via createReference().
+        // Objects born via createReferenceWithTrackedElements or closures with
+        // captures start at 0 and are always tracked. Named variables (\$x, \@a)
+        // have refCount = -1 (untracked) since they have a JVM local slot that
+        // isn't counted. Transitioning -1→1 would undercount.
         boolean newOwned = false;
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
@@ -966,14 +968,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
-        // Handle WEAKLY_TRACKED objects being overwritten: clear weak refs.
+        // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
         // These objects have refCount == -2 and their strong refs don't have
         // refCountOwned=true (they were set before tracking started).
-        if (oldBase != null && !thisWasWeak && !this.refCountOwned
-                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-            oldBase.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(oldBase);
-        }
+        // Overwriting ONE reference doesn't mean no other strong refs exist —
+        // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
+        // This is the same rationale as in scopeExitCleanup.
+        // Weak refs for WEAKLY_TRACKED objects are cleared only via explicit
+        // undefine() of a strong reference.
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
@@ -1960,16 +1962,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (--oldBase.refCount == 0) {
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);
-                } else if (oldBase.blessId == 0 && WeakRefRegistry.hasWeakRefsTo(oldBase)) {
-                    // Unblessed object with overcounted refCount: force-clear weak refs
-                    // on explicit undef. Birth-tracked anonymous hashes accumulate
-                    // overcounting through function boundaries (e.g., Moo's constructor
-                    // chain), so refCount may never reach 0 even when all user-visible
-                    // strong refs are gone. Since unblessed objects have no DESTROY,
-                    // force-clearing is safe — the only side effect is weak refs becoming
-                    // undef, which is exactly what the user expects after explicit undef.
-                    oldBase.refCount = Integer.MIN_VALUE;
-                    WeakRefRegistry.clearWeakRefsTo(oldBase);
                 }
             }
         }
@@ -2098,18 +2090,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // when the same referent is on the JVM stack as a return value.
         MortalList.deferDecrementIfTracked(scalar);
 
-        // Handle WEAKLY_TRACKED objects: clear weak refs when strong ref exits scope.
+        // WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.
         // These objects transitioned from untracked (-1) to WEAKLY_TRACKED (-2) in
-        // weaken(), so their strong refs don't have refCountOwned=true. We detect the
-        // drop by checking the scalar holds a non-weak reference to a WEAKLY_TRACKED object.
-        // This is a heuristic — may clear prematurely if other strong refs exist.
-        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.refCount == WeakRefRegistry.WEAKLY_TRACKED
-                && !WeakRefRegistry.isweak(scalar)) {
-            base.refCount = Integer.MIN_VALUE;
-            DestroyDispatch.callDestroy(base);
-        }
+        // weaken(), but scope exit of ONE reference doesn't mean no other strong
+        // references exist — closures may capture copies of the same reference
+        // (e.g., Sub::Quote's $_QUOTED capture keeps $quoted_info alive even after
+        // unquote_sub's local exits scope). Clearing weak refs here would break
+        // Sub::Quote/Moo constructor inlining.
+        // Weak refs for WEAKLY_TRACKED objects are cleared only via:
+        //   - explicit undefine() of a strong reference
+        //   - setLarge() overwriting a strong reference
+        // Since unblessed objects have no DESTROY, delayed clearing is safe.
     }
 
     public RuntimeScalar defined() {

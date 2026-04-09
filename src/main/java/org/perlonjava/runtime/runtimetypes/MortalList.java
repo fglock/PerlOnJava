@@ -14,11 +14,13 @@ import java.util.ArrayList;
  */
 public class MortalList {
 
-    // Global gate: false until the first bless() into a class with DESTROY.
-    // When false, both deferDecrementIfTracked() and flush() are no-ops
-    // (a single branch, trivially predicted). This means zero effective cost
-    // for programs that never use DESTROY.
-    public static boolean active = false;
+    // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
+    // arrays, closures with captures) requires balanced increment/decrement.
+    // The increment side fires unconditionally in setLarge() when refCount >= 0,
+    // so the decrement side (deferDecrementIfTracked, flush, etc.) must also
+    // be active from the start.  The per-method `!active` guards are retained
+    // as a trivially-predicted branch; the JIT will elide them.
+    public static boolean active = true;
 
     // List of RuntimeBase references awaiting decrement.
     // Populated by delete() when removing tracked elements.
