@@ -648,10 +648,7 @@ subtest 'DESTROY called on untie' => sub {
                 last;
             }
         }
-        TODO: {
-            local $TODO = 'PerlOnJava does not implement DESTROY';
-            ok($destroy_called, 'DESTROY called on untie');
-        }
+        ok($destroy_called, 'DESTROY called on untie');
     }
 
     # Test with a class that doesn't implement DESTROY

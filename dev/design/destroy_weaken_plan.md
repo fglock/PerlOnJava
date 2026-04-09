@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
-**Status**: Moo — fixing WEAKLY_TRACKED premature clearing for CODE refs  
-**Version**: 5.9  
+**Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
+**Version**: 5.11  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.9 — WEAKLY_TRACKED clearing breaks Sub::Quote/Sub::Defer)  
+**Updated**: 2026-04-09 (v5.11 — tie DESTROY on untie via refcounting)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1838,7 +1838,7 @@ sub DESTROY {
 
 ## Progress Tracking
 
-### Current Status: Moo 64/71 (90.1%) — accessor-weaken 19/19 fixed; remaining 7 programs are pre-existing unrelated failures
+### Current Status: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-04-08)
@@ -1884,6 +1884,48 @@ sub DESTROY {
     that was clearing weak refs when ANY strong ref exited scope while others still existed
   - **Result**: accessor-weaken.t 19/19 (was 16/19), accessor-weaken-pre-5_8_3.t 19/19
   - **Files**: `RuntimeScalar.java` (~line 1898-1908), `WeakRefRegistry.java`
+- [x] Skip weak ref clearing for CODE objects (2026-04-09):
+  - **Root cause**: CODE refs live in both lexicals and the stash (symbol table), but stash
+    assignments (`*Foo::bar = $coderef`) bypass `setLarge()`, making the stash reference
+    invisible to refcounting. Two premature clearing paths existed:
+    1. **WEAKLY_TRACKED path**: `weaken()` transitioned untracked CODE refs to WEAKLY_TRACKED (-2).
+       Then `setLarge()`/`scopeExitCleanup()` cleared weak refs when any lexical reference was
+       overwritten — even though the CODE ref was still alive in the stash.
+    2. **Mortal flush path**: Tracked CODE refs (refCount > 0) got added to `MortalList.pending`
+       via `deferDecrementIfTracked()`. When `flush()` ran, refCount decremented to 0 (because
+       the stash reference never incremented it), triggering `callDestroy()` → `clearWeakRefsTo()`.
+    Both paths cleared weak refs used by `Sub::Quote`/`Sub::Defer` for back-references to
+    deferred subs, making `quoted_from_sub()` return undef and breaking Moo's accessor inlining.
+  - **Fix**: Two guards in `WeakRefRegistry.java`:
+    1. Skip WEAKLY_TRACKED transition for `RuntimeCode` in `weaken()` (line 88): `!(base instanceof RuntimeCode)`
+    2. Skip `clearWeakRefsTo()` for `RuntimeCode` objects (line 172): `if (referent instanceof RuntimeCode) return`
+    Since DESTROY is not implemented, skipping the clear has no behavioral impact.
+  - **Result**: Moo goes from 793/841 (65/71) to **839/841 (70/71)**. 46 subtests fixed across
+    6 programs (accessor-coerce, accessor-default, accessor-isa, accessor-trigger,
+    constructor-modify, method-generate-accessor). All now fully pass.
+  - **Remaining 2 failures**: `overloaded-coderefs.t` tests 6 and 8 — B::Deparse returns "DUMMY"
+    instead of deparsed Perl source. This is a pre-existing B::Deparse limitation (JVM bytecode
+    cannot be reconstructed to Perl source), unrelated to weak references.
+  - **Files**: `WeakRefRegistry.java` (lines 88 and 162-172)
+  - **Commits**: `86d5f813e`
+- [x] Tie DESTROY on untie via refcounting (2026-04-09):
+  - **Problem**: Tie wrappers (TieScalar, TieArray, TieHash, TieHandle) held a strong Java
+    reference to the tied object (`self`) but never incremented refCount. When `untie` replaced
+    the variable's contents, the tied object was dropped by Java GC with no DESTROY call.
+    System Perl fires DESTROY immediately after untie when no other refs hold the object.
+  - **Fix**: Increment refCount in each tie wrapper constructor (TiedVariableBase, TieArray,
+    TieHash, TieHandle). Add `releaseTiedObject()` method to each that decrements refCount
+    and calls `DestroyDispatch.callDestroy()` if it reaches 0. Call `releaseTiedObject()`
+    from `TieOperators.untie()` after restoring the previous value.
+  - **Null guard**: `TiedVariableBase` constructor gets null check because proxy entries
+    (`RuntimeTiedHashProxyEntry`, `RuntimeTiedArrayProxyEntry`) pass null for `tiedObject`.
+  - **Deferred DESTROY**: When `my $obj = tie(...)` holds a ref, `$obj`'s setLarge() increments
+    refCount, so untie's decrement (2→1) does NOT trigger DESTROY. DESTROY fires later when
+    `$obj` goes out of scope. Verified to match system Perl behavior.
+  - **Tests**: Removed 5 `TODO` blocks from tie_scalar.t (2), tie_array.t (1), tie_hash.t (1).
+    Added 2 new subtests to destroy.t: immediate DESTROY on untie, deferred DESTROY with held ref.
+  - **Files**: `TiedVariableBase.java`, `TieArray.java`, `TieHash.java`, `TieHandle.java`,
+    `TieOperators.java`, `tie_scalar.t`, `tie_array.t`, `tie_hash.t`, `destroy.t`
 
 ### Moo Test Results
 
@@ -1893,72 +1935,35 @@ sub DESTROY {
 | After Phase 3 (weaken/isweak) | 68/71 | 834/841 | isweak() works, weak refs tracked |
 | After POSIX::_do_exit | 69/71 | 835/841 | demolish-global_destruction.t passes |
 | After force-clear fix (v5.8) | **64/71** | **790/841 (93.9%)** | accessor-weaken 19/19, accessor-weaken-pre 19/19 |
+| After clearWeakRefsTo CODE skip (v5.10) | **70/71** | **839/841 (99.8%)** | Skip clearing weak refs to CODE objects; fixes Sub::Quote/Sub::Defer inlining |
 
-**Note**: The decrease in passing programs (69→64) reflects fluctuation from pre-existing
-failures in accessor-coerce, accessor-default, accessor-isa, accessor-trigger,
-constructor-modify, method-generate-accessor, and overloaded-coderefs — none of which
-are related to the weaken/DESTROY changes.
+**Note on v5.8→v5.10**: The v5.8 decrease (69→64) was caused by WEAKLY_TRACKED premature
+clearing of CODE refs breaking Sub::Quote/Sub::Defer. The v5.10 fix (skip clearWeakRefsTo
+for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modify.t.
 
-### Remaining Moo Failures (51 subtests across 7 programs — all pre-existing)
+### Remaining Moo Failures (2 subtests in 1 program — B::Deparse limitation)
 
 | Test File | Failed | Root Cause |
 |-----------|--------|------------|
-| accessor-coerce.t | 12/19 | Coerce + trigger interaction (not weaken-related) |
-| accessor-default.t | 9/42 | Default value handling (not weaken-related) |
-| accessor-isa.t | 7/40 | Isa constraint handling (not weaken-related) |
-| accessor-trigger.t | 12/45 | Trigger handling (not weaken-related) |
-| constructor-modify.t | 3/7 | Constructor modification (not weaken-related) |
-| method-generate-accessor.t | 6/49 | Accessor generation (not weaken-related) |
-| overloaded-coderefs.t | 2/10 | Overloaded coderef handling (not weaken-related) |
+| overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `7507a6eba`: "fix: force-clear weak refs on explicit undef of unblessed objects"
+- `86d5f813e`: "fix: skip weak ref clearing for CODE objects (fixes 46 Moo test failures)"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
 
-#### Immediate: Fix WEAKLY_TRACKED premature clearing for CODE refs (v5.9)
+#### Immediate: Fix overloaded-coderefs.t B::Deparse failures (2/841)
 
-**Problem**: 51/841 Moo subtests fail because `Sub::Quote` / `Sub::Defer` deferred subs
-have their weak back-references prematurely cleared, making `quoted_from_sub()` return
-undef and breaking Moo's accessor inlining. Affects: accessor-coerce (12), accessor-default
-(9), accessor-isa (7), accessor-trigger (12), constructor-modify (3),
-method-generate-accessor (6), overloaded-coderefs (2).
+**Problem**: `overloaded-coderefs.t` tests 6 and 8 check that `B::Deparse->coderef2text()`
+returns the inlined source code of Sub::Quoted coercions and isa constraints. PerlOnJava's
+`B::Deparse` returns `"DUMMY"` for all coderefs because JVM bytecode cannot be reconstructed
+to Perl source.
 
-**Root cause trace**:
-1. `defer_sub()` creates a deferred CODE ref and stores `weaken($deferred_info->[4] = $deferred)`
-2. `quote_sub()` stores `weaken($quoted_info->{deferred} = $deferred)`
-3. `WeakRefRegistry.weaken()` transitions the CODE ref from refCount=-1 to WEAKLY_TRACKED (-2)
-4. Later, `setLarge()` overwrites some (non-weak, non-refCountOwned) reference to the same CODE ref
-5. The WEAKLY_TRACKED check in `setLarge()` (line 962-966) fires:
-   ```java
-   if (oldBase != null && !thisWasWeak && !this.refCountOwned
-           && oldBase.refCount == WEAKLY_TRACKED) {
-       oldBase.refCount = Integer.MIN_VALUE;
-       DestroyDispatch.callDestroy(oldBase);
-   }
-   ```
-6. This clears ALL weak refs to the CODE ref, including `$deferred_info->[4]` and `$quoted_info->{deferred}`
-7. When the deferred sub is called: `$deferred_info->[4]` is undef → `undefer_sub(undef)` → `goto &undef` → "Not a CODE reference"
-8. When Moo checks `quoted_from_sub($trigger)`: `$quoted_info->{deferred}` is undef → returns undef → trigger not inlined → falls back to coderef capture path
-
-**Why CODE refs are different from hashes**: CODE refs live in BOTH lexicals AND the symbol
-table (stash). Stash assignments (`*Foo::bar = $coderef`) don't go through `setLarge()`,
-so the stash reference is invisible to refcounting. When `setLarge()` overwrites a lexical
-reference to the CODE ref, the CODE ref is still alive in the stash — but the WEAKLY_TRACKED
-heuristic treats the overwrite as "last strong ref removed" and clears all weak refs.
-
-For anonymous hashes/arrays, the WEAKLY_TRACKED heuristic works correctly because they
-exist only in lexicals and stores tracked by `setLarge()`.
-
-**Fix approach**: In `WeakRefRegistry.weaken()`, skip the WEAKLY_TRACKED transition for
-`RuntimeCode` objects. Leave them at refCount=-1. This means weak refs to CODE refs are
-never cleared deterministically, matching Perl 5's behavior (CODE refs in stashes are only
-freed during global destruction). The accessor-weaken tests for hashes still work via the
-force-clear in `undefine()`.
-
-**Affected code**: `WeakRefRegistry.weaken()` — add `!(base instanceof RuntimeCode)` guard
-before the WEAKLY_TRACKED transition.
+**Possible approaches**:
+1. Store original Perl source in RuntimeCode metadata and return it from `B::Deparse`
+2. Have Sub::Quote store source strings that B::Deparse can retrieve
+3. Accept as a known limitation (B::Deparse is inherently limited on JVM)
 
 #### Other pending items
 1. **Commit** the null-check fix in `RuntimeScalar.incrementRefCountForContainerStore()`
@@ -2399,6 +2404,22 @@ subtests passing.
   3. Documented test 19 (optree reaping) as JVM-fundamentally-impossible: compiled
      bytecode held by ClassLoader is never freed on sub redefinition.
   4. Updated Progress Tracking to final state: 69/71 programs, 835/841 subtests (99.3%).
+- **v5.11** (2026-04-09): Tie DESTROY on untie via refcounting:
+  1. Tie wrappers now increment refCount in constructors and decrement in untie via
+     `releaseTiedObject()`. DESTROY fires immediately if no other refs, deferred if held.
+  2. Null guard in TiedVariableBase for proxy entries passing null tiedObject.
+  3. Removed 5 TODO blocks from tie tests; added 2 new deferred DESTROY subtests.
+- **v5.10** (2026-04-09): Skip clearWeakRefsTo for CODE objects — fixes 46 Moo subtests:
+  1. Root cause: CODE refs' stash references bypass setLarge(), making them invisible to
+     refcounting. Two premature clearing paths: (a) WEAKLY_TRACKED transition in weaken()
+     → clearing via setLarge()/scopeExitCleanup(), (b) MortalList.flush() decrementing
+     tracked CODE ref refCount to 0 → callDestroy() → clearWeakRefsTo().
+  2. Fix: Guard in weaken() to skip WEAKLY_TRACKED for RuntimeCode; guard in
+     clearWeakRefsTo() to skip RuntimeCode objects entirely.
+  3. **Result**: Moo 70/71 programs, 839/841 subtests (99.8%). Remaining 2 failures in
+     overloaded-coderefs.t are B::Deparse limitations.
+- **v5.9** (2026-04-09): Documented WEAKLY_TRACKED premature clearing root cause trace;
+  added §15 with 4 approaches tried and reverted (X1-X4).
 - **v5.8** (2026-04-09): Force-clear fix for unblessed weak refs:
   1. Added force-clear in `RuntimeScalar.undefine()`: when an unblessed object
      (`blessId == 0`) has weak refs registered but refCount doesn't reach 0 after

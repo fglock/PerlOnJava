@@ -35,6 +35,17 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         super();
         this.self = tiedObject;
         this.tiedPackage = tiedPackage;
+        // The tie wrapper holds a strong reference to the tied object.
+        // Increment refCount so that untie's decrement can trigger DESTROY
+        // when no other references remain (matching Perl 5 behavior).
+        // Note: tiedObject is null for proxy entries (RuntimeTiedHashProxyEntry,
+        // RuntimeTiedArrayProxyEntry) which delegate to the parent container.
+        if (tiedObject != null
+                && (tiedObject.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && tiedObject.value instanceof RuntimeBase base
+                && base.refCount >= 0) {
+            base.refCount++;
+        }
     }
 
     /**
@@ -183,6 +194,21 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
 
     public String getTiedPackage() {
         return tiedPackage;
+    }
+
+    /**
+     * Releases the tie wrapper's strong reference to the tied object.
+     * Decrements refCount and triggers DESTROY if it reaches 0.
+     * Called by untie() after UNTIE has been dispatched.
+     */
+    public void releaseTiedObject() {
+        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base) {
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
+        }
     }
 }
 

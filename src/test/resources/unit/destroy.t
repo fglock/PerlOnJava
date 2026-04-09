@@ -134,4 +134,35 @@ subtest 'DESTROY on hash delete in void context' => sub {
         "DESTROY called at statement end for void-context delete (mortal mechanism)");
 };
 
+subtest 'DESTROY on untie - immediate when no other refs' => sub {
+    my @log;
+    { package DestroyTieScalar;
+      sub TIESCALAR { bless {}, shift }
+      sub FETCH { "val" }
+      sub STORE { }
+      sub UNTIE { push @log, "untie" }
+      sub DESTROY { push @log, "destroy" } }
+    tie my $s, 'DestroyTieScalar';
+    untie $s;
+    is_deeply(\@log, ["untie", "destroy"],
+        "DESTROY fires immediately after untie when no other refs hold the object");
+};
+
+subtest 'DESTROY on untie - deferred when ref held' => sub {
+    my @log;
+    { package DestroyTieDeferred;
+      sub TIESCALAR { bless {}, shift }
+      sub FETCH { "val" }
+      sub STORE { }
+      sub UNTIE { push @log, "untie" }
+      sub DESTROY { push @log, "destroy" } }
+    my $obj = tie my $s, 'DestroyTieDeferred';
+    untie $s;
+    is_deeply(\@log, ["untie"],
+        "DESTROY deferred when caller holds a reference to the tied object");
+    undef $obj;
+    is_deeply(\@log, ["untie", "destroy"],
+        "DESTROY fires when last reference is dropped");
+};
+
 done_testing();

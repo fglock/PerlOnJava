@@ -263,18 +263,13 @@ subtest 'DESTROY called on untie' => sub {
         # Clear method calls before untie
         @TrackedTiedScalar::method_calls = ();
 
-        # Untie should trigger UNTIE; DESTROY is deferred to GC
+        # Untie should trigger UNTIE, then DESTROY (no other refs hold the object)
         untie $scalar;
 
-        # Check that UNTIE was called
-        # In Perl, DESTROY is only called during GC, not during untie.
-        # PerlOnJava does not implement DESTROY (JVM handles GC natively).
+        # Check that UNTIE and DESTROY were called
         is($TrackedTiedScalar::method_calls[0][0], 'UNTIE', 'UNTIE called first');
-        TODO: {
-            local $TODO = 'PerlOnJava does not implement DESTROY';
-            is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
-            is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
-        }
+        is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
+        is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
     }
 
     # Test with a class that doesn't implement DESTROY
@@ -311,18 +306,13 @@ subtest 'UNTIE called before DESTROY' => sub {
         # Clear method calls before untie
         @TrackedTiedScalar::method_calls = ();
 
-        # Untie should trigger UNTIE; DESTROY is deferred to GC
+        # Untie should trigger UNTIE, then DESTROY (no other refs hold the object)
         untie $scalar;
 
-        # Check that UNTIE was called
-        # In Perl, DESTROY is only called during GC, not during untie.
-        # PerlOnJava does not implement DESTROY (JVM handles GC natively).
+        # Check that UNTIE and DESTROY were called
         is($TrackedTiedScalar::method_calls[0][0], 'UNTIE', 'UNTIE called first');
-        TODO: {
-            local $TODO = 'PerlOnJava does not implement DESTROY';
-            is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
-            is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
-        }
+        is(scalar(@TrackedTiedScalar::method_calls), 2, 'Two methods called on untie');
+        is($TrackedTiedScalar::method_calls[1][0], 'DESTROY', 'DESTROY called second');
 };
 
 done_testing();
