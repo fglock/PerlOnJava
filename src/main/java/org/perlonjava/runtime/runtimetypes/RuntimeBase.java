@@ -140,6 +140,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public abstract RuntimeScalar createReference();
 
     /**
+     * Creates a reference and tracks refCounts for contained elements.
+     * Used for anonymous array/hash construction ([...], {...}) where elements
+     * need refCount tracking to prevent premature destruction of referents.
+     * Default implementation delegates to createReference().
+     *
+     * @return a RuntimeScalar representing the reference
+     */
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        return createReference();
+    }
+
+    /**
      * Undefines the elements of the object.
      *
      * @return the object after undefining its elements

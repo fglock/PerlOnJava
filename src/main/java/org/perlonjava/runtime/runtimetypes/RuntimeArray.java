@@ -714,6 +714,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Creates a reference to the array and tracks refCounts for all elements.
+     * Use this for anonymous array construction ([...]) where elements are copies
+     * that need refCount tracking to prevent premature destruction of referents.
+     *
+     * @return A scalar representing the array reference.
+     */
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        if (MortalList.active) {
+            for (RuntimeScalar elem : this.elements) {
+                RuntimeScalar.incrementRefCountForContainerStore(elem);
+            }
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.ARRAYREFERENCE;
+        result.value = this;
+        return result;
+    }
+
+    /**
      * Gets the size of the array.
      *
      * @return The size of the array.

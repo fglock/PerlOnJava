@@ -148,7 +148,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public static RuntimeScalar createHashRef(RuntimeBase value) {
-        return createHash(value).createReference();
+        return createHash(value).createReferenceWithTrackedElements();
     }
 
     /**
@@ -567,6 +567,17 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
         result.value = this;
+        return result;
+    }
+
+    @Override
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        RuntimeScalar result = createReference();
+        if (MortalList.active) {
+            for (RuntimeScalar elem : this.elements.values()) {
+                RuntimeScalar.incrementRefCountForContainerStore(elem);
+            }
+        }
         return result;
     }
 

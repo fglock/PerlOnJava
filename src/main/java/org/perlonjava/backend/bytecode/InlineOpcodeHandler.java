@@ -541,12 +541,10 @@ public class InlineOpcodeHandler {
             array = new RuntimeArray(list);
         }
 
-        registers[rd] = array.createReference();
+        registers[rd] = array.createReferenceWithTrackedElements();
         return pc;
     }
 
-    // =========================================================================
-    // HASH OPERATIONS
     // =========================================================================
 
     /**
@@ -908,7 +906,7 @@ public class InlineOpcodeHandler {
         RuntimeBase list = registers[listReg];
         RuntimeHash hash = RuntimeHash.createHash(list);
 
-        registers[rd] = hash.createReference();
+        registers[rd] = hash.createReferenceWithTrackedElements();
         return pc;
     }
 
