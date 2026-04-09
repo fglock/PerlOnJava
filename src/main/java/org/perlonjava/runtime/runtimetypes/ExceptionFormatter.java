@@ -229,6 +229,13 @@ public class ExceptionFormatter {
                 // parseStackTraceElement returns null if location already seen in a different class
                 var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
                 if (loc != null) {
+                    // Skip frames with invalid line numbers (e.g., line -1 from compiler
+                    // infrastructure like runSpecialBlock's anonymous sub wrappers).
+                    // These frames don't represent real user-visible call sites.
+                    if (loc.lineNumber() < 0) {
+                        continue;
+                    }
+
                     // Get subroutine name from the source location (now preserved in bytecode metadata)
                     String subName = loc.subroutineName();
 
