@@ -8,22 +8,60 @@ Make `./jcpan -t Perl::Tidy` run without errors on PerlOnJava.
 
 **Version:** Perl-Tidy-20260204 (SHANCOCK/Perl-Tidy-20260204.tar.gz)
 **Install:** Succeeds — 16 files installed to `~/.perlonjava/lib/`
-**Tests:** 5/44 files pass, 39/44 fail (14/49 subtests fail, but most files die mid-run)
+**Tests:** 7/44 files pass, 37/44 fail
 
-### Test Results Summary
+### Test Results Summary (after \G fixes)
 
 | Category | Files | Result |
 |----------|-------|--------|
-| Passing | t/filter_example.t, t/test.t, t/testsa.t, t/testss.t, t/zero.t | 5 OK |
+| Passing | t/atee.t, t/filter_example.t, t/test.t, t/test_DEBUG.t, t/testsa.t, t/testss.t, t/zero.t | 7 OK |
 | Snippet tests (DESTROY) | t/snippets1.t–t/snippets33.t (33 files) | 33 FAIL |
-| Wide char tests (DESTROY + alignment) | t/testwide.t, t/testwide-passthrough.t, t/testwide-tidy.t | 3 FAIL |
-| Filter/option tests | t/atee.t | 1 FAIL (1/2 subtests) |
-| EOL tests | t/test-eol.t | 1 FAIL (0/4 subtests ran) |
-| Debug output test | t/test_DEBUG.t | 1 FAIL (1/2 subtests) |
+| Wide char tests (DESTROY) | t/testwide.t (2/3 pass), t/testwide-passthrough.t (2/6), t/testwide-tidy.t (2/6) | 3 FAIL |
+| EOL tests (DESTROY) | t/test-eol.t (1/4 pass) | 1 FAIL |
 
-## Blockers
+### Progress Tracking
 
-### Blocker 1: Missing DESTROY Breaks Singleton Guards (Critical — 36+ test files)
+| Date | Milestone | Tests Passing |
+|------|-----------|---------------|
+| 2025-04-08 | Initial investigation | 5/44 |
+| 2025-04-09 | \G regex fixes (pos undef + non-/g) | 7/44 |
+
+## Fixes Applied
+
+### Fix 1: \G Regex Anchor — pos() undef case (2025-04-09)
+
+**File:** `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` (line 651)
+
+**Problem:** When `pos()` was undef, the `\G` anchor check was skipped entirely
+(`if (regex.useGAssertion && isPosDefined && matcher.start() != startPos)`).
+This allowed `\G(\s+)` to scan forward and match whitespace anywhere in the
+string, even though `\G` should anchor at position 0 when pos is undef.
+
+**Impact:** Perl::Tidy's `parse_args` function uses `\G/gc` patterns to
+tokenize option strings. With broken `\G`, options like `-dac` were silently
+dropped, causing t/atee.t to fail.
+
+**Fix:** Removed `isPosDefined` from the condition. When pos is undef,
+`startPos` defaults to 0, so `\G` correctly anchors at 0.
+
+### Fix 2: \G in Non-/g Matches (2025-04-09)
+
+**File:** `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` (line 607)
+
+**Problem:** `pos()` was only looked up for `/g` matches. In Perl, `\G`
+should anchor at `pos()` even in non-`/g` matches (e.g. `$str =~ /\Gfoo/`).
+PerlOnJava was ignoring pos entirely for non-/g matches containing `\G`.
+
+**Impact:** Perl::Tidy's tokenizer uses `\G` in non-/g matches for signature
+detection (line 10060: `$input_line =~ /\G\s*\(/`). Without this fix,
+subroutine signatures like `sub foo($bar, %opts)` were misidentified as
+prototypes, causing t/filter_example.t to fail.
+
+**Fix:** Changed the pos() lookup condition from `isGlobalMatch()` to
+`isGlobalMatch() || useGAssertion`, so pos is looked up whenever `\G` is
+present in the pattern.
+
+## Remaining Blocker: Missing DESTROY (33+ test files)
 
 **Symptom:**
 ```
@@ -70,7 +108,7 @@ line 676).
 methods (only to prevent AUTOLOAD dispatch) — these are safe with missing
 DESTROY. Only `Formatter` and `Tokenizer` have functional DESTROY code.
 
-**Impact:** ~555 subtests across 36 test files never run.
+**Impact:** ~555 subtests across 33+ test files never run.
 
 **Fix (Bundled overlay — Perl/Tidy.pm):**
 
@@ -85,130 +123,7 @@ Perl::Tidy::Formatter::_decrement_count();
 Perl::Tidy::Tokenizer::_decrement_count();
 ```
 
-This works because `_decrement_count` is a package-scoped sub (not a lexical),
-so it's callable from outside the class.
-
-**Alternative approaches:**
-- **Patch Formatter.pm and Tokenizer.pm** — change `new()` to not rely on
-  DESTROY (e.g., reset `$_count` before incrementing). Requires patching 2
-  files instead of 1.
-- **Implement DESTROY in PerlOnJava** — the most complete fix but a very large
-  undertaking (see `dev/design/destroy_weaken_plan.md`).
-
 **Effort:** Low — 2 lines added to one file.
-
-### Blocker 2: perltidyrc String Ref Option Parsing (Moderate — affects first test in some snippet files + t/atee.t)
-
-**Symptom (t/atee.t):**
-```
-# Test 1 got: "# block comment\n\n=pod\nsome pod\n=cut\n\nprint \"hello world\\n\";\n$xx++;    # side comment\n"
-#   Expected: "\nprint \"hello world\\n\";\n$xx++;\n"
-```
-
-The test passes options via `perltidyrc => \$params` where `$params` is a
-string like `"-dac -tac -D -g"`. The formatter runs (whitespace is adjusted)
-but option-specific features (delete comments, brace placement) don't take
-effect.
-
-**Root cause hypothesis:** The options are passed through
-`expand_command_abbreviations` and then `Getopt::Long::GetOptions`. Possible
-PerlOnJava issues:
-1. **`Getopt::Long` `!` (negatable boolean) handling** — delete options use
-   `'delete-block-comments' => '!'`. If PerlOnJava's Getopt::Long doesn't
-   handle `!` correctly, options are silently ignored.
-2. **Abbreviation expansion** — `-dac` must be expanded to
-   `--delete-block-comments --delete-side-comments --delete-pod`. If the
-   expansion regex fails, unexpanded `-dac` is passed to GetOptions which
-   doesn't recognize it.
-3. **Hash key population** — The expanded options may not populate
-   `$rOpts->{'delete-block-comments'}` correctly.
-
-**Affected tests:**
-- t/atee.t (test 1 of 2) — `-dac -tac -D -g` options
-- t/snippets18.t (test 1 — braces.braces1) — `-bl -asbl` (Allman brace style)
-- t/snippets22.t (test 1 — bbhb.bbhb2) — `-bbhb` (break before hash brace)
-- t/snippets30.t, t/snippets31.t — first test also fails with formatting diffs
-
-**Investigation needed:**
-```bash
-# Test if atomic options work (no abbreviation expansion needed):
-./jperl -e '
-  use Perl::Tidy;
-  my $src = "# comment\nprint 1;\n";
-  my $out;
-  Perl::Tidy::perltidy(
-    source => \$src, destination => \$out,
-    perltidyrc => \"--delete-block-comments",
-    argv => ""
-  );
-  print $out;
-'
-# Expected: "\nprint 1;\n" (comment deleted)
-# If comment remains: Getopt::Long ! handling is broken
-# If comment deleted: abbreviation expansion is broken
-```
-
-**Fix approach:** Once root cause is confirmed, either:
-- Fix `Getopt::Long` `!` handling in PerlOnJava's bundled Getopt::Long
-- Fix abbreviation expansion regex in Perl::Tidy (less likely needed)
-- Patch Perl::Tidy.pm's option processing to work around the issue
-
-**Effort:** Medium — requires debugging the option parsing pipeline.
-
-### Blocker 3: Wide Character Alignment (Low — 3 test files)
-
-**Symptom (t/testwide.t):**
-```perl
-# Got:     4-space indent (standard formatting)
-# Expected: right-aligned to opening parenthesis
-```
-
-The formatter doesn't compute correct display widths for multi-byte Unicode
-characters (Cyrillic, Polish, German umlauts). This causes hash value
-alignment to use standard indentation instead of right-aligning to the `(`
-column.
-
-**Affected tests:** t/testwide.t (3/3 fail), t/testwide-passthrough.t (3/4
-fail), t/testwide-tidy.t (3/4 fail)
-
-**Root cause hypothesis:** Perl::Tidy measures string widths using `length()`
-which in Perl returns codepoint count. For alignment purposes, display width
-matters. Wide characters (CJK) take 2 columns, while most Latin/Cyrillic
-take 1. The issue may be in how PerlOnJava handles `length()` on decoded
-Unicode strings, or in how Perl::Tidy's alignment calculations interact with
-PerlOnJava's string handling.
-
-Note: Tests 1-2 in testwide.t both fail with the same alignment issue, and
-test 3 fails due to the DESTROY singleton bug (Blocker 1). Fixing Blocker 1
-won't fix tests 1-2 but will allow test 3 to run.
-
-**Effort:** Medium — requires investigating string width calculations.
-
-### Blocker 4: EOL Handling (Low — 1 test file)
-
-**Symptom (t/test-eol.t):** All 4 subtests produce no output (0 tests ran).
-
-The test likely checks for correct handling of different line endings (CR, LF,
-CRLF). The test may die early or produce no TAP output at all.
-
-**Investigation needed:**
-```bash
-cd /path/to/Perl-Tidy-build && PERL5LIB="./blib/lib:./blib/arch" \
-  /path/to/jperl t/test-eol.t 2>&1
-```
-
-**Effort:** Low–Medium — needs investigation.
-
-### Blocker 5: DEBUG File Output (Low — 1 test file)
-
-**Symptom (t/test_DEBUG.t):** Test 2 expects debug output via `debugfile =>
-\$string` but gets `undef`.
-
-**Root cause:** The `debugfile` parameter to `perltidy()` writes debug/token
-type information. The output goes to a `Perl::Tidy::Debugger` object which
-writes to the file handle. The output may not be reaching the scalar ref.
-
-**Effort:** Low — likely a minor I/O or filehandle issue.
 
 ## Implementation Plan
 
@@ -225,25 +140,11 @@ writes to the file handle. The output may not be reaching the scalar ref.
 
 3. **Run `make`** — ensure no regressions in PerlOnJava's own tests.
 
-### Phase 2: Fix Option Parsing (unblocks ~5 first-test failures)
-
-1. **Investigate** Getopt::Long `!` negatable boolean handling
-   - Test atomic options (no abbreviation needed) vs abbreviated options
-   - If `!` handling is broken, fix in `src/main/perl/lib/Getopt/Long.pm`
-   - If abbreviation expansion is broken, investigate Perl::Tidy's regex
-
-2. **Verify:** t/atee.t test 1 passes, snippets18/22/30/31 first tests pass
-
-### Phase 3: Fix Wide Character Alignment (nice to have)
+### Phase 2: Wide Character Alignment (nice to have)
 
 1. **Investigate** string width computation for Unicode characters
 2. May require changes to PerlOnJava's `length()` or Perl::Tidy's alignment code
 3. **Verify:** t/testwide.t, t/testwide-passthrough.t, t/testwide-tidy.t
-
-### Phase 4: Fix EOL and DEBUG (nice to have)
-
-1. Investigate t/test-eol.t — likely minor I/O issue
-2. Investigate t/test_DEBUG.t — debug file handle output
 
 ## Expected Results After Phase 1
 
@@ -251,13 +152,9 @@ With the DESTROY fix alone, the test results should improve dramatically:
 
 | Before | After (estimated) |
 |--------|-------------------|
-| 5/44 files pass | ~35/44 files pass |
-| 14/49 subtests fail | TBD (most snippet tests should fully pass) |
+| 7/44 files pass | ~38/44 files pass |
+| 4/53 subtests fail | TBD (most snippet tests should fully pass) |
 | Result: FAIL | Closer to PASS |
-
-The snippet tests that also have first-test formatting failures
-(snippets18, 22, 28, 30, 31, 32, 33) may still fail a few subtests due to
-Blocker 2, but they will progress past the first test case.
 
 ## Dependency on Other Work
 
