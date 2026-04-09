@@ -163,4 +163,21 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
         return flagString.toString();
     }
+
+    /**
+     * Returns the modifier string as Perl's regexp_pattern() would return it.
+     * Only includes pattern-level modifiers (i, m, s, x, n, a, u), not
+     * match-level ones like g, p, r.
+     */
+    public String toModifierString() {
+        StringBuilder sb = new StringBuilder();
+        if (isMultiLine) sb.append('m');
+        if (isDotAll) sb.append('s');
+        if (isCaseInsensitive) sb.append('i');
+        if (isExtended) sb.append('x');
+        if (isNonCapturing) sb.append('n');
+        if (isAscii) sb.append('a');
+        if (isUnicode) sb.append('u');
+        return sb.toString();
+    }
 }

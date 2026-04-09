@@ -72,9 +72,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public Pattern pattern;
     // Compiled regex pattern for Unicode strings (Unicode \w, \d)
     public Pattern patternUnicode;
+    // "Notempty" variant patterns for zero-length match guard retry.
+    // In Perl, after a zero-length /gc match at position P, the next attempt
+    // stays at P but uses NOTEMPTY (forbidding zero-length results, causing
+    // backtracking from lazy quantifiers like ??). Java lacks this, so we
+    // compile a variant where ?? is converted to ? (greedy) and (?=[\s\S])
+    // is prepended to prevent matching at end of string.
+    Pattern notemptyPattern;
+    Pattern notemptyPatternUnicode;
     int patternFlags;
     int patternFlagsUnicode;
-    String patternString;
+    public String patternString;
     String javaPatternString; // Preprocessed Java-compatible pattern for recompilation
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
@@ -94,6 +102,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public RuntimeRegex() {
         this.regexFlags = null;
+    }
+
+    /** Returns the regex flags for this compiled pattern. */
+    public RegexFlags getRegexFlags() {
+        return regexFlags;
     }
 
     /**
@@ -187,6 +200,30 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.hasCodeBlockCaptures = true;
                             break;
                         }
+                    }
+                }
+
+                // Compile "notempty" variant for /g patterns.
+                // This is used after a zero-length match to retry at the same position
+                // with a regex that prefers non-zero-length matches (like Perl's NOTEMPTY).
+                // Transform: prepend (?=[\s\S]) and convert ?? to ? (lazy→greedy).
+                if (regex.regexFlags.isGlobalMatch() && javaPattern != null) {
+                    try {
+                        String notemptyJava = "(?=[\\s\\S])" + javaPattern.replace("??", "?");
+                        regex.notemptyPattern = Pattern.compile(notemptyJava, regex.patternFlags);
+                        if (regex.patternFlagsUnicode != regex.patternFlags) {
+                            String notemptyUnicode = "(?=[\\s\\S])" + javaPattern
+                                    .replace("\\p{Punct}", "[\\p{P}\\p{S}]")
+                                    .replace("\\P{Punct}", "[^\\p{P}\\p{S}]")
+                                    .replace("??", "?");
+                            regex.notemptyPatternUnicode = Pattern.compile(notemptyUnicode, regex.patternFlagsUnicode);
+                        } else {
+                            regex.notemptyPatternUnicode = regex.notemptyPattern;
+                        }
+                    } catch (Exception ignore) {
+                        // If notempty compilation fails, fall back to bumpalong
+                        regex.notemptyPattern = null;
+                        regex.notemptyPatternUnicode = null;
                     }
                 }
             } catch (Exception e) {
@@ -603,6 +640,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar posScalar = null;
         boolean isPosDefined = false;
         int startPos = 0;
+        // Flag to skip the first find() when the notempty variant already found a match
+        boolean skipFirstFind = false;
         
         if (regex.regexFlags.isGlobalMatch() || regex.useGAssertion) {
             // Use RuntimePosLvalue to get the current position
@@ -612,28 +651,63 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             
             // Check if previous call had zero-length match at this position (for SCALAR context)
             // This prevents infinite loops in: while ($str =~ /pat/g)
-            // Perl 5 bumps pos() by 1 after a zero-length match to make progress
+            // In Perl, after a zero-length match, the next attempt stays at the same position
+            // but uses NOTEMPTY (forbidding zero-length results). Java lacks NOTEMPTY, so we
+            // use a precompiled "notempty" variant that converts ?? to ? (lazy→greedy) and
+            // adds (?=[\s\S]) to prevent matching at end of string.
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
                 String patternKey = regex.patternString;
                 if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
-                    // Bumpalong: advance by 1 character and retry the match
-                    startPos++;
-                    if (startPos > inputStr.length()) {
-                        // Past end of string, fail
-                        if (!regex.regexFlags.keepCurrentPosition()) {
-                            posScalar.set(scalarUndef);
+                    // First, try the notempty variant at the SAME position (Perl behavior)
+                    boolean notemptySucceeded = false;
+                    if (regex.notemptyPattern != null) {
+                        // Select the right notempty pattern variant (byte/unicode)
+                        Pattern notemptyPat = regex.notemptyPattern;
+                        if (regex.notemptyPatternUnicode != null && regex.notemptyPatternUnicode != regex.notemptyPattern) {
+                            if (!(regex.regexFlags != null && regex.regexFlags.isAscii())
+                                    && !hasInlineAsciiModifier(regex.patternString)
+                                    && Utf8.isUtf8(string)) {
+                                notemptyPat = regex.notemptyPatternUnicode;
+                            }
                         }
-                        return RuntimeScalarCache.scalarFalse;
+                        Matcher notemptyMatcher = notemptyPat.matcher(matchInput);
+                        notemptyMatcher.region(startPos, inputStr.length());
+                        if (notemptyMatcher.find()) {
+                            // Check \G constraint: match must start at startPos
+                            if (!regex.useGAssertion || notemptyMatcher.start() == startPos) {
+                                // Verify it's actually non-zero-length
+                                if (notemptyMatcher.end() > notemptyMatcher.start()) {
+                                    // Success! Use the notempty matcher's result
+                                    matcher = notemptyMatcher;
+                                    skipFirstFind = true;
+                                    notemptySucceeded = true;
+                                    RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                                }
+                            }
+                        }
                     }
-                    posScalar.set(startPos);
-                    RuntimePosLvalue.recordNonZeroLengthMatch(string);
-                    isPosDefined = true;
+                    
+                    if (!notemptySucceeded) {
+                        // Notempty variant didn't find a match; fall back to bumpalong
+                        startPos++;
+                        if (startPos > inputStr.length()) {
+                            // Past end of string, fail
+                            if (!regex.regexFlags.keepCurrentPosition()) {
+                                posScalar.set(scalarUndef);
+                            }
+                            return RuntimeScalarCache.scalarFalse;
+                        }
+                        posScalar.set(startPos);
+                        RuntimePosLvalue.recordNonZeroLengthMatch(string);
+                        isPosDefined = true;
+                    }
                 }
             }
         }
 
         // Start matching from the current position if defined
-        if (isPosDefined) {
+        // (skip if notempty variant already found a match - region() would reset the matcher)
+        if (isPosDefined && !skipFirstFind) {
             matcher.region(startPos, inputStr.length());
         }
 
@@ -653,9 +727,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // state and break tests that rely on @-/@+.
 
         try {
-            while (matcher.find()) {
-                // If \G is used, ensure the match starts at the expected position
-                // When pos() is undefined, \G anchors at position 0 (startPos defaults to 0)
+            while (skipFirstFind || matcher.find()) {
+                skipFirstFind = false;
+                // If \G is used, ensure the match starts at the expected position.
+                // When pos() is undefined, \G anchors at 0 (the default startPos).
                 if (regex.useGAssertion && matcher.start() != startPos) {
                     break;
                 }

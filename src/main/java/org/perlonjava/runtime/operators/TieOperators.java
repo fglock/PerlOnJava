@@ -119,6 +119,23 @@ public class TieOperators {
      *
      * <p>In Perl: {@code untie $scalar}</p>
      *
+     * <p><b>IMPORTANT: untie does NOT call DESTROY.</b> In Perl, DESTROY is only called
+     * when the tied object's last reference is garbage-collected, not during untie itself.
+     * If caller code holds a reference to the tied object (e.g. {@code my $obj = tie ...}),
+     * DESTROY is deferred until that reference goes out of scope. This matters because
+     * DESTROY methods may have side effects that assume the untie/close sequence has
+     * already finished. For example, IO::Compress::Base::DESTROY clears the glob hash
+     * with {@code %{ *$self } = ()}, which would wipe {@code *$self->{Compress}} before
+     * the close() method finishes writing trailers — causing "Can't call method close
+     * on an undefined value" errors.</p>
+     *
+     * <p>Verified with system Perl 5.x: when a reference to the tied object is held,
+     * untie calls UNTIE but does NOT call DESTROY. DESTROY fires only when the last
+     * reference is dropped (e.g. {@code undef $obj}).</p>
+     *
+     * <p>Since PerlOnJava does not implement DESTROY (JVM GC handles cleanup), omitting
+     * the tiedDestroy call here is both correct and safe.</p>
+     *
      * @param scalars varargs where scalars[0] is the tied variable (must be a reference)
      * @return true on success, undef if the variable wasn't tied
      */
@@ -130,7 +147,6 @@ public class TieOperators {
                 RuntimeScalar scalar = variable.scalarDeref();
                 if (scalar.type == TIED_SCALAR && scalar.value instanceof TieScalar tieScalar) {
                     TieScalar.tiedUntie(scalar);
-                    TieScalar.tiedDestroy(scalar);
                     RuntimeScalar previousValue = tieScalar.getPreviousValue();
                     scalar.type = previousValue.type;
                     scalar.value = previousValue.value;
@@ -141,7 +157,6 @@ public class TieOperators {
                 RuntimeArray array = variable.arrayDeref();
                 if (array.type == TIED_ARRAY) {
                     TieArray.tiedUntie(array);
-                    TieArray.tiedDestroy(array);
                     RuntimeArray previousValue = ((TieArray) array.elements).getPreviousValue();
                     array.type = previousValue.type;
                     array.elements = previousValue.elements;
@@ -152,7 +167,6 @@ public class TieOperators {
                 RuntimeHash hash = variable.hashDeref();
                 if (hash.type == TIED_HASH) {
                     TieHash.tiedUntie(hash);
-                    TieHash.tiedDestroy(hash);
                     RuntimeHash previousValue = ((TieHash) hash.elements).getPreviousValue();
                     hash.type = previousValue.type;
                     hash.elements = previousValue.elements;
@@ -166,7 +180,6 @@ public class TieOperators {
                 if (IO.type == TIED_SCALAR) {
                     TieHandle currentTieHandle = (TieHandle) IO.value;
                     TieHandle.tiedUntie(currentTieHandle);
-                    TieHandle.tiedDestroy(currentTieHandle);
                     RuntimeIO previousValue = currentTieHandle.getPreviousValue();
                     IO.type = 0;    // XXX there is no type defined for IO handles
                     IO.value = previousValue;

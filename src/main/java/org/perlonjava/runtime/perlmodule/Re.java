@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -21,6 +22,7 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code use re '/u'} - Unicode semantics for character classes</li>
  *   <li>{@code use re 'strict'} - Enables experimental regex warnings</li>
  *   <li>{@code re::is_regexp($ref)} - Check if reference is a compiled regex</li>
+ *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
  * </ul>
  * 
  * <p>TODO: Features not yet implemented (see {@code perldoc re}):
@@ -31,7 +33,6 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code use re 'debug'} - Regex debugging output</li>
  *   <li>{@code use re 'debugcolor'} - Colorized regex debugging</li>
  *   <li>{@code use re 'taint'} - Taint mode for regex</li>
- *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
  *   <li>Combining multiple flags: {@code use re '/xms'}</li>
  *   <li>Scoped flag restoration with {@code no re '/flags'}</li>
  * </ul>
@@ -52,6 +53,7 @@ public class Re extends PerlModuleBase {
         Re re = new Re();
         try {
             re.registerMethod("is_regexp", "isRegexp", "$");
+            re.registerMethod("regexp_pattern", "regexpPattern", "$");
             re.registerMethod("import", "importRe", null);
             re.registerMethod("unimport", "unimportRe", null);
         } catch (NoSuchMethodException e) {
@@ -64,7 +66,7 @@ public class Re extends PerlModuleBase {
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
-     * @return Empty list
+     * @return A scalar indicating whether the argument is a regex.
      */
     public static RuntimeList isRegexp(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
@@ -73,6 +75,59 @@ public class Re extends PerlModuleBase {
         return new RuntimeList(
                 new RuntimeScalar(args.get(0).type == RuntimeScalarType.REGEX)
         );
+    }
+
+    /**
+     * Implements re::regexp_pattern($ref).
+     * In list context, returns (pattern, modifiers) if arg is a compiled regex, or (undef, undef).
+     * In scalar context, returns (?^flags:pattern) if arg is a compiled regex, or "".
+     *
+     * @param args The arguments (expects one argument).
+     * @param ctx  The context (SCALAR or LIST).
+     * @return Pattern/modifiers in list context, stringified regex in scalar context.
+     */
+    public static RuntimeList regexpPattern(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for regexp_pattern() method");
+        }
+
+        RuntimeScalar arg = args.get(0);
+
+        // Dereference if it's a reference to a regex
+        if (arg.type == RuntimeScalarType.REFERENCE || arg.type == RuntimeScalarType.ARRAYREFERENCE
+                || arg.type == RuntimeScalarType.HASHREFERENCE) {
+            RuntimeScalar deref = (RuntimeScalar) arg.value;
+            if (deref.type == RuntimeScalarType.REGEX) {
+                arg = deref;
+            }
+        }
+
+        if (arg.type == RuntimeScalarType.REGEX) {
+            RuntimeRegex regex = (RuntimeRegex) arg.value;
+            String pattern = regex.patternString != null ? regex.patternString : "";
+            String flags = regex.getRegexFlags() != null ? regex.getRegexFlags().toModifierString() : "";
+
+            if (ctx == RuntimeContextType.SCALAR) {
+                // Scalar context: return stringified form (?^flags:pattern)
+                return new RuntimeList(new RuntimeScalar(regex.toString()));
+            } else {
+                // List context: return (pattern, modifiers)
+                RuntimeList result = new RuntimeList();
+                result.add(new RuntimeScalar(pattern));
+                result.add(new RuntimeScalar(flags));
+                return result;
+            }
+        }
+
+        // Not a regex
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeList(new RuntimeScalar(""));
+        } else {
+            RuntimeList result = new RuntimeList();
+            result.add(RuntimeScalar.undef());
+            result.add(RuntimeScalar.undef());
+            return result;
+        }
     }
 
     /**
@@ -94,6 +149,13 @@ public class Re extends PerlModuleBase {
                 String caller = callerList.scalar().toString();
                 RuntimeScalar sourceCode = getGlobalCodeRef("re::is_regexp");
                 RuntimeScalar targetCode = getGlobalCodeRef(caller + "::is_regexp");
+                targetCode.set(sourceCode);
+            } else if (opt.equals("regexp_pattern")) {
+                // Export re::regexp_pattern to caller's namespace
+                RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
+                String caller = callerList.scalar().toString();
+                RuntimeScalar sourceCode = getGlobalCodeRef("re::regexp_pattern");
+                RuntimeScalar targetCode = getGlobalCodeRef(caller + "::regexp_pattern");
                 targetCode.set(sourceCode);
             } else if (opt.equalsIgnoreCase("strict")) {
                 // Enable categories used by our preprocessor warnings
