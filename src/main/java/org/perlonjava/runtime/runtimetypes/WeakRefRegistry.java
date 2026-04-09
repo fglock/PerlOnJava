@@ -67,8 +67,20 @@ public class WeakRefRegistry {
             // another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+                if (base.blessId != 0) {
+                    // Blessed object with DESTROY: accurate refCount tracking.
+                    // refCount=0 means no strong refs remain → destroy.
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                } else {
+                    // Unblessed birth-tracked object: refCount is incomplete
+                    // because it doesn't include the lexical variable that
+                    // directly holds the hash/array (e.g., `my %h; \%h`).
+                    // Transition to WEAKLY_TRACKED instead of destroying.
+                    // Weak refs will be cleared when the referent is truly
+                    // unreachable (scope exit or explicit undef).
+                    base.refCount = WEAKLY_TRACKED;
+                }
             }
         }
     }
