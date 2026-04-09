@@ -939,7 +939,6 @@ public class Encode extends PerlModuleBase {
 
         RuntimeScalar self = args.get(0);
         String octets = args.get(1).toString();
-        int check = args.size() > 2 ? args.get(2).getInt() : 0;
 
         // Extract charset name from the blessed hash
         RuntimeHash hash = (RuntimeHash) self.value;
