@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 2 COMPLETE -- 62/108 test programs pass (was 8/109)
+## Status: Phase 3 COMPLETE -- 65/108 test programs pass, 90.2% subtest rate (was 8/109)
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
@@ -187,6 +187,53 @@ websocket_lite_app.t(14/14)
 | upload_lite_app.t | 1/2 | Near-miss |
 | 6 timeouts | 0/0 | exception/group/layouted/production/tag_helper/testing |
 | 10 errors | 0/0 | embedded/external/ojo/proxy/twinkle/upload_stream |
+
+### After Phase 3 fixes (65/108 passing)
+
+| Metric | Count |
+|--------|-------|
+| Total test programs | 108 |
+| Passed (t/mojo/) | 46 of 63 |
+| Passed (t/mojolicious/) | 17 of 43 |
+| Passed (t/pod*) | 2 of 2 |
+| **Total Passed** | **65** |
+| Subtests (t/mojo/) | 756/835 (90.5%) |
+| Subtests (t/mojolicious/) | 1173/1303 (90.0%) |
+| **Total Subtests** | **1929/2138 (90.2%)** |
+
+#### Phase 3 fixes applied
+1. **Warning category aliases** (WarningFlags.java): Added `ambiguous`, `bareword`,
+   `parenthesis`, `precedence`, `printf`, `semicolon` as shortcuts. Unblocked
+   Mojo::Template rendering (210+ subtests), config loading, and error pages.
+2. **Regex dot UNIX_LINES** (RegexFlags.java): Added `Pattern.UNIX_LINES` so `.`
+   only excludes `\n`, not `\r`. Fixed HTTP chunked parsing.
+3. **IO::Handle SEEK constants** (IO/Handle.pm): Added SEEK_SET/CUR/END. Fixed
+   IO::Compress::Base seek operations for gzip/gunzip.
+4. **Deflate/Inflate scalar context** (CompressRawZlib.java): Return only object
+   (not status) in scalar context. Fixed WebSocket compression.
+5. **++Boolean ClassCastException** (RuntimeScalar.java): Read Boolean value before
+   changing type to INTEGER to prevent getInt() fast path from casting Boolean as Integer.
+
+#### New file-level passes from Phase 3 (3 net gained)
+**t/mojo/** (+1 net): cgi.t(10/10), websocket_frames.t(23/23) gained;
+response.t regressed (23/23→28/29, more subtests exposed by template fix)
+
+**t/mojolicious/** (+2 net): charset_lite_app.t(45/45), multipath_lite_app.t(7/7),
+testing_app.t(42/42), upload_lite_app.t(8/8) gained;
+lite_app.t(15/15→298/302), websocket_lite_app.t(14/14→34/35) regressed
+(more subtests exposed by template fix)
+
+#### Key subtest improvements from Phase 3
+| Test | Before | After | Change |
+|------|--------|-------|--------|
+| template.t | 17/226 | 150/196 | +133 |
+| lite_app.t | 15/15 | 298/302 | +283 |
+| tag_helper_lite_app.t | 0/0 (timeout) | 78/90 | +78 |
+| production_app.t | 0/0 (timeout) | 71/95 | +71 |
+| testing_app.t | 0/0 (timeout) | 42/42 | +42 |
+| group_lite_app.t | 0/0 (timeout) | 65/66 | +65 |
+| layouted_lite_app.t | 0/0 (timeout) | 30/35 | +30 |
+| websocket_lite_app.t | 14/14 | 34/35 | +20 |
 
 ### Remaining Failed Tests by Root Cause
 
@@ -613,7 +660,7 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 
 ## Progress Tracking
 
-### Current Status: Phase 2 COMPLETE -- 62/108
+### Current Status: Phase 3 COMPLETE -- 65/108 (90.2% subtests)
 
 ### Completed
 - [x] Initial analysis and test baseline (2026-04-09): 8/109 tests pass
@@ -637,6 +684,12 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - [x] Phase 2: `Encode::decode` $check parameter in Encode.java (2026-04-09)
 - [x] Phase 2: `pack`/`unpack` Q/q 64-bit support in NumericPackHandler/FormatHandler (2026-04-09)
 - [x] Mojo test count: 47/108 -> 62/108 (2026-04-09)
+- [x] Phase 3: Missing warning category aliases in WarningFlags.java (2026-04-09)
+- [x] Phase 3: Regex dot UNIX_LINES flag in RegexFlags.java (2026-04-09)
+- [x] Phase 3: IO::Handle SEEK_SET/CUR/END constants (2026-04-09)
+- [x] Phase 3: Deflate/Inflate scalar context in CompressRawZlib.java (2026-04-09)
+- [x] Phase 3: ++Boolean ClassCastException fix in RuntimeScalar.java (2026-04-09)
+- [x] Mojo test count: 62/108 -> 65/108, subtests 76.9% -> 90.2% (2026-04-09)
 
 ### Files Created/Modified in Phase 1
 - `src/main/perl/lib/Digest/SHA.pm` -- HMAC functions added to @EXPORT_OK
@@ -655,33 +708,34 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - `src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java` -- 13 PosixXxx properties
 - `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` -- zero-length match bumpalong
 
-### Next Steps (Phase 3: remaining near-miss and template fixes)
+### Files Modified in Phase 3
+- `src/main/java/org/perlonjava/runtime/runtimetypes/WarningFlags.java` -- 6 missing warning category aliases
+- `src/main/java/org/perlonjava/runtime/regex/RegexFlags.java` -- UNIX_LINES flag for dot behavior
+- `src/main/perl/lib/IO/Handle.pm` -- SEEK_SET/SEEK_CUR/SEEK_END constants
+- `src/main/java/org/perlonjava/runtime/perlmodule/CompressRawZlib.java` -- scalar context for deflateInit/inflateInit
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` -- ++Boolean and --Boolean fix
+
+### Next Steps (Phase 4: template and near-miss tests)
 
 The highest-impact remaining targets:
 
-1. **template.t** (17/226): Mojo::Template is critical for `*_lite_app.t` tests. Many
-   of the 6 timeout and 10 error tests in t/mojolicious/ are likely blocked by template
-   rendering. Fixing template.t would unlock a large portion of the remaining 28 failures.
+1. **template.t** (150/196): 46 subtests still failing. These may be blocking
+   remaining `*_lite_app.t` tests. Investigate the failure pattern.
 
-2. **Near-miss t/mojo/ tests** (6 tests, 1-2 subtests from passing):
-   - bytestream.t (30/31): gzip subtest empty
+2. **Near-miss t/mojo/ tests** (still 1-2 from passing):
+   - bytestream.t (30/31): gzip subtest still has no tests
    - collection.t (18/19): JSON number encoding
-   - cgi.t (9/10), exception.t (14/15), request.t (31/33), transactor.t (21/22)
+   - exception.t (14/15): caller() path issue
+   - request.t (32/33): 1 failing subtest (gzip?)
+   - response.t (28/29): 1 new failing subtest
+   - transactor.t: Now timing out (was 21/22)
 
-3. **Near-miss t/mojolicious/ tests** (4 tests):
-   - static_lite_app.t (34/37), json_config_lite_app.t (2/3),
-     yaml_config_lite_app.t (2/3), upload_lite_app.t (1/2)
-
-4. **Timeout investigation**: 6 t/mojolicious/ tests timeout at 300s. These likely
-   start a Mojo server that hangs due to IO::Poll runtime issues or template rendering
-   failures.
-
-### Files Modified in Phase 2 (near-miss fixes)
-- `src/main/java/org/perlonjava/runtime/perlmodule/ScalarUtil.java` -- looks_like_number delegation
-- `src/main/java/org/perlonjava/runtime/TieOperators.java` -- blessed ref invocant
-- `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java` -- $check parameter
-- `src/main/java/org/perlonjava/runtime/pack/NumericPackHandler.java` -- Q/q 64-bit pack
-- `src/main/java/org/perlonjava/runtime/pack/NumericFormatHandler.java` -- Q/q 64-bit unpack
+3. **Near-miss t/mojolicious/ tests**:
+   - lite_app.t (298/302): 4 subtests from passing
+   - group_lite_app.t (65/66): 1 subtest from passing
+   - websocket_lite_app.t (34/35): 1 subtest from passing
+   - tag_helper_lite_app.t (78/90): 12 subtests from passing
+   - production_app.t (71/95): 24 subtests from passing
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
