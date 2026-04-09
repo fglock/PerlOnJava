@@ -2216,6 +2216,15 @@ unlikely to affect real-world Moo usage. The cost of full refcounting from birth
 (the only correct fix for tests 10/11) far exceeds the benefit of 6 additional
 subtests passing.
 
+### Post-Merge Action Items
+
+1. **Check DESTROY TODO markers after `untie` fix merges.** A separate PR
+   is fixing `untie` to not call DESTROY automatically. DESTROY-related
+   tests are being marked `TODO` in that PR. Once both PRs are merged,
+   verify whether the TODO markers can be removed (i.e., whether DESTROY
+   now fires correctly in the `untie` scenarios with this branch's
+   refined Strategy A changes in place).
+
 ### Version History
 - **v5.7** (2026-04-08): JVM WeakReference feasibility analysis + Moo codegen trace:
   1. Added §13: Traced Moo's Method::Generate::Accessor code generation for
