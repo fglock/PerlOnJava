@@ -51,4 +51,4 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for build instructions, code organiza
 
 ## License
 
-Same terms as Perl 5 — Artistic License or GPL v1+. See [LICENSE.md](LICENSE.md). Copyright (c) Flavio Glock
+Same terms as Perl 5 — [Artistic License](Artistic) or [GPL v1+](Copying). See [LICENSE.md](LICENSE.md). Copyright (c) Flavio Glock
