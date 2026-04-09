@@ -65,11 +65,13 @@ subtest 'In-memory file handles' => sub {
     ok(!defined($bytes), 'syswrite to in-memory handle returns undef (known limitation)');
     close($mem_out);
     
+    # sysread on in-memory handles is not supported in Perl —
+    # it returns undef and sets $! to "Bad file descriptor".
     $mem_content = "Test content";
     open(my $mem_in, '<', \$mem_content) or die "Cannot open in-memory handle: $!";
     my $buffer;
     my $read = sysread($mem_in, $buffer, 1024);
-    is($read, length($mem_content), 'sysread from in-memory handle works');
+    ok(!defined($read), 'sysread from in-memory handle returns undef (not supported)');
     close($mem_in);
 };
 

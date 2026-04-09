@@ -1051,32 +1051,13 @@ public class IOOperator {
         }
 
         // Check for in-memory handles (ScalarBackedIO)
+        // System Perl does not support sysread on in-memory file handles —
+        // it returns undef and sets $! to "Bad file descriptor".
         IOHandle baseHandle = getBaseHandle(fh.ioHandle);
 
         if (baseHandle instanceof ScalarBackedIO scalarIO) {
-            RuntimeScalar result;
-            try {
-                result = scalarIO.sysread(length);
-            } catch (Exception e) {
-                getGlobalVariable("main::!").set("Bad file descriptor");
-                return new RuntimeScalar();
-            }
-            if (!result.getDefinedBoolean()) {
-                return new RuntimeScalar(0);
-            }
-            String readData = result.toString();
-            String existing = target.toString();
-            if (offset > 0) {
-                while (existing.length() < offset) existing += "\0";
-                setByteString(target, existing.substring(0, offset) + readData);
-            } else if (offset < 0) {
-                int effectiveOffset = existing.length() + offset;
-                if (effectiveOffset < 0) effectiveOffset = 0;
-                setByteString(target, existing.substring(0, effectiveOffset) + readData);
-            } else {
-                setByteString(target, readData);
-            }
-            return new RuntimeScalar(readData.length());
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            return new RuntimeScalar(); // undef
         }
 
         // Try to perform the system read

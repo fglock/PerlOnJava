@@ -76,8 +76,10 @@ subtest 'Special punctuation variable interpolation' => sub {
     is("$%", "0", "\$% interpolates correctly");
     
     # $\ - output record separator
+    # In DQ strings, $\ greedily captures \ as the variable name.
+    # "$\\" = value_of($\) + literal backslash (from remaining \)
     local $\ = "";
-    is("$\\", "", "\$\\ interpolates correctly");
+    is("$\\", "\\", "\$\\ interpolates correctly");
     
     # $( - real group ID
     my $gid = "$(";

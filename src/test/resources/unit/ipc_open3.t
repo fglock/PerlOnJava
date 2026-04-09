@@ -35,23 +35,24 @@ subtest 'IPC::Open3 stdout capture with sysread' => sub {
     waitpid($pid, 0);
 };
 
-subtest 'IPC::Open3 stderr capture (separate handle)' => sub {
+subtest 'IPC::Open3 stderr merged with stdout (empty string err)' => sub {
+    # When $err is "" (false), stderr merges with stdout (same as undef)
     use IPC::Open3;
     my ($wtr, $rdr, $err);
     $rdr = ""; $err = "";
     my $pid = open3($wtr, $rdr, $err, "sh", "-c", "echo out-msg; echo err-msg >&2");
     close($wtr);
-    # Small delay to let both streams fill
-    select(undef, undef, undef, 0.3);
-    my $out = <$rdr>;
-    my $errout = <$err>;
-    chomp $out if defined $out;
-    chomp $errout if defined $errout;
-    is($out, "out-msg", "stdout captured separately");
-    is($errout, "err-msg", "stderr captured separately");
+    my @lines;
+    while (my $line = <$rdr>) {
+        chomp $line;
+        push @lines, $line;
+    }
     close($rdr);
-    close($err);
     waitpid($pid, 0);
+    # Both stdout and stderr should appear in the reader (merged)
+    ok(scalar(@lines) >= 2, "got at least 2 lines (merged streams)");
+    ok(grep({ $_ eq "out-msg" } @lines), "stdout present in merged output");
+    ok(grep({ $_ eq "err-msg" } @lines), "stderr present in merged output");
 };
 
 subtest 'IPC::Open3 stderr merged with stdout (undef err)' => sub {
@@ -74,8 +75,9 @@ subtest 'IPC::Open3 stderr merged with stdout (undef err)' => sub {
 
 subtest 'IPC::Open3 fileno returns defined value' => sub {
     use IPC::Open3;
-    my ($wtr, $rdr, $err);
-    $rdr = ""; $err = "";
+    use Symbol 'gensym';
+    my ($wtr, $rdr);
+    my $err = gensym;
     my $pid = open3($wtr, $rdr, $err, "cat");
 
     my $fn_wtr = fileno($wtr);
@@ -118,7 +120,9 @@ subtest 'IPC::Open3 with IO::Select - single handle' => sub {
     waitpid($pid, 0);
 };
 
-subtest 'IPC::Open3 with IO::Select - stdout + stderr (Net::SSH pattern)' => sub {
+subtest 'IPC::Open3 with IO::Select - stdout + stderr merged (empty string err)' => sub {
+    # When $err is "" (false), stderr merges with stdout, so IO::Select
+    # should see only 1 handle with both streams' data
     use IPC::Open3;
     use IO::Select;
     my ($wtr, $rdr, $err);
@@ -128,10 +132,10 @@ subtest 'IPC::Open3 with IO::Select - stdout + stderr (Net::SSH pattern)' => sub
 
     my $sel = IO::Select->new();
     $sel->add($rdr);
-    $sel->add($err);
-    is($sel->count, 2, "IO::Select has 2 handles");
+    # $err is not a real handle (false value merged stderr), so only 1 handle
+    is($sel->count, 1, "IO::Select has 1 handle (stderr merged)");
 
-    my ($out, $errout) = ("", "");
+    my $out = "";
     my $iterations = 0;
     while ($sel->count && $iterations < 20) {
         $iterations++;
@@ -144,20 +148,15 @@ subtest 'IPC::Open3 with IO::Select - stdout + stderr (Net::SSH pattern)' => sub
                 $sel->remove($fh);
                 next;
             }
-            if (fileno($fh) == fileno($rdr)) {
-                $out .= $buf;
-            } else {
-                $errout .= $buf;
-            }
+            $out .= $buf;
         }
     }
 
-    chomp $out; chomp $errout;
-    is($out, "stdout-data", "IO::Select captured stdout");
-    is($errout, "stderr-data", "IO::Select captured stderr");
+    # Both stdout and stderr data should be in the merged output
+    like($out, qr/stdout-data/, "merged output contains stdout");
+    like($out, qr/stderr-data/, "merged output contains stderr");
 
     close($rdr);
-    close($err);
     waitpid($pid, 0);
 };
 

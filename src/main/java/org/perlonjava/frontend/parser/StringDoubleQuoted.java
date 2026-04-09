@@ -468,6 +468,14 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // Consume the character after the backslash
         var escape = TokenUtils.consumeChar(parser);
 
+        // Trailing backslash at end of string content — treat as literal \
+        // This happens when $\ consumes a \ for the variable name, leaving
+        // a lone \ before end-of-string with no escape partner.
+        if (escape.isEmpty()) {
+            appendToCurrentSegment("\\");
+            return;
+        }
+
         switch (escape) {
             // Standard escapes - convert to actual characters
             case "\\" -> appendToCurrentSegment("\\");
