@@ -4307,16 +4307,21 @@ public class BytecodeCompiler implements Visitor {
                 // Also set isSymbolicReference so defined(\&stub) returns true, matching
                 // the JVM backend's createCodeReference behavior.
                 if (node.operand instanceof OperatorNode operandOp
-                        && operandOp.operator.equals("&")
-                        && operandOp.operand instanceof IdentifierNode idNode) {
-                    // Set isSymbolicReference before loading, so defined(\&Name) returns true
-                    String subName = NameNormalizer.normalizeVariableName(
-                            idNode.name, getCurrentPackage());
-                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
-                    if (codeRef.type == RuntimeScalarType.CODE
-                            && codeRef.value instanceof RuntimeCode rc) {
-                        rc.isSymbolicReference = true;
+                        && operandOp.operator.equals("&")) {
+                    if (operandOp.operand instanceof IdentifierNode idNode) {
+                        // \&name — regular package sub. Set isSymbolicReference before
+                        // loading, so defined(\&Name) returns true
+                        String subName = NameNormalizer.normalizeVariableName(
+                                idNode.name, getCurrentPackage());
+                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
+                        if (codeRef.type == RuntimeScalarType.CODE
+                                && codeRef.value instanceof RuntimeCode rc) {
+                            rc.isSymbolicReference = true;
+                        }
                     }
+                    // For both \&name and \&$var (lexical subs), the & operator
+                    // already produces a CODE value — no CREATE_REF wrapping needed.
+                    // This matches the JVM backend's createCodeReference behavior.
                     node.operand.accept(this);
                     // lastResultReg already holds the CODE scalar — no wrapping needed
                     return;
