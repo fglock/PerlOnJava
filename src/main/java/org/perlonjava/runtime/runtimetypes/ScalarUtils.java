@@ -152,8 +152,12 @@ public class ScalarUtils {
             if (str.isEmpty()) {
                 return false;
             }
-            // Check for Inf and NaN
-            if (str.equalsIgnoreCase("Inf") || str.equalsIgnoreCase("Infinity") || str.equalsIgnoreCase("NaN")) {
+            // Check for Inf and NaN (with optional sign prefix)
+            String check = str;
+            if ((str.charAt(0) == '+' || str.charAt(0) == '-') && str.length() > 1) {
+                check = str.substring(1);
+            }
+            if (check.equalsIgnoreCase("Inf") || check.equalsIgnoreCase("Infinity") || check.equalsIgnoreCase("NaN")) {
                 return true;
             }
             // Fast check: if first char isn't digit, +, -, or . it's not a number

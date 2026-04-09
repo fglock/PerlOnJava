@@ -626,13 +626,25 @@ public class CompileBinaryOperator {
                  "&.", "|.", "^." -> true;
             default -> false;
         };
+        // For grep/map/sort/all/any, the right operand (list) must always be in LIST context
+        // and the left operand (closure) in SCALAR context, matching the JVM backend.
+        boolean isListOp = switch (node.operator) {
+            case "grep", "map", "sort", "all", "any" -> true;
+            default -> false;
+        };
         int outerCtx = bytecodeCompiler.currentCallContext;
-        int leftCtx = forceScalar ? RuntimeContextType.SCALAR : outerCtx;
+        int leftCtx = (forceScalar || isListOp) ? RuntimeContextType.SCALAR : outerCtx;
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
-        int rightCtx = (forceScalar || node.operator.equals("=~") || node.operator.equals("!~"))
-                ? RuntimeContextType.SCALAR : outerCtx;
+        int rightCtx;
+        if (isListOp) {
+            rightCtx = RuntimeContextType.LIST;
+        } else if (forceScalar || node.operator.equals("=~") || node.operator.equals("!~")) {
+            rightCtx = RuntimeContextType.SCALAR;
+        } else {
+            rightCtx = outerCtx;
+        }
         bytecodeCompiler.compileNode(node.right, -1, rightCtx);
         int rs2 = bytecodeCompiler.lastResultReg;
 
