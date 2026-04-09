@@ -209,6 +209,32 @@ jcpan install /tmp/Test-JavaXS-1.00/
 - When Phase 4 is complete, remove the "Not yet implemented" warning from
   `docs/guides/module-porting.md`
 
+### Action Items
+
+- [ ] **Create a GitHub issue** to track implementation of Dual-Backend CPAN Module support.
+  The issue should include:
+  - Summary of the feature: allow CPAN modules to ship a `java/` directory with
+    Java XS implementations that `jcpan` compiles at install time
+  - The 4-phase implementation plan (XSLoader discovery, jcpan compilation,
+    recompilation, documentation)
+  - Links to:
+    - This design doc: `dev/design/DUAL_BACKEND_CPAN_MODULES.md`
+    - Module porting guide: `docs/guides/module-porting.md` (Option B section)
+    - Discussion #25: https://github.com/fglock/PerlOnJava/discussions/25
+  - Open questions from this document
+  - Label: `enhancement`
+
+- [ ] **Reply to [Discussion #25](https://github.com/fglock/PerlOnJava/discussions/25)**
+  with the following:
+  - A GitHub issue has been opened to implement support for dual-backend CPAN
+    modules (link to the issue)
+  - The module porting guide now documents a proposed "Publish a Dual-Backend
+    CPAN Module" workflow (not yet implemented):
+    https://github.com/fglock/PerlOnJava/blob/master/docs/guides/module-porting.md
+  - A detailed implementation plan has been created:
+    https://github.com/fglock/PerlOnJava/blob/master/dev/design/DUAL_BACKEND_CPAN_MODULES.md
+  - Invite feedback on the proposed `java/` directory convention and `auto/` install layout
+
 ---
 
 ## Related Documents

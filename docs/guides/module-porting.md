@@ -29,7 +29,33 @@ src/main/
 │       └── Name.pm              # Perl wrapper (calls XSLoader::load)
 └── java/org/perlonjava/runtime/perlmodule/
     └── ModuleName.java          # Java XS implementation
+
+src/test/resources/module/
+└── Module-Name/
+    ├── t/                       # .t test files (run by ModuleTestExecutionTest)
+    ├── samples/                 # test data files (optional)
+    └── lib/                     # test-specific libraries (optional)
 ```
+
+### Importing Core Perl Modules with sync.pl
+
+Core Perl modules (the pure Perl `.pm` files) are imported from the Perl 5 source
+tree using `dev/import-perl5/sync.pl`. This script reads `dev/import-perl5/config.yaml`
+and copies files from the `perl5/` checkout into the PerlOnJava tree:
+
+- **Perl modules** → `src/main/perl/lib/` (shipped inside the PerlOnJava JAR)
+- **Module tests** → `perl5_t/` (external test suite, not in git)
+
+To add a new core module import:
+
+1. Add entries to `dev/import-perl5/config.yaml` (source/target pairs)
+2. Run `perl dev/import-perl5/sync.pl`
+3. If the module needs PerlOnJava-specific changes, mark it as `protected: true`
+   and optionally provide a patch file in `dev/import-perl5/patches/`
+
+> **TODO:** `sync.pl` should be updated to copy core module tests into
+> `src/test/resources/module/` instead of `perl5_t/`, so they are picked up by
+> `ModuleTestExecutionTest` and run as part of `make test-bundled-modules`.
 
 ### Naming Convention
 
