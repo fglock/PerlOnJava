@@ -106,10 +106,6 @@ public class ExceptionFormatter {
         boolean lastWasRunSpecialBlock = false;
 
         for (var element : t.getStackTrace()) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG ExceptionFormatter: element class=" + element.getClassName() + " method=" + element.getMethodName() + " file=" + element.getFileName() + " line=" + element.getLineNumber());
-            }
-            
             boolean isRunSpecialBlock = element.getClassName().equals("org.perlonjava.frontend.parser.SpecialBlockParser") &&
                     element.getMethodName().equals("runSpecialBlock");
             
@@ -131,9 +127,6 @@ public class ExceptionFormatter {
                     }
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
                     callerStackIndex++;
-                    if (System.getenv("DEBUG_CALLER") != null) {
-                        System.err.println("DEBUG ExceptionFormatter: runSpecialBlock corrected frame with CallerStack[" + (callerStackIndex - 1) + "] pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line());
-                    }
                 }
                 lastWasRunSpecialBlock = true;
                 continue;
@@ -171,64 +164,45 @@ public class ExceptionFormatter {
                 if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // First check CallerStack for accurate call site info.
-                        // CallerStack entries are pushed by CALL_SUB/CALL_METHOD with the exact
-                        // call site location, which is more accurate than the current PC.
-                        var callerInfo = CallerStack.peek(interpreterFrameIndex);
+                        // For interpreter frames, use tokenIndex/PC-based lookup to get
+                        // the sub's own location. Unlike CallerStack entries (which may come
+                        // from compile-time contexts like runSpecialBlock), the PC-based
+                        // lookup always gives the correct location for this interpreter frame.
+                        // The caller's location will come from the NEXT frame in the stack
+                        // (either a JVM anon class or another interpreter frame), and
+                        // caller() will skip this frame to reach it.
                         
                         String pkg = null;
                         String filename = frame.code().sourceName;
                         String line = String.valueOf(frame.code().sourceLine);
-                        
-                        if (callerInfo != null && callerInfo.filename() != null) {
-                            // Use CallerStack info for call site location
-                            pkg = callerInfo.packageName();
-                            filename = callerInfo.filename();
-                            line = String.valueOf(callerInfo.line());
-                            if (System.getenv("DEBUG_CALLER") != null) {
-                                System.err.println("DEBUG ExceptionFormatter: using CallerStack[" + interpreterFrameIndex + 
-                                    "] pkg=" + pkg + " file=" + filename + " line=" + line);
-                            }
-                        } else {
-                            // Fallback: get tokenIndex from PC mapping
-                            Integer tokenIndex = null;
-                            int pc = -1;
-                            if (interpreterFrameIndex < interpreterPcs.size()) {
-                                pc = interpreterPcs.get(interpreterFrameIndex);
-                                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
-                                    var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
-                                    if (entryPc != null) {
-                                        tokenIndex = entryPc.getValue();
-                                    }
+                        // Get tokenIndex from PC mapping
+                        Integer tokenIndex = null;
+                        int pc = -1;
+                        if (interpreterFrameIndex < interpreterPcs.size()) {
+                            pc = interpreterPcs.get(interpreterFrameIndex);
+                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
+                                if (entryPc != null) {
+                                    tokenIndex = entryPc.getValue();
                                 }
                             }
-                            if (System.getenv("DEBUG_CALLER") != null) {
-                                System.err.println("DEBUG ExceptionFormatter: fallback interpreter frame " + interpreterFrameIndex + 
-                                    " pc=" + pc + " tokenIndex=" + tokenIndex + 
-                                    " sourceName=" + frame.code().sourceName);
-                            }
+                        }
+                        // Look up package from ByteCodeSourceMapper using tokenIndex
+                        if (tokenIndex != null && frame.code().sourceName != null) {
+                            pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
+                        }
+                        if (pkg == null) {
+                            // Fallback: runtime package for innermost frame, compile-time for others
+                            pkg = (interpreterFrameIndex == 0)
+                                    ? InterpreterState.currentPackage.get().toString()
+                                    : frame.packageName();
+                        }
 
-                            // Look up package from ByteCodeSourceMapper using tokenIndex
-                            if (tokenIndex != null && frame.code().sourceName != null) {
-                                pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
-                            }
-                            if (pkg == null) {
-                                // Fallback: runtime package for innermost frame, compile-time for others
-                                pkg = (interpreterFrameIndex == 0)
-                                        ? InterpreterState.currentPackage.get().toString()
-                                        : frame.packageName();
-                            }
-
-                            // Use tokenIndex for line lookup
-                            if (tokenIndex != null && frame.code().errorUtil != null) {
-                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
-                                filename = loc.fileName();
-                                line = String.valueOf(loc.lineNumber());
-                                if (System.getenv("DEBUG_CALLER") != null) {
-                                    System.err.println("DEBUG ExceptionFormatter: tokenIndex " + tokenIndex + 
-                                        " -> file=" + filename + " line=" + line);
-                                }
-                            }
+                        // Use tokenIndex for line lookup
+                        if (tokenIndex != null && frame.code().errorUtil != null) {
+                            ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                            filename = loc.fileName();
+                            line = String.valueOf(loc.lineNumber());
                         }
 
                         String subName = frame.subroutineName();
@@ -242,9 +216,9 @@ public class ExceptionFormatter {
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);
-                        if (stackTrace.isEmpty()) {
-                            firstFrameFromInterpreter = true;
-                        }
+                        // Interpreter frames from tokenIndex/PC represent the sub's OWN
+                        // location (like JVM frames), so firstFrameFromInterpreter stays
+                        // false and caller() will skip this frame to reach the actual caller.
                         stackTrace.add(entry);
                         lastFileName = filename != null ? filename : "";
                         addedFrameForCurrentLevel = true;
@@ -270,9 +244,6 @@ public class ExceptionFormatter {
                     entry.add(loc.sourceFileName());
                     entry.add(String.valueOf(loc.lineNumber()));
                     entry.add(subName);  // Add subroutine name
-                    if (System.getenv("DEBUG_CALLER") != null) {
-                        System.err.println("DEBUG ExceptionFormatter: adding frame pkg=" + loc.packageName() + " file=" + loc.sourceFileName() + " line=" + loc.lineNumber());
-                    }
                     stackTrace.add(entry);
                     lastFileName = loc.sourceFileName() != null ? loc.sourceFileName() : "";
                 }
@@ -288,10 +259,6 @@ public class ExceptionFormatter {
 
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(effectiveCallerStackIndex);
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG ExceptionFormatter: CallerStack at index " + effectiveCallerStackIndex + " = " + 
-                (callerInfo != null ? "pkg=" + callerInfo.packageName() + " file=" + callerInfo.filename() + " line=" + callerInfo.line() : "null"));
-        }
         if (callerInfo != null && callerInfo.filename() != null && !lastFileName.equals(callerInfo.filename())) {
             var entry = new ArrayList<String>();
             String outerPkg = callerInfo.packageName();

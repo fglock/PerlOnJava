@@ -21,9 +21,6 @@ public class CallerStack {
      * @param line        The line number in the file where the call originated.
      */
     public static void push(String packageName, String filename, int line) {
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG CallerStack.push: pkg=" + packageName + " file=" + filename + " line=" + line + " (stack size now " + (callerStack.size() + 1) + ")");
-        }
         callerStack.add(new CallerInfo(packageName, filename, line));
     }
 
@@ -36,9 +33,6 @@ public class CallerStack {
      * @param resolver    A function to compute the CallerInfo when needed.
      */
     public static void pushLazy(String packageName, CallerInfoResolver resolver) {
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG CallerStack.pushLazy: pkg=" + packageName + " (stack size now " + (callerStack.size() + 1) + ")");
-        }
         callerStack.add(new LazyCallerInfo(packageName, resolver));
     }
 

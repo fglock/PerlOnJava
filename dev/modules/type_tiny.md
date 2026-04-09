@@ -294,7 +294,7 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 completed
+### Current Status: Phase 4 completed
 
 ### Completed Phases
 - [x] Phase 1: `looks_like_number` string parsing (2026-04-09)
@@ -310,11 +310,25 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
     `(Foo()) | (Bar())` not `Foo(| Bar)`
   - File: `src/main/java/org/perlonjava/frontend/parser/PrototypeArgs.java`
   - Test: `src/test/resources/unit/subroutine_prototype_args.t`
+- [x] Phase 4: `Function not found to wrap!` / caller() in interpreter fallback (2026-04-09)
+  - Root cause: `goto $variable` triggers interpreter fallback for the entire sub.
+    In interpreter mode, `caller(0)` returned the wrong package because
+    `ExceptionFormatter` was using CallerStack entries from compile-time contexts
+    (BEGIN/use) for interpreter frames.
+  - Fix: Removed CallerStack usage from interpreter frame processing entirely.
+    Interpreter frames now always use tokenIndex/PC-based lookup via
+    `ByteCodeSourceMapper` to get location info, avoiding contamination from
+    compile-time CallerStack entries.
+  - Also removed pre-scan code for compile-time CallerStack entries (no longer needed)
+    and cleaned up all DEBUG_CALLER instrumentation.
+  - Files: `ExceptionFormatter.java`, `CallerStack.java`, `ByteCodeSourceMapper.java`,
+    `ErrorMessageUtil.java`
+  - Tests now passing: v2-defaults.t (2/2), v2-positional.t (13/13),
+    v2-named.t (15/15), v2-allowdash.t (20/20), v2-listtonamed.t (17/17)
 
 ### Next Steps
-1. Investigate `Function not found to wrap!` (Phase 4)
-2. Address remaining issues (alias assignment, TIESCALAR in eval, etc.)
-3. Re-run full Type::Tiny test suite to measure progress
+1. Address remaining issues (alias assignment, TIESCALAR in eval, etc.)
+2. Re-run full Type::Tiny test suite to measure progress
 
 ### Open Questions
 - `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`

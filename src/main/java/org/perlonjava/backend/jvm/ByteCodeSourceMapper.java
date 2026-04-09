@@ -153,12 +153,6 @@ public class ByteCodeSourceMapper {
         LineInfo existingEntry = info.tokenToLineInfo.get(tokenIndex);
         if (existingEntry != null) {
             // Entry already exists from parse-time - preserve it entirely
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG saveSourceLocation: SKIP (exists) file=" + ctx.compilerOptions.fileName 
-                    + " tokenIndex=" + tokenIndex + " existingLine=" + existingEntry.lineNumber()
-                    + " existingPkg=" + packageNamePool.get(existingEntry.packageNameId())
-                    + " existingSourceFile=" + fileNamePool.get(existingEntry.sourceFileNameId()));
-            }
             return;
         }
         
@@ -194,12 +188,6 @@ public class ByteCodeSourceMapper {
         
         int sourceFileNameId = getOrCreateFileId(sourceFileName);
 
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG saveSourceLocation: STORE origFile=" + ctx.compilerOptions.fileName 
-                + " sourceFile=" + sourceFileName
-                + " tokenIndex=" + tokenIndex + " line=" + lineNumber 
-                + " pkg=" + ctx.symbolTable.getCurrentPackage() + " sub=" + subroutineName);
-        }
 
         // Map the token index to a LineInfo object containing line, package, subroutine, and source file
         info.tokenToLineInfo.put(tokenIndex, new LineInfo(
@@ -222,33 +210,20 @@ public class ByteCodeSourceMapper {
     public static String getPackageAtLocation(String fileName, int tokenIndex) {
         int fileId = fileNameToId.getOrDefault(fileName, -1);
         if (fileId == -1) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG getPackageAtLocation: NO FILE ID for fileName=" + fileName);
-            }
             return null;
         }
 
         SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG getPackageAtLocation: NO SOURCE INFO for fileName=" + fileName + " fileId=" + fileId);
-            }
             return null;
         }
 
         Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
         if (entry == null) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG getPackageAtLocation: NO ENTRY for fileName=" + fileName + " tokenIndex=" + tokenIndex);
-            }
             return null;
         }
 
         String pkg = packageNamePool.get(entry.getValue().packageNameId());
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG getPackageAtLocation: fileName=" + fileName + " tokenIndex=" + tokenIndex 
-                + " foundTokenIndex=" + entry.getKey() + " pkg=" + pkg);
-        }
         return pkg;
     }
 
@@ -264,18 +239,12 @@ public class ByteCodeSourceMapper {
 
         SourceFileInfo info = sourceFiles.get(fileId);
         if (info == null) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG parseStackTraceElement: NO INFO for file=" + element.getFileName() + " fileId=" + fileId);
-            }
             return new SourceLocation(element.getFileName(), "", tokenIndex, null);
         }
 
         // Use TreeMap's floorEntry to find the nearest defined token index
         Map.Entry<Integer, LineInfo> entry = info.tokenToLineInfo.floorEntry(tokenIndex);
         if (entry == null) {
-            if (System.getenv("DEBUG_CALLER") != null) {
-                System.err.println("DEBUG parseStackTraceElement: NO ENTRY for file=" + element.getFileName() + " tokenIndex=" + tokenIndex);
-            }
             return new SourceLocation(element.getFileName(), "", element.getLineNumber(), null);
         }
 
@@ -298,9 +267,6 @@ public class ByteCodeSourceMapper {
             
             while (lowerEntry != null && (entry.getKey() - lowerEntry.getKey()) < 300) {
                 String lowerSourceFile = fileNamePool.get(lowerEntry.getValue().sourceFileNameId());
-                if (System.getenv("DEBUG_CALLER") != null) {
-                    System.err.println("DEBUG parseStackTraceElement: checking lowerEntry key=" + lowerEntry.getKey() + " sourceFile=" + lowerSourceFile + " line=" + lowerEntry.getValue().lineNumber() + " entryKey=" + entry.getKey());
-                }
                 if (!lowerSourceFile.equals(element.getFileName())) {
                     // Found an entry with #line-adjusted filename
                     // Calculate the offset: the difference between the original line and the #line-adjusted line
@@ -328,9 +294,6 @@ public class ByteCodeSourceMapper {
                     lineNumber = lowerEntry.getValue().lineNumber() + estimatedExtraLines;
                     
                     packageName = packageNamePool.get(lowerEntry.getValue().packageNameId());
-                    if (System.getenv("DEBUG_CALLER") != null) {
-                        System.err.println("DEBUG parseStackTraceElement: APPLYING lowerEntry sourceFile=" + sourceFileName + " adjustedLine=" + lineNumber + " tokenDist=" + tokenDistFromLineDirective);
-                    }
                     break;
                 }
                 // This lower entry still has the original file, keep looking
@@ -343,9 +306,6 @@ public class ByteCodeSourceMapper {
                 var higherEntry = info.tokenToLineInfo.higherEntry(currentKey);
                 while (higherEntry != null && (higherEntry.getKey() - entry.getKey()) < 50) {
                     String higherSourceFile = fileNamePool.get(higherEntry.getValue().sourceFileNameId());
-                    if (System.getenv("DEBUG_CALLER") != null) {
-                        System.err.println("DEBUG parseStackTraceElement: checking higherEntry key=" + higherEntry.getKey() + " sourceFile=" + higherSourceFile + " entryKey=" + entry.getKey() + " currentKey=" + currentKey);
-                    }
                     if (!higherSourceFile.equals(element.getFileName())) {
                         // Higher entry has #line-adjusted filename - use it
                         sourceFileName = higherSourceFile;
@@ -353,28 +313,15 @@ public class ByteCodeSourceMapper {
                             (higherEntry.getKey() - entry.getKey());  // Approximate adjustment
                         if (lineNumber < 1) lineNumber = 1;
                         packageName = packageNamePool.get(higherEntry.getValue().packageNameId());
-                        if (System.getenv("DEBUG_CALLER") != null) {
-                            System.err.println("DEBUG parseStackTraceElement: APPLYING higherEntry sourceFile=" + sourceFileName + " adjustedLine=" + lineNumber);
-                        }
                         break;
                     }
                     // This higher entry still has the original file, keep looking
                     currentKey = higherEntry.getKey();
                     higherEntry = info.tokenToLineInfo.higherEntry(currentKey);
-                    if (System.getenv("DEBUG_CALLER") != null) {
-                        System.err.println("DEBUG parseStackTraceElement: next higherEntry for key=" + currentKey + " is " + 
-                            (higherEntry != null ? "key=" + higherEntry.getKey() : "null"));
-                    }
                 }
             }
         }
         
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG parseStackTraceElement: file=" + element.getFileName() 
-                + " sourceFile=" + sourceFileName
-                + " lookupTokenIndex=" + tokenIndex + " foundTokenIndex=" + entry.getKey()
-                + " line=" + lineNumber + " pkg=" + packageName);
-        }
 
         // Retrieve subroutine name
         String subroutineName = subroutineNamePool.get(lineInfo.subroutineNameId());
