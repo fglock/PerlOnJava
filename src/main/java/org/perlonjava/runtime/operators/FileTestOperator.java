@@ -777,23 +777,67 @@ public class FileTestOperator {
 
     /**
      * Common heuristic for text/binary detection.
+     * Matches Perl's pp_fttext heuristic from pp_sys.c:
+     * - "odd" chars = null bytes, invalid high-bit bytes, and control chars
+     *   (0-31) except \n, \r, \t, \b (8), \f (12), and ESC (27)
+     * - Valid UTF-8 multi-byte sequences are treated as text (not odd)
+     * - File is binary if odd * 3 > length (more than 1/3 odd characters)
      */
     private static RuntimeScalar analyzeTextBinary(byte[] buffer, int length, boolean checkForText) {
-        int textChars = 0;
-        int totalChars = 0;
+        int odd = 0;
 
         for (int i = 0; i < length; i++) {
-            if (buffer[i] == 0) {
-                return checkForText ? scalarFalse : scalarTrue; // Binary file
+            int b = buffer[i] & 0xFF;  // treat as unsigned
+            if (b == 0) {
+                // Null byte — immediately binary
+                return checkForText ? scalarFalse : scalarTrue;
+            } else if (b >= 128) {
+                // Check if this starts a valid UTF-8 multi-byte sequence
+                int seqLen = utf8SequenceLength(buffer, i, length);
+                if (seqLen > 1) {
+                    // Valid UTF-8 sequence — skip remaining bytes, not odd
+                    i += seqLen - 1;
+                } else {
+                    // Invalid high-bit byte — odd
+                    odd++;
+                }
+            } else if (b < 32
+                    && b != '\n' && b != '\r' && b != '\t'
+                    && b != '\b' && b != '\f' && b != 27) {
+                // Control characters (except common whitespace and ESC) are "odd"
+                odd++;
             }
-            if ((buffer[i] >= 32 && buffer[i] <= 126) || buffer[i] == '\n' || buffer[i] == '\r' || buffer[i] == '\t') {
-                textChars++;
-            }
-            totalChars++;
         }
 
-        double textRatio = (double) textChars / totalChars;
-        return getScalarBoolean(checkForText ? textRatio > 0.7 : textRatio <= 0.7);
+        // Perl: odd * 3 > len means binary
+        boolean isBinary = odd * 3 > length;
+        return getScalarBoolean(checkForText ? !isBinary : isBinary);
+    }
+
+    /**
+     * Determines the length of a valid UTF-8 sequence starting at the given position.
+     * Returns the sequence length (2-4) if valid, or 1 if invalid.
+     */
+    private static int utf8SequenceLength(byte[] buffer, int pos, int length) {
+        int b = buffer[pos] & 0xFF;
+        int seqLen;
+
+        if ((b & 0xE0) == 0xC0) {
+            seqLen = 2;  // 110xxxxx — 2-byte sequence
+        } else if ((b & 0xF0) == 0xE0) {
+            seqLen = 3;  // 1110xxxx — 3-byte sequence
+        } else if ((b & 0xF8) == 0xF0) {
+            seqLen = 4;  // 11110xxx — 4-byte sequence
+        } else {
+            return 1;    // Not a valid UTF-8 start byte
+        }
+
+        // Verify continuation bytes (10xxxxxx)
+        if (pos + seqLen > length) return 1;  // Not enough bytes
+        for (int j = 1; j < seqLen; j++) {
+            if ((buffer[pos + j] & 0xC0) != 0x80) return 1;  // Invalid continuation
+        }
+        return seqLen;
     }
 
     /**
