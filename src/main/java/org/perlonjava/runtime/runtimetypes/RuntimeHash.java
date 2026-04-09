@@ -331,14 +331,33 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     /**
      * Creates a RuntimeScalar for a hash key with the correct type (STRING or BYTE_STRING).
+     * <p>
+     * In Perl, hash keys that are pure ASCII (all bytes 0-127) are always stored and
+     * returned without the UTF-8 flag, regardless of whether the original string had it.
+     * Only keys containing characters > 127 preserve the byte/UTF-8 distinction via byteKeys.
      */
     RuntimeScalar createKeyScalar(String key) {
+        // Check if key is explicitly marked as byte string (for non-ASCII keys)
         if (byteKeys != null && byteKeys.contains(key)) {
             RuntimeScalar scalar = new RuntimeScalar(key);
             scalar.type = BYTE_STRING;
             return scalar;
         }
-        return new RuntimeScalar(key); // default STRING type
+        // In Perl, ASCII-only hash keys are always returned without the UTF-8 flag.
+        // Only non-ASCII keys that are NOT in byteKeys should be returned as STRING (UTF-8).
+        boolean isAscii = true;
+        for (int i = 0; i < key.length(); i++) {
+            if (key.charAt(i) > 127) {
+                isAscii = false;
+                break;
+            }
+        }
+        if (isAscii) {
+            RuntimeScalar scalar = new RuntimeScalar(key);
+            scalar.type = BYTE_STRING;
+            return scalar;
+        }
+        return new RuntimeScalar(key); // non-ASCII, not in byteKeys → STRING (UTF-8)
     }
 
     /**

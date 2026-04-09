@@ -284,6 +284,7 @@ public class Operator {
         boolean hasExplicitLength = size > 2;
         int length = hasExplicitLength ? ((RuntimeScalar) args[2]).getInt() : strLength - offset;
         String replacement = (size > 3) ? args[3].toString() : null;
+        RuntimeScalar replacementScalar = (size > 3) ? (RuntimeScalar) args[3] : null;
 
         // Handle negative offsets (count from the end of the string)
         if (offset < 0) {
@@ -357,8 +358,12 @@ public class Operator {
             if (replacement != null) {
                 // With replacement, still need to handle the replacement at position 0
                 var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
-                lvalue.set(replacement);
-                return new RuntimeScalar("");
+                lvalue.set(replacementScalar);
+                RuntimeScalar retVal = new RuntimeScalar("");
+                if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
+                    retVal.type = RuntimeScalarType.BYTE_STRING;
+                }
+                return retVal;
             }
             return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
         }
@@ -376,9 +381,14 @@ public class Operator {
         if (replacement != null) {
             // When replacement is provided, save the extracted substring before modifying
             String extractedSubstring = result;
-            lvalue.set(replacement);
+            lvalue.set(replacementScalar);
             // Return the extracted substring, not the lvalue (which now contains the replacement)
-            return new RuntimeScalar(extractedSubstring);
+            RuntimeScalar retVal = new RuntimeScalar(extractedSubstring);
+            // Preserve BYTE_STRING type from parent
+            if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
+                retVal.type = RuntimeScalarType.BYTE_STRING;
+            }
+            return retVal;
         }
 
         return lvalue;

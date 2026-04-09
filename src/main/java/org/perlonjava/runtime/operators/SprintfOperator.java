@@ -48,6 +48,17 @@ public class SprintfOperator {
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
         String format = runtimeScalar.toString();
+        // Track if any input has UTF-8 flag — sprintf produces byte string unless
+        // the format or a %s argument has UTF-8 flag on
+        boolean hasUtf8Input = runtimeScalar.type == RuntimeScalarType.STRING;
+        if (!hasUtf8Input) {
+            for (RuntimeBase elem : list.elements) {
+                if (elem instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.STRING) {
+                    hasUtf8Input = true;
+                    break;
+                }
+            }
+        }
 
         StringBuilder result = new StringBuilder();
         int argIndex = 0;  // Sequential argument index
@@ -193,7 +204,11 @@ public class SprintfOperator {
             WarnDie.warn(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""));
         }
 
-        return new RuntimeScalar(result.toString());
+        RuntimeScalar res = new RuntimeScalar(result.toString());
+        if (!hasUtf8Input) {
+            res.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return res;
     }
 
     private static void handlePercentN(FormatSpecifier spec,

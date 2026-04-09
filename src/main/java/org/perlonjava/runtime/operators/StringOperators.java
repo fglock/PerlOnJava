@@ -335,46 +335,45 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
-        String aStr = runtimeScalar.toString();
+        // b.toString() may trigger FETCH for tied vars, potentially modifying runtimeScalar.
+        // Read b first so runtimeScalar.toString() reflects any FETCH side-effects,
+        // matching Perl's behavior where the left SV is read after tied-var resolution.
         String bStr = b.toString();
+        String aStr = runtimeScalar.toString();
 
-        if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(runtimeScalar + bStr);
+        // In Perl, concatenation produces a UTF-8 string only if at least one
+        // operand has the UTF-8 flag on (STRING type). Non-STRING types
+        // (BYTE_STRING, INTEGER, DOUBLE, UNDEF) are all byte-compatible.
+        boolean aIsUtf8 = runtimeScalar.type == RuntimeScalarType.STRING;
+        boolean bIsUtf8 = b.type == RuntimeScalarType.STRING;
+
+        if (aIsUtf8 || bIsUtf8) {
+            return new RuntimeScalar(aStr + bStr);
         }
 
-        if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
-            boolean aIsByte = runtimeScalar.type == BYTE_STRING
-                    || runtimeScalar.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && runtimeScalar.type != RuntimeScalarType.STRING);
-            boolean bIsByte = b.type == BYTE_STRING
-                    || b.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && b.type != RuntimeScalarType.STRING);
-            if (aIsByte && bIsByte) {
-                boolean safe = true;
-                for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                if (safe) {
-                    byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] out = new byte[aBytes.length + bBytes.length];
-                    System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                    System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                    return new RuntimeScalar(out);
-                }
+        // Neither operand is UTF-8 — produce BYTE_STRING result
+        // Check if all chars fit in a byte (Latin-1)
+        boolean safe = true;
+        for (int i = 0; safe && i < aStr.length(); i++) {
+            if (aStr.charAt(i) > 255) {
+                safe = false;
             }
         }
+        for (int i = 0; safe && i < bStr.length(); i++) {
+            if (bStr.charAt(i) > 255) {
+                safe = false;
+            }
+        }
+        if (safe) {
+            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
+            byte[] out = new byte[aBytes.length + bBytes.length];
+            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+            return new RuntimeScalar(out);
+        }
 
-        return new RuntimeScalar(runtimeScalar + bStr);
+        return new RuntimeScalar(aStr + bStr);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -641,13 +640,20 @@ public class StringOperators {
         }
 
         // Fast path: 1 element -> return that element (no separator evaluation needed)
+        // Preserve BYTE_STRING type: in Perl, join doesn't upgrade to UTF-8 unless
+        // an input has the UTF-8 flag on. Non-STRING types (INTEGER, DOUBLE, UNDEF)
+        // are byte-compatible and should not trigger UTF-8 upgrade.
         if (elements.size() == 1) {
             RuntimeScalar scalar = elements.get(0);
             if (warnOnUndef && !isStringInterpolation && scalar.type == RuntimeScalarType.UNDEF) {
                 WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in join or string"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
-            return new RuntimeScalar(scalar.toString());
+            RuntimeScalar res = new RuntimeScalar(scalar.toString());
+            if (scalar.type != RuntimeScalarType.STRING) {
+                res.type = BYTE_STRING;
+            }
+            return res;
         }
 
         // 2+ elements: evaluate the separator
@@ -658,7 +664,10 @@ public class StringOperators {
 
         String delimiter = runtimeScalar.toString();
 
-        boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
+        // In Perl, join produces a byte-string unless one of the inputs has
+        // the UTF-8 flag on. Only STRING type has the flag; INTEGER, DOUBLE,
+        // UNDEF, and BYTE_STRING are all byte-compatible.
+        boolean hasUtf8 = runtimeScalar.type == RuntimeScalarType.STRING;
 
         // Join the elements
         StringBuilder sb = new StringBuilder();
@@ -676,11 +685,13 @@ public class StringOperators {
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
             }
 
-            isByteString = isByteString && scalar.type == BYTE_STRING;
+            if (scalar.type == RuntimeScalarType.STRING) {
+                hasUtf8 = true;
+            }
             sb.append(scalar);
         }
         RuntimeScalar res = new RuntimeScalar(sb.toString());
-        if (isByteString) {
+        if (!hasUtf8) {
             res.type = BYTE_STRING;
         }
         return res;

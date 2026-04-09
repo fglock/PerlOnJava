@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators.unpack;
 import org.perlonjava.runtime.operators.UnpackState;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -78,6 +79,8 @@ public class HexStringFormatHandler implements FormatHandler {
             }
         }
 
-        output.add(new RuntimeScalar(hexString.toString()));
+        RuntimeScalar rs = new RuntimeScalar(hexString.toString());
+        rs.type = RuntimeScalarType.BYTE_STRING;
+        output.add(rs);
     }
 }

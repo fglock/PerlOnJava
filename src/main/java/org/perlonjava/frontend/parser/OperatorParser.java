@@ -911,6 +911,13 @@ public class OperatorParser {
                 ((OperatorNode) separator).operator = "quoteRegex";
             }
         }
+        // If no string argument provided, default to $_
+        // This is needed so both JVM and bytecode backends resolve $_ correctly
+        // at runtime (the bytecode backend otherwise compiles the empty ListNode
+        // in scalar context, producing a spurious value instead of $_ fallback)
+        if (operand.elements.isEmpty()) {
+            operand.elements.add(ParserNodeUtils.scalarUnderscore(parser));
+        }
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
     }
 

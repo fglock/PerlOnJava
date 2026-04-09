@@ -322,7 +322,9 @@ public class Utf8 extends PerlModuleBase {
         if (scalar instanceof ScalarSpecialVariable sv) {
             scalar = sv.getValueAsScalar();
         }
-        return scalar.type != BYTE_STRING;
+        // Only STRING type has the UTF-8 flag set.
+        // INTEGER, DOUBLE, UNDEF, REFERENCE etc. don't have the UTF-8 flag in Perl.
+        return scalar.type == STRING;
     }
 
     /**
