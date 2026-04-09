@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 2 IN PROGRESS -- 47/108 test programs pass (was 8/109)
+## Status: Phase 2 COMPLETE -- 62/108 test programs pass (was 8/109)
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
@@ -76,7 +76,7 @@ pattern.t, routes.t, types.t -- all unblocked by Mojo::Util now loading.
 8 tests passed before Phase 1 (cache, date, eventemitter, json_pointer, signatures,
 plus skipped/partial tests).
 
-### After Phase 2 (47/108 passing)
+### After Phase 2 initial fixes (47/108 passing)
 
 | Metric | Count |
 |--------|-------|
@@ -86,10 +86,10 @@ plus skipped/partial tests).
 | Passed (t/pod*) | 2 of 2 |
 | **Total Passed** | **47** |
 
-#### New passes from Phase 2 (32 gained)
+#### New passes from Phase 2 initial (32 gained)
 
 **t/mojo/** (21 new):
-base_util.t, bytestream.t(30/31), daemon_ipv6_tls.t, dynamic_methods.t, hypnotoad.t,
+base_util.t, daemon_ipv6_tls.t, dynamic_methods.t, hypnotoad.t,
 ioloop_ipv6.t, ioloop_tls.t, json_xs.t, log.t, morbo.t, prefork.t,
 promise_async_await.t, reactor_ev.t, reactor_poll.t, subprocess.t, subprocess_ev.t,
 tls.t, user_agent.t, user_agent_online.t, user_agent_socks.t, user_agent_tls.t,
@@ -100,20 +100,93 @@ app.t, command.t, commands.t, dispatch.t, lite_app.t, renderer.t, sse_lite_app.t
 
 **t/pod** (2 new): pod.t, pod_coverage.t
 
-#### Near-passing tests (1-2 subtests from passing)
+### After Phase 2 near-miss fixes (62/108 passing)
 
-| Test File | Subtests | Single Failing Subtest |
-|-----------|----------|----------------------|
-| t/mojo/util.t | 50/51 | "decode (invalid UTF-8)" |
+| Metric | Count |
+|--------|-------|
+| Total test programs | 108 |
+| Passed (t/mojo/) | 45 of 63 |
+| Passed (t/mojolicious/) | 15 of 43 |
+| Passed (t/pod*) | 2 of 2 |
+| **Total Passed** | **62** |
+| Subtests (t/mojo/) | 635/880 (72.2%) |
+| Subtests (t/mojolicious/) | 542/652 (83.1%) |
+| **Total Subtests** | **1177/1532 (76.9%)** |
+
+#### New passes from near-miss fixes (15 gained)
+
+**t/mojo/** (11 new):
+content.t(8/8), cookiejar.t(22/22), file_download.t(6/6), parameters.t(19/19),
+path.t(15/15), psgi.t(9/9), request_cgi.t(16/16), response.t(23/23),
+url.t(38/38), util.t(51/51), websocket_proxy.t(3/3)
+
+**t/mojolicious/** (4 new):
+log_lite_app.t(2/2), signatures_lite_app.t(2/2), tls_lite_app.t(0/0),
+websocket_lite_app.t(14/14)
+
+#### Fixes that flipped near-miss tests
+- **`looks_like_number`** (ScalarUtil.java): content.t, cookiejar.t now fully pass
+- **`Encode::decode` $check** (Encode.java): util.t now fully passes (51/51)
+- **`pack Q/q` 64-bit** (NumericPackHandler.java): websocket_frames.t 14→21 subtests
+- **`tie` with blessed ref** (TieOperators.java): IO::Compress properly tied
+- **`url.t`**: 36/38→38/38 (parameters.t similarly fixed)
+
+#### Remaining near-miss tests (1-2 subtests from passing)
+
+| Test File | Subtests | Blocker |
+|-----------|----------|---------|
 | t/mojo/bytestream.t | 30/31 | "gzip/gunzip" subtest has no tests |
 | t/mojo/collection.t | 18/19 | "TO_JSON" — JSON number encoding |
-| t/mojo/content.t | 7/8 | "128-bit content length" |
-| t/mojo/cookiejar.t | 21/22 | "invalid expiration" — max_age->expires |
-| t/mojo/transactor.t | 21/22 | "Multipart form with real file" — no tests |
-| t/mojo/url.t | 36/38 | 2 Unicode/IDNA subtests |
-| t/mojo/websocket_frames.t | 14/15 | "64-bit text frame roundtrip" |
-| t/mojo/parameters.t | 18/19 | "Unicode" |
+| t/mojo/cgi.t | 9/10 | 1 subtest failing |
+| t/mojo/exception.t | 14/15 | 1 subtest failing |
+| t/mojo/transactor.t | 21/22 | "Multipart form with real file" |
+| t/mojo/websocket_frames.t | 21/22 | 1 remaining subtest |
 | t/mojo/base.t | 8/9 | "Weaken" (known limitation) |
+| t/mojo/request.t | 31/33 | 2 subtests failing |
+
+#### Still-failing tests by score
+
+**t/mojo/** (18 failing):
+
+| Test | Score | Notes |
+|------|-------|-------|
+| request.t | 31/33 | Near-miss |
+| bytestream.t | 30/31 | Near-miss |
+| collection.t | 18/19 | Near-miss |
+| transactor.t | 21/22 | Near-miss |
+| websocket_frames.t | 21/22 | Near-miss |
+| file.t | 17/23 | |
+| template.t | 17/226 | Major failures |
+| daemon.t | 16/19 | |
+| exception.t | 14/15 | Near-miss |
+| json.t | 14/17 | |
+| asset.t | 13/17 | |
+| loader.t | 12/15 | |
+| cgi.t | 9/10 | Near-miss |
+| ioloop.t | 9/12 | |
+| base.t | 8/9 | weaken limitation |
+| websocket.t | 8/10 | |
+| promise.t | 5/7 | |
+| dom.t | 1/2 | |
+
+**t/mojolicious/** (28 not passing):
+
+| Test | Score | Notes |
+|------|-------|-------|
+| restful_lite_app.t | 41/91 | |
+| charset_lite_app.t | 38/45 | |
+| static_lite_app.t | 34/37 | Near-miss |
+| validation_lite_app.t | 18/22 | |
+| dispatcher_lite_app.t | 11/13 | |
+| rebased_lite_app.t | 6/24 | |
+| static_prefix_lite_app.t | 4/10 | |
+| multipath_lite_app.t | 3/7 | |
+| json_config_lite_app.t | 2/3 | Near-miss |
+| yaml_config_lite_app.t | 2/3 | Near-miss |
+| longpolling_lite_app.t | 2/10 | |
+| upload_lite_app.t | 1/2 | Near-miss |
+| 6 timeouts | 0/0 | exception/group/layouted/production/tag_helper/testing |
+| 10 errors | 0/0 | embedded/external/ojo/proxy/twinkle/upload_stream |
 
 ### Remaining Failed Tests by Root Cause
 
@@ -127,10 +200,15 @@ app.t, command.t, commands.t, dispatch.t, lite_app.t, renderer.t, sse_lite_app.t
 | ~~`is_regexp` export missing~~ | ~~5~~ | **FIXED** (`re::is_regexp` export in Re.java) |
 | ~~`toGlob` is null (glob coercion)~~ | ~~3~~ | **FIXED** (anonymous glob null guard in RuntimeGlob.java) |
 | ~~ASCII POSIX char classes~~ | ~~2~~ | **FIXED** (13 `\p{PosixXxx}` variants in UnicodeResolver.java) |
-| `local *STDOUT = $fh` IO redirect | ~2 | **Medium** -- bare `print` not redirected (see Issue 7) |
+| ~~`local *STDOUT = $fh` IO redirect~~ | ~~2~~ | **FIXED** (selectedHandle update in RuntimeGlob.java) |
+| ~~`looks_like_number` broken~~ | ~~3~~ | **FIXED** (delegate to ScalarUtils in ScalarUtil.java) |
+| ~~`tie` blessed ref invocant~~ | ~~2~~ | **FIXED** (TieOperators.java) |
+| ~~`Encode::decode` $check param~~ | ~~1~~ | **FIXED** (Encode.java) |
+| ~~`pack`/`unpack` Q/q 64-bit~~ | ~~1~~ | **FIXED** (NumericPackHandler/FormatHandler) |
 | JSON number encoding | ~10 | **High** -- `[1]` becomes `["1"]`, deep scalar type issue |
 | DOM `/g` regex zero-length match | ~5 | **High** -- HTML parser uses complex alternation patterns |
-| IO::Poll `_poll()` runtime behavior | ~20 | **High** -- IOLoop/reactor/daemon tests |
+| Mojo::Template failures | ~20 | **High** -- 17/226 subtests, blocks `*_lite_app.t` tests |
+| IO::Poll timeout tests | ~6 | **Medium** -- test server hangs, 300s timeout |
 | fork() not supported | ~3 (subprocess) | Known limitation |
 | Parser indirect method bug | 1 | Low -- monkey_patch + Test::More |
 
@@ -535,7 +613,7 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 
 ## Progress Tracking
 
-### Current Status: Phase 2 IN PROGRESS -- 47/108
+### Current Status: Phase 2 COMPLETE -- 62/108
 
 ### Completed
 - [x] Initial analysis and test baseline (2026-04-09): 8/109 tests pass
@@ -554,6 +632,11 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - [x] Phase 2: Zero-length match bumpalong in RuntimeRegex.java (2026-04-09)
 - [x] Phase 2: `local *STDOUT = $fh` IO redirection fix in RuntimeGlob.java (2026-04-09)
 - [x] Mojo test count: 15/108 -> 47/108 (2026-04-09)
+- [x] Phase 2: `looks_like_number` fix in ScalarUtil.java (2026-04-09)
+- [x] Phase 2: `tie` with blessed ref invocant fix in TieOperators.java (2026-04-09)
+- [x] Phase 2: `Encode::decode` $check parameter in Encode.java (2026-04-09)
+- [x] Phase 2: `pack`/`unpack` Q/q 64-bit support in NumericPackHandler/FormatHandler (2026-04-09)
+- [x] Mojo test count: 47/108 -> 62/108 (2026-04-09)
 
 ### Files Created/Modified in Phase 1
 - `src/main/perl/lib/Digest/SHA.pm` -- HMAC functions added to @EXPORT_OK
@@ -572,50 +655,33 @@ IOLoop-dependent tests (need Phase 2 runtime _poll()):
 - `src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java` -- 13 PosixXxx properties
 - `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java` -- zero-length match bumpalong
 
-### Next Steps (Phase 2 near-miss fixes)
+### Next Steps (Phase 3: remaining near-miss and template fixes)
 
-These fixes target tests that are 1-2 subtests from passing (47→55+ projected):
+The highest-impact remaining targets:
 
-#### Fix A: `Scalar::Util::looks_like_number` broken for strings (ONE-LINE FIX)
-- **File**: `ScalarUtil.java` line 259
-- **Bug**: Only checks internal type (INTEGER/DOUBLE), returns false for numeric strings like `"86400"`
-- **Fix**: Delegate to existing `ScalarUtils.looksLikeNumber()` which already handles all types correctly
-- **Unblocks**: cookiejar.t (max_age→expires), content.t (128-bit content length), potentially others
-- **Effort**: 1 minute
+1. **template.t** (17/226): Mojo::Template is critical for `*_lite_app.t` tests. Many
+   of the 6 timeout and 10 error tests in t/mojolicious/ are likely blocked by template
+   rendering. Fixing template.t would unlock a large portion of the remaining 28 failures.
 
-#### Fix B: `tie` with blessed ref invocant passes wrong `$_[0]`
-- **File**: `TieOperators.java` lines 38-71
-- **Bug**: When `tie *$obj, $obj` is called with a blessed ref, the invocant is stringified to a class name.
-  `RuntimeCode.call()` then prepends the string as `$_[0]` instead of the blessed object.
-  `IO::Compress::Base::TIEHANDLE` checks `ref($_[0])`, gets `""`, and dies.
-- **Fix**: Use the blessed ref as invocant (not a string), don't prepend classArg to args
-- **Unblocks**: bytestream.t gzip/gunzip, and potentially gzip-dependent tests across the suite
-- **Effort**: 15 minutes
+2. **Near-miss t/mojo/ tests** (6 tests, 1-2 subtests from passing):
+   - bytestream.t (30/31): gzip subtest empty
+   - collection.t (18/19): JSON number encoding
+   - cgi.t (9/10), exception.t (14/15), request.t (31/33), transactor.t (21/22)
 
-#### Fix C: `Encode::decode` ignores `$check` parameter (wide char detection)
-- **File**: `Encode.java` lines 496-518 (`encoding_decode`) and line 353 (`decode`)
-- **Bug**: The `$check` parameter is read but ignored. Java's `getBytes(ISO_8859_1)` silently
-  replaces wide chars (>255) with `?`, and `new String(bytes, charset)` never throws on
-  malformed input. When `$check=1` (FB_CROAK), Perl would die on invalid input.
-- **Fix**: Before `getBytes(ISO_8859_1)`, detect chars >255 and croak if `$check & 1`.
-  Also: use `CharsetDecoder` with `CodingErrorAction.REPORT` for strict decoding.
-- **Unblocks**: util.t "decode (invalid UTF-8)"
-- **Effort**: 30 minutes
+3. **Near-miss t/mojolicious/ tests** (4 tests):
+   - static_lite_app.t (34/37), json_config_lite_app.t (2/3),
+     yaml_config_lite_app.t (2/3), upload_lite_app.t (1/2)
 
-#### Fix D: `pack`/`unpack` Q/q 64-bit integer support
-- **File**: `NumericPackHandler.java` lines 322-325, `NumericFormatHandler.java` lines 216-218
-- **Bug**: `pack('Q>', $n)` and `unpack('Q>', $bytes)` throw "Invalid type" instead of
-  packing/unpacking 8-byte big-endian integers. Java's `long` is natively 64-bit.
-- **Fix**: Implement Q/q handlers using `ByteBuffer.putLong()`/`getLong()` (similar to existing N/n)
-- **Unblocks**: websocket_frames.t "64-bit text frame roundtrip"
-- **Effort**: 30 minutes
+4. **Timeout investigation**: 6 t/mojolicious/ tests timeout at 300s. These likely
+   start a Mojo server that hangs due to IO::Poll runtime issues or template rendering
+   failures.
 
-#### Not fixing in this round
-- **collection.t TO_JSON**: JSON number encoding — deep scalar type tracking issue, not quick
-- **parameters.t Unicode**: URL encoding of wide chars — needs investigation of Mojo::Util url_escape
-- **base.t Weaken**: Known limitation (weaken is no-op on JVM)
-- **transactor.t multipart**: Needs file upload investigation
-- **url.t IDNA/punycode**: Not implemented
+### Files Modified in Phase 2 (near-miss fixes)
+- `src/main/java/org/perlonjava/runtime/perlmodule/ScalarUtil.java` -- looks_like_number delegation
+- `src/main/java/org/perlonjava/runtime/TieOperators.java` -- blessed ref invocant
+- `src/main/java/org/perlonjava/runtime/perlmodule/Encode.java` -- $check parameter
+- `src/main/java/org/perlonjava/runtime/pack/NumericPackHandler.java` -- Q/q 64-bit pack
+- `src/main/java/org/perlonjava/runtime/pack/NumericFormatHandler.java` -- Q/q 64-bit unpack
 
 ## Related Documents
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
