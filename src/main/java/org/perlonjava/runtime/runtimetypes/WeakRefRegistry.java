@@ -22,12 +22,16 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
-     * Special refCount value for non-DESTROY objects that have weak refs.
-     * Unlike DESTROY objects (where refCount tracks strong refs accurately),
-     * non-DESTROY objects can't have their strong refs counted (because refs
-     * created before weaken() activation weren't tracked). Using -2 prevents
-     * setLarge() from incrementing/decrementing (which would give wrong counts),
-     * and weak ref clearing happens only via explicit undef or scope exit.
+     * Special refCount value for named/global objects that have weak refs but
+     * whose strong refs can't be counted accurately. Named objects (e.g.,
+     * {@code my %h} or global hashes) have their JVM local variable / stash
+     * slot holding a direct reference that isn't tracked in refCount. Using -2
+     * prevents setLarge() from incorrectly incrementing/decrementing, and weak
+     * ref clearing happens only via explicit undef or scope exit.
+     * <p>
+     * Anonymous objects (created via {@code createReferenceWithTrackedElements})
+     * use normal refCount tracking (0, 1, 2, ...) because they're only reachable
+     * through references, making refCount complete.
      */
     public static final int WEAKLY_TRACKED = -2;
 
@@ -66,30 +70,19 @@ public class WeakRefRegistry {
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
-                if (base.blessId != 0) {
-                    // Blessed object with DESTROY: accurate refCount tracking.
-                    // refCount=0 means no strong refs remain → destroy.
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
-                } else {
-                    // Unblessed birth-tracked object: refCount is incomplete
-                    // because it doesn't include the lexical variable that
-                    // directly holds the hash/array (e.g., `my %h; \%h`).
-                    // Transition to WEAKLY_TRACKED instead of destroying.
-                    // Weak refs will be cleared when the referent is truly
-                    // unreachable (scope exit or explicit undef).
-                    base.refCount = WEAKLY_TRACKED;
-                }
+                // No strong refs remain. For blessed objects this triggers DESTROY.
+                // For anonymous unblessed objects (born via createReferenceWithTrackedElements),
+                // refCount is complete because named objects stay at -1 (never birth-tracked)
+                // and all reference copies go through setLarge when MortalList.active.
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
             } else if (base.blessId == 0) {
                 // Unblessed object with remaining strong refs: transition to
-                // WEAKLY_TRACKED because the mortal/refCount mechanism can't
-                // accurately count all references for unblessed objects.
-                // Many code paths (copy constructors, argument passing, return
-                // values) don't go through setLarge(), so refCount undercounts
-                // the actual strong references. Without this transition, a
-                // mortal flush can bring refCount to 0 and trigger
-                // clearWeakRefsTo while the object is still alive (e.g.,
-                // Sub::Quote coercion coderefs passed inline to Moo's has()).
+                // WEAKLY_TRACKED because closure captures and temporary copies
+                // via new RuntimeScalar(RuntimeScalar) aren't tracked in refCount.
+                // Without this transition, a mortal flush can bring refCount to 0
+                // and trigger clearWeakRefsTo while the object is still alive
+                // (e.g., Sub::Quote deferred coderefs captured by closures).
                 // Since unblessed objects don't have DESTROY, there's no
                 // semantic cost to switching off refCount tracking.
                 base.refCount = WEAKLY_TRACKED;

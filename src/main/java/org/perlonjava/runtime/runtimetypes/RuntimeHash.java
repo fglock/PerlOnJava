@@ -555,15 +555,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public RuntimeScalar createReference() {
-        // Birth tracking: start refCount at 0 for hashes created while
-        // the mortal/weaken mechanism is active. This enables proper
-        // weak ref clearing when the last strong ref goes out of scope
-        // (e.g., Moo lazy weak_ref attributes where the builder returns {}).
-        // Only applied to RuntimeHash (not RuntimeCode) to avoid issues
-        // with CODE refs in glob tables getting premature refCount=0→destroy.
-        if (this.refCount == -1 && MortalList.active) {
-            this.refCount = 0;
-        }
+        // No birth tracking here. Named hashes (\%h) have a JVM local variable
+        // holding them that isn't counted in refCount, so starting at 0 would
+        // undercount. Birth tracking for anonymous hashes ({}) happens in
+        // createReferenceWithTrackedElements() where refCount IS complete.
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
         result.value = this;
@@ -572,6 +567,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     @Override
     public RuntimeScalar createReferenceWithTrackedElements() {
+        // Birth-track anonymous hashes: set refCount=0 so setLarge() can
+        // accurately count strong references. Anonymous hashes are only
+        // reachable through references (no lexical variable slot), so
+        // refCount is complete and reaching 0 means truly no strong refs.
+        if (MortalList.active && this.refCount == -1) {
+            this.refCount = 0;
+        }
         RuntimeScalar result = createReference();
         if (MortalList.active) {
             for (RuntimeScalar elem : this.elements.values()) {
