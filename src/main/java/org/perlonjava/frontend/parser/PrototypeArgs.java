@@ -137,7 +137,26 @@ public class PrototypeArgs {
                 next.text.equals("||=") ||
                 next.text.equals("//=") ||
                 next.text.equals("x=") ||
-                next.text.equals(".=");
+                next.text.equals(".=") ||
+                // Binary-only infix operators that cannot start a primary expression
+                // should terminate argument parsing. For example, with `;$` prototype:
+                //   Foo | Bar  → (Foo()) | (Bar())  not  Foo(| Bar)
+                // This matches Perl's behavior where these operators signal
+                // "no argument provided" to the function.
+                next.text.equals("|") ||
+                next.text.equals("^") ||
+                next.text.equals("|.") ||
+                next.text.equals("^.") ||
+                next.text.equals("&.") ||
+                next.text.equals("==") ||
+                next.text.equals("!=") ||
+                next.text.equals(">") ||
+                next.text.equals(">=") ||
+                next.text.equals("..") ||
+                next.text.equals("...") ||
+                next.text.equals("=~") ||
+                next.text.equals("!~") ||
+                next.text.equals("?");
     }
 
     /**

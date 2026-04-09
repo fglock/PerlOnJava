@@ -294,15 +294,31 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 3 completed
 
 ### Completed Phases
-_(none yet)_
+- [x] Phase 1: `looks_like_number` string parsing (2026-04-09)
+  - Fixed `ScalarUtil.java` to parse string content for numeric patterns
+  - File: `src/main/java/org/perlonjava/runtime/perlmodule/ScalarUtil.java`
+- [x] Phase 2: `my` scoping in `for` statement modifier (2026-04-09)
+  - Fixed parser to unwrap single-element ListNode before checking for my-assignment
+  - File: `src/main/java/org/perlonjava/frontend/parser/StatementResolver.java`
+- [x] Phase 3: Prototype `;$` with `|` infix operator (2026-04-09)
+  - Added binary-only infix operators (`|`, `^`, `==`, `!=`, `>`, `>=`,
+    `..`, `...`, `=~`, `!~`, `?`, `|.`, `^.`, `&.`) to `isArgumentTerminator`
+  - This matches Perl's behavior: `Foo | Bar` with `;$` prototype parses as
+    `(Foo()) | (Bar())` not `Foo(| Bar)`
+  - File: `src/main/java/org/perlonjava/frontend/parser/PrototypeArgs.java`
+  - Test: `src/test/resources/unit/subroutine_prototype_args.t`
 
 ### Next Steps
-1. Fix `looks_like_number` in ScalarUtil.java
-2. Investigate `my` scoping in `for` statement modifier
-3. Re-run Type::Tiny tests after each fix to measure progress
+1. Investigate `Function not found to wrap!` (Phase 4)
+2. Address remaining issues (alias assignment, TIESCALAR in eval, etc.)
+3. Re-run full Type::Tiny test suite to measure progress
+
+### Open Questions
+- `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
+  at Type/Tiny/Union.pm line 60 — separate runtime issue, not parser-related
 
 ---
 
