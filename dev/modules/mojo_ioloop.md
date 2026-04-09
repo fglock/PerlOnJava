@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 3 COMPLETE -- 65/108 test programs pass, 90.2% subtest rate (was 8/109)
+## Status: Phase 4 IN PROGRESS -- 55/108 file-level, dom.t 107/108 (was 1/2), gzip works
 
 - **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
 - **Date started**: 2026-04-09
@@ -235,6 +235,93 @@ lite_app.t(15/15→298/302), websocket_lite_app.t(14/14→34/35) regressed
 | layouted_lite_app.t | 0/0 (timeout) | 30/35 | +30 |
 | websocket_lite_app.t | 14/14 | 34/35 | +20 |
 
+### After Phase 4 fixes (55/108 passing, massive subtest gains)
+
+| Metric | Count |
+|--------|-------|
+| Total test programs | 108 |
+| Passed (t/mojo/) | 42 of 63 |
+| Passed (t/mojolicious/) | 11 of 43 |
+| Passed (t/pod*) | 2 of 2 |
+| **Total Passed** | **55** |
+| Timeout | 7 |
+
+**Note on file-level count**: The file-level pass count dropped from 65 to 55 despite
+significant subtest improvements. This is because Phase 4 fixes (especially the RC1
+DOM/HTML fix) exposed many more subtests in previously-passing tests, causing them to
+reach new code paths that crash on pre-existing issues (DESTROY not implemented,
+`Unknown encoding 'Latin-1'`, `Can't write to file ""`, indirect method parsing).
+Tests like request.t (41/41), path.t (15/15), log.t (8/8), reactor_poll.t (7/7),
+commands.t (37/37), and renderer.t (8/8) pass ALL subtests but exit 255 due to
+crashes after the last subtest.
+
+#### Phase 4 fixes applied
+
+1. **RC1 - Mojo::DOM HTML parsing / CSS selectors** (RuntimeRegex.java):
+   Fix zero-length `/gc` match semantics. After a zero-length match, Perl retries
+   at the SAME position with NOTEMPTY constraint before falling back to bumpalong.
+   Added `notemptyPattern` variant that prepends `(?=[\s\S])` and converts `??` to `?`.
+   This fixed Mojo::DOM::HTML `$TOKEN_RE` and CSS `>` child combinator.
+   **dom.t: 1/2 -> 107/108** (+106 subtests).
+
+2. **RC5 - IO::Compress::Gzip** (TieOperators.java):
+   Remove `tiedDestroy()` calls from `untie()`. In Perl, DESTROY is only called
+   during garbage collection, not during untie. The previous behavior caused
+   IO::Compress::Base::DESTROY to fire prematurely, clearing glob hash entries
+   before `close()` finished writing trailers. Gzip compression now works.
+
+3. **RC6 - `re::regexp_pattern()`** (Re.java):
+   Implement `re::regexp_pattern()` which extracts pattern string and modifiers
+   from a compiled regex. Returns `(pattern, modifiers)` in list context,
+   `(?flags:pattern)` in scalar context.
+
+#### Key subtest improvements from Phase 4
+
+| Test | Phase 3 | Phase 4 | Change |
+|------|---------|---------|--------|
+| dom.t | 1/2 | 107/108 | **+106** |
+| response.t | 28/29 | 49/52 | +21 |
+| request.t | 31/33 | 41/41 | +10 |
+| restful_lite_app.t | 41/91 | 90/91 | **+49** |
+| tag_helper_lite_app.t | 78/90 | 86/90 | +8 |
+| production_app.t | 71/95 | 52/60 | (fewer subtests run) |
+| bytestream.t | 30/31 | 31/32 | +1 |
+| lite_app.t | 298/302 | 298/302 | (stable) |
+
+#### Tests that pass all subtests but crash (exit 255)
+
+These tests pass every subtest but die after the last one due to pre-existing issues
+(DESTROY cleanup, encoding errors, indirect method parsing). They would be file-level
+passes if DESTROY were implemented or the crash-after-tests were fixed:
+
+| Test | Subtests | Crash Reason |
+|------|----------|--------------|
+| request.t | 41/41 | `Can't write to file ""` (DESTROY temp cleanup) |
+| path.t | 15/15 | `Unknown encoding 'Latin-1'` |
+| log.t | 8/8 | `Log messages already being captured` (DESTROY) |
+| reactor_poll.t | 7/7 | Stack trace after all tests |
+| renderer.t | 8/8 | `Log messages already being captured` (DESTROY) |
+| commands.t | 37/37 | `Can't call method "server" on undef` |
+| command.t | 3/3 | `Can't write to file ""` (DESTROY temp cleanup) |
+
+#### Regressions from Phase 3 (tests that were passing, now fail)
+
+Most "regressions" are tests that now run MORE subtests due to fixes, reaching
+new code paths that crash on pre-existing issues. Key causes:
+
+1. **DESTROY not implemented** (5 tests): log.t, lite_app.t, renderer.t —
+   `Mojo::Log->capture` uses a DESTROY-based guard object; second `capture()`
+   call on same logger croaks because the guard never ran DESTROY to reset state.
+   Also: request.t, response.t, command.t — temp file DESTROY cleanup.
+
+2. **Indirect method parsing** (2 tests): base_util.t, util.t —
+   `is MojoMonkeyTest::bar(), "bar"` parsed as `MojoMonkeyTest::bar->is(...)`.
+
+3. **`Unknown encoding 'Latin-1'`** (1 test): path.t — missing encoding alias.
+
+4. **Timeouts** (3 tests): file_download.t, transactor.t, sse_lite_app.t —
+   IO::Poll/reactor issues causing test server hangs.
+
 ### Remaining Failed Tests by Root Cause
 
 | Root Cause | Tests Affected | Severity |
@@ -253,8 +340,13 @@ lite_app.t(15/15→298/302), websocket_lite_app.t(14/14→34/35) regressed
 | ~~`Encode::decode` $check param~~ | ~~1~~ | **FIXED** (Encode.java) |
 | ~~`pack`/`unpack` Q/q 64-bit~~ | ~~1~~ | **FIXED** (NumericPackHandler/FormatHandler) |
 | JSON number encoding | ~10 | **High** -- `[1]` becomes `["1"]`, deep scalar type issue |
-| DOM `/g` regex zero-length match | ~5 | **High** -- HTML parser uses complex alternation patterns |
-| Mojo::Template failures | ~20 | **High** -- 17/226 subtests, blocks `*_lite_app.t` tests |
+| ~~DOM `/g` regex zero-length match~~ | ~~5~~ | **FIXED** (Phase 4 RC1: notempty pattern in RuntimeRegex.java) |
+| ~~`re::regexp_pattern()` missing~~ | ~~3~~ | **FIXED** (Phase 4 RC6: Re.java) |
+| ~~IO::Compress::Gzip `untie` calls DESTROY~~ | ~~3~~ | **FIXED** (Phase 4 RC5: TieOperators.java) |
+| Mojo::Template failures | ~20 | **High** -- 150/196 subtests, blocks `*_lite_app.t` tests |
+| DESTROY not implemented | ~10 | **High** -- Log capture guard, temp file cleanup, asset cleanup |
+| Indirect method parsing | ~2 | **Medium** -- `is Foo::bar()` parsed as `Foo::bar->is()` |
+| `Unknown encoding 'Latin-1'` | ~1 | **Low** -- missing Encode alias |
 | IO::Poll timeout tests | ~6 | **Medium** -- test server hangs, 300s timeout |
 | fork() not supported | ~3 (subprocess) | Known limitation |
 | Parser indirect method bug | 1 | Low -- monkey_patch + Test::More |
