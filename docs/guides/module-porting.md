@@ -2,91 +2,98 @@
 
 ## Overview
 
-PerlOnJava supports three types of Perl modules:
+There are two ways to provide Java XS support for a Perl module:
 
-1. **Pure Perl modules** (.pm files) - No Java code needed
-2. **Java-implemented modules** (via XSLoader) - Perl modules that load Java implementations, replacing XS/C modules
-3. **Built-in modules** (in GlobalContext) - Internal PerlOnJava modules available at startup (e.g., UNIVERSAL)
+1. **Option A: Bundle into PerlOnJava** — The Java class ships inside the PerlOnJava JAR.
+   Best for core infrastructure modules (DateTime, Digest::MD5, DBI, etc.) maintained by the PerlOnJava project.
 
-**Most CPAN module ports should use type #2 (XSLoader).** Type #3 is only for internal PerlOnJava functionality.
+2. **Option B: Publish a dual-backend CPAN module** — The `.java` file ships inside the CPAN distribution alongside the `.pm` files. `jcpan` compiles it at install time.
+   Best for third-party module authors who want their module to work on both `perl` and `jperl`.
 
-## Directory Structure
+Both options use the same XSLoader mechanism at runtime. The only difference is **where the Java class lives** and **who compiles it**.
 
-- Pure Perl modules: `src/main/perl/lib/`
-- Java implementations: `src/main/java/org/perlonjava/perlmodule/`
+Pure Perl modules require no porting — they work as-is on PerlOnJava.
 
-## Pure Perl Modules
+---
 
-Pure Perl modules can be used directly or with minimal changes. Example from `if.pm`:
+## Option A: Bundle a Module into PerlOnJava
 
-```perl
-package if;
-use strict;
+Use this when adding Java XS support to a module that the PerlOnJava project maintains.
 
-sub import   { shift; unshift @_, 1; goto &work }
-sub unimport { shift; unshift @_, 0; goto &work }
+### Directory Layout
+
 ```
-
-## Java-Implemented Modules (via XSLoader)
-
-Java implementations replace Perl XS modules. They extend `PerlModuleBase` and are loaded via `XSLoader::load()`.
+src/main/
+├── perl/lib/
+│   └── Module/
+│       └── Name.pm              # Perl wrapper (calls XSLoader::load)
+└── java/org/perlonjava/runtime/perlmodule/
+    └── ModuleName.java          # Java XS implementation
+```
 
 ### Naming Convention
 
 XSLoader maps Perl module names to Java class names:
 
-- **Perl module**: `DBI` → **Java class**: `org.perlonjava.runtime.perlmodule.Dbi`
-- **Perl module**: `Text::CSV` → **Java class**: `org.perlonjava.runtime.perlmodule.Text_CSV`
-- **Perl module**: `My::Module` → **Java class**: `org.perlonjava.runtime.perlmodule.My_Module`
+| Perl Module | Java Class | Java File |
+|---|---|---|
+| `DBI` | `org.perlonjava.runtime.perlmodule.Dbi` | `Dbi.java` |
+| `Text::CSV` | `org.perlonjava.runtime.perlmodule.TextCsv` | `TextCsv.java` |
+| `Time::HiRes` | `org.perlonjava.runtime.perlmodule.TimeHiRes` | `TimeHiRes.java` |
+| `MIME::Base64` | `org.perlonjava.runtime.perlmodule.MIMEBase64` | `MIMEBase64.java` |
+| `B::Hooks::EndOfScope` | `org.perlonjava.runtime.perlmodule.BHooksEndOfScope` | `BHooksEndOfScope.java` |
 
 Rules:
-- Package: Always `org.perlonjava.runtime.perlmodule`
-- Class name: Perl module name with `::` replaced by `_`
-- First letter capitalized (Java convention)
+- Package: always `org.perlonjava.runtime.perlmodule`
+- Class name: `::` separators removed, CamelCased
+- The constructor passes the **original Perl module name** to `super()`
 
-### Basic Structure
+### Java Implementation
 
 ```java
 package org.perlonjava.runtime.perlmodule;
 
-public class Dbi extends PerlModuleBase {
-    public Dbi() {
-        super("DBI", false);
+import org.perlonjava.runtime.runtimetypes.*;
+
+public class ModuleName extends PerlModuleBase {
+
+    public ModuleName() {
+        super("Module::Name", false);  // false = not a pragma
     }
 
-    // Called by XSLoader::load('DBI')
+    // Called by XSLoader::load('Module::Name')
     public static void initialize() {
-        Dbi dbi = new Dbi();
-        dbi.registerMethod("connect", null);
-        dbi.registerMethod("prepare", null);
-        // Register other methods...
+        ModuleName module = new ModuleName();
+        try {
+            module.registerMethod("xs_function", null);
+            module.registerMethod("perl_name", "javaMethodName", null);
+        } catch (NoSuchMethodException e) {
+            System.err.println("Warning: Missing method: " + e.getMessage());
+        }
     }
 
-    // Implement methods
-    public static RuntimeList connect(RuntimeArray args, int ctx) {
-        // Implementation...
+    // Method signature: (RuntimeArray args, int ctx) -> RuntimeList
+    public static RuntimeList xs_function(RuntimeArray args, int ctx) {
+        String param = args.get(0).toString();
+        return new RuntimeScalar(result).getList();
     }
 }
 ```
 
-## Using Java-Implemented Modules
-
-### From Perl Code (XSLoader)
-
-In your Perl module, load the Java implementation:
+### Perl Wrapper
 
 ```perl
-package My::Module;
+package Module::Name;
 use strict;
 use warnings;
 
 our $VERSION = '1.00';
 
 # Load Java implementation
-require XSLoader;
-XSLoader::load('My::Module', $VERSION);
+use XSLoader;
+XSLoader::load('Module::Name', $VERSION);
 
-# Pure Perl methods can call Java methods
+# Pure Perl methods can coexist with Java methods
 sub helper_method {
     my ($self, @args) = @_;
     return $self->java_implemented_method(@args);
@@ -95,31 +102,296 @@ sub helper_method {
 1;
 ```
 
-### From User Code
+### Module Registration
 
-Users just use the module normally:
+There are two sub-types for bundled modules:
 
-```perl
-use My::Module;
+**XSLoader modules (standard)** — Loaded on demand when the Perl `.pm` file calls `XSLoader::load()`. This is the right choice for almost all modules.
 
-my $obj = My::Module->new();
-$obj->method();
-```
-
-The XSLoader mechanism is completely transparent to end users.
-
-## Implementing Java Module Methods
-
-### Method Registration
-
-In your Java class's `initialize()` method, register all methods:
+**Built-in modules (GlobalContext)** — Only for internal PerlOnJava modules that must be available at startup (UNIVERSAL, CORE functions). Registered in `GlobalContext.java`:
 
 ```java
-public static void initialize() {
-    MyModule module = new MyModule();
-    module.registerMethod("method_name", null);
-    module.registerMethod("perl_name", "java_method_name", null);
+DiamondIO.initialize(compilerOptions);
+Universal.initialize();
+```
+
+Do not use GlobalContext for CPAN-style modules.
+
+### How XSLoader Resolution Works
+
+When `XSLoader::load('Module::Name')` is called:
+1. XSLoader looks for the Java class `org.perlonjava.runtime.perlmodule.ModuleName` in the JAR
+2. Calls the static `initialize()` method
+3. Methods are registered into the Perl namespace
+
+This is transparent to users — they just `use Module::Name` and it works.
+
+### Build and Test
+
+```bash
+make dev    # Quick build (no tests) — for iteration
+make        # Full build + all unit tests — before committing
+./jperl -e 'use Module::Name; ...'   # Quick smoke test
+```
+
+### Module Test Directory
+
+Bundled module tests live under `src/test/resources/module/` in a CPAN-like layout:
+
+```
+src/test/resources/module/
+├── Text-CSV/
+│   ├── lib/            # module-specific test libraries
+│   ├── files/          # test data files
+│   └── t/              # .t test files
+└── XML-Parser/
+    ├── samples/        # sample data files
+    └── t/              # .t test files
+```
+
+The `ModuleTestExecutionTest.java` test runner automatically discovers all `.t`
+files under `module/*/t/` and executes them. Key behaviors:
+
+- **Working directory** — Each test runs with `chdir` set to the module's root
+  directory (e.g., `module/XML-Parser/`), so relative paths like `samples/foo.xml`
+  resolve correctly.
+- **TAP validation** — Output is checked for `not ok` (excluding `# TODO`) and
+  `Bail out!` lines.
+- **Filtering** — Set `JPERL_TEST_FILTER=Text-CSV` to run only matching tests.
+- **JUnit tag** — Module tests are tagged `@Tag("module")` so they can be run
+  separately with `make test-bundled-modules`.
+
+To add tests for a new bundled module:
+
+1. Create `src/test/resources/module/Module-Name/t/` with `.t` files
+2. Add any supporting data files as sibling directories (`samples/`, `files/`, etc.)
+3. Run `make test-bundled-modules` to verify
+
+### Bundled Module Checklist
+
+- [ ] Fetch original `.pm` and `.xs` source from CPAN
+- [ ] Study XS code to understand C algorithms and edge cases
+- [ ] Check `build.gradle` for usable Java libraries
+- [ ] Create `ModuleName.java` in `src/main/java/org/perlonjava/runtime/perlmodule/`
+- [ ] Create `Module/Name.pm` in `src/main/perl/lib/`
+- [ ] Preserve original author/copyright attribution
+- [ ] Register all methods in `initialize()`
+- [ ] Create `src/test/resources/module/Module-Name/t/` with test files
+- [ ] `make dev` compiles without errors
+- [ ] Compare output with system Perl
+- [ ] `make` passes all unit tests
+- [ ] `make test-bundled-modules` passes module-specific tests
+
+---
+
+## Option B: Publish a Dual-Backend CPAN Module
+
+> **⚠️ Status: Not yet implemented.** This section describes the planned design for
+> dual-backend CPAN modules. See the [design document](../../dev/design/DUAL_BACKEND_CPAN_MODULES.md)
+> for implementation plan and progress tracking.
+
+Use this when you are a CPAN module author and want your module to work on both standard Perl (`perl`) and PerlOnJava (`jperl`).
+
+### How It Works
+
+The module ships with:
+- `.pm` files (work on both backends)
+- `.xs` file (compiled by standard Perl's `make`)
+- `.java` file (compiled by `jcpan` at install time)
+
+On **standard Perl**: `ExtUtils::MakeMaker` compiles the `.xs` as usual.
+On **PerlOnJava**: `jcpan` ignores the `.xs`, compiles the `.java`, and installs the resulting JAR.
+
+### Distribution Layout
+
+```
+Foo-Bar-1.00/
+├── lib/
+│   └── Foo/
+│       ├── Bar.pm           # Main module — calls XSLoader::load()
+│       └── Bar/
+│           └── PP.pm        # Pure Perl fallback (optional but recommended)
+├── java/
+│   └── Foo/
+│       └── Bar.java         # Java XS implementation for PerlOnJava
+├── Bar.xs                   # C XS implementation for standard Perl
+├── Makefile.PL
+├── t/
+│   └── basic.t
+└── META.json
+```
+
+The `java/` directory mirrors the `lib/` structure using the Perl module path, **not** Java package conventions. This keeps it simple for Perl authors who may not know Java packaging.
+
+### The Perl Module (.pm)
+
+The `.pm` file uses the standard XSLoader fallback pattern that works on both backends:
+
+```perl
+package Foo::Bar;
+use strict;
+use warnings;
+
+our $VERSION = '1.00';
+our $IsPurePerl;
+
+eval {
+    require XSLoader;
+    XSLoader::load('Foo::Bar', $VERSION);
+    $IsPurePerl = 0;
+};
+if ($@) {
+    require Foo::Bar::PP;    # Pure Perl fallback
+    $IsPurePerl = 1;
 }
+
+1;
+```
+
+On standard Perl, `XSLoader` loads the compiled `.so` from `auto/`.
+On PerlOnJava, `XSLoader` loads the compiled `.jar` from `auto/`.
+If neither is available, the PP fallback kicks in.
+
+### The Java Implementation (.java)
+
+```java
+package org.perlonjava.cpan.foo;
+
+import org.perlonjava.runtime.perlmodule.PerlModuleBase;
+import org.perlonjava.runtime.runtimetypes.*;
+
+public class Bar extends PerlModuleBase {
+
+    public Bar() {
+        super("Foo::Bar", false);
+    }
+
+    public static void initialize() {
+        Bar module = new Bar();
+        try {
+            module.registerMethod("fast_function", null);
+        } catch (NoSuchMethodException e) {
+            System.err.println("Warning: Missing method: " + e.getMessage());
+        }
+    }
+
+    public static RuntimeList fast_function(RuntimeArray args, int ctx) {
+        String input = args.get(0).toString();
+        // Java implementation replacing the C XS code
+        return new RuntimeScalar(result).getList();
+    }
+}
+```
+
+### The Java File Manifest
+
+Include a `META-INF/perlonjava.properties` inside the distribution's `java/` directory so `jcpan` knows how to compile and register the module:
+
+```properties
+# java/META-INF/perlonjava.properties
+perl-module=Foo::Bar
+main-class=org.perlonjava.cpan.foo.Bar
+```
+
+### Where jcpan Installs It
+
+`jcpan` mirrors Perl's `auto/` convention for compiled XS:
+
+```
+~/.perlonjava/
+├── lib/                              # .pm files
+│   └── Foo/
+│       ├── Bar.pm
+│       └── Bar/
+│           └── PP.pm
+└── auto/                             # compiled Java XS
+    └── Foo/
+        └── Bar/
+            ├── Bar.jar               # compiled module JAR
+            └── Bar.java              # source (kept for recompilation)
+```
+
+### What jcpan Does at Install Time
+
+1. Copies `.pm` files to `~/.perlonjava/lib/` (standard behavior)
+2. Detects the `java/` directory in the distribution
+3. Compiles the `.java` file against `perlonjava.jar`:
+   ```bash
+   javac -cp perlonjava.jar -d /tmp/build java/Foo/Bar.java
+   jar cf ~/.perlonjava/auto/Foo/Bar/Bar.jar -C /tmp/build .
+   ```
+4. Copies the source to `~/.perlonjava/auto/Foo/Bar/Bar.java`
+
+### XSLoader Search Order
+
+When `XSLoader::load('Foo::Bar')` is called at runtime:
+
+1. **Built-in registry** — Java classes in the PerlOnJava JAR (`org.perlonjava.runtime.perlmodule.*`)
+2. **`auto/` JARs** — `~/.perlonjava/auto/Foo/Bar/Bar.jar` (CPAN-installed)
+3. **Fail** — dies with `"Can't load loadable object for module Foo::Bar"`, which triggers the PP fallback if the module has one
+
+### Makefile.PL for Dual Backend
+
+```perl
+use ExtUtils::MakeMaker;
+
+WriteMakefile(
+    NAME         => 'Foo::Bar',
+    VERSION_FROM => 'lib/Foo/Bar.pm',
+    XS           => { 'Bar.xs' => 'Bar.c' },   # standard Perl XS
+    # jcpan ignores XS and uses java/ directory instead
+);
+```
+
+No changes to `Makefile.PL` are needed — `jcpan` handles the `java/` directory automatically.
+
+### Dual-Backend Module Checklist
+
+- [ ] Module works on standard Perl with `.xs` (existing behavior)
+- [ ] Add `java/` directory with Java XS implementation
+- [ ] Add `java/META-INF/perlonjava.properties` manifest
+- [ ] `.pm` file has XSLoader fallback pattern (eval + PP require)
+- [ ] Test with `jcpan install ./` from the distribution directory
+- [ ] Test with standard `perl Makefile.PL && make test`
+- [ ] Both backends produce the same output
+- [ ] Credit PerlOnJava port in documentation
+
+---
+
+## Java Implementation Reference
+
+### Calling Conventions
+
+All Java XS methods have the same signature:
+
+```java
+public static RuntimeList method_name(RuntimeArray args, int ctx)
+```
+
+- `args.get(0)` — first argument (`$self` for methods)
+- `ctx` — `RuntimeContextType.SCALAR`, `LIST`, or `VOID`
+
+### Returning Values
+
+```java
+// Scalar
+return new RuntimeScalar(value).getList();
+
+// List
+RuntimeList result = new RuntimeList();
+result.add(new RuntimeScalar(item1));
+result.add(new RuntimeScalar(item2));
+return result;
+
+// Array reference
+RuntimeArray arr = new RuntimeArray();
+arr.push(new RuntimeScalar(item));
+return arr.createReference().getList();
+
+// Hash reference
+RuntimeHash hash = new RuntimeHash();
+hash.put("key", new RuntimeScalar(value));
+return hash.createReference().getList();
 ```
 
 ### Defining Exports
@@ -130,259 +402,136 @@ module.defineExport("EXPORT_OK", "optional_function");
 module.defineExportTag("group", "function1", "function2");
 ```
 
-## Calling Conventions
+### Converting XS Patterns to Java
 
-### Method Parameters
-- First parameter: RuntimeArray containing arguments
-- Second parameter: Context type (void/scalar/list)
+| XS Pattern | Java Equivalent |
+|---|---|
+| `SvIV(arg)` | `args.get(i).getInt()` |
+| `SvNV(arg)` | `args.get(i).getDouble()` |
+| `SvPV(arg, len)` | `args.get(i).toString()` |
+| `newSViv(n)` | `new RuntimeScalar(n)` |
+| `newSVnv(n)` | `new RuntimeScalar(n)` |
+| `newSVpv(s, len)` | `new RuntimeScalar(s)` |
+| `av_fetch(av, i, 0)` | `array.get(i)` |
+| `hv_fetch(hv, k, len, 0)` | `hash.get(k)` |
+| `RETVAL` / `ST(0)` | `return new RuntimeScalar(x).getList()` |
 
-Example:
+### Available Java Libraries
+
+Check `build.gradle` for dependencies already in PerlOnJava:
+
+| Java Library | Use Case | Example Module |
+|---|---|---|
+| Gson | JSON parsing/encoding | `Json.java` |
+| jnr-posix | Native POSIX calls | `POSIX.java` |
+| jnr-ffi | Foreign function interface | Native bindings |
+| SnakeYAML | YAML parsing | `YAMLPP.java` |
+| java.time | Date/time operations | `DateTime.java` |
+| java.security | Crypto (MD5, SHA) | `DigestMD5.java` |
+| java.util.Base64 | Base64 encoding | `MIMEBase64.java` |
+
+### Using PosixLibrary for Native Calls
+
 ```java
-public static RuntimeList method_name(RuntimeArray args, int ctx) {
-    RuntimeHash self = args.get(0).hashDeref();
-    String param1 = args.get(1).toString();
-    return new RuntimeList(new RuntimeScalar(result));
-}
+// Direct POSIX call (Unix only)
+int uid = PosixLibrary.INSTANCE.getuid();
+
+// Cross-platform with Windows fallback (preferred)
+RuntimeScalar uid = NativeUtils.getuid(ctx);
 ```
 
-### Return Values
-- Return `RuntimeList` containing results
-- For scalar context: return single-element list
-- For list context: return multi-element list
-- For void context: return empty list
+---
 
-## Module Registration
+## Real-World Examples
 
-There are two ways to register Java-implemented modules:
+### Bundled: DateTime (Option A)
 
-### 1. Built-in/Internal Modules (GlobalContext)
+The DateTime module provides Java XS using `java.time` APIs:
 
-**Only for internal PerlOnJava modules** that need to be available immediately at startup (e.g., UNIVERSAL, CORE functions).
+| XS Function | Java Implementation |
+|---|---|
+| `_rd2ymd(rd)` | `LocalDate.MIN.with(JulianFields.RATA_DIE, rd)` |
+| `_ymd2rd(y, m, d)` | `LocalDate.of(y, m, d).getLong(JulianFields.RATA_DIE)` |
+| `_is_leap_year(y)` | `Year.isLeap(y)` |
+| `_day_length(utc_rd)` | Custom leap seconds table |
 
-Register in `GlobalContext.java`:
+Files:
+- `src/main/java/org/perlonjava/runtime/perlmodule/DateTime.java`
+- CPAN `.pm` files installed via `jcpan install DateTime`
 
-```java
-// Initialize built-in Perl classes
-DiamondIO.initialize(compilerOptions);
-Universal.initialize();
-```
+Pure Perl fallback: `DateTime::PP` — used automatically if Java XS is unavailable.
 
-**Do not use this approach for regular CPAN-style modules.**
+### Bundled: Time::Piece (Option A)
 
-### 2. Regular Modules (XSLoader)
+Files:
+- `src/main/java/org/perlonjava/runtime/perlmodule/TimePiece.java`
+- `src/main/perl/lib/Time/Piece.pm`
+- `src/main/perl/lib/Time/Seconds.pm`
 
-**This is the standard approach for porting modules.** Use XSLoader in your Perl module:
+~80% of the original Perl code reused as-is. Only `_strftime`, `_strptime`, `_crt_localtime`, and similar C functions were reimplemented in Java.
 
-```perl
-package DBI;
-use strict;
-use warnings;
-
-our $VERSION = '1.643';
-
-# Load Java implementation
-require XSLoader;
-XSLoader::load('DBI', $VERSION);
-
-# Pure Perl methods
-sub do {
-    my ($dbh, $statement, $attr, @params) = @_;
-    my $sth = $dbh->prepare($statement, $attr) or return undef;
-    $sth->execute(@params) or return undef;
-    my $rows = $sth->rows;
-    ($rows == 0) ? "0E0" : $rows;
-}
-
-1;
-```
-
-When `XSLoader::load('DBI')` is called:
-1. XSLoader looks for the Java class `org.perlonjava.runtime.perlmodule.Dbi`
-2. Calls the static `initialize()` method
-3. Registers all methods defined in the Java class
-
-This is transparent to users - they just `use DBI` and it works.
-
-## Real-World Example: DBI Module
-
-The DBI module demonstrates a complete port using XSLoader:
-
-1. **Perl module** (`DBI.pm`):
-```perl
-package DBI;
-use strict;
-use warnings;
-
-our $VERSION = '1.643';
-
-# Load Java implementation
-require XSLoader;
-XSLoader::load('DBI', $VERSION);
-
-# Pure Perl helper method
-sub do {
-    my ($dbh, $statement, $attr, @params) = @_;
-    my $sth = $dbh->prepare($statement, $attr) or return undef;
-    $sth->execute(@params) or return undef;
-    my $rows = $sth->rows;
-    ($rows == 0) ? "0E0" : $rows;
-}
-
-1;
-```
-
-2. **Java implementation** (`org/perlonjava/perlmodule/Dbi.java`):
-```java
-public class Dbi extends PerlModuleBase {
-    public Dbi() {
-        super("DBI", false);
-    }
-
-    // Called by XSLoader
-    public static void initialize() {
-        Dbi dbi = new Dbi();
-        dbi.registerMethod("connect", null);
-        dbi.registerMethod("prepare", null);
-        dbi.registerMethod("execute", null);
-        // ... register other methods
-    }
-
-    // Implementation of connect method
-    public static RuntimeList connect(RuntimeArray args, int ctx) {
-        RuntimeHash dbh = new RuntimeHash();
-        String jdbcUrl = args.get(1).toString();
-        dbh.put("Username", new RuntimeScalar(args.get(2).toString()));
-        // ... JDBC connection logic
-        return dbh.createReference().getList();
-    }
-}
-```
-
-**Key points:**
-- DBI.pm calls `XSLoader::load('DBI')` to load the Java implementation
-- Java class is in `org.perlonjava.runtime.perlmodule.Dbi` (naming convention)
-- `initialize()` method registers all Java-implemented methods
-- Pure Perl methods (like `do()`) can call Java methods (like `prepare()`, `execute()`)
-
-## Best Practices
-
-1. Keep pure Perl code for simple functionality
-2. Use Java implementation for:
-    - Performance-critical code
-    - System interactions
-    - Database connectivity
-    - Complex data structures
-3. Maintain Perl calling conventions
-4. Handle both scalar and list contexts
-5. Properly manage resources and error states
-6. Follow PerlOnJava naming conventions
+---
 
 ## Testing
 
-1. Create test files in `src/test/resources/`
-2. Write Java tests in `src/test/java/`
-3. Test both pure Perl and Java implementations
-4. Verify compatibility with original Perl module
+### Unit Tests
+
+Create test files in `src/test/resources/` for bundled modules:
+
+```bash
+make dev                          # Quick build
+./jperl src/test/resources/module_name.t
+make                              # Full build + all tests
+```
+
+### Comparing with Standard Perl
+
+```bash
+cat > /tmp/test.pl << 'EOF'
+use Module::Name;
+# test code
+EOF
+
+perl /tmp/test.pl      # standard Perl
+./jperl /tmp/test.pl   # PerlOnJava
+```
 
 ### CPAN Smoke Test
 
-Use `dev/tools/cpan_smoke_test.pl` to verify CPAN module compatibility across a curated registry of modules. This helps catch regressions when making changes to PerlOnJava's runtime or module infrastructure.
+Use `dev/tools/cpan_smoke_test.pl` for regression testing across modules:
 
 ```bash
-# Quick regression check (known-good modules only)
-perl dev/tools/cpan_smoke_test.pl --quick
-
-# Test all registered modules
-perl dev/tools/cpan_smoke_test.pl
-
-# Test specific modules
-perl dev/tools/cpan_smoke_test.pl Moo DateTime Try::Tiny
-
-# Compare with a previous run to detect regressions
-perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_20250331.dat
-
-# List all registered modules and their status
-perl dev/tools/cpan_smoke_test.pl --list
+perl dev/tools/cpan_smoke_test.pl --quick              # known-good modules
+perl dev/tools/cpan_smoke_test.pl Moo DateTime Try::Tiny  # specific modules
+perl dev/tools/cpan_smoke_test.pl --compare cpan_smoke_20250331.dat  # regressions
+perl dev/tools/cpan_smoke_test.pl --list               # show all registered modules
 ```
 
-The script reports pass/fail counts, XS detection (pure-perl, java-xs, xs-required), and flags regressions when compared with a previous run. Run with `perl` (not `jperl`) because it uses fork.
+Run with `perl` (not `jperl`) because it uses fork.
 
-## Version Compatibility
-
-- Perl version requirements
-- Java version requirements
-- PerlOnJava version compatibility matrix
-
-## Error Handling
-
-### Exception Mapping
-- Perl exceptions map to Java RuntimeExceptions
-- Standard error patterns follow Perl conventions
-- Error propagation maintains stack traces
-
-### Guidelines
-- Use die() for Perl-style exceptions
-- Propagate Java exceptions with proper context
-- Maintain error state in $@ variable
-
-## Performance Considerations
-
-### Implementation Choice
-- Use Java for performance-critical code paths
-- Pure Perl for maintainability and compatibility
-- Hybrid approach for balanced solutions
-
-### Optimization Techniques
-- Minimize context switches
-- Cache frequently used values
-- Use native Java collections where appropriate
-
-### Memory Management
-- Release resources promptly
-- Monitor object lifecycles
-- Follow Java garbage collection best practices
+---
 
 ## Troubleshooting
 
-### Common Issues
-- Module loading failures
-- Method registration problems
-- Context handling errors
+### "Can't load loadable object for module ..."
+- **Bundled**: Check class name matches naming convention, verify `initialize()` is static
+- **CPAN-installed**: Check `~/.perlonjava/auto/Module/Name/Name.jar` exists
+- **Both**: Module should fall back to PP if error matches `/loadable object/`
 
-### Debugging Techniques
-- Enable verbose logging
-- Use Java debugger for implementation code
-- Perl debugging for pure Perl portions
+### Method Not Found
+- Ensure method is registered in `initialize()`
+- Check signature: `public static RuntimeList name(RuntimeArray args, int ctx)`
 
-### Module Loading
-- Verify path configuration
-- Check initialization sequence
-- Validate export definitions
+### Different Output Than Standard Perl
+- Compare with fixed test values (not current time)
+- Check locale handling
+- Verify edge cases from XS comments
 
-## Migration Checklist
-
-### Pre-migration Assessment
-- [ ] Analyze module dependencies
-- [ ] Identify XS/C components
-- [ ] Document API requirements
-
-### Testing Requirements
-- [ ] Unit test coverage
-- [ ] Integration tests
-- [ ] Performance benchmarks
-
-### Documentation Requirements
-- [ ] API documentation
-- [ ] Migration notes
-- [ ] Version compatibility
-
-### Post-migration Verification
-- [ ] Functionality verification
-- [ ] Performance validation
-- [ ] Compatibility testing
+---
 
 ## See Also
 
-- [XS Compatibility Reference](../reference/xs-compatibility.md) - List of XS modules with Java implementations and PP fallbacks
-- [Using CPAN Modules](using-cpan-modules.md) - Installing and using CPAN modules
-- [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility
+- [XS Compatibility Reference](../reference/xs-compatibility.md) — XS modules with Java implementations and PP fallbacks
+- [Using CPAN Modules](using-cpan-modules.md) — Installing and using CPAN modules with jcpan
+- [Feature Matrix](../reference/feature-matrix.md) — Perl feature compatibility
+- [GitHub Discussion #25](https://github.com/fglock/PerlOnJava/discussions/25) — Perl/Java module loading from project directories
