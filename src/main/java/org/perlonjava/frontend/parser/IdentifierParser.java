@@ -356,9 +356,9 @@ public class IdentifierParser {
                     // `@{${...}` should fall back to block parsing
                     return null;
                 }
-                if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && Character.isUpperCase(nextToken.text.charAt(0))) {
-                    // `$^` can be followed by an optional uppercase identifier: `$^A`
-                    //  ^A is control-A char(1)
+                if (token.text.equals("^") && nextToken.type == LexerTokenType.IDENTIFIER && (Character.isUpperCase(nextToken.text.charAt(0)) || nextToken.text.charAt(0) == '_')) {
+                    // `$^` can be followed by an optional uppercase or underscore identifier: `$^A`, `${^_THING}`
+                    //  ^A is control-A char(1), ^_ is char(31)
                     TokenUtils.consume(parser); // consume the ^
                     if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parse $^ at token " + TokenUtils.peek(parser).text);
                     //  `$^LAST_FH` is parsed as `$^L` + `AST_FH`
