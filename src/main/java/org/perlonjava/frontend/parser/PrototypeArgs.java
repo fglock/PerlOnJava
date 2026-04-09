@@ -192,7 +192,7 @@ public class PrototypeArgs {
         // than comparison operators. So `reftype $h eq 'HASH'` parses as
         // `(reftype($h)) eq 'HASH'`, not `reftype($h eq 'HASH')`.
         if (!hasParentheses && prototype != null && isNamedUnaryPrototype(prototype)) {
-            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>")) {
+            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>") || isComma(TokenUtils.peek(parser))) {
                 // No argument - check if optional
                 if (!allowsZeroArguments(prototype)) {
                     throwNotEnoughArgumentsError(parser);

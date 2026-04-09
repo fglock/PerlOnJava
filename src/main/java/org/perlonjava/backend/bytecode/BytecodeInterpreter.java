@@ -2248,9 +2248,7 @@ public class BytecodeInterpreter {
                 RuntimeBase val2 = registers[rs2];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                boolean isEqual = (cmpResult.getInt() == 0);
-                registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                registers[rd] = CompareOperators.eq(s1, s2);
                 return pc;
             }
 
@@ -2263,9 +2261,7 @@ public class BytecodeInterpreter {
                 RuntimeBase val2 = registers[rs2];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                boolean isNotEqual = (cmpResult.getInt() != 0);
-                registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                registers[rd] = CompareOperators.ne(s1, s2);
                 return pc;
             }
 
