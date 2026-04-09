@@ -333,11 +333,24 @@ public class CompressRawZlib extends PerlModuleBase {
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::deflateStream"));
 
+            // In scalar context, return only the object (CPAN code uses: $d ||= Deflate->new(...))
+            if (ctx == RuntimeContextType.SCALAR) {
+                RuntimeList result = new RuntimeList();
+                result.add(ref);
+                return result;
+            }
+
             RuntimeList result = new RuntimeList();
             result.add(ref);
             result.add(new RuntimeScalar(Z_OK));
             return result;
         } catch (Exception e) {
+            // In scalar context, return undef on error
+            if (ctx == RuntimeContextType.SCALAR) {
+                RuntimeList result = new RuntimeList();
+                result.add(scalarUndef);
+                return result;
+            }
             RuntimeList result = new RuntimeList();
             result.add(scalarUndef);
             result.add(new RuntimeScalar(Z_STREAM_ERROR));
@@ -388,11 +401,24 @@ public class CompressRawZlib extends PerlModuleBase {
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::inflateStream"));
 
+            // In scalar context, return only the object (CPAN code uses: $i ||= Inflate->new(...))
+            if (ctx == RuntimeContextType.SCALAR) {
+                RuntimeList result = new RuntimeList();
+                result.add(ref);
+                return result;
+            }
+
             RuntimeList result = new RuntimeList();
             result.add(ref);
             result.add(new RuntimeScalar(Z_OK));
             return result;
         } catch (Exception e) {
+            // In scalar context, return undef on error
+            if (ctx == RuntimeContextType.SCALAR) {
+                RuntimeList result = new RuntimeList();
+                result.add(scalarUndef);
+                return result;
+            }
             RuntimeList result = new RuntimeList();
             result.add(scalarUndef);
             result.add(new RuntimeScalar(Z_STREAM_ERROR));

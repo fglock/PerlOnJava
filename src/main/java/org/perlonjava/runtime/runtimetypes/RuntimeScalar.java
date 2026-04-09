@@ -1933,8 +1933,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.type = RuntimeScalarType.STRING;  // ++ flattens vstrings
             }
             case BOOLEAN -> { // 5
+                int intVal = (boolean) this.value ? 1 : 0;
                 this.type = RuntimeScalarType.INTEGER;
-                this.value = this.getInt() + 1;
+                this.value = intVal + 1;
             }
             case GLOB -> { // 6
                 if (this instanceof RuntimeGlob) {
@@ -1954,8 +1955,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return variable;
             }
             case DUALVAR -> { // 9
+                int dualVal = this.getInt();
                 this.type = RuntimeScalarType.INTEGER;
-                this.value = this.getInt() + 1;
+                this.value = dualVal + 1;
             }
             case FORMAT -> { // 10
                 this.type = RuntimeScalarType.INTEGER;
@@ -2144,8 +2146,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return this.preAutoDecrement();
             }
             case BOOLEAN -> { // 5
+                int intVal = (boolean) this.value ? 1 : 0;
                 this.type = RuntimeScalarType.INTEGER;
-                this.value = this.getInt() - 1;
+                this.value = intVal - 1;
             }
             case GLOB -> { // 6
                 if (this instanceof RuntimeGlob) {
@@ -2165,8 +2168,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 return variable;
             }
             case DUALVAR -> { // 9
+                int dualVal = this.getInt();
                 this.type = RuntimeScalarType.INTEGER;
-                this.value = this.getInt() - 1;
+                this.value = dualVal - 1;
             }
             case FORMAT -> { // 10
                 this.type = RuntimeScalarType.INTEGER;

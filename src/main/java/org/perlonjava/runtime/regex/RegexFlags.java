@@ -69,6 +69,10 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public int toPatternFlags() {
         int flags = 0;
         
+        // UNIX_LINES ensures that . only excludes \n (not \r, \u0085, etc.)
+        // This matches Perl's behavior where . excludes only \n
+        flags |= UNIX_LINES;
+        
         // /u flag enables Unicode semantics for \w, \d, \s
         // /a flag (ASCII-restrict) disables Unicode semantics
         if (isUnicode && !isAscii) {
