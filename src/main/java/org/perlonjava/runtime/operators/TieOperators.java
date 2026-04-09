@@ -39,11 +39,9 @@ public class TieOperators {
         if (blessId != 0) {
             // classArg is a blessed object, get the package name
             className = NameNormalizer.getBlessStr(blessId);
-            // Prepend the object to the arguments
-            RuntimeBase[] argsWithObj = new RuntimeBase[scalars.length - 1];
-            argsWithObj[0] = classArg;
-            System.arraycopy(scalars, 2, argsWithObj, 1, scalars.length - 2);
-            args = new RuntimeArray(argsWithObj);
+            // Extra args only — classArg will be used as the invocant,
+            // so RuntimeCode.call() will prepend it as $_[0]
+            args = new RuntimeArray(Arrays.copyOfRange(scalars, 2, scalars.length));
         } else {
             // classArg is a string class name
             className = classArg.getBoolean() ? scalars[1].toString() : "main";
@@ -62,8 +60,12 @@ public class TieOperators {
         untie(ctx, variable);
 
         // Call the Perl method
+        // When classArg is a blessed ref, use it as invocant so $_[0] is the object
+        // (not a string). This matches Perl's tie() behavior where `tie *$obj, $obj`
+        // passes the blessed object as $_[0] to TIEHANDLE.
+        RuntimeScalar invocant = blessId != 0 ? classArg : new RuntimeScalar(className);
         RuntimeScalar self = RuntimeCode.call(
-                new RuntimeScalar(className),
+                invocant,
                 new RuntimeScalar(method),
                 null,
                 args,

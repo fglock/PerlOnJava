@@ -321,8 +321,13 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'q':
                 case 'Q':
-                    // 64-bit quads not supported (ivsize=4, no use64bitint)
-                    throw new PerlCompilerException("Invalid type '" + format + "' in pack");
+                    // 64-bit quad (always 8 bytes) - use endianness if specified
+                    if (modifiers.bigEndian) {
+                        PackWriter.writeLongBigEndian(output, (long) value.getDouble());
+                    } else {
+                        PackWriter.writeLongLittleEndian(output, (long) value.getDouble());
+                    }
+                    break;
                 case 'f':
                     // Float (4 bytes) - use endianness if specified
                     if (modifiers.bigEndian) {

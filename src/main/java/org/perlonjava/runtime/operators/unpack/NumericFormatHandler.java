@@ -214,13 +214,84 @@ public abstract class NumericFormatHandler implements FormatHandler {
 
         @Override
         public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
-            // 64-bit quads not supported (ivsize=4, no use64bitint)
-            throw new PerlCompilerException("Invalid type '" + (signed ? "q" : "Q") + "' in unpack");
+            // For UTF-8 strings, q/Q formats read CHARACTER CODES (masking to 0xFF), not UTF-8 bytes
+            if (state.isUTF8Data() && state.isCharacterMode()) {
+                ByteBuffer buffer = state.getBuffer();
+                boolean isBigEndian = (buffer.order() == java.nio.ByteOrder.BIG_ENDIAN);
+
+                for (int i = 0; i < count; i++) {
+                    if (state.remainingCodePoints() < 8) {
+                        break;
+                    }
+                    long value;
+                    if (isBigEndian) {
+                        value = ((long) (state.nextCodePoint() & 0xFF) << 56) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
+                                ((long) (state.nextCodePoint() & 0xFF));
+                    } else {
+                        value = ((long) (state.nextCodePoint() & 0xFF)) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 8) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 16) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 24) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 32) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 40) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 48) |
+                                ((long) (state.nextCodePoint() & 0xFF) << 56);
+                    }
+
+                    if (signed) {
+                        output.add(new RuntimeScalar(value));
+                    } else {
+                        // For unsigned Q, use double for values > Long.MAX_VALUE
+                        if (value >= 0) {
+                            output.add(new RuntimeScalar(value));
+                        } else {
+                            // Convert to unsigned via double
+                            output.add(new RuntimeScalar(value + 18446744073709551616.0));
+                        }
+                    }
+                }
+                return;
+            }
+
+            // For non-UTF-8 strings, use byte buffer logic
+            boolean wasCharacterMode = state.isCharacterMode();
+            if (wasCharacterMode) {
+                state.switchToByteMode();
+            }
+
+            ByteBuffer buffer = state.getBuffer();
+
+            for (int i = 0; i < count; i++) {
+                if (buffer.remaining() < 8) {
+                    break;
+                }
+                long value = buffer.getLong();
+                if (signed) {
+                    output.add(new RuntimeScalar(value));
+                } else {
+                    // For unsigned Q, use double for values > Long.MAX_VALUE
+                    if (value >= 0) {
+                        output.add(new RuntimeScalar(value));
+                    } else {
+                        output.add(new RuntimeScalar(value + 18446744073709551616.0));
+                    }
+                }
+            }
+
+            if (wasCharacterMode) {
+                state.switchToCharacterMode();
+            }
         }
 
         @Override
         public int getFormatSize() {
-            return 8; // q, Q are 8-byte formats (j, J use LongHandler at 4 bytes)
+            return 8; // q, Q are 8-byte formats
         }
     }
 

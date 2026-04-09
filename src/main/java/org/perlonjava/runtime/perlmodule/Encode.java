@@ -939,6 +939,7 @@ public class Encode extends PerlModuleBase {
 
         RuntimeScalar self = args.get(0);
         String octets = args.get(1).toString();
+        int check = args.size() > 2 ? args.get(2).getInt() : 0;
 
         // Extract charset name from the blessed hash
         RuntimeHash hash = (RuntimeHash) self.value;
@@ -949,6 +950,19 @@ public class Encode extends PerlModuleBase {
 
         try {
             Charset charset = getCharset(charsetName);
+
+            // Check for wide characters (code points > 255) in input.
+            // These cannot be valid octets and indicate invalid input.
+            if ((check & 0x01) != 0) { // DIE_ON_ERR
+                for (int i = 0; i < octets.length(); i++) {
+                    if (octets.charAt(i) > 255) {
+                        throw new PerlCompilerException(
+                                "Cannot decode string with wide characters at " +
+                                        "Encode.pm line 0.");
+                    }
+                }
+            }
+
             byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
             bytes = trimOrphanBytes(bytes, charset);
 
@@ -961,7 +975,15 @@ public class Encode extends PerlModuleBase {
             // Slow path with error handling
             return decodeWithCharset(bytes, charset, charsetName, check, codeRef, args, 1).getList();
         } catch (Exception e) {
-            throw new RuntimeException("Cannot decode octets with " + charsetName + ": " + e.getMessage());
+            if ((check & 0x01) != 0) {
+                throw new PerlCompilerException(charsetName + " \"\\x{" +
+                        String.format("%02X", (int) octets.charAt(0)) +
+                        "}\" does not map to Unicode");
+            }
+            // Default: silently return best effort
+            byte[] bytes = octets.getBytes(StandardCharsets.ISO_8859_1);
+            String decoded = new String(bytes, getCharset(charsetName));
+            return new RuntimeScalar(decoded).getList();
         }
     }
 

@@ -254,9 +254,7 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for looks_like_number() method");
         }
-        RuntimeScalar scalar = args.get(0);
-        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
-        boolean isNumber = scalar.type == RuntimeScalarType.INTEGER || scalar.type == RuntimeScalarType.DOUBLE;
+        boolean isNumber = ScalarUtils.looksLikeNumber(args.get(0));
         return new RuntimeScalar(isNumber).getList();
     }
 
