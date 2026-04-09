@@ -598,12 +598,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // hexPrinter(inputStr);
 
-        // Only look up pos() for /g matches - non-/g matches always start from 0
+        // Look up pos() for /g matches and for non-/g matches that use \G.
+        // In Perl, \G anchors at pos() even in non-/g matches (e.g. $str =~ /\Gfoo/).
         RuntimeScalar posScalar = null;
         boolean isPosDefined = false;
         int startPos = 0;
         
-        if (regex.regexFlags.isGlobalMatch()) {
+        if (regex.regexFlags.isGlobalMatch() || regex.useGAssertion) {
             // Use RuntimePosLvalue to get the current position
             posScalar = RuntimePosLvalue.pos(string);
             isPosDefined = posScalar.getDefinedBoolean();
@@ -611,7 +612,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             
             // Check if previous call had zero-length match at this position (for SCALAR context)
             // This prevents infinite loops in: while ($str =~ /pat/g)  
-            if (ctx == RuntimeContextType.SCALAR) {
+            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.SCALAR) {
                 String patternKey = regex.patternString;
                 if (RuntimePosLvalue.hadZeroLengthMatchAt(string, startPos, patternKey)) {
                     // Previous match was zero-length at this position - fail to break loop
@@ -647,7 +648,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         try {
             while (matcher.find()) {
                 // If \G is used, ensure the match starts at the expected position
-                if (regex.useGAssertion && isPosDefined && matcher.start() != startPos) {
+                // When pos() is undefined, \G anchors at position 0 (startPos defaults to 0)
+                if (regex.useGAssertion && matcher.start() != startPos) {
                     break;
                 }
 

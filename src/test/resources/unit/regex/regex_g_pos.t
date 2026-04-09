@@ -80,6 +80,82 @@ $pattern = qr/\G(\d{3})/;  # Use a capture group
 $string =~ /$pattern/;
 ok(!($1 ne '123'), 'Non-global match does not use \\G, matched \'123\'');
 ###################
+# \G anchoring when pos() is undefined
+# \G should anchor at position 0 when pos is undef, not scan forward
+
+# \G(\s+) should NOT match "-dac -tac" at pos 0 (no space at pos 0)
+my $cfg = "-dac -tac";
+if ($cfg =~ /\G(\s+)/gc) {
+    ok(0, '\\G(\\s+) should not match when no space at pos 0');
+} else {
+    ok(1, '\\G(\\s+) correctly fails when pos is undef and no space at pos 0');
+}
+
+# \G([a-z]+) should NOT match "-dac -tac" at pos 0 (dash at pos 0)
+pos($cfg) = undef;
+if ($cfg =~ /\G([a-z]+)/gc) {
+    ok(0, '\\G([a-z]+) should not match when no letter at pos 0');
+} else {
+    ok(1, '\\G([a-z]+) correctly fails when pos is undef and no letter at pos 0');
+}
+
+# \G(-) SHOULD match "-dac -tac" at pos 0 (dash at pos 0)
+pos($cfg) = undef;
+if ($cfg =~ /\G(-)/gc) {
+    ok($1 eq '-' && pos($cfg) == 1, '\\G(-) correctly matches dash at pos 0');
+} else {
+    ok(0, '\\G(-) should match dash at pos 0');
+}
+
+# Simulate parse_args pattern: multiple \G/gc alternations on same string
+pos($cfg) = undef;
+my @tokens;
+my $part = "";
+while (1) {
+    if ($cfg =~ /\G([\"\'])/gc) {
+        # quote
+    }
+    elsif ($cfg =~ /\G(\s+)/gc) {
+        push @tokens, $part if length($part);
+        $part = "";
+    }
+    elsif ($cfg =~ /\G(.)/gc) {
+        $part .= $1;
+    }
+    else {
+        push @tokens, $part if length($part);
+        last;
+    }
+}
+ok(scalar(@tokens) == 2 && $tokens[0] eq '-dac' && $tokens[1] eq '-tac',
+   '\\G/gc tokenizer correctly splits "-dac -tac" into two tokens');
+
+###################
+# \G in non-/g matches should still anchor at pos()
+# This is used by Perl::Tidy's tokenizer for signature detection
+
+my $line = "sub foo(\$bar) { }";
+pos($line) = 7;  # after "sub foo"
+ok($line =~ /\G\s*\(/, '\\G in non-/g match anchors at pos() - matches ( at pos 7');
+
+pos($line) = 7;
+ok(!($line =~ /\Gx/), '\\G in non-/g match anchors at pos() - fails when char does not match');
+
+# \G in non-/g should not change pos()
+pos($line) = 7;
+$line =~ /\G\s*\(/;
+ok(pos($line) == 7, '\\G non-/g match does not change pos()');
+
+# \G with capture in non-/g match
+my $data = "hello world";
+pos($data) = 6;
+if ($data =~ /\G(\w+)/) {
+    ok($1 eq 'world', '\\G non-/g match with capture works at pos 6');
+} else {
+    ok(0, '\\G non-/g match with capture should match at pos 6');
+}
+
+###################
 # End of Perl `pos` and `\G` Tests
 
 done_testing();
