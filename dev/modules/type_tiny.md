@@ -294,7 +294,16 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 
 ## Progress Tracking
 
-### Current Status: Phase 4 completed
+### Current Status: Phase 5 completed — 99.0% pass rate (2879/2907)
+
+### Results History
+
+| Phase | Files Passed | Files Failed | Tests OK | Tests Total | Pass Rate |
+|-------|-------------|-------------|----------|-------------|-----------|
+| Baseline | ~45 | ~60+ | — | — | — |
+| Phase 4 | 186 | 57 | — | — | — |
+| Phase 5a | 318 | 13 | 2812 | 2869 | 98.0% |
+| Phase 5b | 331 | 10 | 2879 | 2907 | 99.0% |
 
 ### Completed Phases
 - [x] Phase 1: `looks_like_number` string parsing (2026-04-09)
@@ -325,10 +334,47 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
     `ErrorMessageUtil.java`
   - Tests now passing: v2-defaults.t (2/2), v2-positional.t (13/13),
     v2-named.t (15/15), v2-allowdash.t (20/20), v2-listtonamed.t (17/17)
+- [x] Phase 5a: `~` overload, `;$` prototype, eq/ne interpreter overload (2026-04-09)
+  - Added `~` (bitwise not) operator overload dispatch
+  - Extended `;$` prototype parsing to accept named-unary behavior
+  - Added comma as argument terminator for `;$` prototypes
+  - Fixed interpreter `EQ_STR`/`NE_STR` opcodes to call `eq()`/`ne()` instead
+    of `cmp()` for proper overload dispatch
+  - Files: `BitwiseOperators.java`, `PrototypeArgs.java`, `BytecodeInterpreter.java`
+  - Tests fixed: matchfor.t (3/6 → 6/6), multisig-custom-message.t (9/18 → 15/18)
+- [x] Phase 5b: grep/map/sort context bug + looks_like_number -Inf (2026-04-09)
+  - **Root cause (grep-in-eval):** Bytecode compiler propagated the outer SCALAR
+    context to grep/map/sort's list operand. This collapsed `@array` to its count
+    before filtering. The JVM backend always uses LIST context for the list operand.
+  - **Fix:** Added `isListOp` check in `CompileBinaryOperator.java` to force
+    LIST context for the right operand and SCALAR context for the left (closure)
+    operand of grep/map/sort/all/any operators.
+  - Also simplified ARRAY_SIZE opcode to use `operand.scalar()` uniformly.
+  - Also fixed `looks_like_number` to recognize signed Inf/NaN (e.g., `-Inf`, `+NaN`).
+  - Files: `CompileBinaryOperator.java`, `InlineOpcodeHandler.java`, `ScalarUtils.java`
+  - Tests fixed: structured.t (100/115 → 110/115), basic.t (82/83 → 83/83),
+    rt86239.t (4/6 → 6/6), rt90096.t (0/3 → 3/3), extra-params.t (4/7 → 7/7)
+
+### Remaining 10 Failing Tests (28 individual failures)
+
+| Test | Result | Root Cause |
+|------|--------|-----------|
+| `structured.t` | 110/115 | Dict+Slurpy[HashRef/Map] combo fails (5 tests) |
+| `ConstrainedObject/basic.t` | 24/27 | `with_attribute_values` inline eval issue |
+| `Moo/exceptions.t` | 13/15 | Accessor exception metadata |
+| `multisig-custom-message.t` | 15/18 | `${^_TYPE_PARAMS_MULTISIG}` caret var returns undef |
+| `lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
+| `Type-Tie/01basic.t` | 15/17 | Tied array edge cases |
+| `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
+| `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
+| `Type-Tie/basic.t` | 1/2 | Tie-related |
+| `Type-Tiny-Bitfield/basic.t` | 80/81 | AUTOLOAD error msg differs from method-not-found |
+| `v2-returns.t` | 4/5 | Multi + return types subtest |
 
 ### Next Steps
-1. Address remaining issues (alias assignment, TIESCALAR in eval, etc.)
-2. Re-run full Type::Tiny test suite to measure progress
+1. Investigate Dict+Slurpy[HashRef] failures (likely different grep/context issue in nested eval)
+2. Investigate `${^_TYPE_PARAMS_MULTISIG}` caret variable handling
+3. Address Tie-related failures (may require deeper tie infrastructure work)
 
 ### Open Questions
 - `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
