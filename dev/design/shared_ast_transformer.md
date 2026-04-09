@@ -1180,23 +1180,23 @@ public class ASTAnnotation {
 
 The following Devin skills are available to assist with implementation and debugging:
 
-### `.cognition/skills/interpreter-parity/`
+### `.agents/skills/interpreter-parity/`
 **Primary skill for this work.** Debugging interpreter vs JVM backend parity issues. Includes:
 - Comparing backend outputs (`./jperl` vs `./jperl --interpreter`)
 - Disassembling bytecode (`--disassemble`)
 - Common parity bug patterns (context, lvalue, closure captures)
 - Bytecode compiler architecture overview
 
-### `.cognition/skills/debug-perlonjava/`
+### `.agents/skills/debug-perlonjava/`
 General debugging for test failures and regressions. Covers:
 - Running unit tests and Perl5 core tests
 - Debugging workflows for compiler and runtime issues
 - Disassembly and tracing techniques
 
-### `.cognition/skills/debug-exiftool/`
+### `.agents/skills/debug-exiftool/`
 Debugging Image::ExifTool test failures. Useful for validating real-world Perl module compatibility after transformer changes.
 
-### `.cognition/skills/profile-perlonjava/`
+### `.agents/skills/profile-perlonjava/`
 Performance profiling. Use to verify transformer passes don't introduce performance regressions.
 
 ### Invoking Skills

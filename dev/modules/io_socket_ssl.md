@@ -137,4 +137,4 @@ Not suitable for CI.
 
 - `dev/modules/lwp_protocol_https.md` — LWP::Protocol::https support
 - `dev/modules/net_smtp.md` — Net::SMTP (also uses Net::SSLeay)
-- `.cognition/skills/port-cpan-module/SKILL.md` — Module porting guidelines
+- `.agents/skills/port-cpan-module/SKILL.md` — Module porting guidelines

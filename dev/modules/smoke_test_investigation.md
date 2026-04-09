@@ -166,7 +166,7 @@ Deps (OLE::Storage_Lite, Parse::RecDescent) should already be installable.
 #### Image::ExifTool — 590/600 (98%)
 
 **Known issue**: 10 failing tests across Writer.t, XMP.t, Geotag.t, PDF.t, etc.
-See `.cognition/skills/debug-exiftool/SKILL.md` for detailed analysis.
+See `.agents/skills/debug-exiftool/SKILL.md` for detailed analysis.
 **Action**: Low priority — already very high pass rate.
 
 #### MIME::Base64 — partial
