@@ -76,6 +76,20 @@ PerlOnJava does **not** implement the following Perl features:
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
 
+**ALWAYS capture full test output to a file.** Test output can be very long and gets truncated in the terminal. Always redirect output to a file and read from there:
+```bash
+# For prove-based tests
+prove src/test/resources/unit > /tmp/prove_output.txt 2>&1; echo "EXIT: $?" >> /tmp/prove_output.txt
+
+# For jperl tests
+./jperl test.t > /tmp/test_output.txt 2>&1
+
+# For perl_test_runner.pl
+perl dev/tools/perl_test_runner.pl perl5_t/t/op/ > /tmp/test_output.txt 2>&1
+
+# Then read the results from the file
+```
+
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
 | Command | What it does |

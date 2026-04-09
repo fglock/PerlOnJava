@@ -201,16 +201,19 @@ public class IPCOpen3 extends PerlModuleBase {
     }
 
     /**
-     * Check if a handle parameter is usable (not undef or a reference to undef)
+     * Check if a handle parameter is usable (not false or a reference to a false value).
+     * Per IPC::Open3 docs: "If CHLD_ERR is false, or the same file descriptor as
+     * CHLD_OUT, then STDOUT and STDERR of the child are on the same filehandle."
+     * A false value includes undef, "", and 0.
      */
     private static boolean isUsableHandle(RuntimeScalar handleRef) {
         if (!handleRef.getDefinedBoolean()) {
             return false;
         }
-        // If it's a reference, check if the inner value is defined
+        // If it's a reference, check if the inner value is true (not just defined)
         if (handleRef.type == RuntimeScalarType.REFERENCE && handleRef.value instanceof RuntimeScalar) {
             RuntimeScalar inner = (RuntimeScalar) handleRef.value;
-            return inner.getDefinedBoolean();
+            return inner.getBoolean();
         }
         return true;
     }
