@@ -200,7 +200,11 @@ public class SubroutineParser {
         // If a package name follows, then it looks like a indirect method
         // Unless the subName looks like an operator
         // Unless the subName has a prototype with `*`
-        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
+        // Unless the subName is a known subroutine (imported/declared functions take
+        // precedence over indirect method syntax per perlobj: "If there is a subroutine
+        // with the same name as the method in your current package, Perl will call that
+        // subroutine instead." This matches the !subExists check at line 279 for $var.)
+        if (!subExists && peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
