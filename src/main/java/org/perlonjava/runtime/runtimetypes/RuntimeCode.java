@@ -2297,6 +2297,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return new RuntimeList(new RuntimeScalar());
         } finally {
             evalDepth--;
+            // Release captured variable references from the eval's code object.
+            // After eval STRING finishes executing, its captures are no longer needed.
+            // Any closures created inside the eval have their own independent captures,
+            // so releasing the eval's captures won't affect them.
+            // This prevents eval STRING from retaining references to outer scope variables
+            // (e.g., in Test::Builder's cmp_ok), which would block weak reference clearing.
+            if (runtimeScalar.type == RuntimeScalarType.CODE && runtimeScalar.value instanceof RuntimeCode code) {
+                code.releaseCaptures();
+            }
         }
     }
 
