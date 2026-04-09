@@ -4,31 +4,38 @@
 
 **Branch**: `feature/destroy-weaken`
 
-**Current state**: 69/71 pass, 839/841 subtests pass (2 test files failing, 2 subtests)
+**Current state**: 71/71 pass, 841/841 subtests pass — GOAL ACHIEVED
 
 ---
 
-## Failure Summary (Current)
+## All Failures Resolved
 
-| Test file | Failed/Total | Category |
-|-----------|-------------|----------|
-| t/accessor-weaken.t | 1/19 (test 19) | optree reaping (JVM limitation) |
-| t/accessor-weaken-pre-5_8_3.t | 1/19 (test 19) | optree reaping (JVM limitation) |
-
-### Test 19: optree reaped, ro static value gone
-
-When `*mk_ref = sub {}` replaces a subroutine, Perl 5 frees the old sub's op-tree
-including compile-time constants. Weak references to those constants become undef.
-In PerlOnJava, subroutine internals are JVM bytecode — there's no op-tree to reap.
-Constants are Java String objects managed by GC, not reference-counted.
-
-This is a fundamental difference between Perl 5's reference counting and JVM's tracing GC.
-Fixing this would require implementing Perl 5-style reference counting for subroutine
-internal constants, which is impractical.
+All 841/841 Moo subtests now pass across all 71 test files.
 
 ---
 
 ## Completed Fixes
+
+### Category C: Optree Reaping — FIXED (2025-04-09)
+
+**2 test files, 2 subtests fixed (test 19 in each accessor-weaken file).**
+
+Root cause: When `*mk_ref = sub {}` replaces a subroutine, Perl 5 frees the old sub's
+op-tree including compile-time constants. Weak references to those constants become undef.
+On the JVM, there's no op-tree to reap — constants are cached RuntimeScalarReadOnly objects.
+
+Fix: Track cached string constants referenced via backslash inside each subroutine
+("pad constants"). When the CODE slot of a glob is overwritten, clear weak references
+to the old sub's pad constants. This is done by:
+
+1. Recording which cached constants are referenced via `\` during compilation
+   (EmitOperator.handleCreateReference -> JavaClassInfo.padConstants)
+2. Transferring pad constants from compile context to RuntimeCode at runtime
+   (via EmitSubroutine for anon subs, SubroutineParser for named subs)
+3. Calling clearPadConstantWeakRefs() on the old RuntimeCode when a glob's
+   CODE slot is overwritten (RuntimeGlob.set CODE case)
+
+Commit: `84c483a24`
 
 ### Category A: quote_sub Inlining — FIXED (2025-04-09)
 
@@ -111,12 +118,12 @@ to WEAKLY_TRACKED. This is necessary because:
 
 ## Progress Tracking
 
-### Current Status: 839/841 subtests passing (99.8%)
+### Current Status: 841/841 subtests passing (100%) — COMPLETE
 
 ### Completed
 - [x] Category A fix: quote_sub inlining (2025-04-09) — commit cad2f2566
 - [x] Category B fix: anonymous hash weak ref clearing (2025-04-09) — commit 800f70faa
+- [x] Category C fix: optree reaping emulation (2025-04-09) — commit 84c483a24
 
 ### Remaining
-- [ ] Test 19 in accessor-weaken: optree reaping — JVM limitation, not fixable without fundamental changes
-- [ ] Test 19 in accessor-weaken-pre-5_8_3: same issue
+None — all 71/71 test files and 841/841 subtests pass.
