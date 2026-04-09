@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
-**Status**: Moo 64/71 (90.1%) — 790/841 subtests pass; 7 programs fail (pre-existing, unrelated to weaken)  
-**Version**: 5.8  
+**Status**: Moo — fixing WEAKLY_TRACKED premature clearing for CODE refs  
+**Version**: 5.9  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.8 — Force-clear fix for unblessed weak refs, Moo accessor-weaken 19/19)  
+**Updated**: 2026-04-09 (v5.9 — WEAKLY_TRACKED clearing breaks Sub::Quote/Sub::Defer)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1917,46 +1917,48 @@ are related to the weaken/DESTROY changes.
 
 ### Next Steps
 
-#### Immediate: Fix `untie` DESTROY semantics (in progress)
+#### Immediate: Fix WEAKLY_TRACKED premature clearing for CODE refs (v5.9)
 
-**Problem**: `TieOperators.untie()` explicitly called `tiedDestroy()` (which directly
-invokes DESTROY) unconditionally — even when other Perl-visible references to the
-tie object exist. This is wrong: Perl 5's `untie` only calls UNTIE; DESTROY fires
-only when the tie object's last reference is dropped.
+**Problem**: 51/841 Moo subtests fail because `Sub::Quote` / `Sub::Defer` deferred subs
+have their weak back-references prematurely cleared, making `quoted_from_sub()` return
+undef and breaking Moo's accessor inlining. Affects: accessor-coerce (12), accessor-default
+(9), accessor-isa (7), accessor-trigger (12), constructor-modify (3),
+method-generate-accessor (6), overloaded-coderefs (2).
 
-**Fix approach** (partially implemented):
-1. Removed explicit `tiedDestroy()` calls from `untie()` — replaced with
-   `decrementTieObjectRefCount(self)` which uses refCount to decide.
-2. UNTIE is still called unconditionally (correct Perl 5 behavior).
-3. The `decrementTieObjectRefCount()` helper checks `refCount == 0` to fire DESTROY
-   when no external Perl-visible references exist.
+**Root cause trace**:
+1. `defer_sub()` creates a deferred CODE ref and stores `weaken($deferred_info->[4] = $deferred)`
+2. `quote_sub()` stores `weaken($quoted_info->{deferred} = $deferred)`
+3. `WeakRefRegistry.weaken()` transitions the CODE ref from refCount=-1 to WEAKLY_TRACKED (-2)
+4. Later, `setLarge()` overwrites some (non-weak, non-refCountOwned) reference to the same CODE ref
+5. The WEAKLY_TRACKED check in `setLarge()` (line 962-966) fires:
+   ```java
+   if (oldBase != null && !thisWasWeak && !this.refCountOwned
+           && oldBase.refCount == WEAKLY_TRACKED) {
+       oldBase.refCount = Integer.MIN_VALUE;
+       DestroyDispatch.callDestroy(oldBase);
+   }
+   ```
+6. This clears ALL weak refs to the CODE ref, including `$deferred_info->[4]` and `$quoted_info->{deferred}`
+7. When the deferred sub is called: `$deferred_info->[4]` is undef → `undefer_sub(undef)` → `goto &undef` → "Not a CODE reference"
+8. When Moo checks `quoted_from_sub($trigger)`: `$quoted_info->{deferred}` is undef → returns undef → trigger not inlined → falls back to coderef capture path
 
-**Current issue**: The tie object's `refCount` at untie time depends on the number
-of Perl function-return copies the blessed reference passed through:
-- Simple TIEHANDLE (single `bless {}` + return): refCount=0 at untie → DESTROY fires ✓
-- Inherited TIEHANDLE (`$class->SUPER::TIEHANDLE` → return → return`): refCount=1
-  at untie → DESTROY does NOT fire (the extra refCount comes from a Perl subroutine
-  return-chain copy that increments via `setLarge()` but is never decremented because
-  the traveling RuntimeScalar is a JVM stack local, not a Perl `my` variable)
+**Why CODE refs are different from hashes**: CODE refs live in BOTH lexicals AND the symbol
+table (stash). Stash assignments (`*Foo::bar = $coderef`) don't go through `setLarge()`,
+so the stash reference is invisible to refcounting. When `setLarge()` overwrites a lexical
+reference to the CODE ref, the CODE ref is still alive in the stash — but the WEAKLY_TRACKED
+heuristic treats the overwrite as "last strong ref removed" and clears all weak refs.
 
-**Root cause**: The `bless()` code sets `refCount = 0` for first-time bless (§4A.2),
-designed so that the bless-time temporary is NOT counted. But when the blessed ref
-passes through additional Perl return boundaries (SUPER::TIEHANDLE → TIEHANDLE),
-each `set()` in the return chain increments refCount. These increments have no
-corresponding decrements because they're JVM-stack temporaries.
+For anonymous hashes/arrays, the WEAKLY_TRACKED heuristic works correctly because they
+exist only in lexicals and stores tracked by `setLarge()`.
 
-**Options to fix**:
-- **Option A**: In `decrementTieObjectRefCount`, check `refCount <= 1` instead of
-  `== 0`. This works if only one return-chain copy is typical. Fragile if deeper
-  call chains add more increments.
-- **Option B**: Track a `tieRefCountIncrement` in the tie wrapper at `tie()` time
-  (snapshot `base.refCount`) and compare at `untie()` time — DESTROY if refCount
-  hasn't grown beyond the tie-time value.
-- **Option C**: Increment refCount explicitly in `tie()` for the implicit tie
-  reference, and decrement unconditionally in `untie()`. This makes refCount
-  consistently represent: Perl-visible refs + 1 (for tie). The problem seen earlier
-  (refCount=2 at untie, decrement to 1) was because the return-chain also added +1,
-  making it: Perl-visible refs + 1 (tie) + 1 (return chain) = 2.
+**Fix approach**: In `WeakRefRegistry.weaken()`, skip the WEAKLY_TRACKED transition for
+`RuntimeCode` objects. Leave them at refCount=-1. This means weak refs to CODE refs are
+never cleared deterministically, matching Perl 5's behavior (CODE refs in stashes are only
+freed during global destruction). The accessor-weaken tests for hashes still work via the
+force-clear in `undefine()`.
+
+**Affected code**: `WeakRefRegistry.weaken()` — add `!(base instanceof RuntimeCode)` guard
+before the WEAKLY_TRACKED transition.
 
 #### Other pending items
 1. **Commit** the null-check fix in `RuntimeScalar.incrementRefCountForContainerStore()`
@@ -1964,9 +1966,98 @@ corresponding decrements because they're JVM-stack temporaries.
 2. **Investigate** io/crlf_through.t, io/through.t, lib/croak.t crashes (0/0 results)
 3. **Investigate** remaining -1 regressions: benchmark/gh7094, op/eval.t, op/runlevel.t
 4. **Update `moo_support.md`** with final Moo test results and analysis
-5. **Consider PR merge** — accessor-weaken.t now passes 19/19; remaining 51 subtests in
-   7 programs are pre-existing failures unrelated to weaken/DESTROY
+5. **Consider PR merge** once all Moo tests pass
 6. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
+
+---
+
+## 15. Approaches Tried and Reverted (Do NOT Retry)
+
+This section documents approaches that were attempted and failed, with clear explanations
+of **why** they failed. These are recorded to prevent re-trying the same dead ends.
+
+### X1. Remove birth-tracking `refCount = 0` from `createReferenceWithTrackedElements()` (REVERTED)
+
+**What it did**: Removed the line `this.refCount = 0` from
+`RuntimeHash.createReferenceWithTrackedElements()`, so anonymous hashes would stay at
+refCount=-1 (untracked) instead of being birth-tracked.
+
+**Why it seemed promising**: Without birth-tracking, hashes stay at refCount=-1. When
+`weaken()` transitions them to WEAKLY_TRACKED, `undef $ref` → `scopeExitCleanup()` →
+clears weak refs. This fixed accessor-weaken tests 4, 9, 16 (undef clearing).
+
+**Why it failed**: It broke `isweak()` tests (7 additional failures in accessor-weaken.t:
+tests 2, 3, 6, 7, 8, 10, 15). Without birth-tracking, the hash is untracked, so
+`weaken()` transitions to WEAKLY_TRACKED — but `isweak()` doesn't detect
+WEAKLY_TRACKED as "weak" in the way Moo's tests expect. Birth-tracking is needed so
+that `weaken()` can decrement a real refCount and leave the hash in a state that
+correctly interacts with `isweak()`.
+
+**Lesson**: Birth-tracking for anonymous hashes is load-bearing for `isweak()` correctness.
+Don't remove it — instead fix the clearing mechanism separately.
+
+### X2. Type-aware `weaken()` transition: set `refCount = 1` for data structures (REVERTED)
+
+**What it did**: In `WeakRefRegistry.weaken()`, when transitioning from NOT_TRACKED
+(refCount=-1), set `refCount = 1` for RuntimeHash/RuntimeArray/RuntimeScalar referents
+(data structures), while keeping WEAKLY_TRACKED (-2) for RuntimeCode/RuntimeGlob
+(stash-stored types).
+
+**Why it seemed promising**: Data structures exist only in lexicals/stores tracked by
+`setLarge()`, so starting at refCount=1 gives an accurate count (one strong ref = the
+variable that existed before `weaken()`). Future `setLarge()` copies will increment/
+decrement correctly. CODE/Glob refs keep WEAKLY_TRACKED because stash refs are invisible.
+
+**Why it failed**: Starting refCount at 1 is an UNDERCOUNT for objects with multiple
+pre-existing strong refs (created before tracking started). During routine `setLarge()`
+operations, refCount prematurely reaches 0, triggering `callDestroy()` →
+`clearWeakRefsTo()` which sets weak refs to undef mid-operation. In Sub::Defer, this
+cleared a deferred sub entry, causing the next access to re-trigger undeferring →
+infinite `apply()` → `apply()` → StackOverflowError.
+
+**Lesson**: You CANNOT start accurate refCount tracking mid-flight. Once an object exists
+with multiple untracked strong refs, any starting count will be wrong. The only correct
+approaches are: (a) track from birth, or (b) accept the limitation and use heuristics.
+
+### X3. Remove WEAKLY_TRACKED transition entirely from `weaken()` — NOT TRIED, known bad
+
+**Why it would fail**: Without WEAKLY_TRACKED, untracked objects (refCount=-1) stay at
+-1 after `weaken()`. The three clearing sites (setLarge, scopeExitCleanup, undefine)
+only check for `refCount == WEAKLY_TRACKED` or `refCount > 0`. At refCount=-1, none of
+them clear weak refs. The force-clear in `undefine()` only fires for
+`refCountOwned && refCount > 0` objects. So weak refs to untracked hashes would NEVER
+be cleared, breaking accessor-weaken tests 4, 9, 16.
+
+**Note**: The proposed fix (skip WEAKLY_TRACKED for RuntimeCode only) is different — it
+skips WEAKLY_TRACKED only for RuntimeCode, NOT for hashes/arrays.
+
+### X4. Lost commits from moo.md (commits cad2f2566, 800f70faa, 84c483a24)
+
+The `dev/modules/moo.md` document references three commits that achieved 841/841 Moo
+passing but were lost during branch rewriting. These commits are NOT on any branch or
+in the reflog. The approaches documented in moo.md were:
+
+- **Category A (cad2f2566)**: In `weaken()`, transition to WEAKLY_TRACKED when
+  unblessed refCount > 0. Also removed `MortalList.flush()` from `RuntimeCode.apply()`.
+  This was for the quote_sub inlining problem (same as v5.9 problem).
+
+- **Category B (800f70faa)**: Moved birth tracking from `RuntimeHash.createReference()`
+  to `createReferenceWithTrackedElements()`. In `weaken()`, when refCount reaches 0
+  after decrement, destroy immediately (only anonymous objects reach this state).
+
+- **Category C (84c483a24)**: Track pad constants in RuntimeCode. When glob's CODE slot
+  is overwritten, clear weak refs to old sub's pad constants (optree reaping emulation).
+
+These commits' exact implementations are lost. The moo.md describes them at a high level
+but not with enough detail to reconstruct precisely. The current branch has different code
+paths, so re-applying these approaches requires fresh implementation.
+
+**Key facts about these lost commits**:
+- They worked together as a set — each alone may not be sufficient
+- They were made BEFORE the "refcount leaks" fix (commit 41ab517ca) and the
+  "prevent premature weak ref clearing for untracked objects" fix (862bdc751)
+- The codebase has evolved significantly since, so the same approach may produce
+  different results now
 
 ---
 
