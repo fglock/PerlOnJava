@@ -100,12 +100,21 @@ public class PrototypeArgs {
      * makes them list operators.
      *
      * @param prototype The prototype string
-     * @return true if the prototype is exactly "$" or "_"
+     * @return true if the prototype is "$", "_", ";$", or ";_"
      */
     private static boolean isNamedUnaryPrototype(String prototype) {
-        if (prototype.length() != 1) return false;
-        char first = prototype.charAt(0);
-        return first == '$' || first == '_';
+        if (prototype.length() == 1) {
+            char first = prototype.charAt(0);
+            return first == '$' || first == '_';
+        }
+        // ";$" and ";_" are also named unary (optional single scalar argument).
+        // This matters for expressions like ArrayRef[Int] | HashRef[Int] where
+        // the | must NOT be consumed as part of ArrayRef's argument.
+        if (prototype.length() == 2 && prototype.charAt(0) == ';') {
+            char second = prototype.charAt(1);
+            return second == '$' || second == '_';
+        }
+        return false;
     }
 
     /**
