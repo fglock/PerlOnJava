@@ -85,8 +85,8 @@ public class WeakRefRegistry {
             // (new RuntimeScalar(RuntimeScalar)) is mitigated by the fact that such
             // copies don't decrement refCount on cleanup (refCountOwned=false), so
             // they can't cause false-positive refCount==0 destruction.
-        } else if (base.refCount == -1) {
-            // Untracked object: transition to WEAKLY_TRACKED so that
+        } else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
+            // Untracked non-CODE object: transition to WEAKLY_TRACKED so that
             // undefine() and scopeExitCleanup() can clear weak refs
             // when a strong reference is dropped. This is a heuristic —
             // it may clear weak refs too early when multiple strong refs
@@ -94,6 +94,16 @@ public class WeakRefRegistry {
             // never clearing at all. Unblessed objects have no DESTROY,
             // so over-eager clearing causes no side effects beyond the
             // weak ref becoming undef.
+            //
+            // CODE refs are excluded because they live in BOTH lexicals AND
+            // the symbol table (stash). Stash assignments (*Foo::bar = $coderef)
+            // don't go through setLarge(), making the stash reference invisible
+            // to refcounting. If we transition CODE refs to WEAKLY_TRACKED,
+            // setLarge()/scopeExitCleanup() will prematurely clear weak refs
+            // when a lexical reference is overwritten — even though the CODE ref
+            // is still alive in the stash. This breaks Sub::Quote/Sub::Defer
+            // (which use weaken() for back-references) and cascades to break
+            // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
         }
@@ -150,6 +160,16 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
+        // Skip clearing weak refs to CODE objects. CODE refs live in both
+        // lexicals and the symbol table (stash), but stash assignments
+        // (*Foo::bar = $coderef) bypass setLarge(), making the stash reference
+        // invisible to refcounting. This causes false refCount==0 via mortal
+        // flush when a lexical goes out of scope — even though the CODE ref
+        // is still alive in the stash. Since DESTROY is not implemented,
+        // there is no behavioral difference from skipping the clear.
+        // This is critical for Sub::Quote/Sub::Defer which use weaken()
+        // for back-references to deferred subs.
+        if (referent instanceof RuntimeCode) return;
         Set<RuntimeScalar> weakRefs = referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;
         for (RuntimeScalar weak : weakRefs) {
