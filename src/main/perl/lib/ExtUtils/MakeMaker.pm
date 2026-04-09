@@ -204,10 +204,10 @@ sub _install_pure_perl {
         }
     } else {
         # Default: scan lib/ directory
-        # Include .pm, .pl, and common data files (.dat, .json, .yml, .yaml, .xml, .txt)
-        # Some modules like Image::ExifTool use .pl files loaded via require
-        # and .dat files for data (e.g., Geolocation.dat)
-        my $installable_re = qr/\.(?:pm|pl|pod|dat|json|ya?ml|xml|txt|cfg|conf|ini)$/i;
+        # Include .pm, .pl, and common data files (.dat, .json, .yml, .yaml, .xml, .txt, .pem)
+        # Some modules like Image::ExifTool use .pl files loaded via require,
+        # .dat files for data (e.g., Geolocation.dat), and Mozilla::CA uses .pem
+        my $installable_re = qr/\.(?:pm|pl|pod|dat|json|ya?ml|xml|txt|cfg|conf|ini|pem)$/i;
         if (-d 'lib') {
             find({
                 wanted => sub {
@@ -283,17 +283,19 @@ sub _install_pure_perl {
         return $mm;
     }
     
-    # For XS modules, skip .pm files that have a PerlOnJava shim in the JAR.
-    # The JAR shim provides proper pure-Perl fallback, while the CPAN version
-    # would call XSLoader::load at the top level and die fatally.
-    if ($args->{_xs_module}) {
-        for my $src (sort keys %pm) {
-            my $dest = $pm{$src};
-            (my $rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
-            if ($rel && -f "jar:PERL5LIB/$rel") {
-                print "  SKIP: $rel (PerlOnJava shim in JAR takes precedence)\n";
-                delete $pm{$src};
-            }
+    # Skip .pm files that already exist in PerlOnJava's bundled JAR.
+    # ~/.perlonjava/lib/ has higher @INC priority than jar:PERL5LIB, so
+    # installing a CPAN version would shadow the bundled module.  This
+    # protects Java-backed shims (IO::Socket::SSL, Net::SSLeay, etc.)
+    # from being overwritten by incompatible CPAN versions, while still
+    # allowing other files from the same distribution to be installed
+    # (e.g. IO::Socket::SSL::Utils from the IO-Socket-SSL dist).
+    for my $src (sort keys %pm) {
+        my $dest = $pm{$src};
+        (my $rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
+        if ($rel && -f "jar:PERL5LIB/$rel") {
+            print "  SKIP: $rel (bundled in PerlOnJava JAR)\n";
+            delete $pm{$src};
         }
     }
     

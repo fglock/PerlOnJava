@@ -125,7 +125,35 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        nonSocketReady++;
+                        // SSL-wrapped sockets have no NIO channel.
+                        // Check readiness via InputStream.available() for reads,
+                        // and assume always writable for writes.
+                        boolean ready = false;
+                        if (wantRead) {
+                            try {
+                                java.io.InputStream is = socketIO.getSocket() != null
+                                        ? socketIO.getSocket().getInputStream() : null;
+                                if (is != null && is.available() > 0) {
+                                    ready = true;
+                                } else {
+                                    // For SSL sockets, available() may return 0 even when
+                                    // data is waiting in the SSL layer. Assume readable
+                                    // to avoid blocking in select() — worst case, the
+                                    // subsequent read will block briefly.
+                                    if (socketIO.getSocket() instanceof javax.net.ssl.SSLSocket) {
+                                        ready = true;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                ready = true; // Err on the side of reporting ready
+                            }
+                        }
+                        if (wantWrite) {
+                            ready = true; // SSL sockets are always writable
+                        }
+                        if (ready) {
+                            nonSocketReady++;
+                        }
                         continue;
                     }
 
@@ -248,11 +276,26 @@ public class IOOperator {
             byte[] eresult = new byte[edata.length];
             int totalReady = 0;
 
-            // Non-socket handles: check actual readiness for result bits
+            // Non-socket handles and SSL sockets (no NIO channel): set result bits
             for (int fd = 0; fd < maxFd; fd++) {
                 RuntimeIO rio = RuntimeIO.getByFileno(fd);
                 if (rio == null) continue;
-                if (rio.ioHandle instanceof SocketIO) continue;
+
+                if (rio.ioHandle instanceof SocketIO socketIO) {
+                    // Only handle SocketIO with null channel (SSL sockets)
+                    if (socketIO.getSelectableChannel() != null) continue;
+
+                    // SSL socket: set bits based on readiness
+                    if (isBitSet(rdata, fd)) {
+                        setBit(rresult, fd); totalReady++;
+                    }
+                    if (isBitSet(wdata, fd)) {
+                        setBit(wresult, fd); totalReady++;
+                    }
+                    continue;
+                }
+
+                // Non-socket handles
                 if (isBitSet(rdata, fd) && FileDescriptorTable.isReadReady(rio.ioHandle)) {
                     setBit(rresult, fd); totalReady++;
                 }

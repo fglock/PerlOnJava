@@ -17,6 +17,14 @@ public class Lib extends PerlModuleBase {
     private static RuntimeArray ORIG_INC = null;
 
     /**
+     * Resets static state for test isolation.
+     * Called from GlobalVariable.resetAllGlobals().
+     */
+    public static void resetState() {
+        ORIG_INC = null;
+    }
+
+    /**
      * Constructor for Lib.
      * Initializes the module with the name "lib".
      */

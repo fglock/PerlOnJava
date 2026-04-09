@@ -150,6 +150,16 @@ public class GlobalVariable {
         // Debug/source mapping cache grows with every compilation; clear it between test scripts.
         ByteCodeSourceMapper.resetAll();
 
+        // Reset Net::SSLeay static state (handles, providers, etc.)
+        try {
+            org.perlonjava.runtime.perlmodule.NetSSLeay.resetState();
+        } catch (NoClassDefFoundError e) {
+            // NetSSLeay not loaded; ignore
+        }
+
+        // Reset lib module static state (ORIG_INC)
+        org.perlonjava.runtime.perlmodule.Lib.resetState();
+
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
         globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());

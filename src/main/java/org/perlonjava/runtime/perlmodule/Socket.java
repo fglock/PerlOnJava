@@ -68,6 +68,11 @@ public class Socket extends PerlModuleBase {
     // IPV6 constants
     public static final int IPV6_V6ONLY = (IS_MAC || IS_WINDOWS) ? 27 : 26;
     public static final int SO_REUSEPORT = IS_MAC ? 0x0200 : 15;  // not available on Windows
+    // MSG constants for send/recv flags
+    public static final int MSG_OOB = 1;
+    public static final int MSG_PEEK = 2;
+    public static final int MSG_DONTROUTE = 4;
+    public static final int MSG_DONTWAIT = IS_MAC ? 0x80 : 0x40;
     // INADDR constants as 4-byte packed binary strings
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1
@@ -139,6 +144,15 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("EAI_NONAME", "");
             socket.registerMethod("IPV6_V6ONLY", "");
             socket.registerMethod("SO_REUSEPORT", "");
+            socket.registerMethod("SO_RCVBUF", "");
+            socket.registerMethod("SO_SNDBUF", "");
+            socket.registerMethod("MSG_OOB", "");
+            socket.registerMethod("MSG_PEEK", "");
+            socket.registerMethod("MSG_DONTROUTE", "");
+            socket.registerMethod("MSG_DONTWAIT", "");
+            socket.registerMethod("CR", "");
+            socket.registerMethod("LF", "");
+            socket.registerMethod("CRLF", "");
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Socket method: " + e.getMessage());
@@ -792,5 +806,41 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList SO_REUSEPORT(RuntimeArray args, int ctx) {
         return new RuntimeScalar(SO_REUSEPORT).getList();
+    }
+
+    public static RuntimeList SO_RCVBUF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_RCVBUF).getList();
+    }
+
+    public static RuntimeList SO_SNDBUF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_SNDBUF).getList();
+    }
+
+    public static RuntimeList MSG_OOB(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(MSG_OOB).getList();
+    }
+
+    public static RuntimeList MSG_PEEK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(MSG_PEEK).getList();
+    }
+
+    public static RuntimeList MSG_DONTROUTE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(MSG_DONTROUTE).getList();
+    }
+
+    public static RuntimeList MSG_DONTWAIT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(MSG_DONTWAIT).getList();
+    }
+
+    public static RuntimeList CR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("\015").getList();
+    }
+
+    public static RuntimeList LF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("\012").getList();
+    }
+
+    public static RuntimeList CRLF(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("\015\012").getList();
     }
 }

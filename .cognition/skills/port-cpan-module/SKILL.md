@@ -8,6 +8,15 @@
 - INSTEAD: Commit to a WIP branch or use `git diff > backup.patch`
 - This warning exists because completed work was lost during debugging
 
+## ⚠️⚠️⚠️ CRITICAL: NEVER MODIFY OR DELETE TESTS ⚠️⚠️⚠️
+
+**Tests are the source of truth. If a test fails, fix the code, not the test.**
+
+- NEVER remove a test file because it fails — fix the underlying bug instead
+- NEVER edit a test to make it pass — the test defines correct behavior
+- If a test cannot pass yet due to a known limitation, leave it in place and document the issue
+- This applies to ALL tests: unit tests, bundled module tests, and upstream CPAN tests
+
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
 ## When to Use This Skill
@@ -179,10 +188,46 @@ as Perl itself.
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
 | `make dev` | Build only, skip tests (for quick iteration during development) |
+| `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
-1. **Create test file:** `src/test/resources/module_name.t`
+1. **Add tests to `src/test/resources/module/`:**
 
-2. **Compare with system Perl:**
+   Every bundled module MUST have tests in `src/test/resources/module/Module-Name/t/`.
+   This is how CI verifies the module keeps working across changes.
+
+   **How to populate the test directory:**
+   - Download the upstream CPAN distribution (e.g. from MetaCPAN or via `./jcpan`)
+   - Copy the `t/` directory from the distribution into `src/test/resources/module/Module-Name/t/`
+   - Also copy any support files the tests need (sample data, test certificates, etc.)
+   - All included tests MUST pass: `make test-bundled-modules`
+
+   ```
+   src/test/resources/module/
+   ├── XML-Parser/          # existing example
+   │   └── t/
+   │       ├── cdata.t
+   │       ├── encoding.t
+   │       └── samples/
+   └── Module-Name/         # your new module
+       └── t/
+           ├── basic.t
+           ├── feature.t
+           └── samples/
+               └── test-data.txt
+   ```
+
+   These tests are run by `make test-bundled-modules`, NOT by `make` (which runs unit tests only).
+
+2. **Test with `jcpan` if the module is on CPAN:**
+
+   If the module has an upstream CPAN distribution with its own test suite,
+   run it to verify compatibility:
+   ```bash
+   ./jcpan -t Module::Name
+   ```
+   This downloads the CPAN distribution, installs it, and runs the upstream tests.
+
+3. **Compare with system Perl:**
    ```bash
    # Create test script
    cat > /tmp/test.pl << 'EOF'
@@ -195,12 +240,37 @@ as Perl itself.
    ./jperl /tmp/test.pl
    ```
 
-3. **Build and verify:**
+3. **Install/test modules with `jcpan`:**
+
+   Use `./jcpan` to install and test CPAN modules:
+   ```bash
+   ./jcpan Module::Name            # Install a module
+   ./jcpan -t Module::Name         # Test a module (download + install + run upstream tests)
+   ```
+   `jcpan` installs modules into the `.perlonjava/` directory in the project root.
+
+4. **Build and verify:**
    ```bash
    make dev   # Quick build (no tests)
    ./jperl -e 'use Module::Name; ...'
    make       # Full build with tests before committing
    ```
+
+5. **Cleanup `.perlonjava/` after bundling:**
+
+   When all tests pass and the module is bundled into the project (i.e. its `.pm` and
+   `.java` files are in `src/main/perl/lib/` and `src/main/java/`), remove the
+   `.perlonjava/` directory so the bundled version is used instead of the jcpan-installed copy:
+   ```bash
+   rm -rf .perlonjava/
+   ```
+   Then verify the bundled version and all its dependencies load correctly:
+   ```bash
+   ./jperl -e 'use Module::Name; print "ok\n"'
+   ```
+   If this fails with a "Can't locate Dependency/Module.pm" error, the dependency
+   is not bundled. You must bundle all dependencies too — bundled modules must be
+   fully self-contained with no CPAN installs required.
 
 ## Common Patterns
 
@@ -361,10 +431,22 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 - [ ] Basic functionality works: `./jperl -e 'use Module::Name; ...'`
 - [ ] Compare output with system Perl
 - [ ] Test edge cases identified in XS code
+- [ ] Copy upstream CPAN tests into `src/test/resources/module/Module-Name/t/`
+- [ ] Run bundled module tests: `make test-bundled-modules`
+- [ ] Run upstream CPAN tests if applicable: `./jcpan -t Module::Name`
+
+### Cleanup
+- [ ] Check all dependencies are also bundled: `./jperl -e 'use Module::Name'` should not pull anything from `.perlonjava/`
+- [ ] Remove `.perlonjava/` directory so the bundled version is used: `rm -rf .perlonjava/`
+- [ ] Verify bundled version loads without `.perlonjava/`: `./jperl -e 'use Module::Name; print "ok\n"'`
+- [ ] If it fails, identify the missing dependency and bundle it too (bundled modules must be fully self-contained)
 
 ### Documentation
 - [ ] Add POD with AUTHOR and COPYRIGHT sections
 - [ ] Credit original authors
+- [ ] Update `docs/about/changelog.md` — add module to "Add modules:" list in the current unreleased version
+- [ ] Update `docs/reference/feature-matrix.md` — add entry in the appropriate section (Core modules / Non-core modules) with status icon and description
+- [ ] Update `README.md` if the module is notable enough to mention in the Features list
 
 ## Example: Time::Piece Port
 

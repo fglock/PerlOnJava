@@ -124,8 +124,11 @@ public class PerlCompilerException extends RuntimeException {
                 }
 
                 // JVM-compiled Perl frame — resolve via ByteCodeSourceMapper
-                if (className.contains("org.perlonjava.anon") ||
-                        className.contains("org.perlonjava.runtime.perlmodule")) {
+                // Note: we intentionally skip org.perlonjava.runtime.perlmodule frames
+                // because those are Java-implemented Perl builtins (Encode, POSIX, etc.).
+                // Errors from those should report the Perl caller's location, not the
+                // Java implementation file — matching Perl 5 behavior for XS modules.
+                if (className.contains("org.perlonjava.anon")) {
                     var loc = ByteCodeSourceMapper.parseStackTraceElement(element, locationToClassName);
                     if (loc != null && loc.sourceFileName() != null && !loc.sourceFileName().isEmpty()) {
                         return formatWithLocation(message, loc.sourceFileName(), loc.lineNumber());

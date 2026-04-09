@@ -496,10 +496,9 @@ public class PrototypeArgs {
             return 0;
         }
 
-        // Parse with precedence 20 (=~ level) which allows subscripts ([],{},->)
-        // but excludes binary operators like &&, ||, !=, etc.
-        // This is the same precedence used for scalar/keys/values/each operators.
-        Node expr = parser.parseExpression(parser.getPrecedence("=~"));
+        // Parse with comma-level precedence to allow full expressions (e.g., $a || $b)
+        // as filehandle arguments. Perl 5 accepts recv($biosock || $self, $buf, 1, MSG_PEEK).
+        Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
