@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/fglock/PerlOnJava/workflows/Java%20CI%20with%20Gradle/badge.svg)](https://github.com/fglock/PerlOnJava/actions)
 [![License](https://img.shields.io/badge/license-Artistic_1.0_|_GPL_1+-blue.svg)](LICENSE.md)
 
-PerlOnJava compiles Perl to JVM bytecode. One jar file runs on Linux, macOS, and Windows — just add Java 22+.
+PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any platform with a JVM, with access to Java libraries. One jar file runs on Linux, macOS, and Windows — just add Java 22+. PerlOnJava is an independent project, not part of the Perl core distribution.
 
 ## Features
 
@@ -15,7 +15,7 @@ PerlOnJava compiles Perl to JVM bytecode. One jar file runs on Linux, macOS, and
 - **Install more with jcpan** — [pure-Perl CPAN modules](docs/guides/using-cpan-modules.md) work out of the box
 - **JDBC database access** — [PostgreSQL, MySQL, SQLite, Oracle](docs/guides/database-access.md) via standard JDBC drivers
 - **Embed in Java apps** — [JSR-223 ScriptEngine](docs/guides/java-integration.md) integration
-- **Perl 5.42+ features** — [see feature matrix](docs/reference/feature-matrix.md)
+- **Perl 5.42 language compatibility** — [see feature matrix](docs/reference/feature-matrix.md)
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ make
 | [Docker](docs/getting-started/docker.md) | [Using CPAN Modules](docs/guides/using-cpan-modules.md) | [Architecture](docs/reference/architecture.md) |
 | [One-liners](docs/getting-started/oneliners.md) | [Module Porting](docs/guides/module-porting.md) | [Testing](docs/reference/testing.md) |
 
-**About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Roadmap](docs/about/roadmap.md) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md)
+**About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Roadmap](docs/about/roadmap.md) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md) | [Security](SECURITY.md) | [AI Policy](AI_POLICY.md)
 
 ## About Perl
 

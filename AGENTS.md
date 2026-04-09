@@ -187,44 +187,7 @@ See `.cognition/skills/` for specialized debugging and development skills:
 - `debug-exiftool` - ExifTool test debugging
 - `profile-perlonjava` - Performance profiling
 
-## Regression Tracking (feature/defer-blocks branch)
-
-### Summary
-
-All reported regressions have been investigated. The issues fall into two categories:
-1. **Fixed in this branch**: goto-related issues
-2. **Pre-existing on master**: MethodHandle conversion errors, regex octal escape parsing
-
-### Regression Status
-
-| Test | Status | Details |
-|------|--------|---------|
-| op/die_goto.t | **FIXED** (5/5) | `goto &sub` in `$SIG{__DIE__}` handlers now works |
-| uni/goto.t | **FIXED** (2/4) | Tests 1-2 pass (goto &{expr}). Tests 3-4 fail due to pre-existing regex octal escape bug |
-| op/bop.t | Pre-existing | MethodHandle conversion error - fails on master too |
-| op/warn.t | Pre-existing | MethodHandle conversion error - fails on master too |
-| re/subst.t | Pre-existing | MethodHandle conversion error - fails on master too |
-| re/pat_rt_report.t | Pre-existing | MethodHandle conversion error - fails on master too |
-| lib/croak.t | Pre-existing | `class` feature incomplete |
-
-### Fixes Applied in This Branch
-
-1. **EmitControlFlow.java**: Added `handleGotoSubroutineBlock()` for `goto &{expr}` tail call support
-2. **CompileOperator.java**: Added `goto &{expr}` support to bytecode interpreter  
-3. **RuntimeControlFlowList.java**: Added validation for undefined subroutines in tail calls
-4. **RuntimeCode.java**: Added `gotoErrorPrefix()` for "Goto undefined subroutine" error messages
-5. **CompileAssignment.java**: Added `vec` lvalue support for interpreter
-6. **OpcodeHandlerExtended.java**: Fixed `|=` and `^=` to use polymorphic `bitwiseOr`/`bitwiseXor`
-7. **WarnDie.java**: Added TAILCALL trampoline for `goto &sub` in `$SIG{__DIE__}` handlers
-
-### Pre-existing Issues (on master too)
-
-- **MethodHandle conversion errors**: Affects op/warn.t, re/subst.t, re/pat_rt_report.t, op/bop.t
-- **Regex octal escapes**: `\345` in patterns is parsed as backreference `\3` + `45`
-- **op/bop.t**: `new version ~$_` crashes in Version.java
-- **String bitwise ops**: Interpreter uses numeric ops instead of string ops
-
-### How to Check Regressions
+## How to Check Regressions
 
 When a unit test fails on a feature branch, always verify whether it also fails on master before trying to fix it:
 

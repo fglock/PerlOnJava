@@ -21,8 +21,8 @@ git clone https://github.com/fglock/PerlOnJava.git
 cd PerlOnJava
 
 # Build and run tests
-make        # Build + fast unit tests
-make dev    # Force clean rebuild
+make        # Build + run all unit tests
+make dev    # Build only, skip tests (for quick iteration during debugging)
 
 # Run comprehensive tests
 make test-all
@@ -32,8 +32,9 @@ make test-all
 
 **Before making changes:**
 1. Create a feature branch: `git checkout -b feature-name`
-2. Read the [Architecture Guide](docs/reference/architecture.md)
-3. Check [Roadmap](docs/about/roadmap.md) for planned features
+2. **Never push directly to master** — always use feature branches and PRs
+3. Read the [Architecture Guide](docs/reference/architecture.md)
+4. Check [Roadmap](docs/about/roadmap.md) for planned features
 
 **While coding:**
 1. Follow existing code style
@@ -41,9 +42,8 @@ make test-all
 3. Add tests for new features in `src/test/resources/unit/`
 
 **Before committing:**
-1. Ensure `make` passes (fast unit tests)
-2. Run `make test-all` for comprehensive testing
-3. Write clear commit messages
+1. Ensure `make` passes (all unit tests)
+2. Write clear commit messages
 
 ### 3. Submit Pull Request
 
@@ -100,14 +100,11 @@ perl5_t/ (at project root)
 ### Building and Testing
 
 ```bash
-# Build with incremental compilation
-make build
+# Build + run all unit tests (default)
+make
 
-# Force clean rebuild (during active development)
+# Build only, skip tests (for quick iteration during debugging)
 make dev
-
-# Run fast unit tests (default)
-make test
 
 # Run all tests including Perl 5 core tests
 make test-all
@@ -168,6 +165,8 @@ Developer documentation is in `dev/`:
 - **implementation/** - Implementation notes (regex, tie, overload)
 - **maintenance/** - Maintenance procedures
 
+See also **[AGENTS.md](AGENTS.md)** for detailed testing commands, unimplemented features, environment variables, and git workflow rules.
+
 ## Feature Development
 
 ### Before Adding a Feature
@@ -205,6 +204,10 @@ See **[Module Porting Guide](docs/guides/module-porting.md)** for:
 - **GitHub Issues** - Bug reports and feature requests
 - **Pull Requests** - Code contributions
 - **Discussions** - Questions and design discussions
+
+## AI-Assisted Contributions
+
+PerlOnJava accepts AI-assisted contributions with proper attribution. See **[AI_POLICY.md](AI_POLICY.md)** for our full policy on commit attribution, human responsibility, and how our approach compares to other open-source projects.
 
 ## Code of Conduct
 
