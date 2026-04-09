@@ -308,6 +308,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar[] capturedScalars;
 
     /**
+     * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
+     * When the CODE slot of a glob is replaced, weak references to these constants
+     * are cleared to emulate Perl 5's "optree reaping" behavior.
+     */
+    public RuntimeBase[] padConstants;
+
+    /**
+     * Registry mapping generated class names to their pad constants.
+     * Used to transfer pad constants from compile time to runtime for anonymous subs.
+     */
+    public static final java.util.concurrent.ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Clears weak references to this subroutine's pad constants.
+     * Called when the CODE slot of a glob is replaced, emulating Perl 5's
+     * behavior where replacing a sub frees its op-tree and clears weak refs
+     * to compile-time constants.
+     */
+    public void clearPadConstantWeakRefs() {
+        if (padConstants != null) {
+            for (RuntimeBase constant : padConstants) {
+                WeakRefRegistry.clearWeakRefsTo(constant);
+            }
+        }
+    }
+
+    /**
      * Release captured variable references. Called when this closure is being
      * discarded (scope exit, undef, or reassignment of the variable holding
      * this CODE ref). Decrements {@code captureCount} on each captured scalar,
@@ -1430,6 +1458,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Set CvSTASH (the package where this sub was compiled)
         if (packageName != null) {
             code.packageName = packageName;
+        }
+
+        // Look up pad constants registered at compile time for this class.
+        // These track cached string literals referenced via \ inside the sub,
+        // needed for optree reaping (clearing weak refs when sub is replaced).
+        String internalClassName = clazz.getName().replace('.', '/');
+        RuntimeBase[] padConsts = padConstantsByClassName.remove(internalClassName);
+        if (padConsts != null) {
+            code.padConstants = padConsts;
         }
 
         // Extract captured RuntimeScalar fields for closure DESTROY tracking.

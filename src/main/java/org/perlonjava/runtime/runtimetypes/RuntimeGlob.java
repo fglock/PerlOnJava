@@ -212,7 +212,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case READONLY_SCALAR:
                 return set((RuntimeScalar) value.value);
             case CODE:
-                GlobalVariable.defineGlobalCodeRef(this.globName).set(value);
+                // Get or create the code ref container
+                RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                // Before overwriting, clear weak refs to the old sub's pad constants.
+                // This emulates Perl 5's behavior where replacing a sub frees its op-tree,
+                // causing compile-time constants to be freed and weak refs to be cleared.
+                if (codeContainer.value instanceof RuntimeCode oldCode) {
+                    oldCode.clearPadConstantWeakRefs();
+                }
+
+                codeContainer.set(value);
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();

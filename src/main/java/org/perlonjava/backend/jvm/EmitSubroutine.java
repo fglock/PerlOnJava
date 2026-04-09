@@ -11,6 +11,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -224,6 +225,13 @@ public class EmitSubroutine {
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
             RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
+
+            // Transfer pad constants (cached string literals referenced via \) from compile time
+            // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
+            if (subCtx.javaClassInfo.padConstants != null && !subCtx.javaClassInfo.padConstants.isEmpty()) {
+                RuntimeCode.padConstantsByClassName.put(subCtx.javaClassInfo.javaClassName,
+                        subCtx.javaClassInfo.padConstants.toArray(new RuntimeBase[0]));
+            }
 
             // Direct instantiation approach - no reflection needed!
 

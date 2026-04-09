@@ -200,4 +200,28 @@ public class RuntimeScalarCache {
     public static RuntimeScalar getScalarString(int index) {
         return scalarString[index];
     }
+
+    /**
+     * Looks up an existing cache index for the specified byte string without creating a new entry.
+     *
+     * @param s the string to look up
+     * @return the cache index, or -1 if not in the cache
+     */
+    public static int lookupByteStringIndex(String s) {
+        if (s == null) return -1;
+        Integer index = byteStringToIndex.get(s);
+        return index != null ? index : -1;
+    }
+
+    /**
+     * Looks up an existing cache index for the specified string without creating a new entry.
+     *
+     * @param s the string to look up
+     * @return the cache index, or -1 if not in the cache
+     */
+    public static int lookupStringIndex(String s) {
+        if (s == null) return -1;
+        Integer index = stringToIndex.get(s);
+        return index != null ? index : -1;
+    }
 }
