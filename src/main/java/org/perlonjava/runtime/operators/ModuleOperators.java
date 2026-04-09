@@ -683,6 +683,11 @@ public class ModuleOperators {
             if (moduleTrue) {
                 result = scalarTrue.getList();
             }
+
+            // Clear $@ on success. do FILE is like eval STRING, which clears $@
+            // when execution completes normally. Without this, $@ from inner
+            // eval { die ... } blocks would leak through to the caller.
+            GlobalVariable.setGlobalVariable("main::@", "");
         } catch (Throwable t) {
             // For require, if there was a compilation failure, we need to handle %INC specially
             if (isRequire && setINC) {
