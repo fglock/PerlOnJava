@@ -22,24 +22,29 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
-     * Special refCount value for named/global objects that have weak refs but
-     * whose strong refs can't be counted accurately. Named objects (e.g.,
-     * {@code my %h} or global hashes) have their JVM local variable / stash
-     * slot holding a direct reference that isn't tracked in refCount. Using -2
-     * prevents setLarge() from incorrectly incrementing/decrementing, and weak
-     * ref clearing happens only via explicit undef or scope exit.
+     * Special refCount value for unblessed birth-tracked objects that have weak
+     * refs but whose strong refs can't be counted accurately. These objects were
+     * born via {@code createReferenceWithTrackedElements} (refCount started at 0)
+     * but have blessId == 0 (unblessed), meaning closure captures and temporary
+     * copies bypass {@code setLarge()}, making refCount unreliable.
      * <p>
-     * Anonymous objects (created via {@code createReferenceWithTrackedElements})
-     * use normal refCount tracking (0, 1, 2, ...) because they're only reachable
-     * through references, making refCount complete.
+     * Setting refCount to WEAKLY_TRACKED prevents {@code setLarge()} from
+     * incorrectly decrementing to 0 and triggering false destruction.
+     * Weak ref clearing happens only via explicit {@code undef} or scope exit.
+     * <p>
+     * Note: untracked objects (refCount == -1) are NOT transitioned to
+     * WEAKLY_TRACKED — they stay at -1 and their weak refs are never cleared
+     * deterministically. This distinction fixes the qr-72922.t regression
+     * where untracked regex objects had weak refs prematurely cleared.
      */
     public static final int WEAKLY_TRACKED = -2;
 
     /**
      * Make a reference weak. The reference no longer counts as a strong reference
      * for refCount purposes. If this was the last strong reference, DESTROY fires.
-     * For non-DESTROY objects (refCount == -1), activates minimal tracking so that
-     * weak refs can be nullified when the last strong reference is dropped.
+     * For untracked objects (refCount == -1), simply registers in WeakRefRegistry
+     * without changing refCount — weak refs to untracked objects are never cleared
+     * deterministically (see Strategy A in weaken-destroy.md).
      */
     public static void weaken(RuntimeScalar ref) {
         if (!RuntimeScalarType.isReference(ref)) {
@@ -61,23 +66,17 @@ public class WeakRefRegistry {
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
 
-        if (base.refCount == -1) {
-            MortalList.active = true;
-            base.refCount = WEAKLY_TRACKED;
-        } else if (base.refCount > 0) {
-            // Decrement strong count (weak ref doesn't count).
+        if (base.refCount > 0) {
+            // Tracked object: decrement strong count (weak ref doesn't count).
             // Clear refCountOwned because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
-                // No strong refs remain. For blessed objects this triggers DESTROY.
-                // For anonymous unblessed objects (born via createReferenceWithTrackedElements),
-                // refCount is complete because named objects stay at -1 (never birth-tracked)
-                // and all reference copies go through setLarge when MortalList.active.
+                // No strong refs remain — trigger DESTROY + clear weak refs.
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);
             } else if (base.blessId == 0) {
-                // Unblessed object with remaining strong refs: transition to
+                // Unblessed tracked object with remaining strong refs: transition to
                 // WEAKLY_TRACKED because closure captures and temporary copies
                 // via new RuntimeScalar(RuntimeScalar) aren't tracked in refCount.
                 // Without this transition, a mortal flush can bring refCount to 0
@@ -88,6 +87,10 @@ public class WeakRefRegistry {
                 base.refCount = WEAKLY_TRACKED;
             }
         }
+        // For untracked objects (refCount == -1): register only, no refCount change.
+        // Unlike the old code, we do NOT transition -1 → WEAKLY_TRACKED here.
+        // This fixes qr-72922.t where untracked regex objects had their weak refs
+        // prematurely cleared on undef when other strong refs still existed.
     }
 
     /**

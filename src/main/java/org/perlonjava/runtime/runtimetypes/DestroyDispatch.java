@@ -65,7 +65,10 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
-        // Clear weak refs BEFORE calling DESTROY (or returning for unblessed objects)
+        // Clear weak refs BEFORE calling DESTROY (or returning for unblessed objects).
+        // For unblessed objects this clears weak refs to birth-tracked anonymous
+        // containers (e.g., anonymous hashes from createReferenceWithTrackedElements).
+        // Untracked objects (refCount == -1) never reach callDestroy under Strategy A.
         WeakRefRegistry.clearWeakRefsTo(referent);
 
         // Release closure captures when a CODE ref's refCount hits 0.

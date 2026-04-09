@@ -1936,8 +1936,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
         if (oldBase != null) {
             if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
-                // Non-DESTROY weakly-tracked object: clear weak refs on explicit undef
-                // (refCountOwned not relevant — WEAKLY_TRACKED objects weren't birth-tracked)
+                // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
+                // clear weak refs on explicit undef. These objects transitioned to
+                // WEAKLY_TRACKED in weaken() because their refCount was unreliable
+                // (closure captures bypass setLarge). Clearing on undef is a heuristic
+                // but safe since unblessed objects have no DESTROY.
                 oldBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(oldBase);
             } else if (this.refCountOwned && oldBase.refCount > 0) {
