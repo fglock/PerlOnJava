@@ -376,7 +376,7 @@ imports:
     target: src/main/perl/lib/autodie/Scope/GuardStack.pm
 
   # Tie::RefHash - Hash with references as keys (required by Fatal.pm)
-  - source: perl5/lib/Tie/RefHash.pm
+  - source: perl5/cpan/Tie-RefHash/lib/Tie/RefHash.pm
     target: src/main/perl/lib/Tie/RefHash.pm
 
   # From core distribution
