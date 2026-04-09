@@ -1,6 +1,6 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-08
+**Last Updated:** 2026-04-09
 **Status:** PRODUCTION READY - 841/841 Moo subtests passing
 **Branch:** `feature/destroy-weaken`
 
@@ -588,12 +588,185 @@ strong Perl reference to an untracked object is dropped.
 **Test plan:** Same as A/B, plus timing-sensitive tests for sentinel
 clearing (would need `System.gc()` hints in tests).
 
-### Recommendation
+### Experimental Results: Strategy A (2026-04-09)
 
-**Implement Strategy A first.** It is the simplest, has the lowest risk,
-and fixes the known regression. Strategy B is functionally equivalent but
-leaves dead complexity. Strategy C can be explored later if real-world
-programs depend on weak ref clearing for non-DESTROY objects.
+Strategy A was implemented on the `feature/eliminate-weakly-tracked` branch
+and tested end-to-end. Results:
+
+#### What worked
+
+- **`make` passes**: All unit tests pass EXCEPT `weaken_edge_cases.t` test 15.
+- **qr-72922.t**: Recovered from 5/14 to **10/14** (matches master). The
+  premature clearing regression is fully fixed.
+- **die_keeperr.t**: 15/15 with the separate warning format fix in
+  DestroyDispatch.java (already committed).
+- **Blessed-with-DESTROY objects**: Completely unaffected. The refCount >= 0
+  path is unchanged by Strategy A.
+
+#### What failed
+
+**`weaken_edge_cases.t` test 15** ("nested weak array element becomes undef"):
+
+```perl
+my $strong = [1, 2, 3];          # unblessed array, refCount = -1
+my @nested;
+$nested[0][0] = $strong;         # refCount still -1 (untracked)
+weaken($nested[0][0]);           # Strategy A: register only, no refCount change
+undef $strong;                   # Strategy A: no action for untracked
+ok(!defined($nested[0][0]), ...);  # FAILS: weak ref still valid
+```
+
+**Root cause: Hash/Array Birth-Tracking Asymmetry.**
+
+`RuntimeHash.createReferenceWithTrackedElements()` sets `refCount = 0`
+for anonymous hashes, making them birth-tracked. This means `weaken()` on
+unblessed hash refs works correctly — the refCount path handles everything.
+
+`RuntimeArray.createReferenceWithTrackedElements()` does **NOT** set
+`refCount = 0`. Arrays stay at -1 (untracked). This means `weaken()` on
+unblessed array refs cannot detect when the last strong ref is dropped.
+
+**Why arrays differ:** Adding `this.refCount = 0` to RuntimeArray was
+tested and caused **54/839 Moo subtest failures** across 7 test files:
+- accessor-coerce, accessor-default, accessor-isa, accessor-trigger,
+  accessor-weaken, overloaded-coderefs, method-generate-accessor
+
+**Root cause of Moo failures:** Sub::Quote closures capture arrays by
+sharing the RuntimeScalar variable (via `captureCount`). This capture
+does NOT go through `setLarge()`, so refCount is never incremented for
+the captured reference. When the original strong ref drops, refCount hits
+0 even though the closure still holds a valid reference → premature
+DESTROY.
+
+Hash refs avoid this problem because Moo's usage patterns don't capture
+hash refs in the same way, or because hash captures coincidentally go
+through setLarge().
+
+#### Strategy A Summary
+
+| Test suite | Result | Notes |
+|------------|--------|-------|
+| `make` (unit tests) | PASS (except 1) | weaken_edge_cases.t #15 |
+| qr-72922.t | 10/14 (matches master) | Regression fixed |
+| die_keeperr.t | 15/15 | With warning format fix |
+| Moo (without array tracking) | Not re-tested | Expected same as master |
+| Moo (WITH array tracking) | 54/839 failures | Array birth-tracking breaks closures |
+
+### Blast Radius Analysis: Java WeakReference Approach
+
+An alternative to refCount-based tracking is to use Java's own
+`WeakReference<RuntimeBase>` for Perl weak refs to untracked objects.
+The JVM GC would detect when no strong Java references remain and clear
+the weak ref automatically.
+
+**The fundamental requirement:** The Perl weak scalar must NOT hold a
+strong Java reference to the referent. Currently, `RuntimeScalar.value`
+is a strong `Object` reference — changing this for weak scalars means
+changing how every dereference site accesses the referent.
+
+**Measured blast radius:**
+
+| Scope | Cast/instanceof sites | Files |
+|-------|-----------------------|-------|
+| RuntimeScalar.java internal | 46 | 1 |
+| External codebase | 303 | 63 |
+| **Total** | **349** | **64** |
+
+Top-impacted files: RuntimeCode.java (36), RuntimeScalar.java (33),
+ModuleOperators.java (32), RuntimeGlob.java (17), ReferenceOperators.java (15).
+
+There are **zero existing accessor methods** (`getReferent()`, `asHash()`,
+etc.) — every consumer casts `scalar.value` directly. This means either:
+
+1. **Option 1:** Modify all 349 sites to check for WeakReference.
+   Extremely high risk, touches most of the runtime.
+2. **Option 2:** Add accessor methods first (separate refactoring), then
+   change the internal representation behind the accessor. Two-phase
+   approach but lower risk per phase.
+3. **Option 3:** Use a side-channel mechanism (e.g., `PhantomReference` +
+   `ReferenceQueue`) that doesn't require changing `value` storage. But
+   this doesn't work because the `value` field still holds a strong ref.
+
+**Conclusion:** Java WeakReference is architecturally clean but requires
+a prerequisite refactoring (accessor methods) before it's feasible. This
+is a future enhancement, not an immediate fix.
+
+### Strategy D: Java WeakReference via Accessor Refactoring (Future)
+
+**Phase 1 prerequisite:** Introduce accessor methods on RuntimeScalar:
+```java
+public RuntimeBase getReferentBase() { ... }
+public RuntimeHash  getHashReferent() { ... }
+public RuntimeArray getArrayReferent() { ... }
+public RuntimeCode  getCodeReferent() { ... }
+```
+Refactor all 349 cast sites to use these accessors. This is a pure
+refactoring with no behavioral change.
+
+**Phase 2:** Inside the accessors, check for a Java WeakReference:
+```java
+public RuntimeBase getReferentBase() {
+    if (javaWeakRef != null) {
+        RuntimeBase ref = javaWeakRef.get();
+        if (ref == null) {
+            // JVM GC collected the referent — clear this weak ref
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
+            this.javaWeakRef = null;
+            return null;
+        }
+        return ref;
+    }
+    return (RuntimeBase) value;
+}
+```
+
+**Phase 3:** In `weaken()`, for untracked objects:
+- Set `value = null` (remove strong Java reference)
+- Set `javaWeakRef = new WeakReference<>(referent)`
+- On dereference, the accessor checks the WeakReference
+
+**Pros:** Handles ALL objects (DESTROY via refCount, non-DESTROY via JVM
+GC). Eliminates WEAKLY_TRACKED entirely. Zero overhead for non-weak refs.
+
+**Cons:** Clearing is GC-dependent (not immediate like Perl 5). Requires
+prerequisite refactoring. Adds 8 bytes (WeakReference field) to every
+RuntimeScalar.
+
+### Strategy E: Fix Array Closure Capture (Targeted)
+
+Instead of Java WeakReference, fix the root cause of the hash/array
+asymmetry: make closure captures properly track refCount for arrays.
+
+**Approach:** When a closure captures a variable that holds a reference,
+increment the referent's refCount (like setLarge does). When
+`releaseCaptures()` fires, decrement it.
+
+**This is narrower than Strategy D** — it only fixes the array case,
+not the general "weak ref to non-DESTROY object" case. But it would:
+- Allow array birth-tracking without breaking Moo closures
+- Make `weaken_edge_cases.t` test 15 pass
+- Keep the simple refCount model without JVM GC dependency
+
+**Risk:** Closure capture paths are in codegen (EmitterVisitor), which
+is a high-risk area. Needs careful testing.
+
+### Revised Recommendation
+
+**Implement Strategy A immediately.** It fixes the critical regression
+(qr-72922.t), simplifies the codebase, and has minimal risk.
+
+**Accept the limitation** for weaken_edge_cases.t test 15 (weak refs to
+unblessed arrays not cleared). This is a narrow edge case — in practice,
+`weaken()` is primarily used with blessed objects (Moo, Moose, etc.).
+
+**Future work (prioritized):**
+
+1. **Strategy E** (fix array closure capture) — Targeted fix for the
+   hash/array asymmetry. Lower risk than D, higher value than C.
+2. **Strategy D** (Java WeakReference via accessor refactoring) — Full
+   Perl 5 compliance for all weak ref cases. Higher effort but
+   architecturally clean.
 
 **Key insight:** The refCount system's purpose is DESTROY timing. For
 objects without DESTROY, the only effect of "destroying" them is clearing
@@ -627,17 +800,31 @@ dependent modules like Moo.
    memory reclamation. In practice, deterministic weak ref clearing only
    matters for objects blessed into DESTROY classes, which are fully tracked.
 
-2. **Global variables bypass `setLarge()`.** Stash slots are assigned via
+2. **Hash/Array birth-tracking asymmetry.** Anonymous hashes (`{...}`) are
+   birth-tracked (`refCount = 0` in `createReferenceWithTrackedElements`),
+   so `weaken()` works for unblessed hash refs. Anonymous arrays (`[...]`)
+   are **not** birth-tracked, so `weaken()` on unblessed array refs has no
+   effect (the weak ref persists). Adding array birth-tracking breaks Moo
+   because Sub::Quote closure captures bypass `setLarge()`, causing refCount
+   undercounting and premature destruction. See "Strategy E" for the fix
+   proposal.
+
+3. **Global variables bypass `setLarge()`.** Stash slots are assigned via
    `GlobalVariable` infrastructure, which doesn't always go through the
    refCount-tracking path. For blessed-with-DESTROY objects in global slots,
    `GlobalDestruction` catches them at program exit. For unblessed globals
    with weak refs, the weak refs persist (see limitation 1).
 
-3. **No `DESTROY` for non-reference types.** Only hash, array, code, and scalar
+4. **No `DESTROY` for non-reference types.** Only hash, array, code, and scalar
    referents (via `RuntimeBase`) can be blessed and tracked.
 
-4. **Single-threaded.** The refCount system is not thread-safe. This matches
+5. **Single-threaded.** The refCount system is not thread-safe. This matches
    PerlOnJava's current single-threaded execution model.
+
+6. **349 dereference sites access `value` directly.** There are zero accessor
+   methods for `RuntimeScalar.value` in reference context. This makes it
+   infeasible to change how weak references store their referent without a
+   prerequisite refactoring to introduce accessors (see "Strategy D").
 
 ---
 
