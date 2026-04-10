@@ -1320,6 +1320,13 @@ public class SubroutineParser {
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
             }
 
+            // Transfer pad constants (cached string literals referenced via \)
+            // from compile context to the RuntimeCode for optree reaping.
+            if (newCtx.javaClassInfo.padConstants != null && !newCtx.javaClassInfo.padConstants.isEmpty()) {
+                placeholder.padConstants = newCtx.javaClassInfo.padConstants.toArray(
+                        new org.perlonjava.runtime.runtimetypes.RuntimeBase[0]);
+            }
+
             // Clear the compilerSupplier once done (use the captured placeholder variable)
             // This prevents the Supplier from being invoked multiple times
             placeholder.compilerSupplier = null;

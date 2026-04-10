@@ -25,6 +25,7 @@ PerlOnJava is a Perl 5 implementation that compiles Perl source code to JVM byte
 | Document | Description |
 |----------|-------------|
 | [dynamic-scope.md](dynamic-scope.md) | Dynamic scoping via `local` and DynamicVariableManager |
+| [weaken-destroy.md](weaken-destroy.md) | Cooperative reference counting, DESTROY, and weak references |
 | [lexical-pragmas.md](lexical-pragmas.md) | Lexical warnings, strict, and features |
 | [../design/interpreter.md](../design/interpreter.md) | Bytecode interpreter design |
 | [../design/variables_and_values.md](../design/variables_and_values.md) | Runtime value representation |

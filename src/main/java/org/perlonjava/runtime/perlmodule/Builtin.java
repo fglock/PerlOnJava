@@ -3,6 +3,7 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
@@ -100,18 +101,17 @@ public class Builtin extends PerlModuleBase {
 
     public static RuntimeList weaken(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
-        // Implementation for reference weakening
+        WeakRefRegistry.weaken(ref);
         return new RuntimeList();
     }
 
     public static RuntimeList unweaken(RuntimeArray args, int ctx) {
         RuntimeScalar ref = args.get(0);
-        // Implementation for reference strengthening
+        WeakRefRegistry.unweaken(ref);
         return new RuntimeList();
     }
 
     public static RuntimeList isWeak(RuntimeArray args, int ctx) {
-        // Delegate to Scalar::Util::isweak - on JVM all refs are effectively weak
         return ScalarUtil.isweak(args, ctx);
     }
 

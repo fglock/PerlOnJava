@@ -322,5 +322,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         // Don't vivify when blessing - we're not modifying the underlying value,
         // just setting the blessId on the lvalue itself
         this.blessId = blessId;
+        if (blessId != 0) blessedObjectExists = true;
     }
 }

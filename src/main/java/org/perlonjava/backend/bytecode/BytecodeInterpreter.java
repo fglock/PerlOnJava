@@ -156,6 +156,42 @@ public class BytecodeInterpreter {
                                 // No operation
                             }
 
+                            case Opcodes.MORTAL_FLUSH -> {
+                                // Flush deferred mortal decrements (FREETMPS equivalent)
+                                MortalList.flush();
+                            }
+
+                            case Opcodes.MORTAL_PUSH_MARK -> {
+                                // Push mark before scope-exit cleanup (SAVETMPS equivalent)
+                                MortalList.pushMark();
+                            }
+
+                            case Opcodes.MORTAL_POP_FLUSH -> {
+                                // Pop mark and flush only entries added since it (scoped FREETMPS)
+                                MortalList.popAndFlush();
+                            }
+
+                            case Opcodes.SCOPE_EXIT_CLEANUP -> {
+                                // Scope-exit cleanup for a my-scalar register
+                                int reg = bytecode[pc++];
+                                RuntimeScalar.scopeExitCleanup((RuntimeScalar) registers[reg]);
+                                registers[reg] = null;
+                            }
+
+                            case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
+                                // Scope-exit cleanup for a my-hash register
+                                int reg = bytecode[pc++];
+                                MortalList.scopeExitCleanupHash((RuntimeHash) registers[reg]);
+                                registers[reg] = null;
+                            }
+
+                            case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
+                                // Scope-exit cleanup for a my-array register
+                                int reg = bytecode[pc++];
+                                MortalList.scopeExitCleanupArray((RuntimeArray) registers[reg]);
+                                registers[reg] = null;
+                            }
+
                             case Opcodes.RETURN -> {
                                 // Return from subroutine: return rd
                                 int retReg = bytecode[pc++];

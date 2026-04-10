@@ -78,6 +78,39 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean ioOwner;
 
+    /**
+     * Number of closures that have captured this RuntimeScalar variable.
+     * When {@code captureCount > 0}, {@link #scopeExitCleanup} skips the
+     * blessed ref decrement because a closure still holds a reference to
+     * this variable. The count is incremented in
+     * {@link RuntimeCode#makeCodeObject} and decremented in
+     * {@link RuntimeCode#releaseCaptures}.
+     */
+    public int captureCount;
+
+    /**
+     * True if {@link #scopeExitCleanup} has been called for this variable
+     * (i.e., the variable's declaring scope has exited), but cleanup was
+     * deferred because {@code captureCount > 0}. Used by
+     * {@link RuntimeCode#releaseCaptures} to know when it's safe to call
+     * {@link MortalList#deferDecrementIfTracked}: only if the scope has
+     * already exited (otherwise the variable is still alive and its refCount
+     * will be decremented later by scopeExitCleanup when the scope exits).
+     */
+    public boolean scopeExited;
+
+    /**
+     * True if this scalar "owns" a refCount increment on its referent.
+     * Set to true by {@link #setLarge} after incrementing the referent's refCount.
+     * Cleared when the matching decrement fires (scope exit, overwrite, undef, weaken).
+     * <p>
+     * This prevents spurious decrements from copies that were created via the
+     * copy constructor (which does NOT increment refCount). Without this flag,
+     * scope exit cleanup would decrement refCount for every scalar holding a
+     * tracked reference, even if that scalar never incremented it.
+     */
+    public boolean refCountOwned;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -758,7 +791,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Setters
 
+    /**
+     * Increment refCount for a scalar that was just stored in a container (array/hash).
+     * Container stores use the copy constructor which doesn't increment refCount
+     * (to avoid over-counting for temporary copies). This method should be called
+     * after storing a tracked reference in a container, if MortalList is active.
+     * <p>
+     * Skips elements that already have {@code refCountOwned == true}, meaning they
+     * were created via {@code set()} / {@code setLarge()} rather than the copy
+     * constructor, and their refCount was already incremented at creation time.
+     */
+    public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
+        if (scalar != null && !scalar.refCountOwned
+                && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
+                && base.refCount >= 0) {
+            base.refCount++;
+            scalar.refCountOwned = true;
+        }
+    }
+
     // Inlineable fast path for set(RuntimeScalar)
+    // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
+    // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
             this.type = value.type;
@@ -799,7 +853,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
-    // Slow path for set(RuntimeScalar)
+    // Slow path for set(RuntimeScalar) — kept small for JIT inlining of set().
+    // Reference-type assignments are dispatched to setLargeRefCounted() which
+    // handles refCount tracking, IO lifecycle, and weak ref bookkeeping.
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
             closeIOOnDrop();
@@ -828,6 +884,47 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case READONLY_SCALAR ->
                     throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+
+        // Reference types (or overwriting a reference) need refCount + IO tracking.
+        // All reference types have REFERENCE_BIT (0x8000) set, so a single
+        // bitwise OR + AND check covers both old and new values.
+        if (((this.type | value.type) & REFERENCE_BIT) != 0) {
+            return setLargeRefCounted(value);
+        }
+
+        // Simple non-reference assignment (no refCount tracking needed).
+        // No MortalList.flush() here — neither old nor new value is a reference,
+        // so no refCount was incremented/decremented, and no mortal entries were added.
+        this.type = value.type;
+        this.value = value.value;
+        return this;
+    }
+
+    /**
+     * RefCount-aware slow path for reference assignments.
+     * Called from setLarge() when either the old or new value involves a reference type.
+     * Separated to keep setLarge() small enough for JIT inlining of set().
+     */
+    private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        // Fast path for untracked references (refCount == -1).
+        // Most reference assignments involve untracked objects (named variables,
+        // anonymous arrays/hashes that were never blessed). Skip all refCount
+        // tracking, WeakRefRegistry checks, and MortalList flush.
+        if (!this.refCountOwned && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
+            // Both old and new are non-GLOB references. Check if referents are untracked.
+            boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
+                    || this.value == null
+                    || ((RuntimeBase) this.value).refCount == -1;
+            boolean newUntracked = (value.type & REFERENCE_BIT) == 0
+                    || value.value == null
+                    || ((RuntimeBase) value.value).refCount == -1;
+            if (oldUntracked && newUntracked) {
+                this.type = value.type;
+                this.value = value.value;
+                return this;
+            }
+        }
+
         // ──────────────────────────────────────────────────────────────────
         // closeIOOnDrop() was REMOVED from this assignment path.
         //
@@ -875,8 +972,72 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             oldGlob.ioHolderCount--;
         }
 
+        // NOTE: Do NOT release captures here on CODE overwrite.
+        // releaseCaptures() must only fire when the CODE ref's refCount truly
+        // reaches 0 (via DestroyDispatch.callDestroy). Releasing on every
+        // overwrite is wrong because other variables may still hold the same
+        // CODE ref — e.g., the stash entry *Foo::bar holds the constructor
+        // while a local variable also holds it. Overwriting the local should
+        // not release the captures that the stash's copy still needs.
+        // For untracked CODE refs (refCount == -1), the JVM GC handles cleanup.
+
+        // Track refCount for blessed objects with DESTROY.
+        // Save old referent BEFORE the assignment (for correct DESTROY ordering —
+        // Perl 5 semantics: DESTROY sees the new state of the variable, not the old)
+        RuntimeBase oldBase = null;
+        if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
+            oldBase = (RuntimeBase) this.value;
+        }
+
+        // If this scalar was a weak ref, remove from weak tracking before overwriting.
+        // Weak refs don't count toward refCount, so skip refCount decrement later.
+        boolean thisWasWeak = (oldBase != null && WeakRefRegistry.removeWeakRef(this, oldBase));
+
+        // Increment new value's refCount (>= 0 means tracked; -1 means untracked).
+        // Only increment for objects already being tracked (refCount >= 0).
+        // Objects born via createReferenceWithTrackedElements or closures with
+        // captures start at 0 and are always tracked. Named variables (\$x, \@a)
+        // have refCount = -1 (untracked) since they have a JVM local slot that
+        // isn't counted. Transitioning -1→1 would undercount.
+        boolean newOwned = false;
+        if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
+            RuntimeBase nb = (RuntimeBase) value.value;
+            if (nb.refCount >= 0) {
+                nb.refCount++;
+                newOwned = true;
+            }
+        }
+
+        // Do the assignment
         this.type = value.type;
         this.value = value.value;
+
+        // Decrement old value's refCount AFTER assignment (skip for weak refs
+        // and for scalars that didn't own a refCount increment).
+        if (oldBase != null && !thisWasWeak && this.refCountOwned) {
+            if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            }
+        }
+
+        // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
+        // These objects have refCount == -2 and their strong refs don't have
+        // refCountOwned=true (they were set before tracking started).
+        // Overwriting ONE reference doesn't mean no other strong refs exist —
+        // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
+        // This is the same rationale as in scopeExitCleanup.
+        // Weak refs for WEAKLY_TRACKED objects are cleared only via explicit
+        // undefine() of a strong reference.
+
+        // Update ownership: this scalar now owns a refCount iff we incremented.
+        this.refCountOwned = newOwned;
+
+        // Flush deferred mortal decrements. This is the primary flush point for
+        // the mortal mechanism — called after every assignment involving references.
+        // Cost when MortalList.active is false: one boolean check (trivially predicted).
+        MortalList.flush();
+
         return this;
     }
 
@@ -1814,13 +1975,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar undefine() {
         // Special handling for CODE type - don't set the ref to undef,
         // just clear the code from the global symbol table
-        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode) {
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code) {
+            // Release captured variables before discarding this CODE ref
+            code.releaseCaptures();
             // Clear the code value but keep the type as CODE
             this.value = new RuntimeCode((String) null, null);
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
             return this;
         }
+
+        // Decrement refCount for blessed references with DESTROY or weakly-tracked refs
+        RuntimeBase oldBase = null;
+        if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value instanceof RuntimeBase base
+                && base.refCount != -1 && base.refCount != Integer.MIN_VALUE) {
+            oldBase = base;
+        }
+
         // Close IO handles when dropping a glob reference.
         // This mimics Perl's internal sv_clear behavior where IO handles are closed
         // when the glob's reference count drops to zero (independent of DESTROY).
@@ -1828,6 +1999,33 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // For all other types, set to undef
         this.type = UNDEF;
         this.value = null;
+
+        // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
+        if (oldBase != null) {
+            if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
+                // clear weak refs on explicit undef. These objects transitioned to
+                // WEAKLY_TRACKED in weaken() because their refCount was unreliable
+                // (closure captures bypass setLarge). Clearing on undef is a heuristic
+                // but safe since unblessed objects have no DESTROY.
+                oldBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(oldBase);
+            } else if (this.refCountOwned && oldBase.refCount > 0) {
+                this.refCountOwned = false;
+                if (--oldBase.refCount == 0) {
+                    oldBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(oldBase);
+                }
+            }
+        }
+
+        // Flush deferred mortal decrements. Without this, pending DECs from
+        // scope exit of locals (e.g., `my ($a,$b) = @_` inside a sub) would
+        // not be processed until the next setLarge/apply, making the refCount
+        // appear inflated at the point of `undef $ref`. This matches Perl 5
+        // where FREETMPS runs at statement boundaries.
+        MortalList.flush();
+
         return this;
     }
 
@@ -1906,7 +2104,84 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @see RuntimeIO#processAbandonedGlobs()
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
-        if (scalar != null && scalar.ioOwner && scalar.type == GLOBREFERENCE
+        if (scalar == null) return;
+
+        // Fast path: skip if no special state (most common case for integer/string vars).
+        // When all three conditions are true, the entire method body is a no-op:
+        // - refCountOwned=false → deferDecrementIfTracked returns immediately
+        // - captureCount=0 → capture handling branch not taken
+        // - ioOwner=false → IO fd recycling branch not taken
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) return;
+
+        // If this variable is captured by a closure, mark it so releaseCaptures
+        // knows the scope has exited. But still proceed with refCount cleanup below
+        // so that blessed ref refCounts and weak refs are handled properly.
+        if (scalar.captureCount > 0) {
+            // Self-referential capture cycle detection: if this variable holds
+            // a CODE ref that captures this same variable, we have a cycle that
+            // will never resolve on its own. This happens when eval STRING creates
+            // closures that capture ALL visible lexicals (including the variable
+            // the closure is assigned to). Break the cycle by decrementing our own
+            // captureCount and removing ourselves from the CODE's captures array.
+            // The full release of other captures will happen when the CODE ref's
+            // refCount reaches 0 (via callDestroy/releaseCaptures).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && code.capturedScalars != null) {
+                boolean selfRef = false;
+                for (RuntimeScalar s : code.capturedScalars) {
+                    if (s == scalar) { selfRef = true; break; }
+                }
+                if (selfRef) {
+                    // Decrement our captureCount (the closure captured us)
+                    scalar.captureCount--;
+                    // Remove self from capturedScalars to prevent double-decrement
+                    // when releaseCaptures runs later during CODE ref destruction
+                    RuntimeScalar[] old = code.capturedScalars;
+                    if (old.length == 1) {
+                        code.capturedScalars = null;
+                    } else {
+                        RuntimeScalar[] updated = new RuntimeScalar[old.length - 1];
+                        int j = 0;
+                        for (RuntimeScalar cap : old) {
+                            if (cap != scalar && j < updated.length) updated[j++] = cap;
+                        }
+                        code.capturedScalars = updated;
+                    }
+                }
+            }
+            // Mark that this variable's scope has exited. When releaseCaptures
+            // later decrements captureCount to 0, it will know the scope is gone.
+            scalar.scopeExited = true;
+            // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
+            // is eventually destroyed and its releaseCaptures fires (decrementing
+            // captureCount on all the variables IT captured). This is critical for
+            // eval STRING closures that capture all visible lexicals — without this,
+            // the inner sub's captures (including $got in cmp_ok) are never released,
+            // preventing weak refs from being cleared.
+            // For non-CODE refs: do NOT decrement. The closure holds a strong reference
+            // to this variable's value, and decrementing would prematurely clear weak
+            // refs (breaks Sub::Quote where closures legitimately keep values alive).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode) {
+                // Fall through to deferDecrementIfTracked below
+            } else {
+                return;
+            }
+        }
+
+        // NOTE: Do NOT call releaseCaptures() on CODE refs here.
+        // When a local variable holding a CODE ref goes out of scope, the
+        // RuntimeCode may still be alive in other locations (e.g., a glob's
+        // CODE slot installed via *glob = $code, or another variable).
+        // Premature releaseCaptures() would decrement captureCount on captured
+        // variables, causing those variables' scope exit to add birth-tracked
+        // objects to the mortal list and prematurely clear weak refs.
+        // Captures are properly released when the CODE ref is overwritten
+        // (via setLarge) or undef'd (via undefine).
+
+        // Existing: IO fd recycling for anonymous filehandle globs
+        if (scalar.ioOwner && scalar.type == GLOBREFERENCE
                 && scalar.value instanceof RuntimeGlob glob
                 && glob.globName == null) {
             RuntimeScalar ioSlot = glob.getIO();
@@ -1918,6 +2193,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 io.unregisterFileno();
             }
         }
+
+        // Defer refCount decrement for blessed references with DESTROY.
+        // Uses MortalList to defer the decrement until the next safe point
+        // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
+        // when the same referent is on the JVM stack as a return value.
+        MortalList.deferDecrementIfTracked(scalar);
+
+        // WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.
+        // These objects transitioned from untracked (-1) to WEAKLY_TRACKED (-2) in
+        // weaken(), but scope exit of ONE reference doesn't mean no other strong
+        // references exist — closures may capture copies of the same reference
+        // (e.g., Sub::Quote's $_QUOTED capture keeps $quoted_info alive even after
+        // unquote_sub's local exits scope). Clearing weak refs here would break
+        // Sub::Quote/Moo constructor inlining.
+        // Weak refs for WEAKLY_TRACKED objects are cleared only via:
+        //   - explicit undefine() of a strong reference
+        //   - setLarge() overwriting a strong reference
+        // Since unblessed objects have no DESTROY, delayed clearing is safe.
     }
 
     public RuntimeScalar defined() {
@@ -2427,6 +2720,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
+
+            // Decrement refCount of the CURRENT value being displaced.
+            // Do NOT increment the restored value — it already has the correct
+            // refCount from its original counting (it was never decremented during save).
+            if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && this.value instanceof RuntimeBase displacedBase
+                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                displacedBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(displacedBase);
+            }
+
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = previousState.value;

@@ -65,16 +65,79 @@ public class EmitStatement {
      * @param scopeIndex The scope boundary being exited
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex) {
+        emitScopeExitNullStores(ctx, scopeIndex, false);
+    }
+
+    /**
+     * Same as {@link #emitScopeExitNullStores(EmitterContext, int)} but with
+     * an option to flush the MortalList after cleanup.
+     * <p>
+     * When {@code flush} is true, emits a scoped flush using
+     * {@code MortalList.pushMark()} before cleanup and
+     * {@code MortalList.popAndFlush()} after. This only processes entries
+     * added by the scope-exit cleanup itself (not entries from outer scopes
+     * or prior operations), matching Perl 5's SAVETMPS/FREETMPS scoping.
+     * <p>
+     * {@code flush=true} is safe for bare blocks, loops, and control structures.
+     * It must be {@code false} for subroutine body blocks where the implicit
+     * return value may still be on the JVM operand stack — flushing would
+     * destroy the return value before the caller captures it.
+     *
+     * @param ctx        The emitter context with the MethodVisitor and symbol table
+     * @param scopeIndex The scope boundary being exited
+     * @param flush      If true, emit scoped MortalList flush around null stores
+     */
+    static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
+        // Gather variable indices for this scope first, to determine if cleanup is needed.
+        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
+        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
+        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
+
+        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+        // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
+        // skip this entirely, eliminating 2 method calls per loop iteration.
+        boolean needsCleanup = flush
+                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
+        // Phase 0: Push mark so popAndFlush only drains entries added by
+        // scopeExitCleanup in Phase 1. Entries from method returns within
+        // the block that are below the mark will be processed by the next
+        // setLarge() or undefine() flush, or by the enclosing scope's exit.
+        if (needsCleanup) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "pushMark",
+                    "()V",
+                    false);
+        }
         // Phase 1: Eagerly unregister fd numbers on scalar variables holding
         // anonymous filehandle globs. This makes the fd available for reuse
         // without waiting for non-deterministic GC.
-        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
         for (int idx : scalarIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
                     "scopeExitCleanup",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+        }
+        // Phase 1b: Walk hash/array variables for nested blessed references.
+        // When a hash/array goes out of scope, any blessed refs stored inside
+        // (or nested inside sub-containers) need their refCounts decremented.
+        for (int idx : hashIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupHash",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                    false);
+        }
+        for (int idx : arrayIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "scopeExitCleanupArray",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
                     false);
         }
         // Phase 2: Null all my variable slots to help GC collect associated objects.
@@ -84,6 +147,17 @@ public class EmitStatement {
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
+        }
+        // Phase 3: Pop mark and flush only entries added since Phase 0.
+        // This triggers DESTROY for blessed objects whose last strong reference was
+        // in a lexical that just went out of scope. Only entries added by Phase 1
+        // are processed; older pending entries from outer scopes are preserved.
+        if (needsCleanup) {
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList",
+                    "popAndFlush",
+                    "()V",
+                    false);
         }
     }
 
@@ -136,7 +210,7 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(emitterVisitor);
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -151,7 +225,7 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(emitterVisitor);
-                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -223,7 +297,7 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -421,7 +495,7 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 
@@ -539,7 +613,7 @@ public class EmitStatement {
         emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         // If the context is not VOID, push "undef" to the stack

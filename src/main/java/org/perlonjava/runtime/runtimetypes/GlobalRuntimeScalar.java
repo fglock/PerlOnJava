@@ -84,6 +84,18 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
+                // Decrement refCount of the CURRENT (local) value being displaced.
+                // Do NOT increment the restored value — it already has the correct
+                // refCount from its original counting.
+                RuntimeScalar currentVar = GlobalVariable.globalVariables.get(saved.fullName);
+                if (currentVar != null
+                        && (currentVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && currentVar.value instanceof RuntimeBase displacedBase
+                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                    displacedBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(displacedBase);
+                }
+
                 // Restore the internal separator values if this was an output separator variable
                 if (saved.originalVariable instanceof OutputRecordSeparator) {
                     OutputRecordSeparator.restoreInternalORS();

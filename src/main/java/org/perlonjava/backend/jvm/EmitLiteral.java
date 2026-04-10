@@ -96,8 +96,10 @@ public class EmitLiteral {
         emitterVisitor.ctx.javaClassInfo.releaseSpillRef(arrayRef);
 
         // Convert the array to a reference (array literals produce references)
+        // Use createReferenceWithTrackedElements to increment refCounts for elements,
+        // preventing premature destruction of referents stored in anonymous arrays.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "createReference", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }

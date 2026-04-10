@@ -53,6 +53,12 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
+        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
+        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base
+                && base.refCount >= 0) {
+            base.refCount++;
+        }
     }
 
     /**
@@ -173,5 +179,19 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
 
     public String getTiedPackage() {
         return tiedPackage;
+    }
+
+    /**
+     * Releases the tie wrapper's strong reference to the tied object.
+     * Decrements refCount and triggers DESTROY if it reaches 0.
+     */
+    public void releaseTiedObject() {
+        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base) {
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
+        }
     }
 }

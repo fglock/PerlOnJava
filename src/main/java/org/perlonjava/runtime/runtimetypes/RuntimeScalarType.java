@@ -22,7 +22,9 @@ public class RuntimeScalarType {
     public static final int READONLY_SCALAR = 12;
     public static final int PROXY = 13;  // Proxy with lazy evaluation (e.g. ScalarSpecialVariable)
     // Reference types (with high bit set)
-    private static final int REFERENCE_BIT = 0x8000;
+    // Package-private so that refCount tracking in RuntimeScalar.setLarge() can
+    // test (type & REFERENCE_BIT) without an extra method call.
+    static final int REFERENCE_BIT = 0x8000;
     // References with bit pattern
     public static final int REGEX = 100 | REFERENCE_BIT;
     public static final int CODE = 101 | REFERENCE_BIT;

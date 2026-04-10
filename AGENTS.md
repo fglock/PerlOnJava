@@ -60,15 +60,20 @@ Example format at the end of a design doc:
 - Keep docs updated as implementation progresses
 - Reference related docs and skills at the end
 
+### Partially Implemented Features
+
+| Feature | Status |
+|---------|--------|
+| `weaken` / `isweak` | Implemented on the `feature/destroy-weaken` branch. Uses cooperative reference counting on top of JVM GC. See `dev/architecture/weaken-destroy.md` for details. |
+| `DESTROY` | Implemented on the `feature/destroy-weaken` branch. Fires deterministically for tracked objects (blessed into a class with DESTROY). See `dev/architecture/weaken-destroy.md`. |
+| `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
+
 ### Unimplemented Features
 
 PerlOnJava does **not** implement the following Perl features:
 
 | Feature | Impact |
 |---------|--------|
-| `weaken` / `isweak` | No weak reference tracking. `weaken()` is a no-op, `isweak()` always returns false (since nothing is ever weakened). JVM's tracing GC handles circular references natively. |
-| `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
-| `DESTROY` | Object destructors never called; DEMOLISH patterns and cleanup code won't run |
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 | `threads` | Perl threads not supported; use Java threading via inline Java if needed |
 
@@ -172,7 +177,16 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 4. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
-   gh pr create --title "Title" --body "Description"
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
+   ```
+   **IMPORTANT: Never use `--body` with inline text containing backticks.** Bash
+   interprets backticks as command substitution, silently corrupting the PR body.
+   Always write the body to a temp file first and use `--body-file`:
+   ```bash
+   cat > /tmp/pr_body.md << 'EOF'
+   PR body with `backticks` and other markdown...
+   EOF
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
 
 5. **Wait for review** before merging

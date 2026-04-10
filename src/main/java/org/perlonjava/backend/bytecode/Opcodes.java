@@ -2198,6 +2198,50 @@ public class Opcodes {
      */
     public static final short RETURN_NONLOCAL = 461;
 
+    /**
+     * Flush deferred mortal decrements at statement boundary.
+     * Equivalent to Perl 5's FREETMPS.
+     * Format: MORTAL_FLUSH (no operands)
+     */
+    public static final short MORTAL_FLUSH = 462;
+
+    /**
+     * Scope-exit cleanup for a my-scalar register.
+     * Calls RuntimeScalar.scopeExitCleanup() and nulls the register.
+     * Format: SCOPE_EXIT_CLEANUP reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP = 463;
+
+    /**
+     * Push a mark on the MortalList mark stack before scope-exit cleanup.
+     * Analogous to Perl 5's SAVETMPS.
+     * Format: MORTAL_PUSH_MARK (no operands)
+     */
+    public static final short MORTAL_PUSH_MARK = 464;
+
+    /**
+     * Pop the most recent mark and flush only entries added since it.
+     * Analogous to Perl 5's scoped FREETMPS after LEAVE.
+     * Format: MORTAL_POP_FLUSH (no operands)
+     */
+    public static final short MORTAL_POP_FLUSH = 465;
+
+    /**
+     * Scope-exit cleanup for a my-hash register.
+     * Walks hash values recursively for tracked blessed references
+     * and defers refCount decrements via MortalList.
+     * Format: SCOPE_EXIT_CLEANUP_HASH reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP_HASH = 466;
+
+    /**
+     * Scope-exit cleanup for a my-array register.
+     * Walks array elements recursively for tracked blessed references
+     * and defers refCount decrements via MortalList.
+     * Format: SCOPE_EXIT_CLEANUP_ARRAY reg
+     */
+    public static final short SCOPE_EXIT_CLEANUP_ARRAY = 467;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

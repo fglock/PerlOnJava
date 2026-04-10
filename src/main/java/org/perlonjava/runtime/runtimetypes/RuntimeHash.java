@@ -148,7 +148,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public static RuntimeScalar createHashRef(RuntimeBase value) {
-        return createHash(value).createReference();
+        return createHash(value).createReferenceWithTrackedElements();
     }
 
     /**
@@ -235,6 +235,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
 
                 // Clear existing elements but keep the same Map instance to preserve capacity
+                MortalList.deferDestroyForContainerClear(this.elements.values());
                 this.elements.clear();
                 if (this.byteKeys != null) this.byteKeys.clear();
 
@@ -250,6 +251,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
                     this.elements.put(key, val);
+                    RuntimeScalar.incrementRefCountForContainerStore(val);
                 }
 
                 // Create a RuntimeArray that wraps this hash
@@ -258,6 +260,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 RuntimeArray result = new RuntimeArray(this);
                 // Store the original size as an annotation for scalar context
                 result.scalarContextSize = originalSize;
+                // Flush deferred DESTROY for refs removed from the container
+                MortalList.flush();
                 yield result;
             }
             case AUTOVIVIFY_HASH -> {
@@ -455,6 +459,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(k);
                 if (byteKeys != null) byteKeys.remove(k);
                 if (value != null) {
+                    // Schedule deferred refCount decrement — fires at next safe point
+                    // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
+                    // when the caller captures the return value.
+                    MortalList.deferDecrementIfTracked(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();
@@ -474,6 +482,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 var value = elements.remove(key);
                 if (byteKeys != null) byteKeys.remove(key);
                 if (value != null) {
+                    // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
+                    MortalList.deferDecrementIfTracked(value);
                     yield new RuntimeScalar(value);
                 }
                 yield new RuntimeScalar();
@@ -545,9 +555,29 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public RuntimeScalar createReference() {
+        // No birth tracking here. Named hashes (\%h) have a JVM local variable
+        // holding them that isn't counted in refCount, so starting at 0 would
+        // undercount. Birth tracking for anonymous hashes ({}) happens in
+        // createReferenceWithTrackedElements() where refCount IS complete.
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
         result.value = this;
+        return result;
+    }
+
+    @Override
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        // Birth-track anonymous hashes: set refCount=0 so setLarge() can
+        // accurately count strong references. Anonymous hashes are only
+        // reachable through references (no lexical variable slot), so
+        // refCount is complete and reaching 0 means truly no strong refs.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
+        RuntimeScalar result = createReference();
+        for (RuntimeScalar elem : this.elements.values()) {
+            RuntimeScalar.incrementRefCountForContainerStore(elem);
+        }
         return result;
     }
 
@@ -943,12 +973,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeHash undefine() {
         // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
+        MortalList.deferDestroyForContainerClear(this.elements.values());
         if (this.type == PLAIN_HASH) {
             this.elements = new StableHashMap<>();
         } else {
             this.elements.clear();
         }
         this.byteKeys = null;
+        MortalList.flush();
         return this;
     }
 

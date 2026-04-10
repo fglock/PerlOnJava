@@ -295,8 +295,65 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void exitScope() {
+        exitScope(false);
+    }
+
+    /**
+     * Exit the current scope, emitting cleanup opcodes.
+     *
+     * @param flush If true, emit MORTAL_PUSH_MARK before and MORTAL_POP_FLUSH after
+     *              cleanup to trigger DESTROY for blessed objects whose refCount drops
+     *              to 0. Only entries added by the cleanup are flushed (scoped flush).
+     *              Must be false for subroutine body scopes where the return value
+     *              is on the stack.
+     */
+    private void exitScope(boolean flush) {
         if (!scopeIndices.isEmpty()) {
-            symbolTable.exitScope(scopeIndices.pop());
+            int scopeIdx = scopeIndices.pop();
+
+            // Gather variable indices to determine if cleanup is needed.
+            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
+            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+
+            // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+            // Scopes with no my-variables skip this entirely.
+            boolean needsCleanup = flush
+                    && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
+            // Push mark so popAndFlush only drains entries added by
+            // scopeExitCleanup. Entries from method returns within the block
+            // that are below the mark will be processed by the next setLarge()
+            // or undefine() flush, or by the enclosing scope's exit.
+            if (needsCleanup) {
+                emit(Opcodes.MORTAL_PUSH_MARK);
+            }
+
+            // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
+            // This calls RuntimeScalar.scopeExitCleanup() which handles:
+            // 1. IO fd recycling for anonymous filehandle globs
+            // 2. refCount decrement for blessed references with DESTROY
+            for (int reg : scalarIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                emitReg(reg);
+            }
+
+            // Walk hash/array variables for nested blessed references.
+            for (int reg : hashIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                emitReg(reg);
+            }
+            for (int reg : arrayIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                emitReg(reg);
+            }
+
+            // Pop mark and flush only entries added since the mark
+            if (needsCleanup) {
+                emit(Opcodes.MORTAL_POP_FLUSH);
+            }
+
+            symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
                 nextRegister = savedNextRegister.pop();
             }
@@ -1012,6 +1069,7 @@ public class BytecodeCompiler implements Visitor {
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
             recycleTemporaryRegisters();
+
         }
 
         // Use the saved result reg from the last meaningful statement if subsequent
@@ -1034,8 +1092,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(regexSaveReg);
         }
 
-        // Exit scope restores register state
-        exitScope();
+        // Exit scope restores register state.
+        // Flush mortal list for non-subroutine blocks so DESTROY fires promptly
+        // at scope exit. Subroutine body blocks must NOT flush — the implicit
+        // return value may still be in a register and flushing could destroy it.
+        exitScope(!node.getBooleanAnnotation("blockIsSubroutine"));
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -5288,7 +5349,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 13: Pop loop info and exit scope
         loopStack.pop();
-        exitScope();
+        exitScope(true);  // safe to flush — foreach loop, not subroutine body
 
         if (foreachRegexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
@@ -5358,7 +5419,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             } finally {
                 // Exit scope to clean up lexical variables
-                exitScope();
+                exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
             // next jumps here (continue point = end of body, before exit)

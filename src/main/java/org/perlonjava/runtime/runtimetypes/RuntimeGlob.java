@@ -212,10 +212,30 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case READONLY_SCALAR:
                 return set((RuntimeScalar) value.value);
             case CODE:
-                GlobalVariable.defineGlobalCodeRef(this.globName).set(value);
+                // Get or create the code ref container
+                RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+
+                // Before overwriting, clear weak refs to the old sub's pad constants.
+                // This emulates Perl 5's behavior where replacing a sub frees its op-tree,
+                // causing compile-time constants to be freed and weak refs to be cleared.
+                if (codeContainer.value instanceof RuntimeCode oldCode) {
+                    oldCode.clearPadConstantWeakRefs();
+                }
+
+                codeContainer.set(value);
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
+
+                // Mark as an imported override for overridable built-in operators.
+                // In Perl 5, typeglob CODE assignment (e.g., *time = \&Time::HiRes::time
+                // from Exporter imports) sets the GvIMPORTED_CV flag, which allows the
+                // imported sub to override the built-in keyword. Simply defining
+                // 'sub close { }' does NOT set this flag. We emulate this by setting
+                // isSubs for any CODE typeglob assignment — the parser only checks
+                // isSubs for names in the OVERRIDABLE_OP set, so marking non-overridable
+                // names has no effect.
+                GlobalVariable.isSubs.put(this.globName, true);
 
                 // Increment package generation counter for mro::get_pkg_gen
                 int lastColonIdx = this.globName.lastIndexOf("::");
@@ -944,6 +964,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
         GlobalVariable.globalHashes.put(snap.globName, snap.hash);
         GlobalVariable.globalArrays.put(snap.globName, snap.array);
+
+        // Before replacing the code ref, decrement the refCount of the CODE
+        // that was installed during the local scope. The local scope's code
+        // was set via setLarge (which incremented refCount), but the restore
+        // via put() bypasses setLarge, so we must decrement manually.
+        // Without this, CODE refs installed in localized globs (e.g.,
+        // `local *Foo::bar; sub bar { ... }` in Sub::Quote's unquote_sub)
+        // have permanently overcounted refCount, preventing releaseCaptures
+        // from firing at the right time.
+        RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
+        if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+            if (localBase.refCount > 0 && --localBase.refCount == 0) {
+                localBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(localBase);
+            }
+        }
         GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.

@@ -907,6 +907,22 @@ public class OpcodeHandlerExtended {
         // Create a new InterpretedCode with the captured variables
         InterpretedCode closureCode = template.withCapturedVars(capturedVars);
 
+        // Track captureCount on captured RuntimeScalar variables.
+        // This mirrors what RuntimeCode.makeCodeObject() does for JVM-compiled closures.
+        // Without this, scopeExitCleanup() doesn't know the variable is still alive
+        // via this closure, and may prematurely clear weak references to its value.
+        java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
+        for (RuntimeBase captured : capturedVars) {
+            if (captured instanceof RuntimeScalar s) {
+                capturedScalars.add(s);
+                s.captureCount++;
+            }
+        }
+        if (!capturedScalars.isEmpty()) {
+            closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            closureCode.refCount = 0;
+        }
+
         // Wrap in RuntimeScalar and set __SUB__ for self-reference
         RuntimeScalar codeRef = new RuntimeScalar(closureCode);
         closureCode.__SUB__ = codeRef;

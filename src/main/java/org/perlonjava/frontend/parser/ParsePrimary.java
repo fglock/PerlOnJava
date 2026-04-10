@@ -153,17 +153,22 @@ public class ParsePrimary {
         // Check for overridable operators (unless explicitly called with CORE::)
         if (!calledWithCore && operatorEnabled && ParserTables.OVERRIDABLE_OP.contains(operator)) {
             // Core functions can be overridden in two ways:
-            // 1. By defining a subroutine in the current package
+            // 1. By explicit declaration: use subs 'name', or imported via Exporter (typeglob assignment)
             // 2. By defining a subroutine in CORE::GLOBAL::
+            //
+            // NOTE: Simply defining 'sub close { ... }' in the current package does NOT
+            // override the built-in. Perl 5 requires an explicit import or 'use subs'
+            // declaration. The isSubs flag is set by: use subs, Exporter imports (via
+            // typeglob CODE assignment in RuntimeGlob.set()), and subs::mark_overridable.
 
             // Special case: 'do' followed by '{' is a do-block, not a function call
             if (operator.equals("do") && peekTokenText.equals("{")) {
                 // This is a do block, not a do function call - let CoreOperatorResolver handle it
             } else {
 
-                // Check for local package override
+                // Check for local package override (only if explicitly imported/declared)
                 String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
-                if (GlobalVariable.isSubs.getOrDefault(fullName, false) || GlobalVariable.isGlobalCodeRefDefined(fullName)) {
+                if (GlobalVariable.isSubs.getOrDefault(fullName, false)) {
                     // Example: 'use subs "hex"; sub hex { 456 } print hex("123"), "\n"'
                     // Or: 'use Time::HiRes "time"; print time, "\n"' (sub imported at BEGIN time)
                     parser.tokenIndex = startIndex;   // backtrack to reparse as subroutine

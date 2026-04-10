@@ -234,6 +234,40 @@ public class ScopedSymbolTable {
     }
 
     /**
+     * Returns the JVM local slot indices for hash ({@code %}) {@code my}
+     * variables declared in or after the given scope. Used by scope-exit
+     * cleanup to defer refCount decrements for blessed objects stored in hashes.
+     */
+    public java.util.List<Integer> getMyHashIndicesInScope(int scopeIndex) {
+        java.util.List<Integer> indices = new java.util.ArrayList<>();
+        for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
+                if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("%")) {
+                    indices.add(entry.index());
+                }
+            }
+        }
+        return indices;
+    }
+
+    /**
+     * Returns the JVM local slot indices for array ({@code @}) {@code my}
+     * variables declared in or after the given scope. Used by scope-exit
+     * cleanup to defer refCount decrements for blessed objects stored in arrays.
+     */
+    public java.util.List<Integer> getMyArrayIndicesInScope(int scopeIndex) {
+        java.util.List<Integer> indices = new java.util.ArrayList<>();
+        for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
+                if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("@")) {
+                    indices.add(entry.index());
+                }
+            }
+        }
+        return indices;
+    }
+
+    /**
      * Returns the JVM local slot indices for scalar ({@code $}) {@code my}
      * variables declared in or after the given scope. Used by
      * {@link org.perlonjava.backend.jvm.EmitStatement#emitScopeExitNullStores}

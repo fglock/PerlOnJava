@@ -104,6 +104,36 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         this.regexFlags = null;
     }
 
+    /**
+     * Creates a tracked copy of this RuntimeRegex for use as a qr// value.
+     * The copy shares compiled Pattern objects but has its own refCount = 0,
+     * enabling proper reference counting when assigned to user variables.
+     * This mirrors Perl 5 where qr// always creates a new SV wrapper around
+     * the shared compiled regex.
+     */
+    public RuntimeRegex cloneTracked() {
+        RuntimeRegex copy = new RuntimeRegex();
+        copy.pattern = this.pattern;
+        copy.patternUnicode = this.patternUnicode;
+        copy.notemptyPattern = this.notemptyPattern;
+        copy.notemptyPatternUnicode = this.notemptyPatternUnicode;
+        copy.patternFlags = this.patternFlags;
+        copy.patternFlagsUnicode = this.patternFlagsUnicode;
+        copy.patternString = this.patternString;
+        copy.javaPatternString = this.javaPatternString;
+        copy.hasPreservesMatch = this.hasPreservesMatch;
+        copy.useGAssertion = this.useGAssertion;
+        copy.regexFlags = this.regexFlags;
+        copy.hasCodeBlockCaptures = this.hasCodeBlockCaptures;
+        copy.deferredUserDefinedUnicodeProperties = this.deferredUserDefinedUnicodeProperties;
+        copy.hasBranchReset = this.hasBranchReset;
+        copy.hasBackslashK = this.hasBackslashK;
+        // replacement and callerArgs are not copied — they are set per-substitution
+        // matched is not copied — each qr// object tracks its own m?PAT? state
+        copy.refCount = 0;  // Enable refCount tracking
+        return copy;
+    }
+
     /** Returns the regex flags for this compiled pattern. */
     public RegexFlags getRegexFlags() {
         return regexFlags;
@@ -380,6 +410,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
             regex.useGAssertion = regex.regexFlags.useGAssertion();
             regex.patternFlags = regex.regexFlags.toPatternFlags();
+            regex.refCount = 0;  // Track for proper weak ref handling
 
             return new RuntimeScalar(regex);
         }
@@ -409,6 +440,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
                     regex.useGAssertion = regex.regexFlags.useGAssertion();
                     regex.patternFlags = regex.regexFlags.toPatternFlags();
+                    regex.refCount = 0;  // Track for proper weak ref handling
 
                     return new RuntimeScalar(regex);
                 }
@@ -416,13 +448,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
                 if (fallbackResult != null) {
-                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr));
+                    return new RuntimeScalar(compile(fallbackResult.toString(), modifierStr).cloneTracked());
                 }
             }
         }
 
-        // Default: compile as string
-        return new RuntimeScalar(compile(patternString.toString(), modifierStr));
+        // Default: compile as string (cloneTracked() creates a tracked copy
+        // so the cached RuntimeRegex is not corrupted by refCount changes)
+        return new RuntimeScalar(compile(patternString.toString(), modifierStr).cloneTracked());
     }
 
     /**
@@ -438,8 +471,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
         String modifierStr = modifiers.toString();
         
-        // Check if /o modifier is present
-        if (modifierStr.contains("o")) {
+        // Check if /o or m?PAT? modifier is present (both need per-callsite caching
+        // to preserve state: /o caches the compiled pattern, m?PAT? preserves the
+        // 'matched' flag that tracks whether the pattern has already matched once)
+        if (modifierStr.contains("o") || modifierStr.contains("?")) {
             // Check if we already have a cached regex for this callsite
             RuntimeScalar cached = optimizedRegexCache.get(callsiteId);
             if (cached != null) {
@@ -452,7 +487,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return result;
         }
         
-        // No /o modifier, use normal compilation
+        // No /o or m?PAT? modifier, use normal compilation
         return getQuotedRegex(patternString, modifiers);
     }
 
@@ -1233,6 +1268,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
             RuntimeRegex regex = entry.getValue();
             regex.matched = false; // Reset the matched field
+        }
+        // Also reset m?PAT? patterns cached per-callsite in optimizedRegexCache
+        for (Map.Entry<Integer, RuntimeScalar> entry : optimizedRegexCache.entrySet()) {
+            RuntimeScalar scalar = entry.getValue();
+            if (scalar.value instanceof RuntimeRegex regex) {
+                regex.matched = false;
+            }
         }
     }
 

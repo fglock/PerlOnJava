@@ -299,6 +299,77 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar __SUB__;
 
     /**
+     * Captured RuntimeScalar variables from the enclosing scope.
+     * Set by {@link #makeCodeObject} for closures that capture lexical variables.
+     * Used to properly track blessed object lifetimes across closure boundaries:
+     * captured variables' blessed refs should not be destroyed at the inner scope
+     * exit, but only when the closure itself is released.
+     */
+    public RuntimeScalar[] capturedScalars;
+
+    /**
+     * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
+     * When the CODE slot of a glob is replaced, weak references to these constants
+     * are cleared to emulate Perl 5's "optree reaping" behavior.
+     */
+    public RuntimeBase[] padConstants;
+
+    /**
+     * Registry mapping generated class names to their pad constants.
+     * Used to transfer pad constants from compile time to runtime for anonymous subs.
+     */
+    public static final java.util.concurrent.ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Clears weak references to this subroutine's pad constants.
+     * Called when the CODE slot of a glob is replaced, emulating Perl 5's
+     * behavior where replacing a sub frees its op-tree and clears weak refs
+     * to compile-time constants.
+     */
+    public void clearPadConstantWeakRefs() {
+        if (padConstants != null) {
+            for (RuntimeBase constant : padConstants) {
+                WeakRefRegistry.clearWeakRefsTo(constant);
+            }
+        }
+    }
+
+    /**
+     * Release captured variable references. Called when this closure is being
+     * discarded (scope exit, undef, or reassignment of the variable holding
+     * this CODE ref). Decrements {@code captureCount} on each captured scalar,
+     * and if it reaches zero, defers the blessed ref decrement via MortalList.
+     * <p>
+     * Handles cascading: if a captured scalar itself holds a CODE ref with
+     * captures, those are released recursively.
+     */
+    public void releaseCaptures() {
+        if (capturedScalars != null) {
+            RuntimeScalar[] scalars = capturedScalars;
+            capturedScalars = null;  // null out first to prevent re-entry
+            for (RuntimeScalar s : scalars) {
+                s.captureCount--;
+                if (s.captureCount == 0) {
+                    // If the captured scalar itself holds a CODE ref with captures,
+                    // release those recursively (handles nested closures).
+                    if (s.type == RuntimeScalarType.CODE && s.value instanceof RuntimeCode innerCode) {
+                        innerCode.releaseCaptures();
+                    }
+                    // The captured variable's scope has exited but refCount was NOT
+                    // decremented at that time (scopeExitCleanup returns early for
+                    // captured variables to prevent premature clearing while the
+                    // closure is alive). Now that the last closure is releasing this
+                    // capture, decrement refCount to balance the original increment.
+                    if (s.scopeExited) {
+                        MortalList.deferDecrementIfTracked(s);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
      * @param prototype  the prototype of the subroutine
@@ -1395,6 +1466,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (packageName != null) {
             code.packageName = packageName;
         }
+
+        // Look up pad constants registered at compile time for this class.
+        // These track cached string literals referenced via \ inside the sub,
+        // needed for optree reaping (clearing weak refs when sub is replaced).
+        String internalClassName = clazz.getName().replace('.', '/');
+        RuntimeBase[] padConsts = padConstantsByClassName.remove(internalClassName);
+        if (padConsts != null) {
+            code.padConstants = padConsts;
+        }
+
+        // Extract captured RuntimeScalar fields for closure DESTROY tracking.
+        // Each instance field of type RuntimeScalar (except __SUB__) is a
+        // captured lexical variable. We store them so that releaseCaptures()
+        // can decrement blessed ref refCounts when the closure is discarded.
+        Field[] allFields = clazz.getDeclaredFields();
+        List<RuntimeScalar> captured = new ArrayList<>();
+        for (Field f : allFields) {
+            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
+                RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
+                if (capturedVar != null) {
+                    captured.add(capturedVar);
+                    capturedVar.captureCount++;
+                }
+            }
+        }
+        if (!captured.isEmpty()) {
+            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+            // Enable refCount tracking for closures with captures.
+            // When the CODE ref's refCount drops to 0, releaseCaptures()
+            // fires (via DestroyDispatch.callDestroy), letting captured
+            // blessed objects run DESTROY.
+            code.refCount = 0;
+        }
+
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
         // Set the __SUB__ instance field
@@ -1768,7 +1873,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
-        if (!args.isEmpty()) {
+        boolean hasExplicitExpr = !args.isEmpty();
+        if (hasExplicitExpr) {
             frame = args.getFirst().getInt();
         }
 
@@ -1803,6 +1909,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+
+                // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
+                // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
+                if (hasExplicitExpr) {
 
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
@@ -1934,6 +2044,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         res.add(RuntimeScalarCache.scalarUndef);
                     }
                 }
+                } // end if (hasExplicitExpr)
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
@@ -2023,6 +2134,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // NOTE: flush() was removed from here. Return values from nested calls
+        // (e.g., receiver(coerce => quote_sub(...))) may have pending refCount
+        // decrements from their scope exits. Flushing here would decrement them
+        // to 0 and call clearWeakRefsTo before the callee captures them, breaking
+        // weak ref tracking (Sub::Quote/Sub::Defer pattern). DESTROY still fires
+        // at the next setLarge() or popAndFlush() — typically inside the callee.
+
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), a, callContext);
@@ -2124,6 +2242,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
                 }
+                // Mortal-ize blessed refs with refCount==0 in void-context calls.
+                // These are objects that were created but never stored in a named
+                // variable (e.g., discarded return values from constructors).
+                if (callContext == RuntimeContextType.VOID) {
+                    MortalList.mortalizeForVoidDiscard(result);
+                }
                 return result;
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
@@ -2138,6 +2262,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
+                }
+                // eval BLOCK is compiled as an immediately-invoked anonymous sub
+                // (sub { ... }->()) that captures outer lexicals, incrementing their
+                // captureCount. Unlike a normal closure that may be stored and reused,
+                // eval BLOCK executes once and is discarded. Release captures eagerly
+                // so captureCount is decremented promptly, allowing scopeExitCleanup
+                // to properly decrement refCount when the outer scope exits.
+                // (eval STRING uses applyEval() which already does this.)
+                if (code.isEvalBlock) {
+                    code.releaseCaptures();
                 }
             }
         }
@@ -2217,6 +2351,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return new RuntimeList(new RuntimeScalar());
         } finally {
             evalDepth--;
+            // Release captured variable references from the eval's code object.
+            // After eval STRING finishes executing, its captures are no longer needed.
+            if (runtimeScalar.type == RuntimeScalarType.CODE && runtimeScalar.value instanceof RuntimeCode code) {
+                code.releaseCaptures();
+            }
         }
     }
 

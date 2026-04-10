@@ -120,11 +120,21 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
             if (previousState == null) {
+                // Element didn't exist before.
+                // Decrement refCount of the current value being displaced.
+                if (this.lvalue != null
+                        && (this.lvalue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && this.lvalue.value instanceof RuntimeBase displacedBase
+                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                    displacedBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(displacedBase);
+                }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
             } else {
                 // Restore the type, value from the saved state
+                // this.set() goes through setLarge() which handles refCount
                 this.set(previousState);
                 this.lvalue.blessId = previousState.blessId;
                 this.blessId = previousState.blessId;
