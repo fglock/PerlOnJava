@@ -84,9 +84,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     public RuntimeScalar set(RuntimeScalar value) {
         if (variableId == Id.INPUT_LINE_NUMBER) {
             vivify();
-            if (RuntimeIO.lastAccesseddHandle != null) {
-                RuntimeIO.lastAccesseddHandle.currentLineNumber = value.getInt();
-                lvalue.set(RuntimeIO.lastAccesseddHandle.currentLineNumber);
+            if (RuntimeIO.getLastAccessedHandle() != null) {
+                RuntimeIO.getLastAccessedHandle().currentLineNumber = value.getInt();
+                lvalue.set(RuntimeIO.getLastAccessedHandle().currentLineNumber);
             } else {
                 lvalue.set(value);
             }
@@ -173,10 +173,10 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
                 case LAST_FH -> {
-                    if (RuntimeIO.lastAccesseddHandle == null) {
+                    if (RuntimeIO.getLastAccessedHandle() == null) {
                         yield scalarUndef;
                     }
-                    String globName = RuntimeIO.lastAccesseddHandle.globName;
+                    String globName = RuntimeIO.getLastAccessedHandle().globName;
                     if (globName != null) {
                         // Extract package and name from the glob name
                         String packageName;
@@ -202,16 +202,16 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         }
                     }
                     // Fallback to the RuntimeIO object if no glob name is available
-                    yield new RuntimeScalar(RuntimeIO.lastAccesseddHandle);
+                    yield new RuntimeScalar(RuntimeIO.getLastAccessedHandle());
                 }
                 case INPUT_LINE_NUMBER -> {
-                    if (RuntimeIO.lastAccesseddHandle == null) {
+                    if (RuntimeIO.getLastAccessedHandle() == null) {
                         if (lvalue != null) {
                             yield lvalue;
                         }
                         yield scalarUndef;
                     }
-                    yield getScalarInt(RuntimeIO.lastAccesseddHandle.currentLineNumber);
+                    yield getScalarInt(RuntimeIO.getLastAccessedHandle().currentLineNumber);
                 }
                 case LAST_PAREN_MATCH -> {
                     String lastCapture = RuntimeRegex.lastCaptureString();
@@ -424,7 +424,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     @Override
     public void dynamicSaveState() {
         if (variableId == Id.INPUT_LINE_NUMBER) {
-            RuntimeIO handle = RuntimeIO.lastAccesseddHandle;
+            RuntimeIO handle = RuntimeIO.getLastAccessedHandle();
             int lineNumber = handle != null ? handle.currentLineNumber : (lvalue != null ? lvalue.getInt() : 0);
             RuntimeScalar localValue = lvalue != null ? new RuntimeScalar(lvalue) : null;
             inputLineStateStack.push(new InputLineState(handle, lineNumber, localValue));
@@ -444,7 +444,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         if (variableId == Id.INPUT_LINE_NUMBER) {
             if (!inputLineStateStack.isEmpty()) {
                 InputLineState previous = inputLineStateStack.pop();
-                RuntimeIO.lastAccesseddHandle = previous.lastHandle;
+                RuntimeIO.setLastAccessedHandle(previous.lastHandle);
                 if (previous.lastHandle != null) {
                     previous.lastHandle.currentLineNumber = previous.lastLineNumber;
                 }

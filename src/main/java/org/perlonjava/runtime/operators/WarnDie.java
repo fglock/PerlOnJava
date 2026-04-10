@@ -502,8 +502,8 @@ public class WarnDie {
      * @return String with filehandle context (including leading ", "), or null if no context
      */
     public static String getFilehandleContext() {
-        if (RuntimeIO.lastAccesseddHandle != null && RuntimeIO.lastAccesseddHandle.currentLineNumber > 0) {
-            String handleName = findFilehandleName(RuntimeIO.lastAccesseddHandle);
+        if (RuntimeIO.getLastAccessedHandle() != null && RuntimeIO.getLastAccessedHandle().currentLineNumber > 0) {
+            String handleName = findFilehandleName(RuntimeIO.getLastAccessedHandle());
             if (handleName != null) {
                 // Perl 5 uses "line" only when $/ is exactly "\n".
                 // Everything else (undef, "", custom separator, ref) uses "chunk".
@@ -516,7 +516,7 @@ public class WarnDie {
                 } catch (Exception ignored) {
                     // Default to "chunk" if we can't read $/
                 }
-                return ", <" + handleName + "> " + unit + " " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
+                return ", <" + handleName + "> " + unit + " " + RuntimeIO.getLastAccessedHandle().currentLineNumber;
             }
         }
         return null;
@@ -540,6 +540,6 @@ public class WarnDie {
             return name;
         }
         // Fall back to the variable name set during the last readline (e.g., "$f")
-        return RuntimeIO.lastReadlineHandleName;
+        return RuntimeIO.getLastReadlineHandleName();
     }
 }

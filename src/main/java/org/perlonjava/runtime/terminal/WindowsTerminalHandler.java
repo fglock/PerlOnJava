@@ -57,7 +57,7 @@ public class WindowsTerminalHandler implements TerminalHandler {
 
     @Override
     public char readSingleChar(double timeoutSeconds, RuntimeIO fh) throws IOException {
-        if (fh != RuntimeIO.stdin) {
+        if (fh != RuntimeIO.getStdin()) {
             RuntimeScalar result = fh.ioHandle.read(1);
             if (!result.getDefinedBoolean()) {
                 return 0;

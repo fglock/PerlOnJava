@@ -7,6 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -97,23 +98,28 @@ public class ModuleTestExecutionTest {
 
     @BeforeEach
     void setUp() {
+        // Ensure PerlRuntime is initialized for this test thread
+        if (PerlRuntime.currentOrNull() == null) {
+            PerlRuntime.initialize();
+        }
+
         originalOut = System.out;
         outputStream = new ByteArrayOutputStream();
         originalUserDir = System.getProperty("user.dir");
 
         StandardIO newStdout = new StandardIO(outputStream, true);
-        RuntimeIO.stdout = new RuntimeIO(newStdout);
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(new RuntimeIO(newStdout));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
         System.setOut(new PrintStream(outputStream));
     }
 
     @AfterEach
     void tearDown() {
         // Restore original stdout
-        RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
+        RuntimeIO.setStdout(new RuntimeIO(new StandardIO(originalOut, true)));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
         System.setOut(originalOut);
 
         // Restore original working directory

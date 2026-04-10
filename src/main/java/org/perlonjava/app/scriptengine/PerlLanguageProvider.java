@@ -54,7 +54,20 @@ public class PerlLanguageProvider {
 
     private static boolean globalInitialized = false;
 
+    /**
+     * Ensures a PerlRuntime is bound to the current thread.
+     * Called at the start of every entry point (executePerlCode, compilePerlCode, etc.)
+     * to support both CLI (where Main.main() initializes) and JSR-223 (where the
+     * ScriptEngine may be called from any thread).
+     */
+    private static void ensureRuntimeInitialized() {
+        if (PerlRuntime.currentOrNull() == null) {
+            PerlRuntime.initialize();
+        }
+    }
+
     public static void resetAll() {
+        ensureRuntimeInitialized();
         globalInitialized = false;
         resetAllGlobals();
         DataSection.reset();
@@ -84,6 +97,8 @@ public class PerlLanguageProvider {
     public static RuntimeList executePerlCode(CompilerOptions compilerOptions,
                                               boolean isTopLevelScript,
                                               int callerContext) throws Exception {
+
+        ensureRuntimeInitialized();
 
         // Save the current scope so we can restore it after execution.
         // This is critical because require/do should not leak their scope to the caller.
@@ -249,6 +264,8 @@ public class PerlLanguageProvider {
                                              List<LexerToken> tokens,
                                              CompilerOptions compilerOptions,
                                              int contextType) throws Exception {
+
+        ensureRuntimeInitialized();
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
@@ -558,6 +575,8 @@ public class PerlLanguageProvider {
      * @throws Exception if compilation fails
      */
     public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
+        ensureRuntimeInitialized();
+
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
         globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0

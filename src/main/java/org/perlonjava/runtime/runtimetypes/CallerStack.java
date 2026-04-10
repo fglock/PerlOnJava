@@ -10,8 +10,10 @@ import java.util.List;
  * for implementing the caller() function during operations like import() and unimport().
  */
 public class CallerStack {
-    // Store either CallerInfo (resolved) or LazyCallerInfo (deferred)
-    private static final List<Object> callerStack = new ArrayList<>();
+    // State is now held per-PerlRuntime. This accessor delegates to the current runtime.
+    private static List<Object> callerStack() {
+        return PerlRuntime.current().callerStack;
+    }
 
     /**
      * Pushes a new CallerInfo object onto the stack, representing a new entry in the calling sequence.
@@ -21,10 +23,11 @@ public class CallerStack {
      * @param line        The line number in the file where the call originated.
      */
     public static void push(String packageName, String filename, int line) {
+        List<Object> stack = callerStack();
         if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG CallerStack.push: pkg=" + packageName + " file=" + filename + " line=" + line + " (stack size now " + (callerStack.size() + 1) + ")");
+            System.err.println("DEBUG CallerStack.push: pkg=" + packageName + " file=" + filename + " line=" + line + " (stack size now " + (stack.size() + 1) + ")");
         }
-        callerStack.add(new CallerInfo(packageName, filename, line));
+        stack.add(new CallerInfo(packageName, filename, line));
     }
 
     /**
@@ -36,10 +39,11 @@ public class CallerStack {
      * @param resolver    A function to compute the CallerInfo when needed.
      */
     public static void pushLazy(String packageName, CallerInfoResolver resolver) {
+        List<Object> stack = callerStack();
         if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG CallerStack.pushLazy: pkg=" + packageName + " (stack size now " + (callerStack.size() + 1) + ")");
+            System.err.println("DEBUG CallerStack.pushLazy: pkg=" + packageName + " (stack size now " + (stack.size() + 1) + ")");
         }
-        callerStack.add(new LazyCallerInfo(packageName, resolver));
+        stack.add(new LazyCallerInfo(packageName, resolver));
     }
 
     /**
@@ -50,20 +54,20 @@ public class CallerStack {
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
     public static CallerInfo peek(int callFrame) {
-        if (callerStack.isEmpty()) {
+        List<Object> stack = callerStack();
+        if (stack.isEmpty()) {
             return null;
         }
-        int index = callerStack.size() - 1 - callFrame;
+        int index = stack.size() - 1 - callFrame;
         if (index < 0) {
             return null;
         }
-        Object entry = callerStack.get(index);
+        Object entry = stack.get(index);
         if (entry instanceof CallerInfo ci) {
             return ci;
         } else if (entry instanceof LazyCallerInfo lazy) {
-            // Resolve the lazy entry and cache it
             CallerInfo resolved = lazy.resolve();
-            callerStack.set(index, resolved);
+            stack.set(index, resolved);
             return resolved;
         }
         return null;
@@ -76,14 +80,14 @@ public class CallerStack {
      * @return The most recent CallerInfo object, or null if the stack is empty.
      */
     public static CallerInfo pop() {
-        if (callerStack.isEmpty()) {
+        List<Object> stack = callerStack();
+        if (stack.isEmpty()) {
             return null;
         }
-        Object entry = callerStack.removeLast();
+        Object entry = stack.removeLast();
         if (entry instanceof CallerInfo ci) {
             return ci;
         } else if (entry instanceof LazyCallerInfo lazy) {
-            // Don't resolve on pop - caller info not needed
             return null;
         }
         return null;
@@ -96,14 +100,15 @@ public class CallerStack {
      * @return A list containing all CallerInfo objects in the stack.
      */
     public static List<CallerInfo> getStack() {
+        List<Object> stack = callerStack();
         List<CallerInfo> result = new ArrayList<>();
-        for (int i = 0; i < callerStack.size(); i++) {
-            Object entry = callerStack.get(i);
+        for (int i = 0; i < stack.size(); i++) {
+            Object entry = stack.get(i);
             if (entry instanceof CallerInfo ci) {
                 result.add(ci);
             } else if (entry instanceof LazyCallerInfo lazy) {
                 CallerInfo resolved = lazy.resolve();
-                callerStack.set(i, resolved);
+                stack.set(i, resolved);
                 result.add(resolved);
             }
         }

@@ -10,8 +10,8 @@ public class OutputAutoFlushVariable extends RuntimeScalar {
     private static final Stack<State> stateStack = new Stack<>();
 
     private static RuntimeIO currentHandle() {
-        RuntimeIO handle = RuntimeIO.selectedHandle;
-        return handle != null ? handle : RuntimeIO.stdout;
+        RuntimeIO handle = RuntimeIO.getSelectedHandle();
+        return handle != null ? handle : RuntimeIO.getStdout();
     }
 
     @Override

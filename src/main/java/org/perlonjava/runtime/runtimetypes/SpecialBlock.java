@@ -13,10 +13,11 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  */
 public class SpecialBlock {
 
-    // Arrays to store different types of blocks
-    public static RuntimeArray endBlocks = new RuntimeArray();
-    public static RuntimeArray initBlocks = new RuntimeArray();
-    public static RuntimeArray checkBlocks = new RuntimeArray();
+    // State is now held per-PerlRuntime. These accessors delegate to the current runtime.
+    // Public getters preserve backward compatibility for any code that reads these fields.
+    public static RuntimeArray getEndBlocks() { return PerlRuntime.current().endBlocks; }
+    public static RuntimeArray getInitBlocks() { return PerlRuntime.current().initBlocks; }
+    public static RuntimeArray getCheckBlocks() { return PerlRuntime.current().checkBlocks; }
 
     /**
      * Saves a code reference to the endBlocks array.
@@ -25,7 +26,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveEndBlock(RuntimeScalar codeRef) {
-        RuntimeArray.push(endBlocks, codeRef);
+        RuntimeArray.push(getEndBlocks(), codeRef);
     }
 
     /**
@@ -35,7 +36,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveInitBlock(RuntimeScalar codeRef) {
-        RuntimeArray.unshift(initBlocks, codeRef);
+        RuntimeArray.unshift(getInitBlocks(), codeRef);
     }
 
     /**
@@ -45,7 +46,7 @@ public class SpecialBlock {
      * @param codeRef the code reference to be saved
      */
     public static void saveCheckBlock(RuntimeScalar codeRef) {
-        RuntimeArray.push(checkBlocks, codeRef);
+        RuntimeArray.push(getCheckBlocks(), codeRef);
     }
 
     /**
@@ -56,13 +57,11 @@ public class SpecialBlock {
      */
     public static void runEndBlocks(boolean resetChildStatus) {
         if (resetChildStatus) {
-            // Reset $? to 0 before END blocks run (Perl semantics for normal exit)
-            // This ensures END blocks see $? = 0 unless they explicitly set it
             getGlobalVariable("main::?").set(0);
         }
-        
-        while (!endBlocks.isEmpty()) {
-            RuntimeScalar block = RuntimeArray.pop(endBlocks);
+        RuntimeArray blocks = getEndBlocks();
+        while (!blocks.isEmpty()) {
+            RuntimeScalar block = RuntimeArray.pop(blocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
@@ -81,8 +80,9 @@ public class SpecialBlock {
      * Executes all code blocks stored in the initBlocks array in FIFO order.
      */
     public static void runInitBlocks() {
-        while (!initBlocks.isEmpty()) {
-            RuntimeScalar block = RuntimeArray.pop(initBlocks);
+        RuntimeArray blocks = getInitBlocks();
+        while (!blocks.isEmpty()) {
+            RuntimeScalar block = RuntimeArray.pop(blocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
@@ -93,8 +93,9 @@ public class SpecialBlock {
      * Executes all code blocks stored in the checkBlocks array in LIFO order.
      */
     public static void runCheckBlocks() {
-        while (!checkBlocks.isEmpty()) {
-            RuntimeScalar block = RuntimeArray.pop(checkBlocks);
+        RuntimeArray blocks = getCheckBlocks();
+        while (!blocks.isEmpty()) {
+            RuntimeScalar block = RuntimeArray.pop(blocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }

@@ -341,9 +341,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             // Update selectedHandle if the old IO was the currently selected output handle.
             // This ensures that `local *STDOUT = $fh` redirects bare `print` (no filehandle)
             // to the new handle, not just explicit `print STDOUT`.
-            if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+            if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.getSelectedHandle()
                     && value.IO != null && value.IO.value instanceof RuntimeIO newRIO) {
-                RuntimeIO.selectedHandle = newRIO;
+                RuntimeIO.setSelectedHandle(newRIO);
             }
 
             return value.scalar();
@@ -394,9 +394,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         targetIO.IO = sourceIO.IO;
 
         // Update selectedHandle if the old IO was the currently selected output handle
-        if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+        if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.getSelectedHandle()
                 && sourceIO.IO != null && sourceIO.IO.value instanceof RuntimeIO newRIO) {
-            RuntimeIO.selectedHandle = newRIO;
+            RuntimeIO.setSelectedHandle(newRIO);
         }
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
@@ -594,8 +594,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (io.value instanceof RuntimeIO runtimeIO) {
             runtimeIO.globName = this.globName;
             // Update selectedHandle if the old IO was the selected handle
-            if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
-                RuntimeIO.selectedHandle = runtimeIO;
+            if (oldIO != null && oldIO == RuntimeIO.getSelectedHandle()) {
+                RuntimeIO.setSelectedHandle(runtimeIO);
             }
         }
         return this;
@@ -620,8 +620,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Update selectedHandle if the old IO was the selected handle
         // This ensures that when STDOUT is redirected, print without explicit
         // filehandle uses the new handle
-        if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
-            RuntimeIO.selectedHandle = io;
+        if (oldIO != null && oldIO == RuntimeIO.getSelectedHandle()) {
+            RuntimeIO.setSelectedHandle(io);
         }
         return this;
     }
@@ -869,11 +869,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // after Capture::Tiny or similar modules localize STDOUT.
         RuntimeIO savedSelectedHandle = null;
         boolean isSelectedHandle = false;
-        if (this.IO != null && this.IO.value instanceof RuntimeIO rio && rio == RuntimeIO.selectedHandle) {
-            savedSelectedHandle = RuntimeIO.selectedHandle;
+        if (this.IO != null && this.IO.value instanceof RuntimeIO rio && rio == RuntimeIO.getSelectedHandle()) {
+            savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
-        } else if (this.IO != null && this.IO.type == TIED_SCALAR && this.IO.value == RuntimeIO.selectedHandle) {
-            savedSelectedHandle = RuntimeIO.selectedHandle;
+        } else if (this.IO != null && this.IO.type == TIED_SCALAR && this.IO.value == RuntimeIO.getSelectedHandle()) {
+            savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
         }
         globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
@@ -914,7 +914,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeIO stubIO = new RuntimeIO();
             stubIO.globName = this.globName;
             newGlob.IO = new RuntimeScalar(stubIO);
-            RuntimeIO.selectedHandle = stubIO;
+            RuntimeIO.setSelectedHandle(stubIO);
         }
 
         GlobalVariable.globalIORefs.put(this.globName, newGlob);
@@ -931,7 +931,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // This ensures that after local(*STDOUT) + restore, print without explicit
         // filehandle goes through the correct (possibly tied) handle.
         if (snap.savedSelectedHandle != null) {
-            RuntimeIO.selectedHandle = snap.savedSelectedHandle;
+            RuntimeIO.setSelectedHandle(snap.savedSelectedHandle);
         }
 
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.

@@ -4,6 +4,7 @@ import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Locale;
@@ -26,6 +27,9 @@ public class Main {
      * @param args Command-line arguments.
      */
     public static void main(String[] args) {
+        // Initialize the PerlRuntime for the main thread
+        PerlRuntime.initialize();
+
         CompilerOptions parsedArgs = ArgumentParser.parseArguments(args);
 
         if (parsedArgs.code == null) {
