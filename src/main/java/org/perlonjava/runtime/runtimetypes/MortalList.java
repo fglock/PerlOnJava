@@ -1,6 +1,10 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 /**
  * Lightweight mortal-like defer-decrement mechanism.
@@ -131,40 +135,50 @@ public class MortalList {
     }
 
     /**
-     * Recursively process a scalar value: if it holds a reference to a
+     * Iteratively process a scalar value: if it holds a reference to a
      * tracked blessed object and owns a refCount, defer a decrement.
-     * If it holds a reference to an unblessed container, recurse into
-     * its elements.
+     * If it holds a reference to an unblessed container, walk into
+     * its elements (iteratively with cycle detection to avoid
+     * StackOverflowError on circular data structures like ExifTool's).
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
         if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
-        if (!(scalar.value instanceof RuntimeBase base)) return;
+        if (!(scalar.value instanceof RuntimeBase)) return;
 
-        if (base.blessId != 0) {
-            if (scalar.refCountOwned && base.refCount > 0) {
-                // Blessed, tracked, and this scalar owns the refCount: defer decrement
-                scalar.refCountOwned = false;
-                pending.add(base);
-            } else if (base.refCount == 0) {
-                // Blessed but refCount=0: container didn't increment (e.g., anonymous
-                // array constructor). Bump to 1 so flush triggers DESTROY.
-                base.refCount = 1;
-                pending.add(base);
-            }
-        } else {
-            // Unblessed reference: check if this scalar owns a refCount
-            if (scalar.refCountOwned && base.refCount > 0) {
-                scalar.refCountOwned = false;
-                pending.add(base);
-            }
-            // Also recurse into unblessed containers to find nested blessed refs
-            if (base instanceof RuntimeArray arr) {
-                for (RuntimeScalar elem : arr.elements) {
-                    deferDecrementRecursive(elem);
+        // Use an explicit work queue + visited set to avoid stack overflow
+        // on circular references (e.g., ExifTool's self-referential hashes).
+        ArrayDeque<RuntimeScalar> work = new ArrayDeque<>();
+        Set<RuntimeBase> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        work.add(scalar);
+
+        while (!work.isEmpty()) {
+            RuntimeScalar s = work.poll();
+            if (s == null || (s.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (!(s.value instanceof RuntimeBase base)) continue;
+            if (!visited.add(base)) continue;  // already visited — cycle
+
+            if (base.blessId != 0) {
+                if (s.refCountOwned && base.refCount > 0) {
+                    s.refCountOwned = false;
+                    pending.add(base);
+                } else if (base.refCount == 0) {
+                    base.refCount = 1;
+                    pending.add(base);
                 }
-            } else if (base instanceof RuntimeHash hash) {
-                for (RuntimeScalar val : hash.elements.values()) {
-                    deferDecrementRecursive(val);
+            } else {
+                if (s.refCountOwned && base.refCount > 0) {
+                    s.refCountOwned = false;
+                    pending.add(base);
+                }
+                // Walk into unblessed containers to find nested blessed refs
+                if (base instanceof RuntimeArray arr) {
+                    for (RuntimeScalar elem : arr.elements) {
+                        work.add(elem);
+                    }
+                } else if (base instanceof RuntimeHash hash) {
+                    for (RuntimeScalar val : hash.elements.values()) {
+                        work.add(val);
+                    }
                 }
             }
         }
