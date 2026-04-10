@@ -126,8 +126,15 @@ public class EmitControlFlow {
                     "(Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;Ljava/lang/String;Ljava/lang/String;I)V",
                     false);
 
-            // Return the tagged list (will be detected at subroutine return boundary)
-            ctx.mv.visitInsn(Opcodes.ARETURN);
+            // Return the tagged list via returnLabel so that local variable teardown
+            // (popToLocalLevel) runs before the method exits. A direct ARETURN would
+            // bypass the cleanup at returnLabel, leaving `local` variables un-restored.
+            if (ctx.javaClassInfo.returnLabel != null) {
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            } else {
+                ctx.mv.visitInsn(Opcodes.ARETURN);
+            }
             return;
         }
 

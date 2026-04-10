@@ -724,6 +724,35 @@ public class PrototypeArgs {
     }
 
     /**
+     * Unwraps my(@array) and my(%hash) declarations for backslash prototypes.
+     *
+     * <p>When Perl parses {@code tie(my(@bar), "Class")}, the {@code my(@bar)} produces
+     * an AST like {@code OperatorNode("my", ListNode(OperatorNode("@")))}.
+     * For the backslash prototype {@code \[$@%*]}, we need the same result as
+     * {@code tie(my @bar, "Class")} which produces {@code OperatorNode("my", OperatorNode("@"))}.
+     * This method unwraps the extra ListNode so the {@code \} operator correctly creates
+     * an ARRAYREFERENCE or HASHREFERENCE.</p>
+     *
+     * @param arg The argument node to potentially unwrap
+     * @return The unwrapped node if applicable, or the original node
+     */
+    private static Node unwrapMyListDeclaration(Node arg) {
+        // Check if arg is my/our/local with a ListNode operand containing a single array/hash
+        if (!(arg instanceof OperatorNode myOp)) return arg;
+        if (!myOp.operator.equals("my") && !myOp.operator.equals("our") && !myOp.operator.equals("local")) return arg;
+        if (!(myOp.operand instanceof ListNode listNode)) return arg;
+        if (listNode.elements.size() != 1) return arg;
+
+        Node element = listNode.elements.get(0);
+        if (element instanceof OperatorNode varOp &&
+                (varOp.operator.equals("@") || varOp.operator.equals("%") || varOp.operator.equals("*"))) {
+            // Unwrap: my(ListNode(@bar)) → my(@bar)
+            myOp.operand = element;
+        }
+        return arg;
+    }
+
+    /**
      * Unwraps unary plus from expressions like +(%hash) or +(@array) for backslash prototypes.
      * In Perl, +() is used for disambiguation but should be transparent for \% and \@ prototypes.
      *
@@ -817,6 +846,12 @@ public class PrototypeArgs {
             // Handle +(%hash) and +(@array) constructs for \% and \@ prototypes
             // The unary + is used for disambiguation but should be transparent for prototypes
             referenceArg = unwrapUnaryPlus(referenceArg, refType);
+
+            // Handle my(@array) and my(%hash) for backslash prototypes.
+            // When my(@bar) is parsed, it creates OperatorNode("my", ListNode(OperatorNode("@")))
+            // but \my(@bar) should produce an ARRAYREFERENCE, same as \my @bar.
+            // Unwrap the ListNode so we get OperatorNode("my", OperatorNode("@")).
+            referenceArg = unwrapMyListDeclaration(referenceArg);
             // For \& prototype, check for invalid forms like &foo(), foo(), or bareword foo
             if (refType == '&') {
                 String subName = parser.ctx.symbolTable.getCurrentSubroutine();

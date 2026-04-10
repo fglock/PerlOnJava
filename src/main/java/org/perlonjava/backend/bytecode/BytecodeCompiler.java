@@ -5326,6 +5326,17 @@ public class BytecodeCompiler implements Visitor {
                 emitInt(0);
             }
 
+            // Save local variable level so that `last` exits restore `local` variables.
+            // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
+            // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
+            // On normal exit, the body already restored locals, so this is a no-op.
+            int blockLocalLevelReg = -1;
+            if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+                blockLocalLevelReg = allocateRegister();
+                emit(Opcodes.GET_LOCAL_LEVEL);
+                emitReg(blockLocalLevelReg);
+            }
+
             // Push loop info so that redo/next/last inside bare blocks work
             // (Perl 5 allows redo/next/last in bare blocks)
             // Unlabeled bare blocks are targets for unlabeled redo/next/last;
@@ -5372,8 +5383,14 @@ public class BytecodeCompiler implements Visitor {
                 patchJump(exitPcPlaceholder, exitPc);
             }
 
-            // Patch last (break) PCs to jump past the block
+            // Patch last (break) PCs to jump to local cleanup (or past the block if no locals).
+            // POP_LOCAL_LEVEL must be at endPc so `last` runs it.
+            // On normal exit this is a no-op since the body's POP_LOCAL_LEVEL already ran.
             int endPc = bytecode.size();
+            if (blockLocalLevelReg >= 0) {
+                emit(Opcodes.POP_LOCAL_LEVEL);
+                emitReg(blockLocalLevelReg);
+            }
             for (int pc2 : loopInfo.breakPcs) {
                 patchJump(pc2, endPc);
             }
@@ -5392,6 +5409,17 @@ public class BytecodeCompiler implements Visitor {
         // Step 1: Execute initialization (for C-style loops only)
         if (node.initialization != null) {
             node.initialization.accept(this);
+        }
+
+        // Save local variable level so that `last` exits restore `local` variables.
+        // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
+        // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
+        // On normal exit, the body already restored locals, so POP_LOCAL_LEVEL is a no-op.
+        int for3LocalLevelReg = -1;
+        if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+            for3LocalLevelReg = allocateRegister();
+            emit(Opcodes.GET_LOCAL_LEVEL);
+            emitReg(for3LocalLevelReg);
         }
 
         // Step 2: Push loop info onto stack for last/next/redo
@@ -5497,8 +5525,14 @@ public class BytecodeCompiler implements Visitor {
             emitInt(loopStartPc);
         }
 
-        // Step 10: Loop end - patch the forward jump (last jumps here)
+        // Step 10: Loop end - restore local variables and patch jumps.
+        // POP_LOCAL_LEVEL must be at loopEndPc so `last` runs it.
+        // On normal exit (condition false) this is a no-op since the body already cleaned up.
         int loopEndPc = bytecode.size();
+        if (for3LocalLevelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(for3LocalLevelReg);
+        }
         if (loopEndJumpPc != -1) {
             patchJump(loopEndJumpPc, loopEndPc);
         }

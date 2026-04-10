@@ -241,6 +241,7 @@ public class WarnDie {
         if (warningBits == null) {
             warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
         }
+
         
         // If warning bits are available, check if this category is enabled
         if (warningBits != null) {

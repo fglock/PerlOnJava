@@ -2787,19 +2787,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 elems.set(i, concrete);
             } else if (elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
-                // Replace the RuntimeArray reference with a new RuntimeArray containing copies.
-                RuntimeArray copy = new RuntimeArray();
-                for (RuntimeScalar arrElem : arr.elements) {
-                    copy.elements.add(arrElem == null ? null : new RuntimeScalar(arrElem));
+                // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
+                // since TieArray.elements (the ArrayList) is empty — data lives in the tied object.
+                // For regular arrays, copy elements directly.
+                if (arr.type == RuntimeArray.TIED_ARRAY) {
+                    RuntimeList arrList = arr.getList();
+                    elems.set(i, arrList);
+                } else {
+                    RuntimeArray copy = new RuntimeArray();
+                    for (RuntimeScalar arrElem : arr.elements) {
+                        copy.elements.add(arrElem == null ? null : new RuntimeScalar(arrElem));
+                    }
+                    elems.set(i, copy);
                 }
-                elems.set(i, copy);
             } else if (elem instanceof RuntimeHash hash) {
-                // Copy hash elements for the same reason as arrays
-                RuntimeHash copy = new RuntimeHash();
-                for (var entry : hash.elements.entrySet()) {
-                    copy.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                // Copy hash elements for the same reason as arrays.
+                // For tied hashes, use getList() which dispatches through FIRSTKEY/NEXTKEY/FETCH.
+                if (hash.type == RuntimeHash.TIED_HASH) {
+                    RuntimeList hashList = hash.getList();
+                    elems.set(i, hashList);
+                } else {
+                    RuntimeHash copy = new RuntimeHash();
+                    for (var entry : hash.elements.entrySet()) {
+                        copy.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                    }
+                    elems.set(i, copy);
                 }
-                elems.set(i, copy);
             }
         }
     }

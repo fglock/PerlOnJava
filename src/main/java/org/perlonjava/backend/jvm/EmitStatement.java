@@ -277,6 +277,13 @@ public class EmitStatement {
                 node.initialization.accept(voidVisitor);
             }
 
+            // Set up local variable cleanup for the loop/block scope.
+            // This ensures that `local` variables are restored when exiting via `last`,
+            // which jumps to endLabel and bypasses the body block's own localTeardown.
+            // This mirrors EmitForeach.emitFor1() which has an outer localSetup/localTeardown
+            // wrapping the loop body with teardown AFTER the loopEnd label.
+            Local.localRecord for3LocalRecord = Local.localSetup(emitterVisitor.ctx, node, mv, true);
+
             // For while/for loops in non-void context, allocate a register to save
             // the condition value so the false condition is returned on normal exit.
             boolean needWhileConditionResult = !node.isSimpleBlock
@@ -407,6 +414,10 @@ public class EmitStatement {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
             }
+
+            // Restore local variables that were saved before the loop/block.
+            // This catches `last` exits which bypass the body block's own localTeardown.
+            Local.localTeardown(for3LocalRecord, mv);
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {

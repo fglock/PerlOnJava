@@ -231,8 +231,11 @@ public class Operator {
             }
         }
 
-        // Preserve BYTE_STRING type: if input was BYTE_STRING, all split results should be too
-        if (string.type == RuntimeScalarType.BYTE_STRING) {
+        // Preserve UTF-8 flag semantics: split results should only have the UTF-8 flag
+        // (STRING type) if the input string had it. When input is BYTE_STRING, INTEGER,
+        // DOUBLE, UNDEF, etc., the results should be BYTE_STRING (no UTF-8 flag).
+        // This matches Perl's behavior where split doesn't spontaneously add UTF-8 flag.
+        if (string.type != RuntimeScalarType.STRING) {
             for (RuntimeBase element : splitElements) {
                 if (element instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.STRING) {
                     rs.type = RuntimeScalarType.BYTE_STRING;

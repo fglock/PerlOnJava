@@ -43,6 +43,17 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     }
 
     /**
+     * Creates a reference to the underlying lvalue, vivifying it first.
+     * In Perl, \$hash{key} auto-vivifies the hash entry so that the reference
+     * points to the actual hash element, not a temporary.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        vivify();
+        return lvalue.createReference();
+    }
+
+    /**
      * Vivifies (initializes) the element in the parent hash if it does not exist.
      * If the element associated with the key is not present, it creates a new
      * RuntimeScalar and assigns it to the key in the parent hash.

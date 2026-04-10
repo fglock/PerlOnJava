@@ -771,14 +771,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /**
      * Set value while preserving BYTE_STRING type when possible.
      * Used by .= (string concat-assign) to prevent UTF-8 flag contamination
-     * of binary buffers. In PerlOnJava, upgrading from BYTE_STRING to STRING
-     * doesn't change the underlying chars (unlike Perl where bytes > 127 get
-     * re-encoded), so preserving BYTE_STRING is safe when all chars fit in Latin-1.
+     * of binary buffers. Only preserves BYTE_STRING when the concat result
+     * itself is BYTE_STRING (both operands were non-UTF-8). When the concat
+     * result is STRING (at least one operand was UTF-8), the UTF-8 flag is
+     * preserved, matching Perl's behavior where concatenation with a UTF-8
+     * string upgrades the result.
      */
     public RuntimeScalar setPreservingByteString(RuntimeScalar value) {
         boolean wasByteString = (this.type == BYTE_STRING);
         this.set(value);
-        if (wasByteString && this.type == STRING) {
+        // Only preserve BYTE_STRING when the concat result was also BYTE_STRING.
+        // If concat produced STRING (because an operand was UTF-8), don't downgrade.
+        if (wasByteString && value.type == BYTE_STRING && this.type == STRING) {
             // Check if all chars fit in Latin-1 (single byte)
             String s = this.toString();
             boolean allLatin1 = true;
@@ -1269,8 +1273,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not an ARRAY reference");
-            case TIED_SCALAR -> // 9
-                    tiedFetch().arrayDeref();
+            case TIED_SCALAR -> { // 9
+                RuntimeScalar fetched = tiedFetch();
+                if (fetched.type == RuntimeScalarType.UNDEF) {
+                    // Autovivify: create array ref, store back to tied var, re-fetch
+                    RuntimeArray arr = new RuntimeArray();
+                    arr.strictAutovivify = true;
+                    tiedStore(arr.createReference());
+                    yield arr;
+                }
+                yield fetched.arrayDeref();
+            }
             case DUALVAR -> // 10
                     throw new PerlCompilerException("Not an ARRAY reference");
             case FORMAT -> // 11
@@ -1354,10 +1367,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not a HASH reference");
-            case TIED_SCALAR -> // 9
-                    tiedFetch().hashDeref();
-            case DUALVAR -> // 10
-                    throw new PerlCompilerException("Not a HASH reference");
+            case TIED_SCALAR -> { // 9
+                RuntimeScalar fetched = tiedFetch();
+                if (fetched.type == RuntimeScalarType.UNDEF) {
+                    // Autovivify: create hash ref, store back to tied var
+                    RuntimeHash hash = new RuntimeHash();
+                    tiedStore(hash.createReference());
+                    yield hash;
+                }
+                yield fetched.hashDeref();
+            }
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
             case READONLY_SCALAR -> // 12
@@ -1534,8 +1553,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not a HASH reference");
-            case TIED_SCALAR -> // 9
-                    tiedFetch().hashDerefNonStrict(packageName);
+            case TIED_SCALAR -> { // 9
+                RuntimeScalar fetched = tiedFetch();
+                if (fetched.type == RuntimeScalarType.UNDEF) {
+                    RuntimeHash hash = new RuntimeHash();
+                    tiedStore(hash.createReference());
+                    yield hash;
+                }
+                yield fetched.hashDerefNonStrict(packageName);
+            }
             case FORMAT -> // 11
                     throw new PerlCompilerException("Not a HASH reference");
             case READONLY_SCALAR -> // 12
@@ -1601,10 +1627,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             case JAVAOBJECT -> // 8
                     throw new PerlCompilerException("Not an ARRAY reference");
-            case TIED_SCALAR -> // 9
-                    tiedFetch().arrayDerefNonStrict(packageName);
-            case FORMAT -> // 11
-                    throw new PerlCompilerException("Not an ARRAY reference");
+            case TIED_SCALAR -> { // 9
+                RuntimeScalar fetched = tiedFetch();
+                if (fetched.type == RuntimeScalarType.UNDEF) {
+                    RuntimeArray arr = new RuntimeArray();
+                    arr.strictAutovivify = true;
+                    tiedStore(arr.createReference());
+                    yield arr;
+                }
+                yield fetched.arrayDerefNonStrict(packageName);
+            }
             case READONLY_SCALAR -> // 12
                     ((RuntimeScalar) this.value).arrayDerefNonStrict(packageName);
             default -> throw new PerlCompilerException("Not an ARRAY reference");
