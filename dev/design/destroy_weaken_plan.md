@@ -3006,17 +3006,85 @@ be done first because it addresses the IO/string/hash path that shows the larges
 O3 is quickest to implement and helps the compute path. O1+O2 together eliminate remaining
 scope-exit overhead for integer-only loops.
 
-### 16.6 Verification
+### 16.6 Testing & Revert Policy
 
-After each phase:
-1. `make` must pass (all unit tests)
-2. Run `dev/bench/benchmark_lexical.pl` — target ≥390,000/s (master baseline: 397,633/s)
-3. Run `dev/bench/benchmark_global.pl` — target ≥90,000/s (master baseline: 96,850/s)
-4. `./jperl examples/life_bitpacked.pl -r none -g 5000` — target ≥28 Mcells/s (master: ~29)
-5. `./jperl examples/life_bitpacked.pl -g 5000` — target ≥14 Mcells/s (master: ~15, braille)
-6. `./jcpan --jobs 8 -t Moo` — 841/841 must still pass
-7. Sandbox destroy/weaken tests: `perl dev/tools/perl_test_runner.pl src/test/resources/unit/destroy*.t src/test/resources/unit/weaken*.t`
-8. `./jperl --disassemble` on a tight loop to confirm bytecode reduction
+#### Workflow for each optimization phase
+
+1. **Create a commit** with the optimization (on `feature/destroy-weaken`)
+2. **Build**: `make clean && make` — must pass, no exceptions
+3. **Run correctness tests**:
+   ```bash
+   # Unit tests (already run by make)
+   # Destroy/weaken sandbox tests
+   perl dev/tools/perl_test_runner.pl src/test/resources/unit/destroy*.t src/test/resources/unit/weaken*.t
+   # Moo test suite (full integration)
+   ./jcpan --jobs 8 -t Moo   # must be 841/841
+   ```
+4. **Run performance benchmarks** (all five, in order of importance):
+   ```bash
+   # Primary benchmarks (most sensitive to regressions)
+   ./jperl examples/life_bitpacked.pl -g 5000          # braille display — master: ~15 Mcells/s
+   ./jperl examples/life_bitpacked.pl -r none -g 5000  # compute only — master: ~29 Mcells/s
+   ./jperl dev/bench/benchmark_lexical.pl               # master: 397,633/s
+   ./jperl dev/bench/benchmark_global.pl                # master: 96,850/s
+   # Secondary benchmarks
+   ./jperl dev/bench/benchmark_string.pl                # master: 28,487/s
+   ./jperl dev/bench/benchmark_method.pl                # master: 444/s
+   ./jperl dev/bench/benchmark_regex.pl                 # master: 51,343/s
+   ```
+5. **Compare** against the pre-optimization numbers (branch baseline below)
+6. **Decide** keep or revert per the criteria below
+
+#### Branch baseline (pre-optimization, 2026-04-10)
+
+| Benchmark | Master | Branch (pre-opt) |
+|-----------|--------|------------------|
+| `life_bitpacked.pl` braille | ~15 Mcells/s | ~6 Mcells/s |
+| `life_bitpacked.pl` `-r none` | ~29 Mcells/s | ~27 Mcells/s |
+| `benchmark_lexical.pl` | 397,633/s | 280,214/s |
+| `benchmark_global.pl` | 96,850/s | 70,879/s |
+| `benchmark_string.pl` | 28,487/s | 25,085/s |
+| `benchmark_method.pl` | 444/s | 387/s |
+| `benchmark_regex.pl` | 51,343/s | 45,078/s |
+
+#### Per-phase expected gains and revert criteria
+
+| Phase | Primary benchmark to watch | Expected gain | Revert if... |
+|-------|---------------------------|---------------|--------------|
+| O4 | `life_bitpacked.pl` braille | braille ≥10 Mcells/s (from 6) | braille gain < 20% AND no benchmark improves > 5% |
+| O3 | `benchmark_lexical.pl` | lexical ≥320,000/s (from 280K) | no benchmark improves > 3% |
+| O1 | `benchmark_lexical.pl` | lexical ≥370,000/s (from 280K) | lexical gain < 10% |
+| O2 | (same as O1, incremental) | small additional gain on O1 | never revert alone (trivial, coupled with O1) |
+| O5 | all benchmarks equally | small uniform gain | no benchmark improves > 2% AND adds complexity |
+| O6 | memory benchmarks | array 15M < 2.0 GB (from 2.22) | effort > 3 hrs with < 10% memory improvement |
+
+#### Revert policy
+
+- **Revert immediately** if `make` fails or Moo tests regress
+- **Revert** if a phase delivers no measurable improvement (< 3% on its target benchmark)
+  AND the change adds code complexity. A "no gain" change can be kept ONLY if it improves
+  code clarity or architecture (e.g., splitting a method is good hygiene even without
+  measured speedup)
+- **Keep** if any primary benchmark improves ≥ 5%, even if others don't change
+- **Keep** if correctness tests pass and the change simplifies code, regardless of
+  performance impact
+- Each phase should be a **separate commit** so it can be reverted independently
+
+#### Disassembly verification (for O1/O2)
+
+After implementing O1+O2, verify bytecode reduction:
+```bash
+# Before (current branch): expect 4 scopeExitCleanup + pushMark/popAndFlush
+./jperl --disassemble -e '
+for my $i (0..100) {
+    my $a = $i + 1;
+    my $b = $a * 2;
+    my $c = $b & 0xFF;
+}
+' 2>&1 | grep -c 'scopeExitCleanup\|pushMark\|popAndFlush'
+
+# After O1+O2: expect 0 (all variables are integer-only)
+```
 
 ### 16.7 Bytecode Evidence
 
