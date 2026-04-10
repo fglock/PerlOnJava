@@ -975,7 +975,7 @@ parsing/emitting, while allowing concurrent execution of compiled code.
   cross-runtime class compatibility issues
 
 ### Multiplicity Demo (2026-04-10)
-- Created `dev/sandbox/MultiplicityDemo.java` — launches N threads, each with its
+- Created `dev/sandbox/multiplicity/MultiplicityDemo.java` — launches N threads, each with its
   own PerlRuntime, compiles and executes a Perl script, captures per-thread STDOUT
 - Uses `PerlLanguageProvider.executePerlCode()` which handles the full lifecycle:
   initialization, compilation (under COMPILE_LOCK), and execution (no lock)
@@ -983,7 +983,7 @@ parsing/emitting, while allowing concurrent execution of compiled code.
 - Successfully tested with 126 concurrent interpreters running unit tests
 - **122/126 tests pass**; remaining 4 failures are pre-existing `DESTROY` TODO:
   - `tie_array.t`, `tie_handle.t`, `tie_hash.t`, `tie_scalar.t` — object destructors not implemented
-- Run with: `./dev/sandbox/run_multiplicity_demo.sh`
+- Run with: `./dev/sandbox/multiplicity/run_multiplicity_demo.sh`
 
 ### Local Save/Restore Stack Fix (2026-04-10)
 

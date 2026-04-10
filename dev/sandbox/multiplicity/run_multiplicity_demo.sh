@@ -3,15 +3,17 @@
 # Compile and run the Multiplicity Demo.
 #
 # Usage:
-#   ./dev/sandbox/run_multiplicity_demo.sh [script1.pl script2.pl ...]
+#   ./dev/sandbox/multiplicity/run_multiplicity_demo.sh [script1.pl script2.pl ...]
 #
 # If no scripts are given, runs the three bundled demo scripts.
+#
+# See also: dev/design/concurrency.md (Multiplicity Demo section)
 #
 set -euo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
-DEMO_SRC="dev/sandbox/MultiplicityDemo.java"
-DEMO_DIR="dev/sandbox"
+DEMO_SRC="dev/sandbox/multiplicity/MultiplicityDemo.java"
+DEMO_DIR="dev/sandbox/multiplicity"
 
 # Find the fat JAR the same way jperl does
 if [ -f "target/perlonjava-5.42.0.jar" ]; then
@@ -29,9 +31,9 @@ javac -d "$DEMO_DIR" -cp "$JAR" "$DEMO_SRC"
 
 # Default scripts if none provided
 if [ $# -eq 0 ]; then
-    set -- dev/sandbox/multiplicity_script1.pl \
-           dev/sandbox/multiplicity_script2.pl \
-           dev/sandbox/multiplicity_script3.pl
+    set -- dev/sandbox/multiplicity/multiplicity_script1.pl \
+           dev/sandbox/multiplicity/multiplicity_script2.pl \
+           dev/sandbox/multiplicity/multiplicity_script3.pl
 fi
 
 echo ""

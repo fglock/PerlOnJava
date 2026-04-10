@@ -113,9 +113,9 @@ When adding new design documents:
 
 For the most important architectural decisions and current work, check:
 
-- **multiplicity.md** - Multiple independent Perl runtimes (enables fork/threads/web concurrency)
+- **concurrency.md** - Unified concurrency design (supersedes multiplicity.md, fork.md, threads.md). Includes multiplicity demo and progress tracking.
 - **jsr223-perlonjava-web.md** - JSR-223 compliance and web server integration
-- **fork.md** / **threads.md** - Concurrency model and limitations
+- **multiplicity.md** / **fork.md** / **threads.md** - Superseded by concurrency.md
 
 These represent major architectural directions for the project.
 

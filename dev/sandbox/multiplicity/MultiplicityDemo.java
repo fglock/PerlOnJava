@@ -27,7 +27,9 @@ import java.util.concurrent.TimeUnit;
  *        org.perlonjava.demo.MultiplicityDemo script1.pl script2.pl ...
  *
  * Or with the helper script:
- *   ./dev/sandbox/run_multiplicity_demo.sh script1.pl script2.pl ...
+ *   ./dev/sandbox/multiplicity/run_multiplicity_demo.sh script1.pl script2.pl ...
+ *
+ * See also: dev/design/concurrency.md (Multiplicity Demo section)
  */
 public class MultiplicityDemo {
 
