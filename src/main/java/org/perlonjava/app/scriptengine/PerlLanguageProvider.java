@@ -89,6 +89,14 @@ public class PerlLanguageProvider {
         // This is critical because require/do should not leak their scope to the caller.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
 
+        // Save and clear the eval runtime context so that modules loaded via require/do
+        // during eval STRING execution don't see the eval's captured variables.
+        // Without this, SpecialBlockParser.runSpecialBlock would incorrectly alias
+        // local variables in required modules to the eval's captured variables when
+        // they share the same name (e.g., $caller in constant.pm vs $caller in eval scope).
+        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
+                RuntimeCode.saveAndClearEvalRuntimeContext();
+
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;
 
@@ -218,6 +226,9 @@ public class PerlLanguageProvider {
             if (savedCurrentScope != null && !isTopLevelScript) {
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
+            // Restore the eval runtime context so the caller's eval STRING compilation
+            // can continue with its captured variables.
+            RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
         }
     }
 
@@ -252,6 +263,10 @@ public class PerlLanguageProvider {
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+
+        // Save and clear the eval runtime context (same reason as executePerlCode)
+        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
+                RuntimeCode.saveAndClearEvalRuntimeContext();
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
@@ -320,6 +335,8 @@ public class PerlLanguageProvider {
                 WarningBitsRegistry.snapshotCurrentHintHash();
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
+            // Restore the eval runtime context
+            RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
         }
     }
 

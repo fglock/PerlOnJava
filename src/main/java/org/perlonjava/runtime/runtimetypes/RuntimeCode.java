@@ -404,6 +404,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Save and clear the eval runtime context.
+     * Used by require/do to prevent inner compilations from seeing the eval's captured variables.
+     * The returned value should be passed to {@link #restoreEvalRuntimeContext} to restore it.
+     *
+     * @return The saved eval runtime context (may be null)
+     */
+    public static EvalRuntimeContext saveAndClearEvalRuntimeContext() {
+        EvalRuntimeContext saved = evalRuntimeContext.get();
+        if (saved != null) {
+            evalRuntimeContext.remove();
+        }
+        return saved;
+    }
+
+    /**
+     * Restore a previously saved eval runtime context.
+     *
+     * @param saved The context returned by {@link #saveAndClearEvalRuntimeContext}
+     */
+    public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
+        if (saved != null) {
+            evalRuntimeContext.set(saved);
+        }
+    }
+
+    /**
      * Gets the next eval sequence number and generates a filename.
      * Used by both baseline compiler and interpreter for consistent naming.
      *
