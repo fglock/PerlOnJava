@@ -93,12 +93,13 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeHierarchy(String className) {
+        PerlRuntime rt = PerlRuntime.current();
         // Check if ISA has changed and invalidate cache if needed
-        if (hasIsaChanged(className)) {
-            invalidateCacheForClass(className);
+        if (hasIsaChanged(className, rt)) {
+            invalidateCacheForClass(className, rt);
         }
 
-        Map<String, List<String>> cache = getLinearizedClassesCache();
+        Map<String, List<String>> cache = rt.linearizedClassesCache;
         // Check cache first
         List<String> cached = cache.get(className);
         if (cached != null) {
@@ -106,7 +107,7 @@ public class InheritanceResolver {
             return new ArrayList<>(cached);
         }
 
-        MROAlgorithm mro = getPackageMRO(className);
+        MROAlgorithm mro = rt.packageMRO.getOrDefault(className, rt.currentMRO);
 
         List<String> result;
         switch (mro) {
@@ -129,6 +130,10 @@ public class InheritanceResolver {
      * Checks if the @ISA array for a class has changed since last cached.
      */
     private static boolean hasIsaChanged(String className) {
+        return hasIsaChanged(className, PerlRuntime.current());
+    }
+
+    private static boolean hasIsaChanged(String className, PerlRuntime rt) {
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
         
         // Build current ISA list
@@ -140,7 +145,7 @@ public class InheritanceResolver {
             }
         }
 
-        Map<String, List<String>> isCache = getIsaStateCache();
+        Map<String, List<String>> isCache = rt.isaStateCache;
         List<String> cachedIsa = isCache.get(className);
 
         // If ISA changed, update cache and return true
@@ -156,8 +161,12 @@ public class InheritanceResolver {
      * Invalidate cache for a specific class and its dependents.
      */
     private static void invalidateCacheForClass(String className) {
-        Map<String, List<String>> linCache = getLinearizedClassesCache();
-        Map<String, RuntimeScalar> mCache = getMethodCache();
+        invalidateCacheForClass(className, PerlRuntime.current());
+    }
+
+    private static void invalidateCacheForClass(String className, PerlRuntime rt) {
+        Map<String, List<String>> linCache = rt.linearizedClassesCache;
+        Map<String, RuntimeScalar> mCache = rt.methodCache;
 
         // Remove exact class and subclasses from linearization cache
         linCache.remove(className);
@@ -175,10 +184,11 @@ public class InheritanceResolver {
      * This should be called whenever the class hierarchy or method definitions change.
      */
     public static void invalidateCache() {
-        getMethodCache().clear();
-        getLinearizedClassesCache().clear();
-        getOverloadContextCache().clear();
-        getIsaStateCache().clear();
+        PerlRuntime rt = PerlRuntime.current();
+        rt.methodCache.clear();
+        rt.linearizedClassesCache.clear();
+        rt.overloadContextCache.clear();
+        rt.isaStateCache.clear();
         // Also clear the inline method cache in RuntimeCode
         RuntimeCode.clearInlineMethodCache();
     }
@@ -302,6 +312,8 @@ public class InheritanceResolver {
      * @return RuntimeScalar representing the found method, or null if not found
      */
     public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex) {
+        PerlRuntime rt = PerlRuntime.current();
+
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("TRACE InheritanceResolver.findMethodInHierarchy:");
             System.err.println("  methodName: '" + methodName + "'");
@@ -321,12 +333,12 @@ public class InheritanceResolver {
         }
 
         // Check if ISA changed for this class - if so, invalidate relevant caches
-        if (hasIsaChanged(perlClassName)) {
-            invalidateCacheForClass(perlClassName);
+        if (hasIsaChanged(perlClassName, rt)) {
+            invalidateCacheForClass(perlClassName, rt);
         }
 
         // Check the method cache - handles both found and not-found cases
-        Map<String, RuntimeScalar> mCache = getMethodCache();
+        Map<String, RuntimeScalar> mCache = rt.methodCache;
         if (mCache.containsKey(cacheKey)) {
             if (TRACE_METHOD_RESOLUTION) {
                 System.err.println("  Found in cache: " + (mCache.get(cacheKey) != null ? "YES" : "NULL"));
@@ -362,7 +374,7 @@ public class InheritanceResolver {
                 if (!codeRef.getDefinedBoolean()) {
                     continue;
                 }
-                cacheMethod(cacheKey, codeRef);
+                mCache.put(cacheKey, codeRef);
                 if (TRACE_METHOD_RESOLUTION) {
                     System.err.println("  FOUND method!");
                     System.err.flush();
@@ -374,7 +386,7 @@ public class InheritanceResolver {
         // Second pass — method not found anywhere, check AUTOLOAD in class hierarchy.
         // This matches Perl semantics: AUTOLOAD is only tried after the full MRO
         // search (including UNIVERSAL) fails to find the method.
-        if (isAutoloadEnabled() && !methodName.startsWith("(")) {
+        if (rt.autoloadEnabled && !methodName.startsWith("(")) {
             for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
                 String className = linearizedClasses.get(i);
                 String effectiveClassName = GlobalVariable.resolveStashAlias(className);
@@ -393,7 +405,7 @@ public class InheritanceResolver {
                         } else {
                             autoloadCode.autoloadVariableName = autoloadName;
                         }
-                        cacheMethod(cacheKey, autoload);
+                        mCache.put(cacheKey, autoload);
                         return autoload;
                     }
                 }
