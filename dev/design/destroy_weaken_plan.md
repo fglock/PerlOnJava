@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 71/71 (100%) — 841/841 subtests; croak-locations.t 29/29  
-**Version**: 5.19  
+**Version**: 5.20  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-10 (v5.19 — fix caller() for interpreter-backed subs; rebase on origin/master)  
+**Updated**: 2026-04-10 (v5.20 — performance optimization plan; fix reset() m?PAT? regression)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -2084,13 +2084,16 @@ which corrected PC stack ordering for interpreter-backed subroutines.
 
 ### Next Steps
 
+#### Performance Optimization (blocking PR merge)
+
+See **§16. Performance Optimization Plan** for the full analysis and phased approach.
+
+**Benchmark**: `./jperl examples/life_bitpacked.pl` — 5 Mcells/s (branch) vs 13 Mcells/s (master).
+
 #### Pending items
-1. **Commit** the null-check fix in `RuntimeScalar.incrementRefCountForContainerStore()`
-   (fixes sparse-array NPE in array.t)
-2. **Investigate** io/crlf_through.t, io/through.t, lib/croak.t crashes (0/0 results)
-3. **Update `moo_support.md`** with final Moo test results and analysis
-4. **Consider PR merge** — all Moo tests pass (841/841), all unit tests pass
-5. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
+1. **Resolve performance regression** before merging (see §16)
+2. **Update `moo_support.md`** with final Moo test results and analysis
+3. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
 
 #### Image::ExifTool Test Results (2026-04-09)
 
@@ -2521,6 +2524,12 @@ subtests passing.
    refined Strategy A changes in place).
 
 ### Version History
+- **v5.20** (2026-04-10): Performance optimization plan + fix reset() m?PAT? regression:
+  1. Added §16 Performance Optimization Plan with root cause analysis (5 sources of overhead)
+     and 6-phase optimization strategy to restore ~13 Mcells/s on life_bitpacked.pl.
+  2. Fixed `RuntimeRegex.reset()` not clearing `m?PAT?` match-once flags in
+     `optimizedRegexCache` — restores op/reset.t from 27/45 back to 30/45.
+  3. Updated PR #464 description: WIP, all tests pass, performance regression noted.
 - **v5.19** (2026-04-10): Fix caller() for interpreter-backed subs + rebase:
   1. Root cause: `InterpreterState.getPcStack()` returned PCs in oldest-to-newest order
      (ArrayList `add()` insertion order), but `getStack()` returned frames in newest-to-oldest
@@ -2697,4 +2706,325 @@ subtests passing.
   pinning, missing refcount hooks, VarHandle CAS, type reconstruction in DESTROY dispatch.
 - **v3.0**: Revised `refCount=0` at bless time to fix overcounting.
 - **v2.0**: Initial targeted refcounting + Cleaner design.
+
+---
+
+## 16. Performance Optimization Plan
+
+### 16.1 Problem Statement
+
+The `feature/destroy-weaken` branch shows measurable performance regressions on
+compute-intensive benchmarks. The life_bitpacked benchmark shows ~27 Mcells/s (branch)
+vs ~29 Mcells/s (master) — a ~7% regression. Other benchmarks show larger regressions,
+particularly `benchmark_global.pl` (-27%) and `benchmark_lexical.pl` (-30%).
+
+The benchmarks do NOT use blessed objects, DESTROY, or weak references, so all overhead
+is "tax" on unrelated code.
+
+### 16.2 Benchmark Baseline (2026-04-10)
+
+Environment: macOS, Java 21+, `make clean && make` on each branch before benchmarking.
+
+#### Throughput benchmarks (ops/s, higher is better)
+
+| Benchmark | Master | Branch | Delta | Notes |
+|-----------|--------|--------|-------|-------|
+| `benchmark_lexical.pl` | 397,633/s | 280,214/s | **-30%** | Pure lexical arithmetic loop |
+| `benchmark_global.pl` | 96,850/s | 70,879/s | **-27%** | Global variable arithmetic loop |
+| `benchmark_closure.pl` | 866/s | 810/s | **-6%** | Closure creation + invocation |
+| `benchmark_eval_string.pl` | 81,966/s | 83,753/s | +2% | eval STRING compilation |
+| `benchmark_method.pl` | 444/s | 387/s | **-13%** | Method dispatch loop |
+| `benchmark_regex.pl` | 51,343/s | 45,078/s | **-12%** | Regex matching loop |
+| `benchmark_string.pl` | 28,487/s | 25,085/s | **-12%** | String operations |
+| `life_bitpacked.pl` (5K gen) | ~29 Mcells/s | ~27 Mcells/s | **-7%** | Bitwise integer inner loop |
+
+#### Memory benchmarks (delta, lower is better)
+
+| Workload | Master | Branch | Delta |
+|----------|--------|--------|-------|
+| Array creation (15M elements) | 1.73 GB | 2.22 GB | **+28%** |
+| Hash creation (2M entries) | 710.0 MB | 707.6 MB | 0% |
+| String buffer (100M chars) | 769.8 MB | 781.3 MB | +1% |
+| Nested data structures (30K objects) | 282.7 MB | 458.8 MB | **+62%** |
+
+**Key observations**:
+- Largest regressions are in tight loops with many lexical variables (`benchmark_lexical.pl`)
+  and global variable access (`benchmark_global.pl`)
+- The 30% lexical regression correlates directly with `scopeExitCleanup` overhead on
+  every `my` variable at scope exit
+- The 28% array memory regression is from the extra `refCount` field on RuntimeBase
+  and `refCountOwned`/`captureCount`/`scopeExited` fields on RuntimeScalar
+- The 62% nested data structure memory regression is from RuntimeBase `refCount` on every
+  array/hash/code object plus RuntimeScalar field growth
+
+### 16.3 Root Cause Analysis
+
+Bytecode disassembly (`./jperl --disassemble`) and code review identified **five** sources
+of overhead, ordered by estimated impact:
+
+#### A. `scopeExitCleanup` called for EVERY `my` scalar at scope exit (HIGH)
+
+**What changed**: `EmitStatement.emitScopeExitNullStores()` now emits a call to
+`RuntimeScalar.scopeExitCleanup(scalar)` for every `my $var` in the exiting scope.
+Previously it only checked `ioOwner` glob references (a rare case). Now it also calls
+`MortalList.deferDecrementIfTracked()` which checks `refCountOwned`, `type & REFERENCE_BIT`,
+`instanceof RuntimeBase`, and `base.refCount`.
+
+**Impact on life_bitpacked.pl**: The inner loop (`next_generation_parallel`) declares
+~15+ `my` variables per iteration (e.g. `$cell`, `$n_left`, `$n_right`, `$above`,
+`$below`, `$s1`, `$c1`, `$s2`, `$c2`, `$s3`, `$c3`, ...). All are plain integers.
+Each scope exit generates N×`scopeExitCleanup` calls + `pushMark`/`popAndFlush` pair.
+With 100×4 word iterations × 5000 generations = 2M iterations, this adds ~30M+ useless
+method calls.
+
+**The `scopeExitCleanup` method itself** is not trivially cheap either — it checks
+`captureCount`, `ioOwner`, `type == GLOBREFERENCE`, then calls `deferDecrementIfTracked`
+which has 4 conditional checks before the early return. The JIT may inline some of this
+but the method dispatch + branch misprediction cost adds up at 30M+ calls.
+
+#### B. `pushMark`/`popAndFlush` pairs on every block scope (MEDIUM-HIGH)
+
+**What changed**: Every `for`, `if`, bare block now wraps scope-exit cleanup with
+`MortalList.pushMark()` before and `MortalList.popAndFlush()` after. These are
+`static synchronized` calls that manipulate an ArrayList.
+
+**Impact**: In nested loops, the inner loop's block exit triggers pushMark+popAndFlush
+on every iteration. These are cheap individually (just `ArrayList.add`/`removeLast`) but
+at millions of iterations the overhead accumulates — especially because `popAndFlush`
+checks `!active || marks.isEmpty()` and `pending.size() <= mark` on every call.
+
+#### C. `set()` fast path now routes references through `setLarge()` (MEDIUM)
+
+**What changed**: The fast path in `RuntimeScalar.set(RuntimeScalar)` added:
+```java
+if (((this.type | value.type) & REFERENCE_BIT) != 0) {
+    return setLarge(value);
+}
+```
+This check runs on EVERY `set()` call, even for integer-to-integer assignments. The
+branch itself is trivially predicted for non-reference types, but `setLarge()` is now
+significantly larger (refCount tracking, WeakRefRegistry, MortalList.flush) which may
+prevent the JIT from inlining `set()` due to the increased bytecode size of the callee.
+
+**Impact**: `set()` is the single most-called method in PerlOnJava. If the JIT decides
+not to inline it (because `setLarge` pulls in too many classes), every variable assignment
+becomes a real method call instead of inlined field stores.
+
+#### D. Extra fields on RuntimeScalar increase object size (LOW-MEDIUM)
+
+**What changed**: Three new boolean/int fields added to RuntimeScalar:
+- `captureCount` (int, 4 bytes)
+- `scopeExited` (boolean, 1 byte + padding)
+- `refCountOwned` (boolean, 1 byte + padding)
+
+Plus `refCount` (int, 4 bytes) on RuntimeBase.
+
+**Impact**: With JVM object alignment (8-byte boundaries), RuntimeScalar grew by ~16 bytes.
+This increases GC pressure and reduces cache density. Life_bitpacked creates millions of
+temporary RuntimeScalar objects for arithmetic results.
+
+#### E. `MortalList.flush()` called on every `setLarge()` (LOW)
+
+**What changed**: `setLarge()` now ends with `MortalList.flush()`. Cost when
+`MortalList.active == true` and `pending.isEmpty()`: one boolean check + one
+`ArrayList.isEmpty()` call. This was previously not present.
+
+**Impact**: Low individually, but `setLarge()` is called for every reference assignment.
+
+### 16.4 Optimization Strategy
+
+#### Guiding principle
+**Zero overhead for code that doesn't use DESTROY/weaken.** The refcounting mechanism
+should be invisible to programs that don't bless objects into classes with DESTROY methods.
+
+#### Phase O1: Compile-time scope-exit elision (HIGH impact, LOW risk)
+
+**Goal**: Skip `scopeExitCleanup` calls for variables that provably never hold references.
+
+**Approach**: At compile time, track whether each `my` variable could hold a reference:
+- Variables assigned only from arithmetic/string operations → **never a reference**
+- Variables assigned from `@_` slicing, sub calls, hash/array access → **might be a reference**
+- Variables explicitly assigned a reference (`\@foo`, `[...]`, `{...}`) → **is a reference**
+
+In `emitScopeExitNullStores()`, only emit `scopeExitCleanup` calls for variables that
+**might** hold a reference. For integer-only inner loop variables, skip entirely.
+
+**Conservative fallback**: If the analysis can't prove a variable is reference-free,
+emit the cleanup call (safe default). This is a sound optimization — it can't break
+anything, it just reduces calls.
+
+**Implementation sketch**:
+1. Add a `boolean mightHoldReference` flag to symbol table entries
+2. Default to `true` (conservative)
+3. Set to `false` for variables with only integer/double/string assignments
+4. In `emitScopeExitNullStores()`, check the flag before emitting cleanup call
+
+**Estimated impact**: For life_bitpacked.pl, this eliminates ~90% of scopeExitCleanup
+calls since most inner-loop variables are pure integers.
+
+**Files**: `ScopedSymbolTable.java`, `EmitStatement.java`
+
+#### Phase O2: Elide `pushMark`/`popAndFlush` for scopes with no cleanup (HIGH impact, LOW risk)
+
+**Goal**: Skip MortalList mark/flush for blocks that have no `scopeExitCleanup` calls.
+
+**Approach**: After Phase O1 filtering, if a scope has zero variables needing cleanup,
+skip the `pushMark()`/`popAndFlush()` pair entirely. This is a trivial extension of O1 —
+just check if the filtered list is empty before emitting the mark/flush calls.
+
+**Implementation**: In `emitScopeExitNullStores(ctx, scopeIndex, flush)`:
+```java
+List<Integer> needsCleanup = scalarIndices.stream()
+    .filter(idx -> ctx.symbolTable.mightHoldReference(idx))
+    .toList();
+if (needsCleanup.isEmpty() && hashIndices.isEmpty() && arrayIndices.isEmpty()) {
+    // No cleanup needed — skip pushMark/popAndFlush entirely
+    // Still null the slots for GC
+} else {
+    // Emit pushMark, cleanup calls, popAndFlush as before
+}
+```
+
+**Estimated impact**: Eliminates 2 static calls per inner loop iteration in
+life_bitpacked.pl.
+
+**Files**: `EmitStatement.java`
+
+#### Phase O3: Runtime fast-path in `scopeExitCleanup` (MEDIUM impact, LOW risk)
+
+**Goal**: Make `scopeExitCleanup` cheaper for the common case (non-reference scalars).
+
+**Approach**: Add an early-exit check at the top of `scopeExitCleanup`:
+```java
+public static void scopeExitCleanup(RuntimeScalar scalar) {
+    if (scalar == null || scalar.type < RuntimeScalarType.TIED_SCALAR) return;
+    // ... existing logic ...
+}
+```
+
+For plain integers/strings/doubles (type 0-8), this is a single field read + comparison.
+The JIT will inline this to a trivially-predicted branch. This helps even if Phase O1
+doesn't eliminate the call entirely (e.g., variables whose type can't be statically
+determined).
+
+**Estimated impact**: Reduces per-call cost from ~100ns to ~2ns for non-reference scalars.
+
+**Files**: `RuntimeScalar.java`
+
+#### Phase O4: Prevent `setLarge` bloat from killing `set()` inlining (MEDIUM impact, MEDIUM risk)
+
+**Goal**: Keep the `set()` method small enough for JIT inlining.
+
+**Approach**: The JIT's inlining budget is based on bytecode size. `setLarge()` grew
+substantially with refCount/WeakRef/MortalList logic. Options:
+
+a. **Extract refCount logic into a separate method** called from `setLarge()`:
+   ```java
+   private RuntimeScalar setLarge(RuntimeScalar value) {
+       // ... unwrap tied/readonly ...
+       // ... IO lifecycle ...
+       if (((this.type | value.type) & REFERENCE_BIT) != 0) {
+           return setLargeRefCounted(value);
+       }
+       this.type = value.type;
+       this.value = value.value;
+       return this;
+   }
+   ```
+   This keeps `setLarge()` small enough that the JIT may still inline `set()` → `setLarge()`
+   for the non-reference path.
+
+b. **Move the REFERENCE_BIT check back into `set()`** but with a lighter `setLarge`:
+   The fast path already checks `REFERENCE_BIT` before calling `setLarge`. Inside `setLarge`,
+   skip the refCount block entirely when neither old nor new is a reference.
+
+**Estimated impact**: May restore JIT inlining of `set()`, which would reduce
+every variable assignment from a method call to inline field stores.
+
+**Files**: `RuntimeScalar.java`
+
+#### Phase O5: `MortalList.active` gate (already partially done) (LOW impact, LOW risk)
+
+**Goal**: Make `MortalList.flush()`, `pushMark()`, `popAndFlush()` truly zero-cost when
+no DESTROY class has been registered.
+
+**Current state**: `active` is `true` always (set in the field initializer). It was
+originally gated on first `bless()` into a class with DESTROY, but was changed to
+always-on because birth-tracked objects need balanced increment/decrement.
+
+**Approach**: Re-examine whether `active` can start `false` and flip to `true` only
+when the first `bless()` with DESTROY occurs OR when the first `weaken()` is called.
+Birth-tracked objects' refCount is only meaningful when there's a class with DESTROY
+or when weak refs are in play — otherwise refCount is never checked.
+
+**Risk**: Requires careful analysis of whether any code path depends on
+`MortalList.flush()` running before the first DESTROY-aware bless.
+
+**Files**: `MortalList.java`, `InheritanceResolver.java` (classHasDestroy), `ScalarUtil.java`
+
+#### Phase O6: Reduce RuntimeScalar object size (LOW impact, HIGH effort)
+
+**Goal**: Reclaim the ~16 bytes added per RuntimeScalar.
+
+**Approach**: Pack `refCountOwned`, `scopeExited`, and `ioOwner` into a single `byte flags`
+field using bit masks. `captureCount` could be moved to a side table (WeakHashMap) since
+it's only non-zero for closure-captured variables.
+
+**Estimated impact**: Marginal — modern JVMs handle small objects well, and GC pressure
+from field size is secondary to allocation rate.
+
+**Files**: `RuntimeScalar.java`
+
+### 16.5 Implementation Order
+
+| Phase | Impact | Risk | Effort | Depends on |
+|-------|--------|------|--------|------------|
+| O1    | HIGH   | LOW  | 1-2 hrs | — |
+| O2    | HIGH   | LOW  | 30 min | O1 |
+| O3    | MEDIUM | LOW  | 15 min | — |
+| O4    | MEDIUM | MED  | 1 hr | — |
+| O5    | LOW    | MED  | 1 hr | — |
+| O6    | LOW    | HIGH | 2+ hrs | — |
+
+**Recommended order**: O3 → O1 → O2 → O4 → O5 → (O6 only if needed)
+
+O3 is quickest to implement and provides immediate benefit. O1+O2 together should
+eliminate the majority of the regression. O4 may require JIT profiling to confirm
+the inlining hypothesis.
+
+### 16.6 Verification
+
+After each phase:
+1. `make` must pass (all unit tests)
+2. Run `dev/bench/benchmark_lexical.pl` — target ≥390,000/s (master baseline: 397,633/s)
+3. Run `dev/bench/benchmark_global.pl` — target ≥90,000/s (master baseline: 96,850/s)
+4. `./jperl examples/life_bitpacked.pl -r none -g 5000` — target ≥28 Mcells/s (master: ~29)
+5. `./jcpan --jobs 8 -t Moo` — 841/841 must still pass
+6. Sandbox destroy/weaken tests: `perl dev/tools/perl_test_runner.pl src/test/resources/unit/destroy*.t src/test/resources/unit/weaken*.t`
+7. `./jperl --disassemble` on a tight loop to confirm bytecode reduction
+
+### 16.7 Bytecode Evidence
+
+Disassembly of a simple inner loop with 4 `my` variables shows the overhead:
+
+```
+# Per inner-loop iteration (scope exit of for body):
+INVOKESTATIC MortalList.pushMark ()V           # mark mortal stack
+ALOAD 29                                       # load $cell
+INVOKESTATIC RuntimeScalar.scopeExitCleanup    # check/cleanup
+ALOAD 30                                       # load $x
+INVOKESTATIC RuntimeScalar.scopeExitCleanup    # check/cleanup
+ALOAD 31                                       # load $y
+INVOKESTATIC RuntimeScalar.scopeExitCleanup    # check/cleanup
+ALOAD 32                                       # load $s
+INVOKESTATIC RuntimeScalar.scopeExitCleanup    # check/cleanup
+ACONST_NULL / ASTORE x4                        # null slots for GC
+INVOKESTATIC MortalList.popAndFlush ()V         # drain mortal stack
+```
+
+After O1+O2, if all 4 variables are integer-only, this entire block is eliminated:
+```
+# Only null slots for GC (existing behavior from master):
+ACONST_NULL / ASTORE x4
+```
 - **v1.0**: Initial design proposal.
