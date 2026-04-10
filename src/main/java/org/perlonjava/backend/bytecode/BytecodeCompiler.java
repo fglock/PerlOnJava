@@ -3276,6 +3276,35 @@ public class BytecodeCompiler implements Visitor {
                             if (hasVariable(varName)) {
                                 // Already declared, just use existing register
                                 reg = getVariableRegister(varName);
+
+                                // For 'our' declarations, we must ALWAYS load from the global table
+                                // even if the variable name already exists in scope.  This handles
+                                // the case where eval STRING captures outer 'my' variables into
+                                // registers, but the eval's 'our $var' needs to rebind the register
+                                // to the actual package global.
+                                // (Matches the single-variable our handling above.)
+                                String globalVarName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) sigilOp.operand).name,
+                                        getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalVarName);
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                }
                             } else {
                                 // Allocate register and add to symbol table
                                 reg = addVariable(varName, "our");

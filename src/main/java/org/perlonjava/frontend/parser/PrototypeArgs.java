@@ -236,6 +236,10 @@ public class PrototypeArgs {
 //            for (Node element : args.elements) {
 //                element.setAnnotation("context", "LIST");
 //            }
+        } else if (prototype.isEmpty()) {
+            // Empty prototype "()" means zero arguments - nothing to parse.
+            // Don't enter parsePrototypeArguments which would incorrectly check
+            // for consecutive commas in the outer context (e.g., "Num ,=> Int").
         } else {
             parsePrototypeArguments(parser, args, prototype, hasParentheses);
 
