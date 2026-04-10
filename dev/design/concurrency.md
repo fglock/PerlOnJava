@@ -897,7 +897,7 @@ comparable to Perl 5 interpreter clones.
 
 ## Progress Tracking
 
-### Current Status: Phase 0 complete (2026-04-10)
+### Current Status: Phase 0 complete, local save/restore fixed (2026-04-10)
 
 All mutable runtime state has been migrated from static fields into `PerlRuntime`
 instance fields with ThreadLocal-based access. Multiple independent Perl interpreters
@@ -980,9 +980,56 @@ parsing/emitting, while allowing concurrent execution of compiled code.
 - Uses `PerlLanguageProvider.executePerlCode()` which handles the full lifecycle:
   initialization, compilation (under COMPILE_LOCK), and execution (no lock)
 - INIT/CHECK/UNITCHECK/END blocks execute correctly for each interpreter
-- Successfully tested with 10 concurrent interpreters running unit tests (begincheck.t,
-  closure.t, hash.t, regex.t, array.t, control_flow.t, ref.t, subroutine.t, etc.)
+- Successfully tested with 126 concurrent interpreters running unit tests
+- 118/126 tests pass; remaining 8 failures are unrelated to runtime state isolation:
+  - 4 tie tests: pre-existing `DESTROY` TODO (not implemented)
+  - 2 I/O tests: shared temp file positions (io_read.t, io_seek.t)
+  - 1 directory test: shared JVM-global CWD (directory.t)
+  - 1 glob test: shared CWD + temp file interference (glob.t)
 - Run with: `./dev/sandbox/run_multiplicity_demo.sh`
+
+### Local Save/Restore Stack Fix (2026-04-10)
+
+**Problem:** After Phase 3 migrated `DynamicVariableManager.variableStack` and
+`RuntimeScalar.dynamicStateStack` to per-runtime, `local` still failed under
+multiplicity. With 2+ interpreters, `local $x` would not restore the original value
+at scope exit — all "restored" assertions failed.
+
+**Root cause:** Phase 3 only migrated 2 of 17 dynamic state stacks. The remaining
+15 were still shared static fields. The most critical was
+`GlobalRuntimeScalar.localizedStack` — this is the stack used when `local` is
+applied to package variables (the most common case). With 2 threads doing
+`local $global_var` concurrently, they pushed/popped from the same stack, causing
+each thread to restore the other thread's saved state.
+
+**Fix (commit e2f16ec07):** Migrated all 16 remaining stacks to per-PerlRuntime
+instance fields, following the same accessor-method pattern:
+
+| Class | Stack Field(s) | Type |
+|-------|----------------|------|
+| `GlobalRuntimeScalar` | `localizedStack` | `Stack<Object>` (SavedGlobalState) |
+| `GlobalRuntimeArray` | `localizedStack` | `Stack<Object>` (SavedGlobalArrayState) |
+| `GlobalRuntimeHash` | `localizedStack` | `Stack<Object>` (SavedGlobalHashState) |
+| `RuntimeArray` | `dynamicStateStack` | `Stack<RuntimeArray>` |
+| `RuntimeHash` | `dynamicStateStack` | `Stack<RuntimeHash>` |
+| `RuntimeStash` | `dynamicStateStack` | `Stack<RuntimeStash>` |
+| `RuntimeGlob` | `globSlotStack` | `Stack<Object>` (GlobSlotSnapshot) |
+| `RuntimeHashProxyEntry` | `dynamicStateStack` | `Stack<RuntimeScalar>` |
+| `RuntimeArrayProxyEntry` | `dynamicStateStackInt` + `dynamicStateStack` | `Stack<Integer>` + `Stack<RuntimeScalar>` |
+| `ScalarSpecialVariable` | `inputLineStateStack` | `Stack<Object>` (InputLineState) |
+| `OutputAutoFlushVariable` | `stateStack` | `Stack<Object>` (State) |
+| `OutputRecordSeparator` | `orsStack` | `Stack<String>` |
+| `OutputFieldSeparator` | `ofsStack` | `Stack<String>` |
+| `ErrnoVariable` | `errnoStack` + `messageStack` | `Stack<int[]>` + `Stack<String>` |
+
+Each class now has a `private static Stack<T> stackName()` accessor that delegates
+to `PerlRuntime.current().<field>`. Inner types (SavedGlobalState, etc.) remain
+private to their classes; `PerlRuntime` stores them as `Stack<Object>` with
+`@SuppressWarnings("unchecked")` casts in the accessor methods.
+
+**Impact:** Fixed 8 previously-failing tests under multiplicity: `local.t` (74/74),
+`chomp.t`, `defer.t`, `local_glob_dynamic.t`, `sysread_syswrite.t`,
+`array_autovivification.t`, `vstring.t`, `nested_for_loops.t`.
 
 ### Phase 0: Compilation Thread Safety (2026-04-10)
 
@@ -1120,8 +1167,40 @@ state from shared statics to per-compilation-context (which would eliminate the
 lock entirely).
 
 ### Next Steps
-1. **Phase 6:** Implement `threads` module (requires runtime cloning)
-2. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
+
+1. **Per-runtime CWD** — `chdir()` currently calls `System.setProperty("user.dir", ...)`
+   which is JVM-global. All path resolution goes through `RuntimeIO.resolvePath()` which
+   reads `System.getProperty("user.dir")`. When multiple interpreters call `chdir()`
+   concurrently, they overwrite each other's working directory.
+
+   **Fix:** Add a per-runtime `String cwd` field to `PerlRuntime`, initialized from
+   `System.getProperty("user.dir")` at runtime creation. Change `Directory.chdir()` to
+   update `PerlRuntime.current().cwd` instead of `System.setProperty()`. Change
+   `RuntimeIO.resolvePath()` to read from `PerlRuntime.current().cwd`. This isolates
+   each interpreter's working directory without affecting the JVM-global property.
+
+   Affected files: `Directory.java` (chdir), `RuntimeIO.java` (resolvePath/resolveFile),
+   `PerlRuntime.java` (new field), and any other code reading `user.dir` for CWD
+   (`FileSpec.java`, `Internals.java`, `SystemOperator.java`, `ScalarGlobOperator.java`,
+   `ArgumentParser.java`, etc.).
+
+2. **Per-runtime file positions (seek/read)** — When multiple interpreters open the same
+   file path, they may share underlying OS file descriptors or interfere via the file
+   system. The `io_seek.t` and `io_read.t` failures occur because concurrent interpreters
+   share temp files and their file positions interleave.
+
+   **Fix (two parts):**
+   - **Temp file isolation:** Tests that create temp files should use unique file names
+     per interpreter (e.g., include thread ID or runtime ID in the temp path). This is
+     mostly a test-level concern, not a runtime bug.
+   - **File position tracking (if needed):** If true per-runtime file position isolation is
+     required (e.g., for shared read-only files), `RuntimeIO` could maintain a per-runtime
+     logical position and use `RandomAccessFile` with explicit `seek()` before each read,
+     rather than relying on the OS-level sequential position. However, this adds complexity
+     and may not be needed if temp files are properly isolated.
+
+3. **Phase 6:** Implement `threads` module (requires runtime cloning)
+4. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
