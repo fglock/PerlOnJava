@@ -201,7 +201,7 @@ public class SpecialBlockParser {
                     isFromOuterScope = RuntimeCode.getEvalBeginIds().containsKey(ast);
                     int beginId = RuntimeCode.getEvalBeginIds().computeIfAbsent(
                             ast,
-                            k -> EmitterMethodCreator.classCounter++);
+                            k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(

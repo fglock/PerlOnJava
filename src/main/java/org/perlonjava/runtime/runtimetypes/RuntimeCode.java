@@ -639,7 +639,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             if (ast != null) {
                                 int beginId = getEvalBeginIds().computeIfAbsent(
                                         ast,
-                                        k -> EmitterMethodCreator.classCounter++);
+                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
@@ -1058,7 +1058,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             if (operatorAst != null) {
                                 int beginId = getEvalBeginIds().computeIfAbsent(
                                         operatorAst,
-                                        k -> EmitterMethodCreator.classCounter++);
+                                        k -> EmitterMethodCreator.classCounter.getAndIncrement());
                                 String packageName = PersistentVariable.beginPackage(beginId);
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;

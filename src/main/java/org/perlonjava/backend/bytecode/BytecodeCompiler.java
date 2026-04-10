@@ -76,8 +76,8 @@ public class BytecodeCompiler implements Visitor {
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
-    // Callsite ID counter for /o modifier support (unique across all compilations)
-    private static int nextCallsiteId = 1;
+    // Callsite ID counter for /o modifier support (unique across all compilations, thread-safe)
+    private static final java.util.concurrent.atomic.AtomicInteger nextCallsiteId = new java.util.concurrent.atomic.AtomicInteger(1);
     // Track last result register for expression chaining
     int lastResultReg = -1;
     // Target output register for ALIAS elimination (same save/restore pattern as currentCallContext).
@@ -4371,7 +4371,7 @@ public class BytecodeCompiler implements Visitor {
      * Each callsite with /o gets a unique ID so the pattern is compiled only once per callsite.
      */
     int allocateCallsiteId() {
-        return nextCallsiteId++;
+        return nextCallsiteId.getAndIncrement();
     }
 
     int allocateOutputRegister() {
@@ -4785,7 +4785,7 @@ public class BytecodeCompiler implements Visitor {
 
         int beginId = 0;
         if (!closureVarIndices.isEmpty()) {
-            beginId = EmitterMethodCreator.classCounter++;
+            beginId = EmitterMethodCreator.classCounter.getAndIncrement();
 
             // Store each closure variable in PersistentVariable globals
             for (int i = 0; i < closureVarNames.size(); i++) {

@@ -1144,7 +1144,7 @@ public class SubroutineParser {
                     OperatorNode ast = entry.ast();
                     int beginId = RuntimeCode.getEvalBeginIds().computeIfAbsent(
                             ast,
-                            k -> EmitterMethodCreator.classCounter++);
+                            k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),
                             PersistentVariable.beginPackage(beginId));

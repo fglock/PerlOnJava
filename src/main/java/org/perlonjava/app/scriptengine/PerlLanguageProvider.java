@@ -26,6 +26,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Constructor;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.resetAllGlobals;
 import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
@@ -51,6 +52,18 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
  * details within a single class, we provide a simpler and more manageable interface for executing Perl code.
  */
 public class PerlLanguageProvider {
+
+    /**
+     * Global compile lock. The parser and emitter have shared mutable static state
+     * (SpecialBlockParser.symbolTable, ByteCodeSourceMapper collections, etc.) that
+     * is not yet thread-safe. All compilation paths — initial compilePerlCode() and
+     * runtime eval "string" via EvalStringHandler — must acquire this lock.
+     * <p>
+     * This serializes compilation across threads but allows concurrent execution
+     * of already-compiled code. Future work (Phase 0 completion) will migrate the
+     * remaining shared state to per-PerlRuntime instances, eliminating this lock.
+     */
+    public static final ReentrantLock COMPILE_LOCK = new ReentrantLock();
 
     private static boolean globalInitialized = false;
 
@@ -577,51 +590,56 @@ public class PerlLanguageProvider {
     public static Object compilePerlCode(CompilerOptions compilerOptions) throws Exception {
         ensureRuntimeInitialized();
 
-        ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
-        globalSymbolTable.enterScope();
-        globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
-        globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
-        globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
+        COMPILE_LOCK.lock();
+        try {
+            ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
+            globalSymbolTable.enterScope();
+            globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
+            globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
+            globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
 
-        if (compilerOptions.codeHasEncoding) {
-            globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
+            if (compilerOptions.codeHasEncoding) {
+                globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
+            }
+
+            EmitterContext ctx = new EmitterContext(
+                    new JavaClassInfo(),
+                    globalSymbolTable.snapShot(),
+                    null,
+                    null,
+                    RuntimeContextType.SCALAR,  // Default to SCALAR context
+                    true,
+                    null,
+                    compilerOptions,
+                    new RuntimeArray()
+            );
+
+            if (!globalInitialized) {
+                GlobalContext.initializeGlobals(compilerOptions);
+                globalInitialized = true;
+            }
+
+            // Tokenize
+            Lexer lexer = new Lexer(compilerOptions.code);
+            List<LexerToken> tokens = lexer.tokenize();
+            compilerOptions.code = null;  // Free memory
+
+            // Parse
+            ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            Parser parser = new Parser(ctx, tokens);
+            parser.isTopLevelScript = false;  // Not top-level for compiled script
+            Node ast = parser.parse();
+
+            // Compile to class or bytecode based on flag
+            ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            ctx.symbolTable = ctx.symbolTable.snapShot();
+            SpecialBlockParser.setCurrentScope(ctx.symbolTable);
+
+            // Use unified compilation path (works for JSR 223 too!)
+            return compileToExecutable(ast, ctx);
+        } finally {
+            COMPILE_LOCK.unlock();
         }
-
-        EmitterContext ctx = new EmitterContext(
-                new JavaClassInfo(),
-                globalSymbolTable.snapShot(),
-                null,
-                null,
-                RuntimeContextType.SCALAR,  // Default to SCALAR context
-                true,
-                null,
-                compilerOptions,
-                new RuntimeArray()
-        );
-
-        if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
-            globalInitialized = true;
-        }
-
-        // Tokenize
-        Lexer lexer = new Lexer(compilerOptions.code);
-        List<LexerToken> tokens = lexer.tokenize();
-        compilerOptions.code = null;  // Free memory
-
-        // Parse
-        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        Parser parser = new Parser(ctx, tokens);
-        parser.isTopLevelScript = false;  // Not top-level for compiled script
-        Node ast = parser.parse();
-
-        // Compile to class or bytecode based on flag
-        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        ctx.symbolTable = ctx.symbolTable.snapShot();
-        SpecialBlockParser.setCurrentScope(ctx.symbolTable);
-
-        // Use unified compilation path (works for JSR 223 too!)
-        return compileToExecutable(ast, ctx);
     }
 }
 

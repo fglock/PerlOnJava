@@ -25,9 +25,6 @@ import static org.perlonjava.backend.jvm.astrefactor.BlockRefactor.*;
  */
 public class LargeBlockRefactorer {
 
-    // Reusable visitor for control flow detection
-    private static final ControlFlowDetectorVisitor controlFlowDetector = new ControlFlowDetectorVisitor();
-
     // Thread-local flag to prevent recursion when creating chunk blocks
     private static final ThreadLocal<Boolean> skipRefactoring = ThreadLocal.withInitial(() -> false);
 
@@ -465,9 +462,10 @@ public class LargeBlockRefactorer {
     private static boolean tryWholeBlockRefactoring(EmitterVisitor emitterVisitor, BlockNode node) {
         // Check for unsafe control flow using ControlFlowDetectorVisitor
         // This properly handles loop depth - unlabeled next/last/redo inside loops are safe
-        controlFlowDetector.reset();
-        controlFlowDetector.scan(node);
-        if (controlFlowDetector.hasUnsafeControlFlow()) {
+        // Create a new instance per call to avoid thread-safety issues with shared mutable state
+        ControlFlowDetectorVisitor detector = new ControlFlowDetectorVisitor();
+        detector.scan(node);
+        if (detector.hasUnsafeControlFlow()) {
             return false;
         }
 

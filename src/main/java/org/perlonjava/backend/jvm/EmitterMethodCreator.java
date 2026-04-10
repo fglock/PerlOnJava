@@ -24,6 +24,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,13 +48,13 @@ public class EmitterMethodCreator implements Opcodes {
     private static final boolean SHOW_FALLBACK =
             System.getenv("JPERL_SHOW_FALLBACK") != null;
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
-    public static int skipVariables = 3;
-    // Counter for generating unique class names
-    public static int classCounter = 0;
+    public static final int skipVariables = 3;
+    // Counter for generating unique class names (thread-safe)
+    public static final AtomicInteger classCounter = new AtomicInteger(0);
 
     // Generate a unique internal class name
     public static String generateClassName() {
-        return "org/perlonjava/anon" + classCounter++;
+        return "org/perlonjava/anon" + classCounter.getAndIncrement();
     }
 
     private static String insnToString(AbstractInsnNode n) {
