@@ -39,6 +39,8 @@ Implementations:
 - `RuntimeArray` - array variables  
 - `RuntimeHash` - hash variables
 - `RuntimeGlob` - typeglobs
+- `GlobalRuntimeArray` - global array localization (`local @array`)
+- `GlobalRuntimeHash` - global hash localization (`local %hash`)
 - `DeferBlock` - defer block execution
 - `RegexState` - regex match state ($1, $2, etc.)
 
@@ -50,15 +52,19 @@ Manages a stack of saved states:
 public class DynamicVariableManager {
     private static final Deque<DynamicState> variableStack = new ArrayDeque<>();
     
-    // Save current state and push onto stack
-    public static void pushLocalVariable(DynamicState variable) {
-        variable.dynamicSaveState();
-        variableStack.addLast(variable);
-    }
+    // Save current state and push onto stack (4 overloads)
+    public static RuntimeBase pushLocalVariable(RuntimeBase variable)     // returns variable
+    public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) // returns variable
+    public static RuntimeGlob pushLocalVariable(RuntimeGlob variable)    // special: returns new glob from GlobalVariable.getGlobalIO()
+    public static void pushLocalVariable(DynamicState variable)          // for DeferBlock, RegexState
+    
+    // Each overload calls variable.dynamicSaveState() and variableStack.addLast(variable).
+    // The RuntimeGlob overload has special behavior: it returns the new glob obtained
+    // from GlobalVariable.getGlobalIO(), not the original variable.
     
     // Restore all states back to a saved level
-    public static void popToLocalLevel(int targetLevel) {
-        while (variableStack.size() > targetLevel) {
+    public static void popToLocalLevel(int targetLocalLevel) {
+        while (variableStack.size() > targetLocalLevel) {
             DynamicState variable = variableStack.removeLast();
             variable.dynamicRestoreState();
         }
@@ -85,7 +91,13 @@ public class RuntimeScalar implements DynamicState {
         RuntimeScalar copy = new RuntimeScalar();
         copy.type = this.type;
         copy.value = this.value;
+        copy.blessId = this.blessId;
         dynamicStateStack.push(copy);
+        // Reset to undef — this is the key `local` behavior:
+        // the variable is cleared after saving
+        this.type = UNDEF;
+        this.value = null;
+        this.blessId = 0;
     }
     
     @Override
@@ -93,6 +105,7 @@ public class RuntimeScalar implements DynamicState {
         RuntimeScalar saved = dynamicStateStack.pop();
         this.type = saved.type;
         this.value = saved.value;
+        this.blessId = saved.blessId;
     }
 }
 ```
@@ -150,12 +163,13 @@ The same mechanism is used for several other features:
 Implementation:
 ```java
 public class DeferBlock implements DynamicState {
-    private final RuntimeCode code;
+    private final RuntimeScalar codeRef;
+    private final RuntimeArray capturedArgs;  // captures enclosing subroutine's @_
     
     @Override
     public void dynamicRestoreState() {
-        // Execute the defer block
-        code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+        // Execute the defer block (static call, uses capturedArgs)
+        RuntimeCode.apply(codeRef, capturedArgs, RuntimeContextType.VOID);
     }
 }
 ```
@@ -245,6 +259,9 @@ This ensures:
 | `RuntimeScalar.java` | Scalar save/restore |
 | `RuntimeArray.java` | Array save/restore |
 | `RuntimeHash.java` | Hash save/restore |
+| `GlobalRuntimeArray.java` | Implements DynamicState for global array localization |
+| `GlobalRuntimeHash.java` | Implements DynamicState for global hash localization |
+| `GlobalRuntimeScalar.java` | Contains `makeLocal()`, the primary entry point for `local $scalar` |
 | `DeferBlock.java` | Defer block execution |
 | `RegexState.java` | Regex state save/restore |
 | `Local.java` | Code generation helpers |
@@ -253,4 +270,4 @@ This ensures:
 ## See Also
 
 - [lexical-pragmas.md](lexical-pragmas.md) - How warnings/strict use this mechanism
-- [../design/warnings-scope.md](../design/warnings-scope.md) - Warning scope design
+- [../design/lexical-warnings.md](../design/lexical-warnings.md) - Warning scope design

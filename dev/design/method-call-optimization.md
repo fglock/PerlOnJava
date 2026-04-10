@@ -1,5 +1,7 @@
 # Method Call Performance Optimization Plan
 
+**Status:** PARTIALLY IMPLEMENTED - Phase 1 (inline caching) is implemented as a runtime global cache in `RuntimeCode.java`. Phases 2-3 (fast hash access, method-specific optimizations) remain unimplemented. Some references below (e.g. `SpillSlotManager`, `RuntimeArrayPool`, `bench_method.pl`) are to planned components that were never created.
+
 **Goal**: Achieve >340 iterations/sec on `dev/bench/bench_method.pl` (matching or exceeding native Perl performance)
 
 **Current Status**: 119 iter/sec (2.87x slower than target)

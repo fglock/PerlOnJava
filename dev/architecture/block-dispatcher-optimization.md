@@ -48,11 +48,20 @@ notControlFlow:
 ALOAD controlFlowTempSlot       // Not marked, continue
 ```
 
+> **Note:** In addition to the above, each call site also emits an inline tail-call
+> trampoline (~30 instructions) that handles `goto &NAME` without jumping to the
+> block dispatcher. The actual per-call-site bytecode is ~100-150 bytes, not ~20.
+
 **Block dispatcher (emitted once, ~150 bytes):**
 ```java
 blockDispatcher:
   Get control flow type ordinal
   Check if LAST/NEXT/REDO (0/1/2)
+  IF_ICMPGT propagateToCaller    // ordinals > 2 handled below
+  // Higher ordinals (GOTO=3, TAILCALL=4, RETURN=5):
+  // - GOTO and TAILCALL: propagate to caller
+  // - RETURN (ordinal 5): unwrap return value for non-map/grep blocks,
+  //   then jump to returnLabel; otherwise propagate
   Loop through visible loop labels:
     Match label name
     Dispatch by type to appropriate label
@@ -78,6 +87,11 @@ skipDispatcher:
 - Old: 150N bytes
 - New: 20N + 150 + 3 bytes
 - **Savings: 130N - 153 bytes**
+
+> **Note:** These calculations use a simplified ~20 bytes per call site. The actual
+> per-call-site overhead is ~100-150 bytes due to the inline tailcall trampoline.
+> The block dispatcher sharing still provides significant savings, but the
+> absolute numbers differ from this simplified model.
 
 **Examples:**
 | Calls | Old (bytes) | New (bytes) | Savings | Percentage |
@@ -106,14 +120,20 @@ skipDispatcher:
 1. **JavaClassInfo.java**
    - Added `blockDispatcherLabels` map to track dispatcher reuse
    - Added `getLoopStateSignature()` method to compute unique signatures
-   - Imports: Added `HashMap` and `Map`
+   - Imports: Uses wildcard `import java.util.*`
 
 2. **EmitSubroutine.java**
    - Modified call-site emission to use block-level dispatchers
    - Added `emitBlockDispatcher()` helper method
    - Simplified call-site code to ~20 bytes (check + GOTO)
 
-3. **CONTROL_FLOW_IMPLEMENTATION.md**
+3. **Dereference.java** (`backend/jvm/Dereference.java`)
+   - Contains a full copy of the block-dispatcher pattern (lines 982-1109)
+   - Includes `getLoopStateSignature()`, `blockDispatcherLabels` lookup,
+     the tailcall trampoline, and calls `EmitSubroutine.emitBlockDispatcher()`
+   - Significant second emission point alongside EmitSubroutine.java
+
+4. **control-flow.md**
    - Documented block-level dispatcher approach
    - Updated performance metrics
    - Explained why method-level centralization doesn't work

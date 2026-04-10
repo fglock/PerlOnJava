@@ -2209,7 +2209,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Sub::Quote/Moo constructor inlining.
         // Weak refs for WEAKLY_TRACKED objects are cleared only via:
         //   - explicit undefine() of a strong reference
-        //   - setLarge() overwriting a strong reference
         // Since unblessed objects have no DESTROY, delayed clearing is safe.
     }
 

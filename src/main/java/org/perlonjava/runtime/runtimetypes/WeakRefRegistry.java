@@ -22,20 +22,23 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
-     * Special refCount value for unblessed birth-tracked objects that have weak
-     * refs but whose strong refs can't be counted accurately. These objects were
-     * born via {@code createReferenceWithTrackedElements} (refCount started at 0)
-     * but have blessId == 0 (unblessed), meaning closure captures and temporary
-     * copies bypass {@code setLarge()}, making refCount unreliable.
+     * Special refCount value for objects that have weak refs but whose strong
+     * refs can't be counted accurately. Used in two cases:
+     * <p>
+     * 1. Unblessed birth-tracked objects (refCount started at 0) with blessId == 0,
+     *    where closure captures and temporary copies bypass {@code setLarge()},
+     *    making refCount unreliable.
+     * <p>
+     * 2. Untracked non-CODE objects (refCount == -1) that acquire weak refs via
+     *    {@code weaken()}. These are transitioned to WEAKLY_TRACKED so that
+     *    {@code undefine()} and {@code scopeExitCleanup()} can clear weak refs
+     *    when a strong reference is dropped. CODE refs are excluded because they
+     *    live in both lexicals and the symbol table, making stash references
+     *    invisible to refcounting.
      * <p>
      * Setting refCount to WEAKLY_TRACKED prevents {@code setLarge()} from
      * incorrectly decrementing to 0 and triggering false destruction.
      * Weak ref clearing happens only via explicit {@code undef} or scope exit.
-     * <p>
-     * Note: untracked objects (refCount == -1) are NOT transitioned to
-     * WEAKLY_TRACKED — they stay at -1 and their weak refs are never cleared
-     * deterministically. This distinction fixes the qr-72922.t regression
-     * where untracked regex objects had weak refs prematurely cleared.
      */
     public static final int WEAKLY_TRACKED = -2;
 

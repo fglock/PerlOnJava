@@ -230,6 +230,13 @@ Tests use Perl's TAP (Test Anything Protocol) format and are executed via JUnit 
 
 ## Related Documentation
 
-- `dev/design/interpreter.md` - Interpreter design details
-- `dev/design/shared_ast_transformer.md` - AST normalization
-- `dev/custom_bytecode/` - Bytecode VM documentation
+- `dev/architecture/` - Deep-dive architecture documents for contributors:
+  - [Overview and index](../../dev/architecture/README.md)
+  - [DESTROY and weak references](../../dev/architecture/weaken-destroy.md) - Cooperative reference counting overlay
+  - [Dynamic scoping](../../dev/architecture/dynamic-scope.md) - `local` and DynamicVariableManager
+  - [Lexical pragmas](../../dev/architecture/lexical-pragmas.md) - Warnings, strict, and features
+  - [Control flow](../../dev/architecture/control-flow.md) - die/eval, loop control, exceptions
+- `dev/design/` - Design documents and implementation plans:
+  - [Interpreter design](../../dev/design/interpreter.md)
+  - [Variables and values](../../dev/design/variables_and_values.md)
+  - [Shared AST transformer](../../dev/design/shared_ast_transformer.md)

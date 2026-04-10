@@ -1,5 +1,7 @@
 # Inline Caching in PerlOnJava: Technical Implementation Guide
 
+**Status:** PARTIALLY IMPLEMENTED - A runtime global inline cache (4096 entries in `RuntimeCode.java`) is implemented using callsite IDs allocated at compile time. The per-call-site static field approach and INVOKEDYNAMIC variant described below remain unimplemented design alternatives.
+
 ## How It Works
 
 PerlOnJava compiles Perl code to JVM bytecode using the ASM library. When you write:

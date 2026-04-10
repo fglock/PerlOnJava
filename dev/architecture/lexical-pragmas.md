@@ -43,23 +43,32 @@ PerlOnJava tracks both using different mechanisms.
 ```java
 public class ScopedSymbolTable {
     // Warning flags - one BitSet per scope level
-    public final Deque<BitSet> warningFlagsStack = new ArrayDeque<>();
+    public final Stack<BitSet> warningFlagsStack = new Stack<>();
     
     // Feature flags - integer bitmask per scope
-    public final Deque<Integer> featureFlagsStack = new ArrayDeque<>();
+    public final Stack<Integer> featureFlagsStack = new Stack<>();
     
     // Strict options - integer bitmask per scope
-    public final Deque<Integer> strictOptionsStack = new ArrayDeque<>();
+    public final Stack<Integer> strictOptionsStack = new Stack<>();
+    
+    // Warning disabled flags - tracks "no warnings 'category'" per scope
+    public final Stack<BitSet> warningDisabledStack = new Stack<>();
+    
+    // Warning fatal flags - tracks "use warnings FATAL => 'category'" per scope
+    public final Stack<BitSet> warningFatalStack = new Stack<>();
 }
 ```
 
 When entering a new scope (block, subroutine, file):
 ```java
-void enterScope() {
+int enterScope() {
     // Clone current flags for new scope
     warningFlagsStack.push((BitSet) warningFlagsStack.peek().clone());
     featureFlagsStack.push(featureFlagsStack.peek());
     strictOptionsStack.push(strictOptionsStack.peek());
+    warningDisabledStack.push((BitSet) warningDisabledStack.peek().clone());
+    warningFatalStack.push((BitSet) warningFatalStack.peek().clone());
+    // returns current scope depth
 }
 ```
 
@@ -85,27 +94,22 @@ public class WarningFlags {
     }
     
     // Each category maps to a bit position
-    public void enableWarning(String category) {
-        int bit = getCategoryBit(category);
-        currentFlags.set(bit);
-        // Also enable subcategories
-        for (String sub : getSubcategories(category)) {
-            enableWarning(sub);
-        }
-    }
+    // Enabling/disabling warnings delegates to ScopedSymbolTable:
+    //   ScopedSymbolTable.enableWarningCategory(category)
+    // which calls setWarningState() to update the current scope's BitSet.
+    // Subcategories are recursively expanded via the hierarchy map.
 }
 ```
 
 ### Strict Options
 
-Strict has three options encoded as bits:
+Strict has three options encoded as bit constants in `Strict.java`:
 
 ```java
-public class StrictOptions {
-    public static final int STRICT_REFS = 1;  // no symbolic refs
-    public static final int STRICT_VARS = 2;  // must declare variables
-    public static final int STRICT_SUBS = 4;  // no barewords as subs
-}
+// In Strict.java (not a separate StrictOptions class)
+public static final int HINT_STRICT_REFS = 0x00000002;
+public static final int HINT_STRICT_SUBS = 0x00000200;
+public static final int HINT_STRICT_VARS = 0x00000400;
 ```
 
 ### CompilerFlagNode
@@ -118,6 +122,9 @@ public class CompilerFlagNode extends AbstractNode {
     private final int featureFlags;
     private final int strictOptions;
     private final int warningScopeId;  // For runtime propagation
+    private final java.util.BitSet warningFatalFlags;
+    private final java.util.BitSet warningDisabledFlags;
+    private final int hintHashSnapshotId;
 }
 ```
 
@@ -147,7 +154,7 @@ We use a runtime mechanism with dynamic scoping:
    ```java
    public static int registerScopeWarnings(Set<String> categories) {
        int scopeId = scopeIdCounter.incrementAndGet();
-       scopeDisabledWarnings.put(scopeId, expandCategories(categories));
+       scopeDisabledWarnings.put(scopeId, expandCategory(categories));
        return scopeId;
    }
    ```
@@ -169,6 +176,10 @@ We use a runtime mechanism with dynamic scoping:
        // ... emit warning
    }
    ```
+   > **Note:** The actual implementation in `Warnings.java` is significantly more complex—it
+   > uses `caller()[9]` warning bits as the primary mechanism for checking whether a warning
+   > category is enabled at the call site, with `${^WARNING_SCOPE}` as an additional
+   > suppression check. The pseudocode above is a simplified illustration.
 
 4. **Automatic Restore**: When scope exits, `DynamicVariableManager` restores `${^WARNING_SCOPE}` to its previous value.
 
@@ -300,4 +311,4 @@ Warnings.warnIf()
 ## See Also
 
 - [dynamic-scope.md](dynamic-scope.md) - How `local` makes runtime scoping work
-- [../design/warnings-scope.md](../design/warnings-scope.md) - Detailed design for warning scope propagation
+- [../design/lexical-warnings.md](../design/lexical-warnings.md) - Detailed design for warning scope propagation
