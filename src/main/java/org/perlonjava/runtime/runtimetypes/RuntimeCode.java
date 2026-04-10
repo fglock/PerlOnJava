@@ -2097,15 +2097,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
             String warningBits = getWarningBitsForCode(code);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
-            // Save caller's call-site warning bits so caller()[9] can retrieve them
-            WarningBitsRegistry.pushCallerBits();
-            // Save caller's $^H so caller()[8] can retrieve them
-            WarningBitsRegistry.pushCallerHints();
-            // Save caller's call-site hint hash so caller()[10] can retrieve them
-            HintHashRegistry.pushCallerHintHash();
+            // Batch push: caller bits, hints, hint hash, and warning bits in one PerlRuntime.current() call
+            PerlRuntime rt = PerlRuntime.current();
+            rt.pushCallerState(warningBits);
             try {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(a, callContext);
@@ -2126,12 +2120,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Consume at normal subroutine boundary
                 return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
             } finally {
-                HintHashRegistry.popCallerHintHash();
-                WarningBitsRegistry.popCallerHints();
-                WarningBitsRegistry.popCallerBits();
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
+                rt.popCallerState(warningBits != null);
             }
         }
 
@@ -2330,15 +2319,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.defined()) {
                 // Look up warning bits for the code's class and push to context stack
                 String warningBits = getWarningBitsForCode(code);
-                if (warningBits != null) {
-                    WarningBitsRegistry.pushCurrent(warningBits);
-                }
-                // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits();
-                // Save caller's $^H so caller()[8] can retrieve them
-                WarningBitsRegistry.pushCallerHints();
-                // Save caller's call-site hint hash so caller()[10] can retrieve them
-                HintHashRegistry.pushCallerHintHash();
+                // Batch push: caller bits, hints, hint hash, and warning bits in one PerlRuntime.current() call
+                PerlRuntime rt = PerlRuntime.current();
+                rt.pushCallerState(warningBits);
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
@@ -2350,12 +2333,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Consume at normal subroutine boundary
                     return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 } finally {
-                    HintHashRegistry.popCallerHintHash();
-                    WarningBitsRegistry.popCallerHints();
-                    WarningBitsRegistry.popCallerBits();
-                    if (warningBits != null) {
-                        WarningBitsRegistry.popCurrent();
-                    }
+                    rt.popCallerState(warningBits != null);
                 }
             }
 
@@ -2496,15 +2474,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.defined()) {
                 // Look up warning bits for the code's class and push to context stack
                 String warningBits = getWarningBitsForCode(code);
-                if (warningBits != null) {
-                    WarningBitsRegistry.pushCurrent(warningBits);
-                }
-                // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits();
-                // Save caller's $^H so caller()[8] can retrieve them
-                WarningBitsRegistry.pushCallerHints();
-                // Save caller's call-site hint hash so caller()[10] can retrieve them
-                HintHashRegistry.pushCallerHintHash();
+                // Batch push: caller bits, hints, hint hash, and warning bits in one PerlRuntime.current() call
+                PerlRuntime rt = PerlRuntime.current();
+                rt.pushCallerState(warningBits);
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
@@ -2516,12 +2488,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Consume at normal subroutine boundary
                     return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
                 } finally {
-                    HintHashRegistry.popCallerHintHash();
-                    WarningBitsRegistry.popCallerHints();
-                    WarningBitsRegistry.popCallerBits();
-                    if (warningBits != null) {
-                        WarningBitsRegistry.popCurrent();
-                    }
+                    rt.popCallerState(warningBits != null);
                 }
             }
 
@@ -2904,13 +2871,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugHooks.enterSubroutine(debugSubName);
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            
             // Push warning bits for FATAL warnings support
+            // Batch push: args + warning bits in one PerlRuntime.current() call
             String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
+            PerlRuntime rt = PerlRuntime.current();
+            rt.pushSubState(a, warningBits);
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -2923,10 +2888,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                popArgs();
+                rt.popSubState(warningBits != null);
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
@@ -3001,13 +2963,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 DebugHooks.enterSubroutine(debugSubName);
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            
             // Push warning bits for FATAL warnings support
+            // Batch push: args + warning bits in one PerlRuntime.current() call
             String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
+            PerlRuntime rt = PerlRuntime.current();
+            rt.pushSubState(a, warningBits);
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -3020,10 +2980,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 return result;
             } finally {
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                popArgs();
+                rt.popSubState(warningBits != null);
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();

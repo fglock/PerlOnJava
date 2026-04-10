@@ -495,6 +495,83 @@ public final class PerlRuntime {
         return rt;
     }
 
+    // ---- Batch push/pop methods for subroutine call hot path ----
+
+    /**
+     * Pushes all caller state in one shot for the static apply() dispatch path.
+     * Replaces 4 separate PerlRuntime.current() lookups with 1.
+     * Called from RuntimeCode's static apply() methods.
+     *
+     * @param warningBits warning bits for the code being called, or null
+     */
+    public void pushCallerState(String warningBits) {
+        if (warningBits != null) {
+            warningCurrentBitsStack.push(warningBits);
+        }
+        // Save caller's call-site warning bits (for caller()[9])
+        warningCallerBitsStack.push(warningCallSiteBits != null ? warningCallSiteBits : "");
+        // Save caller's $^H (for caller()[8])
+        warningCallerHintsStack.push(warningCallSiteHints);
+        // Save caller's hint hash snapshot ID and reset for callee
+        hintCallerSnapshotIdStack.push(hintCallSiteSnapshotId);
+        hintCallSiteSnapshotId = 0;
+    }
+
+    /**
+     * Pops all caller state in one shot for the static apply() dispatch path.
+     * Replaces 4 separate PerlRuntime.current() lookups with 1.
+     *
+     * @param hadWarningBits true if warningBits was non-null on the matching push
+     */
+    public void popCallerState(boolean hadWarningBits) {
+        // Restore hint hash snapshot ID
+        if (!hintCallerSnapshotIdStack.isEmpty()) {
+            hintCallSiteSnapshotId = hintCallerSnapshotIdStack.pop();
+        }
+        // Restore caller hints
+        if (!warningCallerHintsStack.isEmpty()) {
+            warningCallerHintsStack.pop();
+        }
+        // Restore caller bits
+        if (!warningCallerBitsStack.isEmpty()) {
+            warningCallerBitsStack.pop();
+        }
+        // Restore warning bits
+        if (hadWarningBits && !warningCurrentBitsStack.isEmpty()) {
+            warningCurrentBitsStack.pop();
+        }
+    }
+
+    /**
+     * Pushes subroutine entry state (args + warning bits) in one shot.
+     * Replaces 2 separate PerlRuntime.current() lookups with 1.
+     * Called from RuntimeCode's instance apply() methods.
+     *
+     * @param args the @_ arguments array
+     * @param warningBits warning bits for the code being called, or null
+     */
+    public void pushSubState(RuntimeArray args, String warningBits) {
+        argsStack.push(args);
+        if (warningBits != null) {
+            warningCurrentBitsStack.push(warningBits);
+        }
+    }
+
+    /**
+     * Pops subroutine exit state (args + warning bits) in one shot.
+     * Replaces 2 separate PerlRuntime.current() lookups with 1.
+     *
+     * @param hadWarningBits true if warningBits was non-null on the matching push
+     */
+    public void popSubState(boolean hadWarningBits) {
+        if (hadWarningBits && !warningCurrentBitsStack.isEmpty()) {
+            warningCurrentBitsStack.pop();
+        }
+        if (!argsStack.isEmpty()) {
+            argsStack.pop();
+        }
+    }
+
     /**
      * Creates a new independent PerlRuntime (not bound to any thread).
      * Call {@link #setCurrent(PerlRuntime)} to bind it to a thread before use.
