@@ -1518,18 +1518,21 @@ lookups per sub call** — even when the subroutine never uses regex.
 | 2 | Migrate WarningBits/HintHash/args stacks to PerlRuntime fields | WarningBitsRegistry.java, HintHashRegistry.java, RuntimeCode.java, PerlRuntime.java | 14-17 per sub call (separate ThreadLocals -> 1 ThreadLocal) |
 | 2b | Batch pushCallerState/popCallerState and pushSubState/popSubState | PerlRuntime.java, RuntimeCode.java | 8-12 per sub call -> 2 |
 | 2c | Batch RegexState save/restore | RegexState.java | **24 per sub call** (13 getters + 13 setters -> 2) |
+| 2d | Skip RegexState save/restore for subs without regex | EmitterMethodCreator.java, RegexUsageDetector.java | **Entire save/restore eliminated** for non-regex subs |
 
 #### Benchmark Results
 
 | Benchmark | master | branch (pre-opt) | **After all opts** | vs master | vs pre-opt |
 |-----------|--------|-------------------|--------------------|-----------|------------|
-| **closure** | 863 | 569 (-34.1%) | **814** | **-5.7%** | +43.1% |
-| **method** | 436 | 319 (-26.9%) | **399** | **-8.5%** | +25.1% |
+| **closure** | 863 | 569 (-34.1%) | **1177** | **+36.4%** | +106.9% |
+| **method** | 436 | 319 (-26.9%) | **417** | **-4.4%** | +30.7% |
 | **lexical** | 394K | 375K (-4.9%) | **466K** | **+18.2%** | +24.3% |
-| global | 78K | 74K (-5.4%) | **73K** | -6.4% | -0.4% |
+| global | 78K | 74K (-5.4%) | **71K** | -8.6% | -3.4% |
 
-Closure and method are now within the 5-10% range of other benchmarks,
-meeting the optimization goal. Lexical actually got faster than master.
+Closure is now 36% **faster** than master. Method is within 5%. Lexical is 18% faster.
+The closure and lexical improvements come from eliminating unnecessary RegexState
+save/restore for subroutines that don't use regex — an overhead that existed on
+master too (via separate ThreadLocals) but was masked by lower per-lookup cost.
 
 #### Remaining Optimization Opportunities (not yet pursued)
 
