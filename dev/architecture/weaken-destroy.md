@@ -144,6 +144,8 @@ variable to trigger destruction.
 | `RuntimeBase.java` | Defines `refCount`, `blessId` fields on all referent types |
 | `RuntimeScalar.java` | `setLarge()` (increment/decrement), `scopeExitCleanup()`, `undefine()`, `incrementRefCountForContainerStore()` |
 | `RuntimeList.java` | `setFromList()` -- list destructuring with materialized copy refcount undo |
+| `RuntimeHash.java` | `createReferenceWithTrackedElements()` (birth-tracking for anonymous hashes), `delete()` with deferred decrement |
+| `RuntimeArray.java` | `createReferenceWithTrackedElements()` (element tracking, NOT birth-tracked -- see Limitations), `pop()`/`shift()` with deferred decrement |
 | `WeakRefRegistry.java` | Weak reference tracking: forward set + reverse map |
 | `DestroyDispatch.java` | DESTROY method resolution, caching, invocation |
 | `MortalList.java` | Deferred decrements (FREETMPS equivalent) |
@@ -151,6 +153,10 @@ variable to trigger destruction.
 | `ReferenceOperators.java` | `bless()` -- activates tracking |
 | `RuntimeGlob.java` | CODE slot replacement -- optree reaping emulation |
 | `RuntimeCode.java` | `padConstants` registry, `releaseCaptures()`, eval BLOCK capture release in `apply()` |
+| `TiedVariableBase.java` | Tie wrapper refCount increment/decrement for DESTROY on `untie` |
+| `RuntimeRegex.java` | `cloneTracked()` for qr// objects; per-callsite caching for m?PAT? |
+| `EmitStatement.java` | Generates scope-exit `MortalList` bytecode (`pushMark`/`popAndFlush`/`scopeExitCleanup`) |
+| `GlobalRuntimeScalar.java` | `dynamicSaveState()`/`dynamicRestoreState()` refCount displacement for `local` on globals |
 
 ---
 
@@ -172,12 +178,12 @@ Manages all weak references using two identity-based data structures:
 
 | Method | What it does |
 |--------|--------------|
-| `weaken(ref)` | Validates ref is a reference. Adds to both maps. Adjusts refCount: if tracked (>0), decrements strong count (may trigger DESTROY if it hits 0). If untracked (-1) and NOT a CODE ref, transitions to WEAKLY_TRACKED (-2) as a heuristic for weak ref clearing. CODE refs stay at -1 (stash refs bypass setLarge). |
+| `weaken(ref)` | Validates ref is a reference (no-op for undef). If already weak, returns (idempotent -- prevents double-decrement). If referent is already destroyed (`MIN_VALUE`), immediately sets ref to `UNDEF/null` and returns. Otherwise, adds to both maps. Clears `ref.refCountOwned = false` to prevent spurious decrements on scope exit/overwrite. Adjusts refCount: if tracked (>0), decrements strong count; if it hits 0, sets `MIN_VALUE` and triggers DESTROY. If untracked (-1) and NOT a CODE ref, transitions to WEAKLY_TRACKED (-2) as a heuristic for weak ref clearing. CODE refs stay at -1 (stash refs bypass setLarge). |
 | `isweak(ref)` | Returns `weakScalars.contains(ref)`. |
-| `unweaken(ref)` | Removes from both maps. Re-increments refCount and restores `refCountOwned`. |
-| `removeWeakRef(ref, oldReferent)` | Called by `setLarge()` before decrementing. Returns true if the ref was weak, telling the caller to skip the refCount decrement. |
+| `unweaken(ref)` | Removes from both maps. If referent is tracked (`refCount >= 0`), re-increments refCount and restores `refCountOwned = true`. If referent is untracked, destroyed, or WEAKLY_TRACKED, no refCount adjustment (unweaken is effectively a no-op for these states). |
+| `removeWeakRef(ref, oldReferent)` | Called by `setLarge()` before decrementing. Returns true if the ref was weak, telling the caller to skip the refCount decrement. Cleans up empty entries in the reverse map. |
 | `hasWeakRefsTo(referent)` | Returns true if any weak references point to the given referent. |
-| `clearWeakRefsTo(referent)` | Called during destruction. Skips CODE referents (stash refs invisible to refcounting would cause false clears). For non-CODE: sets every weak scalar pointing at this referent to `UNDEF/null`. Removes all entries from both maps. |
+| `clearWeakRefsTo(referent)` | Called during destruction (before DESTROY method runs). Skips CODE referents (stash refs invisible to refcounting would cause false clears). For non-CODE: sets every weak scalar pointing at this referent to `UNDEF/null`. Removes all entries from both maps. |
 
 **Design decision -- external maps, not per-scalar flags:** Weak refs are rare.
 Using identity-based external maps avoids adding a field to every
@@ -199,7 +205,14 @@ Resolves and calls DESTROY methods. Uses two caches:
 Both caches are invalidated by `invalidateCache()`, called whenever `@ISA`
 changes or methods are redefined.
 
+**`classHasDestroy(blessId, className)`:** Checks (via cache) whether a class
+defines DESTROY or AUTOLOAD. Populates the `destroyClasses` BitSet on first
+lookup per class. Called by `bless()` to decide whether to activate tracking.
+
 **`callDestroy(referent)` flow:**
+
+The public `callDestroy()` handles steps 1-4; the private `doCallDestroy()`
+handles steps 5-11.
 
 1. **Precondition:** Caller has already set `refCount = MIN_VALUE`.
 2. Calls `WeakRefRegistry.clearWeakRefsTo(referent)` -- clears all weak
@@ -207,20 +220,22 @@ changes or methods are redefined.
    both blessed objects (before DESTROY) and WEAKLY_TRACKED objects (unblessed,
    reached via `undefine()` WEAKLY_TRACKED handling).
 3. If referent is `RuntimeCode`, calls `releaseCaptures()`.
-4. Looks up class name from `blessId`. If unblessed, returns (no DESTROY
-   to call, but weak refs and captures have already been cleaned up).
+4. Looks up class name from `blessId`. If unblessed: cascades into container
+   elements via `MortalList.scopeExitCleanupHash/Array()` (so that tracked
+   refs inside unblessed containers get their refCounts decremented), then
+   returns. No DESTROY to call, but weak refs, captures, and container
+   elements have been cleaned up.
 5. Resolves DESTROY method via cache or `InheritanceResolver`.
 6. Handles AUTOLOAD: sets `$AUTOLOAD = "ClassName::DESTROY"`.
 7. Saves/restores `$@` around the call (DESTROY must not clobber `$@`).
-8. Builds a `$self` reference with the correct type (HASHREFERENCE, etc.).
+8. Builds a `$self` reference with the correct type (`GLOBREFERENCE` for
+   `RuntimeGlob`, then `HASHREFERENCE`/`ARRAYREFERENCE`/etc. -- note:
+   `RuntimeGlob` is checked before `RuntimeScalar` because it is a subclass).
 9. Calls `RuntimeCode.apply(destroyMethod, args, VOID)`.
 10. **Cascading destruction:** After DESTROY returns, walks the destroyed
-    object's elements. For hashes and arrays, walks both blessed AND
-    unblessed elements: `MortalList.scopeExitCleanupHash/Array()` handles
-    tracked refs, then `clearWeakRefsInHash/Array()` handles WEAKLY_TRACKED
-    refs inside the container. This is necessary because WEAKLY_TRACKED
-    elements inside a blessed container wouldn't otherwise get their weak
-    refs cleared (they have no DESTROY and no scope exit). Then flushes.
+    object's elements via `MortalList.scopeExitCleanupHash/Array()`, then
+    flushes. This ensures tracked refs inside the destroyed container get
+    their refCounts decremented and may trigger further DESTROY calls.
 11. **Exception handling:** Catches exceptions, converts to
     `WarnDie.warn("(in cleanup) ...")` -- matching Perl 5 semantics.
 
@@ -250,7 +265,7 @@ negligible for programs that don't use DESTROY.
 |--------|---------|
 | `deferDecrement(base)` | Unconditionally adds to pending. |
 | `deferDecrementIfTracked(scalar)` | Guarded: skips if `!active`, `!refCountOwned`, or referent's `refCount <= 0`. Clears `refCountOwned` before deferring. |
-| `deferDecrementIfNotCaptured(scalar)` | Like above but also skips if `captureCount > 0`. Used by explicit `return`. |
+| `deferDecrementIfNotCaptured(scalar)` | If `captureCount > 0`, delegates to `RuntimeScalar.scopeExitCleanup()` (which handles CODE vs non-CODE captured vars differently). Otherwise behaves like `deferDecrementIfTracked`. Used by explicit `return`. |
 | `deferDestroyForContainerClear(elements)` | For `%hash = ()` / `@array = ()`. Handles owned refs and never-stored blessed objects (bumps refCount 0 -> 1 to ensure DESTROY fires). |
 | `scopeExitCleanupHash(hash)` | Recursively walks a hash's values, deferring refCount decrements for tracked blessed refs (including inside nested containers). Called at scope exit for `my %hash` and during cascading destruction in `callDestroy`. |
 | `scopeExitCleanupArray(arr)` | Same as above but for arrays. Called at scope exit for `my @array` and during cascading destruction. |
@@ -319,19 +334,23 @@ Called by generated bytecode when a lexical variable goes out of scope:
 #### `undefine()` -- Explicit `undef $obj`
 
 Handles explicit undef with special cases:
-- CODE refs: releases captures, replaces with empty `RuntimeCode`.
-- Tracked (>0): decrements; DESTROY if it hits 0.
-- WEAKLY_TRACKED (-2): triggers callDestroy to clear weak refs. This is
-  the primary clearing mechanism for WEAKLY_TRACKED objects. Safe because
-  these are unblessed objects with no DESTROY method.
+- CODE refs: releases captures, invalidates inheritance cache, replaces
+  with empty `RuntimeCode`.
+- Tracked (>0) with `refCountOwned`: decrements; sets `MIN_VALUE` and
+  calls DESTROY if it hits 0. Scalars without `refCountOwned` skip the
+  decrement (they don't own the refCount increment).
+- WEAKLY_TRACKED (-2): sets `MIN_VALUE` and triggers callDestroy to clear
+  weak refs. This is the primary clearing mechanism for WEAKLY_TRACKED
+  objects. Safe because these are unblessed objects with no DESTROY method.
 - Untracked (-1): no refCount action.
+- In all cases, sets the scalar to `UNDEF/null` BEFORE the refCount
+  decrement (Perl 5 semantics: DESTROY sees the new state of the variable).
 - Flushes `MortalList` at the end.
 
 #### `incrementRefCountForContainerStore()` -- Container Tracking
 
-Called after storing a reference in a container (array/hash element) when
-`MortalList.active` is true. Increments the referent's refCount for
-container ownership.
+Called after storing a reference in a container (array/hash element).
+Increments the referent's refCount for container ownership.
 
 **Guard:** `!scalar.refCountOwned` -- skips elements whose refCount was
 already incremented during creation (via `set()` → `setLarge()`). This
@@ -363,9 +382,12 @@ if (assigned != null && assigned.refCountOwned
 }
 ```
 
-Array and hash targets don't need this undo because they take direct
+**Plain** array targets don't need this undo because they take direct
 ownership of the remaining materialized copies (the copies become the
-container's elements and remain alive).
+container's elements and remain alive). However, **tied/autovivify array
+targets** and **hash targets** DO have undo blocks because they create new
+copies via `setFromList()`/`createHashForAssignment()`, so the materialized
+copies' refCount increments would otherwise leak.
 
 ### 5. bless() -- Tracking Activation
 
@@ -397,10 +419,13 @@ exit path (after END blocks, before `closeAllHandles`).
 1. Sets `${^GLOBAL_PHASE}` to `"DESTRUCT"`.
 2. Walks all global scalars -> `destroyIfTracked()`.
 3. Walks all global arrays -> iterates elements -> `destroyIfTracked()`.
+   Skips `TIED_ARRAY` containers (tie objects may be invalid at destruction time).
 4. Walks all global hashes -> iterates values -> `destroyIfTracked()`.
+   Skips `TIED_HASH` containers (same reason).
 
-`destroyIfTracked()` checks if a scalar holds a reference with `refCount >= 0`,
-then sets `MIN_VALUE` and calls `DestroyDispatch.callDestroy()`.
+`destroyIfTracked()` checks if a scalar holds a reference (via `REFERENCE_BIT`)
+with `refCount >= 0`, then sets `MIN_VALUE` and calls
+`DestroyDispatch.callDestroy()`.
 
 This catches objects that "escaped" into global/stash variables and were never
 explicitly dropped.
@@ -418,8 +443,11 @@ PerlOnJava emulates this with "pad constants":
 1. **Compile time** (`EmitOperator.handleCreateReference()`): When `\` is applied
    to a `StringNode`, the cached `RuntimeScalarReadOnly` index is recorded in
    `JavaClassInfo.padConstants`.
-2. **Subroutine creation** (`EmitSubroutine.java`, `SubroutineParser.java`):
-   Pad constants are transferred to `RuntimeCode.padConstantsByClassName`.
+2. **Subroutine creation** (`EmitSubroutine.java`): Pad constants are
+   transferred to `RuntimeCode.padConstantsByClassName`, from where
+   `makeCodeObject()` reads them. `SubroutineParser.java` transfers them
+   directly to the placeholder's `padConstants` field (bypassing the
+   class-name registry).
 3. **CODE slot replacement** (`RuntimeGlob.set()`): Before overwriting the CODE
    slot, calls `clearPadConstantWeakRefs()` on the old code, which clears any
    weak references to those cached constants.
@@ -429,18 +457,25 @@ PerlOnJava emulates this with "pad constants":
 **Path:** `org.perlonjava.runtime.runtimetypes.RuntimeCode`
 
 **`releaseCaptures()`:** Called when a CODE ref's refCount reaches 0 (via
-`callDestroy()`) or when a CODE ref is explicitly `undef`'d. Decrements
+`callDestroy()`, which explicitly calls `releaseCaptures()` for `RuntimeCode`
+referents) or when a CODE ref is explicitly `undef`'d. Decrements
 `captureCount` on each captured scalar. For captured scalars where
 `scopeExited == true` (their declaring scope already exited), calls
 `MortalList.deferDecrementIfTracked()` to trigger the deferred destruction
 that `scopeExitCleanup()` couldn't perform earlier.
 
+**Closure birth-tracking:** `makeCodeObject()` sets `code.refCount = 0` for
+closures that have captures. Without this, closures wouldn't be tracked and
+`callDestroy()` -> `releaseCaptures()` would never fire.
+
 **`apply()` -- eval BLOCK capture release:** `eval BLOCK` is compiled as
-`sub { ... }->()` with `useTryCatch=true`. The `apply()` method's finally
-block calls `code.releaseCaptures()` when `code.isEvalBlock` is true. This
-ensures captured variables' `captureCount` is decremented immediately after
-the eval block completes, rather than waiting for GC. Without this, weak
-refs inside eval blocks wouldn't be cleared until the next GC cycle.
+`sub { ... }->()` with `useTryCatch=true`. The first `apply()` overload's
+finally block calls `code.releaseCaptures()` when `code.isEvalBlock` is true.
+This ensures captured variables' `captureCount` is decremented immediately
+after the eval block completes, rather than waiting for GC. (eval STRING uses
+`applyEval()`, which already calls `releaseCaptures()` in its own finally
+block.) Without this, weak refs inside eval blocks wouldn't be cleared until
+the next GC cycle.
 
 **Note:** `apply()` does NOT call `flush()` at the top of the method (this
 was removed). Flushing happens at statement boundaries via `setLarge()` and
@@ -531,18 +566,19 @@ my $weak;
 
 | Condition | Overhead |
 |-----------|----------|
-| No DESTROY classes exist | Zero. `MortalList.active == false` gates all paths. |
-| DESTROY classes exist but object is not blessed into one | Minimal. `refCount == -1` short-circuits in `setLarge()`. |
+| Object is not blessed into a DESTROY class | Minimal. `refCount == -1` short-circuits all tracking in `setLarge()`. `MortalList.flush()` is a no-op when the pending list is empty. |
 | Object blessed into DESTROY class | Full tracking: increment/decrement in `setLarge()`, deferred decrement in `scopeExitCleanup()`. |
 
 ### Hot Path Costs
 
-- **`setLarge()` with `MortalList.active == false`**: One boolean check, no
-  other overhead.
+- **`setLarge()` with untracked referent** (`refCount == -1`): One integer
+  comparison per reference assignment, not taken. Plus `MortalList.flush()`
+  at the end (one boolean + one `isEmpty()` check, trivially predicted).
 - **`setLarge()` with tracked referent**: ~4 field reads + 1 increment +
   1 decrement + `MortalList.flush()` (usually a no-op if pending list is empty).
 - **`WeakRefRegistry` checks**: Only in `setLarge()` when the scalar was
-  previously holding a reference and `MortalList.active` is true.
+  previously holding a reference (checks `removeWeakRef` to decide whether
+  to skip the refCount decrement).
 
 ### Benchmark Results (2026-04-08)
 
@@ -568,8 +604,8 @@ Measured on macOS (Apple Silicon), 3 runs per benchmark, median CPU time.
   one-time cost per new blessId and is cached.
 
 - **Non-OOP benchmarks** (closure, lexical, global, string, regex): All within
-  +/-3.5%, consistent with normal JIT warmup variance. The `MortalList.active`
-  gate keeps these paths zero-cost.
+  +/-3.5%, consistent with normal JIT warmup variance. The `refCount == -1`
+  short-circuit keeps these paths nearly zero-cost.
 
 - **life_bitpacked** (+5.1%): Does not use `bless`, so this is likely JIT
   variance or cache effects from the additional fields on `RuntimeBase`
@@ -1114,8 +1150,8 @@ Tests are organized in three tiers:
 
 | Directory | Files | Focus |
 |-----------|-------|-------|
-| `src/test/resources/unit/destroy.t` | 1 file, 11 subtests | Basic DESTROY semantics: scope exit, multiple refs, exceptions, inheritance, re-bless, void-context delete |
-| `src/test/resources/unit/weaken.t` | 1 file, 34 subtests | Basic weaken: isweak flag, weak ref access, copy semantics, weaken+DESTROY interaction |
+| `src/test/resources/unit/destroy.t` | 1 file, 14 subtests | Basic DESTROY semantics: scope exit, multiple refs, exceptions, inheritance, re-bless, void-context delete, untie DESTROY (immediate and deferred) |
+| `src/test/resources/unit/weaken.t` | 1 file, 4 subtests | Basic weaken: isweak flag, weak ref access, copy semantics, weaken+DESTROY interaction |
 | `src/test/resources/unit/refcount/` | 8 files | Comprehensive: circular refs, self-refs, tree structures, return values, inheritance chains, edge cases (weaken on non-ref, resurrection, closures, deeply nested structures, multiple simultaneous weak refs) |
 | `src/test/resources/unit/refcount/weaken_edge_cases.t` | 42 subtests | Edge cases: nested weak refs, WEAKLY_TRACKED heuristic, multiple strong refs, scope exit clearing |
 
