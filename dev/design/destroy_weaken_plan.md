@@ -3008,9 +3008,64 @@ scope-exit overhead for integer-only loops.
 
 ### 16.6 Testing & Revert Policy
 
+#### Git workflow
+
+Work on a **separate branch** forked from `feature/destroy-weaken`. This keeps the
+working destroy/weaken implementation safe while experimenting with optimizations.
+
+```bash
+# 1. Start from the current destroy-weaken branch
+git fetch origin
+git checkout feature/destroy-weaken
+git pull origin feature/destroy-weaken
+
+# 2. Create a new branch for optimization work
+git checkout -b feature/destroy-weaken-optimize
+
+# 3. Implement one phase at a time, commit each phase separately
+#    (see workflow below)
+
+# 4a. If optimization succeeds (benchmarks meet targets):
+git checkout feature/destroy-weaken
+git merge feature/destroy-weaken-optimize
+git push origin feature/destroy-weaken
+
+# 4b. If optimization fails (no measurable gain or breaks tests):
+#    Document what was tried and why it failed (see "Documenting failures" below),
+#    then delete the branch:
+git checkout feature/destroy-weaken
+git branch -D feature/destroy-weaken-optimize
+```
+
+**Why a separate branch**: Optimization work is exploratory. Some phases may not deliver
+gains, or may interact badly with each other. Working on a separate branch means you can
+abandon failed attempts without polluting the main feature branch history.
+
+#### Documenting failures
+
+If a phase is attempted but does not deliver the expected gain, **do NOT silently delete
+the work**. Before discarding:
+
+1. Return to `feature/destroy-weaken`
+2. Add an entry in **§15 (Approaches Tried and Reverted)** with this format:
+   ```
+   ### Xn. Phase O<N>: <title> (REVERTED — no gain)
+
+   **What it did**: <1-2 sentence description of the change>
+
+   **Why it seemed promising**: <what the analysis predicted>
+
+   **Actual result**: <benchmark numbers before/after>
+
+   **Why it failed**: <root cause — e.g., JIT already handles this,
+   the bottleneck was elsewhere, etc.>
+   ```
+3. Commit this documentation to `feature/destroy-weaken` so the next engineer
+   knows what was already tried and why it did not work.
+
 #### Workflow for each optimization phase
 
-1. **Create a commit** with the optimization (on `feature/destroy-weaken`)
+1. **Implement** the optimization (on `feature/destroy-weaken-optimize`)
 2. **Build**: `make clean && make` — must pass, no exceptions
 3. **Run correctness tests**:
    ```bash
