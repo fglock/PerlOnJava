@@ -1039,6 +1039,58 @@ will corrupt shared mutable static state.
    - Lock is reentrant so nested evals work without deadlock
    - Future optimization: migrate parser/emitter static state to per-runtime, remove lock
 
+### Reentrancy Analysis (2026-04-10)
+
+**Question:** What happens when `eval "string"` triggers a BEGIN block that itself
+requires a module (nested compilation)?
+
+**Answer:** `ReentrantLock` handles this correctly. The call chain runs entirely on
+the same thread:
+
+```
+eval "use Foo"
+  → EvalStringHandler.evalString() acquires COMPILE_LOCK (count=1)
+    → Parser.parse() encounters `use Foo` → BEGIN block
+      → SpecialBlockParser.runSpecialBlock() → executePerlAST()
+        → require Foo → PerlLanguageProvider.compilePerlCode()
+          → COMPILE_LOCK.lock() — same thread, count=2
+          → compile module → unlock (count=1)
+        → continue executing BEGIN block (execution, no lock needed — but lock
+          is still held at count=1 by the outer compilation)
+    → Parser continues parsing the rest of the eval string
+  → unlock (count=0)
+```
+
+Same-thread reentrancy works because `ReentrantLock` increments the hold count on
+each nested `lock()` and decrements on each `unlock()`.
+
+**Bug found and fixed:** `evalStringWithInterpreter` used `isHeldByCurrentThread()`
+in its `finally` block to decide whether to release the lock. This over-decrements
+in nested scenarios:
+
+```
+Outer compilation holds lock (count=1)
+  → BEGIN triggers inner evalStringWithInterpreter
+    → lock (count=2)
+    → compile OK, explicit unlock before execution (count=1)
+    → execution runs
+    → finally: isHeldByCurrentThread() → TRUE (outer holds it!)
+    → unlock (count=0) ← BUG: released the outer's lock!
+```
+
+**Fix (commit 510106cd9):** Replaced `isHeldByCurrentThread()` with a `boolean
+compileLockReleased` flag that tracks whether the success-path unlock already
+happened. The finally block only unlocks if the flag is false (error path).
+
+**Why not release the lock during BEGIN execution?** `runSpecialBlock` is called
+**mid-parse** — the parser is suspended with its state intact (token position,
+symbol table, scope depth). That state lives in shared statics like
+`SpecialBlockParser.symbolTable` and `ByteCodeSourceMapper` collections. If the
+lock were released, another thread could start compiling and corrupt this state.
+Releasing the lock around BEGIN blocks is only viable after migrating parser/emitter
+state from shared statics to per-compilation-context (which would eliminate the
+lock entirely).
+
 ### Next Steps
 1. **Phase 6:** Implement `threads` module (requires runtime cloning)
 2. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
