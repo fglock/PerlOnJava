@@ -192,7 +192,9 @@ public class UnicodeResolver {
                     try {
                         long codePoint = Long.parseLong(hexStr, 16);
                         if (codePoint > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            // JVM only supports Unicode up to U+10FFFF; silently clamp
+                            // (Perl supports 31-bit/32-bit code points, but Java doesn't)
+                            codePoint = 0x10FFFF;
                         }
                         resultSet.add((int) codePoint);
                     } catch (NumberFormatException e) {
@@ -212,11 +214,14 @@ public class UnicodeResolver {
                         long start = Long.parseLong(startHex, 16);
                         long end = Long.parseLong(endHex, 16);
 
+                        // JVM only supports Unicode up to U+10FFFF; clamp values
+                        // (Perl supports 31-bit/32-bit code points, but Java doesn't)
                         if (start > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            // Entire range is beyond JVM limit; skip it
+                            continue;
                         }
                         if (end > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            end = 0x10FFFF;
                         }
                         if (start > end) {
                             throw new IllegalArgumentException("Illegal range in \"" + line.trim() + "\" in expansion of " + propertyName);
@@ -496,7 +501,10 @@ public class UnicodeResolver {
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
             // Check for user-defined properties (Is... or In...)
-            if (property.matches("^(.*::)?([Ii][sn])[A-Z].*")) {
+            // Perl treats ANY property starting with Is/In (case-insensitive prefix)
+            // as potentially user-defined, regardless of the character after the prefix
+            // (e.g., Is_q, IsMyProp, InMyBlock all trigger user-defined lookup)
+            if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
                 String userProp = tryUserDefinedProperty(property, recursionSet);
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
