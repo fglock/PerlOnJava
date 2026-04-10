@@ -1102,6 +1102,41 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported hash dereference");
                     }
+                } else if (leftOp.operator.equals("\\")) {
+                    // Ref aliasing: \$y = $ref
+                    // Check that refaliasing feature is enabled
+                    if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+                        bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
+                    }
+                    // Handle scalar ref aliasing: \$y = $ref
+                    if (leftOp.operand instanceof OperatorNode varNode && varNode.operator.equals("$")) {
+                        String varName;
+                        if (varNode.operand instanceof IdentifierNode idNode) {
+                            varName = "$" + idNode.name;
+                        } else {
+                            bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target");
+                            return;
+                        }
+
+                        if (bytecodeCompiler.hasVariable(varName)) {
+                            int targetReg = bytecodeCompiler.getVariableRegister(varName);
+                            // Dereference the RHS to get the aliased scalar
+                            int derefReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(derefReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            // Alias: make targetReg share the same object as derefReg
+                            // This creates a true alias (same RuntimeScalar object)
+                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(derefReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                        } else {
+                            bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                        }
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target: " + leftOp.operator);
+                    }
                 } else {
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");

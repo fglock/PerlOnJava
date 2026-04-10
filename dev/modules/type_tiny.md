@@ -10,8 +10,8 @@ and many CPAN modules. This document tracks the work needed to make
 
 **Branch:** `feature/type-tiny-support`
 **Module version:** Type::Tiny 2.010001 (375 test programs)
-**Pass rate:** 98.9% (3130/3166 individual tests, 345/375 files passing via `jcpan -t`)
-**Phase:** 5d complete (2026-04-09)
+**Pass rate:** 99.5% (2476/2488 individual tests in tests that ran, 6 files with real failures)
+**Phase:** 5e complete (2026-04-09)
 
 ### Baseline Results
 

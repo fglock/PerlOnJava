@@ -1423,8 +1423,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          int callContext) {
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
-            if (RuntimeScalarType.isReference(runtimeScalar)) {
-                int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            // Unwrap READONLY_SCALAR for blessId check (same as in call())
+            RuntimeScalar invocant = runtimeScalar;
+            while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+                invocant = (RuntimeScalar) invocant.value;
+            }
+            if (RuntimeScalarType.isReference(invocant)) {
+                int blessId = ((RuntimeBase) invocant.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
                     int cacheIndex = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
@@ -1547,21 +1552,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         String methodName = method.toString();
 
+        // Unwrap READONLY_SCALAR for method dispatch.
+        // Constants created via `use constant` with blessed refs go through
+        // Internals::SvREADONLY which wraps the scalar in READONLY_SCALAR.
+        // We must unwrap to see the actual reference type and blessId.
+        RuntimeScalar invocant = runtimeScalar;
+        while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+            invocant = (RuntimeScalar) invocant.value;
+        }
+
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference(runtimeScalar)) {
+        if (RuntimeScalarType.isReference(invocant)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
-            int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (runtimeScalar.type == GLOBREFERENCE) {
+                if (invocant.type == GLOBREFERENCE) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
                     ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-                } else if (runtimeScalar.type == REGEX) {
+                } else if (invocant.type == REGEX) {
                     // qr// objects are implicitly blessed into the Regexp class in Perl 5
                     // This allows $qr->isa("Regexp"), $qr->can("..."), etc.
                     perlClassName = "Regexp";
@@ -1572,15 +1586,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
-        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+        } else if (invocant.type == RuntimeScalarType.GLOB) {
             // Bare typeglob used as method invocant (e.g., *FH->print(...))
             // Auto-bless to IO::File, same as GLOBREFERENCE
             perlClassName = "IO::File";
             ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-        } else if (!runtimeScalar.getDefinedBoolean()) {
+        } else if (!invocant.getDefinedBoolean()) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
-            perlClassName = runtimeScalar.toString();
+            perlClassName = invocant.toString();
             if (perlClassName.isEmpty()) {
                 throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
             }
