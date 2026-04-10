@@ -972,6 +972,15 @@ can now coexist within the same JVM process with isolated state.
 - evalCache/methodHandleCache are per-runtime (not shared) — simpler, avoids
   cross-runtime class compatibility issues
 
+### Multiplicity Demo (2026-04-10)
+- Created `dev/sandbox/MultiplicityDemo.java` — launches N threads, each with its
+  own PerlRuntime, compiles and executes a Perl script, captures per-thread STDOUT
+- Uses `CountDownLatch` to synchronize execution start (CyclicBarrier caused deadlocks
+  when a thread failed before reaching await)
+- Compilation is serialized via `COMPILE_LOCK` (parser has shared static state — Phase 0)
+- 3 sample scripts prove isolation: each has its own `$_`, `$shared_test`, regex state, `@INC`
+- Run with: `./dev/sandbox/run_multiplicity_demo.sh`
+
 ### Next Steps
 1. **Phase 0:** Add synchronization for true thread safety (currently single-threaded OK)
 2. **Phase 6:** Implement `threads` module (requires runtime cloning)
