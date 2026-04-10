@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.15  
+**Version**: 5.16  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.15 — fix op/for.t, qr-72922.t, op/eval.t, op/runlevel.t regressions)  
+**Updated**: 2026-04-09 (v5.16 — fix ExifTool StackOverflowError in circular ref traversal)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1869,6 +1869,8 @@ sub DESTROY {
 - [x] JVM WeakReference feasibility study (2026-04-08): Analyzed 7 approaches for fixing
   remaining 6 subtests. Concluded: JVM GC non-determinism makes all GC-based approaches
   unviable; only full refcounting from birth can fix tests 10/11 (§14)
+- [x] ExifTool StackOverflow fix (2026-04-09): Converted `deferDecrementRecursive()` from
+  recursive to iterative with cycle detection. ExifTool: 111/113 pass, 0/597 subtests failed.
 - [x] Force-clear fix for unblessed weak refs (2026-04-09):
   - **Root cause**: Birth-tracked anonymous hashes accumulate overcounted refCount
     through function boundaries (e.g., Moo's constructor chain creates `{}`,
@@ -2019,7 +2021,7 @@ for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modif
 | overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `901801c4c`: "fix: skip tied arrays/hashes in global destruction"
+- `886f7e171`: "Fix StackOverflowError in deferDecrementRecursive for circular refs"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
@@ -2043,6 +2045,19 @@ to Perl source.
 3. **Update `moo_support.md`** with final Moo test results and analysis
 4. **Consider PR merge** once all regressions are resolved
 5. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
+
+#### Image::ExifTool Test Results (2026-04-09)
+
+After fixing the StackOverflowError in `deferDecrementRecursive` (commit `886f7e171`):
+- **111/113 test programs pass** (was crashing entirely with StackOverflow before)
+- **0/597 subtests failed** (all subtests that ran passed)
+- **2 test programs** (DNG.t, Nikon.t) exit with non-zero status due to
+  NullPointerException in Writer.pl line 466 (`$$delGroup{$grp} = 1;`).
+  This is a pre-existing PerlOnJava Writer.pl compatibility issue, NOT related
+  to DESTROY/weaken. The NPE occurs during normal tag-writing, not during cleanup.
+- **"(in cleanup)" warnings**: IO::Uncompress::Base and IO::Compress::Base emit
+  "Not a GLOB reference" warnings during DESTROY. These are cosmetic —
+  the DESTROY handlers encounter partially-freed globs, but don't affect test results.
 
 ---
 
@@ -2488,6 +2503,15 @@ subtests passing.
      clearWeakRefsTo() to skip RuntimeCode objects entirely.
   3. **Result**: Moo 70/71 programs, 839/841 subtests (99.8%). Remaining 2 failures in
      overloaded-coderefs.t are B::Deparse limitations.
+- **v5.16** (2026-04-09): Fix ExifTool StackOverflowError in circular ref traversal:
+  1. Converted `MortalList.deferDecrementRecursive()` from recursive to iterative using
+     `ArrayDeque<RuntimeScalar>` work queue + `IdentityHashMap`-based visited set.
+     ExifTool's self-referential hashes caused infinite recursion -> StackOverflowError.
+  2. ExifTool test results: 111/113 programs pass, 0/597 subtests failed. Two programs
+     (DNG.t, Nikon.t) fail with NPE in Writer.pl -- pre-existing, not DESTROY-related.
+  3. "(in cleanup) Not a GLOB reference" warnings from IO::Compress/Uncompress DESTROY
+     handlers are cosmetic and don't affect test correctness.
+  Files: `MortalList.java`
 - **v5.15** (2026-04-09): Fix Perl 5 core test regressions (op/for.t, qr-72922.t, op/eval.t,
   op/runlevel.t):
   1. **Pre-flush removal**: `MortalList.flush()` before `pushMark()` in scope exit caused
