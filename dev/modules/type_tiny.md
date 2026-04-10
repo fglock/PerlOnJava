@@ -388,7 +388,7 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
     because `local @_ = @_` fix unlocked previously-dying code paths in
     Type::Params::Alternatives multisig dispatch.
 
-### Remaining 30 Failing Test Files (36 individual subtest failures)
+### Remaining 30 Failing Test Files (after Phase 5d, 36 individual subtest failures)
 
 **Tests that pass all subtests but exit non-zero (4 files, 0 real failures):**
 
@@ -435,15 +435,74 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `Moo/inflation.t` | 9/11 | Moo → Moose inflation |
 | `gh14.t` | 0/1 | Deep coercion edge case |
 
+- [x] Phase 5e: Fix `our` list in eval, empty prototype parser, eval local restore (2026-04-09)
+  - **`our ($a, $b)` in eval STRING:** The list form of `our` in eval STRING reused
+    the captured register from outer `my` variables without rebinding to the package
+    global. Added `LOAD_GLOBAL_SCALAR/ARRAY/HASH` emission in the list `our` path to
+    match the single-variable `our` handling.
+  - **Empty prototype parser:** For subs with empty prototype `()`, `parsePrototypeArguments`
+    was still called and incorrectly checked for consecutive commas in the outer context
+    (e.g., `Num ,=> Int` seen as syntax error). Added early return for empty prototypes.
+  - **eval {} local variable restoration:** The interpreter's `eval {}` block did not
+    restore `local` variables at block exit. Added `evalLocalLevelStack` tracking to
+    properly scope `local` variables inside eval blocks, matching Perl 5 semantics.
+  - Files: `BytecodeCompiler.java`, `PrototypeArgs.java`, `BytecodeInterpreter.java`
+  - Tests fixed:
+    - `Type-Tiny-Enum/sorter.t` (0/1 → 1/1) — our list fix
+    - `Type-Tiny/list-methods.t` (0/2 → 2/2) — our list fix
+    - `Type-Tiny-Intersection/cmp.t` (0/0 → 17/17) — empty prototype fix
+    - `Type-Params/multisig-gotonext.t` (1/6 → 8/8) — eval local restore fix
+    - `00-begin.t` (0/0 → 1/1) — eval local restore fix
+
+### Remaining Failing Test Files (after Phase 5e)
+
+**Tests with 0 subtests (9 files, missing features/deps):**
+
+| Test | Issue |
+|------|-------|
+| `Eval-TypeTiny/aliases-native.t` | `\$var = \$other` ref aliasing not supported |
+| `Eval-TypeTiny/aliases-tie.t` | TIESCALAR not found (class loading issue) |
+| `Type-Library/exportables.t` | `+Rainbow` sub not found (exporter edge case) |
+| `Type-Registry/lexical.t` | `builtin::export_lexically` not implemented |
+| `Type-Tiny-Enum/exporter_lexical.t` | `builtin::export_lexically` not implemented |
+| `Types-Standard/strmatch-allow-callbacks.t` | `(?{...})` code blocks in regex |
+| `Types-Standard/strmatch-avoid-callbacks.t` | `(?{...})` code blocks in regex |
+| `Types-Standard/tied.t` | Unsupported variable type for `tie()` |
+| `gh1.t` | Dies early |
+
+**Tests with actual subtest failures (6 files, 12 failures):**
+
+| Test | Result | Root Cause |
+|------|--------|-----------|
+| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs |
+| `Eval-TypeTiny/lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
+| `Type-Tie/01basic.t` | 15/17 | Tied array edge cases |
+| `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
+| `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
+| `Type-Tie/basic.t` | 1/2 | Unsupported tie on arrays |
+
+**Tests with runner flakiness (varies per run, ~5 Moo tests):**
+
+| Test | Best Result | Issue |
+|------|-------------|-------|
+| `Type-Library/exportables-duplicated.t` | 0/1 | `caller()` corruption after eval require |
+| `Moo/basic.t` | 4/5 | Moo isa coercion |
+| `Moo/coercion.t` | 9/19 | Moo coercion inlining |
+| `Moo/exceptions.t` | 13/15 | Exception `->value` metadata |
+| `Moo/inflation.t` | 9/11 | Moo → Moose inflation |
+| `gh14.t` | 0/1 | Deep coercion edge case |
+
 ### Next Steps
-1. Investigate `multisig-gotonext.t` — `goto &next_handler` with `@_` propagation
-2. Investigate sort comparator callbacks (`sorter.t`, `list-methods.t`)
-3. Address Tie-related failures (may require deeper tie infrastructure work)
-4. Investigate Moo coercion failures (5 test files)
+1. Address Tie-related failures (4 files, requires deeper tie infrastructure work)
+2. Investigate `caller()` corruption after `eval require` (exportables-duplicated.t)
+3. Investigate Moo coercion failures (5 test files)
+4. Consider B::Deparse output compatibility (1 test)
 
 ### Open Questions
 - `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
   at Type/Tiny/Union.pm line 60 — separate runtime issue, not parser-related
+- Test runner shows variable error counts (29-66 `!` errors) due to parallel JVM startup
+  contention — actual failures are consistent across runs
 
 ---
 
