@@ -471,8 +471,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
         String modifierStr = modifiers.toString();
         
-        // Check if /o modifier is present
-        if (modifierStr.contains("o")) {
+        // Check if /o or m?PAT? modifier is present (both need per-callsite caching
+        // to preserve state: /o caches the compiled pattern, m?PAT? preserves the
+        // 'matched' flag that tracks whether the pattern has already matched once)
+        if (modifierStr.contains("o") || modifierStr.contains("?")) {
             // Check if we already have a cached regex for this callsite
             RuntimeScalar cached = optimizedRegexCache.get(callsiteId);
             if (cached != null) {
@@ -485,7 +487,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return result;
         }
         
-        // No /o modifier, use normal compilation
+        // No /o or m?PAT? modifier, use normal compilation
         return getQuotedRegex(patternString, modifiers);
     }
 

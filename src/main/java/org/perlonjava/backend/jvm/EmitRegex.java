@@ -266,19 +266,20 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
-        // Check if /o modifier is present
-        boolean hasOModifier = false;
+        // Check if /o or m?PAT? modifier is present (both need per-callsite caching)
+        boolean needsCallsiteCache = false;
         Node flagsNode = operand.elements.get(1);
         if (flagsNode instanceof StringNode) {
-            hasOModifier = ((StringNode) flagsNode).value.contains("o");
+            String flags = ((StringNode) flagsNode).value;
+            needsCallsiteCache = flags.contains("o") || flags.contains("?");
         }
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         flagsNode.accept(scalarVisitor);  // Flags
 
-        // Create the regex matcher (use 3-argument version for /o)
-        if (hasOModifier) {
+        // Create the regex matcher (use 3-argument version for /o or m?PAT?)
+        if (needsCallsiteCache) {
             int callsiteId = nextCallsiteId++;
             emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
