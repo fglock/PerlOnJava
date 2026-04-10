@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.12  
+**Version**: 5.15  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.12 — eval BLOCK eager capture release)  
+**Updated**: 2026-04-09 (v5.15 — fix op/for.t, qr-72922.t, op/eval.t, op/runlevel.t regressions)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1955,6 +1955,48 @@ sub DESTROY {
   - **Files**: `RuntimeCode.java` (apply() finally block + releaseCaptures()),
     `RuntimeScalar.java` (scopeExitCleanup CODE ref fallthrough)
   - **Commits**: `8a5ab843c`
+- [x] Remove pre-flush before pushMark in scope exit (2026-04-09):
+  - **Root cause**: `MortalList.flush()` before `pushMark()` in scope exit was causing
+    refCount inflation. The pre-flush was intended to prevent deferred decrements from
+    method returns being stranded below the mark, but those entries are correctly processed
+    by subsequent `setLarge()`/`undefine()` flushes or by the enclosing scope's exit.
+  - **Impact**: 13 op/for.t failures (tests 37-42, 103, 105, 130-131, 133-134, 136) and
+    re/speed.t -1 regression.
+  - **Fix**: Removed the `MortalList.flush()` call before `pushMark()` in both JVM backend
+    (`EmitStatement.emitScopeExitNullStores`) and interpreter backend
+    (`BytecodeCompiler.exitScope`).
+  - **Files**: `EmitStatement.java`, `BytecodeCompiler.java`
+  - **Commits**: `3f92c9ee2`
+- [x] Track qr// RuntimeRegex objects for proper weak ref handling (2026-04-09):
+  - **Root cause**: `RuntimeRegex` objects started with `refCount = -1` (untracked) because
+    they are cached in `RuntimeRegex.regexCache`. When copied via `setLarge()`, the
+    `nb.refCount >= 0` guard prevented refCount increments. When `weaken()` was called,
+    the object transitioned to WEAKLY_TRACKED (-2). Then `undefine()` on ANY strong ref
+    unconditionally cleared all weak refs — even though other strong refs still existed.
+  - **Impact**: re/qr-72922.t -5 regression (tests 5, 7, 8, 12, 14 — weakened qr// refs
+    becoming undef after undef'ing one strong ref while others still existed).
+  - **Fix**: `getQuotedRegex()` now creates tracked (`refCount = 0`) RuntimeRegex copies via
+    a new `cloneTracked()` method. The cached instances used for `m//` and `s///` remain
+    untracked (`refCount = -1`) for efficiency. Fresh RuntimeRegex objects created within
+    `getQuotedRegex()` (for merged flags) also get `refCount = 0`. This mirrors Perl 5
+    where `qr//` always creates a new SV wrapper around the shared compiled pattern.
+  - **Key insight**: The root issue was the same as X2 (§15) — starting refCount tracking
+    mid-flight on an already-shared object is wrong. The fix avoids this by creating a
+    fresh, tracked object at the `qr//` boundary, while leaving the cached original untouched.
+  - **Files**: `RuntimeRegex.java` (`cloneTracked()` method + `getQuotedRegex()` updates)
+  - **Commits**: `4d6a9c401`
+- [x] Skip tied arrays/hashes in global destruction (2026-04-09):
+  - **Root cause**: `GlobalDestruction.runGlobalDestruction()` iterated global arrays and
+    hashes to find blessed elements needing DESTROY. For tied arrays, this called
+    `FETCHSIZE`/`FETCH` on the tie object, which could be invalid at global destruction
+    time (e.g., broken ties from `eval { last }` inside `TIEARRAY`).
+  - **Impact**: op/eval.t test 110 ("eval and last") -1 regression, op/runlevel.t test 20
+    -1 regression. Both involved tied variables with broken tie objects.
+  - **Fix**: Skip `TIED_ARRAY` and `TIED_HASH` containers in the global destruction walk.
+    These containers' tie objects may not be valid during cleanup, and iterating them
+    would call dispatch methods (FETCHSIZE, FIRSTKEY, etc.) that fail.
+  - **Files**: `GlobalDestruction.java`
+  - **Commits**: `901801c4c`
 
 ### Moo Test Results
 
@@ -1977,7 +2019,7 @@ for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modif
 | overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `8a5ab843c`: "fix: release eval BLOCK captures eagerly to prevent weak ref leaks"
+- `901801c4c`: "fix: skip tied arrays/hashes in global destruction"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
@@ -1998,10 +2040,9 @@ to Perl source.
 1. **Commit** the null-check fix in `RuntimeScalar.incrementRefCountForContainerStore()`
    (fixes sparse-array NPE in array.t)
 2. **Investigate** io/crlf_through.t, io/through.t, lib/croak.t crashes (0/0 results)
-3. **Investigate** remaining -1 regressions: benchmark/gh7094, op/eval.t, op/runlevel.t
-4. **Update `moo_support.md`** with final Moo test results and analysis
-5. **Consider PR merge** once all Moo tests pass
-6. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
+3. **Update `moo_support.md`** with final Moo test results and analysis
+4. **Consider PR merge** once all regressions are resolved
+5. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
 
 ---
 
@@ -2447,6 +2488,27 @@ subtests passing.
      clearWeakRefsTo() to skip RuntimeCode objects entirely.
   3. **Result**: Moo 70/71 programs, 839/841 subtests (99.8%). Remaining 2 failures in
      overloaded-coderefs.t are B::Deparse limitations.
+- **v5.15** (2026-04-09): Fix Perl 5 core test regressions (op/for.t, qr-72922.t, op/eval.t,
+  op/runlevel.t):
+  1. **Pre-flush removal**: `MortalList.flush()` before `pushMark()` in scope exit caused
+     refCount inflation, breaking 13 op/for.t tests and re/speed.t -1. Fix: remove the
+     pre-flush; entries below the mark are processed by subsequent flushes or enclosing scope.
+  2. **qr// tracking**: RuntimeRegex objects were untracked (refCount=-1, shared via cache).
+     `weaken()` transitioned to WEAKLY_TRACKED; `undef` on any strong ref cleared all weak refs
+     even with other strong refs alive. Fix: `getQuotedRegex()` creates tracked copies via
+     `cloneTracked()` (refCount=0); cached instances remain untracked. Mirrors Perl 5 where
+     `qr//` creates a new SV around the shared compiled pattern. Fixes re/qr-72922.t -5.
+  3. **Global destruction tied containers**: `GlobalDestruction.runGlobalDestruction()` iterated
+     tied arrays/hashes, calling FETCHSIZE/FETCH on potentially invalid tie objects. Fix: skip
+     `TIED_ARRAY`/`TIED_HASH` in the global destruction walk. Fixes op/eval.t test 110 and
+     op/runlevel.t test 20.
+  4. **All 5 regressed tests now match master baselines**: op/for.t 141/149, re/speed.t 26/59,
+     re/qr-72922.t 10/14, op/eval.t 159/173, op/runlevel.t 12/24.
+- **v5.12** (2026-04-09): eval BLOCK eager capture release + architecture doc update:
+  1. `eval BLOCK` compiled as `sub{...}->()` kept `captureCount` elevated, preventing
+     `scopeExitCleanup()` from decrementing refCount on captured variables.
+  2. Fix: `releaseCaptures()` in `RuntimeCode.apply()` finally block when `isEvalBlock`.
+  3. Updated `dev/architecture/weaken-destroy.md` to match current codebase (12 tasks).
 - **v5.9** (2026-04-09): Documented WEAKLY_TRACKED premature clearing root cause trace;
   added §15 with 4 approaches tried and reverted (X1-X4).
 - **v5.8** (2026-04-09): Force-clear fix for unblessed weak refs:
