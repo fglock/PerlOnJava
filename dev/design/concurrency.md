@@ -897,11 +897,13 @@ comparable to Perl 5 interpreter clones.
 
 ## Progress Tracking
 
-### Current Status: Phase 5 complete (2026-04-10)
+### Current Status: Phase 0 complete (2026-04-10)
 
 All mutable runtime state has been migrated from static fields into `PerlRuntime`
 instance fields with ThreadLocal-based access. Multiple independent Perl interpreters
-can now coexist within the same JVM process with isolated state.
+can now coexist within the same JVM process with isolated state. Compilation is
+thread-safe via a global `COMPILE_LOCK` (ReentrantLock) that serializes all
+parsing/emitting, while allowing concurrent execution of compiled code.
 
 ### Completed Phases
 
@@ -981,7 +983,7 @@ can now coexist within the same JVM process with isolated state.
 - 3 sample scripts prove isolation: each has its own `$_`, `$shared_test`, regex state, `@INC`
 - Run with: `./dev/sandbox/run_multiplicity_demo.sh`
 
-### Phase 0: Compilation Thread Safety (planned)
+### Phase 0: Compilation Thread Safety (2026-04-10)
 
 **Problem:** The multiplicity demo serializes initial compilation with a `COMPILE_LOCK`,
 but `eval "string"` at runtime goes through `EvalStringHandler` → `Lexer` → `Parser` →
@@ -1023,22 +1025,23 @@ will corrupt shared mutable static state.
 
 **Implementation plan (two-part):**
 
-1. **Quick fixes (no lock needed):**
-   - Replace 4 counters with `AtomicInteger`: `classCounter`, `nextCallsiteId` (×2),
+1. **Quick fixes (no lock needed):** ✅ Done
+   - Replaced 4 counters with `AtomicInteger`: `classCounter`, `nextCallsiteId` (×2),
      `nextMethodCallsiteId`
-   - Mark `skipVariables` as `final`
-   - Replace `LargeBlockRefactorer.controlFlowDetector` singleton with new instance
+   - Marked `skipVariables` as `final`
+   - Replaced `LargeBlockRefactorer.controlFlowDetector` singleton with new instance
      per call (matches the existing `controlFlowFinderTl` ThreadLocal pattern on line 34)
 
-2. **Global compile lock:**
-   - Add `static final ReentrantLock COMPILE_LOCK` to `PerlLanguageProvider`
-   - Acquire in `compilePerlCode()` and in both `EvalStringHandler.evalString()` overloads
+2. **Global compile lock:** ✅ Done
+   - Added `static final ReentrantLock COMPILE_LOCK` to `PerlLanguageProvider`
+   - Acquired in `compilePerlCode()` and in both `EvalStringHandler.evalString()` overloads
    - This serializes all compilation (initial + runtime eval) but guarantees safety
+   - Lock is reentrant so nested evals work without deadlock
    - Future optimization: migrate parser/emitter static state to per-runtime, remove lock
 
 ### Next Steps
-1. **Phase 0:** Implement compilation thread safety (see plan above)
-2. **Phase 6:** Implement `threads` module (requires runtime cloning)
+1. **Phase 6:** Implement `threads` module (requires runtime cloning)
+2. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
