@@ -34,7 +34,7 @@ import static org.perlonjava.runtime.perlmodule.Strict.useStrict;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.getLastScopeId;
 import static org.perlonjava.runtime.runtimetypes.WarningFlags.clearLastScopeId;
 import static org.perlonjava.runtime.perlmodule.Warnings.useWarnings;
-import static org.perlonjava.runtime.runtimetypes.GlobalVariable.packageExistsCache;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -845,7 +845,7 @@ public class StatementParser {
         }
 
         // Remember that this package exists
-        packageExistsCache.put(packageName, true);
+        GlobalVariable.getPackageExistsCacheMap().put(packageName, true);
 
         boolean isClass = token.text.equals("class");
 

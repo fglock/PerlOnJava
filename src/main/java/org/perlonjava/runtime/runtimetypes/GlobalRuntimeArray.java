@@ -40,18 +40,18 @@ public class GlobalRuntimeArray implements DynamicState {
     @Override
     public void dynamicSaveState() {
         // Save the current array reference from the global map
-        RuntimeArray original = GlobalVariable.globalArrays.get(fullName);
+        RuntimeArray original = GlobalVariable.getGlobalArraysMap().get(fullName);
         localizedStack.push(new SavedGlobalArrayState(fullName, original));
 
         // Install a fresh empty array in the global map
         RuntimeArray newLocal = new RuntimeArray();
-        GlobalVariable.globalArrays.put(fullName, newLocal);
+        GlobalVariable.getGlobalArraysMap().put(fullName, newLocal);
 
         // Update glob aliases so they all point to the new local array
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.globalArrays.put(alias, newLocal);
+                GlobalVariable.getGlobalArraysMap().put(alias, newLocal);
             }
         }
     }
@@ -64,13 +64,13 @@ public class GlobalRuntimeArray implements DynamicState {
                 localizedStack.pop();
 
                 // Restore the original array reference in the global map
-                GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
+                GlobalVariable.getGlobalArraysMap().put(saved.fullName, saved.originalArray);
 
                 // Restore glob aliases
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.globalArrays.put(alias, saved.originalArray);
+                        GlobalVariable.getGlobalArraysMap().put(alias, saved.originalArray);
                     }
                 }
             }

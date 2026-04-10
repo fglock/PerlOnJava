@@ -641,11 +641,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 
                                 if (runtimeValue instanceof RuntimeArray) {
-                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                    GlobalVariable.getGlobalArraysMap().put(fullName, (RuntimeArray) runtimeValue);
                                 } else if (runtimeValue instanceof RuntimeHash) {
-                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                    GlobalVariable.getGlobalHashesMap().put(fullName, (RuntimeHash) runtimeValue);
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                    GlobalVariable.getGlobalVariablesMap().put(fullName, (RuntimeScalar) runtimeValue);
                                 }
                                 evalAliasKeys.add(entry.name().charAt(0) + fullName);
                             }
@@ -788,9 +788,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 for (String key : evalAliasKeys) {
                     String fullName = key.substring(1);
                     switch (key.charAt(0)) {
-                        case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                        case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                        case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                        case '$' -> GlobalVariable.getGlobalVariablesMap().remove(fullName);
+                        case '@' -> GlobalVariable.getGlobalArraysMap().remove(fullName);
+                        case '%' -> GlobalVariable.getGlobalHashesMap().remove(fullName);
                     }
                 }
 
@@ -1059,11 +1059,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 
                                 if (runtimeValue instanceof RuntimeArray) {
-                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                    GlobalVariable.getGlobalArraysMap().put(fullName, (RuntimeArray) runtimeValue);
                                 } else if (runtimeValue instanceof RuntimeHash) {
-                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                    GlobalVariable.getGlobalHashesMap().put(fullName, (RuntimeHash) runtimeValue);
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                    GlobalVariable.getGlobalVariablesMap().put(fullName, (RuntimeScalar) runtimeValue);
                                 }
                                 evalAliasKeys.add(entry.name().charAt(0) + fullName);
                             }
@@ -1226,9 +1226,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             for (String key : evalAliasKeys) {
                 String fullName = key.substring(1);
                 switch (key.charAt(0)) {
-                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
+                    case '$' -> GlobalVariable.getGlobalVariablesMap().remove(fullName);
+                    case '@' -> GlobalVariable.getGlobalArraysMap().remove(fullName);
+                    case '%' -> GlobalVariable.getGlobalHashesMap().remove(fullName);
                 }
             }
             evalAliasKeys.clear();

@@ -46,7 +46,7 @@ public class Subs extends PerlModuleBase {
             String variableString = variableObj.toString();
             String fullName = caller + "::" + variableString;
             GlobalVariable.getGlobalCodeRef(fullName);
-            GlobalVariable.isSubs.put(fullName, true);
+            GlobalVariable.getIsSubsMap().put(fullName, true);
         }
 
         return new RuntimeList();
@@ -65,7 +65,7 @@ public class Subs extends PerlModuleBase {
             String fullName = args.get(0).toString();
             String operatorName = args.get(1).toString();
             if (ParserTables.OVERRIDABLE_OP.contains(operatorName)) {
-                GlobalVariable.isSubs.put(fullName, true);
+                GlobalVariable.getIsSubsMap().put(fullName, true);
             }
         }
         return new RuntimeList();

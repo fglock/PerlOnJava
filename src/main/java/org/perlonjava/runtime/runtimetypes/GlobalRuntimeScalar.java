@@ -44,7 +44,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     @Override
     public void dynamicSaveState() {
         // Save the current global reference
-        var originalVariable = GlobalVariable.globalVariables.get(fullName);
+        var originalVariable = GlobalVariable.getGlobalVariablesMap().get(fullName);
 
         localizedStack.push(new SavedGlobalState(fullName, originalVariable));
 
@@ -64,7 +64,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         }
 
         // Replace this variable in the global symbol table with the new one
-        GlobalVariable.globalVariables.put(fullName, newLocal);
+        GlobalVariable.getGlobalVariablesMap().put(fullName, newLocal);
 
         // Also update all glob aliases to point to the new local variable.
         // This implements Perl 5 semantics where after `*verbose = *Verbose`,
@@ -72,7 +72,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.globalVariables.put(alias, newLocal);
+                GlobalVariable.getGlobalVariablesMap().put(alias, newLocal);
             }
         }
     }
@@ -92,13 +92,13 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 }
 
                 // Restore the original variable in the global symbol table
-                GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
+                GlobalVariable.getGlobalVariablesMap().put(saved.fullName, saved.originalVariable);
 
                 // Also restore all glob aliases to the original shared variable
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.globalVariables.put(alias, saved.originalVariable);
+                        GlobalVariable.getGlobalVariablesMap().put(alias, saved.originalVariable);
                     }
                 }
             }

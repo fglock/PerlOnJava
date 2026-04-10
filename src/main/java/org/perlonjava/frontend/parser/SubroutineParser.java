@@ -209,11 +209,11 @@ public class SubroutineParser {
             // Check packageExistsCache which is populated when 'package' statement is parsed
             // Note: packageExistsCache uses the package name as-is for packages,
             // and fully qualified names for sub names (e.g., "main::error" not "error")
-            Boolean isPackage = GlobalVariable.packageExistsCache.get(packageName);
+            Boolean isPackage = GlobalVariable.getPackageExistsCacheMap().get(packageName);
             // Also check if this is a known sub in the current package (qualified lookup)
             if (isPackage == null && !packageName.contains("::")) {
                 String qualifiedName = parser.ctx.symbolTable.getCurrentPackage() + "::" + packageName;
-                Boolean qualifiedResult = GlobalVariable.packageExistsCache.get(qualifiedName);
+                Boolean qualifiedResult = GlobalVariable.getPackageExistsCacheMap().get(qualifiedName);
                 if (qualifiedResult != null && !qualifiedResult) {
                     isPackage = false;
                 }
@@ -539,9 +539,9 @@ public class SubroutineParser {
             // as indirect method call `error->parse()`).
             if (subName != null && !subName.contains("::")) {
                 String qualifiedSubName = parser.ctx.symbolTable.getCurrentPackage() + "::" + subName;
-                GlobalVariable.packageExistsCache.put(qualifiedSubName, false);
+                GlobalVariable.getPackageExistsCacheMap().put(qualifiedSubName, false);
             } else if (subName != null) {
-                GlobalVariable.packageExistsCache.put(subName, false);
+                GlobalVariable.getPackageExistsCacheMap().put(subName, false);
             }
         }
 

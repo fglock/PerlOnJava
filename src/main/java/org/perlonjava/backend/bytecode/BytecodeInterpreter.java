@@ -507,13 +507,13 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.STORE_GLOBAL_CODE -> {
-                                // Store global code: GlobalVariable.globalCodeRefs.put(name, codeRef)
+                                // Store global code: GlobalVariable.getGlobalCodeRefsMap().put(name, codeRef)
                                 int nameIdx = bytecode[pc++];
                                 int codeReg = bytecode[pc++];
                                 String name = code.stringPool[nameIdx];
                                 RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
                                 // Store the code reference in the global namespace
-                                GlobalVariable.globalCodeRefs.put(name, codeRef);
+                                GlobalVariable.getGlobalCodeRefsMap().put(name, codeRef);
                             }
 
                             case Opcodes.CREATE_CLOSURE -> {

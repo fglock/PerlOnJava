@@ -36,18 +36,18 @@ public class GlobalRuntimeHash implements DynamicState {
     @Override
     public void dynamicSaveState() {
         // Save the current hash reference from the global map
-        RuntimeHash original = GlobalVariable.globalHashes.get(fullName);
+        RuntimeHash original = GlobalVariable.getGlobalHashesMap().get(fullName);
         localizedStack.push(new SavedGlobalHashState(fullName, original));
 
         // Install a fresh empty hash in the global map
         RuntimeHash newLocal = new RuntimeHash();
-        GlobalVariable.globalHashes.put(fullName, newLocal);
+        GlobalVariable.getGlobalHashesMap().put(fullName, newLocal);
 
         // Update glob aliases so they all point to the new local hash
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.globalHashes.put(alias, newLocal);
+                GlobalVariable.getGlobalHashesMap().put(alias, newLocal);
             }
         }
     }
@@ -60,13 +60,13 @@ public class GlobalRuntimeHash implements DynamicState {
                 localizedStack.pop();
 
                 // Restore the original hash reference in the global map
-                GlobalVariable.globalHashes.put(saved.fullName, saved.originalHash);
+                GlobalVariable.getGlobalHashesMap().put(saved.fullName, saved.originalHash);
 
                 // Restore glob aliases
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.globalHashes.put(alias, saved.originalHash);
+                        GlobalVariable.getGlobalHashesMap().put(alias, saved.originalHash);
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
@@ -7,8 +8,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Stack;
 
 /**
@@ -134,6 +137,53 @@ public final class PerlRuntime {
      * Default MRO algorithm (DFS by default, matching Perl 5).
      */
     public InheritanceResolver.MROAlgorithm currentMRO = InheritanceResolver.MROAlgorithm.DFS;
+
+    // ---- Symbol table state — migrated from GlobalVariable static fields ----
+
+    /** Global scalar variables (%main:: scalar namespace). */
+    public final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
+
+    /** Global array variables. */
+    public final Map<String, RuntimeArray> globalArrays = new HashMap<>();
+
+    /** Global hash variables. */
+    public final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+
+    /** Cache for package existence checks. */
+    public final Map<String, Boolean> packageExistsCache = new HashMap<>();
+
+    /** Tracks subroutines declared via 'use subs' pragma. */
+    public final Map<String, Boolean> isSubs = new HashMap<>();
+
+    /** Global code references (subroutine namespace). */
+    public final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+
+    /** Global IO references (filehandle globs). */
+    public final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
+
+    /** Global format references. */
+    public final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
+
+    /** Pinned code references that survive stash deletion. */
+    public final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
+
+    /** Stash aliasing: *Dst:: = *Src:: makes Dst symbol table redirect to Src. */
+    public final Map<String, String> stashAliases = new HashMap<>();
+
+    /** Glob aliasing: *a = *b makes a and b share the same glob. */
+    public final Map<String, String> globAliases = new HashMap<>();
+
+    /** Flags for typeglob assignments (operator override detection). */
+    public final Map<String, Boolean> globalGlobs = new HashMap<>();
+
+    /** Global class loader for generated classes. Not final so it can be replaced. */
+    public CustomClassLoader globalClassLoader =
+            new CustomClassLoader(GlobalVariable.class.getClassLoader());
+
+    /** Track explicitly declared global variables (via use vars, our, Exporter). */
+    public final Set<String> declaredGlobalVariables = new HashSet<>();
+    public final Set<String> declaredGlobalArrays = new HashSet<>();
+    public final Set<String> declaredGlobalHashes = new HashSet<>();
 
     // ---- Static accessors ----
 
