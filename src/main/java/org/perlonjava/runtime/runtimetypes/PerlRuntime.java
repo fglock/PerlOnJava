@@ -264,6 +264,14 @@ public final class PerlRuntime {
     /** Current eval nesting depth for $^S support. */
     public int evalDepth = 0;
 
+    /**
+     * Whether GlobalContext.initializeGlobals() has been called for this runtime.
+     * Each PerlRuntime needs its own initialization of global variables, @INC, %ENV,
+     * built-in modules, etc. Previously this was a shared static boolean in
+     * PerlLanguageProvider, which caused threads 2-N to skip initialization.
+     */
+    public boolean globalInitialized = false;
+
     /** Inline method cache for fast method dispatch. */
     public static final int METHOD_CALL_CACHE_SIZE = 4096;
     public final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];

@@ -65,8 +65,6 @@ public class PerlLanguageProvider {
      */
     public static final ReentrantLock COMPILE_LOCK = new ReentrantLock();
 
-    private static boolean globalInitialized = false;
-
     /**
      * Ensures a PerlRuntime is bound to the current thread.
      * Called at the start of every entry point (executePerlCode, compilePerlCode, etc.)
@@ -81,7 +79,7 @@ public class PerlLanguageProvider {
 
     public static void resetAll() {
         ensureRuntimeInitialized();
-        globalInitialized = false;
+        PerlRuntime.current().globalInitialized = false;
         resetAllGlobals();
         DataSection.reset();
     }
@@ -112,133 +110,146 @@ public class PerlLanguageProvider {
                                               int callerContext) throws Exception {
 
         ensureRuntimeInitialized();
-
-        // Save the current scope so we can restore it after execution.
-        // This is critical because require/do should not leak their scope to the caller.
-        ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+        PerlRuntime runtime = PerlRuntime.current();
 
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;
 
-        ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
-        // Enter a new scope in the symbol table and add special Perl variables
-        globalSymbolTable.enterScope();
-        globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
-        globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
-        globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
+        // ---- Compilation phase (under COMPILE_LOCK) ----
+        // The parser and emitter have shared mutable static state that requires serialization.
+        // The lock is released before execution so compiled code can run concurrently.
+        ScopedSymbolTable savedCurrentScope;
+        RuntimeCode runtimeCode;
+        EmitterContext ctx;
 
-        if (compilerOptions.codeHasEncoding) {
-            globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
-        }
-
-        // Use caller's context if specified, otherwise default based on script type
-        int contextType = callerContext >= 0 ? callerContext :
-                (isTopLevelScript ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
-
-        // Create the compiler context
-        EmitterContext ctx = new EmitterContext(
-                new JavaClassInfo(), // internal java class name
-                globalSymbolTable.snapShot(), // Top-level symbol table
-                null, // Method visitor
-                null, // Class writer
-                contextType, // Call context - scalar for require/do, void for top-level
-                true, // Is boxed
-                null,  // errorUtil
-                compilerOptions,
-                new RuntimeArray()
-        );
-
-        if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
-            globalInitialized = true;
-        }
-
-        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
-        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  call context " + ctx.contextType);
-
-        // Apply any BEGIN-block filters before tokenization if requested
-        // This is a workaround for the limitation that our architecture tokenizes all source upfront
-        if (compilerOptions.applySourceFilters) {
-            compilerOptions.code = FilterUtilCall.preprocessWithBeginFilters(compilerOptions.code);
-        }
-
-        // Create the LexerToken list
-        Lexer lexer = new Lexer(compilerOptions.code);
-        List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
-        if (ctx.compilerOptions.tokenizeOnly) {
-            // Printing the tokens
-            for (LexerToken token : tokens) {
-                System.out.println(token);
-            }
-            RuntimeIO.closeAllHandles();
-            return null; // success
-        }
-        compilerOptions.code = null;    // Throw away the source code to spare memory
-
-        // Create the AST
-        // Create an instance of ErrorMessageUtil with the file name and token list
-        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        Parser parser = new Parser(ctx, tokens); // Parse the tokens
-        parser.isTopLevelScript = isTopLevelScript;
-
-        // Create placeholder DATA filehandle early so it's available during BEGIN block execution
-        // This ensures *ARGV = *DATA aliasing works correctly in BEGIN blocks
-        DataSection.createPlaceholderDataHandle(parser);
-
-        Node ast;
-        if (isTopLevelScript) {
-            CallerStack.push(
-                    "main",
-                    ctx.compilerOptions.fileName,
-                    ctx.errorUtil.getLineNumber(parser.tokenIndex));
-            // Push the main script onto BHooksEndOfScope's loading stack so that
-            // on_scope_end callbacks (e.g., from namespace::clean) are deferred
-            // until end of parsing, matching Perl 5 behavior.
-            BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
-        }
+        COMPILE_LOCK.lock();
         try {
-            ast = parser.parse(); // Generate the abstract syntax tree (AST)
-        } finally {
+            // Save the current scope so we can restore it after execution.
+            // This is critical because require/do should not leak their scope to the caller.
+            savedCurrentScope = SpecialBlockParser.getCurrentScope();
+
+            ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
+            // Enter a new scope in the symbol table and add special Perl variables
+            globalSymbolTable.enterScope();
+            globalSymbolTable.addVariable("this", "", null); // anon sub instance is local variable 0
+            globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
+            globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
+
+            if (compilerOptions.codeHasEncoding) {
+                globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
+            }
+
+            // Use caller's context if specified, otherwise default based on script type
+            int contextType = callerContext >= 0 ? callerContext :
+                    (isTopLevelScript ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
+
+            // Create the compiler context
+            ctx = new EmitterContext(
+                    new JavaClassInfo(), // internal java class name
+                    globalSymbolTable.snapShot(), // Top-level symbol table
+                    null, // Method visitor
+                    null, // Class writer
+                    contextType, // Call context - scalar for require/do, void for top-level
+                    true, // Is boxed
+                    null,  // errorUtil
+                    compilerOptions,
+                    new RuntimeArray()
+            );
+
+            if (!runtime.globalInitialized) {
+                GlobalContext.initializeGlobals(compilerOptions);
+                runtime.globalInitialized = true;
+            }
+
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("  call context " + ctx.contextType);
+
+            // Apply any BEGIN-block filters before tokenization if requested
+            // This is a workaround for the limitation that our architecture tokenizes all source upfront
+            if (compilerOptions.applySourceFilters) {
+                compilerOptions.code = FilterUtilCall.preprocessWithBeginFilters(compilerOptions.code);
+            }
+
+            // Create the LexerToken list
+            Lexer lexer = new Lexer(compilerOptions.code);
+            List<LexerToken> tokens = lexer.tokenize(); // Tokenize the Perl code
+            if (ctx.compilerOptions.tokenizeOnly) {
+                // Printing the tokens
+                for (LexerToken token : tokens) {
+                    System.out.println(token);
+                }
+                RuntimeIO.closeAllHandles();
+                return null; // success
+            }
+            compilerOptions.code = null;    // Throw away the source code to spare memory
+
+            // Create the AST
+            // Create an instance of ErrorMessageUtil with the file name and token list
+            ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            Parser parser = new Parser(ctx, tokens); // Parse the tokens
+            parser.isTopLevelScript = isTopLevelScript;
+
+            // Create placeholder DATA filehandle early so it's available during BEGIN block execution
+            // This ensures *ARGV = *DATA aliasing works correctly in BEGIN blocks
+            DataSection.createPlaceholderDataHandle(parser);
+
+            Node ast;
             if (isTopLevelScript) {
-                // Fire on_scope_end callbacks now that parsing is complete.
-                // This is the "end of compilation scope" equivalent.
-                BHooksEndOfScope.endFileLoad(ctx.compilerOptions.fileName);
-                CallerStack.pop();
+                CallerStack.push(
+                        "main",
+                        ctx.compilerOptions.fileName,
+                        ctx.errorUtil.getLineNumber(parser.tokenIndex));
+                // Push the main script onto BHooksEndOfScope's loading stack so that
+                // on_scope_end callbacks (e.g., from namespace::clean) are deferred
+                // until end of parsing, matching Perl 5 behavior.
+                BHooksEndOfScope.beginFileLoad(ctx.compilerOptions.fileName);
             }
-        }
+            try {
+                ast = parser.parse(); // Generate the abstract syntax tree (AST)
+            } finally {
+                if (isTopLevelScript) {
+                    // Fire on_scope_end callbacks now that parsing is complete.
+                    // This is the "end of compilation scope" equivalent.
+                    BHooksEndOfScope.endFileLoad(ctx.compilerOptions.fileName);
+                    CallerStack.pop();
+                }
+            }
 
-        // ast = ConstantFoldingVisitor.foldConstants(ast);
+            // ast = ConstantFoldingVisitor.foldConstants(ast);
 
-        // Constant folding: inline user-defined constant subs and fold constant expressions.
-        // This runs after parsing (so BEGIN blocks have executed and constants are defined)
-        // and before code emission. The package from the symbol table is used to resolve
-        // bare constant identifiers (e.g., PI from `use constant PI => 3.14`).
-        ast = ConstantFoldingVisitor.foldConstants(ast, ctx.symbolTable.getCurrentPackage());
+            // Constant folding: inline user-defined constant subs and fold constant expressions.
+            // This runs after parsing (so BEGIN blocks have executed and constants are defined)
+            // and before code emission. The package from the symbol table is used to resolve
+            // bare constant identifiers (e.g., PI from `use constant PI => 3.14`).
+            ast = ConstantFoldingVisitor.foldConstants(ast, ctx.symbolTable.getCurrentPackage());
 
-        if (ctx.compilerOptions.parseOnly) {
-            // Printing the ast
-            System.out.println(ast);
-            RuntimeIO.closeAllHandles();
-            return null; // success
-        }
-        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("-- AST:\n" + ast + "--\n");
+            if (ctx.compilerOptions.parseOnly) {
+                // Printing the ast
+                System.out.println(ast);
+                RuntimeIO.closeAllHandles();
+                return null; // success
+            }
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("-- AST:\n" + ast + "--\n");
 
-        // Create the Java class from the AST
-        if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("createClassWithMethod");
-        // Create a new instance of ErrorMessageUtil, resetting the line counter
-        ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
-        // Snapshot the symbol table after parsing.
-        // The parser records lexical declarations (e.g., `for my $p (...)`) and pragma state
-        // (strict/warnings/features) into ctx.symbolTable. Resetting to a fresh global snapshot
-        // loses those declarations and causes strict-vars failures during codegen.
-        ctx.symbolTable = ctx.symbolTable.snapShot();
-        SpecialBlockParser.setCurrentScope(ctx.symbolTable);
+            // Create the Java class from the AST
+            if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("createClassWithMethod");
+            // Create a new instance of ErrorMessageUtil, resetting the line counter
+            ctx.errorUtil = new ErrorMessageUtil(ctx.compilerOptions.fileName, tokens);
+            // Snapshot the symbol table after parsing.
+            // The parser records lexical declarations (e.g., `for my $p (...)`) and pragma state
+            // (strict/warnings/features) into ctx.symbolTable. Resetting to a fresh global snapshot
+            // loses those declarations and causes strict-vars failures during codegen.
+            ctx.symbolTable = ctx.symbolTable.snapShot();
+            SpecialBlockParser.setCurrentScope(ctx.symbolTable);
 
-        try {
             // Compile to executable (compiler or interpreter based on flag)
-            RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
+            runtimeCode = compileToExecutable(ast, ctx);
+        } finally {
+            COMPILE_LOCK.unlock();
+        }
 
-            // Execute (unified path for both backends)
+        // ---- Execution phase (no lock — compiled code is thread-safe) ----
+        try {
             return executeCode(runtimeCode, ctx, isTopLevelScript, callerContext);
         } finally {
             // Restore the caller's scope so require/do doesn't leak its scope to the caller.
@@ -320,9 +331,9 @@ public class PerlLanguageProvider {
                 new RuntimeArray()
         );
 
-        if (!globalInitialized) {
+        if (!PerlRuntime.current().globalInitialized) {
             GlobalContext.initializeGlobals(compilerOptions);
-            globalInitialized = true;
+            PerlRuntime.current().globalInitialized = true;
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using provided AST");
@@ -614,9 +625,9 @@ public class PerlLanguageProvider {
                     new RuntimeArray()
             );
 
-            if (!globalInitialized) {
+            if (!PerlRuntime.current().globalInitialized) {
                 GlobalContext.initializeGlobals(compilerOptions);
-                globalInitialized = true;
+                PerlRuntime.current().globalInitialized = true;
             }
 
             // Tokenize

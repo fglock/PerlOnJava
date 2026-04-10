@@ -977,10 +977,11 @@ parsing/emitting, while allowing concurrent execution of compiled code.
 ### Multiplicity Demo (2026-04-10)
 - Created `dev/sandbox/MultiplicityDemo.java` — launches N threads, each with its
   own PerlRuntime, compiles and executes a Perl script, captures per-thread STDOUT
-- Uses `CountDownLatch` to synchronize execution start (CyclicBarrier caused deadlocks
-  when a thread failed before reaching await)
-- Compilation is serialized via `COMPILE_LOCK` (parser has shared static state — Phase 0)
-- 3 sample scripts prove isolation: each has its own `$_`, `$shared_test`, regex state, `@INC`
+- Uses `PerlLanguageProvider.executePerlCode()` which handles the full lifecycle:
+  initialization, compilation (under COMPILE_LOCK), and execution (no lock)
+- INIT/CHECK/UNITCHECK/END blocks execute correctly for each interpreter
+- Successfully tested with 10 concurrent interpreters running unit tests (begincheck.t,
+  closure.t, hash.t, regex.t, array.t, control_flow.t, ref.t, subroutine.t, etc.)
 - Run with: `./dev/sandbox/run_multiplicity_demo.sh`
 
 ### Phase 0: Compilation Thread Safety (2026-04-10)
@@ -989,6 +990,33 @@ parsing/emitting, while allowing concurrent execution of compiled code.
 but `eval "string"` at runtime goes through `EvalStringHandler` → `Lexer` → `Parser` →
 emitter → class loading with **no locking**. Concurrent `eval` from multiple threads
 will corrupt shared mutable static state.
+
+Additionally, `executePerlCode()` (the main entry point for running Perl code) had no
+locking at all — it was only safe for single-threaded CLI use. And `globalInitialized`
+was a shared static boolean, causing thread 2+ to skip `initializeGlobals()` entirely.
+
+**Architecture fix (commit TBD):**
+
+1. **`globalInitialized` moved to per-PerlRuntime** — Each runtime tracks its own
+   initialization state. Previously, thread 1 set the shared static to `true`,
+   causing threads 2-N to skip `initializeGlobals()` and run without `$_`, `@INC`,
+   built-in modules, etc.
+
+2. **`executePerlCode()` now uses COMPILE_LOCK** — The compilation phase (tokenize,
+   parse, compile) runs under the lock, then the lock is released before execution:
+   ```
+   COMPILE_LOCK.lock()
+     savedScope = getCurrentScope()
+     initializeGlobals() (per-runtime, idempotent)
+     tokenize → parse → compileToExecutable()
+   COMPILE_LOCK.unlock()
+
+   executeCode() — runs UNITCHECK, CHECK, INIT, main code, END (no lock)
+   ```
+
+3. **Demo simplified** — Uses `executePerlCode()` instead of `compilePerlCode()` +
+   `apply()`. No more redundant demo-level lock. INIT/CHECK/UNITCHECK blocks now
+   execute correctly (previously skipped, causing begincheck.t failures).
 
 **Audit results** — shared mutable state found in three subsystems:
 

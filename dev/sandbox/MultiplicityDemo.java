@@ -31,10 +31,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class MultiplicityDemo {
 
-    // Lock to serialize compilation (parser has shared static state — Phase 0 TODO).
-    // initializeGlobals() also compiles built-in Perl modules, so it must be serialized too.
-    private static final Object COMPILE_LOCK = new Object();
-
     public static void main(String[] args) throws Exception {
         if (args.length == 0) {
             System.err.println("Usage: MultiplicityDemo <script1.pl> [script2.pl] ...");
@@ -58,11 +54,6 @@ public class MultiplicityDemo {
         int n = scriptNames.size();
         System.out.println("=== PerlOnJava Multiplicity Demo ===");
         System.out.println("Starting " + n + " independent Perl interpreter(s)...\n");
-
-        // Latch so all threads begin execution at roughly the same time.
-        // Uses countDown (not await-blocking), so a thread that fails during
-        // compilation still releases the latch for the others.
-        CountDownLatch ready = new CountDownLatch(n);
 
         // Per-thread output capture
         ByteArrayOutputStream[] outputs = new ByteArrayOutputStream[n];
@@ -94,23 +85,14 @@ public class MultiplicityDemo {
                     options.code = source;
                     options.fileName = name;
 
-                    // Compile (serialized — parser and initializeGlobals have shared static state).
-                    // initializeGlobals sets up $_, @INC, %ENV and compiles built-in Perl modules.
-                    RuntimeCode code;
-                    synchronized (COMPILE_LOCK) {
-                        GlobalContext.initializeGlobals(options);
-                        code = (RuntimeCode) PerlLanguageProvider.compilePerlCode(options);
-                    }
-
-                    // Signal that we're ready to execute
-                    ready.countDown();
-
-                    // Wait until all threads have compiled (with a timeout to avoid deadlock)
-                    ready.await(30, TimeUnit.SECONDS);
-
-                    // --- Execute concurrently — runtime state is fully isolated ---
+                    // Use executePerlCode() which handles the full lifecycle:
+                    // - GlobalContext.initializeGlobals() (per-runtime, under COMPILE_LOCK)
+                    // - Tokenize, parse, compile (under COMPILE_LOCK — serialized)
+                    // - Run UNITCHECK, CHECK, INIT blocks
+                    // - Execute the main code (no lock — concurrent)
+                    // - Run END blocks
                     long t0 = System.nanoTime();
-                    code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                    PerlLanguageProvider.executePerlCode(options, true);
                     durations[idx] = System.nanoTime() - t0;
 
                     // Flush buffered output
@@ -118,7 +100,6 @@ public class MultiplicityDemo {
 
                 } catch (Throwable t) {
                     errors[idx] = t;
-                    ready.countDown();  // don't block others on failure
                 }
             }, "perl-" + name);
         }
