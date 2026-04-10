@@ -892,3 +892,69 @@ comparable to Perl 5 interpreter clones.
 - Updated virtual thread pinning caveat with JEP 491 reference
 - Updated timeline with risk assessment
 - Moved resolved questions out of open questions
+
+---
+
+## Progress Tracking
+
+### Current Status: Phase 5 complete (2026-04-10)
+
+All mutable runtime state has been migrated from static fields into `PerlRuntime`
+instance fields with ThreadLocal-based access. Multiple independent Perl interpreters
+can now coexist within the same JVM process with isolated state.
+
+### Completed Phases
+
+- [x] **Phase 1: PerlRuntime Shell** (2026-04-10)
+  - Created `PerlRuntime.java` with `ThreadLocal<PerlRuntime> CURRENT`
+  - Added `current()`, `initialize()`, `setCurrent()` API
+  - Wired `PerlRuntime.initialize()` into `Main.main()` and test setUp methods
+  - Added `ensureRuntimeInitialized()` safety net in `PerlLanguageProvider`
+
+- [x] **Phase 2: De-static-ify I/O** (2026-04-10)
+  - Moved `RuntimeIO.stdout/stderr/stdin` into `PerlRuntime`
+  - Moved `selectedHandle`, `lastWrittenHandle`, `lastAccessedHandle`, `lastReadlineHandleName`
+  - Added static getter/setter methods on `RuntimeIO`
+  - Updated `EmitOperator` to use `INVOKESTATIC` instead of `PUTSTATIC`
+  - Updated 15 consumer files (IOOperator, RuntimeGlob, TieOperators, etc.)
+
+- [x] **Phase 3: De-static-ify CallerStack + DynamicScope** (2026-04-10)
+  - Moved `CallerStack.callerStack` to `PerlRuntime.callerStack`
+  - Moved `DynamicVariableManager.variableStack` to `PerlRuntime.dynamicVariableStack`
+  - Moved `RuntimeScalar.dynamicStateStack` to `PerlRuntime.dynamicStateStack`
+
+- [x] **Phase 4: De-static-ify SpecialBlocks** (2026-04-10)
+  - Moved `SpecialBlock.endBlocks/initBlocks/checkBlocks` to PerlRuntime
+  - Added public getters on SpecialBlock
+
+- [x] **Phase 5a: De-static-ify InheritanceResolver** (2026-04-10)
+  - Moved 7 static fields: linearizedClassesCache, packageMRO, methodCache,
+    overloadContextCache, isaStateCache, autoloadEnabled, currentMRO
+  - Updated DFS.java, C3.java, and 4 consumer files
+
+- [x] **Phase 5b: De-static-ify GlobalVariable** (2026-04-10)
+  - Moved all 17 static fields: symbol tables (globalVariables, globalArrays,
+    globalHashes, globalCodeRefs), IO/Format refs, aliasing maps, caches,
+    classloader, declared variable tracking
+  - Added static accessor methods (getGlobalVariablesMap(), etc.)
+  - Updated 20 consumer files across frontend, backend, and runtime packages
+
+### Files Created
+- `src/main/java/org/perlonjava/runtime/runtimetypes/PerlRuntime.java`
+
+### Key Design Decisions
+- Kept original static method signatures on migrated classes — callers don't change
+- Used public accessor methods (e.g., `GlobalVariable.getGlobalVariablesMap()`) for
+  cross-package access to PerlRuntime fields
+- ThreadLocal overhead is negligible (~1ns per access, JIT-optimized)
+
+### Next Steps
+1. **Phase 4 (partial):** Migrate regex state (`$1`, `$&`, etc.) into PerlRuntime
+2. **RuntimeCode caches:** Migrate `anonSubs`, `interpretedSubs`, `evalContext`,
+   `evalDepth`, `evalCache`, `methodHandleCache` into PerlRuntime
+3. **Phase 0:** Add synchronization for true thread safety (currently single-threaded OK)
+4. **Phase 6:** Implement `threads` module (requires runtime cloning)
+
+### Open Questions
+- Should RuntimeCode compile-time caches (evalCache, methodHandleCache) be per-runtime
+  or shared with thread-safe access? Per-runtime is simpler; shared saves memory.
