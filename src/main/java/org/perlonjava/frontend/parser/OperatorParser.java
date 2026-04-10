@@ -252,6 +252,59 @@ public class OperatorParser {
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
     }
 
+    /**
+     * Check if a variable name refers to a forced-global variable that cannot
+     * be lexicalized with 'my' or 'state'.
+     *
+     * Perl rule: the following are always global:
+     * - $_, @_, %_ (the underscore variables, since Perl 5.30)
+     * - $0, $1, $2, ... (digit-only names)
+     * - $!, $/, $@, $;, $,, $., $|, etc. (single punctuation character names)
+     * - $^W, $^H, etc. (control character / caret variable names)
+     */
+    private static boolean isGlobalOnlyVariable(String name) {
+        if (name == null || name.isEmpty()) return false;
+
+        // Underscore: $_, @_, %_ are all forced global (since Perl 5.30)
+        if (name.equals("_")) return true;
+
+        // Digit-only names: $0, $1, $2, ...
+        boolean allDigits = true;
+        for (int i = 0; i < name.length(); i++) {
+            if (!Character.isDigit(name.charAt(i))) {
+                allDigits = false;
+                break;
+            }
+        }
+        if (allDigits) return true;
+
+        // Single non-alphanumeric, non-underscore character: $!, $/, $@, $;, etc.
+        if (name.length() == 1) {
+            char c = name.charAt(0);
+            if (!Character.isLetterOrDigit(c) && c != '_') return true;
+        }
+
+        // Control character prefix (caret variables like $^W stored as chr(23))
+        if (name.charAt(0) < 32) return true;
+
+        return false;
+    }
+
+    /**
+     * Format a variable name for display in error messages.
+     * Converts internal control character representation back to ^X form.
+     * E.g., chr(23) + "" becomes "^W", chr(8) + "MATCH" becomes "^HMATCH".
+     */
+    private static String formatVarNameForDisplay(String name) {
+        if (name == null || name.isEmpty()) return name;
+        char first = name.charAt(0);
+        if (first < 32) {
+            // Control character: convert to ^X notation
+            return "^" + (char) (first + 'A' - 1) + name.substring(1);
+        }
+        return name;
+    }
+
     private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node) {
         String sigil = node.operator;
         if ("$@%".contains(sigil)) {
@@ -260,7 +313,19 @@ public class OperatorParser {
             if (identifierNode instanceof IdentifierNode) { // my $a
                 String name = ((IdentifierNode) identifierNode).name;
                 String var = sigil + name;
-                
+
+                // Check for global-only variables in my/state declarations
+                // Perl: "Can't use global $0 in "my""
+                if ((operator.equals("my") || operator.equals("state"))
+                        && isGlobalOnlyVariable(name)) {
+                    throw new PerlCompilerException(
+                            node.getIndex(),
+                            "Can't use global " + sigil + formatVarNameForDisplay(name)
+                                    + " in \"" + operator + "\"",
+                            ctx.errorUtil
+                    );
+                }
+
                 // Check for redeclaration warnings
                 if (operator.equals("our")) {
                     // For 'our', only warn if redeclared in the same package (matching Perl behavior)
