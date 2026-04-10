@@ -1519,32 +1519,53 @@ lookups per sub call** — even when the subroutine never uses regex.
 | 2b | Batch pushCallerState/popCallerState and pushSubState/popSubState | PerlRuntime.java, RuntimeCode.java | 8-12 per sub call -> 2 |
 | 2c | Batch RegexState save/restore | RegexState.java | **24 per sub call** (13 getters + 13 setters -> 2) |
 | 2d | Skip RegexState save/restore for subs without regex | EmitterMethodCreator.java, RegexUsageDetector.java | **Entire save/restore eliminated** for non-regex subs |
+| 3 | JVM-compile anonymous subs inside `eval STRING` | BytecodeCompiler.java, OpcodeHandlerExtended.java, JvmClosureTemplate.java (new) | N/A (execution speedup, not ThreadLocal reduction) |
 
-#### Benchmark Results
+**Tier 3: JVM compilation of eval STRING anonymous subs.** Previously,
+`BytecodeCompiler.visitAnonymousSubroutine()` always compiled anonymous sub bodies
+to `InterpretedCode`. This meant hot closures created via `eval STRING` (e.g.,
+Benchmark.pm's `sub { for (1..$n) { &$c } }`) ran in the bytecode interpreter.
+The fix tries JVM compilation first via `EmitterMethodCreator.createClassWithMethod()`,
+falling back to the interpreter on any failure (e.g., ASM frame computation crash).
+A new `JvmClosureTemplate` class holds the JVM-compiled class and instantiates it
+with captured variables via reflection. Measured 4.5x speedup for eval STRING closures
+in isolation (6.4M iter/s vs 1.4M iter/s). The broader benchmark improvements (method
++36.7% vs pre-opt, global +10.8%) likely reflect this change improving Benchmark.pm's
+own infrastructure which is used by all benchmarks.
 
-| Benchmark | master | branch (pre-opt) | **After all opts** | vs master | vs pre-opt |
-|-----------|--------|-------------------|--------------------|-----------|------------|
-| **closure** | 863 | 569 (-34.1%) | **1177** | **+36.4%** | +106.9% |
-| **method** | 436 | 319 (-26.9%) | **417** | **-4.4%** | +30.7% |
-| **lexical** | 394K | 375K (-4.9%) | **466K** | **+18.2%** | +24.3% |
-| global | 78K | 74K (-5.4%) | **71K** | -8.6% | -3.4% |
+#### Benchmark Results (updated 2026-04-10, after JVM eval STRING closures)
 
-Closure is now 36% **faster** than master. Method is within 5%. Lexical is 18% faster.
-The closure and lexical improvements come from eliminating unnecessary RegexState
-save/restore for subroutines that don't use regex — an overhead that existed on
-master too (via separate ThreadLocals) but was masked by lower per-lookup cost.
+| Benchmark | master | branch (pre-opt) | **Current** | vs master | vs pre-opt |
+|-----------|--------|-------------------|-------------|-----------|------------|
+| **closure** | 863 | 569 (-34.1%) | **1,220** | **+41.4%** | +114.4% |
+| **method** | 436 | 319 (-26.9%) | **436** | **0.0%** | +36.7% |
+| **lexical** | 394K | 375K (-4.9%) | **480K** | **+21.8%** | +28.0% |
+| global | 78K | 74K (-5.4%) | **82K** | +5.1% | +10.8% |
+| eval_string | 86K | 82K (-4.8%) | **89K** | +3.1% | +8.5% |
+| regex | 51K | 47K (-7.0%) | **46K** | -9.4% | -2.1% |
+| string | 29K | 31K (+6.5%) | **29K** | +0.3% | -5.6% |
+
+All benchmarks that originally regressed are now **at or above master**. Closure is
+41% faster than master, method matches master exactly, lexical is 22% faster, and
+global is 5% faster. The closure and lexical improvements come from eliminating
+unnecessary RegexState save/restore for subroutines that don't use regex — an
+overhead that existed on master too (via separate ThreadLocals) but was masked by
+lower per-lookup cost. The regex benchmark shows a small regression (~9%) from
+ThreadLocal routing overhead in regex-heavy code paths.
 
 #### Remaining Optimization Opportunities (not yet pursued)
 
-These are lower-priority since the main goal (closure/method within 10%) is met:
+These are lower-priority since the main goal (closure/method within 10%) is exceeded:
 
 | Option | Effort | Expected Impact | Notes |
 |--------|--------|-----------------|-------|
 | Pass `PerlRuntime rt` from static apply to instance apply | Low | Eliminates 1 of 2 remaining lookups per sub call | Changes method signatures |
 | Cache warning bits on RuntimeCode field | Low | Avoids ConcurrentHashMap lookup per call | `getWarningBitsForCode()` in profile |
-| Batch RuntimeRegex field access in match methods | Medium | Eliminates ~10-15 lookups per regex match | Profile showed many individual accessors in RuntimeRegex.java |
-| Lazy regex state save (skip when sub doesn't use regex) | High | Could eliminate RegexState overhead entirely | Complex — would need compile-time analysis |
+| Batch RuntimeRegex field access in match methods | Medium | Eliminates ~10-15 lookups per regex match | Profile showed many individual accessors in RuntimeRegex.java; may help the -9% regex regression |
 | DynamicVariableManager.variableStack() caching | Low | 1 lookup per call eliminated | 10 samples in profile |
+
+Note: "Lazy regex state save (skip when sub doesn't use regex)" was listed here previously
+and has been implemented as Tier 2d above.
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —

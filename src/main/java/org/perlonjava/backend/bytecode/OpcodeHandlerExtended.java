@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.backend.jvm.JvmClosureTemplate;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -888,14 +889,14 @@ public class OpcodeHandlerExtended {
     /**
      * Execute create closure operation.
      * Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
+     * <p>
+     * Supports both InterpretedCode templates (interpreter-compiled subs)
+     * and JvmClosureTemplate (JVM-compiled subs from eval STRING).
      */
     public static int executeCreateClosure(int[] bytecode, int pc, RuntimeBase[] registers, InterpretedCode code) {
         int rd = bytecode[pc++];
         int templateIdx = bytecode[pc++];
         int numCaptures = bytecode[pc++];
-
-        // Get the template InterpretedCode from constants
-        InterpretedCode template = (InterpretedCode) code.constants[templateIdx];
 
         // Capture the current register values
         RuntimeBase[] capturedVars = new RuntimeBase[numCaptures];
@@ -904,19 +905,27 @@ public class OpcodeHandlerExtended {
             capturedVars[i] = registers[captureReg];
         }
 
-        // Create a new InterpretedCode with the captured variables
-        InterpretedCode closureCode = template.withCapturedVars(capturedVars);
+        Object template = code.constants[templateIdx];
 
-        // Wrap in RuntimeScalar and set __SUB__ for self-reference
-        RuntimeScalar codeRef = new RuntimeScalar(closureCode);
-        closureCode.__SUB__ = codeRef;
-        registers[rd] = codeRef;
+        if (template instanceof JvmClosureTemplate jvmTemplate) {
+            // JVM-compiled closure: instantiate the generated class with captured variables
+            registers[rd] = jvmTemplate.instantiate(capturedVars);
+        } else {
+            // InterpretedCode closure: create a new copy with captured variables
+            InterpretedCode interpTemplate = (InterpretedCode) template;
+            InterpretedCode closureCode = interpTemplate.withCapturedVars(capturedVars);
 
-        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
-        // Pass isClosure=true since CREATE_CLOSURE always creates a closure
-        if (closureCode.attributes != null && !closureCode.attributes.isEmpty()
-                && closureCode.packageName != null) {
-            Attributes.runtimeDispatchModifyCodeAttributes(closureCode.packageName, codeRef, true);
+            // Wrap in RuntimeScalar and set __SUB__ for self-reference
+            RuntimeScalar codeRef = new RuntimeScalar(closureCode);
+            closureCode.__SUB__ = codeRef;
+            registers[rd] = codeRef;
+
+            // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
+            // Pass isClosure=true since CREATE_CLOSURE always creates a closure
+            if (closureCode.attributes != null && !closureCode.attributes.isEmpty()
+                    && closureCode.packageName != null) {
+                Attributes.runtimeDispatchModifyCodeAttributes(closureCode.packageName, codeRef, true);
+            }
         }
         return pc;
     }
