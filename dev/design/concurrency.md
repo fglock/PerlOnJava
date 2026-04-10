@@ -1279,60 +1279,162 @@ cache-miss path is being exercised more due to per-runtime cache isolation
 
 #### Optimization Plan
 
-Listed in order of expected impact:
+**Goal:** Reduce the closure and method dispatch regressions to under 10%
+(matching the 5-7% range of other benchmarks). The general 5-7% slowdown
+from ThreadLocal routing is acceptable and expected.
+
+**Methodology for each optimization step:**
+
+1. Create a commit on the feature branch with the optimization
+2. Run `make clean ; make` to verify no test regressions
+3. Run the relevant benchmark(s) 3 times, take the median:
+   ```bash
+   ./jperl dev/bench/benchmark_closure.pl   # target: closure
+   ./jperl dev/bench/benchmark_method.pl    # target: method
+   ./jperl dev/bench/benchmark_lexical.pl   # control: should not regress
+   ./jperl dev/bench/benchmark_global.pl    # control: should not regress
+   ```
+4. Compare against the baseline numbers in the table above
+5. **Revert if:** the optimization does not measurably improve the target
+   benchmark AND does not improve code architecture (e.g., reducing
+   unnecessary abstraction layers). Keep only if it delivers measurable
+   improvement or is architecturally cleaner regardless of performance.
+6. Run the 126-interpreter stress test to verify multiplicity still works:
+   ```bash
+   bash dev/sandbox/multiplicity/run_multiplicity_demo.sh src/test/resources/unit/*.t
+   ```
+
+Listed in order of expected impact. Each tier is independent — do not
+proceed to Tier 2 unless Tier 1 has been completed and benchmarked.
+
+---
 
 **Tier 1: Cache `PerlRuntime.current()` in local variables (LOW RISK)**
 
 These are mechanical changes — cache the ThreadLocal result at method entry
-instead of calling `PerlRuntime.current()` multiple times:
+instead of calling `PerlRuntime.current()` multiple times. Pattern:
 
-1. **`GlobalVariable.getGlobalCodeRef()`** — Currently 4 `PerlRuntime.current()`
-   calls per invocation. Called N times during method hierarchy traversal.
-   Caching as local saves 3 lookups per call.
-   File: `GlobalVariable.java`
+```java
+// BEFORE: N ThreadLocal lookups
+public static Foo doSomething(String key) {
+    Foo a = PerlRuntime.current().mapA.get(key);  // lookup 1
+    Foo b = PerlRuntime.current().mapB.get(key);  // lookup 2
+    PerlRuntime.current().mapC.put(key, b);       // lookup 3
+    return a;
+}
 
-2. **`InheritanceResolver.findMethodInHierarchy()`** — Currently 12-14
-   `PerlRuntime.current()` calls per cache-miss. Cache as local at method
-   entry and pass to internal methods (`getMethodCache()`, `getIsaStateCache()`,
-   `getLinearizedClassesCache()`, etc.).
-   File: `InheritanceResolver.java`
+// AFTER: 1 ThreadLocal lookup
+public static Foo doSomething(String key) {
+    PerlRuntime rt = PerlRuntime.current();        // lookup 1
+    Foo a = rt.mapA.get(key);
+    Foo b = rt.mapB.get(key);
+    rt.mapC.put(key, b);
+    return a;
+}
+```
 
-3. **Other `GlobalVariable` accessors** — `getGlobalVariable()`,
-   `getGlobalArray()`, `getGlobalHash()`, etc. Each does 1-2 lookups;
-   caching saves 1 per call. Many call sites across the codebase.
-   File: `GlobalVariable.java`
+**Step 1a: `GlobalVariable.getGlobalCodeRef()`**
+- File: `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalVariable.java`
+- Currently 4 `PerlRuntime.current()` calls per invocation (pinnedCodeRefs,
+  globalCodeRefs get, globalCodeRefs put, pinnedCodeRefs put)
+- Called N times during method hierarchy traversal in `findMethodInHierarchy()`
+- Expected savings: 3 lookups per call x N calls per method dispatch
+- **Expected impact on method benchmark:** moderate (reduces cache-miss cost)
+- Benchmark after this step before proceeding
+
+**Step 1b: `InheritanceResolver.findMethodInHierarchy()`**
+- File: `src/main/java/org/perlonjava/runtime/mro/InheritanceResolver.java`
+- Currently 12-14 `PerlRuntime.current()` calls per cache-miss invocation
+  across `getMethodCache()`, `getIsaStateCache()`, `getLinearizedClassesCache()`,
+  `getPackageMROMap()`, `getCurrentMRO()`, `isAutoloadEnabled()`
+- Two approaches (pick one):
+  - (a) Add `PerlRuntime rt` parameter to `findMethodInHierarchy()` and its
+    internal methods — cleaner but changes method signatures
+  - (b) Cache `PerlRuntime rt` as a local at the top of `findMethodInHierarchy()`
+    and replace each `getXxxCache()` call with direct `rt.xxxCache` access —
+    fewer signature changes but less encapsulated
+- **Expected impact on method benchmark:** high (this is the main cache-miss path)
+- Benchmark after this step
+
+**Step 1c: Other `GlobalVariable` accessors**
+- Same file as 1a
+- Apply the same pattern to `getGlobalVariable()`, `getGlobalArray()`,
+  `getGlobalHash()`, `existsGlobalCodeRef()`, `resolveStashAlias()`
+- Each saves 1 lookup per call; these are called pervasively
+- **Expected impact:** small per-method, cumulative across all benchmarks
+- Benchmark all 4 benchmarks after this step
+
+After Tier 1, re-run all benchmarks and record results. If closure and method
+are within 10% of master, the optimization work is done. If not, proceed to
+Tier 2.
+
+---
 
 **Tier 2: Consolidate WarningBits/HintHash stacks into PerlRuntime (MEDIUM RISK)**
 
-The closure call path has 14-17 ThreadLocal lookups from 7+ separate
-ThreadLocal stacks in `WarningBitsRegistry` and `HintHashRegistry`. These
-could be consolidated into a single call-frame stack on `PerlRuntime`:
+This tier targets the **closure** regression specifically. The closure call
+path has zero `PerlRuntime.current()` lookups (Tier 1 will not help it) but
+14-17 ThreadLocal lookups from 7 separate ThreadLocal stacks:
 
-```java
-// Instead of 7 separate ThreadLocal stacks:
-//   WarningBitsRegistry.currentBitsStack (ThreadLocal)
-//   WarningBitsRegistry.callerBitsStack (ThreadLocal)
-//   WarningBitsRegistry.callerHintsStack (ThreadLocal)
-//   WarningBitsRegistry.callSiteBits (ThreadLocal)
-//   WarningBitsRegistry.callSiteHints (ThreadLocal)
-//   HintHashRegistry.callSiteSnapshotId (ThreadLocal)
-//   HintHashRegistry.callerSnapshotIdStack (ThreadLocal)
-//
-// Use a single call-frame stack on PerlRuntime:
-//   PerlRuntime.callFrameStack (one ThreadLocal lookup via PerlRuntime.current())
+| ThreadLocal | Class | push/pop per call |
+|-------------|-------|-------------------|
+| `currentBitsStack` | WarningBitsRegistry | 2 (push + pop) |
+| `callerBitsStack` | WarningBitsRegistry | 2 |
+| `callerHintsStack` | WarningBitsRegistry | 2 |
+| `callSiteBits` | WarningBitsRegistry | 1 (get) |
+| `callSiteHints` | WarningBitsRegistry | 1 (get) |
+| `callSiteSnapshotId` | HintHashRegistry | 2 (get + set) |
+| `callerSnapshotIdStack` | HintHashRegistry | 2 |
+| `argsStack` | RuntimeCode | 2 |
+
+**Approach:** Migrate these 8 ThreadLocal stacks into `PerlRuntime` instance
+fields, following the same accessor-method pattern used for all other
+migrated stacks (see "Local Save/Restore Stack Fix" section above). This
+turns 14-17 ThreadLocal lookups into 1 (`PerlRuntime.current()` at method
+entry, then direct field access).
+
+Concrete steps:
+1. Add 8 stack fields to `PerlRuntime.java`
+2. Add `private static` accessor methods in each source class that delegate
+   to `PerlRuntime.current().<field>` (same pattern as `localizedStack()` etc.)
+3. Replace `threadLocalField.get()` with the accessor call in each push/pop site
+4. Remove the ThreadLocal field declarations from WarningBitsRegistry,
+   HintHashRegistry, and RuntimeCode
+5. Verify: `make` passes, then benchmark closure
+
+**Expected impact on closure benchmark:** high — 14 fewer ThreadLocal lookups
+per call. This is the dominant cost in the closure path.
+
+**Revert criteria:** If closure benchmark does not improve by at least 15%
+(i.e., does not recover at least half the 34% regression), revert unless the
+migration is considered architecturally desirable for consistency with the
+other stack migrations.
+
+---
+
+**Tier 3: Investigate inline method cache effectiveness (LOW RISK)**
+
+Only pursue this if method dispatch is still >10% slower after Tier 1.
+
+Each `PerlRuntime` starts with empty inline method cache arrays
+(`inlineCacheBlessId`, `inlineCacheMethodHash`, `inlineCacheCode`). The
+cache is indexed by `callsiteId % CACHE_SIZE`, so it relies on a warm
+steady state.
+
+**Diagnostic step (before any code change):**
+```bash
+# Add temporary counters to callCached() to measure hit/miss ratio:
+# - Count cache hits (blessId matches AND methodHash matches)
+# - Count cache misses
+# Run benchmark_method.pl and report hit rate
 ```
 
-This turns 14 ThreadLocal lookups into 1, but requires careful refactoring
-of `WarningBitsRegistry` and `HintHashRegistry`. The `argsStack` ThreadLocal
-in `RuntimeCode` could also be folded into this call frame.
-
-**Tier 3: Warm the inline method cache (LOW RISK)**
-
-Each new `PerlRuntime` starts with empty inline method cache arrays. If the
-method benchmark regression is due to cold caches, pre-warming or sharing
-read-only method resolution results across runtimes could help. However, this
-only matters for the multiplicity use case (concurrent interpreters), not
-single-interpreter CLI usage.
+If hit rate is >95%, the cache is working and the regression is from the
+single `PerlRuntime.current()` lookup per call (unavoidable overhead of ~2-5ns).
+If hit rate is low, investigate why — possible causes:
+- `callsiteId` collisions across runtimes (IDs are global AtomicIntegers)
+- Cache size too small for the workload
+- BlessId instability across runtime initialization
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
