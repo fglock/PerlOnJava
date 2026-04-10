@@ -57,7 +57,6 @@ PerlOnJava implements most core Perl features with some key differences:
 ❌ Not Supported:
 - XS modules and C integration
 - Threading
-- DESTROY blocks
 
 ---
 
@@ -245,7 +244,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **Field inheritance**: Parent class fields are inherited.
 - 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
 - 🟡  **Argument validation**: Limited by operator implementation issues.
-- ❌  **`DESTROY`**: Destructor blocks not yet implemented.
+- ✅  **`DESTROY`**: Destructor methods with cooperative reference counting.
 
 ---
 
@@ -784,10 +783,7 @@ The DBI module provides seamless integration with JDBC drivers:
 ## Features Incompatible with JVM
 
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
-- ❌  **`DESTROY`**: Handling of object destruction may be incompatible with JVM garbage collection.
-  - For more details see: `dev/design/object_lifecycle.md`.
-  - Some modules that depend on `DESTROY`: `SelectSaver`, `File::Temp`.
-  - `DESTROY` method in tied variables is also not implemented. DESTROY is called when the variable is `untie`.
+- ✅  **`DESTROY`**: Implemented with cooperative reference counting on top of JVM GC. Supports cascading destruction, closure capture tracking, `weaken`/`isweak`/`unweaken`, and global destruction phase.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.

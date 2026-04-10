@@ -75,8 +75,8 @@ Work currently in progress:
 
 ### Core Language Gaps
 
-- **`DESTROY` Support** — Implement scope-based destructors for predictable cleanup at block boundaries, with GC-based fallback for edge cases. Critical for `File::Temp`, `SelectSaver`, tied variable cleanup, and many CPAN modules. See `dev/design/object_lifecycle.md`.
-- **Weak References** — Implement `Scalar::Util::weaken`/`isweak` with minimal memory overhead (external WeakHashMap registry or sentinel value approach). Required by Moo, Moose, and many OO frameworks. See `dev/design/object_lifecycle.md`.
+- ~~**`DESTROY` Support**~~ — Implemented with cooperative reference counting. Supports cascading destruction, closure capture tracking, and global destruction phase.
+- ~~**Weak References**~~ — Implemented: `Scalar::Util::weaken`/`isweak`/`unweaken` with external WeakRefRegistry.
 - **Taint Mode (`-T`)** — Track external data provenance using a `TAINTED` wrapper type (no extra storage for untainted scalars). Required for security-sensitive Perl applications. See `dev/design/TAINT_MODE.md`.
 - **Dynamically-Scoped Regex Variables** — `$1`, `$2`, etc. should be localized per regex match in the dynamic scope.
 

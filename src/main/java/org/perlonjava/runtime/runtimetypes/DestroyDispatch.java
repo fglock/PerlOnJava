@@ -158,11 +158,6 @@ public class DestroyDispatch {
             // internal fields for any blessed references and defer their refCount
             // decrements. This ensures nested objects (e.g., $self->{inner}) are
             // destroyed when their parent is destroyed.
-            // 
-            // Note: RuntimeCode.apply() calls MortalList.flush() at the top, which
-            // clears all pending entries. So we must walk AFTER apply returns and
-            // process the cascading entries immediately (flush them inline) rather
-            // than relying on the caller's popAndFlush loop to pick them up.
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
                 MortalList.flush();

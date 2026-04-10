@@ -16,9 +16,13 @@ PerlOnJava is a Perl 5 implementation that compiles Perl source code to JVM byte
    - Bytecode interpreter: Interprets a subset of operations for eval STRING
 
 3. **Runtime** (`org.perlonjava.runtime`)
-   - Runtime types: RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeCode
+   - Runtime types: RuntimeScalar, RuntimeArray, RuntimeHash, RuntimeList, RuntimeCode, RuntimeGlob, RuntimeIO
    - Operators: Arithmetic, string, comparison, I/O
    - Perl modules: Built-in implementations of core modules
+
+4. **Application** (`org.perlonjava.app`)
+   - CLI entry point (Main, ArgumentParser, CompilerOptions)
+   - JSR-223 ScriptEngine integration
 
 ## Key Architecture Documents
 
@@ -27,6 +31,11 @@ PerlOnJava is a Perl 5 implementation that compiles Perl source code to JVM byte
 | [dynamic-scope.md](dynamic-scope.md) | Dynamic scoping via `local` and DynamicVariableManager |
 | [weaken-destroy.md](weaken-destroy.md) | Cooperative reference counting, DESTROY, and weak references |
 | [lexical-pragmas.md](lexical-pragmas.md) | Lexical warnings, strict, and features |
+| [control-flow.md](control-flow.md) | Control flow implementation (die/eval, last/next/redo, block dispatchers) |
+| [block-dispatcher-optimization.md](block-dispatcher-optimization.md) | Block-level shared dispatchers for control flow |
+| [large-code-refactoring.md](large-code-refactoring.md) | Large code handling: proactive block refactoring and interpreter fallback |
+| [../design/inline-cache.md](../design/inline-cache.md) | Inline caching design (runtime global cache implemented; per-site variant planned) |
+| [../design/method-call-optimization.md](../design/method-call-optimization.md) | Method call optimization plan (Phase 1 done; Phases 2-3 not yet implemented) |
 | [../design/interpreter.md](../design/interpreter.md) | Bytecode interpreter design |
 | [../design/variables_and_values.md](../design/variables_and_values.md) | Runtime value representation |
 
@@ -37,7 +46,7 @@ Perl Source
     │
     ▼
 ┌─────────┐
-│  Lexer  │  Tokenizes source into LexerTokens
+│  Lexer  │  Tokenizes source into LexerToken instances
 └────┬────┘
      │
      ▼
@@ -70,7 +79,7 @@ Perl Source
 ┌────────────────────────────────────────────────┐
 │              Runtime Types                      │
 │  RuntimeScalar, RuntimeArray, RuntimeHash      │
-│  RuntimeCode, RuntimeGlob, RuntimeIO           │
+│  RuntimeList, RuntimeCode, RuntimeGlob, RuntimeIO │
 └────────────────────────────────────────────────┘
                       │
                       ▼
