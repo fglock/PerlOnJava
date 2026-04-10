@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.17  
+**Version**: 5.18  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.17 — fix blessed glob DESTROY: instanceof order in DestroyDispatch)  
+**Updated**: 2026-04-09 (v5.18 — fix m?PAT? regression: per-callsite caching for match-once)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -2018,6 +2018,26 @@ sub DESTROY {
     resolve correctly during DESTROY, matching Perl 5 behavior.
   - **Files**: `DestroyDispatch.java` (lines 135-148)
   - **Commits**: `e6c653e74`
+- [x] Fix m?PAT? regression: per-callsite caching for match-once (2026-04-09):
+  - **Root cause**: The `cloneTracked()` change in v5.15 (for qr// DESTROY refcount safety)
+    made `getQuotedRegex()` create a fresh RuntimeRegex on every call. For `m?PAT?`, the
+    `matched` flag (which tracks "already matched once" state) was reset to `false` on each
+    call because `cloneTracked()` deliberately does NOT copy the `matched` field (line 132:
+    "matched is not copied — each qr// object tracks its own m?PAT? state"). Before v5.15,
+    `getQuotedRegex()` returned the cached instance directly, so the `matched` flag persisted.
+  - **Impact**: `regex_once.t` unit test failed — `m?apple?` always matched instead of
+    matching only once. The test expects the second iteration to return false.
+  - **Fix**: Treat `m?PAT?` like `/o` — both need per-callsite caching to preserve state
+    across calls. Two changes:
+    1. `EmitRegex.java::handleMatchRegex()`: Detect `?` modifier in flags and use the 3-arg
+       `getQuotedRegex(pattern, modifiers, callsiteId)` with a unique callsite ID (same path
+       as `/o`).
+    2. `RuntimeRegex.java::getQuotedRegex(pattern, modifiers, callsiteId)`: Check for `?`
+       modifier in addition to `o` when deciding whether to use callsite caching.
+    The callsite-cached regex persists its `matched` flag between calls from the same source
+    location, which is exactly the semantics of `m?PAT?` (match once per `reset()` cycle).
+  - **Files**: `EmitRegex.java`, `RuntimeRegex.java`
+  - **Commits**: `5643db41a`
 
 ### Moo Test Results
 
@@ -2040,7 +2060,7 @@ for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modif
 | overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `e6c653e74`: "fix: correct instanceof order in DestroyDispatch for blessed globs"
+- `5643db41a`: "Fix m?PAT? regression: use per-callsite caching for match-once"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
@@ -2528,6 +2548,16 @@ subtests passing.
   3. This also fixes the "(in cleanup) Not a GLOB reference" warnings from IO::Compress/
      IO::Uncompress DESTROY handlers that were reported as cosmetic in v5.16.
   Files: `DestroyDispatch.java`
+- **v5.18** (2026-04-09): Fix m?PAT? regression — per-callsite caching for match-once:
+  1. Root cause: `cloneTracked()` (added in v5.15 for qr// refcount safety) created a fresh
+     RuntimeRegex on every `getQuotedRegex()` call, resetting the `matched` flag that `m?PAT?`
+     uses to track "already matched once" state. Before v5.15, the cached instance was returned
+     directly and the flag persisted.
+  2. Fix: `m?PAT?` now uses the same per-callsite caching mechanism as `/o`. Both
+     `EmitRegex.java` (detect `?` modifier → use 3-arg getQuotedRegex with callsite ID) and
+     `RuntimeRegex.java` (check `?` modifier alongside `o` for cache lookup) were updated.
+  3. **Result**: `regex_once.t` passes — `m?apple?` matches on first call, returns false on second.
+  Files: `EmitRegex.java`, `RuntimeRegex.java`
 - **v5.16** (2026-04-09): Fix ExifTool StackOverflowError in circular ref traversal:
   1. Converted `MortalList.deferDecrementRecursive()` from recursive to iterative using
      `ArrayDeque<RuntimeScalar>` work queue + `IdentityHashMap`-based visited set.
