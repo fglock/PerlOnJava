@@ -1189,31 +1189,54 @@ public class CompileAssignment {
                 // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
                 if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode arrayOp) {
 
-                    // Must be @array (not $array)
-                    if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
-                        String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
+                    // Must be @array or @$ref (not $array)
+                    if (arrayOp.operator.equals("@")) {
                         int arrayReg;
-                        if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+
+                        if (arrayOp.operand instanceof IdentifierNode) {
+                            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                                arrayReg = bytecodeCompiler.allocateRegister();
+                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                            } else if (bytecodeCompiler.hasVariable(varName)) {
+                                arrayReg = bytecodeCompiler.getVariableRegister(varName);
+                            } else {
+                                arrayReg = bytecodeCompiler.allocateRegister();
+                                String globalArrayName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) arrayOp.operand).name,
+                                        bytecodeCompiler.getCurrentPackage()
+                                );
+                                int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
+                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emit(nameIdx);
+                            }
+                        } else if (arrayOp.operand instanceof OperatorNode || arrayOp.operand instanceof BlockNode) {
+                            // @$ref[@idx] = ... or @{expr}[@idx] = ...
+                            // Compile the scalar reference expression and dereference to array
+                            bytecodeCompiler.compileNode(arrayOp.operand, -1, RuntimeContextType.SCALAR);
+                            int scalarReg = bytecodeCompiler.lastResultReg;
                             arrayReg = bytecodeCompiler.allocateRegister();
-                            int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                            bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emit(nameIdx);
-                            bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                        } else if (bytecodeCompiler.hasVariable(varName)) {
-                            arrayReg = bytecodeCompiler.getVariableRegister(varName);
+                            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                            } else {
+                                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                                bytecodeCompiler.emit(pkgIdx);
+                            }
                         } else {
-                            arrayReg = bytecodeCompiler.allocateRegister();
-                            String globalArrayName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) arrayOp.operand).name,
-                                    bytecodeCompiler.getCurrentPackage()
-                            );
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emit(nameIdx);
+                            bytecodeCompiler.throwCompilerException("Array slice assignment requires identifier or reference");
+                            return;
                         }
 
                         // Compile indices (right side of [])

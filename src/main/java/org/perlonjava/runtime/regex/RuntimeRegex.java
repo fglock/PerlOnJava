@@ -227,10 +227,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
-                if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
-                ) {
-                    // Warn for unimplemented features and Java regex compilation errors
-                    String base = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : ("Regex compilation failed: " + e.getMessage());
+                // PerlJavaUnimplementedException extends PerlCompilerException, so check
+                // the more specific type first. Real syntax errors (PerlCompilerException
+                // but NOT PerlJavaUnimplementedException) are always fatal.
+                // Java PatternSyntaxException etc. are wrapped as unimplemented.
+                boolean isUnimplemented = e instanceof PerlJavaUnimplementedException;
+                boolean isRealSyntaxError = !isUnimplemented && e instanceof PerlCompilerException;
+
+                if (isRealSyntaxError) {
+                    throw (PerlCompilerException) e;
+                }
+
+                // Wrap non-Perl exceptions (PatternSyntaxException etc.) as unimplemented
+                PerlJavaUnimplementedException unimplEx;
+                if (isUnimplemented) {
+                    unimplEx = (PerlJavaUnimplementedException) e;
+                } else {
+                    unimplEx = new PerlJavaUnimplementedException("Regex compilation failed: " + e.getMessage());
+                }
+
+                // With JPERL_UNIMPLEMENTED=warn, downgrade to warning and use a never-matching pattern
+                if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")) {
+                    String base = unimplEx.getMessage();
                     // Include original and preprocessed patterns to aid debugging
                     String patternInfo = " [pattern='" + (patternString == null ? "" : patternString) + "'" +
                             (javaPattern != null ? ", java='" + javaPattern + "'" : "") + "]";
@@ -242,11 +260,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
                     regex.patternUnicode = regex.pattern;  // Error pattern - same for both
-                } else {
-                    if (e instanceof PerlCompilerException) {
-                        throw e;
+                    // Ensure patternString is set so downstream code doesn't NPE
+                    if (regex.patternString == null) {
+                        regex.patternString = patternString != null ? patternString : "";
                     }
-                    throw new PerlJavaUnimplementedException("Regex compilation failed: " + e.getMessage());
+                } else {
+                    throw unimplEx;
                 }
             }
 
@@ -271,6 +290,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Recompile once, now that runtime may have defined user properties.
         // To avoid infinite loops if recompilation still can't resolve, clear the flag first.
         regex.deferredUserDefinedUnicodeProperties = false;
+
+        // Evict the old cached entry so compile() will actually recompile
+        // instead of returning the stale regex with deferred placeholders.
+        String cacheKey = regex.patternString + "/" + (regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
+        regexCache.remove(cacheKey);
+
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
         regex.patternUnicode = recompiled.patternUnicode;

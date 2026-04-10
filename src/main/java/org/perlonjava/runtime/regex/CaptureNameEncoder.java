@@ -161,15 +161,64 @@ public class CaptureNameEncoder {
         return captureName != null && captureName.startsWith("cb") && captureName.length() > 5;
     }
 
-    // FUTURE ENHANCEMENTS:
-    // 
-    // For underscore support: (?<my_name>)
-    // Use the same hex encoding pattern: (?<ncHEX>) where HEX encodes "my_name"
-    // Then %CAPTURE decodes back to show original name to user
+    // UNDERSCORE ENCODING:
     //
-    // For duplicate names: (?<name>a)|(?<name>b)  
-    // Encode with disambiguation: (?<ncHEX1>a)|(?<ncHEX2>b) where HEX encodes "name"
-    // Track mapping for proper capture group retrieval
+    // Java regex doesn't allow underscores in group names (only [a-zA-Z][a-zA-Z0-9]*).
+    // Perl allows \w+ (letters, digits, underscores) for group names.
     //
-    // The generic hex encoding pattern is reusable for all Java regex limitations!
+    // Encoding: Replace each underscore with "U95" (ASCII code 95 for '_')
+    //   (?<my_name>) → (?<myU95name>)
+    //   (?<_>)       → (?<U95>)
+    //   (?<_foo>)    → (?<U95foo>)
+    //
+    // Names starting with underscore need a letter prefix for Java, so U95 works
+    // since it starts with 'U'. To avoid ambiguity, literal "U95" sequences in
+    // names are escaped as "UU95" (the 'U' itself is escaped).
+
+    /**
+     * Encodes a Perl capture group name for use in Java regex.
+     * Replaces underscores with "U95" and escapes literal "U95" sequences.
+     *
+     * @param perlName The original Perl capture group name
+     * @return The encoded name safe for Java regex, or the original if no encoding needed
+     */
+    public static String encodeGroupName(String perlName) {
+        if (perlName == null || (!perlName.contains("_") && !perlName.contains("U95"))) {
+            return perlName;
+        }
+        // First escape any existing "U95" as "UU95" to avoid ambiguity
+        String encoded = perlName.replace("U95", "UU95");
+        // Then replace underscores with "U95"
+        encoded = encoded.replace("_", "U95");
+        return encoded;
+    }
+
+    /**
+     * Decodes a Java regex capture group name back to the original Perl name.
+     * Reverses the encoding done by encodeGroupName.
+     *
+     * @param javaName The encoded Java group name
+     * @return The original Perl capture group name
+     */
+    public static String decodeGroupName(String javaName) {
+        if (javaName == null || !javaName.contains("U95")) {
+            return javaName;
+        }
+        // First restore underscores from "U95"
+        String decoded = javaName.replace("U95", "_");
+        // Then restore literal "U95" from "U_95" (which was "UU95" before first step)
+        decoded = decoded.replace("U_95", "U95");
+        return decoded;
+    }
+
+    /**
+     * Checks if a capture group name is an internal name that should be hidden
+     * from user-visible variables like %+ and %-.
+     *
+     * @param captureName The capture group name to check
+     * @return true if this is an internal capture (code block or \K marker)
+     */
+    public static boolean isInternalCapture(String captureName) {
+        return isCodeBlockCapture(captureName) || "perlK".equals(captureName);
+    }
 }

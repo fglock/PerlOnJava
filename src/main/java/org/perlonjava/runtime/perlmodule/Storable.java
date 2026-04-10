@@ -548,9 +548,12 @@ public class Storable extends PerlModuleBase {
                         RuntimeArray thawArgs = new RuntimeArray();
                         RuntimeArray.push(thawArgs, newObj);
                         RuntimeArray.push(thawArgs, new RuntimeScalar(1)); // cloning = true
-                        // Pass serialized data and any extra refs from freeze
-                        for (int i = 0; i < freezeArray.size(); i++) {
-                            RuntimeArray.push(thawArgs, freezeArray.get(i));
+                        // First element is the serialized string — pass as-is
+                        RuntimeArray.push(thawArgs, freezeArray.get(0));
+                        // Remaining elements are extra refs — deep-clone them
+                        // so the thawed object gets independent copies
+                        for (int i = 1; i < freezeArray.size(); i++) {
+                            RuntimeArray.push(thawArgs, deepClone(freezeArray.get(i), cloned));
                         }
                         RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
                     }

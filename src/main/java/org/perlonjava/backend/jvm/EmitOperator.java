@@ -534,9 +534,28 @@ public class EmitOperator {
 
                 if (first != null) {
                     try {
+                        MethodVisitor mv = emitterVisitor.ctx.mv;
                         first.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                        // Spill the first operand before evaluating remaining args so
+                        // non-local control flow can't jump to returnLabel with an
+                        // extra value on the JVM operand stack.
+                        int firstSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                        boolean pooled = firstSlot >= 0;
+                        if (!pooled) {
+                            firstSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                        }
+                        mv.visitVarInsn(Opcodes.ASTORE, firstSlot);
+
                         // Accept the remaining arguments in LIST context.
                         args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                        mv.visitVarInsn(Opcodes.ALOAD, firstSlot);
+                        mv.visitInsn(Opcodes.SWAP);
+
+                        if (pooled) {
+                            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                        }
                     } finally {
                         listArgs.elements.addFirst(first);
                     }

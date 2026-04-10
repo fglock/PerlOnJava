@@ -93,6 +93,9 @@ public class RegexPreprocessor {
      * @throws PerlCompilerException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
+        if (s == null) {
+            s = "";
+        }
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
@@ -997,7 +1000,7 @@ public class RegexPreprocessor {
                 sb.append("(?:)");
 
                 // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
-                regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
+                regexUnimplemented(s, offset + 2, "Regex control verb " + verb + " not implemented");
 
                 return verbEnd; // Skip past the entire verb construct
             }
@@ -1019,7 +1022,7 @@ public class RegexPreprocessor {
                 return offset; // offset points to ')', caller will increment past it
             } else if (c3 == '@') {
                 // Handle (?@...) which is not implemented
-                regexError(s, offset + 3, "Sequence (?@...) not implemented");
+                regexUnimplemented(s, offset + 3, "Sequence (?@...) not implemented");
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
                 if (s.startsWith("(?{UNIMPLEMENTED_CODE_BLOCK})", offset)) {
@@ -1095,8 +1098,8 @@ public class RegexPreprocessor {
                 validateLookbehindLength(s, offset);
                 sb.append("(?<!");
                 offset = handleRegex(s, offset + 4, sb, regexFlags, true);
-            } else if (c3 == '<' && isAlphabetic(c4)) {
-                // Handle named capture (?<name> ... )
+            } else if (c3 == '<' && (isAlphabetic(c4) || c4 == '_')) {
+                // Handle named capture (?<name> ... ) - name can start with letter or underscore
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else if (c3 == '<') {
                 // Invalid character after (?<
@@ -1138,7 +1141,10 @@ public class RegexPreprocessor {
             } else if (Character.isDigit(c3)) {
                 // Recursive subpattern reference (?1), (?2), etc.
                 // These refer to the subpattern with that number and are recursive
-                regexError(s, offset + 2, "Sequence (?" + ((char) c3) + "...) not recognized");
+                regexUnimplemented(s, offset + 2, "Sequence (?" + ((char) c3) + "...) not recognized");
+            } else if (c3 == '&') {
+                // Named group recursion (?&name) - Perl feature not yet implemented
+                regexUnimplemented(s, offset + 2, "Sequence (?&...) not recognized");
             } else {
                 // Unknown sequence - show the actual character
                 String seq = "(?";
@@ -1194,7 +1200,9 @@ public class RegexPreprocessor {
             regexError(s, offset, "Unterminated named capture in regex");
         }
         String name = s.substring(start, end);
-        sb.append("(?<").append(name).append(">");
+        // Encode underscores for Java regex compatibility
+        String encodedName = CaptureNameEncoder.encodeGroupName(name);
+        sb.append("(?<").append(encodedName).append(">");
         captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
     }
@@ -1523,7 +1531,7 @@ public class RegexPreprocessor {
         int maxLength = calculateMaxLength(s, start);
 
         if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
-            regexErrorSimple(s, "Lookbehind longer than 255 not implemented");
+            throw new PerlJavaUnimplementedException("Lookbehind longer than 255 not implemented in regex m/" + s + "/");
         }
     }
 
@@ -1868,11 +1876,11 @@ public class RegexPreprocessor {
         // Valid quantifier forms: {n}, {n,}, {n,m}, {,m}
         // Invalid (literal): {}, {,}, {abc}, etc.
         if (!isValid || (!hasFirstNumber && !hasSecondNumber)) {
-            // Not a valid quantifier - treat braces as literal (escape for Java regex)
+            // Not a valid quantifier - treat opening brace as literal (escape for Java regex).
+            // Don't consume content up to '}' — it may contain regex metacharacters
+            // (like parentheses, character classes, etc.) that need proper processing.
             sb.append("\\{");
-            sb.append(quantifier);
-            sb.append("\\}");
-            return new int[]{end, 1}; // literal
+            return new int[]{start, 1}; // literal, offset stays at '{' so caller increments past it
         }
 
         // Valid quantifier - pass through to Java
@@ -2217,23 +2225,23 @@ public class RegexPreprocessor {
 
             // Append a named capture group that matches empty string
             // This allows us to store the constant value without affecting the match
-            sb.append("(?<").append(captureName).append(">)");
+            sb.append("(?<").append(captureName).append(">");
 
-            // Skip past '}' and ')' - the closing brace and paren of (?{...})
-            // codeEnd points to the '}', so we need to skip '}' and ')'
+            // Return offset pointing to the ')' so handleGroup can consume it
+            // codeEnd points to the '}', the next char should be ')'
             if (codeEnd + 1 < length && s.charAt(codeEnd + 1) == ')') {
-                return codeEnd + 2; // Skip past both '}' and ')'
+                return codeEnd + 1; // Point to ')' for handleGroup to consume
             }
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
 
         // Non-constant code block: replace with no-op group so the regex compiles.
         // This allows tests that use (?{...}) in non-critical parts to continue running.
-        sb.append("(?:)");
+        sb.append("(?:");
 
-        // Skip past '}' and ')' - the closing brace and paren of (?{...})
+        // Return offset pointing to the ')' so handleGroup can consume it
         if (codeEnd + 1 < length && s.charAt(codeEnd + 1) == ')') {
-            return codeEnd + 2; // Skip past both '}' and ')'
+            return codeEnd + 1; // Point to ')' for handleGroup to consume
         }
         return codeEnd + 1; // Just skip past '}' if no ')' found
     }
