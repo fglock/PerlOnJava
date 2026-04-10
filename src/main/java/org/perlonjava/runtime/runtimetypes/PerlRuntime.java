@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 
 /**
@@ -37,6 +38,21 @@ import java.util.regex.Matcher;
 public final class PerlRuntime {
 
     private static final ThreadLocal<PerlRuntime> CURRENT = new ThreadLocal<>();
+
+    /**
+     * Counter for generating unique per-runtime PIDs.
+     * Starts at the real JVM PID so the first runtime gets the actual PID,
+     * subsequent runtimes get incrementing values (realPid+1, realPid+2, ...).
+     * This ensures $$ is unique per interpreter for temp file isolation.
+     */
+    private static final AtomicLong PID_COUNTER =
+            new AtomicLong(ProcessHandle.current().pid());
+
+    /**
+     * Per-runtime synthetic PID, used as Perl's $$.
+     * First runtime gets the real JVM PID; subsequent runtimes get unique values.
+     */
+    public final long pid = PID_COUNTER.getAndIncrement();
 
     // ---- Per-runtime state (migrated from static fields) ----
 

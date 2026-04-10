@@ -90,7 +90,7 @@ public class GlobalContext {
             ors.set(compilerOptions.outputRecordSeparator);    // initialize $\
             GlobalVariable.getGlobalVariablesMap().put("main::\\", ors);
         }
-        GlobalVariable.getGlobalVariable("main::$").set(ProcessHandle.current().pid()); // initialize `$$` to process id
+        GlobalVariable.getGlobalVariable("main::$").set(PerlRuntime.current().pid); // initialize `$$` to per-runtime unique pid
         GlobalVariable.getGlobalVariable("main::?");
         // Only set $0 if it hasn't been set yet - prevents overwriting during re-entrant calls
         // (e.g., when require() is called during module initialization)

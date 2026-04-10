@@ -107,9 +107,17 @@ public class PipeInputChannel implements IOHandle {
         // Create reader for stderr only
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
+        // Capture the parent thread's PerlRuntime so the background thread
+        // can access per-runtime STDERR handle for proper output routing
+        PerlRuntime parentRuntime = PerlRuntime.currentOrNull();
+
         // Start a thread to consume stderr and route through Perl STDERR handle
         // This ensures Perl-level redirections are honored (e.g., open STDERR, ">", $file)
         Thread errorThread = new Thread(() -> {
+            // Bind this thread to the same PerlRuntime as the parent
+            if (parentRuntime != null) {
+                PerlRuntime.setCurrent(parentRuntime);
+            }
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {

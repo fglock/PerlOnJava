@@ -167,9 +167,17 @@ public class PipeOutputChannel implements IOHandle {
         outputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
+        // Capture the parent thread's PerlRuntime so background threads
+        // can access per-runtime STDOUT/STDERR handles for proper output routing
+        PerlRuntime parentRuntime = PerlRuntime.currentOrNull();
+
         // Start threads to consume stdout and stderr and route through Perl handles
         // This ensures Perl-level redirections are honored
         Thread outputThread = new Thread(() -> {
+            // Bind this thread to the same PerlRuntime as the parent
+            if (parentRuntime != null) {
+                PerlRuntime.setCurrent(parentRuntime);
+            }
             try (BufferedReader out = outputReader) {
                 String line;
                 while ((line = out.readLine()) != null) {
@@ -192,6 +200,10 @@ public class PipeOutputChannel implements IOHandle {
         outputThread.start();
 
         Thread errorThread = new Thread(() -> {
+            // Bind this thread to the same PerlRuntime as the parent
+            if (parentRuntime != null) {
+                PerlRuntime.setCurrent(parentRuntime);
+            }
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {
