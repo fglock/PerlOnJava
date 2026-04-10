@@ -311,11 +311,21 @@ public class BytecodeCompiler implements Visitor {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
 
+            // Gather variable indices to determine if cleanup is needed.
+            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
+            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+
+            // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+            // Scopes with no my-variables skip this entirely.
+            boolean needsCleanup = flush
+                    && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
             // Push mark so popAndFlush only drains entries added by
             // scopeExitCleanup. Entries from method returns within the block
             // that are below the mark will be processed by the next setLarge()
             // or undefine() flush, or by the enclosing scope's exit.
-            if (flush) {
+            if (needsCleanup) {
                 emit(Opcodes.MORTAL_PUSH_MARK);
             }
 
@@ -323,26 +333,23 @@ public class BytecodeCompiler implements Visitor {
             // This calls RuntimeScalar.scopeExitCleanup() which handles:
             // 1. IO fd recycling for anonymous filehandle globs
             // 2. refCount decrement for blessed references with DESTROY
-            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
             for (int reg : scalarIndices) {
                 emit(Opcodes.SCOPE_EXIT_CLEANUP);
                 emitReg(reg);
             }
 
             // Walk hash/array variables for nested blessed references.
-            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
             for (int reg : hashIndices) {
                 emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
                 emitReg(reg);
             }
-            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
             for (int reg : arrayIndices) {
                 emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
                 emitReg(reg);
             }
 
             // Pop mark and flush only entries added since the mark
-            if (flush) {
+            if (needsCleanup) {
                 emit(Opcodes.MORTAL_POP_FLUSH);
             }
 

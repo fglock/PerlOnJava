@@ -88,11 +88,22 @@ public class EmitStatement {
      * @param flush      If true, emit scoped MortalList flush around null stores
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
+        // Gather variable indices for this scope first, to determine if cleanup is needed.
+        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
+        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
+        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
+
+        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+        // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
+        // skip this entirely, eliminating 2 method calls per loop iteration.
+        boolean needsCleanup = flush
+                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
         // Phase 0: Push mark so popAndFlush only drains entries added by
         // scopeExitCleanup in Phase 1. Entries from method returns within
         // the block that are below the mark will be processed by the next
         // setLarge() or undefine() flush, or by the enclosing scope's exit.
-        if (flush) {
+        if (needsCleanup) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "pushMark",
@@ -102,7 +113,6 @@ public class EmitStatement {
         // Phase 1: Eagerly unregister fd numbers on scalar variables holding
         // anonymous filehandle globs. This makes the fd available for reuse
         // without waiting for non-deterministic GC.
-        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
         for (int idx : scalarIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -114,7 +124,6 @@ public class EmitStatement {
         // Phase 1b: Walk hash/array variables for nested blessed references.
         // When a hash/array goes out of scope, any blessed refs stored inside
         // (or nested inside sub-containers) need their refCounts decremented.
-        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
         for (int idx : hashIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -123,7 +132,6 @@ public class EmitStatement {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
                     false);
         }
-        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
         for (int idx : arrayIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -144,7 +152,7 @@ public class EmitStatement {
         // This triggers DESTROY for blessed objects whose last strong reference was
         // in a lexical that just went out of scope. Only entries added by Phase 1
         // are processed; older pending entries from outer scopes are preserved.
-        if (flush) {
+        if (needsCleanup) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "popAndFlush",

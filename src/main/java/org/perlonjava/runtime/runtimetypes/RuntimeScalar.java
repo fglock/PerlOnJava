@@ -811,11 +811,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Inlineable fast path for set(RuntimeScalar)
+    // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
+    // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
         if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
-            if (((this.type | value.type) & REFERENCE_BIT) != 0) {
-                return setLarge(value);
-            }
             this.type = value.type;
             this.value = value.value;
             return this;
@@ -854,7 +853,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this;
     }
 
-    // Slow path for set(RuntimeScalar)
+    // Slow path for set(RuntimeScalar) — kept small for JIT inlining of set().
+    // Reference-type assignments are dispatched to setLargeRefCounted() which
+    // handles refCount tracking, IO lifecycle, and weak ref bookkeeping.
     private RuntimeScalar setLarge(RuntimeScalar value) {
         if (value == null) {
             closeIOOnDrop();
@@ -883,6 +884,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case READONLY_SCALAR ->
                     throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+
+        // Reference types (or overwriting a reference) need refCount + IO tracking.
+        // All reference types have REFERENCE_BIT (0x8000) set, so a single
+        // bitwise OR + AND check covers both old and new values.
+        if (((this.type | value.type) & REFERENCE_BIT) != 0) {
+            return setLargeRefCounted(value);
+        }
+
+        // Simple non-reference assignment (no refCount tracking needed).
+        this.type = value.type;
+        this.value = value.value;
+        MortalList.flush();
+        return this;
+    }
+
+    /**
+     * RefCount-aware slow path for reference assignments.
+     * Called from setLarge() when either the old or new value involves a reference type.
+     * Separated to keep setLarge() small enough for JIT inlining of set().
+     */
+    private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
         // ──────────────────────────────────────────────────────────────────
         // closeIOOnDrop() was REMOVED from this assignment path.
         //
@@ -2063,6 +2085,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
+
+        // Fast path: skip if no special state (most common case for integer/string vars).
+        // When all three conditions are true, the entire method body is a no-op:
+        // - refCountOwned=false → deferDecrementIfTracked returns immediately
+        // - captureCount=0 → capture handling branch not taken
+        // - ioOwner=false → IO fd recycling branch not taken
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) return;
 
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
