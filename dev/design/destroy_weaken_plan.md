@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.11  
+**Version**: 5.12  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.11 — tie DESTROY on untie via refcounting)  
+**Updated**: 2026-04-09 (v5.12 — eval BLOCK eager capture release)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1926,6 +1926,35 @@ sub DESTROY {
     Added 2 new subtests to destroy.t: immediate DESTROY on untie, deferred DESTROY with held ref.
   - **Files**: `TiedVariableBase.java`, `TieArray.java`, `TieHash.java`, `TieHandle.java`,
     `TieOperators.java`, `tie_scalar.t`, `tie_array.t`, `tie_hash.t`, `destroy.t`
+- [x] eval BLOCK eager capture release (2026-04-09):
+  - **Root cause**: `eval BLOCK` is compiled as `sub { ... }->()` — an immediately-invoked
+    anonymous sub (see `OperatorParser.parseEval()`, line 88-92). This creates a RuntimeCode
+    closure that captures outer lexicals, incrementing their `captureCount`. The `->()` call
+    goes through `RuntimeCode.apply()` (the static overload with RuntimeScalar, RuntimeArray,
+    int parameters), NOT through `applyEval()`. While `applyEval()` calls `releaseCaptures()`
+    in its `finally` block, `apply()` did NOT — so `captureCount` stayed elevated until GC
+    eventually collected the RuntimeCode. This prevented `scopeExitCleanup()` from decrementing
+    `refCount` on captured variables (because `captureCount > 0` causes early return), which in
+    turn kept weak references alive after the strong ref was undef'd.
+  - **Discovery path**: Traced why `undef $ref` in Moo's accessor-weaken tests didn't clear
+    weak refs when used with `Test::Builder::cmp_ok()`. Narrowed to `eval { $check->($got, $expect); 1 }`
+    inside cmp_ok keeping `$got` alive. Verified with system Perl that `eval BLOCK` does NOT
+    keep captured vars alive (Perl 5's eval BLOCK runs inline, no closure capture). Confirmed
+    that PerlOnJava's `eval BLOCK` goes through `apply()` not `applyEval()` because the try/catch
+    is already baked into the generated method (`useTryCatch=true` in `EmitterMethodCreator`).
+    The comment at `EmitSubroutine.java` line 586-588 documents this design decision.
+  - **Fix**: Added `code.releaseCaptures()` in the `finally` block of `RuntimeCode.apply()`
+    (the static method at line 2090) when `code.isEvalBlock` is true. The `isEvalBlock` flag
+    is already set by `EmitSubroutine.java` line 392-402 for eval BLOCK's RuntimeCode.
+  - **Also in this commit**: Restored `deferDecrementIfTracked` in `releaseCaptures()` with
+    `scopeExited` guard (previously removed as "not needed"), and in `scopeExitCleanup()`,
+    captured CODE refs fall through to `deferDecrementIfTracked` while non-CODE captured vars
+    return early (preserving Sub::Quote semantics where closures legitimately keep values alive).
+  - **Result**: All Moo tests pass including accessor-weaken.t (was 16/19, now 19/19).
+    All 200 weaken/refcount unit tests pass (9/9 files). `make` passes with no regressions.
+  - **Files**: `RuntimeCode.java` (apply() finally block + releaseCaptures()),
+    `RuntimeScalar.java` (scopeExitCleanup CODE ref fallthrough)
+  - **Commits**: `8a5ab843c`
 
 ### Moo Test Results
 
@@ -1948,7 +1977,7 @@ for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modif
 | overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `86d5f813e`: "fix: skip weak ref clearing for CODE objects (fixes 46 Moo test failures)"
+- `8a5ab843c`: "fix: release eval BLOCK captures eagerly to prevent weak ref leaks"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
@@ -2393,17 +2422,17 @@ subtests passing.
    refined Strategy A changes in place).
 
 ### Version History
-- **v5.7** (2026-04-08): JVM WeakReference feasibility analysis + Moo codegen trace:
-  1. Added §13: Traced Moo's Method::Generate::Accessor code generation for
-     `lazy + weak_ref` attributes. Documented exact generated accessor code and
-     step-by-step Perl 5 vs PerlOnJava runtime divergence.
-  2. Added §14: Evaluated 7 approaches for fixing remaining 6 accessor-weaken subtests.
-     Concluded JVM GC non-determinism makes all GC-based approaches (WeakReference,
-     PhantomReference, forced System.gc()) unviable. Only full refcounting from birth
-     can achieve synchronous clearing — deferred due to 5-15% runtime overhead.
-  3. Documented test 19 (optree reaping) as JVM-fundamentally-impossible: compiled
-     bytecode held by ClassLoader is never freed on sub redefinition.
-  4. Updated Progress Tracking to final state: 69/71 programs, 835/841 subtests (99.3%).
+- **v5.12** (2026-04-09): eval BLOCK eager capture release:
+  1. Root cause: eval BLOCK compiled as `sub { ... }->()` captures outer lexicals but uses
+     `apply()` (not `applyEval()`), which never called `releaseCaptures()`. Captures stayed
+     alive until GC, preventing `scopeExitCleanup()` from decrementing refCount on captured
+     variables. This kept weak refs alive through `eval { ... }` boundaries (e.g.,
+     Test::Builder's `cmp_ok` using `eval { $check->($got, $expect); 1 }`).
+  2. Fix: `code.releaseCaptures()` in `apply()`'s finally block when `code.isEvalBlock`.
+  3. Also: restored `deferDecrementIfTracked` in `releaseCaptures()` with `scopeExited` guard;
+     in `scopeExitCleanup`, CODE-type captured vars fall through to decrement (releasing inner
+     closures' captures) while non-CODE captured vars return early (Sub::Quote safety).
+  4. **Result**: accessor-weaken.t 19/19, all 200 weaken/refcount unit tests pass, make clean.
 - **v5.11** (2026-04-09): Tie DESTROY on untie via refcounting:
   1. Tie wrappers now increment refCount in constructors and decrement in untie via
      `releaseTiedObject()`. DESTROY fires immediately if no other refs, deferred if held.
