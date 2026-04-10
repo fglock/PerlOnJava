@@ -1311,11 +1311,12 @@ feature/multiplicity          (this branch — known good, all tests pass)
 5. **If the optimization fails** (no measurable gain, or introduces regressions):
    go back to `feature/multiplicity`, document the failure in this section
    (what was tried, what the benchmark numbers were, why it did not work),
-   and delete the branch:
+   commit and **push** so the findings are preserved, then delete the work branch:
    ```bash
    git checkout feature/multiplicity
-   # Add a "Failed Attempts" subsection below with findings
+   # Edit this file: add findings to the "Failed Optimization Attempts" section below
    git commit -am "docs: document failed optimization attempt"
+   git push origin feature/multiplicity
    git branch -D feature/multiplicity-opt
    ```
    This ensures the next engineer knows what was already tried and can
