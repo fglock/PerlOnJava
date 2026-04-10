@@ -1269,6 +1269,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeRegex regex = entry.getValue();
             regex.matched = false; // Reset the matched field
         }
+        // Also reset m?PAT? patterns cached per-callsite in optimizedRegexCache
+        for (Map.Entry<Integer, RuntimeScalar> entry : optimizedRegexCache.entrySet()) {
+            RuntimeScalar scalar = entry.getValue();
+            if (scalar.value instanceof RuntimeRegex regex) {
+                regex.matched = false;
+            }
+        }
     }
 
     /**
