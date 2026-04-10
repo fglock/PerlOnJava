@@ -1,6 +1,6 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-09
+**Last Updated:** 2026-04-10
 **Status:** PRODUCTION READY - 841/841 Moo subtests, all unit tests passing
 **Branch:** `feature/destroy-weaken`
 
@@ -20,9 +20,11 @@ and are cleared when a tracked object's refcount hits zero.
 
 The system is designed around two principles:
 
-1. **Zero cost when unused.** Programs that never `bless` into a class with
-   `DESTROY` pay no runtime overhead -- every hot path is guarded by a single
-   boolean (`MortalList.active`).
+1. **Low cost when unused.** `MortalList.active` is always `true` (required for
+   balanced refCount tracking on birth-tracked objects like anonymous hashes and
+   closures with captures), but most operations are guarded by cheap checks
+   (`refCount >= 0`, `refCountOwned`, empty pending list) that short-circuit for
+   untracked objects.
 
 2. **Correctness over completeness.** The system tracks only objects that
    *need* tracking (blessed into a DESTROY class), avoiding the full Perl 5
@@ -44,15 +46,15 @@ Every `RuntimeBase` (the superclass of `RuntimeHash`, `RuntimeArray`,
  (untracked)                            (birth-tracked)
     │                                       │
     │ weaken()                              │ setLarge() copies ref
-    │ (heuristic)                           │ into a variable
-    │                                       │
-    ▼                                       ▼
-   -2                                      1+
-(WEAKLY_TRACKED)                        (N strong refs)
-    │                                       │
-    │ strong ref dropped                    │ last strong ref dropped
-    │ (undef, scope exit,                   │ (decrement hits 0)
-    │  or overwrite)                        │
+    │ (heuristic,                           │ into a variable
+    │  non-CODE only)                       │
+    │                                       ▼
+    ▼                                      1+
+   -2                                   (N strong refs)
+(WEAKLY_TRACKED)                            │
+    │                                       │ last strong ref dropped
+    │ explicit undef()                      │ (decrement hits 0)
+    │ of a strong ref                       │
     │                                       ▼
     └──────────────────────────────────► MIN_VALUE
                                          (destroyed)
@@ -61,31 +63,45 @@ Every `RuntimeBase` (the superclass of `RuntimeHash`, `RuntimeArray`,
                                                    WeakRefRegistry.clearWeakRefsTo()
 ```
 
-**NOTE:** The WEAKLY_TRACKED (-2) state is used in two cases:
+**NOTE on WEAKLY_TRACKED (-2):**
 
-1. **Unblessed birth-tracked objects** (blessId == 0, refCount > 0) where
-   closure captures bypass `setLarge()`, making refCount unreliable. When
-   `weaken()` decrements such an object's refCount and it remains > 0,
-   the object transitions to WEAKLY_TRACKED to prevent premature clearing
-   by mortal flush. This is the "Moo safety valve" for Sub::Quote closures.
+This state is entered via **one** path: `weaken()` on an **untracked non-CODE
+object** (refCount == -1). Since strong refs to untracked objects are never
+counted, WEAKLY_TRACKED allows `undefine()` to clear weak refs when a strong
+reference is explicitly dropped. This may clear weak refs too eagerly when
+multiple strong refs exist, but unblessed objects have no DESTROY, so
+over-eager clearing causes no side effects beyond the weak ref becoming undef.
 
-2. **Untracked objects** (refCount == -1) transitioned to WEAKLY_TRACKED
-   by `weaken()` as a heuristic. Since strong refs to untracked objects
-   are never counted, WEAKLY_TRACKED allows `undefine()`, `setLarge()`,
-   and `scopeExitCleanup()` to clear weak refs when a strong reference
-   is explicitly dropped. This may clear weak refs too eagerly when
-   multiple strong refs exist, but unblessed objects have no DESTROY,
-   so over-eager clearing causes no side effects beyond the weak ref
-   becoming undef.
+**Why only `undefine()` clears:**  `setLarge()` and `scopeExitCleanup()` do
+**not** clear weak refs for WEAKLY_TRACKED objects. Since WEAKLY_TRACKED objects
+have no refCountOwned tracking on pre-existing strong refs, overwriting one
+reference doesn't mean no other strong refs exist. Closures may capture copies
+(e.g., Sub::Quote's `$_QUOTED` capture), so clearing on scope exit or overwrite
+would break Sub::Quote/Moo constructor inlining.
+
+**Why CODE refs are excluded:** CODE refs live in both lexicals AND the symbol
+table (stash), but stash assignments (`*Foo::bar = $coderef`) bypass
+`setLarge()`, making the stash reference invisible to refcounting. Transitioning
+CODE refs to WEAKLY_TRACKED would cause premature clearing when a lexical
+reference is overwritten — even though the CODE ref is still alive in the stash.
+This would break Sub::Quote/Sub::Defer (which use `weaken()` for
+back-references) and cascade to break Moo's accessor inlining.
+
+**Note:** The previous blessId==0→WEAKLY_TRACKED transition (for unblessed
+birth-tracked objects with remaining strong refs after `weaken()`) was removed.
+It caused premature clearing of weak refs when ANY strong ref exited scope, even
+though other strong refs still existed. Birth-tracked objects maintain accurate
+refCounts through `setLarge()`/`scopeExitCleanup()` — closure captures are
+birth-tracked (refCountOwned=false) and don't decrement refCount on cleanup.
 
 See "Design History" section for the evolution of this design.
 
 | Value | Meaning |
 |-------|---------|
-| `-1` | **Untracked.** Default state. Object is unblessed or blessed into a class without DESTROY. No refCount bookkeeping occurs. `weaken()` transitions to WEAKLY_TRACKED (-2) and registers the weak ref in WeakRefRegistry. |
+| `-1` | **Untracked.** Default state. Object is unblessed or blessed into a class without DESTROY. No refCount bookkeeping occurs. `weaken()` transitions non-CODE objects to WEAKLY_TRACKED (-2) and registers the weak ref in WeakRefRegistry. CODE refs stay at -1. |
 | `0` | **Birth-tracked.** Freshly blessed into a DESTROY class, or anonymous hash/code via `createReferenceWithTrackedElements`. No variable holds a reference yet -- `setLarge()` will increment to 1 on first assignment. |
 | `> 0` | **Tracked.** N strong references exist in named variables. Each `setLarge()` assignment increments; each scope exit or reassignment decrements. |
-| `-2` | **WEAKLY_TRACKED.** Entered via two paths: (1) `weaken()` on an untracked object (-1) — a heuristic allowing weak ref clearing when any strong ref is explicitly dropped. (2) `weaken()` on an unblessed tracked object (blessId == 0) with remaining strong refs — a safety valve for closure captures that bypass `setLarge()`. In both cases, weak refs are cleared when a strong ref is dropped via `undef`, scope exit, or overwrite. |
+| `-2` | **WEAKLY_TRACKED.** Entered when `weaken()` is called on an untracked non-CODE object (refCount == -1). A heuristic allowing weak ref clearing when a strong ref is explicitly dropped via `undefine()`. `setLarge()` and `scopeExitCleanup()` do NOT clear weak refs for this state — only explicit `undefine()`. |
 | `MIN_VALUE` | **Destroyed.** DESTROY has been called (or is in progress). Prevents double-destruction. |
 
 ### Ownership: `refCountOwned`
@@ -98,8 +114,24 @@ of scope.
 ### Capture Count
 
 `RuntimeScalar.captureCount` tracks how many closures capture this variable.
-When `captureCount > 0`, `scopeExitCleanup()` skips all cleanup -- the variable
-outlives its lexical scope.
+When `captureCount > 0`, `scopeExitCleanup()` behaviour depends on the type:
+
+- **CODE refs:** The value's refCount is still decremented (falls through to
+  `deferDecrementIfTracked`) so that the `RuntimeCode` is eventually destroyed
+  and its `releaseCaptures()` fires. This is critical for eval STRING closures
+  that capture all visible lexicals.
+
+- **Non-CODE refs:** `scopeExitCleanup()` returns early. The closure keeps
+  the value alive; premature decrement would clear weak refs in Sub::Quote.
+
+- **Self-referential cycle:** If a CODE scalar captures itself (common with
+  eval STRING), `scopeExitCleanup()` detects the cycle and removes the
+  self-reference from the captures array, breaking the cycle.
+
+`RuntimeScalar.scopeExited` is set to `true` when `scopeExitCleanup()` fires
+on a captured variable. This tells `releaseCaptures()` that the variable's scope
+has already exited, so it should call `deferDecrementIfTracked()` on that
+variable to trigger destruction.
 
 ---
 
@@ -118,7 +150,7 @@ outlives its lexical scope.
 | `GlobalDestruction.java` | End-of-program stash walking |
 | `ReferenceOperators.java` | `bless()` -- activates tracking |
 | `RuntimeGlob.java` | CODE slot replacement -- optree reaping emulation |
-| `RuntimeCode.java` | `padConstants` registry, `releaseCaptures()` |
+| `RuntimeCode.java` | `padConstants` registry, `releaseCaptures()`, eval BLOCK capture release in `apply()` |
 
 ---
 
@@ -140,12 +172,12 @@ Manages all weak references using two identity-based data structures:
 
 | Method | What it does |
 |--------|--------------|
-| `weaken(ref)` | Validates ref is a reference. Adds to both maps. Adjusts refCount: if tracked (>0), decrements strong count (may trigger DESTROY if it hits 0); for unblessed tracked objects (blessId == 0) with remaining strong refs, transitions to WEAKLY_TRACKED. If untracked (-1), transitions to WEAKLY_TRACKED (-2) as a heuristic for weak ref clearing. |
+| `weaken(ref)` | Validates ref is a reference. Adds to both maps. Adjusts refCount: if tracked (>0), decrements strong count (may trigger DESTROY if it hits 0). If untracked (-1) and NOT a CODE ref, transitions to WEAKLY_TRACKED (-2) as a heuristic for weak ref clearing. CODE refs stay at -1 (stash refs bypass setLarge). |
 | `isweak(ref)` | Returns `weakScalars.contains(ref)`. |
 | `unweaken(ref)` | Removes from both maps. Re-increments refCount and restores `refCountOwned`. |
 | `removeWeakRef(ref, oldReferent)` | Called by `setLarge()` before decrementing. Returns true if the ref was weak, telling the caller to skip the refCount decrement. |
 | `hasWeakRefsTo(referent)` | Returns true if any weak references point to the given referent. |
-| `clearWeakRefsTo(referent)` | Called during destruction. Sets every weak scalar pointing at this referent to `UNDEF/null`. Removes all entries from both maps. |
+| `clearWeakRefsTo(referent)` | Called during destruction. Skips CODE referents (stash refs invisible to refcounting would cause false clears). For non-CODE: sets every weak scalar pointing at this referent to `UNDEF/null`. Removes all entries from both maps. |
 
 **Design decision -- external maps, not per-scalar flags:** Weak refs are rare.
 Using identity-based external maps avoids adding a field to every
@@ -171,10 +203,9 @@ changes or methods are redefined.
 
 1. **Precondition:** Caller has already set `refCount = MIN_VALUE`.
 2. Calls `WeakRefRegistry.clearWeakRefsTo(referent)` -- clears all weak
-   references pointing to this object. This fires for both blessed objects
-   (before DESTROY) and WEAKLY_TRACKED objects (unblessed, reached via
-   `undefine()`, `setLarge()`, or `scopeExitCleanup()` WEAKLY_TRACKED
-   handling).
+   references pointing to this object (skips CODE referents). This fires for
+   both blessed objects (before DESTROY) and WEAKLY_TRACKED objects (unblessed,
+   reached via `undefine()` WEAKLY_TRACKED handling).
 3. If referent is `RuntimeCode`, calls `releaseCaptures()`.
 4. Looks up class name from `blessId`. If unblessed, returns (no DESTROY
    to call, but weak refs and captures have already been cleaned up).
@@ -184,8 +215,12 @@ changes or methods are redefined.
 8. Builds a `$self` reference with the correct type (HASHREFERENCE, etc.).
 9. Calls `RuntimeCode.apply(destroyMethod, args, VOID)`.
 10. **Cascading destruction:** After DESTROY returns, walks the destroyed
-    object's hash/array elements via `MortalList.scopeExitCleanupHash/Array()`
-    then flushes.
+    object's elements. For hashes and arrays, walks both blessed AND
+    unblessed elements: `MortalList.scopeExitCleanupHash/Array()` handles
+    tracked refs, then `clearWeakRefsInHash/Array()` handles WEAKLY_TRACKED
+    refs inside the container. This is necessary because WEAKLY_TRACKED
+    elements inside a blessed container wouldn't otherwise get their weak
+    refs cleared (they have no DESTROY and no scope exit). Then flushes.
 11. **Exception handling:** Catches exceptions, converts to
     `WarnDie.warn("(in cleanup) ...")` -- matching Perl 5 semantics.
 
@@ -197,10 +232,13 @@ Equivalent to Perl 5's `FREETMPS` / mortal stack. Provides deferred refCount
 decrements at statement boundaries so that temporaries survive long enough to
 be used.
 
-**The `active` gate:** A single `boolean` that starts `false`. It is set to
-`true` when the first `bless()` into a DESTROY class occurs. When `false`,
-every public method is a no-op -- zero overhead for the vast majority of
-programs that don't use DESTROY.
+**The `active` field:** A `boolean` that is always `true`. It is initialized to
+`true` and never changed. (Historically, it was lazily activated by the first
+`bless()` into a DESTROY class, but this was changed because birth-tracked
+objects like anonymous hashes and closures with captures need balanced refCount
+tracking from the start.) Most operations are guarded by cheap checks
+(`refCount >= 0`, `refCountOwned`, empty pending list) that make the overhead
+negligible for programs that don't use DESTROY.
 
 **Pending list:** `ArrayList<RuntimeBase>` of referents awaiting decrement.
 
@@ -245,8 +283,11 @@ refCount tracking block:
 3. Increment new referent's refCount (if >= 0), set refCountOwned = true
 4. Perform the actual type/value assignment
 5. Decrement old referent's refCount (if owned); DESTROY if it hits 0
-6. Handle WEAKLY_TRACKED: if old referent has refCount == -2 and this scalar
-   was NOT weak and NOT refCountOwned, clear weak refs via callDestroy()
+6. WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
+   These objects have refCount == -2 and their strong refs don't have
+   refCountOwned=true (they were set before tracking started).
+   Overwriting ONE reference doesn't mean no other strong refs exist.
+   Weak refs for WEAKLY_TRACKED objects are cleared only via undefine().
 7. Update refCountOwned
 8. MortalList.flush()
 ```
@@ -255,24 +296,34 @@ refCount tracking block:
 
 Called by generated bytecode when a lexical variable goes out of scope:
 
-1. Returns immediately if `captureCount > 0` (variable is captured by a closure).
+1. If `captureCount > 0`:
+   a. **Self-referential cycle detection:** If the scalar holds a CODE ref
+      that captures this same scalar, removes the self-reference from
+      `capturedScalars` and decrements `captureCount`. This breaks cycles
+      caused by eval STRING closures that capture all visible lexicals.
+   b. Sets `scopeExited = true` so `releaseCaptures()` knows the scope
+      has already exited.
+   c. **CODE refs:** Falls through to step 3 below (still decrements
+      refCount on the RuntimeCode value so it is eventually destroyed and
+      its `releaseCaptures()` fires).
+   d. **Non-CODE refs:** Returns early. The closure keeps the value alive;
+      premature decrement would clear weak refs in Sub::Quote.
 2. Handles IO fd recycling for glob references.
 3. Calls `MortalList.deferDecrementIfTracked()` to schedule a deferred
    decrement rather than decrementing immediately.
-4. Handles WEAKLY_TRACKED: if the scalar holds a non-weak reference to a
-   WEAKLY_TRACKED object (refCount == -2), clears weak refs via
-   `callDestroy()`. This fires when a strong reference to an untracked
-   weakened object goes out of scope.
+4. WEAKLY_TRACKED: does NOT clear weak refs on scope exit. Scope exit of
+   ONE reference doesn't mean no other strong refs exist (closures may
+   capture copies). Weak refs for WEAKLY_TRACKED objects are cleared only
+   via explicit `undefine()`.
 
 #### `undefine()` -- Explicit `undef $obj`
 
 Handles explicit undef with special cases:
 - CODE refs: releases captures, replaces with empty `RuntimeCode`.
 - Tracked (>0): decrements; DESTROY if it hits 0.
-- WEAKLY_TRACKED (-2): triggers callDestroy to clear weak refs. This fires
-  for both unblessed birth-tracked objects (path 1 in WEAKLY_TRACKED) and
-  untracked objects that were weakened (path 2). Safe because these are
-  unblessed objects with no DESTROY method.
+- WEAKLY_TRACKED (-2): triggers callDestroy to clear weak refs. This is
+  the primary clearing mechanism for WEAKLY_TRACKED objects. Safe because
+  these are unblessed objects with no DESTROY method.
 - Untracked (-1): no refCount action.
 - Flushes `MortalList` at the end.
 
@@ -373,6 +424,28 @@ PerlOnJava emulates this with "pad constants":
    slot, calls `clearPadConstantWeakRefs()` on the old code, which clears any
    weak references to those cached constants.
 
+### 8. RuntimeCode -- Capture Release and eval BLOCK
+
+**Path:** `org.perlonjava.runtime.runtimetypes.RuntimeCode`
+
+**`releaseCaptures()`:** Called when a CODE ref's refCount reaches 0 (via
+`callDestroy()`) or when a CODE ref is explicitly `undef`'d. Decrements
+`captureCount` on each captured scalar. For captured scalars where
+`scopeExited == true` (their declaring scope already exited), calls
+`MortalList.deferDecrementIfTracked()` to trigger the deferred destruction
+that `scopeExitCleanup()` couldn't perform earlier.
+
+**`apply()` -- eval BLOCK capture release:** `eval BLOCK` is compiled as
+`sub { ... }->()` with `useTryCatch=true`. The `apply()` method's finally
+block calls `code.releaseCaptures()` when `code.isEvalBlock` is true. This
+ensures captured variables' `captureCount` is decremented immediately after
+the eval block completes, rather than waiting for GC. Without this, weak
+refs inside eval blocks wouldn't be cleared until the next GC cycle.
+
+**Note:** `apply()` does NOT call `flush()` at the top of the method (this
+was removed). Flushing happens at statement boundaries via `setLarge()` and
+scoped `popAndFlush()` instead.
+
 ---
 
 ## Lifecycle Examples
@@ -427,6 +500,28 @@ undef $a;                      # WEAKLY_TRACKED → callDestroy() → $weak = un
 This over-eager clearing is accepted because unblessed objects have no
 DESTROY method, so the only effect is the weak ref becoming undef slightly
 earlier than Perl 5 would. No destructors are missed.
+
+### Example 4: eval BLOCK Capture Release
+
+```perl
+my $weak;
+{
+    my $obj = bless {}, 'Foo';   # refCount: 0 -> 1
+    $weak = $obj;                # refCount: 1 -> 2
+    weaken($weak);               # refCount: 2 -> 1
+    eval {
+        # eval BLOCK compiled as sub { ... }->() with useTryCatch=true
+        # The anonymous sub captures $obj and $weak (captureCount incremented)
+        my $x = $obj;            # refCount: 1 -> 2
+    };
+    # apply() finally: releaseCaptures() since isEvalBlock=true
+    # captureCount on $obj decremented back; $x scope-exited within eval
+    # Without this fix: captureCount stays elevated, scopeExitCleanup
+    # defers forever, weak ref never cleared
+}
+# scopeExitCleanup for $obj: defers decrement (refCount 1 -> 0 -> DESTROY)
+# DESTROY clears $weak via clearWeakRefsTo
+```
 
 ---
 
@@ -777,42 +872,49 @@ Refined Strategy A left `weaken_edge_cases.t` test 15 failing ("nested weak
 array element becomes undef"). The fix: **re-add the -1 → -2 transition**
 but with important differences from the original design:
 
-1. **No `MortalList.active = true`**: The transition does not activate the
-   mortal system. Programs that use `weaken()` without DESTROY classes still
-   pay zero mortal overhead.
-2. **Heuristic clearing in three sites**: `undefine()`, `setLarge()`, and
-   `scopeExitCleanup()` now detect WEAKLY_TRACKED objects and clear weak
-   refs when a strong reference is dropped. This is more precise than the
-   original design which only cleared on `undefine()`.
+1. **`MortalList.active` always true**: The mortal system is always on
+   (required for birth-tracked objects). The -1 → -2 transition does not
+   change this.
+2. **Heuristic clearing only in `undefine()`**: Only explicit `undef`
+   triggers WEAKLY_TRACKED clearing. `setLarge()` and `scopeExitCleanup()`
+   do NOT clear WEAKLY_TRACKED objects — clearing on overwrite/scope-exit
+   was too aggressive (broke Sub::Quote/Moo when closures capture copies).
 3. **`refCountOwned = false`**: The weak scalar's `refCountOwned` is cleared
    so it doesn't trigger spurious decrements.
+4. **CODE refs excluded**: `weaken()` on a CODE ref does NOT transition
+   to WEAKLY_TRACKED (stash refs bypass setLarge, making refcounting
+   unreliable). CODE refs are also skipped in `clearWeakRefsTo()`.
 
 **Changes in `WeakRefRegistry.weaken()`:**
 ```java
-} else if (base.refCount == -1) {
-    // Heuristic: transition to WEAKLY_TRACKED so that undefine(),
-    // setLarge(), and scopeExitCleanup() can clear weak refs when
-    // a strong reference is dropped.
+} else if (base.refCount == -1 && !(base instanceof RuntimeCode)) {
+    // Heuristic: transition to WEAKLY_TRACKED so that undefine()
+    // can clear weak refs when a strong reference is dropped.
+    // CODE refs excluded: stash refs bypass setLarge().
     ref.refCountOwned = false;
     base.refCount = WEAKLY_TRACKED;  // -2
 }
 ```
 
-**Changes in `RuntimeScalar.setLarge()`** (after normal decrement block):
+**Changes in `RuntimeScalar.setLarge()`:**
 ```java
-if (oldBase != null && !thisWasWeak && !this.refCountOwned
-        && oldBase.refCount == WEAKLY_TRACKED) {
-    oldBase.refCount = Integer.MIN_VALUE;
-    DestroyDispatch.callDestroy(oldBase);
-}
+// WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
+// Overwriting ONE reference doesn't mean no other strong refs exist.
+// Weak refs for WEAKLY_TRACKED objects are cleared only via undefine().
 ```
 
-**Changes in `RuntimeScalar.scopeExitCleanup()`** (after deferDecrementIfTracked):
+**Changes in `RuntimeScalar.scopeExitCleanup()`:**
 ```java
-if (scalar holds non-weak reference to WEAKLY_TRACKED base) {
-    base.refCount = Integer.MIN_VALUE;
-    DestroyDispatch.callDestroy(base);
-}
+// WEAKLY_TRACKED objects: do NOT clear weak refs on scope exit.
+// Scope exit of ONE reference doesn't mean no other strong refs exist.
+// Weak refs for WEAKLY_TRACKED objects are cleared only via undefine().
+```
+
+**Changes in `WeakRefRegistry.clearWeakRefsTo()`:**
+```java
+// Skip clearing weak refs to CODE objects. Stash refs bypass setLarge(),
+// causing false refCount==0 via mortal flush.
+if (referent instanceof RuntimeCode) return;
 ```
 
 **Result:**
@@ -932,12 +1034,14 @@ is a high-risk area. Needs careful testing.
 
 The heuristic -1 → -2 transition (current implementation) resolves both the
 qr-72922.t regression and the weaken_edge_cases.t test 15 failure. The
-`blessId == 0 → WEAKLY_TRACKED` safety valve is preserved for Moo.
+previous `blessId == 0 → WEAKLY_TRACKED` safety valve has been removed
+(it caused premature clearing when closures captured copies). WEAKLY_TRACKED
+now only applies to untracked non-CODE objects.
 
 **Accepted trade-off:** Weak refs to untracked objects may be cleared too
-eagerly when multiple strong refs exist. This affects only unblessed objects
-(no DESTROY), so the impact is limited to the weak ref becoming undef
-slightly earlier than Perl 5 would.
+eagerly when one strong ref is undef'd while others exist. This affects only
+unblessed objects (no DESTROY), so the impact is limited to the weak ref
+becoming undef slightly earlier than Perl 5 would.
 
 **Future work (if needed):**
 
@@ -963,15 +1067,18 @@ slightly earlier than Perl 5 would.
 ## Limitations & Known Issues
 
 1. **Weak refs to non-DESTROY objects: heuristic clearing.**
-   `weaken()` on an untracked object (refCount -1) transitions it to
-   WEAKLY_TRACKED (-2). When any strong reference to the object is
-   explicitly dropped (via `undef`, scope exit, or overwrite), weak refs
-   are cleared. This is a heuristic: if multiple strong refs exist, the
-   weak ref may be cleared too early (when the first strong ref drops,
-   not the last). Perl 5 would only clear when ALL strong refs are gone.
-   This over-eager clearing is accepted because unblessed objects have no
-   DESTROY, so the only effect is the weak ref becoming `undef` slightly
-   earlier than Perl 5 would.
+   `weaken()` on an untracked non-CODE object (refCount -1) transitions it
+   to WEAKLY_TRACKED (-2). When a strong reference to the object is
+   explicitly dropped via `undef`, weak refs are cleared. `setLarge()` and
+   `scopeExitCleanup()` do NOT clear WEAKLY_TRACKED objects (overwriting or
+   scope-exiting one reference doesn't mean no other strong refs exist).
+   This is still a heuristic: if multiple strong refs exist and one is
+   undef'd, the weak ref is cleared even though the object is still alive.
+   Perl 5 would only clear when ALL strong refs are gone. This over-eager
+   clearing is accepted because unblessed objects have no DESTROY, so the
+   only effect is the weak ref becoming `undef` slightly earlier than Perl 5
+   would. CODE refs are excluded from WEAKLY_TRACKED entirely (stash refs
+   bypass setLarge).
 
 2. **Hash/Array birth-tracking asymmetry.** Anonymous hashes (`{...}`) are
    birth-tracked (`refCount = 0` in `createReferenceWithTrackedElements`),
