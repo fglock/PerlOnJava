@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
@@ -477,6 +478,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
+        // Acquire the global compile lock — the parser and emitter have shared mutable
+        // static state that is not thread-safe for concurrent compilation.
+        PerlLanguageProvider.COMPILE_LOCK.lock();
+        try {
+
         // Retrieve the eval context that was saved at program compile-time
         EmitterContext ctx = RuntimeCode.<EmitterContext>getEvalContext().get(evalTag);
 
@@ -825,6 +831,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // long-running applications with thread pools.
             evalRuntimeContext.remove();
         }
+
+        } finally {
+            PerlLanguageProvider.COMPILE_LOCK.unlock();
+        }
     }
 
     /**
@@ -977,6 +987,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     "The module may need to be reloaded. " +
                     "If this occurs in tests, ensure module caches are cleared along with eval contexts.");
         }
+
+        // Acquire the global compile lock for the parsing/compilation phase.
+        // The parser and emitter have shared mutable static state that is not thread-safe.
+        PerlLanguageProvider.COMPILE_LOCK.lock();
 
         // Save the current scope so we can restore it after eval execution.
         // This is critical because eval may be called from code compiled with different
@@ -1238,6 +1252,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             evalAliasKeys.clear();
 
+            // Restore the current scope under the compile lock, before releasing it.
+            // setCurrentScope touches shared parser state (SpecialBlockParser.symbolTable).
+            setCurrentScope(savedCurrentScope);
+
+            // Release the compile lock — execution is thread-safe and doesn't need it.
+            PerlLanguageProvider.COMPILE_LOCK.unlock();
+
             // Execute the interpreted code
             // Track eval depth for $^S support
             incrementEvalDepth();
@@ -1308,6 +1329,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Restore the original current scope, not the captured symbol table.
             // This prevents eval from leaking its compile-time scope to the caller.
+            // On the success path, setCurrentScope was already called before the lock was
+            // released; this is a no-op. On the error path, the lock is still held and
+            // this restores the scope before we release it below.
             setCurrentScope(savedCurrentScope);
 
             // Store source lines in debugger symbol table if $^P flags are set
@@ -1321,6 +1345,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Clean up ThreadLocal
             evalRuntimeContext.remove();
+
+            // Release the compile lock if still held (error path — success path releases it earlier)
+            if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+                PerlLanguageProvider.COMPILE_LOCK.unlock();
+            }
         }
     }
 
