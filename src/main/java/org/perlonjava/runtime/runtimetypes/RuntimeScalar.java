@@ -2104,9 +2104,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
-            // Fall through to refCount cleanup below — captured variables still
-            // need their value's refCount decremented at scope exit so that
-            // weak refs are properly cleared when the last strong ref is undef'd.
+            // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
+            // is eventually destroyed and its releaseCaptures fires (decrementing
+            // captureCount on all the variables IT captured). This is critical for
+            // eval STRING closures that capture all visible lexicals — without this,
+            // the inner sub's captures (including $got in cmp_ok) are never released,
+            // preventing weak refs from being cleared.
+            // For non-CODE refs: do NOT decrement. The closure holds a strong reference
+            // to this variable's value, and decrementing would prematurely clear weak
+            // refs (breaks Sub::Quote where closures legitimately keep values alive).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode) {
+                // Fall through to deferDecrementIfTracked below
+            } else {
+                return;
+            }
         }
 
         // NOTE: Do NOT call releaseCaptures() on CODE refs here.

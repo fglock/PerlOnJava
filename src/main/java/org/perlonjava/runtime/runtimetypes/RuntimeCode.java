@@ -356,10 +356,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (s.type == RuntimeScalarType.CODE && s.value instanceof RuntimeCode innerCode) {
                         innerCode.releaseCaptures();
                     }
-                    // Note: deferDecrementIfTracked is NOT called here because
-                    // scopeExitCleanup already handles it. Since scopeExitCleanup
-                    // now always calls deferDecrementIfTracked (even for captured
-                    // variables), doing it again here would be a double decrement.
+                    // The captured variable's scope has exited but refCount was NOT
+                    // decremented at that time (scopeExitCleanup returns early for
+                    // captured variables to prevent premature clearing while the
+                    // closure is alive). Now that the last closure is releasing this
+                    // capture, decrement refCount to balance the original increment.
+                    if (s.scopeExited) {
+                        MortalList.deferDecrementIfTracked(s);
+                    }
                 }
             }
         }
@@ -2258,6 +2262,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.popCallerBits();
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
+                }
+                // eval BLOCK is compiled as an immediately-invoked anonymous sub
+                // (sub { ... }->()) that captures outer lexicals, incrementing their
+                // captureCount. Unlike a normal closure that may be stored and reused,
+                // eval BLOCK executes once and is discarded. Release captures eagerly
+                // so captureCount is decremented promptly, allowing scopeExitCleanup
+                // to properly decrement refCount when the outer scope exits.
+                // (eval STRING uses applyEval() which already does this.)
+                if (code.isEvalBlock) {
+                    code.releaseCaptures();
                 }
             }
         }
