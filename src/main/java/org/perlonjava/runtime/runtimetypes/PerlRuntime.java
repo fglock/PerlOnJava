@@ -1,11 +1,14 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 
 /**
@@ -94,6 +97,43 @@ public final class PerlRuntime {
      * The variable/handle name used in the last readline operation.
      */
     String ioLastReadlineHandleName;
+
+    // ---- Inheritance / MRO state — migrated from InheritanceResolver static fields ----
+
+    /**
+     * Cache for linearized class hierarchies (C3/DFS results).
+     */
+    public final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
+
+    /**
+     * Per-package MRO algorithm settings.
+     */
+    public final Map<String, InheritanceResolver.MROAlgorithm> packageMRO = new HashMap<>();
+
+    /**
+     * Method resolution cache (method name -> code ref).
+     */
+    public final Map<String, RuntimeScalar> methodCache = new HashMap<>();
+
+    /**
+     * Cache for OverloadContext instances by blessing ID.
+     */
+    public final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
+
+    /**
+     * Tracks ISA array states for change detection.
+     */
+    public final Map<String, List<String>> isaStateCache = new HashMap<>();
+
+    /**
+     * Whether AUTOLOAD is enabled for method resolution.
+     */
+    public boolean autoloadEnabled = true;
+
+    /**
+     * Default MRO algorithm (DFS by default, matching Perl 5).
+     */
+    public InheritanceResolver.MROAlgorithm currentMRO = InheritanceResolver.MROAlgorithm.DFS;
 
     // ---- Static accessors ----
 

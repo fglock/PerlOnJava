@@ -18,7 +18,7 @@ public class DFS {
 
         // Check cache first
         String cacheKey = className + "::DFS";
-        List<String> cached = InheritanceResolver.linearizedClassesCache.get(cacheKey);
+        List<String> cached = InheritanceResolver.getLinearizedClassesCache().get(cacheKey);
         if (cached != null) {
             if (DEBUG_DFS) {
                 System.out.println("DEBUG DFS: Using cached result for " + className + ": " + cached);
@@ -65,7 +65,7 @@ public class DFS {
         }
 
         // Cache the result (store a copy to prevent external modifications)
-        InheritanceResolver.linearizedClassesCache.put(cacheKey, new ArrayList<>(result));
+        InheritanceResolver.getLinearizedClassesCache().put(cacheKey, new ArrayList<>(result));
         return result;
     }
 

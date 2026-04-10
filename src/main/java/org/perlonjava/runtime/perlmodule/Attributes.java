@@ -369,12 +369,12 @@ public class Attributes extends PerlModuleBase {
         RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
         RuntimeArray.push(canArgs, new RuntimeScalar("MODIFY_CODE_ATTRIBUTES"));
 
-        InheritanceResolver.autoloadEnabled = false;
+        InheritanceResolver.setAutoloadEnabled(false);
         RuntimeList codeList;
         try {
             codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
         } finally {
-            InheritanceResolver.autoloadEnabled = true;
+            InheritanceResolver.setAutoloadEnabled(true);
         }
 
         boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
@@ -468,12 +468,12 @@ public class Attributes extends PerlModuleBase {
         RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
         RuntimeArray.push(canArgs, new RuntimeScalar(modifyMethod));
 
-        InheritanceResolver.autoloadEnabled = false;
+        InheritanceResolver.setAutoloadEnabled(false);
         RuntimeList codeList;
         try {
             codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
         } finally {
-            InheritanceResolver.autoloadEnabled = true;
+            InheritanceResolver.setAutoloadEnabled(true);
         }
 
         boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();
