@@ -539,15 +539,47 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `builtin::export_lexically` | 2 tests | PerlOnJava reports `$]=5.042` so `Exporter::Tiny` takes the native lexical sub path, but `builtin::export_lexically` is not implemented. Affects `Type-Registry/lexical.t`, `Type-Tiny-Enum/exporter_lexical.t`. |
 | `sprintf "%{"` warning | Cosmetic | Fixed in Phase 6b — warning now properly gated by `use warnings "printf"`. Not a test failure; `Types::Standard::Tied` has `use warnings` so the warning is correct but was previously also firing in no-warnings contexts. |
 | `Math::BigFloat` missing | 1 test | Core Perl module not bundled with PerlOnJava. Only `t/40-bugs/gh1.t` requires it. Would need porting `Math::BigInt` + `Math::BigFloat` (large effort). |
-| `Type-Tie/06clone.t` | Known | Clone::PP doesn't preserve tie magic (3/6 pass) |
+
+### Phase 7: Clone/Storable tie preservation (completed 2026-04-10)
+
+**Goal:** Fix `Type-Tie/06clone.t` (3/6 → 6/6) and `Type-Tie/06storable.t` (3/6 → 6/6).
+
+Both tests create tied variables via `Type::Tie`, clone them, and verify the clone
+still enforces type constraints. Tests 2/4/6 failed because the clone lost tie magic.
+
+**7a. Replace custom Clone::PP with CPAN Clone::PP 1.08:**
+- Replaced our custom 77-line `Clone/PP.pm` with CPAN Clone::PP 1.08.
+- CPAN version handles ties, `clone_self` / `clone_init` hooks, depth limiting, and
+  circular reference detection.
+- However, Clone::PP's tie handling is too simplistic for Type::Tie (it calls
+  `tie %$copy, ref $tied` without constructor arguments), so we also needed 7c.
+
+**7b. Fix Storable::dclone to handle tied variables:**
+- `Storable.java` `deepClone()` now detects `TieHash`, `TieArray`, `TieScalar` backing.
+- For tied hashes/arrays: deep-clones the handler object, creates a new Tie* wrapper,
+  and copies data through the tied interface (FETCH/STORE).
+- For tied scalars: adds `TIED_SCALAR` case to clone the handler and re-tie.
+- Fixed STORABLE_freeze/thaw hook to create the correct reference type (ARRAY vs HASH)
+  for the thaw object — Type::Tie::BASE is array-based, not hash-based.
+- Files: `Storable.java`
+
+**7c. Create Java-based Clone module:**
+- Created `Clone.java` as a proper Java XS implementation of `Clone::clone`.
+- Handles tied hashes, tied arrays, tied scalars, blessed objects, circular references,
+  and depth limiting — equivalent to the XS Clone module.
+- `Clone.pm` loads it via XSLoader (falls back to Clone::PP if unavailable).
+- Files: `Clone.java`
+
+**Bundled tests added:**
+- `src/test/resources/module/Clone-PP/t/` — 7 test files from CPAN Clone::PP 1.08
+- Type-Tie tests are run via `./jcpan -t Type::Tiny` (not bundled; Type::Tie is part of Type-Tiny CPAN dist)
 
 ### Next Steps
 1. Consider implementing scope-exit hooks for DESTROY (2 test files)
-2. Improve Clone/Storable tie preservation (2 test files)
-3. Consider B::Deparse output compatibility (1 test)
-4. Fix test runner CWD handling for tests that reference `./lib`, `./t/lib`
-5. Consider bundling `Math::BigFloat` / `Math::BigInt` (low priority, 1 test)
-6. Consider implementing `builtin::export_lexically` (low priority, 2 tests)
+2. Consider B::Deparse output compatibility (1 test)
+3. Fix test runner CWD handling for tests that reference `./lib`, `./t/lib`
+4. Consider bundling `Math::BigFloat` / `Math::BigInt` (low priority, 1 test)
+5. Consider implementing `builtin::export_lexically` (low priority, 2 tests)
 
 ### Open Questions
 - The 23 `!` errors in the test runner are mostly CWD-related: tests use `./lib` and `./t/lib`

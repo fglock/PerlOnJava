@@ -535,9 +535,16 @@ public class Storable extends PerlModuleBase {
                 // Per Perl 5 Storable: empty return from STORABLE_freeze cancels the
                 // hook and falls through to default deep-copy
                 if (freezeArray.size() > 0) {
-                    // Create a new empty blessed object of the same class
-                    RuntimeHash newHash = new RuntimeHash();
-                    RuntimeScalar newObj = newHash.createReference();
+                    // Create a new empty blessed object of the same reference type as the original
+                    RuntimeScalar newObj;
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                        newObj = new RuntimeArray().createReference();
+                    } else if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        newObj = new RuntimeScalar().createReference();
+                    } else {
+                        // Default to hash reference (most common case)
+                        newObj = new RuntimeHash().createReference();
+                    }
                     ReferenceOperators.bless(newObj, new RuntimeScalar(className));
                     cloned.put(scalar.value, newObj);
 
@@ -578,9 +585,28 @@ public class Storable extends PerlModuleBase {
                     ReferenceOperators.bless(newRef, new RuntimeScalar(className));
                 }
 
-                // Deep-clone each value
-                origHash.elements.forEach((key, value) ->
-                        newHash.put(key, deepClone(value, cloned)));
+                // Check for tied hash — preserve tie magic
+                if (origHash.type == RuntimeHash.TIED_HASH && origHash.elements instanceof TieHash tieHash) {
+                    // Deep-clone the tie handler object
+                    RuntimeScalar clonedSelf = deepClone(tieHash.getSelf(), cloned);
+                    // Deep-clone the underlying data via FETCH iteration
+                    RuntimeHash previousValue = new RuntimeHash();
+                    // Create new TieHash with cloned handler
+                    newHash.type = RuntimeHash.TIED_HASH;
+                    newHash.elements = new TieHash(tieHash.getTiedPackage(), previousValue, clonedSelf);
+                    // Copy the data through the tied interface (STORE calls)
+                    // Iterate original hash via FIRSTKEY/NEXTKEY and FETCH each value
+                    RuntimeScalar firstKey = TieHash.tiedFirstKey(origHash);
+                    while (firstKey.type != RuntimeScalarType.UNDEF) {
+                        RuntimeScalar val = TieHash.tiedFetch(origHash, firstKey);
+                        TieHash.tiedStore(newHash, firstKey, deepClone(val, cloned));
+                        firstKey = TieHash.tiedNextKey(origHash, firstKey);
+                    }
+                } else {
+                    // Regular (untied) hash: deep-clone each value
+                    origHash.elements.forEach((key, value) ->
+                            newHash.put(key, deepClone(value, cloned)));
+                }
                 yield newRef;
             }
             case RuntimeScalarType.ARRAYREFERENCE -> {
@@ -595,9 +621,25 @@ public class Storable extends PerlModuleBase {
                     ReferenceOperators.bless(newRef, new RuntimeScalar(className));
                 }
 
-                // Deep-clone each element
-                for (RuntimeScalar element : origArray.elements) {
-                    newArray.elements.add(deepClone(element, cloned));
+                // Check for tied array — preserve tie magic
+                if (origArray.type == RuntimeArray.TIED_ARRAY && origArray.elements instanceof TieArray tieArray) {
+                    // Deep-clone the tie handler object
+                    RuntimeScalar clonedSelf = deepClone(tieArray.getSelf(), cloned);
+                    // Create new TieArray with cloned handler
+                    RuntimeArray previousValue = new RuntimeArray();
+                    newArray.type = RuntimeArray.TIED_ARRAY;
+                    newArray.elements = new TieArray(tieArray.getTiedPackage(), previousValue, clonedSelf, newArray);
+                    // Copy the data through the tied interface (STORE calls)
+                    int size = TieArray.tiedFetchSize(origArray).getInt();
+                    for (int i = 0; i < size; i++) {
+                        RuntimeScalar val = TieArray.tiedFetch(origArray, new RuntimeScalar(i));
+                        TieArray.tiedStore(newArray, new RuntimeScalar(i), deepClone(val, cloned));
+                    }
+                } else {
+                    // Regular (untied) array: deep-clone each element
+                    for (RuntimeScalar element : origArray.elements) {
+                        newArray.elements.add(deepClone(element, cloned));
+                    }
                 }
                 yield newRef;
             }
@@ -620,6 +662,25 @@ public class Storable extends PerlModuleBase {
                 yield scalar;
             }
             case RuntimeScalarType.READONLY_SCALAR -> deepClone((RuntimeScalar) scalar.value, cloned);
+            case RuntimeScalarType.TIED_SCALAR -> {
+                // Tied scalar: deep-clone the handler and re-tie
+                if (scalar.value instanceof TieScalar tieScalar) {
+                    RuntimeScalar clonedSelf = deepClone(tieScalar.getSelf(), cloned);
+                    // Fetch the current value through the tie to initialize the previous value
+                    RuntimeScalar prevValue = new RuntimeScalar();
+                    prevValue.set(tieScalar.tiedFetch());
+                    // Create a new tied scalar with the cloned handler
+                    RuntimeScalar copy = new RuntimeScalar();
+                    copy.type = RuntimeScalarType.TIED_SCALAR;
+                    copy.value = new TieScalar(tieScalar.getTiedPackage(), prevValue, clonedSelf);
+                    yield copy;
+                } else {
+                    // Fallback: just copy the fetched value
+                    RuntimeScalar copy = new RuntimeScalar();
+                    copy.set(scalar);
+                    yield copy;
+                }
+            }
             default -> {
                 // Scalar values (int, double, string, undef) — just copy
                 RuntimeScalar copy = new RuntimeScalar();
