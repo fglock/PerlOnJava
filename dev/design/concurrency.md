@@ -1216,8 +1216,21 @@ this caused `io_pipe.t` failures.
 
 ### Next Steps
 
-1. **Phase 6:** Implement `threads` module (requires runtime cloning)
-2. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
+1. **Phase 6:** Implement `threads` module (requires runtime cloning — see Sections 5.1-5.4
+   for the full cloning protocol). This is new functionality: deep-cloning runtime state,
+   closure capture fixup, `CLONE($pkg)` callbacks, `threads::shared` wrappers.
+
+2. **Phase 7: Runtime Pool** — An optimization/convenience layer, not a new capability.
+   The core multiplicity infrastructure is already complete; `PerlRuntime` instances can
+   be created and destroyed ad-hoc (as the `MultiplicityDemo` does). The pool amortizes
+   runtime initialization cost (loading built-in modules, setting up `@INC`/`%ENV`, etc.)
+   by reusing warm runtimes instead of re-creating them per request. Also provides
+   concurrency limiting (cap simultaneous runtimes to prevent OOM) and clean reset
+   between uses. Same pattern as JDBC connection pools or servlet thread pools. Primarily
+   useful for high-throughput web server embedding (mod_perl model), not needed for CLI
+   usage or the demo.
+
+3. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
