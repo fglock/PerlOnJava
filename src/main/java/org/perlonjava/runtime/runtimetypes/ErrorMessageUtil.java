@@ -202,9 +202,6 @@ public class ErrorMessageUtil {
     }
 
     public void setFileName(String fileName) {
-        if (System.getenv("DEBUG_CALLER") != null) {
-            System.err.println("DEBUG setFileName: " + this.fileName + " -> " + fileName);
-        }
         this.fileName = fileName;
     }
 

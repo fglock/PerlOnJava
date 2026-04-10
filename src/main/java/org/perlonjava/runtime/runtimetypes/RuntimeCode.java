@@ -404,6 +404,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Save and clear the eval runtime context.
+     * Used by require/do to prevent inner compilations from seeing the eval's captured variables.
+     * The returned value should be passed to {@link #restoreEvalRuntimeContext} to restore it.
+     *
+     * @return The saved eval runtime context (may be null)
+     */
+    public static EvalRuntimeContext saveAndClearEvalRuntimeContext() {
+        EvalRuntimeContext saved = evalRuntimeContext.get();
+        if (saved != null) {
+            evalRuntimeContext.remove();
+        }
+        return saved;
+    }
+
+    /**
+     * Restore a previously saved eval runtime context.
+     *
+     * @param saved The context returned by {@link #saveAndClearEvalRuntimeContext}
+     */
+    public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
+        if (saved != null) {
+            evalRuntimeContext.set(saved);
+        }
+    }
+
+    /**
      * Gets the next eval sequence number and generates a filename.
      * Used by both baseline compiler and interpreter for consistent naming.
      *
@@ -1423,8 +1449,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          int callContext) {
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
-            if (RuntimeScalarType.isReference(runtimeScalar)) {
-                int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            // Unwrap READONLY_SCALAR for blessId check (same as in call())
+            RuntimeScalar invocant = runtimeScalar;
+            while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+                invocant = (RuntimeScalar) invocant.value;
+            }
+            if (RuntimeScalarType.isReference(invocant)) {
+                int blessId = ((RuntimeBase) invocant.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
                     int cacheIndex = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
@@ -1446,12 +1477,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
                                 if (autoloadVariableName != null) {
                                     String methodName = method.toString();
-                                    // Use the original calling class (perlClassName), not the class
-                                    // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
-                                    // even when AUTOLOAD is inherited from Base.
-                                    String perlClassName = NameNormalizer.getBlessStr(blessId);
-                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-                                    getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    // Only set $AUTOLOAD when dispatching to AUTOLOAD as a fallback
+                                    // (method name != "AUTOLOAD"). When calling AUTOLOAD directly
+                                    // (e.g., $self->SUPER::AUTOLOAD), the caller has already set it.
+                                    if (!methodName.equals("AUTOLOAD")) {
+                                        // Use the original calling class (perlClassName), not the class
+                                        // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
+                                        // even when AUTOLOAD is inherited from Base.
+                                        String perlClassName = NameNormalizer.getBlessStr(blessId);
+                                        String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+                                        getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    }
                                 }
                                 
                                 // Prefer PerlSubroutine interface over MethodHandle
@@ -1499,7 +1535,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             String autoloadVariableName = code.autoloadVariableName;
-                            if (autoloadVariableName != null) {
+                            if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                                 // Use the original calling class, not where AUTOLOAD was found
                                 String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
@@ -1542,21 +1578,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         String methodName = method.toString();
 
+        // Unwrap READONLY_SCALAR for method dispatch.
+        // Constants created via `use constant` with blessed refs go through
+        // Internals::SvREADONLY which wraps the scalar in READONLY_SCALAR.
+        // We must unwrap to see the actual reference type and blessId.
+        RuntimeScalar invocant = runtimeScalar;
+        while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+            invocant = (RuntimeScalar) invocant.value;
+        }
+
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference(runtimeScalar)) {
+        if (RuntimeScalarType.isReference(invocant)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
-            int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (runtimeScalar.type == GLOBREFERENCE) {
+                if (invocant.type == GLOBREFERENCE) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
                     ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-                } else if (runtimeScalar.type == REGEX) {
+                } else if (invocant.type == REGEX) {
                     // qr// objects are implicitly blessed into the Regexp class in Perl 5
                     // This allows $qr->isa("Regexp"), $qr->can("..."), etc.
                     perlClassName = "Regexp";
@@ -1567,15 +1612,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
-        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+        } else if (invocant.type == RuntimeScalarType.GLOB) {
             // Bare typeglob used as method invocant (e.g., *FH->print(...))
             // Auto-bless to IO::File, same as GLOBREFERENCE
             perlClassName = "IO::File";
             ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-        } else if (!runtimeScalar.getDefinedBoolean()) {
+        } else if (!invocant.getDefinedBoolean()) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
-            perlClassName = runtimeScalar.toString();
+            perlClassName = invocant.toString();
             if (perlClassName.isEmpty()) {
                 throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
             }
@@ -1674,7 +1719,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).autoloadVariableName);
 
             String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
-            if (autoloadVariableName != null) {
+            if (autoloadVariableName != null
+                    && !methodName.equals("AUTOLOAD") && !methodName.endsWith("::AUTOLOAD")) {
                 // The inherited method is an autoloaded subroutine
                 // Set the $AUTOLOAD variable to the name of the method that was called
 

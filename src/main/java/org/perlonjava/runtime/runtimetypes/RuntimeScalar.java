@@ -347,7 +347,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case TIED_SCALAR -> this.tiedFetch().getNumber();
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumber();
             case DUALVAR -> ((DualVar) this.value).numericValue();
-            default -> Overload.numify(this);
+            default -> {
+                RuntimeScalar result = Overload.numify(this);
+                // Overload may return a string (e.g., "3.1" from 0+ handler);
+                // ensure it's converted to a proper numeric type
+                yield (result.type == INTEGER || result.type == DOUBLE)
+                        ? result : result.getNumber();
+            }
         };
     }
 

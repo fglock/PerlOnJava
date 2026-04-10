@@ -96,6 +96,12 @@ public class BytecodeInterpreter {
         // Use ArrayDeque instead of Stack for better performance (no synchronization)
         java.util.ArrayDeque<Integer> evalCatchStack = new java.util.ArrayDeque<>();
 
+        // Parallel stack tracking DynamicVariableManager local level at eval entry.
+        // When EVAL_TRY is executed, save the current local level.
+        // On eval exit (both normal EVAL_END and exception catch), restore to this level
+        // so that `local` variables inside the eval block are properly unwound.
+        java.util.ArrayDeque<Integer> evalLocalLevelStack = new java.util.ArrayDeque<>();
+
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
@@ -1012,6 +1018,11 @@ public class BytecodeInterpreter {
                                             // Set $@ to the error message
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
+                                            // Restore local variables pushed inside the eval block
+                                            if (!evalLocalLevelStack.isEmpty()) {
+                                                int savedLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                            }
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
                                             RuntimeCode.evalDepth--;
@@ -1122,6 +1133,11 @@ public class BytecodeInterpreter {
                                                 && !evalCatchStack.isEmpty()) {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
+                                            // Restore local variables pushed inside the eval block
+                                            if (!evalLocalLevelStack.isEmpty()) {
+                                                int savedLevel = evalLocalLevelStack.pop();
+                                                DynamicVariableManager.popToLocalLevel(savedLevel);
+                                            }
                                             pc = evalCatchStack.pop();
                                             RuntimeCode.evalDepth--;
                                             break;
@@ -1497,6 +1513,9 @@ public class BytecodeInterpreter {
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
 
+                                // Save local level so we can restore local variables on eval exit
+                                evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
+
                                 // Track eval depth for $^S
                                 RuntimeCode.evalDepth++;
 
@@ -1514,6 +1533,13 @@ public class BytecodeInterpreter {
                                 // Pop the catch PC from eval stack (we didn't need it)
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
+                                }
+
+                                // Restore local variables that were pushed inside the eval block
+                                // e.g., `eval { local @_ = @_ }` should restore @_ on eval exit
+                                if (!evalLocalLevelStack.isEmpty()) {
+                                    int savedLevel = evalLocalLevelStack.pop();
+                                    DynamicVariableManager.popToLocalLevel(savedLevel);
                                 }
 
                                 // Track eval depth for $^S
@@ -2037,6 +2063,11 @@ public class BytecodeInterpreter {
                     // Check if we're inside an eval block first
                     if (!evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
+                        // Restore local variables pushed inside the eval block
+                        if (!evalLocalLevelStack.isEmpty()) {
+                            int savedLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                        }
                         RuntimeCode.evalDepth--;
                         WarnDie.catchEval(e);
                         pc = catchPc;
@@ -2072,6 +2103,12 @@ public class BytecodeInterpreter {
                     if (!evalCatchStack.isEmpty()) {
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
+
+                        // Restore local variables pushed inside the eval block
+                        if (!evalLocalLevelStack.isEmpty()) {
+                            int savedLevel = evalLocalLevelStack.pop();
+                            DynamicVariableManager.popToLocalLevel(savedLevel);
+                        }
 
                         // Track eval depth for $^S
                         RuntimeCode.evalDepth--;
@@ -2248,9 +2285,7 @@ public class BytecodeInterpreter {
                 RuntimeBase val2 = registers[rs2];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                boolean isEqual = (cmpResult.getInt() == 0);
-                registers[rd] = isEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                registers[rd] = CompareOperators.eq(s1, s2);
                 return pc;
             }
 
@@ -2263,9 +2298,7 @@ public class BytecodeInterpreter {
                 RuntimeBase val2 = registers[rs2];
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
-                RuntimeScalar cmpResult = CompareOperators.cmp(s1, s2);
-                boolean isNotEqual = (cmpResult.getInt() != 0);
-                registers[rd] = isNotEqual ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarFalse;
+                registers[rd] = CompareOperators.ne(s1, s2);
                 return pc;
             }
 

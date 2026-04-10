@@ -100,12 +100,21 @@ public class PrototypeArgs {
      * makes them list operators.
      *
      * @param prototype The prototype string
-     * @return true if the prototype is exactly "$" or "_"
+     * @return true if the prototype is "$", "_", ";$", or ";_"
      */
     private static boolean isNamedUnaryPrototype(String prototype) {
-        if (prototype.length() != 1) return false;
-        char first = prototype.charAt(0);
-        return first == '$' || first == '_';
+        if (prototype.length() == 1) {
+            char first = prototype.charAt(0);
+            return first == '$' || first == '_';
+        }
+        // ";$" and ";_" are also named unary (optional single scalar argument).
+        // This matters for expressions like ArrayRef[Int] | HashRef[Int] where
+        // the | must NOT be consumed as part of ArrayRef's argument.
+        if (prototype.length() == 2 && prototype.charAt(0) == ';') {
+            char second = prototype.charAt(1);
+            return second == '$' || second == '_';
+        }
+        return false;
     }
 
     /**
@@ -137,7 +146,26 @@ public class PrototypeArgs {
                 next.text.equals("||=") ||
                 next.text.equals("//=") ||
                 next.text.equals("x=") ||
-                next.text.equals(".=");
+                next.text.equals(".=") ||
+                // Binary-only infix operators that cannot start a primary expression
+                // should terminate argument parsing. For example, with `;$` prototype:
+                //   Foo | Bar  → (Foo()) | (Bar())  not  Foo(| Bar)
+                // This matches Perl's behavior where these operators signal
+                // "no argument provided" to the function.
+                next.text.equals("|") ||
+                next.text.equals("^") ||
+                next.text.equals("|.") ||
+                next.text.equals("^.") ||
+                next.text.equals("&.") ||
+                next.text.equals("==") ||
+                next.text.equals("!=") ||
+                next.text.equals(">") ||
+                next.text.equals(">=") ||
+                next.text.equals("..") ||
+                next.text.equals("...") ||
+                next.text.equals("=~") ||
+                next.text.equals("!~") ||
+                next.text.equals("?");
     }
 
     /**
@@ -164,7 +192,7 @@ public class PrototypeArgs {
         // than comparison operators. So `reftype $h eq 'HASH'` parses as
         // `(reftype($h)) eq 'HASH'`, not `reftype($h eq 'HASH')`.
         if (!hasParentheses && prototype != null && isNamedUnaryPrototype(prototype)) {
-            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>")) {
+            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>") || isComma(TokenUtils.peek(parser))) {
                 // No argument - check if optional
                 if (!allowsZeroArguments(prototype)) {
                     throwNotEnoughArgumentsError(parser);
@@ -208,6 +236,10 @@ public class PrototypeArgs {
 //            for (Node element : args.elements) {
 //                element.setAnnotation("context", "LIST");
 //            }
+        } else if (prototype.isEmpty()) {
+            // Empty prototype "()" means zero arguments - nothing to parse.
+            // Don't enter parsePrototypeArguments which would incorrectly check
+            // for consecutive commas in the outer context (e.g., "Num ,=> Int").
         } else {
             parsePrototypeArguments(parser, args, prototype, hasParentheses);
 

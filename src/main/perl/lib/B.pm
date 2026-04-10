@@ -197,6 +197,12 @@ package B::CV {
         $self->_introspect;
         return $self->{_is_anon} ? 0x0004 : 0;  # CVf_ANON for anonymous subs
     }
+
+    sub XSUB {
+        # PerlOnJava has no XSUBs (all code is Java bytecode or interpreted Perl).
+        # Return 0 (false) so callers like Type::Tiny::_has_xsub() get the right answer.
+        return 0;
+    }
 }
 
 package B::GV {

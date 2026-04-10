@@ -186,6 +186,19 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
+- **Write commit messages to a file** to avoid shell quoting issues (apostrophes, backticks, special characters). Use `git commit -F /tmp/commit_msg.txt` instead of `-m`:
+  ```bash
+  cat > /tmp/commit_msg.txt << 'ENDMSG'
+  fix: description of the change
+
+  Details about what was fixed and why.
+
+  Generated with [TOOL_NAME](TOOL_DOCS_URL)
+
+  Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
+  ENDMSG
+  git commit -F /tmp/commit_msg.txt
+  ```
 - **Commit Attribution:** AI-assisted commits must include attribution markers in the commit message (see [AI_POLICY.md](AI_POLICY.md)):
   ```
   Generated with [TOOL_NAME](TOOL_DOCS_URL)
