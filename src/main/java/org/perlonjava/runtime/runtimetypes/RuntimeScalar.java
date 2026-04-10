@@ -771,14 +771,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /**
      * Set value while preserving BYTE_STRING type when possible.
      * Used by .= (string concat-assign) to prevent UTF-8 flag contamination
-     * of binary buffers. In PerlOnJava, upgrading from BYTE_STRING to STRING
-     * doesn't change the underlying chars (unlike Perl where bytes > 127 get
-     * re-encoded), so preserving BYTE_STRING is safe when all chars fit in Latin-1.
+     * of binary buffers. Only preserves BYTE_STRING when the concat result
+     * itself is BYTE_STRING (both operands were non-UTF-8). When the concat
+     * result is STRING (at least one operand was UTF-8), the UTF-8 flag is
+     * preserved, matching Perl's behavior where concatenation with a UTF-8
+     * string upgrades the result.
      */
     public RuntimeScalar setPreservingByteString(RuntimeScalar value) {
         boolean wasByteString = (this.type == BYTE_STRING);
         this.set(value);
-        if (wasByteString && this.type == STRING) {
+        // Only preserve BYTE_STRING when the concat result was also BYTE_STRING.
+        // If concat produced STRING (because an operand was UTF-8), don't downgrade.
+        if (wasByteString && value.type == BYTE_STRING && this.type == STRING) {
             // Check if all chars fit in Latin-1 (single byte)
             String s = this.toString();
             boolean allLatin1 = true;

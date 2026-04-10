@@ -26,7 +26,7 @@ sub lwp_ext_ent_handler {
   if (defined $base) {
     # Base may have been set by parsefile, which is agnostic about
     # whether its a file or URI.
-    my $base_uri = new URI($base);
+    my $base_uri = URI->new($base);
     unless (defined $base_uri->scheme) {
       $base_uri = URI->new_abs($base_uri, URI::file->cwd);
     }
@@ -34,7 +34,7 @@ sub lwp_ext_ent_handler {
     $uri = URI->new_abs($sys, $base_uri);
   }
   else {
-    $uri = new URI($sys);
+    $uri = URI->new($sys);
     unless (defined $uri->scheme) {
       $uri = URI->new_abs($uri, URI::file->cwd);
     }
@@ -42,11 +42,11 @@ sub lwp_ext_ent_handler {
   
   my $ua = $xp->{_lwpagent};
   unless (defined $ua) {
-    $ua = $xp->{_lwpagent} = new LWP::UserAgent();
+    $ua = $xp->{_lwpagent} = LWP::UserAgent->new();
     $ua->env_proxy();
   }
 
-  my $req = new HTTP::Request('GET', $uri);
+  my $req = HTTP::Request->new('GET', $uri);
 
   my $res = $ua->request($req);
   if ($res->is_error) {
