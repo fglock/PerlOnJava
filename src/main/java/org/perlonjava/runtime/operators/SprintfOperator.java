@@ -201,7 +201,7 @@ public class SprintfOperator {
         if (!hasPositionalParameter && !hasInvalidSpecifier && list.size() > 0 &&
                 ((hasValidSpecifier && maxArgIndexUsed >= 0 && maxArgIndexUsed + 1 < list.size()) ||
                         (!hasValidSpecifier && maxArgIndexUsed == -1))) {
-            WarnDie.warn(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""));
+            WarnDie.warnWithCategory(new RuntimeScalar("Redundant argument in sprintf"), new RuntimeScalar(""), "printf");
         }
 
         RuntimeScalar res = new RuntimeScalar(result.toString());
@@ -542,8 +542,8 @@ public class SprintfOperator {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
-                WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
-                        new RuntimeScalar(""));
+                WarnDie.warnWithCategory(new RuntimeScalar("Missing argument in sprintf"),
+                        new RuntimeScalar(""), "printf");
             }
         } else if (spec.width != null) {
             args.width = spec.width;
@@ -587,8 +587,8 @@ public class SprintfOperator {
                     throw new PerlCompilerException("Integer overflow in format string for sprintf ");
                 }
             } else {
-                WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"),
-                        new RuntimeScalar(""));
+                WarnDie.warnWithCategory(new RuntimeScalar("Missing argument in sprintf"),
+                        new RuntimeScalar(""), "printf");
             }
         } else if (spec.precision != null) {
             args.precision = spec.precision;
@@ -669,7 +669,7 @@ public class SprintfOperator {
 
             String warningMessage = "Invalid conversion in sprintf: \"" + formatForWarning + "\"";
             //
-            WarnDie.warn(new RuntimeScalar(warningMessage), new RuntimeScalar(""));
+            WarnDie.warnWithCategory(new RuntimeScalar(warningMessage), new RuntimeScalar(""), "printf");
         }
 
         // Don't consume any arguments for invalid specifiers
@@ -683,7 +683,7 @@ public class SprintfOperator {
     private static String handleMissingArgument(FormatSpecifier spec,
                                                 FormatArguments args) {
         // Generate warning
-        WarnDie.warn(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""));
+        WarnDie.warnWithCategory(new RuntimeScalar("Missing argument in sprintf"), new RuntimeScalar(""), "printf");
 
         // Special handling for vector formats
         if (spec.vectorFlag) {

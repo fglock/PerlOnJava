@@ -508,16 +508,38 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `gh1.t` | Missing `Math::BigFloat` dependency |
 | Various Type-Library/*, Type-Tiny-*/basic.t | Test runner CWD issue — pass when run from Type-Tiny dir |
 
+- [x] Phase 6b: Fix sprintf warnings to respect `use warnings` (2026-04-10)
+  - **sprintf/printf warnings fired unconditionally:** All sprintf/printf warnings
+    ("Invalid conversion", "Missing argument", "Redundant argument") used plain
+    `WarnDie.warn()` which always emits warnings. Changed to `WarnDie.warnWithCategory()`
+    with the `"printf"` category, matching Perl 5 behavior where these warnings only
+    fire under `use warnings` or `use warnings "printf"`.
+  - File: `SprintfOperator.java` (5 call sites updated)
+  - Impact: Eliminates spurious `Invalid conversion in sprintf: "%{"` warnings from
+    `Types/Standard/Tied.pm` line 62 when `use warnings` is not in the caller's scope.
+
+### Remaining Issues from `./jcpan --jobs 8 -t Type::Tiny`
+
+| Issue | Impact | Details |
+|-------|--------|---------|
+| `builtin::export_lexically` | 2 tests | PerlOnJava reports `$]=5.042` so `Exporter::Tiny` takes the native lexical sub path, but `builtin::export_lexically` is not implemented. Affects `Type-Registry/lexical.t`, `Type-Tiny-Enum/exporter_lexical.t`. |
+| `sprintf "%{"` warning | Cosmetic | Fixed in Phase 6b — warning now properly gated by `use warnings "printf"`. Not a test failure; `Types::Standard::Tied` has `use warnings` so the warning is correct but was previously also firing in no-warnings contexts. |
+| `Math::BigFloat` missing | 1 test | Core Perl module not bundled with PerlOnJava. Only `t/40-bugs/gh1.t` requires it. Would need porting `Math::BigInt` + `Math::BigFloat` (large effort). |
+| `Type-Tie/06clone.t` | Known | Clone::PP doesn't preserve tie magic (3/6 pass) |
+
 ### Next Steps
 1. Consider implementing scope-exit hooks for DESTROY (2 test files)
 2. Improve Clone/Storable tie preservation (2 test files)
 3. Consider B::Deparse output compatibility (1 test)
 4. Fix test runner CWD handling for tests that reference `./lib`, `./t/lib`
+5. Consider bundling `Math::BigFloat` / `Math::BigInt` (low priority, 1 test)
+6. Consider implementing `builtin::export_lexically` (low priority, 2 tests)
 
 ### Open Questions
 - The 23 `!` errors in the test runner are mostly CWD-related: tests use `./lib` and `./t/lib`
   which require running from the Type-Tiny distribution directory
 - All 5 Moo tests pass when run from the correct CWD
+- `builtin::export_lexically` would require lexical scoping machinery — complex to implement properly
 
 ---
 
