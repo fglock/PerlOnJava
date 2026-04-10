@@ -5,10 +5,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,15 +33,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int DOTALL = Pattern.DOTALL;
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
-    // Cache to store compiled regex patterns
-    private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
-            return size() > MAX_REGEX_CACHE_SIZE;
-        }
-    };
-    // Cache for /o modifier - maps callsite ID to compiled regex (only first compilation is used)
-    private static final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
+    // Cache to store compiled regex patterns (synchronized for multiplicity thread-safety)
+    private static final Map<String, RuntimeRegex> regexCache = Collections.synchronizedMap(
+            new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
+                    return size() > MAX_REGEX_CACHE_SIZE;
+                }
+            });
+    // Cache for /o modifier is now per-PerlRuntime (regexOptimizedCache field)
 
     // ---- Regex match state accessors (delegating to PerlRuntime.current()) ----
 
@@ -464,15 +461,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         
         // Check if /o modifier is present
         if (modifierStr.contains("o")) {
+            Map<Integer, RuntimeScalar> cache = PerlRuntime.current().regexOptimizedCache;
             // Check if we already have a cached regex for this callsite
-            RuntimeScalar cached = optimizedRegexCache.get(callsiteId);
+            RuntimeScalar cached = cache.get(callsiteId);
             if (cached != null) {
                 return cached;
             }
             
             // Compile the regex and cache it
             RuntimeScalar result = getQuotedRegex(patternString, modifiers);
-            optimizedRegexCache.put(callsiteId, result);
+            cache.put(callsiteId, result);
             return result;
         }
         
@@ -1254,9 +1252,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static void reset() {
         // Iterate over the regexCache and reset the `matched` flag for each cached regex
-        for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
-            RuntimeRegex regex = entry.getValue();
-            regex.matched = false; // Reset the matched field
+        // Synchronized because Collections.synchronizedMap requires manual sync for iteration
+        synchronized (regexCache) {
+            for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
+                RuntimeRegex regex = entry.getValue();
+                regex.matched = false; // Reset the matched field
+            }
         }
     }
 

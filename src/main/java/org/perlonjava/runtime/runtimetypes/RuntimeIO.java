@@ -91,31 +91,12 @@ public class RuntimeIO extends RuntimeScalar {
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
 
     /**
-     * Maximum number of file handles to keep in the LRU cache.
-     * Older handles are flushed (not closed) when this limit is exceeded.
+     * Returns the per-runtime LRU cache of open file handles.
+     * Migrated from a static field for multiplicity thread-safety.
      */
-    private static final int MAX_OPEN_HANDLES = 100;
-
-    /**
-     * LRU (Least Recently Used) cache for managing open file handles.
-     * This helps prevent resource exhaustion by limiting open handles and
-     * automatically flushing less recently used ones.
-     */
-    private static final Map<IOHandle, Boolean> openHandles = new LinkedHashMap<IOHandle, Boolean>(MAX_OPEN_HANDLES, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<IOHandle, Boolean> eldest) {
-            if (size() > MAX_OPEN_HANDLES) {
-                try {
-                    // Flush but don't close the eldest handle
-                    eldest.getKey().flush();
-                } catch (Exception e) {
-                    // Handle exception if needed
-                }
-                return true;
-            }
-            return false;
-        }
-    };
+    private static Map<IOHandle, Boolean> openHandles() {
+        return PerlRuntime.current().openHandles;
+    }
 
     private static final Map<Long, Process> childProcesses = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -982,8 +963,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @param handle the IOHandle to cache
      */
     public static void addHandle(IOHandle handle) {
-        synchronized (openHandles) {
-            openHandles.put(handle, Boolean.TRUE);
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            handles.put(handle, Boolean.TRUE);
         }
     }
 
@@ -993,8 +975,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @param handle the IOHandle to remove
      */
     public static void removeHandle(IOHandle handle) {
-        synchronized (openHandles) {
-            openHandles.remove(handle);
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            handles.remove(handle);
         }
     }
 
@@ -1003,8 +986,9 @@ public class RuntimeIO extends RuntimeScalar {
      * This ensures all buffered data is written without closing files.
      */
     public static void flushAllHandles() {
-        synchronized (openHandles) {
-            for (IOHandle handle : openHandles.keySet()) {
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            for (IOHandle handle : handles.keySet()) {
                 handle.flush();
             }
         }
@@ -1017,8 +1001,9 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void closeAllHandles() {
         flushAllHandles();
-        synchronized (openHandles) {
-            for (IOHandle handle : openHandles.keySet()) {
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            for (IOHandle handle : handles.keySet()) {
                 try {
                     handle.close();
                     handle = new ClosedIOHandle();
@@ -1026,7 +1011,7 @@ public class RuntimeIO extends RuntimeScalar {
                     // Handle exception if needed
                 }
             }
-            openHandles.clear(); // Clear the cache after closing all handles
+            handles.clear(); // Clear the cache after closing all handles
         }
     }
 

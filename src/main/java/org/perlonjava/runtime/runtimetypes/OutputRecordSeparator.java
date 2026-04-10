@@ -21,12 +21,6 @@ import java.util.Stack;
 public class OutputRecordSeparator extends RuntimeScalar {
 
     /**
-     * The internal ORS value that print reads.
-     * Only updated by OutputRecordSeparator.set() calls.
-     */
-    private static String internalORS = "";
-
-    /**
      * Stack for save/restore during local $\ and for $\ (list).
      * Now held per-PerlRuntime.
      */
@@ -40,9 +34,10 @@ public class OutputRecordSeparator extends RuntimeScalar {
 
     /**
      * Returns the internal ORS value for use by print.
+     * Now per-PerlRuntime for multiplicity thread-safety.
      */
     public static String getInternalORS() {
-        return internalORS;
+        return PerlRuntime.current().internalORS;
     }
 
     /**
@@ -50,7 +45,8 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicSaveState() when localizing $\.
      */
     public static void saveInternalORS() {
-        orsStack().push(internalORS);
+        PerlRuntime rt = PerlRuntime.current();
+        orsStack().push(rt.internalORS);
     }
 
     /**
@@ -59,49 +55,49 @@ public class OutputRecordSeparator extends RuntimeScalar {
      */
     public static void restoreInternalORS() {
         if (!orsStack().isEmpty()) {
-            internalORS = orsStack().pop();
+            PerlRuntime.current().internalORS = orsStack().pop();
         }
     }
 
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(String value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(int value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(long value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(boolean value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 
     @Override
     public RuntimeScalar set(Object value) {
         super.set(value);
-        internalORS = this.toString();
+        PerlRuntime.current().internalORS = this.toString();
         return this;
     }
 }
