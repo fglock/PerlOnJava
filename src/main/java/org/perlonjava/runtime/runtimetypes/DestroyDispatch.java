@@ -132,15 +132,17 @@ public class DestroyDispatch {
         try {
             // Build $self reference to pass as $_[0]
             RuntimeScalar self = new RuntimeScalar();
-            // Determine the reference type based on the referent's runtime class
+            // Determine the reference type based on the referent's runtime class.
+            // Order matters: RuntimeGlob extends RuntimeScalar, so check RuntimeGlob
+            // BEFORE RuntimeScalar to avoid misclassifying globs as plain references.
             if (referent instanceof RuntimeHash) {
                 self.type = RuntimeScalarType.HASHREFERENCE;
             } else if (referent instanceof RuntimeArray) {
                 self.type = RuntimeScalarType.ARRAYREFERENCE;
-            } else if (referent instanceof RuntimeScalar) {
-                self.type = RuntimeScalarType.REFERENCE;
             } else if (referent instanceof RuntimeGlob) {
                 self.type = RuntimeScalarType.GLOBREFERENCE;
+            } else if (referent instanceof RuntimeScalar) {
+                self.type = RuntimeScalarType.REFERENCE;
             } else if (referent instanceof RuntimeCode) {
                 self.type = RuntimeScalarType.CODE;
             } else {
