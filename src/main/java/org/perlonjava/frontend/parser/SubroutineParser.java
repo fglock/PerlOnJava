@@ -240,15 +240,17 @@ public class SubroutineParser {
             // 1. Explicitly marked as non-package (false in cache), OR
             // 2. Unknown package (null) AND unknown subroutine (!isKnownSub) AND followed by '('
             //    AND name is not package-qualified (no ::) - this is a function call like mycan(...)
+            // 3. Calling sub exists AND qualified name with '()' AND NOT a known package
+            //    — then it's a function call like: is MojoMonkeyTest::bar(), "bar"
+            //    But if the qualified name IS a known package (isPackage==true), treat as
+            //    indirect object: new LWP::UserAgent() → LWP::UserAgent->new()
             // Allow if:
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
-            // - Name contains '::' (qualified names are always treated as packages in indirect syntax)
-            //   UNLESS the calling sub exists and it's followed by '(' — then it's a function call
-            //   like: is MojoMonkeyTest::bar(), "bar" (per perlobj: declared functions take precedence)
             if ((isPackage != null && !isPackage)
                     || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
-                    || (subExists && packageName.contains("::") && token.text.equals("("))) {
+                    || (subExists && packageName.contains("::") && token.text.equals("(")
+                        && !(isPackage != null && isPackage))) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax
