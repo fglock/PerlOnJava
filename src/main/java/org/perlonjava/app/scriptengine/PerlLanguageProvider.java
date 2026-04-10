@@ -510,7 +510,7 @@ public class PerlLanguageProvider {
                 if (needsInterpreterFallback(e)) {
                     boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
                     if (showFallback) {
-                        System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                        System.err.println("Note: Method too large, using interpreter backend.");
                     }
 
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Falling back to bytecode interpreter due to method size");

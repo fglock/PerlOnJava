@@ -1529,7 +1529,7 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                    System.err.println("Note: Method too large, using interpreter backend.");
                 }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }

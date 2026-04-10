@@ -1,7 +1,6 @@
 package org.perlonjava.frontend.analysis;
 
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
-import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.frontend.astnode.*;
 
 /**
@@ -20,7 +19,7 @@ import org.perlonjava.frontend.astnode.*;
  * <p>
  * <b>Usage:</b>
  * <ul>
- *   <li>{@link #estimateSnippetSize(Node)} - For code snippets/chunks (no BASE_OVERHEAD, used by LargeNodeRefactorer)</li>
+ *   <li>{@link #estimateSnippetSize(Node)} - For code snippets/chunks (no BASE_OVERHEAD, used by LargeBlockRefactorer)</li>
  * </ul>
  * <p>
  * The distinction between these methods is important:
@@ -29,7 +28,6 @@ import org.perlonjava.frontend.astnode.*;
  *   <li>Code snippets are partial AST fragments where method overhead doesn't apply</li>
  * </ul>
  *
- * @see LargeNodeRefactorer
  * @see LargeBlockRefactorer
  */
 public class BytecodeSizeEstimator implements Visitor {
