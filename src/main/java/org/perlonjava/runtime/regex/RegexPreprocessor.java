@@ -997,7 +997,7 @@ public class RegexPreprocessor {
                 sb.append("(?:)");
 
                 // Throw error that can be caught by JPERL_UNIMPLEMENTED=warn
-                regexError(s, offset + 2, "Regex control verb " + verb + " not implemented");
+                regexUnimplemented(s, offset + 2, "Regex control verb " + verb + " not implemented");
 
                 return verbEnd; // Skip past the entire verb construct
             }
@@ -1019,7 +1019,7 @@ public class RegexPreprocessor {
                 return offset; // offset points to ')', caller will increment past it
             } else if (c3 == '@') {
                 // Handle (?@...) which is not implemented
-                regexError(s, offset + 3, "Sequence (?@...) not implemented");
+                regexUnimplemented(s, offset + 3, "Sequence (?@...) not implemented");
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
                 if (s.startsWith("(?{UNIMPLEMENTED_CODE_BLOCK})", offset)) {
@@ -1523,7 +1523,7 @@ public class RegexPreprocessor {
         int maxLength = calculateMaxLength(s, start);
 
         if (maxLength >= 255 || maxLength == -1) { // >= 255 means 255 or more
-            regexErrorSimple(s, "Lookbehind longer than 255 not implemented");
+            throw new PerlJavaUnimplementedException("Lookbehind longer than 255 not implemented in regex m/" + s + "/");
         }
     }
 
@@ -2217,23 +2217,23 @@ public class RegexPreprocessor {
 
             // Append a named capture group that matches empty string
             // This allows us to store the constant value without affecting the match
-            sb.append("(?<").append(captureName).append(">)");
+            sb.append("(?<").append(captureName).append(">");
 
-            // Skip past '}' and ')' - the closing brace and paren of (?{...})
-            // codeEnd points to the '}', so we need to skip '}' and ')'
+            // Return offset pointing to the ')' so handleGroup can consume it
+            // codeEnd points to the '}', the next char should be ')'
             if (codeEnd + 1 < length && s.charAt(codeEnd + 1) == ')') {
-                return codeEnd + 2; // Skip past both '}' and ')'
+                return codeEnd + 1; // Point to ')' for handleGroup to consume
             }
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
 
         // Non-constant code block: replace with no-op group so the regex compiles.
         // This allows tests that use (?{...}) in non-critical parts to continue running.
-        sb.append("(?:)");
+        sb.append("(?:");
 
-        // Skip past '}' and ')' - the closing brace and paren of (?{...})
+        // Return offset pointing to the ')' so handleGroup can consume it
         if (codeEnd + 1 < length && s.charAt(codeEnd + 1) == ')') {
-            return codeEnd + 2; // Skip past both '}' and ')'
+            return codeEnd + 1; // Point to ')' for handleGroup to consume
         }
         return codeEnd + 1; // Just skip past '}' if no ')' found
     }

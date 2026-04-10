@@ -278,10 +278,12 @@ public class OperatorParser {
         }
         if (allDigits) return true;
 
-        // Single non-alphanumeric, non-underscore character: $!, $/, $@, $;, etc.
+        // Single ASCII non-alphanumeric, non-underscore character: $!, $/, $@, $;, etc.
+        // Only check ASCII range — Unicode characters (>= 128) may be valid identifiers
+        // even if Java's Character.isLetterOrDigit() doesn't recognize them.
         if (name.length() == 1) {
             char c = name.charAt(0);
-            if (!Character.isLetterOrDigit(c) && c != '_') return true;
+            if (c < 128 && !Character.isLetterOrDigit(c) && c != '_') return true;
         }
 
         // Control character prefix (caret variables like $^W stored as chr(23))

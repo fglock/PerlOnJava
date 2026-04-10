@@ -227,11 +227,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
-                if (e instanceof PerlJavaUnimplementedException
-                        && GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
-                ) {
-                    // Warn only for unimplemented features when JPERL_UNIMPLEMENTED=warn
-                    String base = e.getMessage();
+                // PerlJavaUnimplementedException extends PerlCompilerException, so check
+                // the more specific type first. Real syntax errors (PerlCompilerException
+                // but NOT PerlJavaUnimplementedException) are always fatal.
+                // Java PatternSyntaxException etc. are wrapped as unimplemented.
+                boolean isUnimplemented = e instanceof PerlJavaUnimplementedException;
+                boolean isRealSyntaxError = !isUnimplemented && e instanceof PerlCompilerException;
+
+                if (isRealSyntaxError) {
+                    throw (PerlCompilerException) e;
+                }
+
+                // Wrap non-Perl exceptions (PatternSyntaxException etc.) as unimplemented
+                PerlJavaUnimplementedException unimplEx;
+                if (isUnimplemented) {
+                    unimplEx = (PerlJavaUnimplementedException) e;
+                } else {
+                    unimplEx = new PerlJavaUnimplementedException("Regex compilation failed: " + e.getMessage());
+                }
+
+                // With JPERL_UNIMPLEMENTED=warn, downgrade to warning and use a never-matching pattern
+                if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")) {
+                    String base = unimplEx.getMessage();
                     // Include original and preprocessed patterns to aid debugging
                     String patternInfo = " [pattern='" + (patternString == null ? "" : patternString) + "'" +
                             (javaPattern != null ? ", java='" + javaPattern + "'" : "") + "]";
@@ -244,10 +261,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
                     regex.patternUnicode = regex.pattern;  // Error pattern - same for both
                 } else {
-                    if (e instanceof PerlCompilerException) {
-                        throw e;
-                    }
-                    throw new PerlJavaUnimplementedException("Regex compilation failed: " + e.getMessage());
+                    throw unimplEx;
                 }
             }
 
