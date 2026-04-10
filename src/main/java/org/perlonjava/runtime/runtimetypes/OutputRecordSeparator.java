@@ -28,8 +28,11 @@ public class OutputRecordSeparator extends RuntimeScalar {
 
     /**
      * Stack for save/restore during local $\ and for $\ (list).
+     * Now held per-PerlRuntime.
      */
-    private static final Stack<String> orsStack = new Stack<>();
+    private static Stack<String> orsStack() {
+        return PerlRuntime.current().orsStack;
+    }
 
     public OutputRecordSeparator() {
         super();
@@ -47,7 +50,7 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicSaveState() when localizing $\.
      */
     public static void saveInternalORS() {
-        orsStack.push(internalORS);
+        orsStack().push(internalORS);
     }
 
     /**
@@ -55,8 +58,8 @@ public class OutputRecordSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicRestoreState() when restoring $\.
      */
     public static void restoreInternalORS() {
-        if (!orsStack.isEmpty()) {
-            internalORS = orsStack.pop();
+        if (!orsStack().isEmpty()) {
+            internalORS = orsStack().pop();
         }
     }
 

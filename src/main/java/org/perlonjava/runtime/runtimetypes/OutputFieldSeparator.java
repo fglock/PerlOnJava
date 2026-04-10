@@ -23,8 +23,11 @@ public class OutputFieldSeparator extends RuntimeScalar {
 
     /**
      * Stack for save/restore during local $, and for $, (list).
+     * Now held per-PerlRuntime.
      */
-    private static final Stack<String> ofsStack = new Stack<>();
+    private static Stack<String> ofsStack() {
+        return PerlRuntime.current().ofsStack;
+    }
 
     public OutputFieldSeparator() {
         super();
@@ -42,7 +45,7 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicSaveState() when localizing $,.
      */
     public static void saveInternalOFS() {
-        ofsStack.push(internalOFS);
+        ofsStack().push(internalOFS);
     }
 
     /**
@@ -50,8 +53,8 @@ public class OutputFieldSeparator extends RuntimeScalar {
      * Called from GlobalRuntimeScalar.dynamicRestoreState() when restoring $,.
      */
     public static void restoreInternalOFS() {
-        if (!ofsStack.isEmpty()) {
-            internalOFS = ofsStack.pop();
+        if (!ofsStack().isEmpty()) {
+            internalOFS = ofsStack().pop();
         }
     }
 

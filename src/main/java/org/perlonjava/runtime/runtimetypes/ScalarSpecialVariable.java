@@ -23,7 +23,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.PROXY;
  */
 public class ScalarSpecialVariable extends RuntimeBaseProxy {
 
-    private static final Stack<InputLineState> inputLineStateStack = new Stack<>();
+    // Input line state stack is now held per-PerlRuntime.
+    @SuppressWarnings("unchecked")
+    private static Stack<InputLineState> inputLineStateStack() {
+        return (Stack<InputLineState>) (Stack<?>) PerlRuntime.current().inputLineStateStack;
+    }
     // The type of special variable, represented by an enum.
     final Id variableId;
     // The position of the capture group, used only for CAPTURE type variables.
@@ -427,7 +431,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             RuntimeIO handle = RuntimeIO.getLastAccessedHandle();
             int lineNumber = handle != null ? handle.currentLineNumber : (lvalue != null ? lvalue.getInt() : 0);
             RuntimeScalar localValue = lvalue != null ? new RuntimeScalar(lvalue) : null;
-            inputLineStateStack.push(new InputLineState(handle, lineNumber, localValue));
+            inputLineStateStack().push(new InputLineState(handle, lineNumber, localValue));
             return;
         }
         super.dynamicSaveState();
@@ -442,8 +446,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
     @Override
     public void dynamicRestoreState() {
         if (variableId == Id.INPUT_LINE_NUMBER) {
-            if (!inputLineStateStack.isEmpty()) {
-                InputLineState previous = inputLineStateStack.pop();
+            if (!inputLineStateStack().isEmpty()) {
+                InputLineState previous = inputLineStateStack().pop();
                 RuntimeIO.setLastAccessedHandle(previous.lastHandle);
                 if (previous.lastHandle != null) {
                     previous.lastHandle.currentLineNumber = previous.lastLineNumber;

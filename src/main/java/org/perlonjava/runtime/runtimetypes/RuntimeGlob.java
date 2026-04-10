@@ -15,7 +15,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
-    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+    // Glob slot stack is now held per-PerlRuntime.
+    @SuppressWarnings("unchecked")
+    private static Stack<GlobSlotSnapshot> globSlotStack() {
+        return (Stack<GlobSlotSnapshot>) (Stack<?>) PerlRuntime.current().globSlotStack;
+    }
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -876,7 +880,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
         }
-        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
+        globSlotStack().push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
@@ -922,7 +926,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     @Override
     public void dynamicRestoreState() {
-        GlobSlotSnapshot snap = globSlotStack.pop();
+        GlobSlotSnapshot snap = globSlotStack().pop();
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;

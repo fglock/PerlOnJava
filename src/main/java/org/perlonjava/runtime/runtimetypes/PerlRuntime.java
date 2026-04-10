@@ -59,6 +59,98 @@ public final class PerlRuntime {
     final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
     /**
+     * Dynamic state stack for RuntimeArray "local" save/restore —
+     * migrated from RuntimeArray.dynamicStateStack.
+     */
+    final Stack<RuntimeArray> arrayDynamicStateStack = new Stack<>();
+
+    /**
+     * Dynamic state stack for RuntimeHash "local" save/restore —
+     * migrated from RuntimeHash.dynamicStateStack.
+     */
+    final Stack<RuntimeHash> hashDynamicStateStack = new Stack<>();
+
+    /**
+     * Dynamic state stack for RuntimeStash "local" save/restore —
+     * migrated from RuntimeStash.dynamicStateStack.
+     */
+    final Stack<RuntimeStash> stashDynamicStateStack = new Stack<>();
+
+    /**
+     * Glob slot stack for RuntimeGlob "local" save/restore —
+     * migrated from RuntimeGlob.globSlotStack.
+     * Elements are RuntimeGlob.GlobSlotSnapshot (package-private inner type).
+     */
+    final Stack<Object> globSlotStack = new Stack<>();
+
+    /**
+     * Localized stack for GlobalRuntimeScalar "local" save/restore —
+     * migrated from GlobalRuntimeScalar.localizedStack.
+     * Elements are GlobalRuntimeScalar.SavedGlobalState (package-private inner type).
+     */
+    final Stack<Object> globalScalarLocalizedStack = new Stack<>();
+
+    /**
+     * Localized stack for GlobalRuntimeArray "local" save/restore —
+     * migrated from GlobalRuntimeArray.localizedStack.
+     * Elements are GlobalRuntimeArray.SavedGlobalArrayState (package-private inner type).
+     */
+    final Stack<Object> globalArrayLocalizedStack = new Stack<>();
+
+    /**
+     * Localized stack for GlobalRuntimeHash "local" save/restore —
+     * migrated from GlobalRuntimeHash.localizedStack.
+     * Elements are GlobalRuntimeHash.SavedGlobalHashState (package-private inner type).
+     */
+    final Stack<Object> globalHashLocalizedStack = new Stack<>();
+
+    /**
+     * Dynamic state stack for RuntimeHashProxyEntry "local" save/restore —
+     * migrated from RuntimeHashProxyEntry.dynamicStateStack.
+     */
+    final Stack<RuntimeScalar> hashProxyDynamicStateStack = new Stack<>();
+
+    /**
+     * Dynamic state stacks for RuntimeArrayProxyEntry "local" save/restore —
+     * migrated from RuntimeArrayProxyEntry.dynamicStateStackInt and dynamicStateStack.
+     */
+    final Stack<Integer> arrayProxyDynamicStateStackInt = new Stack<>();
+    final Stack<RuntimeScalar> arrayProxyDynamicStateStack = new Stack<>();
+
+    /**
+     * Input line state stack for ScalarSpecialVariable "local" save/restore —
+     * migrated from ScalarSpecialVariable.inputLineStateStack.
+     * Elements are ScalarSpecialVariable.InputLineState (package-private inner type).
+     */
+    final Stack<Object> inputLineStateStack = new Stack<>();
+
+    /**
+     * State stack for OutputAutoFlushVariable "local" save/restore —
+     * migrated from OutputAutoFlushVariable.stateStack.
+     * Elements are OutputAutoFlushVariable.State (package-private inner type).
+     */
+    final Stack<Object> autoFlushStateStack = new Stack<>();
+
+    /**
+     * ORS stack for OutputRecordSeparator "local $\" save/restore —
+     * migrated from OutputRecordSeparator.orsStack.
+     */
+    final Stack<String> orsStack = new Stack<>();
+
+    /**
+     * OFS stack for OutputFieldSeparator "local $," save/restore —
+     * migrated from OutputFieldSeparator.ofsStack.
+     */
+    final Stack<String> ofsStack = new Stack<>();
+
+    /**
+     * Errno stacks for ErrnoVariable "local $!" save/restore —
+     * migrated from ErrnoVariable.errnoStack and messageStack.
+     */
+    final Stack<int[]> errnoStack = new Stack<>();
+    final Stack<String> errnoMessageStack = new Stack<>();
+
+    /**
      * Special block arrays (END, INIT, CHECK) — migrated from SpecialBlock.
      */
     final RuntimeArray endBlocks = new RuntimeArray();

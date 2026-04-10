@@ -8,8 +8,11 @@ import java.util.Stack;
  * global symbol table and restoring it when the context exits.
  */
 public class GlobalRuntimeScalar extends RuntimeScalar {
-    // Stack to store the previous values when localized
-    private static final Stack<SavedGlobalState> localizedStack = new Stack<>();
+    // Localized stack is now held per-PerlRuntime.
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedGlobalState> localizedStack() {
+        return (Stack<SavedGlobalState>) (Stack<?>) PerlRuntime.current().globalScalarLocalizedStack;
+    }
     private final String fullName;
 
     public GlobalRuntimeScalar(String fullName) {
@@ -46,7 +49,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         // Save the current global reference
         var originalVariable = GlobalVariable.getGlobalVariablesMap().get(fullName);
 
-        localizedStack.push(new SavedGlobalState(fullName, originalVariable));
+        localizedStack().push(new SavedGlobalState(fullName, originalVariable));
 
         // Create a new variable for the localized scope.
         // For output separator variables, create the matching special type so that
@@ -79,10 +82,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
 
     @Override
     public void dynamicRestoreState() {
-        if (!localizedStack.isEmpty()) {
-            SavedGlobalState saved = localizedStack.peek();
+        Stack<SavedGlobalState> stack = localizedStack();
+        if (!stack.isEmpty()) {
+            SavedGlobalState saved = stack.peek();
             if (saved.fullName.equals(this.fullName)) {
-                localizedStack.pop();
+                stack.pop();
 
                 // Restore the internal separator values if this was an output separator variable
                 if (saved.originalVariable instanceof OutputRecordSeparator) {
