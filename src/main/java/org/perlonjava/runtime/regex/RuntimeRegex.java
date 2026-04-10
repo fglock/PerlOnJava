@@ -227,10 +227,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
             } catch (Exception e) {
-                if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
+                if (e instanceof PerlJavaUnimplementedException
+                        && GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")
                 ) {
-                    // Warn for unimplemented features and Java regex compilation errors
-                    String base = (e instanceof PerlJavaUnimplementedException) ? e.getMessage() : ("Regex compilation failed: " + e.getMessage());
+                    // Warn only for unimplemented features when JPERL_UNIMPLEMENTED=warn
+                    String base = e.getMessage();
                     // Include original and preprocessed patterns to aid debugging
                     String patternInfo = " [pattern='" + (patternString == null ? "" : patternString) + "'" +
                             (javaPattern != null ? ", java='" + javaPattern + "'" : "") + "]";
