@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.*;
@@ -150,7 +151,7 @@ public class PipeOutputChannel implements IOHandle {
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
         // Set working directory to current directory
-        String userDir = System.getProperty("user.dir");
+        String userDir = PerlRuntime.getCwd();
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment

@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
@@ -511,14 +512,14 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for abs2rel() method");
         }
         String path = args.get(1).toString();
-        String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
+        String base = args.size() == 3 ? args.get(2).toString() : PerlRuntime.getCwd();
         
         // Ensure both paths are absolute before relativizing (like Perl does)
-        // Note: We use user.dir explicitly because Java's Path.toAbsolutePath() 
-        // doesn't respect System.setProperty("user.dir", ...) set by chdir()
+        // Note: We use PerlRuntime.getCwd() explicitly because Java's Path.toAbsolutePath() 
+        // doesn't respect per-runtime cwd set by chdir()
         Path pathObj = Paths.get(path);
         Path baseObj = Paths.get(base);
-        String userDir = System.getProperty("user.dir");
+        String userDir = PerlRuntime.getCwd();
         
         if (!pathObj.isAbsolute()) {
             pathObj = Paths.get(userDir).resolve(pathObj).normalize();
@@ -543,7 +544,7 @@ public class FileSpec extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for rel2abs() method");
         }
         String path = args.get(1).toString();
-        String base = args.size() == 3 ? args.get(2).toString() : System.getProperty("user.dir");
+        String base = args.size() == 3 ? args.get(2).toString() : PerlRuntime.getCwd();
 
         // PerlOnJava: jar: paths are already absolute, return as-is
         if (path.startsWith("jar:")) {
@@ -559,7 +560,7 @@ public class FileSpec extends PerlModuleBase {
         // If base is relative, resolve it against current working directory first
         Path basePath = Paths.get(base);
         if (!basePath.isAbsolute()) {
-            basePath = Paths.get(System.getProperty("user.dir")).resolve(basePath);
+            basePath = Paths.get(PerlRuntime.getCwd()).resolve(basePath);
         }
 
         // For relative paths, resolve against the base directory

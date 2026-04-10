@@ -364,6 +364,15 @@ public final class PerlRuntime {
      */
     public boolean globalInitialized = false;
 
+    /**
+     * Per-runtime current working directory.
+     * Initialized from System.getProperty("user.dir") at construction time.
+     * Updated by Directory.chdir(). All path resolution in RuntimeIO.resolvePath()
+     * reads from this field instead of the JVM-global "user.dir" property,
+     * ensuring each interpreter has its own isolated CWD.
+     */
+    public String cwd = System.getProperty("user.dir");
+
     /** Inline method cache for fast method dispatch. */
     public static final int METHOD_CALL_CACHE_SIZE = 4096;
     public final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
@@ -387,6 +396,15 @@ public final class PerlRuntime {
                     "Call PerlRuntime.initialize() or PerlRuntime.setCurrent() first.");
         }
         return rt;
+    }
+
+    /**
+     * Returns the current working directory for the current runtime.
+     * Falls back to System.getProperty("user.dir") if no runtime is bound.
+     */
+    public static String getCwd() {
+        PerlRuntime rt = CURRENT.get();
+        return rt != null ? rt.cwd : System.getProperty("user.dir");
     }
 
     /**

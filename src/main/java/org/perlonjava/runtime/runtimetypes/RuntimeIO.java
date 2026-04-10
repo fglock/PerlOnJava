@@ -955,8 +955,8 @@ public class RuntimeIO extends RuntimeScalar {
             return path.toAbsolutePath();
         }
 
-        // For relative paths, resolve against current directory
-        return Paths.get(System.getProperty("user.dir")).resolve(sanitized).toAbsolutePath();
+        // For relative paths, resolve against per-runtime current directory
+        return Paths.get(PerlRuntime.getCwd()).resolve(sanitized).toAbsolutePath();
     }
 
     /**
