@@ -508,15 +508,29 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `gh1.t` | Missing `Math::BigFloat` dependency |
 | Various Type-Library/*, Type-Tiny-*/basic.t | Test runner CWD issue — pass when run from Type-Tiny dir |
 
-- [x] Phase 6b: Fix sprintf warnings to respect `use warnings` (2026-04-10)
+- [x] Phase 6b: Fix sprintf warnings, `local` restoration on `last`, spurious sprintf warning (2026-04-10)
   - **sprintf/printf warnings fired unconditionally:** All sprintf/printf warnings
     ("Invalid conversion", "Missing argument", "Redundant argument") used plain
     `WarnDie.warn()` which always emits warnings. Changed to `WarnDie.warnWithCategory()`
     with the `"printf"` category, matching Perl 5 behavior where these warnings only
     fire under `use warnings` or `use warnings "printf"`.
-  - File: `SprintfOperator.java` (5 call sites updated)
-  - Impact: Eliminates spurious `Invalid conversion in sprintf: "%{"` warnings from
-    `Types/Standard/Tied.pm` line 62 when `use warnings` is not in the caller's scope.
+  - **`local` variable restoration on `last` exit (3 fixes):**
+    - JVM backend (EmitStatement.java): Added `Local.localSetup/localTeardown` wrapping
+      For3Node (while/for loops, bare blocks) so `last` exits that bypass the body block's
+      own cleanup still restore `local` variables.
+    - JVM backend (EmitControlFlow.java): Non-local `last`/`next`/`redo` now routes
+      through `returnLabel` instead of direct `ARETURN`, ensuring the subroutine's
+      `popToLocalLevel()` cleanup runs when `last LABEL` crosses subroutine boundaries
+      (e.g., test.pl's `sub skip { local $^W=0; last SKIP }`).
+    - Bytecode interpreter (BytecodeCompiler.java): Added `GET_LOCAL_LEVEL/POP_LOCAL_LEVEL`
+      wrapping For3Node for both bare blocks and while/for loops, matching the JVM backend.
+  - **Spurious sprintf "isn't numeric" warning:** `SprintfOperator.java` was calling
+    `getDouble()` on arbitrary string arguments when checking for Inf/NaN on invalid format
+    specifiers. Now only checks DOUBLE type values and known Inf/NaN string literals,
+    avoiding the spurious warning.
+  - Files: `SprintfOperator.java`, `WarnDie.java`, `EmitStatement.java`,
+    `EmitControlFlow.java`, `BytecodeCompiler.java`
+  - Test impact: `op/sprintf2.t` recovers 1 test (1651 → 1652), restoring baseline.
 
 ### Remaining Issues from `./jcpan --jobs 8 -t Type::Tiny`
 
