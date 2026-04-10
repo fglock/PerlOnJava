@@ -981,10 +981,67 @@ can now coexist within the same JVM process with isolated state.
 - 3 sample scripts prove isolation: each has its own `$_`, `$shared_test`, regex state, `@INC`
 - Run with: `./dev/sandbox/run_multiplicity_demo.sh`
 
+### Phase 0: Compilation Thread Safety (planned)
+
+**Problem:** The multiplicity demo serializes initial compilation with a `COMPILE_LOCK`,
+but `eval "string"` at runtime goes through `EvalStringHandler` → `Lexer` → `Parser` →
+emitter → class loading with **no locking**. Concurrent `eval` from multiple threads
+will corrupt shared mutable static state.
+
+**Audit results** — shared mutable state found in three subsystems:
+
+#### Parser (frontend/) — 11 fields
+
+| Severity | File | Field | Issue |
+|----------|------|-------|-------|
+| HIGH | `SpecialBlockParser.java:25` | `symbolTable` | Global parser scope, read/written from 27 call sites |
+| HIGH | `NumberParser.java:27` | `numificationCache` | LRU LinkedHashMap; `.get()` mutates internal state |
+| MEDIUM | `ScopedSymbolTable.java:38` | `nextWarningBitPosition` | Non-atomic counter for `use warnings::register` |
+| MEDIUM | `StringSegmentParser.java:50` | `codeBlockCaptureCounter` | Non-atomic counter for regex code block captures |
+| MEDIUM | `ScopedSymbolTable.java:18` | `warningBitPositions` | HashMap mutated by `registerCustomWarningCategory()` |
+| MEDIUM | `ScopedSymbolTable.java:21` | `packageVersions` | HashMap mutated during `use` and `clear()`ed on reset |
+| MEDIUM | `DataSection.java:24` | `processedPackages` | HashSet mutated during `__DATA__` parsing |
+| MEDIUM | `DataSection.java:29` | `placeholderCreated` | HashSet mutated during `__DATA__` parsing |
+| MEDIUM | `FieldRegistry.java:17` | `classFields` | HashMap mutated by `registerField()` |
+| MEDIUM | `FieldRegistry.java:21` | `classParents` | HashMap mutated by `registerField()` |
+| LOW | `Lexer.java:44` | `isOperator` | Not final but never mutated after class init |
+
+#### Emitter (backend/) — 8 fields
+
+| Severity | File | Field | Issue |
+|----------|------|-------|-------|
+| HIGH | `ByteCodeSourceMapper.java:17-29` | 7 HashMap/ArrayList collections | Source mapping; concurrent `computeIfAbsent()` corrupts HashMap internals |
+| HIGH | `LargeBlockRefactorer.java:29` | `controlFlowDetector` | Single shared visitor; `reset()`/`scan()` race → wrong bytecode |
+| HIGH | `EmitterMethodCreator.java:52` | `classCounter` | Non-atomic `++`; duplicate class names → `LinkageError` |
+| MEDIUM | `BytecodeCompiler.java:80` | `nextCallsiteId` | Non-atomic `++`; duplicate IDs corrupt `/o` regex cache |
+| MEDIUM | `EmitRegex.java:21` | `nextCallsiteId` | Non-atomic `++`; same issue for JVM path |
+| MEDIUM | `Dereference.java:19` | `nextMethodCallsiteId` | Non-atomic `++`; duplicate IDs corrupt inline method cache |
+| LOW | `EmitterMethodCreator.java:50` | `skipVariables` | Never mutated; should be `final` |
+
+#### Class loader — already safe
+`CustomClassLoader` is per-`PerlRuntime` (migrated in Phase 5b).
+
+**Implementation plan (two-part):**
+
+1. **Quick fixes (no lock needed):**
+   - Replace 4 counters with `AtomicInteger`: `classCounter`, `nextCallsiteId` (×2),
+     `nextMethodCallsiteId`
+   - Mark `skipVariables` as `final`
+   - Replace `LargeBlockRefactorer.controlFlowDetector` singleton with new instance
+     per call (matches the existing `controlFlowFinderTl` ThreadLocal pattern on line 34)
+
+2. **Global compile lock:**
+   - Add `static final ReentrantLock COMPILE_LOCK` to `PerlLanguageProvider`
+   - Acquire in `compilePerlCode()` and in both `EvalStringHandler.evalString()` overloads
+   - This serializes all compilation (initial + runtime eval) but guarantees safety
+   - Future optimization: migrate parser/emitter static state to per-runtime, remove lock
+
 ### Next Steps
-1. **Phase 0:** Add synchronization for true thread safety (currently single-threaded OK)
+1. **Phase 0:** Implement compilation thread safety (see plan above)
 2. **Phase 6:** Implement `threads` module (requires runtime cloning)
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
   acceptable for unique ID generation but may want per-runtime counters in future
+- Should `ByteCodeSourceMapper` collections be migrated to per-runtime long-term?
+  (Currently they're only needed during compilation, so the global lock is sufficient)
