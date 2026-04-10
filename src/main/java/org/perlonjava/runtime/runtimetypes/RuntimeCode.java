@@ -101,10 +101,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * - runtimeValues: Object[] of captured variable values
      * - capturedEnv: String[] of captured variable names (matching array indices)
      * <p>
-     * Thread-safety: Each thread's eval compilation uses its own ThreadLocal storage, so parallel
+     * Thread-safety: Each thread's eval compilation uses its own PerlRuntime storage, so parallel
      * eval compilations don't interfere with each other.
      */
-    private static final ThreadLocal<EvalRuntimeContext> evalRuntimeContext = new ThreadLocal<>();
+    // evalRuntimeContext migrated to PerlRuntime; access via getEvalRuntimeContext()
     // evalCache migrated to PerlRuntime; access via getEvalCache()
     private static Map<String, Class<?>> getEvalCache() {
         return PerlRuntime.current().evalCache;
@@ -150,9 +150,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * 
      * Push/pop is handled by RuntimeCode.apply() methods.
      * Access via getCurrentArgs() for Java-implemented functions that need caller's @_.
+     * 
+     * Migrated to PerlRuntime.argsStack for reduced ThreadLocal overhead.
      */
-    private static final ThreadLocal<Deque<RuntimeArray>> argsStack =
-            ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
      * Get the current subroutine's @_ array.
@@ -162,7 +162,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The current @_ array, or null if not in a subroutine
      */
     public static RuntimeArray getCurrentArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = PerlRuntime.current().argsStack;
         return stack.isEmpty() ? null : stack.peek();
     }
 
@@ -178,7 +178,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The caller's @_ array, or null if not available
      */
     public static RuntimeArray getCallerArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = PerlRuntime.current().argsStack;
         if (stack.size() < 2) {
             return null;
         }
@@ -192,7 +192,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void pushArgs(RuntimeArray args) {
-        argsStack.get().push(args);
+        PerlRuntime.current().argsStack.push(args);
     }
 
     /**
@@ -200,7 +200,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
-        Deque<RuntimeArray> stack = argsStack.get();
+        Deque<RuntimeArray> stack = PerlRuntime.current().argsStack;
         if (!stack.isEmpty()) {
             stack.pop();
         }
@@ -403,7 +403,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The current eval runtime context, or null if not in eval STRING compilation
      */
     public static EvalRuntimeContext getEvalRuntimeContext() {
-        return evalRuntimeContext.get();
+        return (EvalRuntimeContext) PerlRuntime.current().evalRuntimeContext;
     }
 
     /**
@@ -424,7 +424,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         rt.anonSubs.clear();
         rt.interpretedSubs.clear();
         rt.evalContext.clear();
-        evalRuntimeContext.remove();
+        rt.evalRuntimeContext = null;
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
@@ -517,7 +517,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ctx.capturedEnv,  // Variable names in same order as runtimeValues
                 evalTag
         );
-        evalRuntimeContext.set(runtimeCtx);
+        PerlRuntime.current().evalRuntimeContext = runtimeCtx;
 
         try {
             // Check if the eval string contains non-ASCII characters
@@ -829,7 +829,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // IMPORTANT: Always clean up ThreadLocal in finally block to ensure it's removed
             // even if compilation fails. Failure to do so could cause memory leaks in
             // long-running applications with thread pools.
-            evalRuntimeContext.remove();
+            PerlRuntime.current().evalRuntimeContext = null;
         }
 
         } finally {
@@ -1004,7 +1004,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ctx.capturedEnv,
                 evalTag
         );
-        evalRuntimeContext.set(runtimeCtx);
+        PerlRuntime.current().evalRuntimeContext = runtimeCtx;
 
         InterpretedCode interpretedCode = null;
         RuntimeList result;
@@ -1345,8 +1345,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 storeSourceLines(code.toString(), evalFilename, ast, tokens);
             }
 
-            // Clean up ThreadLocal
-            evalRuntimeContext.remove();
+            // Clean up eval runtime context
+            PerlRuntime.current().evalRuntimeContext = null;
 
             // Release the compile lock if still held (error path — success path releases it earlier).
             // Use a boolean flag instead of isHeldByCurrentThread() to avoid over-decrementing

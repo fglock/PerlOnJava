@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -22,6 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 2. Per-call-site tracking using snapshot IDs: registerSnapshot() captures %^H
  *    at compile time, and setCallSiteHintHashId()/pushCallerHintHash()/
  *    getCallerHintHashAtFrame() bridge compile-time state to runtime caller()[10].
+ *
+ * Per-call-site stacks are per-PerlRuntime instance fields (accessed via
+ * PerlRuntime.current()) instead of separate ThreadLocals.
  */
 public class HintHashRegistry {
 
@@ -37,15 +41,6 @@ public class HintHashRegistry {
     private static final Map<Integer, Map<String, String>> snapshotRegistry =
         new ConcurrentHashMap<>();
     private static final AtomicInteger nextSnapshotId = new AtomicInteger(0);
-
-    // ThreadLocal tracking the current call site's snapshot ID.
-    // Updated at runtime from emitted bytecode.
-    private static final ThreadLocal<Integer> callSiteSnapshotId =
-        ThreadLocal.withInitial(() -> 0);
-
-    // ThreadLocal stack saving caller's snapshot ID across subroutine calls.
-    private static final ThreadLocal<Deque<Integer>> callerSnapshotIdStack =
-        ThreadLocal.withInitial(ArrayDeque::new);
 
     // ---- Compile-time %^H scoping ----
 
@@ -110,7 +105,7 @@ public class HintHashRegistry {
      * @param id the snapshot ID (0 = empty/no hints)
      */
     public static void setCallSiteHintHashId(int id) {
-        callSiteSnapshotId.set(id);
+        PerlRuntime.current().hintCallSiteSnapshotId = id;
     }
 
     /**
@@ -120,11 +115,11 @@ public class HintHashRegistry {
      * Called by RuntimeCode.apply() before entering a subroutine.
      */
     public static void pushCallerHintHash() {
-        int currentId = callSiteSnapshotId.get();
-        callerSnapshotIdStack.get().push(currentId);
+        PerlRuntime rt = PerlRuntime.current();
+        rt.hintCallerSnapshotIdStack.push(rt.hintCallSiteSnapshotId);
         // Reset callsite for the callee - it should not inherit the caller's hints.
         // The callee's own CompilerFlagNodes will set the correct ID if needed.
-        callSiteSnapshotId.set(0);
+        rt.hintCallSiteSnapshotId = 0;
     }
 
     /**
@@ -133,12 +128,10 @@ public class HintHashRegistry {
      * Called by RuntimeCode.apply() after a subroutine returns.
      */
     public static void popCallerHintHash() {
-        Deque<Integer> stack = callerSnapshotIdStack.get();
+        PerlRuntime rt = PerlRuntime.current();
+        Deque<Integer> stack = rt.hintCallerSnapshotIdStack;
         if (!stack.isEmpty()) {
-            int restoredId = stack.pop();
-            // Restore the callsite ID so eval STRING and subsequent code
-            // see the correct hint hash, not one clobbered by the callee.
-            callSiteSnapshotId.set(restoredId);
+            rt.hintCallSiteSnapshotId = stack.pop();
         }
     }
 
@@ -150,7 +143,7 @@ public class HintHashRegistry {
      * @return The hint hash map, or null if not available
      */
     public static Map<String, String> getCallerHintHashAtFrame(int frame) {
-        Deque<Integer> stack = callerSnapshotIdStack.get();
+        Deque<Integer> stack = PerlRuntime.current().hintCallerSnapshotIdStack;
         if (stack.isEmpty()) {
             return null;
         }
@@ -172,7 +165,7 @@ public class HintHashRegistry {
      * @return the hint hash map, or null if empty/not set
      */
     public static Map<String, String> getCurrentCallSiteHintHash() {
-        int id = callSiteSnapshotId.get();
+        int id = PerlRuntime.current().hintCallSiteSnapshotId;
         if (id == 0) return null;
         return snapshotRegistry.get(id);
     }
@@ -185,7 +178,8 @@ public class HintHashRegistry {
         compileTimeStack.clear();
         snapshotRegistry.clear();
         nextSnapshotId.set(0);
-        callSiteSnapshotId.set(0);
-        callerSnapshotIdStack.get().clear();
+        PerlRuntime rt = PerlRuntime.current();
+        rt.hintCallSiteSnapshotId = 0;
+        rt.hintCallerSnapshotIdStack.clear();
     }
 }

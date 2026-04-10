@@ -395,6 +395,45 @@ public final class PerlRuntime {
     public final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
     public final RuntimeCode[] inlineCacheCode = new RuntimeCode[METHOD_CALL_CACHE_SIZE];
 
+    // ---- Warning/Hints stacks — migrated from WarningBitsRegistry ThreadLocals ----
+
+    /** Stack of warning bits for the current execution context. */
+    public final Deque<String> warningCurrentBitsStack = new ArrayDeque<>();
+
+    /** Warning bits at the current call site. */
+    public String warningCallSiteBits = null;
+
+    /** Stack saving caller's call-site warning bits across subroutine calls. */
+    public final Deque<String> warningCallerBitsStack = new ArrayDeque<>();
+
+    /** Compile-time $^H (hints) at the current call site. */
+    public int warningCallSiteHints = 0;
+
+    /** Stack saving caller's $^H hints across subroutine calls. */
+    public final Deque<Integer> warningCallerHintsStack = new ArrayDeque<>();
+
+    /** Compile-time %^H (hints hash) snapshot at the current call site. */
+    public Map<String, RuntimeScalar> warningCallSiteHintHash = new HashMap<>();
+
+    /** Stack saving caller's %^H across subroutine calls. */
+    public final Deque<Map<String, RuntimeScalar>> warningCallerHintHashStack = new ArrayDeque<>();
+
+    // ---- HintHashRegistry stacks — migrated from HintHashRegistry ThreadLocals ----
+
+    /** Current call site's hint hash snapshot ID. */
+    public int hintCallSiteSnapshotId = 0;
+
+    /** Stack saving caller's hint hash snapshot ID across subroutine calls. */
+    public final Deque<Integer> hintCallerSnapshotIdStack = new ArrayDeque<>();
+
+    // ---- RuntimeCode stacks — migrated from RuntimeCode ThreadLocals ----
+
+    /** Eval runtime context (used during eval STRING compilation). */
+    public Object evalRuntimeContext = null;
+
+    /** Stack of @_ argument arrays across subroutine calls. */
+    public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
+
     // ---- Static accessors ----
 
     /**
