@@ -198,8 +198,8 @@ public class SpecialBlockParser {
                                     new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
                     OperatorNode ast = entry.ast();
-                    isFromOuterScope = RuntimeCode.evalBeginIds.containsKey(ast);
-                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                    isFromOuterScope = RuntimeCode.getEvalBeginIds().containsKey(ast);
+                    int beginId = RuntimeCode.getEvalBeginIds().computeIfAbsent(
                             ast,
                             k -> EmitterMethodCreator.classCounter++);
                     packageName = PersistentVariable.beginPackage(beginId);

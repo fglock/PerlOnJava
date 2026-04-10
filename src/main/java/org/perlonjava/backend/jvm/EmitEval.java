@@ -169,7 +169,7 @@ public class EmitEval {
 
         // Store the context in a static map, indexed by evalTag
         // This allows the runtime compilation to access the compile-time environment
-        RuntimeCode.evalContext.put(evalTag, evalCtx);
+        RuntimeCode.<EmitterContext>getEvalContext().put(evalTag, evalCtx);
 
         // Generate bytecode to evaluate the eval string expression
         // This pushes the string value onto the stack

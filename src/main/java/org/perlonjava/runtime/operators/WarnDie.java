@@ -81,7 +81,7 @@ public class WarnDie {
             // By the time we reach catchEval(), evalDepth has already been decremented
             // by the eval catch block, but the handler should see $^S=1 since we are
             // conceptually still inside eval (Perl 5 calls the handler before unwinding).
-            RuntimeCode.evalDepth++;
+            RuntimeCode.incrementEvalDepth();
             try {
                 RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
             } catch (Throwable handlerException) {
@@ -99,7 +99,7 @@ public class WarnDie {
                     err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(handlerException)));
                 }
             } finally {
-                RuntimeCode.evalDepth--;
+                RuntimeCode.decrementEvalDepth();
                 // Restore $SIG{__DIE__}
                 DynamicVariableManager.popToLocalLevel(level);
             }

@@ -285,11 +285,11 @@ public class EvalStringHandler {
             InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();  // Empty @_
             RuntimeList result;
-            RuntimeCode.evalDepth++;
+            RuntimeCode.incrementEvalDepth();
             try {
                 result = evalCode.apply(args, callContext);
             } finally {
-                RuntimeCode.evalDepth--;
+                RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);
             }
             evalTrace("EvalStringHandler exec ok ctx=" + callContext +
@@ -384,11 +384,11 @@ public class EvalStringHandler {
             InterpreterState.currentPackage.get().set(savedPkg);
             RuntimeArray args = new RuntimeArray();
             RuntimeList result;
-            RuntimeCode.evalDepth++;
+            RuntimeCode.incrementEvalDepth();
             try {
                 result = evalCode.apply(args, RuntimeContextType.SCALAR);
             } finally {
-                RuntimeCode.evalDepth--;
+                RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);
             }
 

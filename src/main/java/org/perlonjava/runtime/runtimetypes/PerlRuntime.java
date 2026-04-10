@@ -231,6 +231,45 @@ public final class PerlRuntime {
     /** Preserves BYTE_STRING type on captures. */
     public boolean regexLastMatchWasByteString = false;
 
+    // ---- RuntimeCode compilation state — migrated from RuntimeCode static fields ----
+
+    /** Tracks eval BEGIN block IDs during compilation. */
+    public final java.util.IdentityHashMap<Object, Integer> evalBeginIds = new java.util.IdentityHashMap<>();
+
+    /** LRU cache for compiled eval STRING results. */
+    public final Map<String, Class<?>> evalCache = new java.util.LinkedHashMap<String, Class<?>>(100, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Class<?>> eldest) {
+            return size() > 100;
+        }
+    };
+
+    /** LRU cache for method handles. */
+    public final Map<Class<?>, java.lang.invoke.MethodHandle> methodHandleCache = new java.util.LinkedHashMap<Class<?>, java.lang.invoke.MethodHandle>(100, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Class<?>, java.lang.invoke.MethodHandle> eldest) {
+            return size() > 100;
+        }
+    };
+
+    /** Temporary storage for anonymous subroutines during compilation. */
+    public final HashMap<String, Class<?>> anonSubs = new HashMap<>();
+
+    /** Storage for interpreter fallback closures. */
+    public final HashMap<String, Object> interpretedSubs = new HashMap<>();
+
+    /** Storage for eval string compiler context (values are EmitterContext but stored as Object to avoid circular deps). */
+    public final HashMap<String, Object> evalContext = new HashMap<>();
+
+    /** Current eval nesting depth for $^S support. */
+    public int evalDepth = 0;
+
+    /** Inline method cache for fast method dispatch. */
+    public static final int METHOD_CALL_CACHE_SIZE = 4096;
+    public final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
+    public final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
+    public final RuntimeCode[] inlineCacheCode = new RuntimeCode[METHOD_CALL_CACHE_SIZE];
+
     // ---- Static accessors ----
 
     /**

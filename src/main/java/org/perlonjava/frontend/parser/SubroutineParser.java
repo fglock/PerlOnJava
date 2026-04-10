@@ -1142,7 +1142,7 @@ public class SubroutineParser {
                             entry.perlPackage());
                 } else {
                     OperatorNode ast = entry.ast();
-                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                    int beginId = RuntimeCode.getEvalBeginIds().computeIfAbsent(
                             ast,
                             k -> EmitterMethodCreator.classCounter++);
                     variableName = NameNormalizer.normalizeVariableName(

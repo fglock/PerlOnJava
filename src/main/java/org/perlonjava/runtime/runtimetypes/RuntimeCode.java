@@ -52,7 +52,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Lookup object for performing method handle operations
     public static final MethodHandles.Lookup lookup = MethodHandles.lookup();
 
-    public static final IdentityHashMap<OperatorNode, Integer> evalBeginIds = new IdentityHashMap<>();
+    // evalBeginIds migrated to PerlRuntime; access via getEvalBeginIds()
+    public static IdentityHashMap<Object, Integer> getEvalBeginIds() {
+        return PerlRuntime.current().evalBeginIds;
+    }
 
     /**
      * Flag to control whether eval STRING should use the interpreter backend.
@@ -101,22 +104,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * eval compilations don't interfere with each other.
      */
     private static final ThreadLocal<EvalRuntimeContext> evalRuntimeContext = new ThreadLocal<>();
-    // Cache for memoization of evalStringHelper results
-    private static final int CLASS_CACHE_SIZE = 100;
-    private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Class<?>> eldest) {
-            return size() > CLASS_CACHE_SIZE;
-        }
-    };
-    // Cache for method handles with eviction policy
-    private static final int METHOD_HANDLE_CACHE_SIZE = 100;
-    private static final Map<Class<?>, MethodHandle> methodHandleCache = new LinkedHashMap<Class<?>, MethodHandle>(METHOD_HANDLE_CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<Class<?>, MethodHandle> eldest) {
-            return size() > METHOD_HANDLE_CACHE_SIZE;
-        }
-    };
+    // evalCache migrated to PerlRuntime; access via getEvalCache()
+    private static Map<String, Class<?>> getEvalCache() {
+        return PerlRuntime.current().evalCache;
+    }
+    // methodHandleCache migrated to PerlRuntime; access via getMethodHandleCache()
+    private static Map<Class<?>, MethodHandle> getMethodHandleCache() {
+        return PerlRuntime.current().methodHandleCache;
+    }
     /**
      * Flag to enable disassembly of eval STRING bytecode.
      * When set, prints the interpreter bytecode for each eval STRING compilation.
@@ -135,9 +130,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Tracks the current eval nesting depth for $^S support.
      * 0 = not inside any eval, >0 = inside eval (eval STRING or eval BLOCK).
-     * Incremented on eval entry, decremented on eval exit (success or failure).
+     * Migrated to PerlRuntime; access via getEvalDepth()/incrementEvalDepth()/decrementEvalDepth().
      */
-    public static int evalDepth = 0;
+    public static int getEvalDepth() {
+        return PerlRuntime.current().evalDepth;
+    }
+    public static void incrementEvalDepth() {
+        PerlRuntime.current().evalDepth++;
+    }
+    public static void decrementEvalDepth() {
+        PerlRuntime.current().evalDepth--;
+    }
 
     /**
      * Thread-local stack of @_ arrays for each active subroutine call.
@@ -229,29 +232,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * This optimization provides ~50% speedup for method-heavy code like:
      *   while ($i < 10000) { $obj->method($arg); $i++ }
      */
-    private static final int METHOD_CALL_CACHE_SIZE = 4096;
-    private static final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
-    private static final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
-    private static final RuntimeCode[] inlineCacheCode = new RuntimeCode[METHOD_CALL_CACHE_SIZE];
+    // Inline cache arrays migrated to PerlRuntime; access via PerlRuntime.current()
     private static int nextCallsiteId = 0;
     
     public static int allocateMethodCallsiteId() {
-        return nextCallsiteId++ % METHOD_CALL_CACHE_SIZE;
+        return nextCallsiteId++ % PerlRuntime.METHOD_CALL_CACHE_SIZE;
     }
     
     /**
      * Clear the inline method cache. Should be called when method definitions change.
      */
     public static void clearInlineMethodCache() {
-        java.util.Arrays.fill(inlineCacheBlessId, 0);
-        java.util.Arrays.fill(inlineCacheMethodHash, 0);
-        java.util.Arrays.fill(inlineCacheCode, null);
+        PerlRuntime rt = PerlRuntime.current();
+        java.util.Arrays.fill(rt.inlineCacheBlessId, 0);
+        java.util.Arrays.fill(rt.inlineCacheMethodHash, 0);
+        java.util.Arrays.fill(rt.inlineCacheCode, null);
     }
     
-    // Temporary storage for anonymous subroutines and eval string compiler context
-    public static HashMap<String, Class<?>> anonSubs = new HashMap<>(); // temp storage for makeCodeObject()
-    public static HashMap<String, Object> interpretedSubs = new HashMap<>(); // storage for interpreter fallback closures
-    public static HashMap<String, EmitterContext> evalContext = new HashMap<>(); // storage for eval string compiler context
+    // anonSubs, interpretedSubs, evalContext migrated to PerlRuntime; access via getters
+    public static HashMap<String, Class<?>> getAnonSubs() { return PerlRuntime.current().anonSubs; }
+    public static HashMap<String, Object> getInterpretedSubs() { return PerlRuntime.current().interpretedSubs; }
+    @SuppressWarnings("unchecked")
+    public static <T> HashMap<String, T> getEvalContext() { return (HashMap<String, T>) (HashMap<String, ?>) PerlRuntime.current().evalContext; }
     // Runtime eval counter for generating unique filenames when $^P is set
     private static int runtimeEvalCounter = 1;
     // Method object representing the compiled subroutine (legacy - used by PerlModuleBase)
@@ -415,11 +417,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Add a method to clear caches when globals are reset
     public static void clearCaches() {
-        evalCache.clear();
-        methodHandleCache.clear();
-        anonSubs.clear();
-        interpretedSubs.clear();
-        evalContext.clear();
+        PerlRuntime rt = PerlRuntime.current();
+        rt.evalCache.clear();
+        rt.methodHandleCache.clear();
+        rt.anonSubs.clear();
+        rt.interpretedSubs.clear();
+        rt.evalContext.clear();
         evalRuntimeContext.remove();
     }
 
@@ -475,7 +478,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static Class<?> evalStringHelper(RuntimeScalar code, String evalTag, Object[] runtimeValues) throws Exception {
 
         // Retrieve the eval context that was saved at program compile-time
-        EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+        EmitterContext ctx = RuntimeCode.<EmitterContext>getEvalContext().get(evalTag);
 
         // Handle missing eval context - this can happen when compiled code (e.g., INIT blocks
         // with eval) is executed after the runtime has been reset. In JUnit parallel tests,
@@ -564,9 +567,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             String cacheKey = code.toString() + '\0' + evalTag + '\0' + hasUnicode + '\0' + ctx.isEvalbytes + '\0' + isByteStringSource + '\0' + featureFlags + '\0' + currentPackage;
             Class<?> cachedClass = null;
             if (!isDebugging) {
-                synchronized (evalCache) {
-                    if (evalCache.containsKey(cacheKey)) {
-                        cachedClass = evalCache.get(cacheKey);
+                Map<String, Class<?>> cache = getEvalCache();
+                synchronized (cache) {
+                    if (cache.containsKey(cacheKey)) {
+                        cachedClass = cache.get(cacheKey);
                     }
                 }
 
@@ -633,7 +637,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // variable reinitialization in loops.
                             OperatorNode ast = entry.ast();
                             if (ast != null) {
-                                int beginId = evalBeginIds.computeIfAbsent(
+                                int beginId = getEvalBeginIds().computeIfAbsent(
                                         ast,
                                         k -> EmitterMethodCreator.classCounter++);
                                 String packageName = PersistentVariable.beginPackage(beginId);
@@ -802,8 +806,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Cache the result (unless debugging is enabled)
             if (!isDebugging) {
-                synchronized (evalCache) {
-                    evalCache.put(cacheKey, generatedClass);
+                Map<String, Class<?>> cache = getEvalCache();
+                synchronized (cache) {
+                    cache.put(cacheKey, generatedClass);
                 }
             }
 
@@ -958,7 +963,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 " codeType=" + code.type + " codeLen=" + (code.toString() != null ? code.toString().length() : -1));
 
         // Retrieve the eval context that was saved at program compile-time
-        EmitterContext ctx = RuntimeCode.evalContext.get(evalTag);
+        EmitterContext ctx = RuntimeCode.<EmitterContext>getEvalContext().get(evalTag);
 
         // Handle missing eval context - this can happen when compiled code (e.g., INIT blocks
         // with eval) is executed after the runtime has been reset. In JUnit parallel tests,
@@ -1051,7 +1056,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if (runtimeValue != null) {
                             OperatorNode operatorAst = entry.ast();
                             if (operatorAst != null) {
-                                int beginId = evalBeginIds.computeIfAbsent(
+                                int beginId = getEvalBeginIds().computeIfAbsent(
                                         operatorAst,
                                         k -> EmitterMethodCreator.classCounter++);
                                 String packageName = PersistentVariable.beginPackage(beginId);
@@ -1235,7 +1240,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Execute the interpreted code
             // Track eval depth for $^S support
-            evalDepth++;
+            incrementEvalDepth();
             try {
                 result = interpretedCode.apply(args, callContext);
 
@@ -1293,9 +1298,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     return new RuntimeList(new RuntimeScalar());
                 }
             } finally {
-                evalDepth--;
+                decrementEvalDepth();
             }
-
         } finally {
             evalTrace("evalStringWithInterpreter exit tag=" + evalTag + " ctx=" + callContext +
                     " $@=" + GlobalVariable.getGlobalVariable("main::@"));
@@ -1427,12 +1431,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
-                    int cacheIndex = callsiteId & (METHOD_CALL_CACHE_SIZE - 1);
+                    int cacheIndex = callsiteId & (PerlRuntime.METHOD_CALL_CACHE_SIZE - 1);
+                    PerlRuntime rt = PerlRuntime.current();
                     
                     // Check if cache hit
-                    if (inlineCacheBlessId[cacheIndex] == blessId && 
-                        inlineCacheMethodHash[cacheIndex] == methodHash) {
-                        RuntimeCode cachedCode = inlineCacheCode[cacheIndex];
+                    if (rt.inlineCacheBlessId[cacheIndex] == blessId && 
+                        rt.inlineCacheMethodHash[cacheIndex] == methodHash) {
+                        RuntimeCode cachedCode = rt.inlineCacheCode[cacheIndex];
                         if (cachedCode != null && (cachedCode.subroutine != null || cachedCode.methodHandle != null)) {
                             // Cache hit - ultra fast path: directly invoke method
                             try {
@@ -1486,9 +1491,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // Only cache if method is defined and has a subroutine or method handle
                             if (code.subroutine != null || code.methodHandle != null) {
                                 // Update cache
-                                inlineCacheBlessId[cacheIndex] = blessId;
-                                inlineCacheMethodHash[cacheIndex] = methodHash;
-                                inlineCacheCode[cacheIndex] = code;
+                                rt.inlineCacheBlessId[cacheIndex] = blessId;
+                                rt.inlineCacheMethodHash[cacheIndex] = methodHash;
+                                rt.inlineCacheCode[cacheIndex] = code;
                             }
                             
                             // Call the method
@@ -2137,7 +2142,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Eval STRING must allow next/last/redo to propagate to the enclosing scope.
     // The caller is responsible for handling RuntimeControlFlowList markers.
     public static RuntimeList applyEval(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
-        evalDepth++;
+        incrementEvalDepth();
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
             // Perl clears $@ on successful eval (even if nested evals previously set it).
@@ -2170,7 +2175,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             return new RuntimeList(new RuntimeScalar());
         } finally {
-            evalDepth--;
+            decrementEvalDepth();
         }
     }
 

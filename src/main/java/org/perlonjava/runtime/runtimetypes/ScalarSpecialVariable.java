@@ -273,7 +273,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                         // During BEGIN/UNITCHECK blocks = compilation phase
                         yield scalarUndef;
                     }
-                    yield getScalarInt(RuntimeCode.evalDepth > 0 ? 1 : 0);
+                    yield getScalarInt(RuntimeCode.getEvalDepth() > 0 ? 1 : 0);
                 }
             };
             return result;

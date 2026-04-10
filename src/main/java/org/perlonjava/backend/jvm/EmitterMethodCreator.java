@@ -1820,27 +1820,21 @@ public class EmitterMethodCreator implements Opcodes {
 
     /**
      * Emits bytecode to increment RuntimeCode.evalDepth (for $^S support).
-     * Stack effect: net 0 (pushes 2, pops 2).
+     * Calls RuntimeCode.incrementEvalDepth() static method.
+     * Stack effect: net 0.
      */
     private static void emitEvalDepthIncrement(MethodVisitor mv) {
-        mv.visitFieldInsn(Opcodes.GETSTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
-        mv.visitInsn(Opcodes.ICONST_1);
-        mv.visitInsn(Opcodes.IADD);
-        mv.visitFieldInsn(Opcodes.PUTSTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "incrementEvalDepth", "()V", false);
     }
 
     /**
      * Emits bytecode to decrement RuntimeCode.evalDepth (for $^S support).
-     * Stack effect: net 0 (pushes 2, pops 2).
+     * Calls RuntimeCode.decrementEvalDepth() static method.
+     * Stack effect: net 0.
      */
     private static void emitEvalDepthDecrement(MethodVisitor mv) {
-        mv.visitFieldInsn(Opcodes.GETSTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
-        mv.visitInsn(Opcodes.ICONST_1);
-        mv.visitInsn(Opcodes.ISUB);
-        mv.visitFieldInsn(Opcodes.PUTSTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "decrementEvalDepth", "()V", false);
     }
 }

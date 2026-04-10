@@ -939,6 +939,28 @@ can now coexist within the same JVM process with isolated state.
   - Added static accessor methods (getGlobalVariablesMap(), etc.)
   - Updated 20 consumer files across frontend, backend, and runtime packages
 
+- [x] **Phase 5c: De-static-ify Regex State** (2026-04-10)
+  - Moved 14 static fields from RuntimeRegex into PerlRuntime: globalMatcher,
+    globalMatchString, lastMatchedString, lastMatch start/end, lastSuccessful*,
+    lastSuccessfulPattern, lastMatchUsedPFlag, lastMatchUsedBackslashK,
+    lastCaptureGroups, lastMatchWasByteString
+  - Added static getter/setter methods on RuntimeRegex
+  - Updated RegexState.java, ScalarSpecialVariable.java, HashSpecialVariable.java
+
+- [x] **Phase 5d: De-static-ify RuntimeCode Caches** (2026-04-10)
+  - Moved evalBeginIds, evalCache, methodHandleCache, anonSubs, interpretedSubs,
+    evalContext, evalDepth, inline method cache arrays into PerlRuntime
+  - Added static getter methods on RuntimeCode (getEvalBeginIds(), getEvalCache(),
+    getAnonSubs(), getInterpretedSubs(), getEvalContext())
+  - Added incrementEvalDepth()/decrementEvalDepth()/getEvalDepth() methods
+  - Changed EmitterMethodCreator bytecode from GETSTATIC/PUTSTATIC to INVOKESTATIC
+  - Changed EmitSubroutine bytecode from GETSTATIC to INVOKESTATIC for interpretedSubs
+  - Updated 13 consumer files: ScalarSpecialVariable, BytecodeInterpreter,
+    EmitterMethodCreator, EmitEval, EmitSubroutine, WarnDie, EvalStringHandler,
+    SpecialBlockParser, SubroutineParser, BytecodeCompiler, EmitVariable,
+    CompileAssignment
+  - Decision: evalCache/methodHandleCache are per-runtime (simpler, no sharing)
+
 ### Files Created
 - `src/main/java/org/perlonjava/runtime/runtimetypes/PerlRuntime.java`
 
@@ -947,14 +969,13 @@ can now coexist within the same JVM process with isolated state.
 - Used public accessor methods (e.g., `GlobalVariable.getGlobalVariablesMap()`) for
   cross-package access to PerlRuntime fields
 - ThreadLocal overhead is negligible (~1ns per access, JIT-optimized)
+- evalCache/methodHandleCache are per-runtime (not shared) — simpler, avoids
+  cross-runtime class compatibility issues
 
 ### Next Steps
-1. **Phase 4 (partial):** Migrate regex state (`$1`, `$&`, etc.) into PerlRuntime
-2. **RuntimeCode caches:** Migrate `anonSubs`, `interpretedSubs`, `evalContext`,
-   `evalDepth`, `evalCache`, `methodHandleCache` into PerlRuntime
-3. **Phase 0:** Add synchronization for true thread safety (currently single-threaded OK)
-4. **Phase 6:** Implement `threads` module (requires runtime cloning)
+1. **Phase 0:** Add synchronization for true thread safety (currently single-threaded OK)
+2. **Phase 6:** Implement `threads` module (requires runtime cloning)
 
 ### Open Questions
-- Should RuntimeCode compile-time caches (evalCache, methodHandleCache) be per-runtime
-  or shared with thread-safe access? Per-runtime is simpler; shared saves memory.
+- `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
+  acceptable for unique ID generation but may want per-runtime counters in future

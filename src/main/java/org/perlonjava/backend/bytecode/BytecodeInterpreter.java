@@ -1014,7 +1014,7 @@ public class BytecodeInterpreter {
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.evalDepth--;
+                                            RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
                                         return result;
@@ -1123,7 +1123,7 @@ public class BytecodeInterpreter {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.evalDepth--;
+                                            RuntimeCode.decrementEvalDepth();
                                             break;
                                         }
                                         return result;
@@ -1498,7 +1498,7 @@ public class BytecodeInterpreter {
                                 evalCatchStack.push(catchPc);
 
                                 // Track eval depth for $^S
-                                RuntimeCode.evalDepth++;
+                                RuntimeCode.incrementEvalDepth();
 
                                 // Clear $@ at start of eval block
                                 GlobalVariable.setGlobalVariable("main::@", "");
@@ -1517,7 +1517,7 @@ public class BytecodeInterpreter {
                                 }
 
                                 // Track eval depth for $^S
-                                RuntimeCode.evalDepth--;
+                                RuntimeCode.decrementEvalDepth();
                             }
 
                             case Opcodes.EVAL_CATCH -> {
@@ -2037,7 +2037,7 @@ public class BytecodeInterpreter {
                     // Check if we're inside an eval block first
                     if (!evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
-                        RuntimeCode.evalDepth--;
+                        RuntimeCode.decrementEvalDepth();
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -2074,7 +2074,7 @@ public class BytecodeInterpreter {
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
 
                         // Track eval depth for $^S
-                        RuntimeCode.evalDepth--;
+                        RuntimeCode.decrementEvalDepth();
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(e);
