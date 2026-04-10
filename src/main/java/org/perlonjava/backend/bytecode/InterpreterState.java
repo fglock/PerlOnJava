@@ -149,8 +149,10 @@ public class InterpreterState {
     public static List<Integer> getPcStack() {
         ArrayList<int[]> pcs = pcStack.get();
         ArrayList<Integer> result = new ArrayList<>(pcs.size());
-        for (int[] holder : pcs) {
-            result.add(holder[0]);
+        // Reverse order to match frameStack (Deque iterates most-recent-first,
+        // but pcStack ArrayList stores oldest-first via add())
+        for (int i = pcs.size() - 1; i >= 0; i--) {
+            result.add(pcs.get(i)[0]);
         }
         return result;
     }
