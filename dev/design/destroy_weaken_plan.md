@@ -2916,9 +2916,16 @@ determined).
 
 **Files**: `RuntimeScalar.java`
 
-#### Phase O4: Prevent `setLarge` bloat from killing `set()` inlining (MEDIUM impact, MEDIUM risk)
+#### Phase O4: Prevent `setLarge` bloat from killing `set()` inlining (HIGH impact, MEDIUM risk)
 
 **Goal**: Keep the `set()` method small enough for JIT inlining.
+
+**Why HIGH impact**: The -60% braille display regression (vs -7% compute-only) proves that
+the string/hash/reference path through `setLarge()` is the dominant bottleneck, not just
+`scopeExitCleanup`. The display code does many string assignments and hash lookups — each
+goes through `set()` → `setLarge()`, which now includes refCount tracking, WeakRefRegistry
+checks, and `MortalList.flush()`. If `setLarge()` bloat prevents the JIT from inlining
+`set()`, every variable assignment in IO-heavy code becomes a real method call.
 
 **Approach**: The JIT's inlining budget is based on bytecode size. `setLarge()` grew
 substantially with refCount/WeakRef/MortalList logic. Options:
@@ -2984,18 +2991,20 @@ from field size is secondary to allocation rate.
 
 | Phase | Impact | Risk | Effort | Depends on |
 |-------|--------|------|--------|------------|
+| O4    | HIGH   | MED  | 1 hr | — |
+| O3    | MEDIUM | LOW  | 15 min | — |
 | O1    | HIGH   | LOW  | 1-2 hrs | — |
 | O2    | HIGH   | LOW  | 30 min | O1 |
-| O3    | MEDIUM | LOW  | 15 min | — |
-| O4    | MEDIUM | MED  | 1 hr | — |
 | O5    | LOW    | MED  | 1 hr | — |
 | O6    | LOW    | HIGH | 2+ hrs | — |
 
-**Recommended order**: O3 → O1 → O2 → O4 → O5 → (O6 only if needed)
+**Recommended order**: O4 → O3 → O1 → O2 → O5 → (O6 only if needed)
 
-O3 is quickest to implement and provides immediate benefit. O1+O2 together should
-eliminate the majority of the regression. O4 may require JIT profiling to confirm
-the inlining hypothesis.
+**Key insight from benchmarking**: The -60% braille display regression (vs -7% compute-only)
+proves that `setLarge()` bloat is the dominant bottleneck, not `scopeExitCleanup`. O4 should
+be done first because it addresses the IO/string/hash path that shows the largest regression.
+O3 is quickest to implement and helps the compute path. O1+O2 together eliminate remaining
+scope-exit overhead for integer-only loops.
 
 ### 16.6 Verification
 
@@ -3004,9 +3013,10 @@ After each phase:
 2. Run `dev/bench/benchmark_lexical.pl` — target ≥390,000/s (master baseline: 397,633/s)
 3. Run `dev/bench/benchmark_global.pl` — target ≥90,000/s (master baseline: 96,850/s)
 4. `./jperl examples/life_bitpacked.pl -r none -g 5000` — target ≥28 Mcells/s (master: ~29)
-5. `./jcpan --jobs 8 -t Moo` — 841/841 must still pass
-6. Sandbox destroy/weaken tests: `perl dev/tools/perl_test_runner.pl src/test/resources/unit/destroy*.t src/test/resources/unit/weaken*.t`
-7. `./jperl --disassemble` on a tight loop to confirm bytecode reduction
+5. `./jperl examples/life_bitpacked.pl -g 5000` — target ≥14 Mcells/s (master: ~15, braille)
+6. `./jcpan --jobs 8 -t Moo` — 841/841 must still pass
+7. Sandbox destroy/weaken tests: `perl dev/tools/perl_test_runner.pl src/test/resources/unit/destroy*.t src/test/resources/unit/weaken*.t`
+8. `./jperl --disassemble` on a tight loop to confirm bytecode reduction
 
 ### 16.7 Bytecode Evidence
 
