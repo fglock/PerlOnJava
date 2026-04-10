@@ -311,12 +311,11 @@ public class BytecodeCompiler implements Visitor {
         if (!scopeIndices.isEmpty()) {
             int scopeIdx = scopeIndices.pop();
 
-            // Flush any previously-pending MortalList entries BEFORE pushing
-            // the mark. Without this, deferred decrements from method returns
-            // within this block are stranded below the mark and never processed
-            // by popAndFlush, causing refCount inflation.
+            // Push mark so popAndFlush only drains entries added by
+            // scopeExitCleanup. Entries from method returns within the block
+            // that are below the mark will be processed by the next setLarge()
+            // or undefine() flush, or by the enclosing scope's exit.
             if (flush) {
-                emit(Opcodes.MORTAL_FLUSH);
                 emit(Opcodes.MORTAL_PUSH_MARK);
             }
 
