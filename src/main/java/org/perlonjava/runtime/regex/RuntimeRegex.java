@@ -290,6 +290,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Recompile once, now that runtime may have defined user properties.
         // To avoid infinite loops if recompilation still can't resolve, clear the flag first.
         regex.deferredUserDefinedUnicodeProperties = false;
+
+        // Evict the old cached entry so compile() will actually recompile
+        // instead of returning the stale regex with deferred placeholders.
+        String cacheKey = regex.patternString + "/" + (regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
+        regexCache.remove(cacheKey);
+
         RuntimeRegex recompiled = compile(regex.patternString, regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
         regex.pattern = recompiled.pattern;
         regex.patternUnicode = recompiled.patternUnicode;

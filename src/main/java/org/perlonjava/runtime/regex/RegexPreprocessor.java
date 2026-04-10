@@ -1141,7 +1141,10 @@ public class RegexPreprocessor {
             } else if (Character.isDigit(c3)) {
                 // Recursive subpattern reference (?1), (?2), etc.
                 // These refer to the subpattern with that number and are recursive
-                regexError(s, offset + 2, "Sequence (?" + ((char) c3) + "...) not recognized");
+                regexUnimplemented(s, offset + 2, "Sequence (?" + ((char) c3) + "...) not recognized");
+            } else if (c3 == '&') {
+                // Named group recursion (?&name) - Perl feature not yet implemented
+                regexUnimplemented(s, offset + 2, "Sequence (?&...) not recognized");
             } else {
                 // Unknown sequence - show the actual character
                 String seq = "(?";
