@@ -88,12 +88,14 @@ public class SubroutineParser {
                 // 1. There are explicit parentheses, OR
                 // 2. There's a prototype, OR
                 // 3. The next token isn't a bareword identifier (to avoid indirect method call confusion), OR
-                // 4. We're parsing a code reference for sort/map/grep (parsingForLoopVariable is true)
+                // 4. We're parsing a code reference for sort/map/grep (parsingForLoopVariable is true), OR
+                // 5. The next token is a statement modifier keyword (if/unless/while/until/for/foreach/when)
                 boolean useExplicitParen = nextToken.text.equals("(");
                 boolean hasPrototype = lexicalPrototype != null;
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
+                boolean nextIsStatementModifier = nextIsIdentifier && isStatementModifierKeyword(nextToken.text);
 
-                if (useExplicitParen || hasPrototype || !nextIsIdentifier || parser.parsingForLoopVariable) {
+                if (useExplicitParen || hasPrototype || !nextIsIdentifier || nextIsStatementModifier || parser.parsingForLoopVariable) {
                     // This is a lexical sub/method - use the hidden variable instead of package lookup
                     // The varNode is the "my $name__lexsub_123" or "my $name__lexmethod_123" variable
 
@@ -1485,5 +1487,17 @@ public class SubroutineParser {
             String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
             Warnings.warnWithCategory("illegalproto", msg, loc);
         }
+    }
+
+    /**
+     * Checks if a token text is a statement modifier keyword.
+     * These keywords cannot start an indirect method call, so a lexical sub
+     * followed by one of these should be treated as a function call.
+     */
+    private static boolean isStatementModifierKeyword(String text) {
+        return switch (text) {
+            case "if", "unless", "while", "until", "for", "foreach", "when" -> true;
+            default -> false;
+        };
     }
 }

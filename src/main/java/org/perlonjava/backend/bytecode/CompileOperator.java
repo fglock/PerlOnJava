@@ -1174,12 +1174,17 @@ public class CompileOperator {
         if (!arrayOp.operator.equals("@")) bc.throwCompilerException("splice requires array variable: splice @array, ...");
         int arrayReg = resolveArrayOperand(bc, new OperatorNode("splice", arrayOp, node.tokenIndex), "splice");
         List<Integer> argRegs = new ArrayList<>();
+        // Compile splice arguments in LIST context so replacement values
+        // (after offset and length) are properly flattened.
+        int savedCtx = bc.currentCallContext;
+        bc.currentCallContext = RuntimeContextType.LIST;
         for (int i = 1; i < list.elements.size(); i++) { list.elements.get(i).accept(bc); argRegs.add(bc.lastResultReg); }
+        bc.currentCallContext = savedCtx;
         int argsListReg = bc.allocateRegister();
         bc.emit(Opcodes.CREATE_LIST); bc.emitReg(argsListReg); bc.emit(argRegs.size());
         for (int argReg : argRegs) bc.emitReg(argReg);
         int rd = bc.allocateOutputRegister();
-        bc.emit(Opcodes.SPLICE); bc.emitReg(rd); bc.emitReg(arrayReg); bc.emitReg(argsListReg); bc.emit(bc.currentCallContext);
+        bc.emit(Opcodes.SPLICE); bc.emitReg(rd); bc.emitReg(arrayReg); bc.emitReg(argsListReg); bc.emit(savedCtx);
         bc.lastResultReg = rd;
     }
 
