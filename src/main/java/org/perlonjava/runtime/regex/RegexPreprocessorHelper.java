@@ -83,12 +83,29 @@ public class RegexPreprocessorHelper {
             int endQuote = s.indexOf('\'', offset);
             if (endQuote != -1) {
                 String name = s.substring(offset, endQuote);
+                // Encode underscores for Java regex compatibility
+                String encodedName = CaptureNameEncoder.encodeGroupName(name);
                 // Convert to Java syntax \k<name>
                 sb.setLength(sb.length() - 1); // Remove the backslash
-                sb.append("\\k<").append(name).append(">");
+                sb.append("\\k<").append(encodedName).append(">");
                 return endQuote; // Return position at closing quote
             } else {
                 RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k'...' backreference");
+            }
+        }
+        if (nextChar == 'k' && offset + 1 < length && s.charAt(offset + 1) == '<') {
+            // Handle \k<name> backreference (also valid Perl syntax)
+            offset += 2; // Skip past \k<
+            int endAngle = s.indexOf('>', offset);
+            if (endAngle != -1) {
+                String name = s.substring(offset, endAngle);
+                // Encode underscores for Java regex compatibility
+                String encodedName = CaptureNameEncoder.encodeGroupName(name);
+                sb.setLength(sb.length() - 1); // Remove the backslash
+                sb.append("\\k<").append(encodedName).append(">");
+                return endAngle; // Return position at closing >
+            } else {
+                RegexPreprocessor.regexError(s, offset - 2, "Unterminated \\k<...> backreference");
             }
         }
         if (nextChar == 'g') {
@@ -124,9 +141,10 @@ public class RegexPreprocessorHelper {
                             sb.append("\\").append(groupNum);
                         }
                     } catch (NumberFormatException e) {
-                        // It's a named reference
+                        // It's a named reference - encode underscores for Java regex
+                        String encodedRef = CaptureNameEncoder.encodeGroupName(ref);
                         sb.setLength(sb.length() - 1); // Remove the backslash
-                        sb.append("\\k<").append(ref).append(">");
+                        sb.append("\\k<").append(encodedRef).append(">");
                     }
                     offset = endBrace;
                 }

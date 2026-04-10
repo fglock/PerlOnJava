@@ -1098,8 +1098,8 @@ public class RegexPreprocessor {
                 validateLookbehindLength(s, offset);
                 sb.append("(?<!");
                 offset = handleRegex(s, offset + 4, sb, regexFlags, true);
-            } else if (c3 == '<' && isAlphabetic(c4)) {
-                // Handle named capture (?<name> ... )
+            } else if (c3 == '<' && (isAlphabetic(c4) || c4 == '_')) {
+                // Handle named capture (?<name> ... ) - name can start with letter or underscore
                 offset = handleNamedCapture(c3, s, offset, length, sb, regexFlags);
             } else if (c3 == '<') {
                 // Invalid character after (?<
@@ -1197,7 +1197,9 @@ public class RegexPreprocessor {
             regexError(s, offset, "Unterminated named capture in regex");
         }
         String name = s.substring(start, end);
-        sb.append("(?<").append(name).append(">");
+        // Encode underscores for Java regex compatibility
+        String encodedName = CaptureNameEncoder.encodeGroupName(name);
+        sb.append("(?<").append(encodedName).append(">");
         captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
     }

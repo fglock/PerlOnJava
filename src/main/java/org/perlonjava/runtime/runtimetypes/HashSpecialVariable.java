@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.regex.CaptureNameEncoder;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.AbstractMap;
@@ -77,6 +78,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             if (matcher != null) {
                 Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
                 for (String name : namedGroups.keySet()) {
+                    // Skip internal captures (code blocks, \K marker)
+                    if (CaptureNameEncoder.isInternalCapture(name)) {
+                        continue;
+                    }
+                    // Decode the name back to original Perl name (reverse underscore encoding)
+                    String perlName = CaptureNameEncoder.decodeGroupName(name);
                     String matchedValue = matcher.group(name);
                     if (this.mode == Id.CAPTURE_ALL) {
                         // For %-, values are always array refs (even for non-participating groups)
@@ -86,11 +93,11 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                         } else {
                             arr.push(new RuntimeScalar()); // undef for non-participating groups
                         }
-                        entries.add(new SimpleEntry<>(name, arr.createReference()));
+                        entries.add(new SimpleEntry<>(perlName, arr.createReference()));
                     } else {
                         // For %+, only include groups that actually matched
                         if (matchedValue != null) {
-                            entries.add(new SimpleEntry<>(name, new RuntimeScalar(matchedValue)));
+                            entries.add(new SimpleEntry<>(perlName, new RuntimeScalar(matchedValue)));
                         }
                     }
                 }
@@ -177,11 +184,13 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
             Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
+                // Encode the Perl name to Java regex name (underscore encoding)
+                String encodedName = CaptureNameEncoder.encodeGroupName(name);
                 // Check if this is a valid named group
-                if (!matcher.pattern().namedGroups().containsKey(name)) {
+                if (!matcher.pattern().namedGroups().containsKey(encodedName)) {
                     return scalarUndef;
                 }
-                String matchedValue = matcher.group(name);
+                String matchedValue = matcher.group(encodedName);
                 if (this.mode == Id.CAPTURE_ALL) {
                     // For %-, always return array ref (with undef for non-participating groups)
                     RuntimeArray arr = new RuntimeArray();
@@ -220,7 +229,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // For %-, all named groups exist (even non-participating ones)
             Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
-                return matcher.pattern().namedGroups().containsKey(name);
+                String encodedName = CaptureNameEncoder.encodeGroupName(name);
+                return matcher.pattern().namedGroups().containsKey(encodedName);
             }
             return false;
         }
@@ -228,7 +238,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // For %+, only groups that actually captured
             Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
-                return matcher.pattern().namedGroups().containsKey(name) && matcher.group(name) != null;
+                String encodedName = CaptureNameEncoder.encodeGroupName(name);
+                return matcher.pattern().namedGroups().containsKey(encodedName) && matcher.group(encodedName) != null;
             }
             return false;
         }

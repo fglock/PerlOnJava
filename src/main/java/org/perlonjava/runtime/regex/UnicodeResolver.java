@@ -334,7 +334,7 @@ public class UnicodeResolver {
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
             // Check for user-defined properties (Is... or In...)
-            if (property.matches("^(.*::)?(Is|In)[A-Z].*")) {
+            if (property.matches("^(.*::)?([Ii][sn])[A-Z].*")) {
                 String userProp = tryUserDefinedProperty(property, recursionSet);
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
@@ -351,9 +351,12 @@ public class UnicodeResolver {
                 case "XPosixSpace":
                 case "XPerlSpace":
                 case "SpacePerl":
+                case "Space":
+                case "White_Space":
                     // Use ICU4J UnicodeSet for accurate XPosixSpace
                     return getXPosixSpacePattern(negated);
                 case "XPosixAlnum":
+                case "Alnum":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}", negated);
                 case "XPosixAlpha":
                 case "Alpha":
@@ -384,6 +387,8 @@ public class UnicodeResolver {
                 case "Print":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}\\p{IsWhite_Space}", negated);
                 case "XPosixPunct":
+                case "Punct":
+                case "Punctuation":
                     return wrapProperty("IsPunctuation", negated);
                 case "XPosixUpper":
                 case "Upper":
@@ -453,9 +458,12 @@ public class UnicodeResolver {
                 }
             }
 
-            // Strip 'Is' prefix for Perl compatibility (e.g., IsPrint -> Print, IsDigit -> Digit)
-            // ICU4J doesn't recognize Is-prefixed property names, but they're valid in Perl
-            if (property.startsWith("Is") && property.length() > 2 && Character.isUpperCase(property.charAt(2))) {
+            // Strip 'Is'/'is' prefix for Perl compatibility (e.g., IsPrint -> Print, isAlpha -> Alpha)
+            // Perl is case-insensitive for the 'Is' prefix on Unicode property names
+            if (property.length() > 2
+                    && (property.charAt(0) == 'I' || property.charAt(0) == 'i')
+                    && (property.charAt(1) == 's' || property.charAt(1) == 'S')
+                    && Character.isUpperCase(property.charAt(2))) {
                 property = property.substring(2);
             }
 
@@ -480,11 +488,28 @@ public class UnicodeResolver {
 
             // Standard Unicode properties
             UnicodeSet unicodeSet = new UnicodeSet();
-            if (isBlockProperty(property)) {
-                unicodeSet.applyPropertyAlias("Block", property);
+
+            // Handle Property=Value syntax (e.g., ASCII_Hex_Digit=True, gc=Ll)
+            String propName = property;
+            String propValue = "";
+            int eqIdx = property.indexOf('=');
+            if (eqIdx > 0 && eqIdx < property.length() - 1) {
+                propName = property.substring(0, eqIdx);
+                propValue = property.substring(eqIdx + 1);
+                // Handle negation: Property=False means \P{Property}
+                if (propValue.equalsIgnoreCase("False") || propValue.equalsIgnoreCase("No") || propValue.equals("N") || propValue.equals("F")) {
+                    negated = !negated;
+                    propValue = "True";
+                } else if (propValue.equalsIgnoreCase("True") || propValue.equalsIgnoreCase("Yes") || propValue.equals("Y") || propValue.equals("T")) {
+                    propValue = "True";
+                }
+            }
+
+            if (isBlockProperty(propName)) {
+                unicodeSet.applyPropertyAlias("Block", propName);
             } else {
                 try {
-                    unicodeSet.applyPropertyAlias(property, "");
+                    unicodeSet.applyPropertyAlias(propName, propValue);
                 } catch (IllegalArgumentException ex) {
                     // Property not found as general category/script - try as a Unicode block name.
                     // Perl resolves \p{Emoticons} as \p{Block=Emoticons}, etc.
