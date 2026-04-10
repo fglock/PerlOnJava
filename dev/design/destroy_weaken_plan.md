@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
 **Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.16  
+**Version**: 5.17  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.16 — fix ExifTool StackOverflowError in circular ref traversal)  
+**Updated**: 2026-04-09 (v5.17 — fix blessed glob DESTROY: instanceof order in DestroyDispatch)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1999,6 +1999,25 @@ sub DESTROY {
     would call dispatch methods (FETCHSIZE, FIRSTKEY, etc.) that fail.
   - **Files**: `GlobalDestruction.java`
   - **Commits**: `901801c4c`
+- [x] Fix blessed glob DESTROY: instanceof order in DestroyDispatch (2026-04-09):
+  - **Root cause**: In `DestroyDispatch.doCallDestroy()`, the `instanceof` chain that
+    determines the `$self` reference type for DESTROY had `referent instanceof RuntimeScalar`
+    before `referent instanceof RuntimeGlob`. Since `RuntimeGlob extends RuntimeScalar`,
+    the RuntimeScalar check matched first, setting `self.type = REFERENCE` instead of
+    `GLOBREFERENCE`. This caused `*$self` inside DESTROY to fall through to string-based
+    glob lookup (looking up `"MyGlob=GLOB(0x...)"` as a symbol name) instead of proper
+    glob dereference. The result: `*$self->{data}` returned undef, `*$self{HASH}` returned
+    undef, and `*{$self}` stringified as `*MyGlob::MyGlob=GLOB(...)` instead of
+    `*Symbol::GEN19`.
+  - **Impact**: Any blessed glob object (IO::Scalar, Symbol::gensym-based objects) that
+    stored per-instance data via `*$self->{key}` could not access that data during DESTROY.
+    Also caused the "(in cleanup) Not a GLOB reference" warnings from IO::Compress/Uncompress.
+  - **Fix**: Swapped the `instanceof` check order: `RuntimeGlob` before `RuntimeScalar`.
+    Subclass checks must precede superclass checks in Java instanceof chains.
+  - **Verified**: `*$self->{data}`, `*$self{HASH}`, `%{*$self}`, and `*{$self}` all
+    resolve correctly during DESTROY, matching Perl 5 behavior.
+  - **Files**: `DestroyDispatch.java` (lines 135-148)
+  - **Commits**: `e6c653e74`
 
 ### Moo Test Results
 
@@ -2021,7 +2040,7 @@ for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modif
 | overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
 
 ### Last Commit
-- `886f7e171`: "Fix StackOverflowError in deferDecrementRecursive for circular refs"
+- `e6c653e74`: "fix: correct instanceof order in DestroyDispatch for blessed globs"
 - Branch: `feature/destroy-weaken`
 
 ### Next Steps
@@ -2051,9 +2070,10 @@ to Perl source.
 After fixing the StackOverflowError in `deferDecrementRecursive` (commit `886f7e171`)
 and null-element NPE in ArrayDeque (null elements from sparse arrays):
 - **113/113 test programs pass**, **597/597 subtests pass**
-- **"(in cleanup)" warnings**: IO::Uncompress::Base and IO::Compress::Base emit
-  "Not a GLOB reference" warnings during DESTROY. These are cosmetic —
-  the DESTROY handlers encounter partially-freed globs, but don't affect test results.
+- **"(in cleanup)" warnings**: IO::Uncompress::Base and IO::Compress::Base were emitting
+  "Not a GLOB reference" warnings during DESTROY. Root cause identified and fixed in v5.17:
+  the `instanceof` check order in `DestroyDispatch.doCallDestroy()` was misclassifying
+  blessed globs as plain scalar references, causing `*$self` to fail during DESTROY.
 
 ---
 
@@ -2499,6 +2519,15 @@ subtests passing.
      clearWeakRefsTo() to skip RuntimeCode objects entirely.
   3. **Result**: Moo 70/71 programs, 839/841 subtests (99.8%). Remaining 2 failures in
      overloaded-coderefs.t are B::Deparse limitations.
+- **v5.17** (2026-04-09): Fix blessed glob DESTROY — instanceof order in DestroyDispatch:
+  1. `DestroyDispatch.doCallDestroy()` checked `referent instanceof RuntimeScalar` before
+     `referent instanceof RuntimeGlob`. Since `RuntimeGlob extends RuntimeScalar`, blessed
+     globs were misclassified as REFERENCE instead of GLOBREFERENCE. This broke `*$self->{key}`
+     access during DESTROY (returned undef instead of stored data).
+  2. Swapped the instanceof check order: RuntimeGlob before RuntimeScalar.
+  3. This also fixes the "(in cleanup) Not a GLOB reference" warnings from IO::Compress/
+     IO::Uncompress DESTROY handlers that were reported as cosmetic in v5.16.
+  Files: `DestroyDispatch.java`
 - **v5.16** (2026-04-09): Fix ExifTool StackOverflowError in circular ref traversal:
   1. Converted `MortalList.deferDecrementRecursive()` from recursive to iterative using
      `ArrayDeque<RuntimeScalar>` work queue + `IdentityHashMap`-based visited set.
