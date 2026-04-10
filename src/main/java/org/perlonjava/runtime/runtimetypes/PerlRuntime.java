@@ -3,6 +3,7 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
+import java.util.regex.Matcher;
 
 /**
  * PerlRuntime represents an independent Perl interpreter instance.
@@ -184,6 +186,50 @@ public final class PerlRuntime {
     public final Set<String> declaredGlobalVariables = new HashSet<>();
     public final Set<String> declaredGlobalArrays = new HashSet<>();
     public final Set<String> declaredGlobalHashes = new HashSet<>();
+
+    // ---- Regex match state — migrated from RuntimeRegex static fields ----
+
+    /** Java Matcher object; provides %+, %-, @-, @+ group info. */
+    public Matcher regexGlobalMatcher;
+
+    /** Full input string being matched; used by $&, $`, $'. */
+    public String regexGlobalMatchString;
+
+    /** The matched substring ($&). */
+    public String regexLastMatchedString = null;
+
+    /** Start offset of match (for $`/@-[0]). */
+    public int regexLastMatchStart = -1;
+
+    /** End offset of match (for $'/@+[0]). */
+    public int regexLastMatchEnd = -1;
+
+    /** Persists across failed matches — matched string. */
+    public String regexLastSuccessfulMatchedString = null;
+
+    /** Persists across failed matches — start offset. */
+    public int regexLastSuccessfulMatchStart = -1;
+
+    /** Persists across failed matches — end offset. */
+    public int regexLastSuccessfulMatchEnd = -1;
+
+    /** Full input string from last successful match. */
+    public String regexLastSuccessfulMatchString = null;
+
+    /** ${^LAST_SUCCESSFUL_PATTERN} and $^R via getLastCodeBlockResult(). */
+    public RuntimeRegex regexLastSuccessfulPattern = null;
+
+    /** Tracks if /p was used (for ${^PREMATCH}, ${^MATCH}, ${^POSTMATCH}). */
+    public boolean regexLastMatchUsedPFlag = false;
+
+    /** Tracks if \K was used; adjusts group offsets. */
+    public boolean regexLastMatchUsedBackslashK = false;
+
+    /** Capture groups $1, $2, ...; persists across non-capturing matches. */
+    public String[] regexLastCaptureGroups = null;
+
+    /** Preserves BYTE_STRING type on captures. */
+    public boolean regexLastMatchWasByteString = false;
 
     // ---- Static accessors ----
 

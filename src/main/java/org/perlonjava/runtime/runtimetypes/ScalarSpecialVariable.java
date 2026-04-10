@@ -158,17 +158,17 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
                 case P_PREMATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!RuntimeRegex.getLastMatchUsedPFlag()) yield scalarUndef;
                     String prematch = RuntimeRegex.preMatchString();
                     yield prematch != null ? makeRegexResultScalar(prematch) : scalarUndef;
                 }
                 case P_MATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!RuntimeRegex.getLastMatchUsedPFlag()) yield scalarUndef;
                     String match = RuntimeRegex.matchString();
                     yield match != null ? makeRegexResultScalar(match) : scalarUndef;
                 }
                 case P_POSTMATCH -> {
-                    if (!RuntimeRegex.lastMatchUsedPFlag) yield scalarUndef;
+                    if (!RuntimeRegex.getLastMatchUsedPFlag()) yield scalarUndef;
                     String postmatch = RuntimeRegex.postMatchString();
                     yield postmatch != null ? makeRegexResultScalar(postmatch) : scalarUndef;
                 }
@@ -217,13 +217,13 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String lastCapture = RuntimeRegex.lastCaptureString();
                     yield lastCapture != null ? new RuntimeScalar(lastCapture) : scalarUndef;
                 }
-                case LAST_SUCCESSFUL_PATTERN -> RuntimeRegex.lastSuccessfulPattern != null
-                        ? new RuntimeScalar(RuntimeRegex.lastSuccessfulPattern) : scalarUndef;
+                case LAST_SUCCESSFUL_PATTERN -> RuntimeRegex.getLastSuccessfulPattern() != null
+                        ? new RuntimeScalar(RuntimeRegex.getLastSuccessfulPattern()) : scalarUndef;
                 case LAST_REGEXP_CODE_RESULT -> {
                     // $^R - Result of last (?{...}) code block
                     // Get the last matched regex and retrieve its code block result
-                    if (RuntimeRegex.lastSuccessfulPattern != null) {
-                        RuntimeScalar codeBlockResult = RuntimeRegex.lastSuccessfulPattern.getLastCodeBlockResult();
+                    if (RuntimeRegex.getLastSuccessfulPattern() != null) {
+                        RuntimeScalar codeBlockResult = RuntimeRegex.getLastSuccessfulPattern().getLastCodeBlockResult();
                         yield codeBlockResult != null ? codeBlockResult : scalarUndef;
                     }
                     yield scalarUndef;
@@ -465,7 +465,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     private static RuntimeScalar makeRegexResultScalar(String value) {
         RuntimeScalar scalar = new RuntimeScalar(value);
-        if (RuntimeRegex.lastMatchWasByteString) {
+        if (RuntimeRegex.getLastMatchWasByteString()) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
         return scalar;

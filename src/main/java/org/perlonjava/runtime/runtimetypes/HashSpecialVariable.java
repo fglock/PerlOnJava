@@ -73,7 +73,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.globalMatcher;
+            Matcher matcher = RuntimeRegex.getGlobalMatcher();
             if (matcher != null) {
                 Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
                 for (String name : namedGroups.keySet()) {
@@ -175,7 +175,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.globalMatcher;
+            Matcher matcher = RuntimeRegex.getGlobalMatcher();
             if (matcher != null && key instanceof String name) {
                 // Check if this is a valid named group
                 if (!matcher.pattern().namedGroups().containsKey(name)) {
@@ -218,7 +218,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public boolean containsKey(Object key) {
         if (this.mode == Id.CAPTURE_ALL) {
             // For %-, all named groups exist (even non-participating ones)
-            Matcher matcher = RuntimeRegex.globalMatcher;
+            Matcher matcher = RuntimeRegex.getGlobalMatcher();
             if (matcher != null && key instanceof String name) {
                 return matcher.pattern().namedGroups().containsKey(name);
             }
@@ -226,7 +226,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         }
         if (this.mode == Id.CAPTURE) {
             // For %+, only groups that actually captured
-            Matcher matcher = RuntimeRegex.globalMatcher;
+            Matcher matcher = RuntimeRegex.getGlobalMatcher();
             if (matcher != null && key instanceof String name) {
                 return matcher.pattern().namedGroups().containsKey(name) && matcher.group(name) != null;
             }

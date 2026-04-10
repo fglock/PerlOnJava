@@ -28,19 +28,19 @@ public class RegexState implements DynamicState {
     private final boolean lastMatchWasByteString;
 
     public RegexState() {
-        this.globalMatcher = RuntimeRegex.globalMatcher;
-        this.globalMatchString = RuntimeRegex.globalMatchString;
-        this.lastMatchedString = RuntimeRegex.lastMatchedString;
-        this.lastMatchStart = RuntimeRegex.lastMatchStart;
-        this.lastMatchEnd = RuntimeRegex.lastMatchEnd;
-        this.lastSuccessfulMatchedString = RuntimeRegex.lastSuccessfulMatchedString;
-        this.lastSuccessfulMatchStart = RuntimeRegex.lastSuccessfulMatchStart;
-        this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
-        this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
-        this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
-        this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
-        this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
-        this.lastMatchWasByteString = RuntimeRegex.lastMatchWasByteString;
+        this.globalMatcher = RuntimeRegex.getGlobalMatcher();
+        this.globalMatchString = RuntimeRegex.getGlobalMatchString();
+        this.lastMatchedString = RuntimeRegex.getLastMatchedString();
+        this.lastMatchStart = RuntimeRegex.getLastMatchStart();
+        this.lastMatchEnd = RuntimeRegex.getLastMatchEnd();
+        this.lastSuccessfulMatchedString = RuntimeRegex.getLastSuccessfulMatchedString();
+        this.lastSuccessfulMatchStart = RuntimeRegex.getLastSuccessfulMatchStart();
+        this.lastSuccessfulMatchEnd = RuntimeRegex.getLastSuccessfulMatchEnd();
+        this.lastSuccessfulMatchString = RuntimeRegex.getLastSuccessfulMatchString();
+        this.lastSuccessfulPattern = RuntimeRegex.getLastSuccessfulPattern();
+        this.lastMatchUsedPFlag = RuntimeRegex.getLastMatchUsedPFlag();
+        this.lastCaptureGroups = RuntimeRegex.getLastCaptureGroups();
+        this.lastMatchWasByteString = RuntimeRegex.getLastMatchWasByteString();
     }
 
     public static void save() {
@@ -57,18 +57,18 @@ public class RegexState implements DynamicState {
 
     @Override
     public void dynamicRestoreState() {
-        RuntimeRegex.globalMatcher = this.globalMatcher;
-        RuntimeRegex.globalMatchString = this.globalMatchString;
-        RuntimeRegex.lastMatchedString = this.lastMatchedString;
-        RuntimeRegex.lastMatchStart = this.lastMatchStart;
-        RuntimeRegex.lastMatchEnd = this.lastMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchedString = this.lastSuccessfulMatchedString;
-        RuntimeRegex.lastSuccessfulMatchStart = this.lastSuccessfulMatchStart;
-        RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
-        RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
-        RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
-        RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
-        RuntimeRegex.lastMatchWasByteString = this.lastMatchWasByteString;
+        RuntimeRegex.setGlobalMatcher(this.globalMatcher);
+        RuntimeRegex.setGlobalMatchString(this.globalMatchString);
+        RuntimeRegex.setLastMatchedString(this.lastMatchedString);
+        RuntimeRegex.setLastMatchStart(this.lastMatchStart);
+        RuntimeRegex.setLastMatchEnd(this.lastMatchEnd);
+        RuntimeRegex.setLastSuccessfulMatchedString(this.lastSuccessfulMatchedString);
+        RuntimeRegex.setLastSuccessfulMatchStart(this.lastSuccessfulMatchStart);
+        RuntimeRegex.setLastSuccessfulMatchEnd(this.lastSuccessfulMatchEnd);
+        RuntimeRegex.setLastSuccessfulMatchString(this.lastSuccessfulMatchString);
+        RuntimeRegex.setLastSuccessfulPattern(this.lastSuccessfulPattern);
+        RuntimeRegex.setLastMatchUsedPFlag(this.lastMatchUsedPFlag);
+        RuntimeRegex.setLastCaptureGroups(this.lastCaptureGroups);
+        RuntimeRegex.setLastMatchWasByteString(this.lastMatchWasByteString);
     }
 }
