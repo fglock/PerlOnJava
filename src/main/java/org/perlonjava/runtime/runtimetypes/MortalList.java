@@ -61,14 +61,21 @@ public class MortalList {
     }
 
     /**
-     * Like {@link #deferDecrementIfTracked}, but skips the decrement if the
-     * scalar is captured by a closure ({@code captureCount > 0}).
+     * Like {@link #deferDecrementIfTracked}, but delegates to
+     * {@link RuntimeScalar#scopeExitCleanup} if the scalar is captured
+     * by a closure ({@code captureCount > 0}).
      * Used by the explicit {@code return} bytecode path which bypasses
      * {@link RuntimeScalar#scopeExitCleanup}.
      */
     public static void deferDecrementIfNotCaptured(RuntimeScalar scalar) {
         if (!active || scalar == null) return;
-        if (scalar.captureCount > 0) return;
+        if (scalar.captureCount > 0) {
+            // Delegate to scopeExitCleanup which handles:
+            // - Self-referential cycle detection (eval STRING closures)
+            // - Setting scopeExited flag for deferred cleanup via releaseCaptures
+            RuntimeScalar.scopeExitCleanup(scalar);
+            return;
+        }
         deferDecrementIfTracked(scalar);
     }
 

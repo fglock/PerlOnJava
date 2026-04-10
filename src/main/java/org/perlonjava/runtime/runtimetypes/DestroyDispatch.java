@@ -79,7 +79,18 @@ public class DestroyDispatch {
         }
 
         String className = NameNormalizer.getBlessStr(referent.blessId);
-        if (className == null) return;
+        if (className == null || className.isEmpty()) {
+            // Unblessed object — no DESTROY to call, but cascade into elements
+            // to decrement refCounts of any tracked references they hold.
+            // Without this, unblessed containers like `$args = {@_}` would leak
+            // element refCounts when going out of scope.
+            if (referent instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+            } else if (referent instanceof RuntimeArray arr) {
+                MortalList.scopeExitCleanupArray(arr);
+            }
+            return;
+        }
 
         doCallDestroy(referent, className);
     }

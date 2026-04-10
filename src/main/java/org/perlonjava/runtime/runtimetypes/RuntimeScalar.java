@@ -89,6 +89,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public int captureCount;
 
     /**
+     * True if {@link #scopeExitCleanup} has been called for this variable
+     * (i.e., the variable's declaring scope has exited), but cleanup was
+     * deferred because {@code captureCount > 0}. Used by
+     * {@link RuntimeCode#releaseCaptures} to know when it's safe to call
+     * {@link MortalList#deferDecrementIfTracked}: only if the scope has
+     * already exited (otherwise the variable is still alive and its refCount
+     * will be decremented later by scopeExitCleanup when the scope exits).
+     */
+    public boolean scopeExited;
+
+    /**
      * True if this scalar "owns" a refCount increment on its referent.
      * Set to true by {@link #setLarge} after incrementing the referent's refCount.
      * Cleared when the matching decrement fires (scope exit, overwrite, undef, weaken).
@@ -2053,12 +2064,50 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
 
-        // Skip ALL cleanup if this variable is captured by a closure.
-        // The closure still holds a reference to this RuntimeScalar, so
-        // we must not decrement blessed ref refCounts or release CODE captures.
-        // Cleanup will happen later when the closure itself is released
-        // (via releaseCaptures).
-        if (scalar.captureCount > 0) return;
+        // If this variable is captured by a closure, mark it so releaseCaptures
+        // knows the scope has exited. But still proceed with refCount cleanup below
+        // so that blessed ref refCounts and weak refs are handled properly.
+        if (scalar.captureCount > 0) {
+            // Self-referential capture cycle detection: if this variable holds
+            // a CODE ref that captures this same variable, we have a cycle that
+            // will never resolve on its own. This happens when eval STRING creates
+            // closures that capture ALL visible lexicals (including the variable
+            // the closure is assigned to). Break the cycle by decrementing our own
+            // captureCount and removing ourselves from the CODE's captures array.
+            // The full release of other captures will happen when the CODE ref's
+            // refCount reaches 0 (via callDestroy/releaseCaptures).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && code.capturedScalars != null) {
+                boolean selfRef = false;
+                for (RuntimeScalar s : code.capturedScalars) {
+                    if (s == scalar) { selfRef = true; break; }
+                }
+                if (selfRef) {
+                    // Decrement our captureCount (the closure captured us)
+                    scalar.captureCount--;
+                    // Remove self from capturedScalars to prevent double-decrement
+                    // when releaseCaptures runs later during CODE ref destruction
+                    RuntimeScalar[] old = code.capturedScalars;
+                    if (old.length == 1) {
+                        code.capturedScalars = null;
+                    } else {
+                        RuntimeScalar[] updated = new RuntimeScalar[old.length - 1];
+                        int j = 0;
+                        for (RuntimeScalar cap : old) {
+                            if (cap != scalar && j < updated.length) updated[j++] = cap;
+                        }
+                        code.capturedScalars = updated;
+                    }
+                }
+            }
+            // Mark that this variable's scope has exited. When releaseCaptures
+            // later decrements captureCount to 0, it will know the scope is gone.
+            scalar.scopeExited = true;
+            // Fall through to refCount cleanup below — captured variables still
+            // need their value's refCount decremented at scope exit so that
+            // weak refs are properly cleared when the last strong ref is undef'd.
+        }
 
         // NOTE: Do NOT call releaseCaptures() on CODE refs here.
         // When a local variable holding a CODE ref goes out of scope, the
