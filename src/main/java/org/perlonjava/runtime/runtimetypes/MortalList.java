@@ -117,6 +117,37 @@ public class MortalList {
      */
     public static void scopeExitCleanupHash(RuntimeHash hash) {
         if (!active || hash == null) return;
+        // If no object has ever been blessed in this JVM, container walks are pointless
+        if (!RuntimeBase.blessedObjectExists) return;
+        // Quick scan: skip if no value could transitively contain blessed/tracked refs.
+        boolean needsWalk = false;
+        for (RuntimeScalar val : hash.elements.values()) {
+            if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && val.value instanceof RuntimeBase rb) {
+                if (rb.blessId != 0 || rb.refCount >= 0) {
+                    needsWalk = true;
+                    break;
+                }
+                // Container ref — peek at children for any reference-type elements
+                if (rb instanceof RuntimeArray innerArr) {
+                    for (RuntimeScalar inner : innerArr.elements) {
+                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+                            needsWalk = true;
+                            break;
+                        }
+                    }
+                } else if (rb instanceof RuntimeHash innerHash) {
+                    for (RuntimeScalar inner : innerHash.elements.values()) {
+                        if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+                            needsWalk = true;
+                            break;
+                        }
+                    }
+                }
+                if (needsWalk) break;
+            }
+        }
+        if (!needsWalk) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }
@@ -129,6 +160,39 @@ public class MortalList {
      */
     public static void scopeExitCleanupArray(RuntimeArray arr) {
         if (!active || arr == null) return;
+        // If no object has ever been blessed in this JVM, container walks are pointless
+        if (!RuntimeBase.blessedObjectExists) return;
+        // Quick scan: check if any element either:
+        //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
+        //   2. Is a direct blessed reference (blessId != 0), OR
+        //   3. Is a container (array/hash ref) that might hold nested blessed refs
+        // For case 3, we peek one level deep to avoid false positives for arrays
+        // of plain-data arrayrefs (like the life_bitpacked @grid).
+        boolean needsWalk = false;
+        for (RuntimeScalar elem : arr.elements) {
+            if (elem == null || (elem.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            // Fast check: refCountOwned means this ref was properly tracked via setLarge
+            if (elem.refCountOwned) { needsWalk = true; break; }
+            if (!(elem.value instanceof RuntimeBase rb)) continue;
+            // Direct blessed ref
+            if (rb.blessId != 0 || rb.refCount >= 0) { needsWalk = true; break; }
+            // Container ref — peek at children for reference-type elements
+            if (rb instanceof RuntimeArray innerArr) {
+                for (RuntimeScalar inner : innerArr.elements) {
+                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+                        needsWalk = true; break;
+                    }
+                }
+            } else if (rb instanceof RuntimeHash innerHash) {
+                for (RuntimeScalar inner : innerHash.elements.values()) {
+                    if (inner != null && (inner.type & RuntimeScalarType.REFERENCE_BIT) != 0) {
+                        needsWalk = true; break;
+                    }
+                }
+            }
+            if (needsWalk) break;
+        }
+        if (!needsWalk) return;
         for (RuntimeScalar elem : arr.elements) {
             deferDecrementRecursive(elem);
         }
@@ -143,8 +207,41 @@ public class MortalList {
      */
     private static void deferDecrementRecursive(RuntimeScalar scalar) {
         if (scalar == null || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0) return;
-        if (!(scalar.value instanceof RuntimeBase)) return;
+        if (!(scalar.value instanceof RuntimeBase topBase)) return;
 
+        // Fast path for leaf references (the overwhelmingly common case):
+        // unblessed, untracked referents with no nested containers to walk.
+        if (topBase.blessId == 0 && topBase.refCount == -1) {
+            // Unblessed, untracked — nothing to do unless it's a container.
+            if (topBase instanceof RuntimeArray arr) {
+                // Check if any element is a tracked ref before iterating.
+                boolean hasTracked = false;
+                for (RuntimeScalar elem : arr.elements) {
+                    if (elem != null && (elem.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && elem.value instanceof RuntimeBase eb
+                            && (eb.blessId != 0 || eb.refCount >= 0)) {
+                        hasTracked = true;
+                        break;
+                    }
+                }
+                if (!hasTracked) return;
+            } else if (topBase instanceof RuntimeHash hash) {
+                boolean hasTracked = false;
+                for (RuntimeScalar val : hash.elements.values()) {
+                    if (val != null && (val.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && val.value instanceof RuntimeBase vb
+                            && (vb.blessId != 0 || vb.refCount >= 0)) {
+                        hasTracked = true;
+                        break;
+                    }
+                }
+                if (!hasTracked) return;
+            } else {
+                return;  // Non-container unblessed untracked leaf — nothing to do
+            }
+        }
+
+        // Slow path: tracked or blessed referents need full walk with cycle detection.
         // Use an explicit work queue + visited set to avoid stack overflow
         // on circular references (e.g., ExifTool's self-referential hashes).
         ArrayDeque<RuntimeScalar> work = new ArrayDeque<>();

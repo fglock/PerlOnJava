@@ -24,6 +24,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int refCount = -1;
 
     /**
+     * Global flag: true once any object has been blessed (blessId set to non-zero).
+     * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
+     * walks when no blessed objects have ever been created in this JVM instance.
+     * Once set to true, it stays true forever (conservative but safe).
+     */
+    public static volatile boolean blessedObjectExists = false;
+
+    /**
      * Adds this entity to the specified RuntimeList.
      *
      * @param list the RuntimeList to which this entity will be added
@@ -94,6 +102,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     public void setBlessId(int blessId) {
         this.blessId = blessId;
+        if (blessId != 0) blessedObjectExists = true;
     }
 
     /**

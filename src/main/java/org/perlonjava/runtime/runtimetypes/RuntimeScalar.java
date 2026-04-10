@@ -893,9 +893,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         // Simple non-reference assignment (no refCount tracking needed).
+        // No MortalList.flush() here — neither old nor new value is a reference,
+        // so no refCount was incremented/decremented, and no mortal entries were added.
         this.type = value.type;
         this.value = value.value;
-        MortalList.flush();
         return this;
     }
 
@@ -905,6 +906,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Separated to keep setLarge() small enough for JIT inlining of set().
      */
     private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        // Fast path for untracked references (refCount == -1).
+        // Most reference assignments involve untracked objects (named variables,
+        // anonymous arrays/hashes that were never blessed). Skip all refCount
+        // tracking, WeakRefRegistry checks, and MortalList flush.
+        if (!this.refCountOwned && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
+            // Both old and new are non-GLOB references. Check if referents are untracked.
+            boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
+                    || this.value == null
+                    || ((RuntimeBase) this.value).refCount == -1;
+            boolean newUntracked = (value.type & REFERENCE_BIT) == 0
+                    || value.value == null
+                    || ((RuntimeBase) value.value).refCount == -1;
+            if (oldUntracked && newUntracked) {
+                this.type = value.type;
+                this.value = value.value;
+                return this;
+            }
+        }
+
         // ──────────────────────────────────────────────────────────────────
         // closeIOOnDrop() was REMOVED from this assignment path.
         //
