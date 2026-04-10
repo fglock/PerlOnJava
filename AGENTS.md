@@ -184,6 +184,20 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 ### Commits
 
+- **Single quotes in commit messages:** The `$(cat <<'EOF' ... EOF)` heredoc pattern breaks when the message body contains single quotes (e.g., Perl's `$_`, `don't`). Write the message to a temp file and use `git commit -F` instead:
+  ```bash
+  cat > /tmp/commit_msg.txt << 'ENDMSG'
+  feat: description here
+
+  Body with single quotes like $_ and don't is fine.
+
+  Generated with [TOOL_NAME](TOOL_DOCS_URL)
+
+  Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
+  ENDMSG
+  git commit -F /tmp/commit_msg.txt
+  ```
+  Replace `TOOL_NAME`, `TOOL_DOCS_URL`, and `TOOL_BOT_EMAIL` as described in [AI_POLICY.md](AI_POLICY.md).
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
 - **Commit Attribution:** AI-assisted commits must include attribution markers in the commit message (see [AI_POLICY.md](AI_POLICY.md)):
