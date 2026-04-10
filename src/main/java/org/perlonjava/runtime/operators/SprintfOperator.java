@@ -108,8 +108,21 @@ public class SprintfOperator {
                     // even though %lld is invalid on 32-bit Perl.
                     if (argIndex < list.size()) {
                         RuntimeScalar value = (RuntimeScalar) list.elements.get(argIndex);
-                        double doubleValue = value.getDouble();
-                        if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
+                        // Only check for Inf/NaN on numeric types or known Inf/NaN strings.
+                        // Calling getDouble() on arbitrary strings would trigger a spurious
+                        // "Argument isn't numeric" warning.
+                        boolean isInfNan = false;
+                        if (value.type == RuntimeScalarType.DOUBLE) {
+                            double d = (double) value.value;
+                            isInfNan = Double.isInfinite(d) || Double.isNaN(d);
+                        } else if (value.type == RuntimeScalarType.STRING || value.type == RuntimeScalarType.BYTE_STRING) {
+                            String s = ((String) value.value).trim();
+                            isInfNan = s.equalsIgnoreCase("inf") || s.equalsIgnoreCase("infinity")
+                                    || s.equalsIgnoreCase("-inf") || s.equalsIgnoreCase("-infinity")
+                                    || s.equalsIgnoreCase("nan");
+                        }
+                        if (isInfNan) {
+                            double doubleValue = value.getDouble();
                             SprintfNumericFormatter numFmt = new SprintfNumericFormatter();
                             String formatted = numFmt.formatSpecialValue(doubleValue, spec.flags,
                                     spec.width != null ? spec.width : 0, spec.conversionChar);
