@@ -173,11 +173,11 @@ public class MortalList {
                 // Walk into unblessed containers to find nested blessed refs
                 if (base instanceof RuntimeArray arr) {
                     for (RuntimeScalar elem : arr.elements) {
-                        work.add(elem);
+                        if (elem != null) work.add(elem);
                     }
                 } else if (base instanceof RuntimeHash hash) {
                     for (RuntimeScalar val : hash.elements.values()) {
-                        work.add(val);
+                        if (val != null) work.add(val);
                     }
                 }
             }

@@ -1870,7 +1870,7 @@ sub DESTROY {
   remaining 6 subtests. Concluded: JVM GC non-determinism makes all GC-based approaches
   unviable; only full refcounting from birth can fix tests 10/11 (§14)
 - [x] ExifTool StackOverflow fix (2026-04-09): Converted `deferDecrementRecursive()` from
-  recursive to iterative with cycle detection. ExifTool: 111/113 pass, 0/597 subtests failed.
+  recursive to iterative with cycle detection + null guards. ExifTool: 113/113 pass, 597/597 subtests pass.
 - [x] Force-clear fix for unblessed weak refs (2026-04-09):
   - **Root cause**: Birth-tracked anonymous hashes accumulate overcounted refCount
     through function boundaries (e.g., Moo's constructor chain creates `{}`,
@@ -2048,13 +2048,9 @@ to Perl source.
 
 #### Image::ExifTool Test Results (2026-04-09)
 
-After fixing the StackOverflowError in `deferDecrementRecursive` (commit `886f7e171`):
-- **111/113 test programs pass** (was crashing entirely with StackOverflow before)
-- **0/597 subtests failed** (all subtests that ran passed)
-- **2 test programs** (DNG.t, Nikon.t) exit with non-zero status due to
-  NullPointerException in Writer.pl line 466 (`$$delGroup{$grp} = 1;`).
-  This is a pre-existing PerlOnJava Writer.pl compatibility issue, NOT related
-  to DESTROY/weaken. The NPE occurs during normal tag-writing, not during cleanup.
+After fixing the StackOverflowError in `deferDecrementRecursive` (commit `886f7e171`)
+and null-element NPE in ArrayDeque (null elements from sparse arrays):
+- **113/113 test programs pass**, **597/597 subtests pass**
 - **"(in cleanup)" warnings**: IO::Uncompress::Base and IO::Compress::Base emit
   "Not a GLOB reference" warnings during DESTROY. These are cosmetic —
   the DESTROY handlers encounter partially-freed globs, but don't affect test results.
@@ -2507,9 +2503,11 @@ subtests passing.
   1. Converted `MortalList.deferDecrementRecursive()` from recursive to iterative using
      `ArrayDeque<RuntimeScalar>` work queue + `IdentityHashMap`-based visited set.
      ExifTool's self-referential hashes caused infinite recursion -> StackOverflowError.
-  2. ExifTool test results: 111/113 programs pass, 0/597 subtests failed. Two programs
-     (DNG.t, Nikon.t) fail with NPE in Writer.pl -- pre-existing, not DESTROY-related.
-  3. "(in cleanup) Not a GLOB reference" warnings from IO::Compress/Uncompress DESTROY
+  2. Added null guards for `ArrayDeque.add()` — sparse arrays contain null elements,
+     and `ArrayDeque` does not accept nulls (throws NPE). This caused DNG.t/Nikon.t
+     ExifTool write tests to fail.
+  3. ExifTool test results: 113/113 programs pass, 597/597 subtests pass.
+  4. "(in cleanup) Not a GLOB reference" warnings from IO::Compress/Uncompress DESTROY
      handlers are cosmetic and don't affect test correctness.
   Files: `MortalList.java`
 - **v5.15** (2026-04-09): Fix Perl 5 core test regressions (op/for.t, qr-72922.t, op/eval.t,
