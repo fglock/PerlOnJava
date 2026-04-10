@@ -440,18 +440,69 @@ public class RegexPreprocessorHelper {
                 sb.setLength(sb.length() - 1); // Remove the backslash
                 sb.append(Character.toChars(c2));
             } else if (c2 == 'x' && offset + 1 < length && s.charAt(offset + 1) == '{') {
-                // \x{...} hex escape - consume entire sequence so main loop doesn't see the braces
-                sb.append('x');
-                sb.append('{');
+                // \x{...} hex escape - parse and normalize the hex value.
+                // Perl stops at the first non-hex character (after removing underscores).
                 offset += 2; // Skip past x{
-                while (offset < length && s.charAt(offset) != '}') {
-                    sb.append(s.charAt(offset));
-                    offset++;
+                int endBrace = -1;
+                for (int i = offset; i < length; i++) {
+                    if (s.charAt(i) == '}') {
+                        endBrace = i;
+                        break;
+                    }
                 }
-                if (offset < length) {
-                    sb.append('}'); // Append closing brace
+                if (endBrace != -1) {
+                    String hexStr = s.substring(offset, endBrace).trim().replace("_", "");
+                    // Extract valid hex prefix
+                    int validLen = 0;
+                    for (int i = 0; i < hexStr.length(); i++) {
+                        char ch = hexStr.charAt(i);
+                        if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                            validLen++;
+                        } else {
+                            break;
+                        }
+                    }
+                    int value;
+                    if (validLen == 0) {
+                        value = 0; // No valid hex digits → \x00
+                    } else {
+                        value = Integer.parseInt(hexStr.substring(0, validLen), 16);
+                    }
+                    sb.append(String.format("x{%X}", value));
+                    offset = endBrace;
+                } else {
+                    // No closing brace - pass through as-is
+                    sb.append('x');
                 }
                 // offset now points to '}', caller will increment
+            } else if (c2 == 'x') {
+                // Bare \xNN (no braces) - Perl takes up to 2 hex digits.
+                // If fewer than 2 valid hex digits, stop at first non-hex char.
+                // Java's Pattern requires exactly 2 hex digits for \xHH, so normalize.
+                int hexVal = 0;
+                int hexDigits = 0;
+                int pos = offset + 1; // position after 'x'
+                while (hexDigits < 2 && pos < length) {
+                    char ch = s.charAt(pos);
+                    if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                        hexVal = hexVal * 16 + Character.digit(ch, 16);
+                        hexDigits++;
+                        pos++;
+                    } else {
+                        break;
+                    }
+                }
+                if (hexDigits == 2) {
+                    // Standard \xHH - pass through (Java handles it natively)
+                    sb.append('x');
+                    sb.append(s.charAt(offset + 1));
+                    sb.append(s.charAt(offset + 2));
+                    offset += 2;
+                } else {
+                    // 0 or 1 hex digits - use \x{H} format for Java
+                    sb.append(String.format("x{%X}", hexVal));
+                    offset = pos - 1; // -1 because caller will increment
+                }
             } else {
                 // Other escape sequences, pass through
                 sb.append(Character.toChars(c2));
@@ -565,12 +616,22 @@ public class RegexPreprocessorHelper {
                                     int endBrace = s.indexOf('}', nextPos + 3);
                                     if (endBrace != -1) {
                                         String hex = s.substring(nextPos + 3, endBrace).trim().replace("_", "");
-                                        try {
-                                            nextChar = Integer.parseInt(hex, 16);
-                                            rangeEndCharCount = endBrace - nextPos + 1;
-                                        } catch (NumberFormatException e) {
-                                            nextChar = -1;
+                                        // Extract valid hex prefix (Perl stops at first non-hex char)
+                                        int vLen = 0;
+                                        for (int i = 0; i < hex.length(); i++) {
+                                            char ch = hex.charAt(i);
+                                            if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                                                vLen++;
+                                            } else {
+                                                break;
+                                            }
                                         }
+                                        if (vLen == 0) {
+                                            nextChar = 0;
+                                        } else {
+                                            nextChar = Integer.parseInt(hex.substring(0, vLen), 16);
+                                        }
+                                        rangeEndCharCount = endBrace - nextPos + 1;
                                     }
                                 } else if (nextChar == 'o' && nextPos + 2 < length && s.charAt(nextPos + 2) == '{') {
                                     // Parse \o{NNNN} as range endpoint
@@ -736,14 +797,25 @@ public class RegexPreprocessorHelper {
                             String hexStr = s.substring(offset, endBrace).trim();
                             // Remove underscores (Perl allows them in number literals)
                             hexStr = hexStr.replace("_", "");
-                            try {
-                                int value = Integer.parseInt(hexStr, 16);
-                                sb.append(String.format("x{%X}", value));
-                                offset = endBrace;
-                                lastChar = value;
-                            } catch (NumberFormatException e) {
-                                RegexPreprocessor.regexError(s, offset, "Invalid hex number in \\x{...}");
+                            // Extract valid hex prefix (Perl stops at first non-hex char)
+                            int validLen = 0;
+                            for (int i = 0; i < hexStr.length(); i++) {
+                                char ch = hexStr.charAt(i);
+                                if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+                                    validLen++;
+                                } else {
+                                    break;
+                                }
                             }
+                            int value;
+                            if (validLen == 0) {
+                                value = 0; // No valid hex digits → \x00
+                            } else {
+                                value = Integer.parseInt(hexStr.substring(0, validLen), 16);
+                            }
+                            sb.append(String.format("x{%X}", value));
+                            offset = endBrace;
+                            lastChar = value;
                         } else {
                             RegexPreprocessor.regexError(s, offset, "Missing right brace on \\x{}");
                         }

@@ -260,6 +260,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
                     regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
                     regex.patternUnicode = regex.pattern;  // Error pattern - same for both
+                    // Ensure patternString is set so downstream code doesn't NPE
+                    if (regex.patternString == null) {
+                        regex.patternString = patternString != null ? patternString : "";
+                    }
                 } else {
                     throw unimplEx;
                 }

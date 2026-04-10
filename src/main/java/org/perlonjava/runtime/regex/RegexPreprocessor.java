@@ -93,6 +93,9 @@ public class RegexPreprocessor {
      * @throws PerlCompilerException If there are unmatched parentheses in the regex.
      */
     static String preProcessRegex(String s, RegexFlags regexFlags) {
+        if (s == null) {
+            s = "";
+        }
         captureGroupCount = 0;
         deferredUnicodePropertyEncountered = false;
         inlinePFlagEncountered = false;
@@ -1868,11 +1871,11 @@ public class RegexPreprocessor {
         // Valid quantifier forms: {n}, {n,}, {n,m}, {,m}
         // Invalid (literal): {}, {,}, {abc}, etc.
         if (!isValid || (!hasFirstNumber && !hasSecondNumber)) {
-            // Not a valid quantifier - treat braces as literal (escape for Java regex)
+            // Not a valid quantifier - treat opening brace as literal (escape for Java regex).
+            // Don't consume content up to '}' — it may contain regex metacharacters
+            // (like parentheses, character classes, etc.) that need proper processing.
             sb.append("\\{");
-            sb.append(quantifier);
-            sb.append("\\}");
-            return new int[]{end, 1}; // literal
+            return new int[]{start, 1}; // literal, offset stays at '{' so caller increments past it
         }
 
         // Valid quantifier - pass through to Java
