@@ -14,6 +14,7 @@ import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.CompilerFlagNode;
@@ -629,8 +630,14 @@ public class EmitterMethodCreator implements Opcodes {
             // Store dynamicIndex so goto &sub can access it for cleanup before tail call
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            // Only save/restore regex state if the subroutine body contains regex
+            // operations (or eval STRING which may introduce them at runtime).
+            // Subroutines without regex don't modify regex state, and callees
+            // that use regex do their own save/restore.
+            if (RegexUsageDetector.containsRegexOperation(ast)) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
