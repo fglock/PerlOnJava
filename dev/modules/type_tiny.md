@@ -8,10 +8,10 @@ and many CPAN modules. This document tracks the work needed to make
 
 ## Current Status
 
-**Branch:** `feature/type-tiny-support`
+**Branch:** `feature/type-tiny-phase6`
 **Module version:** Type::Tiny 2.010001 (375 test programs)
-**Pass rate:** 99.5% (2476/2488 individual tests in tests that ran, 6 files with real failures)
-**Phase:** 5e complete (2026-04-09)
+**Pass rate:** 99.7% (3029/3038 individual tests, 5 files with real failures)
+**Phase:** 6 complete (2026-04-10)
 
 ### Baseline Results
 
@@ -296,7 +296,7 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 
 ## Progress Tracking
 
-### Current Status: Phase 5 completed — 99.0% pass rate (2879/2907)
+### Current Status: Phase 6 completed — 99.7% pass rate (3029/3038)
 
 ### Results History
 
@@ -306,6 +306,7 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | Phase 4 | 186 | 57 | — | — | — |
 | Phase 5a | 318 | 13 | 2812 | 2869 | 98.0% |
 | Phase 5b | 331 | 10 | 2879 | 2907 | 99.0% |
+| Phase 6 | 347 | 5 | 3029 | 3038 | 99.7% |
 
 ### Completed Phases
 - [x] Phase 1: `looks_like_number` string parsing (2026-04-09)
@@ -454,55 +455,69 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
     - `Type-Params/multisig-gotonext.t` (1/6 → 8/8) — eval local restore fix
     - `00-begin.t` (0/0 → 1/1) — eval local restore fix
 
-### Remaining Failing Test Files (after Phase 5e)
+- [x] Phase 6: Tie infrastructure, lexical sub parsing, splice context (2026-04-10)
+  - **Splice list context in interpreter:** Function calls in splice replacement positions
+    now evaluated in LIST context (not SCALAR), matching the JVM backend behavior. The
+    interpreter's `executeSplice` was calling functions in SCALAR context, causing only one
+    value to be inserted instead of the full list.
+  - **Lexical sub + statement modifier:** Lexical subs (`my sub name`) now recognized as
+    function calls before statement modifier keywords (`if`, `unless`, `while`, `until`,
+    `for`, `foreach`, `when`). Previously, `quuux if 1` treated `quuux` as a bareword.
+  - **`tie(my(@arr), ...)` prototype parsing:** Backslash prototype `\[$@%*]` now correctly
+    handles parenthesized `my` declarations. `my(@bar)` produces
+    `OperatorNode("my", ListNode(OperatorNode("@")))` — the extra ListNode wrapper is
+    now unwrapped via `unwrapMyListDeclaration()` helper.
+  - **`return @tied_array` in eval STRING:** `materializeSpecialVarsInResult` was iterating
+    `arr.elements` directly (the empty ArrayList backing TieArray), bypassing FETCHSIZE/FETCH.
+    Now dispatches through `getList()` for tied arrays and hashes.
+  - Files: `CompileOperator.java`, `SubroutineParser.java`, `PrototypeArgs.java`, `RuntimeCode.java`
+  - Tests fixed:
+    - `Eval-TypeTiny/lexical-subs.t` (11/12 → 12/12) — lexical sub + statement modifier
+    - `Eval-TypeTiny/aliases-tie.t` (6/11 → 10/11) — tie prototype + return fix (remaining 1 is DESTROY)
+    - `Type-Tie/basic.t` (1/2 → 3/3) — tie on arrays now supported
+    - `Type-Tie/01basic.t` (15/17 → 17/17) — splice list context
+    - `Types-Standard/tied.t` (0/0 → 27/27) — tie on arrays now supported
+    - `Type-Library/exportables.t` (0/0 → 11/11) — resolved by eval require fix
+    - `Type-Library/exportables-duplicated.t` (0/1 → 1/1) — eval require fix
+    - `Type-Tiny-Enum/basic.t` (17/17 → 25/25) — unlocked more tests
+    - `Moo/basic.t` (4/5 → 5/5), `Moo/coercion.t` (9/19 → 19/19),
+      `Moo/exceptions.t` (13/15 → 15/15), `Moo/inflation.t` (9/11 → 11/11)
+    - `Moo/coercion-inlining-avoidance.t` (0/0 → 14/14), `v2-multi.t` (1/1 → 5/5)
 
-**Tests with 0 subtests (9 files, missing features/deps):**
+### Remaining Failing Test Files (after Phase 6)
+
+**Tests with actual subtest failures (5 files, 9 individual failures):**
+
+| Test | Result | Root Cause |
+|------|--------|-----------|
+| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs (known limitation) |
+| `Eval-TypeTiny/basic.t` | 11/12 | DESTROY not implemented (JVM GC) |
+| `Eval-TypeTiny/aliases-tie.t` | 10/11 | DESTROY not implemented (JVM GC) |
+| `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
+| `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
+
+**Tests with 0 subtests / skipped (23 `!` in runner, mostly CWD or missing deps):**
 
 | Test | Issue |
 |------|-------|
 | `Eval-TypeTiny/aliases-native.t` | `\$var = \$other` ref aliasing not supported |
-| `Eval-TypeTiny/aliases-tie.t` | TIESCALAR not found (class loading issue) |
-| `Type-Library/exportables.t` | `+Rainbow` sub not found (exporter edge case) |
 | `Type-Registry/lexical.t` | `builtin::export_lexically` not implemented |
 | `Type-Tiny-Enum/exporter_lexical.t` | `builtin::export_lexically` not implemented |
 | `Types-Standard/strmatch-allow-callbacks.t` | `(?{...})` code blocks in regex |
 | `Types-Standard/strmatch-avoid-callbacks.t` | `(?{...})` code blocks in regex |
-| `Types-Standard/tied.t` | Unsupported variable type for `tie()` |
-| `gh1.t` | Dies early |
-
-**Tests with actual subtest failures (6 files, 12 failures):**
-
-| Test | Result | Root Cause |
-|------|--------|-----------|
-| `Error-TypeTiny-Assertion/basic.t` | 28/29 | B::Deparse output differs |
-| `Eval-TypeTiny/lexical-subs.t` | 11/12 | Lexical sub without parens returns bareword |
-| `Type-Tie/01basic.t` | 15/17 | Tied array edge cases |
-| `Type-Tie/06clone.t` | 3/6 | Clone::PP doesn't preserve tie magic |
-| `Type-Tie/06storable.t` | 3/6 | Storable::dclone doesn't preserve tie magic |
-| `Type-Tie/basic.t` | 1/2 | Unsupported tie on arrays |
-
-**Tests with runner flakiness (varies per run, ~5 Moo tests):**
-
-| Test | Best Result | Issue |
-|------|-------------|-------|
-| `Type-Library/exportables-duplicated.t` | 0/1 | `caller()` corruption after eval require |
-| `Moo/basic.t` | 4/5 | Moo isa coercion |
-| `Moo/coercion.t` | 9/19 | Moo coercion inlining |
-| `Moo/exceptions.t` | 13/15 | Exception `->value` metadata |
-| `Moo/inflation.t` | 9/11 | Moo → Moose inflation |
-| `gh14.t` | 0/1 | Deep coercion edge case |
+| `gh1.t` | Missing `Math::BigFloat` dependency |
+| Various Type-Library/*, Type-Tiny-*/basic.t | Test runner CWD issue — pass when run from Type-Tiny dir |
 
 ### Next Steps
-1. Address Tie-related failures (4 files, requires deeper tie infrastructure work)
-2. Investigate `caller()` corruption after `eval require` (exportables-duplicated.t)
-3. Investigate Moo coercion failures (5 test files)
-4. Consider B::Deparse output compatibility (1 test)
+1. Consider implementing scope-exit hooks for DESTROY (2 test files)
+2. Improve Clone/Storable tie preservation (2 test files)
+3. Consider B::Deparse output compatibility (1 test)
+4. Fix test runner CWD handling for tests that reference `./lib`, `./t/lib`
 
 ### Open Questions
-- `ArrayRef[Int] | HashRef` triggers `Can't call method "isa" on unblessed reference`
-  at Type/Tiny/Union.pm line 60 — separate runtime issue, not parser-related
-- Test runner shows variable error counts (29-66 `!` errors) due to parallel JVM startup
-  contention — actual failures are consistent across runs
+- The 23 `!` errors in the test runner are mostly CWD-related: tests use `./lib` and `./t/lib`
+  which require running from the Type-Tiny distribution directory
+- All 5 Moo tests pass when run from the correct CWD
 
 ---
 
