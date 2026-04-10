@@ -93,26 +93,15 @@ public class EmitStatement {
         java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
         java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
 
-        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+        // Only emit flush when there are variables that need cleanup.
         // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
-        // skip this entirely, eliminating 2 method calls per loop iteration.
+        // skip the flush entirely, eliminating a method call per loop iteration.
         boolean needsCleanup = flush
                 && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
 
-        // Phase 0: Push mark so popAndFlush only drains entries added by
-        // scopeExitCleanup in Phase 1. Entries from method returns within
-        // the block that are below the mark will be processed by the next
-        // setLarge() or undefine() flush, or by the enclosing scope's exit.
-        if (needsCleanup) {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "pushMark",
-                    "()V",
-                    false);
-        }
-        // Phase 1: Eagerly unregister fd numbers on scalar variables holding
-        // anonymous filehandle globs. This makes the fd available for reuse
-        // without waiting for non-deterministic GC.
+        // Phase 1: Run scopeExitCleanup for scalar variables.
+        // This defers refCount decrements for blessed references with DESTROY,
+        // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -148,14 +137,25 @@ public class EmitStatement {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
         }
-        // Phase 3: Pop mark and flush only entries added since Phase 0.
-        // This triggers DESTROY for blessed objects whose last strong reference was
-        // in a lexical that just went out of scope. Only entries added by Phase 1
-        // are processed; older pending entries from outer scopes are preserved.
+        // Phase 3: Full flush of ALL pending mortal decrements.
+        // Unlike the previous pushMark/popAndFlush approach, this processes ALL
+        // pending entries — including deferred decrements from subroutine scope
+        // exits that occurred within this block. Those entries were previously
+        // "orphaned" below the mark and never processed, causing:
+        //   - Memory leaks (DESTROY never fires)
+        //   - Premature DESTROY (deferred entries flushed at wrong time by
+        //     setLargeRefCounted, which processes ALL pending entries)
+        //
+        // Full flush is safe here because by the time a scope exits:
+        //   1. All return values from inner method calls have been captured
+        //      (via setLargeRefCounted, which already flushes) or discarded.
+        //   2. The pending entries are only deferred decrements that should
+        //      have been processed earlier (Perl 5 FREETMPS at statement
+        //      boundaries), not entries that need to be preserved.
         if (needsCleanup) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "popAndFlush",
+                    "flush",
                     "()V",
                     false);
         }

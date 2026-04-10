@@ -705,6 +705,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReference() {
+        // Opt into refCount tracking when a reference to a named array is created.
+        // Named arrays start at refCount=-1 (untracked). When \@array creates a
+        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // and set localBindingExists=true to indicate a JVM local variable slot
+        // holds a strong reference not counted in refCount.
+        // This allows setLargeRefCounted to properly count references, and
+        // scopeExitCleanupArray to skip element cleanup when external refs exist.
+        // Without this, scope exit of `my @array` would destroy elements even when
+        // \@array is stored elsewhere.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+            this.localBindingExists = true;
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;

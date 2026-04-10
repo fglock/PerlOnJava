@@ -75,9 +75,17 @@ public class WeakRefRegistry {
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
-                // No strong refs remain — trigger DESTROY + clear weak refs.
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+                if (base.localBindingExists) {
+                    // Named container (my %hash / my @array): the local variable
+                    // slot holds a strong reference not counted in refCount.
+                    // Don't call callDestroy — the container is still alive.
+                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else {
+                    // No local binding: refCount==0 means truly no strong refs.
+                    // Trigger DESTROY + clear weak refs.
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
             }
             // Note: we do NOT transition unblessed tracked objects to WEAKLY_TRACKED
             // here anymore. The previous transition (base.blessId == 0 → WEAKLY_TRACKED)

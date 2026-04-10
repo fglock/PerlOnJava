@@ -1016,8 +1016,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
-                oldBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(oldBase);
+                if (oldBase.localBindingExists) {
+                    // Named container (my %hash / my @array): the local variable
+                    // slot holds a strong reference not counted in refCount.
+                    // Don't call callDestroy — the container is still alive.
+                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else {
+                    oldBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(oldBase);
+                }
             }
         }
 
@@ -2013,8 +2020,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (this.refCountOwned && oldBase.refCount > 0) {
                 this.refCountOwned = false;
                 if (--oldBase.refCount == 0) {
-                    oldBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(oldBase);
+                    if (oldBase.localBindingExists) {
+                        // Named container: local variable may still exist. Skip callDestroy.
+                    } else {
+                        oldBase.refCount = Integer.MIN_VALUE;
+                        DestroyDispatch.callDestroy(oldBase);
+                    }
                 }
             }
         }

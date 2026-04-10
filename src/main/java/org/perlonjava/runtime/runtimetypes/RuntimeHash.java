@@ -555,10 +555,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public RuntimeScalar createReference() {
-        // No birth tracking here. Named hashes (\%h) have a JVM local variable
-        // holding them that isn't counted in refCount, so starting at 0 would
-        // undercount. Birth tracking for anonymous hashes ({}) happens in
-        // createReferenceWithTrackedElements() where refCount IS complete.
+        // Opt into refCount tracking when a reference to a named hash is created.
+        // Named hashes start at refCount=-1 (untracked). When \%hash creates a
+        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // and set localBindingExists=true to indicate a JVM local variable slot
+        // holds a strong reference not counted in refCount.
+        // This allows setLargeRefCounted to properly count references, and
+        // scopeExitCleanupHash to skip element cleanup when external refs exist.
+        // Without this, scope exit of `my %hash` would destroy elements even when
+        // \%hash is stored elsewhere (e.g., $obj->{data} = \%hash).
+        if (this.refCount == -1) {
+            this.refCount = 0;
+            this.localBindingExists = true;
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
         result.value = this;

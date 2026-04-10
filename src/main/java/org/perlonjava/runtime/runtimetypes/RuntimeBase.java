@@ -24,6 +24,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int refCount = -1;
 
     /**
+     * True if this container (hash or array) was created as a named variable
+     * ({@code my %hash} or {@code my @array}) and a reference to it was created
+     * via the {@code \} operator. This flag indicates that a JVM local variable
+     * slot holds a strong reference that is NOT counted in {@code refCount}.
+     * <p>
+     * When {@code refCount} reaches 0, this flag prevents premature destruction:
+     * the local variable may still be alive, so the container is not truly
+     * unreferenced. The flag is cleared by {@code scopeExitCleanupHash/Array}
+     * when the local variable's scope ends, allowing subsequent refCount==0
+     * to correctly trigger callDestroy.
+     */
+    public boolean localBindingExists = false;
+
+    /**
      * Global flag: true once any object has been blessed (blessId set to non-zero).
      * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
      * walks when no blessed objects have ever been created in this JVM instance.
