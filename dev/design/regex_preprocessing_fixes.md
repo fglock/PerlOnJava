@@ -53,9 +53,10 @@ This document tracks regex preprocessing issues discovered while running `re/pat
 
 | Test | Before fixes | After fixes | Remaining failures |
 |------|-------------|-------------|-------------------|
-| `re/pat.t` | 428/1298 | **1076**/1298 (all run) | 222 fail |
-| `re/pat_advanced.t` | 63/1298 | **731**/838 | 107 fail |
+| `re/pat.t` | 428/1298 | **1077**/1298 (all run) | 221 fail |
+| `re/pat_advanced.t` | 63/1298 | **1308**/1625 | 317 fail + 53 not reached |
 | `re/pat_rt_report.t` | 2397/2515 | **2431**/2515 (ran 2508) | 77 fail + 7 not reached |
+| `re/regexp_unicode_prop.t` | — | **1017**/1096 | 79 fail + 14 not reached |
 | `re/reg_eval_scope.t` | 6/49 | 7/49 | 42 fail |
 | `uni/variables.t` | 66880/66880 | 66880/66880 | 0 |
 
@@ -64,8 +65,9 @@ This document tracks regex preprocessing issues discovered while running `re/pat
 | Test | Crash point | Cause | Tests blocked |
 |------|------------|-------|---------------|
 | pat.t | **No crash** — all 1298 tests now run | N/A | 0 |
-| pat_advanced.t | Line 1122 (test 838) | `(?1)` — numbered group recursion not supported | 0 (near end) |
+| pat_advanced.t | Line 2308 (test 1625) | `\p{Is_q}` — package-scoped user property (`Some::Is_q`) | 53 tests |
 | pat_rt_report.t | Line 1158 (test 2508) | `(?1)` — numbered group recursion not supported | 7 tests |
+| regexp_unicode_prop.t | Line 543 (test 1096) | `\pf`/`\Pf` invalid property generates warnings instead of errors | 14 tests |
 
 ### Failure Categories
 
@@ -167,9 +169,9 @@ The largest single failure category. Patterns like `/([ ]*$)(?(1))/` don't match
 
 **Difficulty: High.** Requires `(*MARK)` verb support.
 
-#### M. `(?1)` numbered group recursion (1 failure in pat_advanced.t, 1 in pat_rt_report.t)
+#### M. `(?1)` numbered group recursion / `(?&name)` named recursion (pat_advanced.t, pat_rt_report.t)
 
-`(?1)` syntax for recursing into capture group 1 is not recognized. Causes fatal "Sequence (?1...) not recognized" error. This is what crashes pat_advanced.t at test 838 and pat_rt_report.t at test 2508.
+`(?1)` and `(?&name)` syntax for recursing into capture groups is not recognized. Now downgradable with `JPERL_UNIMPLEMENTED=warn` (no longer crashes tests), but the patterns silently fail to match.
 
 **Difficulty: Very High.** Java's regex engine has no recursion support. Would need a custom engine or PCRE/JNI bridge.
 
@@ -200,29 +202,54 @@ Empty alternatives in patterns like `/(|a)/` or the "0 match in alternation" tes
 | Long string patterns | pat_advanced.t 805-813 | Medium |
 | `/d` to `/u` modifier change | pat_advanced.t 807-808 | Low-Medium |
 
+#### Q. Package-scoped user-defined Unicode properties (crash in pat_advanced.t)
+
+`\p{Is_q}` defined in package `Some` as `Some::Is_q` is not found because user-defined property lookup only checks `main::` package. Perl uses the current package when resolving `\p{...}` names. This crashes pat_advanced.t at line 2308 (test 1625), blocking 53 tests.
+
+**Difficulty: Medium.** Need to pass the current package context to the regex preprocessor and try the current package before falling back to `main::`.
+
+#### R. Invalid single-char `\pX`/`\PX` properties (crash in regexp_unicode_prop.t)
+
+Invalid single-character properties like `\pf`, `\Pq` are passed through to Java's regex engine which throws `PatternSyntaxException`. This is caught and wrapped as `PerlJavaUnimplementedException`, which under `JPERL_UNIMPLEMENTED=warn` generates warnings instead of proper errors. Test 1096 in regexp_unicode_prop.t expects 0 warnings but gets 8 (from `\pf`, `\Pf`, `\pq`, `\Pq`), then crashes.
+
+**Fix approach:** Validate single-char properties in the preprocessor (only `\pL`, `\pM`, `\pN`, etc. are valid — single Unicode general category letters). Invalid ones should throw `PerlCompilerException` (not `PerlJavaUnimplementedException`).
+
+**Difficulty: Low.** Add validation for single-char `\p`/`\P` properties in `RegexPreprocessorHelper`.
+
+#### S. `/i` flag not passed to user-defined property subs (regexp_unicode_prop.t)
+
+Perl calls user-defined property subs with `$caseless=1` when the `/i` flag is active, allowing subs to return a wider character set for case-insensitive matching. PerlOnJava always calls the sub with an empty argument list. This causes 2 test failures in regexp_unicode_prop.t (tests 1061, 1077) and several in pat_advanced.t.
+
+**Fix approach:** Pass the `/i` flag through the regex preprocessor to `tryUserDefinedProperty`, which then passes `1` as the first argument to the property sub.
+
+**Difficulty: Medium.** Requires threading the case-insensitive flag through several method calls in the regex preprocessing pipeline.
+
 ### Priority Recommendations
 
 **Quick wins (Low difficulty, high impact):**
 1. ~~**`\p{isAlpha}` aliases** — unblocks 666 pat.t tests (category N)~~ **DONE** — pat.t now runs all 1298 tests
-2. **Useless `(?c)`/`(?g)`/`(?o)` warnings** — fixes 13 pat_advanced.t tests (category I)
-3. **POSIX class error message** — fix message format (category P)
-4. **REG_INFTY error** — add quantifier limit check (category P)
+2. **Invalid `\pX` single-char properties** — unblocks 14 regexp_unicode_prop.t tests (category R)
+3. **Useless `(?c)`/`(?g)`/`(?o)` warnings** — fixes 13 pat_advanced.t tests (category I)
+4. **POSIX class error message** — fix message format (category P)
+5. **REG_INFTY error** — add quantifier limit check (category P)
 
 **Medium effort, significant impact:**
-5. **`(?(1)...)` with `$` anchor** — fixes 48 pat_rt_report.t tests (category K)
-6. **`@-`/`@+` position arrays** — fixes 17 tests across files (category F)
-7. **`$^N` last capture** — fixes 20 pat_advanced.t tests (category C)
-8. **Bare `\x` edge cases** — fixes 5 pat_advanced.t tests (category J)
-9. **`\N{name}` charnames** — fixes 25 pat_advanced.t tests (category H)
+6. **Package-scoped user properties** — unblocks 53 pat_advanced.t tests (category Q)
+7. **`/i` caseless flag for user properties** — fixes ~4 tests (category S)
+8. **`(?(1)...)` with `$` anchor** — fixes 48 pat_rt_report.t tests (category K)
+9. **`@-`/`@+` position arrays** — fixes 17 tests across files (category F)
+10. **`$^N` last capture** — fixes 20 pat_advanced.t tests (category C)
+11. **Bare `\x` edge cases** — fixes 5 pat_advanced.t tests (category J)
+12. **`\N{name}` charnames** — fixes 25 pat_advanced.t tests (category H)
 
 **Hard / architectural (major work):**
-10. **`\G` anchor** — 26 pat.t tests (category A)
-11. **`(?{...})` code blocks** — 46 tests total (category B)
-12. **`(?1)` recursion / `(*ACCEPT)` / `(*MARK)`** — engine limitations (categories E, L, M)
+13. **`\G` anchor** — 26 pat.t tests (category A)
+14. **`(?{...})` code blocks** — 46 tests total (category B)
+15. **`(?1)` recursion / `(?&name)` / `(*ACCEPT)` / `(*MARK)`** — engine limitations (categories E, L, M)
 
 ## Progress Tracking
 
-### Current Status: Category N implemented; pat.t fully unblocked (2026-04-10)
+### Current Status: Major user-defined property and regex cache fixes (2026-04-10)
 
 ### Completed
 - [x] Fix 1: handleQuantifier brace consumption (2026-04-10)
@@ -233,6 +260,18 @@ Empty alternatives in patterns like `/(|a)/` or the "0 match in alternation" tes
 - [x] Fix 5: \p{isAlpha} case-insensitive Is prefix, add Space/Alnum/Punct aliases (2026-04-10)
 - [x] Fix 6: \p{Property=Value} syntax (2026-04-10)
 - [x] Fix 7: Named capture groups with underscores — U95 encoding (2026-04-10)
+- [x] Fix 8: User-defined property resolution — refactor resolvePropertyReference to return UnicodeSet (2026-04-10)
+  - Properties using +utf8:: references (e.g., +utf8::Uppercase, &utf8::ASCII) were failing because
+    the old code returned Java regex patterns that ICU4J's UnicodeSet couldn't parse
+  - Created resolvePropertyReferenceAsSet() and resolveStandardPropertyAsSet() methods
+- [x] Fix 9: Regex cache preventing deferred recompilation (2026-04-10)
+  - ensureCompiledForRuntime() now evicts stale cache entries before recompiling
+- [x] Fix 10: Cache user-defined property sub results (2026-04-10)
+  - Matches Perl behavior of calling each property sub only once
+  - Fixes "Called twice" errors from subs with `state` variables
+- [x] Fix 11: Titlecase/TitlecaseLetter/Lt property aliases (2026-04-10)
+- [x] Fix 12: (?&name) named group recursion downgraded to regexUnimplemented (2026-04-10)
+- [x] Fix 13: (?digit) numbered recursion downgraded to regexUnimplemented (2026-04-10)
 
 ### Files Modified
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java`
