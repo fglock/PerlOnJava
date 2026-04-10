@@ -2736,7 +2736,12 @@ Environment: macOS, Java 21+, `make clean && make` on each branch before benchma
 | `benchmark_method.pl` | 444/s | 387/s | **-13%** | Method dispatch loop |
 | `benchmark_regex.pl` | 51,343/s | 45,078/s | **-12%** | Regex matching loop |
 | `benchmark_string.pl` | 28,487/s | 25,085/s | **-12%** | String operations |
-| `life_bitpacked.pl` (5K gen) | ~29 Mcells/s | ~27 Mcells/s | **-7%** | Bitwise integer inner loop |
+| `life_bitpacked.pl` `-r none` | ~29 Mcells/s | ~27 Mcells/s | **-7%** | Compute only (no display) |
+| `life_bitpacked.pl` braille | ~15 Mcells/s | ~6 Mcells/s | **-60%** | Compute + braille display IO |
+
+The braille display test amplifies the regression because the display code exercises
+string operations, hash lookups (braille lookup table), and `print` calls in tight loops,
+all of which hit `set()`/`setLarge()` and `scopeExitCleanup` overhead repeatedly.
 
 #### Memory benchmarks (delta, lower is better)
 
