@@ -318,17 +318,6 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         return ret;
     }
 
-    /**
-     * Creates a reference to the underlying lvalue, vivifying it first.
-     * In Perl, \$hash{key} auto-vivifies the hash entry so that the reference
-     * points to the actual hash element, not a temporary.
-     */
-    @Override
-    public RuntimeScalar createReference() {
-        vivify();
-        return lvalue.createReference();
-    }
-
     public void setBlessId(int blessId) {
         // Don't vivify when blessing - we're not modifying the underlying value,
         // just setting the blessId on the lvalue itself

@@ -103,18 +103,6 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     }
 
     /**
-     * Creates a reference to this read-only scalar.
-     * Overrides the proxy version to avoid calling vivify() which would throw.
-     */
-    @Override
-    public RuntimeScalar createReference() {
-        RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.REFERENCE;
-        result.value = this;
-        return result;
-    }
-
-    /**
      * Retrieves the integer representation of the scalar.
      * For STRING type, computes lazily to ensure warnings are generated at use time.
      *

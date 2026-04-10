@@ -31,6 +31,26 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     /**
+     * Creates a reference to the underlying lvalue, vivifying it first.
+     * In Perl, \$arr[$i] auto-vivifies the array element so that the reference
+     * points to the actual array element, not a temporary.
+     * Checks for existing elements first to avoid overwriting tied or special elements.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        if (lvalue == null) {
+            // Check if the element already exists (e.g., a tied scalar)
+            List<RuntimeScalar> elements = parent.elements;
+            if (key >= 0 && key < elements.size() && elements.get(key) != null) {
+                lvalue = elements.get(key);
+            } else {
+                vivify();
+            }
+        }
+        return lvalue.createReference();
+    }
+
+    /**
      * Vivifies (initializes) the element in the parent array if it does not exist.
      * If the element at the specified index is not present, it creates new
      * RuntimeScalar instances up to that index and assigns them in the parent array.
