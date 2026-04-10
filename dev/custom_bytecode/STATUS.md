@@ -36,7 +36,7 @@ Show diagnostic messages when compilation paths are taken:
 export JPERL_SHOW_FALLBACK=1
 ./jperl script.pl
 # Output: "Note: JVM compilation succeeded."
-# Or: "Note: Method too large after AST splitting, using interpreter backend."
+# Or: "Note: Method too large, using interpreter backend."
 ```
 
 ### JPERL_EVAL_USE_INTERPRETER

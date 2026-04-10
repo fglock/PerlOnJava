@@ -1,6 +1,5 @@
 package org.perlonjava.frontend.astnode;
 
-import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
@@ -17,9 +16,7 @@ import java.util.List;
  * </ul>
  * <p>
  * The elements list contains key-value pairs in sequence: key1, value1, key2, value2, etc.
- * <p>
  *
- * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
  * @see ListNode
  */
@@ -29,9 +26,6 @@ public class HashLiteralNode extends AbstractNode {
      * <p>
      * Elements are stored as alternating key-value pairs: [key1, value1, key2, value2, ...].
      * Each element is evaluated in LIST context when the hash is constructed.
-     * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
-     * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
 

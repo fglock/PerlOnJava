@@ -4,7 +4,7 @@
 
 PerlOnJava uses a **two-tier strategy** to handle Perl code that exceeds the JVM's 65,535-byte method size limit:
 
-1. **Proactive**: During codegen, large blocks are detected and wrapped in closure calls to split them across multiple JVM methods
+1. **Proactive**: During codegen, large blocks are detected and wrapped in a closure call to push them into a separate JVM method
 2. **Reactive fallback**: If ASM still produces a method that's too large, the code is compiled using the bytecode interpreter backend instead
 
 ## The Problem
@@ -13,7 +13,7 @@ The JVM limits each method to 65,535 bytes of bytecode. PerlOnJava compiles each
 
 ### Closure Scoping Complication
 
-The natural fix is to split large blocks into chunks wrapped in anonymous subs: `sub { ...chunk... }->(@_)`. However, this changes lexical scoping. When `use` or `require` statements are wrapped in closures, their imports happen in the closure's scope instead of the package scope:
+The natural fix is to wrap large blocks in anonymous subs: `sub { ...block... }->(@_)`. However, this changes lexical scoping. When `use` or `require` statements are wrapped in closures, their imports happen in the closure's scope instead of the package scope:
 
 ```perl
 # Original code
@@ -31,7 +31,7 @@ my $x = $Config{foo};      # ERROR: %Config not in scope
 
 This is why proactive refactoring skips subroutines, special blocks (BEGIN/END/INIT/CHECK/UNITCHECK), and blocks with unsafe control flow.
 
-## Tier 1: Proactive Block Refactoring
+## Tier 1: Proactive Block Wrapping
 
 ### Entry Point
 
@@ -52,7 +52,13 @@ EmitBlock.emitBlock(visitor, blockNode)
         └── Return false → normal block emission continues
 ```
 
-Wrapping pushes the block's code into a separate JVM method (the anonymous sub body), giving it its own 64KB budget.
+Wrapping pushes the block's code into a separate JVM method (the anonymous sub body), giving it its own 64KB budget. This effectively doubles the available space for that block.
+
+### Limitations
+
+The wrapping is a **single-level** operation — it wraps the entire block in one closure. It does not recursively split the block into smaller chunks. This means:
+- For blocks up to ~2x the 64KB limit, wrapping succeeds (the block fits in the new method)
+- For blocks larger than ~2x the limit, wrapping is insufficient and the `MethodTooLargeException` still occurs, triggering Tier 2
 
 ### Thresholds
 
@@ -63,12 +69,12 @@ Wrapping pushes the block's code into a separate JVM method (the anonymous sub b
 
 ### Key Classes
 
-- **`BlockRefactor`** (`backend/jvm/astrefactor/BlockRefactor.java`) — Utility methods: `createAnonSubCall()` creates `sub { ... }->(@_)` AST nodes, `buildNestedStructure()` builds nested tail-closure chains, `createBlockNode()` with anti-recursion guard
+- **`BlockRefactor`** (`backend/jvm/astrefactor/BlockRefactor.java`) — Constants and `createAnonSubCall()` utility that creates `sub { ... }->(@_)` AST nodes
 - **`LargeBlockRefactorer`** (`backend/jvm/astrefactor/LargeBlockRefactorer.java`) — Orchestrates block-level refactoring: size estimation, control flow safety checks, whole-block wrapping
 
 ## Tier 2: Interpreter Fallback
 
-When the proactive refactoring is insufficient (or skipped due to unsafe control flow), ASM may still throw `MethodTooLargeException`. The fallback catches this and compiles the code using the bytecode interpreter instead.
+When the proactive wrapping is insufficient (or skipped due to unsafe control flow), ASM throws `MethodTooLargeException`. The fallback catches this and compiles the code using the bytecode interpreter instead.
 
 ### Flow
 
@@ -94,7 +100,7 @@ The fallback also handles other compilation failures (`VerifyError`, `ClassForma
 
 When fallback is triggered with `JPERL_SHOW_FALLBACK=1`:
 ```
-Note: Method too large after AST splitting, using interpreter backend.
+Note: Method too large, using interpreter backend.
 ```
 
 ## Technical Details
@@ -106,27 +112,14 @@ Note: Method too large after AST splitting, using interpreter backend.
 ### Refactoring Strategy
 1. **Whole-block wrapping**: The entire block becomes `sub { <block> }->(@_)`
 2. **`@_` passthrough**: Arguments are forwarded so the wrapper is transparent
-3. **Anti-recursion guard**: `BlockRefactor.createBlockNode()` sets a thread-local `skipRefactoring` flag to prevent infinite recursion when the wrapper's BlockNode is constructed
+3. **Anti-recursion guard**: `blockAlreadyRefactored` annotation prevents infinite recursion when the wrapper's BlockNode is processed
 4. **Safe boundaries**: Blocks with unlabeled control flow (`next`/`last`/`redo`/`goto` outside loops) are not refactored, since these would break when wrapped in a closure
-
-### Dead Code
-
-The codebase contains remnants of a former retry-based approach that was replaced by the interpreter fallback:
-
-| Dead Code | Purpose (unused) |
-|-----------|-----------------|
-| `LargeBlockRefactorer.forceRefactorForCodegen()` | Was meant for reactive retry after MethodTooLargeException |
-| `LargeBlockRefactorer.trySmartChunking()` | Sophisticated chunking algorithm (only called by dead code above) |
-| `DepthFirstLiteralRefactorVisitor` (entire class) | Depth-first literal refactoring (marked OBSOLETE in design docs) |
-| `LargeNodeRefactorer` (entire class) | Element list chunking (only called by dead code above) |
-
-These are candidates for removal.
 
 ## Implementation Files
 
 | File | Role |
 |------|------|
-| `backend/jvm/astrefactor/BlockRefactor.java` | Constants, closure-wrapping utilities |
+| `backend/jvm/astrefactor/BlockRefactor.java` | Constants, closure-wrapping utility |
 | `backend/jvm/astrefactor/LargeBlockRefactorer.java` | Block-level proactive refactoring |
 | `backend/jvm/EmitBlock.java` | Calls `processBlock()` during block emission |
 | `backend/jvm/EmitterMethodCreator.java` | Catches `MethodTooLargeException`, triggers interpreter fallback |
