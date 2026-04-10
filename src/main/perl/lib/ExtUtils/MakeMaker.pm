@@ -641,91 +641,96 @@ sub _shell_cp {
 
 sub _create_mymeta {
     my ($name, $version, $args) = @_;
-    
-    # Create MYMETA.yml for CPAN.pm dependency resolution
-    # This allows CPAN.pm to detect and install prerequisites
-    # Uses meta-spec v2 format with nested prereqs structure
-    
+
+    # Create MYMETA.yml for CPAN.pm dependency resolution.
+    # Uses meta-spec v1.4 with flat top-level requires / build_requires keys.
+    # CPAN.pm's prereq_pm() read_yaml fallback (Tier 2) only understands v1;
+    # the previous v2 nested prereqs structure was silently ignored, causing
+    # CPAN.pm to install modules without their dependencies.
+
     my $mymeta = 'MYMETA.yml';
-    
+
     open my $fh, '>', $mymeta or do {
         warn "Note: Could not create MYMETA.yml: $!\n";
         return;
     };
-    
-    # Build prerequisites in meta-spec v2 format (nested prereqs structure)
-    # Note: 'perl' is a special key for minimum perl version, not a module dependency
-    my $runtime_requires = '';
+
+    # Collect runtime requires (PREREQ_PM)
+    my $requires = '';
     if ($args->{PREREQ_PM} && %{$args->{PREREQ_PM}}) {
         for my $mod (sort keys %{$args->{PREREQ_PM}}) {
             next if $mod eq 'perl';
             my $ver = $args->{PREREQ_PM}{$mod} || 0;
-            $runtime_requires .= "        $mod: '$ver'\n";
+            $requires .= "  $mod: '$ver'\n";
         }
     }
-    
+
+    # Collect build + test requires (v1.4 has no separate test phase, merge them)
+    my %breq;
+    for my $key (qw(BUILD_REQUIRES TEST_REQUIRES)) {
+        if ($args->{$key} && %{$args->{$key}}) {
+            for my $mod (keys %{$args->{$key}}) {
+                next if $mod eq 'perl';
+                my $ver = $args->{$key}{$mod} || 0;
+                $breq{$mod} = $ver;
+            }
+        }
+    }
     my $build_requires = '';
-    if ($args->{BUILD_REQUIRES} && %{$args->{BUILD_REQUIRES}}) {
-        for my $mod (sort keys %{$args->{BUILD_REQUIRES}}) {
-            next if $mod eq 'perl';
-            my $ver = $args->{BUILD_REQUIRES}{$mod} || 0;
-            $build_requires .= "        $mod: '$ver'\n";
-        }
+    for my $mod (sort keys %breq) {
+        $build_requires .= "  $mod: '$breq{$mod}'\n";
     }
-    
-    my $test_requires = '';
-    if ($args->{TEST_REQUIRES} && %{$args->{TEST_REQUIRES}}) {
-        for my $mod (sort keys %{$args->{TEST_REQUIRES}}) {
-            next if $mod eq 'perl';
-            my $ver = $args->{TEST_REQUIRES}{$mod} || 0;
-            $test_requires .= "        $mod: '$ver'\n";
-        }
-    }
-    
-    my $configure_requires = '';
+
+    # Collect configure requires (default to ExtUtils::MakeMaker)
+    my %creq = ('ExtUtils::MakeMaker' => 0);
     if ($args->{CONFIGURE_REQUIRES} && %{$args->{CONFIGURE_REQUIRES}}) {
-        for my $mod (sort keys %{$args->{CONFIGURE_REQUIRES}}) {
+        for my $mod (keys %{$args->{CONFIGURE_REQUIRES}}) {
             next if $mod eq 'perl';
-            my $ver = $args->{CONFIGURE_REQUIRES}{$mod} || 0;
-            $configure_requires .= "        $mod: '$ver'\n";
+            $creq{$mod} = $args->{CONFIGURE_REQUIRES}{$mod} || 0;
         }
     }
-    
-    # Convert NAME to abstract (guess from module name)
+    my $configure_requires = '';
+    for my $mod (sort keys %creq) {
+        $configure_requires .= "  $mod: '$creq{$mod}'\n";
+    }
+
     my $abstract = $args->{ABSTRACT} || "$name module";
-    
-    # Build prereqs structure only including non-empty sections
-    my $prereqs = "prereqs:\n";
-    if ($configure_requires) {
-        $prereqs .= "  configure:\n    requires:\n$configure_requires";
-    }
-    if ($runtime_requires) {
-        $prereqs .= "  runtime:\n    requires:\n$runtime_requires";
-    }
-    if ($build_requires) {
-        $prereqs .= "  build:\n    requires:\n$build_requires";
-    }
-    if ($test_requires) {
-        $prereqs .= "  test:\n    requires:\n$test_requires";
-    }
-    
+    $abstract =~ s/'/''/g;  # YAML single-quote escape: double the quote
+
+    (my $distname = $name) =~ s/::/-/g;
+
+    # Remove trailing newlines to avoid blank lines between YAML sections
+    chomp $build_requires;
+    chomp $configure_requires;
+    chomp $requires;
+
+    # Format section headers: "key:\n  items" when non-empty, "key: {}" when empty
+    my $br_section = $build_requires
+        ? "build_requires:\n$build_requires" : "build_requires: {}";
+    my $cr_section = $configure_requires
+        ? "configure_requires:\n$configure_requires" : "configure_requires: {}";
+    my $rq_section = $requires
+        ? "requires:\n$requires" : "requires: {}";
+
     print $fh <<"MYMETA";
 ---
 abstract: '$abstract'
 author:
   - 'Unknown'
+$br_section
+$cr_section
 dynamic_config: 0
-generated_by: 'ExtUtils::MakeMaker (PerlOnJava)'
+generated_by: 'ExtUtils::MakeMaker version $VERSION'
 license: perl
 meta-spec:
-  url: https://metacpan.org/pod/CPAN::Meta::Spec
-  version: '2'
-name: $name
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: $distname
 no_index:
   directory:
     - t
     - inc
-$prereqs
+$rq_section
 version: '$version'
 MYMETA
 
