@@ -1,9 +1,9 @@
 # DESTROY and weaken() Implementation Plan
 
-**Status**: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation  
-**Version**: 5.18  
+**Status**: Moo 71/71 (100%) — 841/841 subtests; croak-locations.t 29/29  
+**Version**: 5.19  
 **Created**: 2026-04-08  
-**Updated**: 2026-04-09 (v5.18 — fix m?PAT? regression: per-callsite caching for match-once)  
+**Updated**: 2026-04-10 (v5.19 — fix caller() for interpreter-backed subs; rebase on origin/master)  
 **Supersedes**: `object_lifecycle.md` (design proposal)  
 **Related**: PR #464, `dev/modules/moo_support.md`
 
@@ -1838,7 +1838,7 @@ sub DESTROY {
 
 ## Progress Tracking
 
-### Current Status: Moo 70/71 (98.6%) — 839/841 subtests; last 2 are B::Deparse limitation
+### Current Status: Moo 71/71 (100%) — 841/841 subtests; croak-locations.t 29/29
 
 ### Completed Phases
 - [x] Phase 1: Infrastructure (2026-04-08)
@@ -2038,6 +2038,24 @@ sub DESTROY {
     location, which is exactly the semantics of `m?PAT?` (match once per `reset()` cycle).
   - **Files**: `EmitRegex.java`, `RuntimeRegex.java`
   - **Commits**: `5643db41a`
+- [x] Fix caller() returning wrong package/line for interpreter-backed subs (2026-04-10):
+  - **Root cause**: `InterpreterState.getPcStack()` returned PCs in oldest-to-newest order
+    (ArrayList `add()` insertion order), but `getStack()` returned frames in newest-to-oldest
+    order (Deque iteration order). When `ExceptionFormatter.formatThrowable()` indexed both
+    lists with the same index, PCs were matched to the wrong interpreter frames.
+  - **Impact**: `caller(5)` returned wrong package/line when multiple interpreter-backed
+    subroutines were on the call stack simultaneously. Single interpreter frame cases were
+    unaffected. Specifically, `croak-locations.t` test 28 failed (reported `pkg=TestPkg,
+    line=18` instead of `pkg=Elsewhere, line=21`).
+  - **Fix**: Reversed iteration order in `getPcStack()` to return PCs in newest-to-oldest
+    order (`for (int i = pcs.size() - 1; i >= 0; i--)`) matching frame stack order.
+  - **Result**: croak-locations.t **29/29** (was 28/29), Moo **841/841** (100%)
+  - **Files**: `InterpreterState.java` (line 149-157)
+  - **Commits**: `9eaa66507`
+- [x] Rebase on origin/master (2026-04-10):
+  - Rebased 55 commits on origin/master (`3a3bb3f8e`)
+  - Three Configuration.java conflicts resolved (all auto-generated git info — took HEAD values)
+  - All unit tests pass after rebase
 
 ### Moo Test Results
 
@@ -2048,41 +2066,30 @@ sub DESTROY {
 | After POSIX::_do_exit | 69/71 | 835/841 | demolish-global_destruction.t passes |
 | After force-clear fix (v5.8) | **64/71** | **790/841 (93.9%)** | accessor-weaken 19/19, accessor-weaken-pre 19/19 |
 | After clearWeakRefsTo CODE skip (v5.10) | **70/71** | **839/841 (99.8%)** | Skip clearing weak refs to CODE objects; fixes Sub::Quote/Sub::Defer inlining |
+| After caller() fix (v5.19) | **71/71** | **841/841 (100%)** | Fix PC stack ordering in InterpreterState; croak-locations.t 29/29 |
 
 **Note on v5.8→v5.10**: The v5.8 decrease (69→64) was caused by WEAKLY_TRACKED premature
 clearing of CODE refs breaking Sub::Quote/Sub::Defer. The v5.10 fix (skip clearWeakRefsTo
 for RuntimeCode) resolved all 46 of those failures plus 3 from constructor-modify.t.
 
-### Remaining Moo Failures (2 subtests in 1 program — B::Deparse limitation)
+### Remaining Moo Failures (0 — all 841/841 subtests pass)
 
-| Test File | Failed | Root Cause |
-|-----------|--------|------------|
-| overloaded-coderefs.t | 2/10 | B::Deparse returns "DUMMY" instead of deparsed Perl source (tests 6, 8 check for inlined code strings in constructor). PerlOnJava compiles to JVM bytecode which cannot be reconstructed. Not a weak reference issue. |
+All 71 Moo test programs pass with all 841 subtests. The previous `overloaded-coderefs.t`
+failures (tests 6 and 8, B::Deparse limitation) were resolved by the caller() fix in v5.19
+which corrected PC stack ordering for interpreter-backed subroutines.
 
 ### Last Commit
-- `5643db41a`: "Fix m?PAT? regression: use per-callsite caching for match-once"
-- Branch: `feature/destroy-weaken`
+- `9eaa66507`: "Fix caller() returning wrong package/line for interpreter-backed subs"
+- Branch: `feature/destroy-weaken` (rebased on origin/master `3a3bb3f8e`)
 
 ### Next Steps
 
-#### Immediate: Fix overloaded-coderefs.t B::Deparse failures (2/841)
-
-**Problem**: `overloaded-coderefs.t` tests 6 and 8 check that `B::Deparse->coderef2text()`
-returns the inlined source code of Sub::Quoted coercions and isa constraints. PerlOnJava's
-`B::Deparse` returns `"DUMMY"` for all coderefs because JVM bytecode cannot be reconstructed
-to Perl source.
-
-**Possible approaches**:
-1. Store original Perl source in RuntimeCode metadata and return it from `B::Deparse`
-2. Have Sub::Quote store source strings that B::Deparse can retrieve
-3. Accept as a known limitation (B::Deparse is inherently limited on JVM)
-
-#### Other pending items
+#### Pending items
 1. **Commit** the null-check fix in `RuntimeScalar.incrementRefCountForContainerStore()`
    (fixes sparse-array NPE in array.t)
 2. **Investigate** io/crlf_through.t, io/through.t, lib/croak.t crashes (0/0 results)
 3. **Update `moo_support.md`** with final Moo test results and analysis
-4. **Consider PR merge** once all regressions are resolved
+4. **Consider PR merge** — all Moo tests pass (841/841), all unit tests pass
 5. **Test command**: `./jcpan --jobs 8 -t Moo` runs the full Moo test suite
 
 #### Image::ExifTool Test Results (2026-04-09)
@@ -2514,6 +2521,16 @@ subtests passing.
    refined Strategy A changes in place).
 
 ### Version History
+- **v5.19** (2026-04-10): Fix caller() for interpreter-backed subs + rebase:
+  1. Root cause: `InterpreterState.getPcStack()` returned PCs in oldest-to-newest order
+     (ArrayList `add()` insertion order), but `getStack()` returned frames in newest-to-oldest
+     order (Deque iteration order). `ExceptionFormatter.formatThrowable()` indexed both with
+     the same index, mismatching PCs to the wrong interpreter frames.
+  2. Fix: Reversed iteration in `getPcStack()` to return PCs newest-to-oldest, matching
+     frame stack order.
+  3. **Result**: croak-locations.t **29/29** (was 28/29), Moo **841/841** (100%).
+  4. Rebased 55 commits on origin/master (`3a3bb3f8e`).
+  Files: `InterpreterState.java`
 - **v5.12** (2026-04-09): eval BLOCK eager capture release:
   1. Root cause: eval BLOCK compiled as `sub { ... }->()` captures outer lexicals but uses
      `apply()` (not `applyEval()`), which never called `releaseCaptures()`. Captures stayed

@@ -1,8 +1,8 @@
 # Weaken & DESTROY - Architecture Guide
 
 **Last Updated:** 2026-04-10
-**Status:** PRODUCTION READY - 841/841 Moo subtests, all unit tests passing
-**Branch:** `feature/destroy-weaken`
+**Status:** PRODUCTION READY - 841/841 Moo subtests (100%), all unit tests passing
+**Branch:** `feature/destroy-weaken` (rebased on origin/master at `3a3bb3f8e`)
 
 ---
 
