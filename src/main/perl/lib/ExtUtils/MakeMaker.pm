@@ -695,19 +695,30 @@ sub _create_mymeta {
     }
 
     my $abstract = $args->{ABSTRACT} || "$name module";
-    $abstract =~ s/'/\\'/g;
+    $abstract =~ s/'/''/g;  # YAML single-quote escape: double the quote
 
     (my $distname = $name) =~ s/::/-/g;
+
+    # Remove trailing newlines to avoid blank lines between YAML sections
+    chomp $build_requires;
+    chomp $configure_requires;
+    chomp $requires;
+
+    # Format section headers: "key:\n  items" when non-empty, "key: {}" when empty
+    my $br_section = $build_requires
+        ? "build_requires:\n$build_requires" : "build_requires: {}";
+    my $cr_section = $configure_requires
+        ? "configure_requires:\n$configure_requires" : "configure_requires: {}";
+    my $rq_section = $requires
+        ? "requires:\n$requires" : "requires: {}";
 
     print $fh <<"MYMETA";
 ---
 abstract: '$abstract'
 author:
   - 'Unknown'
-build_requires:
-$build_requires
-configure_requires:
-$configure_requires
+$br_section
+$cr_section
 dynamic_config: 0
 generated_by: 'ExtUtils::MakeMaker version $VERSION'
 license: perl
@@ -719,8 +730,7 @@ no_index:
   directory:
     - t
     - inc
-requires:
-$requires
+$rq_section
 version: '$version'
 MYMETA
 

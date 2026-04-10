@@ -1,9 +1,10 @@
 # Dancer2 Support for PerlOnJava
 
-## Status: Investigation Complete -- Installer Bug Identified
+## Status: Phase 2 Complete -- Dancer2 Installed, 2 Blockers Identified
 
 - **Module version**: Dancer2 2.1.0 (CROMEDOME/Dancer2-2.1.0.tar.gz)
 - **Date started**: 2026-04-09
+- **Last updated**: 2026-04-10
 - **Test command**: `./jcpan -t Dancer2`
 - **Build system**: MakeMaker (129 files install successfully)
 
@@ -62,13 +63,13 @@ resolve the entire dependency chain automatically.
 
 ## Issues Found
 
-### Issue 0: MYMETA.yml format bug prevents CPAN.pm dependency auto-install (PRIMARY BLOCKER)
+### Issue 0: MYMETA.yml format bug prevents CPAN.pm dependency auto-install (FIXED)
 
-- **Status**: OPEN -- root cause identified, fix designed
-- **Impact**: ALL `jcpan` installs of modules with dependencies are affected, not just Dancer2
-- **File**: `src/main/perl/lib/ExtUtils/MakeMaker.pm` lines 642-733 (`_create_mymeta`)
+- **Status**: FIXED (PR #479)
+- **Impact**: ALL `jcpan` installs of modules with dependencies were affected
+- **File**: `src/main/perl/lib/ExtUtils/MakeMaker.pm` `_create_mymeta` (line 642)
 
-**Root cause**: PerlOnJava's MakeMaker generates MYMETA.yml in **meta-spec v2** format
+**Root cause**: PerlOnJava's MakeMaker generated MYMETA.yml in **meta-spec v2** format
 with nested `prereqs.runtime.requires` structure. CPAN.pm's `prereq_pm()` method
 (in `CPAN/Distribution.pm` line 3462) has a 3-tier dependency detection cascade:
 
@@ -81,13 +82,22 @@ with nested `prereqs.runtime.requires` structure. CPAN.pm's `prereq_pm()` method
 3. **Tier 3**: Makefile `# PREREQ_PM` comment parsing — **never reached** because the
    `unless ($req || $breq)` guard on line 3556 sees `$breq = {}` as truthy.
 
-**Result**: CPAN.pm thinks the module has no dependencies, installs it without deps.
+**Fix (commit bd1ecc0e6)**: Switched `_create_mymeta` to generate **meta-spec v1.4** format
+with flat top-level `requires:` / `build_requires:` keys.
 
-**Fix**: Switch `_create_mymeta` to generate **meta-spec v1.4** format with flat
-top-level `requires:` / `build_requires:` keys. This works with both Tier 1 and Tier 2.
-Also escape single quotes in the abstract field to prevent YAML parse errors in Tier 1.
+### Issue 0b: MYMETA.yml YAML single-quote escaping bug (FIXED)
 
-See [Solution Plan Phase 1](#solution-plan) for the specific code change.
+- **Status**: FIXED (same PR #479, follow-up commit)
+- **Impact**: Modules with apostrophes in their ABSTRACT field (e.g., `"if it's not already set"`)
+  produced invalid YAML, causing `"not a HASH reference"` warnings from CPAN.pm
+- **File**: `src/main/perl/lib/ExtUtils/MakeMaker.pm` `_create_mymeta`
+
+**Root cause**: The code did `$abstract =~ s/'/\\'/g` producing `\'` — this is a
+Perl/shell escaping convention, not valid YAML. In YAML single-quoted strings, the
+only escape for a single quote is doubling it: `''`.
+
+**Additional fix**: Removed blank lines between YAML sections (caused by trailing newlines
+in interpolated strings) and used `{}` for empty mapping sections.
 
 ### Issue 1: Capture::Tiny test failures (576/4283 subtests failed)
 
@@ -118,48 +128,123 @@ See [Solution Plan Phase 1](#solution-plan) for the specific code change.
   - Expected `:encoding(UTF-8):encoding(UTF-8):crlf` but got `:encoding(UTF-8):crlf`
   - PerlOnJava deduplicates encoding layers
 
-### Issue 2: Transitive dependencies with possible XS components
+### Issue 2: Template Toolkit Makefile.PL fails to configure
 
-- **Status**: NEEDS INVESTIGATION (will be testable after Issue 0 is fixed)
-- **Impact**: Several transitive deps may have XS code without PP fallback
-- **Modules to check**: Params::Validate (has XS+PP), HTTP::Headers::Fast (may have XS), Ref::Util (XS with PP fallback)
+- **Status**: OPEN (non-blocking; Dancer2 falls back to Template::Tiny)
+- **Impact**: Template Toolkit (TT) engine unavailable; Dancer2 uses Template::Tiny instead
+- **Error**: `Global symbol "$DEBUG" requires explicit package name at ./lib/Template/Service.pm line 34`
+
+**Root cause**: Template Toolkit 3.102's `Makefile.PL` loads its own modules during
+configuration. `Template::Service` declares `$DEBUG` via a pattern that PerlOnJava
+doesn't handle correctly (likely `use constant DEBUG => ...` or `our $DEBUG` with
+`use vars`). The bundled Template Toolkit (installed at 99% pass rate) works fine;
+only the CPAN-downloaded v3.102 configuration step fails.
+
+**Workaround**: Dancer2 works with Template::Tiny as fallback. The bundled TT can also
+be used if pre-installed.
+
+### Issue 3: Type::Tiny compilation error blocks `use Dancer2`
+
+- **Status**: OPEN (BLOCKING — prevents `use Dancer2` from loading)
+- **Impact**: `use Dancer2` fails at runtime
+- **Error**: `Global symbol "$s" requires explicit package name at Type/Tiny.pm line 610`
+
+**Root cause**: Type::Tiny line 609 uses a `for` statement modifier with `my` in the
+list expression:
+```perl
+defined && s/[\x00-\x1F]//smg for ( my ( $s, @a ) = @_ );
+sprintf( '%s[%s]', $s, join q[,], ... @a );
+```
+In standard Perl, `my ($s, @a) = @_` in a `for` modifier list creates variables in
+the enclosing scope. PerlOnJava appears to scope `$s` only within the `for` statement,
+making it invisible on line 610. This is a **PerlOnJava compiler scoping bug**.
+
+**Fix needed**: PerlOnJava's `for` statement modifier needs to leak `my` declarations
+from its list expression into the enclosing scope, matching standard Perl behavior.
 
 ## Solution Plan
 
-### Phase 1: Fix MYMETA.yml format in MakeMaker (PRIMARY FIX)
+### Phase 1: Fix MYMETA.yml format in MakeMaker (COMPLETED)
 
-**File**: `src/main/perl/lib/ExtUtils/MakeMaker.pm` — replace `_create_mymeta` sub
+**File**: `src/main/perl/lib/ExtUtils/MakeMaker.pm` — `_create_mymeta` sub
 
-Switch from meta-spec v2 (nested `prereqs.runtime.requires`) to **meta-spec v1.4**
-(flat top-level `requires` / `build_requires`). This format works with all three
-tiers of CPAN.pm's `prereq_pm()` dependency parser.
+Switched from meta-spec v2 (nested `prereqs.runtime.requires`) to **meta-spec v1.4**
+(flat top-level `requires` / `build_requires`). Also fixed YAML single-quote escaping
+(`''` instead of `\'`) and removed blank lines between sections.
 
-Changes needed:
-- [ ] Replace nested `prereqs:` block with flat `requires:` and `build_requires:` keys
-- [ ] Change `meta-spec: version: '2'` to `version: '1.4'`
-- [ ] Merge `TEST_REQUIRES` into `build_requires` (v1.4 has no separate test phase)
-- [ ] Escape single quotes in `abstract` field for YAML safety
-- [ ] Use hyphenated dist name (`Dancer2` → `Dancer-2`) in `name:` field
-- [ ] Include version number in `generated_by` (CPAN.pm filters old EU::MM versions)
-- [ ] Add `configure_requires` with `ExtUtils::MakeMaker: '0'`
+- [x] Replace nested `prereqs:` block with flat `requires:` and `build_requires:` keys
+- [x] Change `meta-spec: version: '2'` to `version: '1.4'`
+- [x] Merge `TEST_REQUIRES` into `build_requires` (v1.4 has no separate test phase)
+- [x] Fix single-quote escaping (`s/'/''/g` not `s/'/\\'/g`) for YAML safety
+- [x] Use hyphenated dist name (`Dancer2` → `Dancer-2`) in `name:` field
+- [x] Include version number in `generated_by` (CPAN.pm filters old EU::MM versions)
+- [x] Add `configure_requires` with `ExtUtils::MakeMaker: '0'`
+- [x] Remove blank lines between YAML sections; use `{}` for empty mappings
+- [x] Run `make` — all unit tests pass
+- [x] Verified YAML parses correctly with both CPAN::Meta::YAML and YAML modules
 
-Verify fix:
-- [ ] Run `./jcpan -t Some::Simple::Module` and confirm CPAN.pm resolves deps
-- [ ] Check generated MYMETA.yml has top-level `requires:` keys
-- [ ] Run `make` to confirm PerlOnJava unit tests still pass
+### Phase 2: Install Dancer2 via notest (COMPLETED)
 
-### Phase 2: Re-run `./jcpan -t Dancer2` after fix
+Ran `CPAN::Shell->notest("install", "Dancer2")` to install Dancer2 with all
+dependencies, skipping tests for faster iteration.
 
-- [ ] Run `./jcpan -t Dancer2` and let CPAN.pm auto-resolve the full dependency chain
-- [ ] Document which dependencies install successfully
-- [ ] Document any dependencies that fail (XS issues, new blockers, etc.)
-- [ ] Record Dancer2 test results with pass/fail counts per test file
+**Successfully installed modules** (all via notest):
 
-### Phase 3: Triage and fix Dancer2 test failures
+| Module | Version | Status |
+|--------|---------|--------|
+| Dancer2 | 2.1.0 | OK (129 files) |
+| CLI::Osprey | - | OK (via Module::Build) |
+| Config::Any | 0.33 | OK (8 files) |
+| Data::Censor | 0.04 | OK |
+| File::Share | 0.27 | OK |
+| File::Which | 1.27 | OK |
+| HTTP::Headers::Fast | - | OK (via Module::Build) |
+| Import::Into | 1.002005 | OK |
+| JSON::MaybeXS | 1.004008 | OK |
+| Plack | 1.0051 | OK (73 files) |
+| Plack::Middleware::FixMissingBodyInRedirect | 0.12 | OK |
+| Plack::Middleware::RemoveRedundantBody | 0.09 | OK |
+| Ref::Util | 0.204 | OK |
+| Template::Tiny | 1.16 | OK |
+| Module::Build | - | OK |
+| Getopt::Long::Descriptive | 0.117 | OK |
+| Sub::Exporter | 0.991 | OK |
+| Data::OptList | 0.114 | OK |
+| Params::Util | 1.102 | OK |
+| Sub::Install | 0.929 | OK |
+| Sub::Uplevel | 0.2800 | OK |
+| Test::Exception | 0.43 | OK |
+| Test::TCP | 2.22 | OK |
+| Test::SharedFork | 0.35 | OK |
+| Test::MockTime | 0.17 | OK |
+| Test::Time | 0.092 | OK |
+| Test::Lib | 0.003 | OK |
+| Test::EOL | 2.02 | OK |
+| Apache::LogFormat::Compiler | 0.36 | OK |
+| Cookie::Baker | 0.12 | OK |
+| Devel::StackTrace::AsHTML | 0.15 | OK |
+| Filesys::Notify::Simple | 0.14 | OK |
+| HTTP::Entity::Parser | 0.25 | OK |
+| HTTP::MultiPartParser | 0.02 | OK |
+| Stream::Buffered | 0.03 | OK |
+| WWW::Form::UrlEncoded | 0.26 | OK |
+| POSIX::strftime::Compiler | 0.46 | OK |
+| Readonly | - | OK |
 
-- [ ] Categorize failures: (a) Dancer2 issues, (b) PerlOnJava issues, (c) acceptable gaps
-- [ ] Address blocking PerlOnJava issues (prioritize by how many tests they unlock)
-- [ ] Re-run tests and update this document
+**Failed to install**:
+
+| Module | Error | Impact |
+|--------|-------|--------|
+| Template (Toolkit) | `$DEBUG` undeclared in Service.pm during Makefile.PL | Non-blocking (Template::Tiny works) |
+
+**Runtime blocker**: `use Dancer2` fails with Type::Tiny scoping bug (Issue 3)
+
+### Phase 3: Fix Type::Tiny scoping bug (NEXT)
+
+- [ ] Reproduce the `for` statement modifier `my` scoping issue with a minimal test
+- [ ] Fix PerlOnJava's compiler to leak `my` declarations from `for` list into enclosing scope
+- [ ] Verify `use Dancer2` loads successfully
+- [ ] Run Dancer2 test suite and document results
 
 ### Phase 4 (optional): Fix Capture::Tiny test issues
 
@@ -239,7 +324,7 @@ Dancer2
 
 ## Progress Tracking
 
-### Current Status: Phase 1 (Fix MakeMaker MYMETA.yml)
+### Current Status: Phase 3 (Fix Type::Tiny scoping bug to unblock `use Dancer2`)
 
 ### Completed Phases
 - [x] Investigation (2026-04-09)
@@ -250,7 +335,19 @@ Dancer2
     fallback dependency reader — dependencies silently ignored
   - File: `src/main/perl/lib/ExtUtils/MakeMaker.pm` `_create_mymeta` (line 642)
 
+- [x] Phase 1: Fix MakeMaker MYMETA.yml (2026-04-09, PR #479)
+  - Switched to meta-spec v1.4 format (commit bd1ecc0e6)
+  - Fixed YAML single-quote escaping: `''` not `\'` (2026-04-10)
+  - Removed blank lines between sections; `{}` for empty mappings (2026-04-10)
+  - All unit tests pass
+
+- [x] Phase 2: Install Dancer2 (2026-04-10)
+  - Used `CPAN::Shell->notest("install", "Dancer2")`
+  - 38 modules installed successfully (all deps auto-resolved)
+  - Only Template Toolkit failed (non-blocking)
+  - **Blocker found**: `use Dancer2` fails due to Type::Tiny scoping bug
+
 ### Next Steps
-1. Fix `_create_mymeta` to use meta-spec v1.4 format
-2. Re-run `./jcpan -t Dancer2` — dependency chain should auto-resolve
-3. Document and triage Dancer2 test results
+1. Fix PerlOnJava `for` statement modifier `my` scoping (Issue 3)
+2. Verify `use Dancer2` loads
+3. Run Dancer2 test suite and document pass/fail results
