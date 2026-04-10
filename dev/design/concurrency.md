@@ -897,7 +897,7 @@ comparable to Perl 5 interpreter clones.
 
 ## Progress Tracking
 
-### Current Status: Phase 0 complete, local save/restore fixed (2026-04-10)
+### Current Status: Phase 0 complete, full runtime isolation achieved (2026-04-10)
 
 All mutable runtime state has been migrated from static fields into `PerlRuntime`
 instance fields with ThreadLocal-based access. Multiple independent Perl interpreters
@@ -981,11 +981,8 @@ parsing/emitting, while allowing concurrent execution of compiled code.
   initialization, compilation (under COMPILE_LOCK), and execution (no lock)
 - INIT/CHECK/UNITCHECK/END blocks execute correctly for each interpreter
 - Successfully tested with 126 concurrent interpreters running unit tests
-- 118/126 tests pass; remaining 8 failures are unrelated to runtime state isolation:
-  - 4 tie tests: pre-existing `DESTROY` TODO (not implemented)
-  - 2 I/O tests: shared temp file positions (io_read.t, io_seek.t)
-  - 1 directory test: shared JVM-global CWD (directory.t)
-  - 1 glob test: shared CWD + temp file interference (glob.t)
+- **122/126 tests pass**; remaining 4 failures are pre-existing `DESTROY` TODO:
+  - `tie_array.t`, `tie_handle.t`, `tie_hash.t`, `tie_scalar.t` — object destructors not implemented
 - Run with: `./dev/sandbox/run_multiplicity_demo.sh`
 
 ### Local Save/Restore Stack Fix (2026-04-10)
@@ -1166,41 +1163,61 @@ Releasing the lock around BEGIN blocks is only viable after migrating parser/emi
 state from shared statics to per-compilation-context (which would eliminate the
 lock entirely).
 
+### Per-Runtime CWD Isolation (2026-04-10)
+
+**Problem:** `chdir()` called `System.setProperty("user.dir", ...)` which is JVM-global.
+When multiple interpreters called `chdir()` concurrently, they overwrote each other's
+working directory. This caused `directory.t` and `glob.t` to fail under multiplicity.
+
+**Fix (commit c30eeb487):** Added per-runtime `String cwd` field to `PerlRuntime`,
+initialized from `System.getProperty("user.dir")` at construction time.
+
+- `PerlRuntime.cwd` — per-runtime CWD field
+- `PerlRuntime.getCwd()` — static accessor with fallback to `System.getProperty("user.dir")`
+- `Directory.chdir()` — updates `PerlRuntime.current().cwd` instead of `System.setProperty()`
+- `RuntimeIO.resolvePath()` — resolves relative paths against `PerlRuntime.getCwd()`
+- Updated all 21 `System.getProperty("user.dir")` call sites across 12 files:
+  `SystemOperator.java`, `FileSpec.java`, `POSIX.java`, `Internals.java`,
+  `IPCOpen3.java`, `XMLParserExpat.java`, `ScalarGlobOperator.java`, `DirectoryIO.java`,
+  `PipeInputChannel.java`, `PipeOutputChannel.java`, `Directory.java`, `RuntimeIO.java`
+- `ArgumentParser.java` kept as-is (sets initial `user.dir` before runtime creation for `-C` flag)
+
+**Impact:** `directory.t` (9/9) and `glob.t` (15/15) now pass under concurrent interpreters.
+
+### Per-Runtime PID and Pipe Thread Fix (2026-04-10)
+
+**Problem 1 — Shared `$$`:** All interpreters shared the same JVM PID via
+`ProcessHandle.current().pid()`. Tests that use `$$` in temp filenames
+(`io_read.t`, `io_seek.t`, `io_layers.t`) produced identical filenames across
+concurrent interpreters, causing file collisions and data races.
+
+**Problem 2 — Unbound pipe threads:** `PipeInputChannel` and `PipeOutputChannel`
+spawn background daemon threads for stderr/stdout consumption. These threads had
+no `PerlRuntime` bound via `ThreadLocal`, so `GlobalVariable.getGlobalIO("main::STDERR")`
+calls threw `IllegalStateException` and fell back to `System.out`/`System.err`,
+bypassing per-runtime STDOUT/STDERR redirection. Under concurrent multiplicity testing,
+this caused `io_pipe.t` failures.
+
+**Fix (commit 0179c888e):**
+
+1. **Per-runtime unique PID:** Added `AtomicLong PID_COUNTER` to `PerlRuntime`, starting
+   at the real JVM PID. Each runtime gets `PID_COUNTER.getAndIncrement()` — first runtime
+   gets the real PID (backward compatible), subsequent runtimes get unique incrementing values.
+   `GlobalContext.initializeGlobals()` sets `$$` from `PerlRuntime.current().pid`.
+
+2. **Pipe thread runtime binding:** Both `PipeInputChannel.setupProcess()` and
+   `PipeOutputChannel.setupProcess()` now capture `PerlRuntime.currentOrNull()` before
+   spawning background threads, and call `PerlRuntime.setCurrent(parentRuntime)` inside
+   the thread lambda. This ensures pipe stderr/stdout consumer threads can access the
+   correct per-runtime IO handles.
+
+**Impact:** Fixed 5 previously-failing tests: `io_read.t`, `io_seek.t`, `io_pipe.t`,
+`io_layers.t`, `digest.t`. Multiplicity stress test improved from 117/126 to **122/126**.
+
 ### Next Steps
 
-1. **Per-runtime CWD** — `chdir()` currently calls `System.setProperty("user.dir", ...)`
-   which is JVM-global. All path resolution goes through `RuntimeIO.resolvePath()` which
-   reads `System.getProperty("user.dir")`. When multiple interpreters call `chdir()`
-   concurrently, they overwrite each other's working directory.
-
-   **Fix:** Add a per-runtime `String cwd` field to `PerlRuntime`, initialized from
-   `System.getProperty("user.dir")` at runtime creation. Change `Directory.chdir()` to
-   update `PerlRuntime.current().cwd` instead of `System.setProperty()`. Change
-   `RuntimeIO.resolvePath()` to read from `PerlRuntime.current().cwd`. This isolates
-   each interpreter's working directory without affecting the JVM-global property.
-
-   Affected files: `Directory.java` (chdir), `RuntimeIO.java` (resolvePath/resolveFile),
-   `PerlRuntime.java` (new field), and any other code reading `user.dir` for CWD
-   (`FileSpec.java`, `Internals.java`, `SystemOperator.java`, `ScalarGlobOperator.java`,
-   `ArgumentParser.java`, etc.).
-
-2. **Per-runtime file positions (seek/read)** — When multiple interpreters open the same
-   file path, they may share underlying OS file descriptors or interfere via the file
-   system. The `io_seek.t` and `io_read.t` failures occur because concurrent interpreters
-   share temp files and their file positions interleave.
-
-   **Fix (two parts):**
-   - **Temp file isolation:** Tests that create temp files should use unique file names
-     per interpreter (e.g., include thread ID or runtime ID in the temp path). This is
-     mostly a test-level concern, not a runtime bug.
-   - **File position tracking (if needed):** If true per-runtime file position isolation is
-     required (e.g., for shared read-only files), `RuntimeIO` could maintain a per-runtime
-     logical position and use `RandomAccessFile` with explicit `seek()` before each read,
-     rather than relying on the OS-level sequential position. However, this adds complexity
-     and may not be needed if temp files are properly isolated.
-
-3. **Phase 6:** Implement `threads` module (requires runtime cloning)
-4. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
+1. **Phase 6:** Implement `threads` module (requires runtime cloning)
+2. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
