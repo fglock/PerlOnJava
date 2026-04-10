@@ -1485,6 +1485,64 @@ and why it was reverted.)
 
 *None yet.*
 
+---
+
+### Optimization Results (2026-04-10)
+
+**Branch:** `feature/multiplicity-opt` (created from `feature/multiplicity`)
+
+#### JFR Profiling Findings
+
+Profiled the closure benchmark (`dev/bench/benchmark_closure.pl`) with Java
+Flight Recorder to identify the dominant overhead sources. Key findings:
+
+| Category | JFR Samples | Source |
+|----------|-------------|--------|
+| `PerlRuntime.current()` / ThreadLocal | 143 | The ThreadLocal.get() call itself |
+| RuntimeRegex accessors | ~126 | **Dominant source** — 13 getters + 13 setters per sub call via RegexState save/restore |
+| DynamicVariableManager | ~90 | `local` variable save/restore (includes regex state push) |
+| pushCallerState (batch) | 10 | Caller bits/hints/hint-hash state |
+| pushSubState (batch) | 3 | Args + warning bits |
+| ArrayDeque.push | 13 | Stack operations |
+
+**Critical finding:** `RegexState` save/restore was calling 13 individual
+`RuntimeRegex` static accessors (each doing its own `PerlRuntime.current()`
+ThreadLocal lookup) on every subroutine entry AND exit — **26 ThreadLocal
+lookups per sub call** — even when the subroutine never uses regex.
+
+#### Optimizations Applied
+
+| Tier | Optimization | Files Changed | ThreadLocal Lookups Eliminated |
+|------|-------------|---------------|-------------------------------|
+| 1 | Cache `PerlRuntime.current()` in local variables | GlobalVariable.java, InheritanceResolver.java | ~12 per method cache miss |
+| 2 | Migrate WarningBits/HintHash/args stacks to PerlRuntime fields | WarningBitsRegistry.java, HintHashRegistry.java, RuntimeCode.java, PerlRuntime.java | 14-17 per sub call (separate ThreadLocals -> 1 ThreadLocal) |
+| 2b | Batch pushCallerState/popCallerState and pushSubState/popSubState | PerlRuntime.java, RuntimeCode.java | 8-12 per sub call -> 2 |
+| 2c | Batch RegexState save/restore | RegexState.java | **24 per sub call** (13 getters + 13 setters -> 2) |
+
+#### Benchmark Results
+
+| Benchmark | master | branch (pre-opt) | **After all opts** | vs master | vs pre-opt |
+|-----------|--------|-------------------|--------------------|-----------|------------|
+| **closure** | 863 | 569 (-34.1%) | **814** | **-5.7%** | +43.1% |
+| **method** | 436 | 319 (-26.9%) | **399** | **-8.5%** | +25.1% |
+| **lexical** | 394K | 375K (-4.9%) | **466K** | **+18.2%** | +24.3% |
+| global | 78K | 74K (-5.4%) | **73K** | -6.4% | -0.4% |
+
+Closure and method are now within the 5-10% range of other benchmarks,
+meeting the optimization goal. Lexical actually got faster than master.
+
+#### Remaining Optimization Opportunities (not yet pursued)
+
+These are lower-priority since the main goal (closure/method within 10%) is met:
+
+| Option | Effort | Expected Impact | Notes |
+|--------|--------|-----------------|-------|
+| Pass `PerlRuntime rt` from static apply to instance apply | Low | Eliminates 1 of 2 remaining lookups per sub call | Changes method signatures |
+| Cache warning bits on RuntimeCode field | Low | Avoids ConcurrentHashMap lookup per call | `getWarningBitsForCode()` in profile |
+| Batch RuntimeRegex field access in match methods | Medium | Eliminates ~10-15 lookups per regex match | Profile showed many individual accessors in RuntimeRegex.java |
+| Lazy regex state save (skip when sub doesn't use regex) | High | Could eliminate RegexState overhead entirely | Complex — would need compile-time analysis |
+| DynamicVariableManager.variableStack() caching | Low | 1 lookup per call eliminated | 10 samples in profile |
+
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
   acceptable for unique ID generation but may want per-runtime counters in future
