@@ -1283,9 +1283,47 @@ cache-miss path is being exercised more due to per-runtime cache isolation
 (matching the 5-7% range of other benchmarks). The general 5-7% slowdown
 from ThreadLocal routing is acceptable and expected.
 
+**Git workflow:**
+
+```
+feature/multiplicity          (this branch — known good, all tests pass)
+  └── feature/multiplicity-opt  (create this — do optimization work here)
+```
+
+1. Fetch and check out this branch:
+   ```bash
+   git fetch origin feature/multiplicity
+   git checkout feature/multiplicity
+   ```
+2. Create a new branch for optimization work:
+   ```bash
+   git checkout -b feature/multiplicity-opt
+   ```
+3. Do the optimization work on `feature/multiplicity-opt` (see tiers below).
+   Commit after each step so progress is preserved.
+4. **If the optimization succeeds** (target benchmarks within 10% of master):
+   merge back into `feature/multiplicity` and push:
+   ```bash
+   git checkout feature/multiplicity
+   git merge feature/multiplicity-opt
+   git push origin feature/multiplicity
+   ```
+5. **If the optimization fails** (no measurable gain, or introduces regressions):
+   go back to `feature/multiplicity`, document the failure in this section
+   (what was tried, what the benchmark numbers were, why it did not work),
+   and delete the branch:
+   ```bash
+   git checkout feature/multiplicity
+   # Add a "Failed Attempts" subsection below with findings
+   git commit -am "docs: document failed optimization attempt"
+   git branch -D feature/multiplicity-opt
+   ```
+   This ensures the next engineer knows what was already tried and can
+   avoid repeating the same work.
+
 **Methodology for each optimization step:**
 
-1. Create a commit on the feature branch with the optimization
+1. Create a commit on `feature/multiplicity-opt` with the optimization
 2. Run `make clean ; make` to verify no test regressions
 3. Run the relevant benchmark(s) 3 times, take the median:
    ```bash
@@ -1435,6 +1473,16 @@ If hit rate is low, investigate why — possible causes:
 - `callsiteId` collisions across runtimes (IDs are global AtomicIntegers)
 - Cache size too small for the workload
 - BlessId instability across runtime initialization
+
+---
+
+**Failed Optimization Attempts**
+
+(Document failed attempts here so future engineers know what was already tried.
+For each attempt, record: what was changed, benchmark numbers before/after,
+and why it was reverted.)
+
+*None yet.*
 
 ### Open Questions
 - `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
