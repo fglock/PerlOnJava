@@ -53,7 +53,7 @@ This document tracks regex preprocessing issues discovered while running `re/pat
 
 | Test | Before fixes | After fixes | Remaining failures |
 |------|-------------|-------------|-------------------|
-| `re/pat.t` | 428/1298 | **533**/1298 (ran 632) | 99 fail + 666 not reached |
+| `re/pat.t` | 428/1298 | **1076**/1298 (all run) | 222 fail |
 | `re/pat_advanced.t` | 63/1298 | **731**/838 | 107 fail |
 | `re/pat_rt_report.t` | 2397/2515 | **2431**/2515 (ran 2508) | 77 fail + 7 not reached |
 | `re/reg_eval_scope.t` | 6/49 | 7/49 | 42 fail |
@@ -63,7 +63,7 @@ This document tracks regex preprocessing issues discovered while running `re/pat
 
 | Test | Crash point | Cause | Tests blocked |
 |------|------------|-------|---------------|
-| pat.t | Line 1247 (test 632) | `\p{isAlpha}` — POSIX-style Unicode property alias not supported | 666 tests |
+| pat.t | **No crash** — all 1298 tests now run | N/A | 0 |
 | pat_advanced.t | Line 1122 (test 838) | `(?1)` — numbered group recursion not supported | 0 (near end) |
 | pat_rt_report.t | Line 1158 (test 2508) | `(?1)` — numbered group recursion not supported | 7 tests |
 
@@ -203,7 +203,7 @@ Empty alternatives in patterns like `/(|a)/` or the "0 match in alternation" tes
 ### Priority Recommendations
 
 **Quick wins (Low difficulty, high impact):**
-1. **`\p{isAlpha}` aliases** — unblocks 666 pat.t tests (category N)
+1. ~~**`\p{isAlpha}` aliases** — unblocks 666 pat.t tests (category N)~~ **DONE** — pat.t now runs all 1298 tests
 2. **Useless `(?c)`/`(?g)`/`(?o)` warnings** — fixes 13 pat_advanced.t tests (category I)
 3. **POSIX class error message** — fix message format (category P)
 4. **REG_INFTY error** — add quantifier limit check (category P)
@@ -222,7 +222,7 @@ Empty alternatives in patterns like `/(|a)/` or the "0 match in alternation" tes
 
 ## Progress Tracking
 
-### Current Status: All preprocessing fixes done; remaining issues catalogued (2026-04-10)
+### Current Status: Category N implemented; pat.t fully unblocked (2026-04-10)
 
 ### Completed
 - [x] Fix 1: handleQuantifier brace consumption (2026-04-10)
@@ -230,8 +230,14 @@ Empty alternatives in patterns like `/(|a)/` or the "0 match in alternation" tes
 - [x] Fix 3: Bare \xNN with non-hex chars (2026-04-10)
 - [x] Fix 4: NPE on failed regex with JPERL_UNIMPLEMENTED=warn (2026-04-10)
 - [x] Failure analysis and categorization (2026-04-10)
+- [x] Fix 5: \p{isAlpha} case-insensitive Is prefix, add Space/Alnum/Punct aliases (2026-04-10)
+- [x] Fix 6: \p{Property=Value} syntax (2026-04-10)
+- [x] Fix 7: Named capture groups with underscores — U95 encoding (2026-04-10)
 
 ### Files Modified
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java`
 - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessorHelper.java`
 - `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java`
+- `src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java`
+- `src/main/java/org/perlonjava/runtime/regex/CaptureNameEncoder.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/HashSpecialVariable.java`
