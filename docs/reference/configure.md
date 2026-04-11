@@ -5,12 +5,17 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 ## Synopsis
 
 ```bash
-./Configure.pl [options]
-./Configure.pl -D key=value
-./Configure.pl --search keyword
-./Configure.pl --direct group:artifact:version
-./Configure.pl --upgrade
+./jperl Configure.pl [options]
+./jperl Configure.pl -D key=value
+./jperl Configure.pl --search keyword
+./jperl Configure.pl --direct group:artifact:version
+./jperl Configure.pl --upgrade
 ```
+
+> **Tip:** `Configure.pl` can be run with either `./jperl` or `perl`. Using `./jperl` is
+> recommended because it includes built-in HTTPS support, while system Perl may
+> require additional modules (`IO::Socket::SSL`, `Net::SSLeay`) for the Maven
+> Central search to work.
 
 ## Options
 
@@ -20,7 +25,7 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 - Show help message and usage instructions
 
 ```bash
-./Configure.pl --help
+./jperl Configure.pl --help
 ```
 
 ### Configuration Management
@@ -32,9 +37,9 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 - Boolean/numeric values are used as-is
 
 ```bash
-./Configure.pl -D perlVersion=v5.40.0
-./Configure.pl -D jarVersion=3.0.1
-./Configure.pl -D strict_mode=true -D enable_optimizations=false
+./jperl Configure.pl -D perlVersion=v5.40.0
+./jperl Configure.pl -D jarVersion=3.0.1
+./jperl Configure.pl -D strict_mode=true -D enable_optimizations=false
 ```
 
 **Special behavior for `jarVersion`:**
@@ -43,7 +48,7 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 
 **View current configuration:**
 ```bash
-./Configure.pl
+./jperl Configure.pl
 ```
 
 ### Dependency Management
@@ -55,15 +60,15 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 
 ```bash
 # Search by keyword
-./Configure.pl --search h2
-./Configure.pl --search mysql
+./jperl Configure.pl --search mysql
+./jperl Configure.pl --search postgresql
 
 # Search by driver class name
-./Configure.pl --search org.h2.Driver
-./Configure.pl --search com.mysql.cj.jdbc.Driver
+./jperl Configure.pl --search com.mysql.cj.jdbc.Driver
+./jperl Configure.pl --search org.postgresql.Driver
 
 # Search by group:artifact
-./Configure.pl --search org.postgresql:postgresql
+./jperl Configure.pl --search org.postgresql:postgresql
 ```
 
 **Search behavior:**
@@ -79,9 +84,8 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 - Format must be: `group:artifact:version`
 
 ```bash
-./Configure.pl --direct com.h2database:h2:2.2.224
-./Configure.pl --direct org.postgresql:postgresql:42.7.1
-./Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
+./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
+./jperl Configure.pl --direct org.postgresql:postgresql:42.7.1
 ```
 
 **`--verbose`**
@@ -91,7 +95,7 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 - Useful for troubleshooting search issues
 
 ```bash
-./Configure.pl --search h2 --verbose
+./jperl Configure.pl --search mysql --verbose
 ```
 
 ### Dependency Upgrades
@@ -103,7 +107,7 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 - Uses `./gradlew versionCatalogUpdate` for Gradle
 
 ```bash
-./Configure.pl --upgrade
+./jperl Configure.pl --upgrade
 ```
 
 **Requirements:**
@@ -118,12 +122,12 @@ The `Configure.pl` script manages configuration settings and dependencies for Pe
 
 1. Search for the driver:
 ```bash
-./Configure.pl --search mysql-connector-java
+./jperl Configure.pl --search mysql-connector-java
 ```
 
 2. Or use direct coordinates if you know them:
 ```bash
-./Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
+./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
 ```
 
 3. Rebuild the project to include the driver:
@@ -139,10 +143,10 @@ Instead of bundling drivers, you can load them at runtime:
 
 ```bash
 # Download driver manually
-wget https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar
+wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.2.0/mysql-connector-j-8.2.0.jar
 
 # Use with CLASSPATH
-CLASSPATH=/path/to/h2-2.2.224.jar ./jperl script.pl
+CLASSPATH=/path/to/mysql-connector-j-8.2.0.jar ./jperl script.pl
 ```
 
 ## How It Works
@@ -191,7 +195,7 @@ For `jarVersion` updates, also:
 ### View Current Configuration
 
 ```bash
-./Configure.pl
+./jperl Configure.pl
 ```
 
 Output:
@@ -206,14 +210,14 @@ strict_mode = true
 ### Update Configuration
 
 ```bash
-./Configure.pl -D perlVersion=v5.42.0 -D jarVersion=3.1.0
+./jperl Configure.pl -D perlVersion=v5.42.0 -D jarVersion=3.1.0
 ```
 
 ### Search and Add JDBC Driver
 
 ```bash
 # Search for PostgreSQL driver
-./Configure.pl --search postgresql
+./jperl Configure.pl --search postgresql
 
 # Output shows:
 # Multiple matches found:
@@ -233,8 +237,8 @@ make
 ### Add Driver with Direct Coordinates
 
 ```bash
-# Add H2 database driver
-./Configure.pl --direct com.h2database:h2:2.2.224
+# Add MySQL database driver
+./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
 
 # Rebuild
 make
@@ -243,7 +247,7 @@ make
 ### Upgrade All Dependencies
 
 ```bash
-./Configure.pl --upgrade
+./jperl Configure.pl --upgrade
 ```
 
 Output:
@@ -261,11 +265,11 @@ Gradle dependencies updated successfully.
 
 ```bash
 # Option 1: Search and select
-./Configure.pl --search mysql
+./jperl Configure.pl --search mysql
 make
 
 # Option 2: Direct coordinates
-./Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
+./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
 make
 
 # Option 3: Manual CLASSPATH (no rebuild needed)
@@ -275,7 +279,7 @@ CLASSPATH=/path/to/mysql-connector.jar ./jperl script.pl
 ### Updating Project Version
 
 ```bash
-./Configure.pl -D jarVersion=4.0.0
+./jperl Configure.pl -D jarVersion=4.0.0
 # This updates Configuration.java and all references to perlonjava-*.jar
 ```
 
@@ -283,21 +287,21 @@ CLASSPATH=/path/to/mysql-connector.jar ./jperl script.pl
 
 ```bash
 # Search by database name
-./Configure.pl --search postgresql --verbose
+./jperl Configure.pl --search postgresql --verbose
 
 # Search by driver class
-./Configure.pl --search org.postgresql.Driver --verbose
+./jperl Configure.pl --search org.postgresql.Driver --verbose
 ```
 
 ## Troubleshooting
 
 ### Search Returns No Results
 
-**Problem**: `./Configure.pl --search keyword` finds nothing
+**Problem**: `./jperl Configure.pl --search keyword` finds nothing
 
 **Solutions**:
 - Try broader keywords: `mysql` instead of `mysql-connector-java-8.2.0`
-- Search by driver class: `./Configure.pl --search com.mysql.cj.jdbc.Driver`
+- Search by driver class: `./jperl Configure.pl --search com.mysql.cj.jdbc.Driver`
 - Use `--verbose` to see search URL and results
 - Use `--direct` if you know the exact coordinates
 
@@ -307,7 +311,7 @@ CLASSPATH=/path/to/mysql-connector.jar ./jperl script.pl
 
 **Solution**: You must rebuild after adding dependencies:
 ```bash
-./Configure.pl --direct group:artifact:version
+./jperl Configure.pl --direct group:artifact:version
 make  # This downloads and bundles the dependency
 ```
 

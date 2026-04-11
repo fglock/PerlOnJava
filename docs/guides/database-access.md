@@ -4,16 +4,18 @@ This guide explains how to use databases with PerlOnJava through the DBI module 
 
 ## Quick Start
 
+SQLite is bundled with PerlOnJava — no additional installation needed:
+
 ```perl
 use DBI;
 
-my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
-$dbh->do("CREATE TABLE users (id INT, name VARCHAR(50))");
+my $dbh = DBI->connect("dbi:SQLite:dbname=:memory:", "", "");
+$dbh->do("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
 ```
 
 ## Adding JDBC Drivers
 
-JDBC Database drivers can be added in two ways:
+SQLite works out of the box. For other databases, JDBC drivers can be added in two ways:
 
 1. Using Configure.pl:
     - The Configure script updates the build configuration to install the JDBC database drivers in the PerlOnJava jar file
@@ -22,8 +24,8 @@ JDBC Database drivers can be added in two ways:
 
 Examples:
 ```bash
-./Configure.pl --search mysql-connector-java
-./Configure.pl --search aws-mysql-jdbc
+./jperl Configure.pl --search mysql-connector-java
+./jperl Configure.pl --search aws-mysql-jdbc
 ```
 
 Then build with the drivers included:
@@ -39,29 +41,33 @@ gradle clean build
 
    Unix/Linux/Mac:
     ```bash
-    CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
+    CLASSPATH="jdbc-drivers/mysql-connector-j-8.2.0.jar" ./jperl myscript.pl
     ```
 
    Windows:
     ```bash
-    set CLASSPATH=jdbc-drivers\h2-2.2.224.jar
+    set CLASSPATH=jdbc-drivers\mysql-connector-j-8.2.0.jar
     jperl myscript.pl
     ```
    
     Calling java directly with the classpath is also possible:
     ```bash
-    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/h2-2.2.224.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main myscript.pl
+    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/mysql-connector-j-8.2.0.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main myscript.pl
     ```
 
 ## Database Connection Examples
 
-### H2 Database
+### SQLite (bundled)
 ```perl
-# In-memory database
-my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
+# In-memory database (Perl DBI DSN format)
+my $dbh = DBI->connect("dbi:SQLite:dbname=:memory:", "", "");
 
 # File-based database
-my $dbh = DBI->connect("jdbc:h2:file:/path/to/database");
+my $dbh = DBI->connect("dbi:SQLite:dbname=/path/to/database.db", "", "");
+
+# JDBC URL format also works
+my $dbh = DBI->connect("jdbc:sqlite::memory:");
+my $dbh = DBI->connect("jdbc:sqlite:/path/to/database.db");
 ```
 
 ### MySQL
@@ -80,11 +86,6 @@ my $dbh = DBI->connect(
     "username",
     "password"
 );
-```
-
-### SQLite
-```perl
-my $dbh = DBI->connect("jdbc:sqlite:/path/to/database.db");
 ```
 
 ### BigQuery
