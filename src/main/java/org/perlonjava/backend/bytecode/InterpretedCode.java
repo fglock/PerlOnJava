@@ -314,7 +314,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.warningBitsString
         );
         copy.prototype = this.prototype;
-        copy.attributes = this.attributes;
+        copy.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
         copy.subName = this.subName;
         copy.packageName = this.packageName;
         // Preserve compiler-set fields that are not passed through the constructor

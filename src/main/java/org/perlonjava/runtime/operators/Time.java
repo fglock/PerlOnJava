@@ -249,12 +249,15 @@ public class Time {
         alarmTargetThread = Thread.currentThread();
 
         currentAlarmTask = alarmScheduler.schedule(() -> {
-            RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
-            if (sig.getDefinedBoolean()) {
-                // Queue the signal for processing in the target thread
-                PerlSignalQueue.enqueue("ALRM", sig);
-                // Interrupt the target thread to break out of blocking operations
-                alarmTargetThread.interrupt();
+            try {
+                RuntimeScalar sig = getGlobalHash("main::SIG").get("ALRM");
+                if (sig.getDefinedBoolean()) {
+                    // Queue the signal for processing in the target thread
+                    PerlSignalQueue.enqueue("ALRM", sig);
+                    // Interrupt the target thread to break out of blocking operations
+                    alarmTargetThread.interrupt();
+                }
+            } finally {
             }
         }, seconds, TimeUnit.SECONDS);
 

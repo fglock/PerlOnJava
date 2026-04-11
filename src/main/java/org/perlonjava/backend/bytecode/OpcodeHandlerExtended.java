@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.backend.jvm.JvmClosureTemplate;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -894,8 +895,8 @@ public class OpcodeHandlerExtended {
         int templateIdx = bytecode[pc++];
         int numCaptures = bytecode[pc++];
 
-        // Get the template InterpretedCode from constants
-        InterpretedCode template = (InterpretedCode) code.constants[templateIdx];
+        // Get the template from constants (can be InterpretedCode or JvmClosureTemplate)
+        Object template = code.constants[templateIdx];
 
         // Capture the current register values
         RuntimeBase[] capturedVars = new RuntimeBase[numCaptures];
@@ -904,35 +905,49 @@ public class OpcodeHandlerExtended {
             capturedVars[i] = registers[captureReg];
         }
 
-        // Create a new InterpretedCode with the captured variables
-        InterpretedCode closureCode = template.withCapturedVars(capturedVars);
+        if (template instanceof JvmClosureTemplate jvmTemplate) {
+            // JVM-compiled closure: instantiate the generated class with captured variables
+            RuntimeScalar codeRef = jvmTemplate.instantiate(capturedVars);
+            registers[rd] = codeRef;
 
-        // Track captureCount on captured RuntimeScalar variables.
-        // This mirrors what RuntimeCode.makeCodeObject() does for JVM-compiled closures.
-        // Without this, scopeExitCleanup() doesn't know the variable is still alive
-        // via this closure, and may prematurely clear weak references to its value.
-        java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
-        for (RuntimeBase captured : capturedVars) {
-            if (captured instanceof RuntimeScalar s) {
-                capturedScalars.add(s);
-                s.captureCount++;
+            // Dispatch MODIFY_CODE_ATTRIBUTES for JVM closures with non-builtin attributes
+            if (jvmTemplate.attributes != null && !jvmTemplate.attributes.isEmpty()) {
+                RuntimeCode jvmCode = (RuntimeCode) codeRef.value;
+                if (jvmCode.packageName != null) {
+                    Attributes.runtimeDispatchModifyCodeAttributes(jvmCode.packageName, codeRef, true);
+                }
             }
-        }
-        if (!capturedScalars.isEmpty()) {
-            closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
-            closureCode.refCount = 0;
-        }
+        } else {
+            // InterpretedCode closure: create a new copy with captured variables
+            InterpretedCode closureCode = ((InterpretedCode) template).withCapturedVars(capturedVars);
 
-        // Wrap in RuntimeScalar and set __SUB__ for self-reference
-        RuntimeScalar codeRef = new RuntimeScalar(closureCode);
-        closureCode.__SUB__ = codeRef;
-        registers[rd] = codeRef;
+            // Track captureCount on captured RuntimeScalar variables.
+            // This mirrors what RuntimeCode.makeCodeObject() does for JVM-compiled closures.
+            // Without this, scopeExitCleanup() doesn't know the variable is still alive
+            // via this closure, and may prematurely clear weak references to its value.
+            java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
+            for (RuntimeBase captured : capturedVars) {
+                if (captured instanceof RuntimeScalar s) {
+                    capturedScalars.add(s);
+                    s.captureCount++;
+                }
+            }
+            if (!capturedScalars.isEmpty()) {
+                closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+                closureCode.refCount = 0;
+            }
 
-        // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
-        // Pass isClosure=true since CREATE_CLOSURE always creates a closure
-        if (closureCode.attributes != null && !closureCode.attributes.isEmpty()
-                && closureCode.packageName != null) {
-            Attributes.runtimeDispatchModifyCodeAttributes(closureCode.packageName, codeRef, true);
+            // Wrap in RuntimeScalar and set __SUB__ for self-reference
+            RuntimeScalar codeRef = new RuntimeScalar(closureCode);
+            closureCode.__SUB__ = codeRef;
+            registers[rd] = codeRef;
+
+            // Dispatch MODIFY_CODE_ATTRIBUTES for anonymous subs with non-builtin attributes
+            // Pass isClosure=true since CREATE_CLOSURE always creates a closure
+            if (closureCode.attributes != null && !closureCode.attributes.isEmpty()
+                    && closureCode.packageName != null) {
+                Attributes.runtimeDispatchModifyCodeAttributes(closureCode.packageName, codeRef, true);
+            }
         }
         return pc;
     }
