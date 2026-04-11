@@ -37,31 +37,31 @@ public class ReferenceOperators {
             int newBlessId = NameNormalizer.getBlessId(str);
 
             if (referent.refCount >= 0) {
-                // Re-bless: update class, keep refCount
+                // Re-bless: update class, keep refCount.
+                // Always keep tracking — even classes without DESTROY need
+                // cascading cleanup of their hash/array elements when freed.
                 referent.setBlessId(newBlessId);
-                if (!DestroyDispatch.classHasDestroy(newBlessId, str)) {
-                    // New class has no DESTROY — stop tracking
-                    referent.refCount = -1;
-                }
             } else {
                 // First bless (or previously untracked)
                 boolean wasAlreadyBlessed = referent.blessId != 0;
                 referent.setBlessId(newBlessId);
-                if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
-                    if (wasAlreadyBlessed) {
-                        // Re-bless from untracked class: the scalar being blessed
-                        // already holds a reference that was never counted (because
-                        // tracking wasn't active at assignment time). Count it as 1.
-                        referent.refCount = 1;
-                        runtimeScalar.refCountOwned = true;
-                    } else {
-                        // First bless (e.g., inside new()): the RuntimeScalar is a
-                        // temporary that will be copied into a named variable via
-                        // setLarge(), which increments refCount. Start at 0.
-                        referent.refCount = 0;
-                    }
+                // Always activate tracking for blessed objects. Even without
+                // DESTROY, we need cascading cleanup of hash/array elements
+                // (e.g., Moo objects like BlockRunner that hold strong refs).
+                if (wasAlreadyBlessed) {
+                    // Re-bless from untracked class: the scalar being blessed
+                    // already holds a reference that was never counted (because
+                    // tracking wasn't active at assignment time). Count it as 1.
+                    referent.refCount = 1;
+                    runtimeScalar.refCountOwned = true;
+                } else {
+                    // First bless (e.g., inside new()): the RuntimeScalar is a
+                    // temporary that will be copied into a named variable via
+                    // setLarge(), which increments refCount. Start at 0.
+                    referent.refCount = 0;
                 }
-                // If no DESTROY, leave refCount = -1 (untracked)
+                // Activate the mortal mechanism
+                MortalList.active = true;
             }
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");

@@ -110,7 +110,18 @@ public class DestroyDispatch {
         }
 
         if (destroyMethod == null || destroyMethod.type != RuntimeScalarType.CODE) {
-            return; // No DESTROY and no AUTOLOAD found
+            // No DESTROY method, but still need to cascade cleanup into elements
+            // to decrement refCounts of any tracked references they hold.
+            // Without this, blessed objects without DESTROY (e.g., Moo objects like
+            // DBIx::Class::Storage::BlockRunner) leak their contained references.
+            if (referent instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeArray arr) {
+                MortalList.scopeExitCleanupArray(arr);
+                MortalList.flush();
+            }
+            return;
         }
 
         // If findMethodInHierarchy returned an AUTOLOAD sub (because no explicit DESTROY
