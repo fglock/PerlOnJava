@@ -1093,10 +1093,12 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Exit scope restores register state.
-        // Flush mortal list for non-subroutine blocks so DESTROY fires promptly
-        // at scope exit. Subroutine body blocks must NOT flush — the implicit
-        // return value may still be in a register and flushing could destroy it.
-        exitScope(!node.getBooleanAnnotation("blockIsSubroutine"));
+        // Flush mortal list for non-subroutine, non-do blocks so DESTROY fires
+        // promptly at scope exit. Subroutine body blocks and do-blocks must NOT
+        // flush — the implicit return value may still be in a register and
+        // flushing could destroy it before the caller captures it.
+        exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
+                && !node.getBooleanAnnotation("blockIsDoBlock"));
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);

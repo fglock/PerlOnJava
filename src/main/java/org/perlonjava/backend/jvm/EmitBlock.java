@@ -372,11 +372,15 @@ public class EmitBlock {
                     "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
 
-        // Flush mortal list for non-subroutine blocks. Subroutine body blocks must
-        // NOT flush here because the implicit return value may be on the JVM stack
-        // and flushing could destroy it before the caller captures it.
+        // Flush mortal list for non-subroutine, non-do blocks. Subroutine body
+        // blocks and do-blocks must NOT flush here because the implicit return value
+        // may be on the JVM stack and flushing could destroy it before the caller
+        // captures it. Example: $self->{cursor} ||= do { my $x = ...; create_obj() }
+        // — the do-block's scope exit would flush pending decrements from create_obj's
+        // scope exit, destroying the return value before ||= can store it.
         boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !isSubBody);
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !isSubBody && !isDoBlock);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }
