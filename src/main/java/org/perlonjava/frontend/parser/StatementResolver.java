@@ -1005,8 +1005,9 @@ public class StatementResolver {
     }
 
     /**
-     * Handle statement modifiers (if/unless) with my declarations.
+     * Handle statement modifiers (if/unless) with my/our/state declarations.
      * For "my $x = EXPR if COND", the variable must be declared even when condition is false.
+     * For "our $x = EXPR unless COND", the variable must be declared before evaluating COND.
      * Uses comma operator to declare variable in current scope: (my $x, COND && ($x = EXPR))
      * This avoids creating a new scope (which BlockNode would do).
      *
@@ -1039,11 +1040,12 @@ public class StatementResolver {
             }
         }
 
-        // Check if expression is an assignment with 'my' on the left side
+        // Check if expression is an assignment with my/our/state on the left side
         if (expression instanceof BinaryOperatorNode assignNode && assignNode.operator.equals("=")) {
             Node left = assignNode.left;
-            // Check if left side is a 'my' declaration
-            if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
+            // Check if left side is a 'my', 'our', or 'state' declaration
+            if (left instanceof OperatorNode myNode &&
+                    (myNode.operator.equals("my") || myNode.operator.equals("our") || myNode.operator.equals("state"))) {
                 // Transform: my $x = EXPR if COND
                 // Into: (my $x, COND && ($x = EXPR))
                 // The comma operator evaluates both in the current scope (no new scope created)
