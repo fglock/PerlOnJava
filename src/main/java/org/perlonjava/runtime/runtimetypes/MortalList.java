@@ -111,6 +111,29 @@ public class MortalList {
     }
 
     /**
+     * Scope-exit cleanup for a single JVM local variable of unknown type.
+     * Used by the JVM backend's eval exception handler to clean up all
+     * my-variables when die unwinds through eval, since the normal
+     * SCOPE_EXIT_CLEANUP bytecodes are skipped by Java exception handling.
+     * <p>
+     * Dispatches to the appropriate cleanup method based on runtime type.
+     * Safe to call with null, non-Perl types, or already-cleaned-up values.
+     *
+     * @param local the JVM local variable value (may be null or any type)
+     */
+    public static void evalExceptionScopeCleanup(Object local) {
+        if (local == null) return;
+        if (local instanceof RuntimeScalar rs) {
+            RuntimeScalar.scopeExitCleanup(rs);
+        } else if (local instanceof RuntimeHash rh) {
+            scopeExitCleanupHash(rh);
+        } else if (local instanceof RuntimeArray ra) {
+            scopeExitCleanupArray(ra);
+        }
+        // Other types (RuntimeList, Integer, etc.) are ignored - they don't need cleanup
+    }
+
+    /**
      * Recursively walk a RuntimeHash's values and defer refCount decrements
      * for any tracked blessed references found (including inside nested
      * arrays/hashes). Called at scope exit for {@code my %hash} variables.

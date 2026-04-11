@@ -5136,10 +5136,17 @@ public class BytecodeCompiler implements Visitor {
     private void visitEvalBlock(SubroutineNode node) {
         int resultReg = allocateRegister();
 
+        // Record the first register that will be allocated inside the eval body.
+        // Registers from firstBodyReg up to peakRegister will be cleaned up on
+        // exception to ensure DESTROY fires for blessed objects going out of scope.
+        int firstBodyReg = nextRegister;
+
         // Emit EVAL_TRY with placeholder for catch target (absolute address)
+        // and the first body register for exception cleanup
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
         int catchTargetPos = bytecode.size();
         emitInt(0); // Placeholder for absolute catch address (4 bytes)
+        emitReg(firstBodyReg); // First register allocated inside eval body
 
         // Track eval block nesting for "goto &sub from eval" detection
         evalBlockDepth++;

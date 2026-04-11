@@ -99,6 +99,15 @@ public class JavaClassInfo {
 
     public int[] spillSlots;
     public int spillTop;
+
+    /**
+     * JVM local variable indices of my-variables (scalar, hash, array) allocated
+     * inside the eval body. Used by the eval catch handler to emit scope-exit
+     * cleanup when die unwinds through eval. Populated during compilation by
+     * {@link EmitStatement#emitScopeExitNullStores} when recording is active.
+     */
+    public List<Integer> evalCleanupLocals;
+
     /**
      * A stack of loop labels for managing nested loops.
      */

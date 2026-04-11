@@ -102,6 +102,12 @@ public class BytecodeInterpreter {
         // so that `local` variables inside the eval block are properly unwound.
         java.util.ArrayDeque<Integer> evalLocalLevelStack = new java.util.ArrayDeque<>();
 
+        // Parallel stack tracking the first register allocated inside the eval body.
+        // When an exception is caught, registers from this index to the end of the
+        // register array are cleaned up (scope exit cleanup + mortal flush) so that
+        // DESTROY fires for blessed objects that went out of scope during die.
+        java.util.ArrayDeque<Integer> evalBaseRegStack = new java.util.ArrayDeque<>();
+
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
@@ -1546,14 +1552,19 @@ public class BytecodeInterpreter {
 
                             case Opcodes.EVAL_TRY -> {
                                 // Start of eval block with exception handling
-                                // Format: [EVAL_TRY] [catch_target_high] [catch_target_low]
-                                // catch_target is absolute bytecode address (4 bytes)
+                                // Format: [EVAL_TRY] [catch_target(4 bytes)] [firstBodyReg]
+                                // catch_target is absolute bytecode address
 
                                 int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
-                                pc += 1;  // Skip the 2 shorts we just read
+                                pc += 1;  // Skip the int we just read
+
+                                int firstBodyReg = bytecode[pc++];  // First register in eval body
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+
+                                // Save first body register for scope cleanup on exception
+                                evalBaseRegStack.push(firstBodyReg);
 
                                 // Save local level so we can restore local variables on eval exit
                                 evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
@@ -1575,6 +1586,11 @@ public class BytecodeInterpreter {
                                 // Pop the catch PC from eval stack (we didn't need it)
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
+                                }
+
+                                // Pop the base register (not needed on success path)
+                                if (!evalBaseRegStack.isEmpty()) {
+                                    evalBaseRegStack.pop();
                                 }
 
                                 // Restore local variables that were pushed inside the eval block
@@ -2145,6 +2161,33 @@ public class BytecodeInterpreter {
                     if (!evalCatchStack.isEmpty()) {
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
+
+                        // Scope exit cleanup for lexical variables allocated inside the eval body.
+                        // When die throws a PerlDieException, the SCOPE_EXIT_CLEANUP opcodes
+                        // between the throw site and the eval boundary are skipped. This loop
+                        // ensures DESTROY fires for blessed objects that went out of scope.
+                        if (!evalBaseRegStack.isEmpty()) {
+                            int baseReg = evalBaseRegStack.pop();
+                            boolean needsFlush = false;
+                            for (int i = baseReg; i < registers.length; i++) {
+                                RuntimeBase reg = registers[i];
+                                if (reg == null) continue;
+                                if (reg instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.scopeExitCleanup(rs);
+                                    needsFlush = true;
+                                } else if (reg instanceof RuntimeHash rh) {
+                                    MortalList.scopeExitCleanupHash(rh);
+                                    needsFlush = true;
+                                } else if (reg instanceof RuntimeArray ra) {
+                                    MortalList.scopeExitCleanupArray(ra);
+                                    needsFlush = true;
+                                }
+                                registers[i] = null;
+                            }
+                            if (needsFlush) {
+                                MortalList.flush();
+                            }
+                        }
 
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {

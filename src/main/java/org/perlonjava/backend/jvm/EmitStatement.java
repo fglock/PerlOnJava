@@ -93,6 +93,16 @@ public class EmitStatement {
         java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
         java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
 
+        // Record my-variable indices for eval exception cleanup.
+        // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
+        // we record all my-variable local indices so the catch handler can emit cleanup
+        // for variables whose normal SCOPE_EXIT_CLEANUP was skipped by die.
+        if (ctx.javaClassInfo.evalCleanupLocals != null) {
+            ctx.javaClassInfo.evalCleanupLocals.addAll(scalarIndices);
+            ctx.javaClassInfo.evalCleanupLocals.addAll(hashIndices);
+            ctx.javaClassInfo.evalCleanupLocals.addAll(arrayIndices);
+        }
+
         // Only emit flush when there are variables that need cleanup.
         // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
         // skip the flush entirely, eliminating a method call per loop iteration.

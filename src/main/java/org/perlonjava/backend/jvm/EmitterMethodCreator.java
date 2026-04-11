@@ -652,6 +652,10 @@ public class EmitterMethodCreator implements Opcodes {
             Label catchBlock = null;
             Label endCatch = null;
 
+            // Recorded my-variable local indices for eval exception cleanup.
+            // Populated during ast.accept(visitor) when useTryCatch is true.
+            java.util.List<Integer> evalCleanupLocals = null;
+
             if (useTryCatch) {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("useTryCatch");
 
@@ -687,7 +691,18 @@ public class EmitterMethodCreator implements Opcodes {
                         "setGlobalVariable",
                         "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
+                // Record the first user-code local variable index.
+                // Locals from this index onward are Perl my-variables and temporaries
+                // allocated during eval body compilation. These need scope-exit cleanup
+                // when die unwinds through the eval (exception handler).
+                // Enable recording of my-variable indices for eval exception cleanup.
+                ctx.javaClassInfo.evalCleanupLocals = new java.util.ArrayList<>();
+
                 ast.accept(visitor);
+
+                // Snapshot and disable recording of my-variable indices.
+                evalCleanupLocals = ctx.javaClassInfo.evalCleanupLocals;
+                ctx.javaClassInfo.evalCleanupLocals = null;
 
                 // Normal fallthrough return: spill and jump with empty operand stack.
                 mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
@@ -877,6 +892,37 @@ public class EmitterMethodCreator implements Opcodes {
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 mv.visitInsn(Opcodes.POP);
+
+                // Scope-exit cleanup for lexical variables allocated inside the eval body.
+                // When die throws a PerlDieException, Java exception handling jumps directly
+                // to this catch handler, skipping the emitScopeExitNullStores calls that
+                // would normally run at each block exit. This loop ensures DESTROY fires
+                // for blessed objects that went out of scope during die.
+                // Note: DestroyDispatch.doCallDestroy saves/restores $@ around DESTROY,
+                // so this is safe to do before the $@ snapshot below.
+                if (evalCleanupLocals != null && !evalCleanupLocals.isEmpty()) {
+                    // De-duplicate indices while preserving order.
+                    // A variable may appear in multiple nested scopes - we want the last
+                    // occurrence (from the innermost scope) to win, and cleanup should
+                    // happen in reverse order (LIFO) to match Perl's DESTROY semantics.
+                    java.util.List<Integer> uniqueLocals = new java.util.ArrayList<>(
+                            new java.util.LinkedHashSet<>(evalCleanupLocals));
+                    // Reverse to get LIFO order (innermost scope first)
+                    java.util.Collections.reverse(uniqueLocals);
+                    for (int localIdx : uniqueLocals) {
+                        mv.visitVarInsn(Opcodes.ALOAD, localIdx);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/MortalList",
+                                "evalExceptionScopeCleanup",
+                                "(Ljava/lang/Object;)V", false);
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                        mv.visitVarInsn(Opcodes.ASTORE, localIdx);
+                    }
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/MortalList",
+                            "flush",
+                            "()V", false);
+                }
 
                 // Save a snapshot of $@ so we can re-set it after DVM teardown
                 // (DVM pop may restore `local $@` from a callee, clobbering $@)
