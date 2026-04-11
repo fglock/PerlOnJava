@@ -1140,80 +1140,73 @@ sub DESTROY {
 
 ### Step 10.4: Categorized non-detached failures (40 tests)
 
-#### GC-only failures (~10 tests)
-Tests where all real subtests pass but END-block garbage collection assertions fail
-(objects at refcnt 1 instead of being collected):
+Detailed analysis shows **27 GC-only, 2 real+GC, 3 real-only, 8 error/can't-run**.
+Only **4 actual real test failures** exist across all 40 non-detached test files.
 
-| Test | Tests | Fail | Pattern |
-|------|-------|------|---------|
-| t/storage/error.t | 84 | 39 | Tests 1-45 pass; 46-84 all "Expected garbage collection" |
-| t/storage/on_connect_do.t | 18 | 6 | Real tests pass; 6 GC failures |
-| t/storage/on_connect_call.t | 21 | 4 | Real tests pass; 4 GC failures |
-| t/storage/quote_names.t | 27 | 2 | Real tests pass; 2 GC failures |
+#### GC-only failures (27 tests)
+All real subtests pass; only appended "Expected garbage collection" assertions fail:
+
+| Test | Tests | GC Fail | Notes |
+|------|-------|---------|-------|
+| t/storage/error.t | 84 | 39 | Tests 1-45 pass; 46-84 all GC |
+| t/storage/on_connect_do.t | 18 | 5 | 13 planned pass; 5 GC appended |
+| t/storage/on_connect_call.t | 21 | 4 | 17 planned pass; 4 GC appended |
+| t/storage/quote_names.t | 27 | 2 | 25 planned pass; 2 GC appended |
 | t/sqlmaker/dbihacks_internals.t | 6494 | 2 | 6492 pass; 2 GC at end |
-| t/storage/global_destruction.t | 4 | 0 | exit= (no exit code, but tests pass) |
-| t/resultset/rowparser_internals.t | 7 | 0 | exit=255 but all 7 subtests pass |
-| t/row/inflate_result.t | 2 | 0 | exit=255 but both subtests pass |
+| t/storage/exception.t | 5 | 3 | 2 planned pass; 3 GC appended |
+| t/storage/ping_count.t | 4 | 3 | 1 pass; 3 GC |
+| t/storage/dbi_env.t | 2 | 2 | Both tests are GC |
+| t/storage/savepoints.t | 3 | 3 | All 3 are GC; then detached crash |
+| t/106dbic_carp.t | 6 | 3 | 3 planned pass; 3 GC appended |
+| t/53lean_startup.t | 6 | 3 | 3 planned pass; 3 GC appended |
+| t/752sqlite.t | 5 | 4 | 1 pass; 4 GC (DBI::db, Storage::DBI) |
+| t/85utf8.t | 10 | 2 | 8 pass; 2 GC appended |
+| t/resultset_class.t | 7 | 2 | 5 pass; 2 GC |
+| t/sqlmaker/rebase.t | 7 | 3 | 4 pass; 3 GC |
+| t/sqlmaker/limit_dialects/mssql_torture.t | 1 | 1 | GC on MSSQL storage_type |
+| t/storage/stats.t | 3 | 2 | 1 pass; 2 GC; then detached crash |
+| t/storage/prefer_stringification.t | 5 | 3 | 2 pass; 3 GC |
+| t/storage/nobindvars.t | 3 | 3 | All 3 GC |
+| t/inflate/hri_torture.t | 3 | 3 | All 3 GC; then detached crash |
+| t/multi_create/find_or_multicreate.t | 3 | 3 | All 3 GC |
+| t/prefetch/false_colvalues.t | 3 | 3 | All 3 GC |
+| t/prefetch/manual.t | 3 | 3 | All 3 GC; then `_unnamed_` detached crash |
+| t/relationship/custom_opaque.t | 3 | 3 | All 3 GC |
+| t/resultset/inflate_result_api.t | 3 | 3 | All 3 GC |
+| t/row/filter_column.t | 3 | 3 | All 3 GC |
+| t/sqlmaker/literal_with_bind.t | 3 | 3 | All 3 GC |
+| t/26dumper.t | 3 | 2 | 1 pass; 2 GC; then detached crash |
 
-#### Real failures with GC overlay
+#### Real failures (5 tests with actual functional bugs)
 
 | Test | Tests | Real Fail | GC Fail | Root Cause |
 |------|-------|-----------|---------|------------|
-| t/storage/exception.t | 5 | 2 | 1 | Exception wrapping / GC |
-| t/storage/ping_count.t | 4 | 2 | 1 | Ping count tracking |
-| t/storage/stats.t | 3 | 1 | 1 | Storage statistics |
-| t/storage/dbi_env.t | 2 | 2 | 0 | DBI environment variable handling |
-| t/storage/savepoints.t | 3 | 2 | 1 | SAVEPOINT execution |
-| t/106dbic_carp.t | 6 | 0 | 3 | 3 real tests pass; 3 GC failures |
-| t/53lean_startup.t | 6 | 0 | 3 | Module load footprint + GC |
-| t/85utf8.t | 10 | 2 | 0 | UTF-8 flag (systemic JVM) |
-| t/752sqlite.t | 5 | 1 | 3 | SQLite-specific + GC |
-| t/resultset_class.t | 7 | 0 | 2 | GC only |
-| t/schema/anon.t | 3 | 0 | 3 | GC only |
-| t/zzzzzzz_perl_perf_bug.t | 3 | 1 | 0 | Perl performance regression test |
+| t/schema/anon.t | 3 | 1 | 2 | "Schema object not lost in chaining" — detached result source during init_schema |
+| t/storage/on_connect_do.t | 18 | 1 | 5 | "Reading from dropped table" — `database table is locked` (SQLite JDBC) |
+| t/zzzzzzz_perl_perf_bug.t | 3 | 1 | 0 | Overload/bless perf ratio 3.2x > 3.0x threshold |
+| t/resultset/rowparser_internals.t | 7 | 0+crash | 0 | All 7 pass, then `_resolve_collapse` crash after tests |
+| t/row/inflate_result.t | 2 | 0+crash | 0 | Both pass, then detached `User` source crash after tests |
 
-#### Tests with detached source (not init_schema pattern)
-
-| Test | Tests | Fail | Root Cause |
-|------|-------|------|------------|
-| t/prefetch/manual.t | 3 | 3 | `_unnamed_` source detached (different from Genre pattern) |
-| t/sqlmaker/rebase.t | 7 | 3 | Mix of detached + GC |
-
-#### Tests blocked by GC (all 3 failures are "Expected garbage collection")
-
-| Test |
-|------|
-| t/inflate/hri_torture.t |
-| t/multi_create/find_or_multicreate.t |
-| t/prefetch/false_colvalues.t |
-| t/relationship/custom_opaque.t |
-| t/resultset/inflate_result_api.t |
-| t/row/filter_column.t |
-| t/storage/nobindvars.t |
-| t/sqlmaker/literal_with_bind.t |
-| t/storage/prefer_stringification.t |
-| t/26dumper.t |
-
-#### DB-specific / error tests
+#### Error / can't-run (8 tests)
 
 | Test | Issue |
 |------|-------|
-| t/52leaks.t | Needs Test::Memory::Cycle (not installed) |
-| t/746sybase.t | Needs Sybase driver |
-| t/sqlmaker/limit_dialects/custom.t | Needs specific SQL dialect |
-| t/sqlmaker/limit_dialects/rownum.t | Needs Oracle dialect |
-| t/sqlmaker/limit_dialects/mssql_torture.t | MSSQL-specific |
-| t/sqlmaker/msaccess.t | MS Access-specific |
-| t/sqlmaker/quotes.t | DB-specific quoting |
-| t/sqlmaker/pg.t | PostgreSQL-specific |
+| t/52leaks.t | `wait()` not implemented in PerlOnJava |
+| t/746sybase.t | `wait()` not implemented in PerlOnJava |
+| t/storage/global_destruction.t | `fork()` not supported; 4 phantom GC tests from TAP bleed |
+| t/sqlmaker/limit_dialects/custom.t | Detached source crash before any tests emitted |
+| t/sqlmaker/limit_dialects/rownum.t | Detached source crash before any tests emitted |
+| t/sqlmaker/msaccess.t | Detached source crash before any tests emitted |
+| t/sqlmaker/quotes.t | Detached source crash before any tests emitted |
+| t/sqlmaker/pg.t | Detached source crash before any tests emitted |
 
 ### Step 10.5: Implementation plan
 
 | Step | What | Impact | Priority | Status |
 |------|------|--------|----------|--------|
-| 10.5a | Fix weak ref cleared during `clone → _copy_state_from` | **Unblock 155 test programs** | P0 | |
-| 10.5b | Fix GC leak assertions (refcnt stays at 1 at END) | ~10 GC-only test programs | P1 | |
-| 10.5c | Fix storage/exception, ping_count, stats, dbi_env, savepoints | ~10 real failures | P2 | |
+| 10.5a | Fix weak ref cleared during `clone → _copy_state_from` | **Unblock 155+ test programs** (including 5 error tests that crash on detached source) | P0 | |
+| 10.5b | Fix GC leak assertions (refcnt stays at 1 at END) | 27 GC-only test programs → fully passing | P1 | |
+| 10.5c | Fix t/storage/on_connect_do.t table lock, t/schema/anon.t chaining | 2 real failures | P2 | |
 | 10.5d | Re-run full suite after P0 fix | Updated numbers | P0 | |
 
 ### Key insight for P0 fix
@@ -1224,6 +1217,21 @@ that has no named variable holding it. In PerlOnJava's refCount system (see
 properly tracked through `MortalList`. If the clone's refCount reaches 0 during
 `_copy_state_from`, `Schema::DESTROY` fires and clears the weakened `{schema}` refs
 on all sources.
+
+**Confirmed via DESTROY tracing**: Schema::DESTROY fires during `_copy_state_from`:
+```
+*** DESTROY called on DBICTest::Schema=HASH(0x59838256)
+  [0] DBIx::Class::Schema :: main::__ANON__ at Schema.pm:1033
+  [1] DBIx::Class::Schema :: _copy_state_from at Schema.pm:1015
+  [2] DBICTest::BaseSchema :: DBIx::Class::Schema::clone at BaseSchema.pm:334
+  [3] DBIx::Class::Schema :: DBICTest::BaseSchema::clone at Schema.pm:524
+  [4] main :: DBIx::Class::Schema::connect at -e:24
+```
+
+The clone (blessed into a class with DESTROY) is created as a temporary in the
+method chain `shift->clone->connection(@_)`. During `_copy_state_from` (called
+from within `clone`), the clone's refCount drops to 0, triggering DESTROY.
+DESTROY nullifies all weakened `{schema}` refs on the sources.
 
 **Potential fixes** (in order of investigation):
 1. Check if `MortalList` correctly handles temporaries in chained method calls
