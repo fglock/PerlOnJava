@@ -60,6 +60,10 @@ Example format at the end of a design doc:
 - Keep docs updated as implementation progresses
 - Reference related docs and skills at the end
 
+### Sandbox Tests
+
+- `dev/sandbox/destroy_weaken/` — Tests for DESTROY and weaken behavior (cascading cleanup, scope exit timing, blessed-without-DESTROY, etc.). Run with `./jperl` or `perl` for comparison.
+
 ### Partially Implemented Features
 
 | Feature | Status |

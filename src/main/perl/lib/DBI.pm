@@ -61,8 +61,17 @@ XSLoader::load( 'DBI' );
                 # Only mark as active for result-returning statements (SELECT etc.)
                 # DDL/DML statements (CREATE, INSERT, etc.) have NUM_OF_FIELDS == 0
                 if (($sth->{NUM_OF_FIELDS} || 0) > 0) {
-                    $dbh->{ActiveKids} = ($dbh->{ActiveKids} || 0) + 1;
+                    if (!$sth->{Active}) {
+                        $dbh->{ActiveKids} = ($dbh->{ActiveKids} || 0) + 1;
+                    }
                     $sth->{Active} = 1;
+                } else {
+                    # DML statement: mark as inactive
+                    if ($sth->{Active}) {
+                        my $active = $dbh->{ActiveKids} || 0;
+                        $dbh->{ActiveKids} = $active > 0 ? $active - 1 : 0;
+                    }
+                    $sth->{Active} = 0;
                 }
             }
         }
@@ -84,6 +93,26 @@ XSLoader::load( 'DBI' );
         $dbh->{Active} = 0;
         return $orig_disconnect->(@_);
     };
+}
+
+# DESTROY for statement handles — calls finish() if still active.
+# This matches Perl DBI behavior where sth DESTROY triggers finish().
+sub DBI::st::DESTROY {
+    my $sth = $_[0];
+    return unless $sth && ref($sth);
+    if ($sth->{Active}) {
+        eval { $sth->finish() };
+    }
+}
+
+# DESTROY for database handles — calls disconnect() if still active.
+# This matches Perl DBI behavior where dbh DESTROY disconnects.
+sub DBI::db::DESTROY {
+    my $dbh = $_[0];
+    return unless $dbh && ref($dbh);
+    if ($dbh->{Active}) {
+        eval { $dbh->disconnect() };
+    }
 }
 
 sub _handle_error {
@@ -162,14 +191,27 @@ use constant {
     my $orig_connect = \&connect;
     *connect = sub {
         my ($class, $dsn, $user, $pass, $attr) = @_;
+
+        # Fall back to DBI_DSN env var if no DSN provided
+        $dsn = $ENV{DBI_DSN} if !defined $dsn || !length $dsn;
+
         $dsn = '' unless defined $dsn;
         $user = '' unless defined $user;
         $pass = '' unless defined $pass;
         $attr = {} unless ref $attr eq 'HASH';
         my $driver_name;
         my $dsn_rest;
-        if ($dsn =~ /^dbi:(\w+)(?:\(([^)]*)\))?:(.*)$/i) {
+        if ($dsn =~ /^dbi:(\w*)(?:\(([^)]*)\))?:(.*)$/i) {
             my ($driver, $dsn_attrs, $rest) = ($1, $2, $3);
+
+            # Fall back to DBI_DRIVER env var if driver part is empty
+            $driver = $ENV{DBI_DRIVER} if !length($driver) && $ENV{DBI_DRIVER};
+
+            # If still no driver, die with the expected Perl DBI error message
+            if (!length($driver)) {
+                die "I can't work out what driver to use (no driver in DSN and DBI_DRIVER env var not set)\n";
+            }
+
             $driver_name = $driver;
             $dsn_rest = $rest;
 
@@ -575,15 +617,18 @@ sub prepare_cached {
         if ($sth->{Database}{Active}) {
             # Handle if_active parameter:
             # 1 = warn and finish, 2 = finish silently, 3 = return new sth
-            if ($if_active && $sth->{Active}) {
-                if ($if_active == 3) {
+            if ($sth->{Active}) {
+                if ($if_active && $if_active == 3) {
                     # Return a fresh sth instead of the active cached one
                     my $new_sth = _prepare_as_cached($dbh, $sql, $attr);
                     return undef unless $new_sth;
                     $cache->{$sql} = $new_sth;
                     return $new_sth;
                 }
-                $sth->finish;
+                # Auto-finish the stale active sth before reuse.
+                # In Perl 5 DBI, cursor DESTROY calls finish() deterministically.
+                # PerlOnJava's GC timing means DESTROY may not have fired yet.
+                eval { $sth->finish() };
             }
             return $sth;
         }

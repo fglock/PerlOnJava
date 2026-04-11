@@ -202,7 +202,13 @@ public class DBI extends PerlModuleBase {
             conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
 
             // Set ReadOnly attribute in case it was changed
-            conn.setReadOnly(sth.get("ReadOnly").getBoolean());
+            // Note: SQLite JDBC requires ReadOnly before connection is established;
+            // suppress the error here since it's a driver limitation
+            try {
+                conn.setReadOnly(sth.get("ReadOnly").getBoolean());
+            } catch (SQLException ignored) {
+                // Some drivers (e.g., SQLite JDBC) can't change ReadOnly after connection
+            }
 
             // Prepare statement
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -397,7 +403,7 @@ public class DBI extends PerlModuleBase {
                     if (args.size() > 1) {
                         // Inline parameters passed to execute(@bind_values)
                         for (int i = 1; i < args.size(); i++) {
-                            stmt.setObject(i, args.get(i).value);
+                            stmt.setObject(i, toJdbcValue(args.get(i)));
                         }
                     } else {
                         // Apply stored bound_params from bind_param() calls
@@ -407,7 +413,7 @@ public class DBI extends PerlModuleBase {
                             for (RuntimeScalar key : boundParams.keys().elements) {
                                 int paramIndex = Integer.parseInt(key.toString());
                                 RuntimeScalar val = boundParams.get(key.toString());
-                                stmt.setObject(paramIndex, val.value);
+                                stmt.setObject(paramIndex, toJdbcValue(val));
                             }
                         }
                     }
@@ -668,6 +674,36 @@ public class DBI extends PerlModuleBase {
      * @param handle    The database or statement handle
      * @param exception The SQL exception that occurred
      */
+    /**
+     * Converts a RuntimeScalar to a JDBC-compatible Java object.
+     * <p>
+     * Handles type conversion:
+     * - INTEGER → Long (preserves exact integer values)
+     * - DOUBLE → Long if whole number, else Double (matches Perl's stringification: 10.0 → "10")
+     * - UNDEF → null (SQL NULL)
+     * - STRING/BYTE_STRING → String
+     * - References/blessed objects → String via toString() (triggers overload "" if present)
+     */
+    private static Object toJdbcValue(RuntimeScalar scalar) {
+        if (scalar == null) return null;
+        return switch (scalar.type) {
+            case RuntimeScalarType.INTEGER -> scalar.value;
+            case RuntimeScalarType.DOUBLE -> {
+                double d = scalar.getDouble();
+                // If the double is a whole number that fits in long, pass as Long
+                // This matches Perl's stringification: 10.0 → "10"
+                if (d == Math.floor(d) && !Double.isInfinite(d) && !Double.isNaN(d)
+                        && d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
+                    yield (long) d;
+                }
+                yield scalar.value;
+            }
+            case RuntimeScalarType.UNDEF -> null;
+            case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING -> scalar.value;
+            default -> scalar.toString(); // Triggers overload "" for blessed refs
+        };
+    }
+
     /**
      * Normalizes JDBC error messages to match native driver format.
      * JDBC drivers (especially SQLite) wrap error messages with extra context:
