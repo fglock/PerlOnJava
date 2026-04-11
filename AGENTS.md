@@ -20,6 +20,18 @@
 
 ---
 
+## ⚠️ Resource Management: Avoid Fork Exhaustion ⚠️
+
+**Do NOT spawn excessive parallel processes.** Running too many background shells, subagents, or parallel builds at once can exhaust the system's process table (fork bomb), forcing a reboot and losing work.
+
+- **Limit parallel operations**: Run at most 2-3 concurrent processes at a time
+- **Avoid unnecessary background shells**: Use foreground execution when you don't need parallelism
+- **Wait for processes to finish** before starting new ones when possible
+- **Never run `make` in parallel with other heavy processes** (builds already use multiple threads internally)
+- **Clean up**: Kill background shells when they're no longer needed
+
+---
+
 ## Project Rules
 
 ### Progress Tracking for Multi-Phase Work
