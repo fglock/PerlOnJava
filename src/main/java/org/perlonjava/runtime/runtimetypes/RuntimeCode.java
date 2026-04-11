@@ -2231,6 +2231,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.pushCallerHints();
             // Save caller's call-site hint hash so caller()[10] can retrieve them
             HintHashRegistry.pushCallerHintHash();
+            int cleanupMark = MyVarCleanupStack.pushMark();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(a, callContext);
@@ -2256,7 +2257,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 // Consume at normal subroutine boundary
                 return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+            } catch (RuntimeException e) {
+                // On die: run scopeExitCleanup for my-variables whose normal
+                // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
+                // PerlExitException (exit()) is excluded — global destruction handles it.
+                if (!(e instanceof PerlExitException)) {
+                    MyVarCleanupStack.unwindTo(cleanupMark);
+                    MortalList.flush();
+                }
+                throw e;
             } finally {
+                // After unwindTo, entries are already removed; popMark is a no-op.
+                // On normal return, popMark discards registrations without cleanup.
+                MyVarCleanupStack.popMark(cleanupMark);
                 HintHashRegistry.popCallerHintHash();
                 WarningBitsRegistry.popCallerHints();
                 WarningBitsRegistry.popCallerBits();
@@ -2485,6 +2498,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerHints();
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash();
+                int cleanupMark = MyVarCleanupStack.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
@@ -2495,7 +2509,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     // Consume at normal subroutine boundary
                     return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                } catch (RuntimeException e) {
+                    if (!(e instanceof PerlExitException)) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        MortalList.flush();
+                    }
+                    throw e;
                 } finally {
+                    MyVarCleanupStack.popMark(cleanupMark);
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();
@@ -2651,6 +2672,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.pushCallerHints();
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash();
+                int cleanupMark = MyVarCleanupStack.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     return code.apply(subroutineName, a, callContext);
@@ -2661,7 +2683,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     // Consume at normal subroutine boundary
                     return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                } catch (RuntimeException e) {
+                    if (!(e instanceof PerlExitException)) {
+                        MyVarCleanupStack.unwindTo(cleanupMark);
+                        MortalList.flush();
+                    }
+                    throw e;
                 } finally {
+                    MyVarCleanupStack.popMark(cleanupMark);
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
                     WarningBitsRegistry.popCallerBits();

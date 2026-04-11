@@ -130,6 +130,15 @@ public class BytecodeInterpreter {
         if (usesLocalization) {
             RegexState.save();
         }
+        // Track whether an exception is propagating out of this frame, so the
+        // finally block can do scope-exit cleanup for blessed objects in my-variables.
+        // Without this, DESTROY doesn't fire for objects in subroutines that are
+        // unwound by die when there's no enclosing eval in the same frame.
+        Throwable propagatingException = null;
+
+        // First my-variable register index (skip reserved + captured vars).
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
+
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
         // Outer try/finally — cleanup only, no catch.
@@ -2152,9 +2161,11 @@ public class BytecodeInterpreter {
                     StackTraceElement[] st = e.getStackTrace();
                     String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
                     String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
+                    propagatingException = e;
                     throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
                 } catch (PerlExitException e) {
                     // exit() should NEVER be caught by eval{} - always propagate
+                    propagatingException = e;
                     throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
@@ -2207,6 +2218,7 @@ public class BytecodeInterpreter {
 
                     // Not in eval block - propagate exception
                     // Re-throw RuntimeExceptions as-is (includes PerlDieException)
+                    propagatingException = e;
                     if (e instanceof RuntimeException re) {
                         throw re;
                     }
@@ -2235,6 +2247,32 @@ public class BytecodeInterpreter {
                 }
             } // end outer while (eval/die retry loop)
         } finally {
+            // Scope-exit cleanup for my-variables when an exception propagates out
+            // of this subroutine frame without being caught by an eval.
+            // This ensures DESTROY fires for blessed objects going out of scope
+            // during die unwinding (e.g. TxnScopeGuard in a sub called from eval).
+            if (propagatingException != null) {
+                boolean needsFlush = false;
+                for (int i = firstMyVarReg; i < registers.length; i++) {
+                    RuntimeBase reg = registers[i];
+                    if (reg == null) continue;
+                    if (reg instanceof RuntimeScalar rs) {
+                        RuntimeScalar.scopeExitCleanup(rs);
+                        needsFlush = true;
+                    } else if (reg instanceof RuntimeHash rh) {
+                        MortalList.scopeExitCleanupHash(rh);
+                        needsFlush = true;
+                    } else if (reg instanceof RuntimeArray ra) {
+                        MortalList.scopeExitCleanupArray(ra);
+                        needsFlush = true;
+                    }
+                    registers[i] = null;
+                }
+                if (needsFlush) {
+                    MortalList.flush();
+                }
+            }
+
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.

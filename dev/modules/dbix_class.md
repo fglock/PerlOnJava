@@ -676,19 +676,10 @@ becomes false when all rows are fetched or finish() is called.
 |------|------|--------|--------|
 | 5.56 | Fix sth Active flag lifecycle: false after prepare, true after execute with results, false on fetch exhaustion. Use mutable RuntimeScalar (not read-only scalarFalse). Close previous JDBC ResultSet on re-execute. | t/60core.t: 45→12 cached stmt failures | ✅ Done |
 
-#### Phase 7 — Transaction Scope Guard Cleanup (targets 12 t/100populate.t tests)
+#### Phase 7 — Transaction Scope Guard Cleanup — OBSOLETED by DESTROY/weaken (PR #464)
 
-**Root cause**: `TxnScopeGuard::DESTROY` never fires → no ROLLBACK on exception →
-`transaction_depth` stays elevated permanently.
-
-**Approach**: Cannot fix via general DESTROY (bless happens in constructor, wrong DVM scope).
-Best option is patching `_insert_bulk` and other callers to use explicit try/catch rollback
-instead of relying on DESTROY.
-
-| Step | What | Impact | Status |
-|------|------|--------|--------|
-| 5.58 | Patch `_insert_bulk` with explicit try/catch rollback | 12 (t/100populate.t) | |
-| 5.59 | Audit other txn_scope_guard callers for similar issues | Future test coverage | |
+TxnScopeGuard::DESTROY now fires via the refCount system. See Phase 13 for remaining
+work on DESTROY-on-die during exception unwinding through regular subroutines.
 
 #### Phase 8 — Remaining Dependency Fixes
 
@@ -699,7 +690,7 @@ instead of relying on DESTROY.
 
 ### Progress Tracking
 
-#### Current Status: Step 5.58 complete (pack/unpack 32-bit consistency)
+#### Current Status: Phase 13 COMPLETED — DESTROY-on-die at apply() level (2026-04-11)
 
 #### Key Test Results (2026-04-02)
 
@@ -1704,136 +1695,24 @@ hash contents are already cleared.
 #### Root cause analysis (confirmed via tracing)
 
 The bug is caused by `popAndFlush` at subroutine exit processing scope-exit
-decrements **before the caller has captured the return value**. This is a
-fundamental ordering problem analogous to Perl 5's FREETMPS timing.
+decrements **before the caller has captured the return value**. In Perl 5,
+per-statement FREETMPS + `sv_2mortal` on return values ensures the caller
+always increments refCount (via assignment) before the mortal is freed.
+PerlOnJava's `popAndFlush` fires at subroutine exit (in the finally block),
+before the caller's assignment.
 
-**How Perl 5 handles this**: Perl 5 uses per-statement FREETMPS to free mortal
-temporaries. Return values get `sv_2mortal`, so they survive the subroutine's
-LEAVE. The caller captures them via assignment, and the mortal copy is freed at
-the caller's next FREETMPS. The key property: **the caller always increments
-refCount (via assignment) before FREETMPS decrements the mortal**.
+**Trace**: `sub connect { shift->clone->connection(@_) }` — `clone()` creates
+a schema with refCount=1 (from `my $clone`). At `apply(clone)` exit,
+`popAndFlush` processes the scope-exit decrement for `$clone`: refCount
+1→0 → DESTROY fires → schema permanently destroyed before `->connection()`
+even starts.
 
-**How PerlOnJava's `popAndFlush` breaks this**: `popAndFlush` at `apply()`'s
-finally block processes the subroutine's scope-exit decrements immediately
-at subroutine exit — before the return value reaches the caller's assignment.
-For an object with refCount=1 (one strong ref from the lexical `$self` or
-`$clone`), the scope-exit decrement drops it to 0 → DESTROY fires → the
-return value is dead before the caller can use it.
+#### Attempted fix: popMark + flush in setLargeRefCounted (FAILED — reverted)
 
-**Trace through `sub connect { shift->clone->connection(@_) }`**:
-
-1. `clone()` via `apply()`: pushMark M_clone
-2. Inside clone: `bless {}`: refCount=0. `my $clone`: refCount 0→1
-3. Return: defers decrement for `$clone`
-4. `popAndFlush(M_clone)`: processes decrement: **refCount 1→0 → DESTROY!**
-5. Return value is permanently destroyed (refCount = MIN_VALUE)
-
-Even with marks, `popAndFlush` processes entries from within the subroutine's
-mark, which includes the subroutine's own scope-exit decrements. The return
-value's only strong reference (the lexical variable) is cleaned up, and the
-return value has no separate protection.
-
-#### Failed approaches investigated
-
-**Approach 1: "Return value protection" (bump + defer)**
-
-Increment return value's refCount before `popAndFlush`, then add a deferred
-decrement in the caller's scope after the mark is popped. Works for single-level
-returns, but fails for multi-level returns:
-
-- `shift->clone->connection(@_)` — the same schema hash passes through both
-  `clone()` and `connection()` return boundaries
-- Each adds a deferred decrement to the caller's scope
-- 2 decrements accumulate but only 1 `setLargeRefCounted` in the caller
-- At the caller's flush: refCount N - 2 hits 0 → DESTROY
-
-This is a structural problem: N subroutine returns add N deferred decrements
-for the same object, but the ultimate caller only does 1 `setLargeRefCounted`.
-
-**Approach 2: popMark-only (no flush at all) with bless starting at refCount=1**
-
-If bless starts at 1 (a "birth reference"), and subroutine exit only pops the
-mark without flushing, entries accumulate. Works for multi-level returns (extra
-+1 absorbs the decrements) but **leaks for simple cases**: `my $obj = bless
-{}, 'Foo'` ends up with refCount=1 permanently because the "birth reference"
-has no corresponding decrement. In Perl 5 this is handled by per-statement
-FREETMPS freeing the expression temporary — PerlOnJava has no equivalent.
-
-#### Solution: Restore flush in setLargeRefCounted + popMark (no flush) at apply exit
-
-The correct approach combines two mechanisms:
-
-1. **Restore `MortalList.flush()` in `setLargeRefCounted`** — this is the
-   per-assignment FREETMPS. In Perl 5, FREETMPS fires at statement boundaries;
-   in PerlOnJava, the assignment point (`setLargeRefCounted`) is the closest
-   equivalent. The flush runs AFTER the new refCount increment, so the object
-   is protected by the new strong reference when its old mortal entry is
-   processed.
-
-2. **Keep `pushMark` at subroutine entry** (already in place) — prevents
-   cross-scope leakage. Flushes inside a subroutine only process entries
-   added since the mark, not entries from outer scopes.
-
-3. **Change `popAndFlush` to `popMark`** (just remove the mark, no flush) —
-   entries from the subroutine stay in `pending`. They are processed by the
-   caller's next flush (which happens inside `setLargeRefCounted` during
-   assignment), at which point refCount has already been incremented.
-
-**Why this combination works — trace through the DBIx::Class pattern**:
-
-```
-sub connect { shift->clone->connection(@_) }
-```
-
-1. `apply(connect)` pushMark **M_connect**
-2. `clone()` via `apply()`: pushMark **M_clone**
-3. Inside clone: bless: refCount=0. `$clone`: refCount 0→1
-   - `setLargeRefCounted` calls `flush()` — starts from M_clone, nothing pending yet
-4. Return: defers decrement for `$clone` (entry after M_clone)
-5. `apply(clone)` exit: **popMark** (NOT popAndFlush) — M_clone removed,
-   entry stays in pending between M_connect and end
-6. `connection()` via `apply()`: pushMark **M_connection** (after clone's entry)
-7. Inside connection: `my ($self) = @_` via `setLargeRefCounted`: refCount 1→2.
-   `flush()` starts from M_connection — clone's entry is BEFORE M_connection,
-   **NOT processed**. Schema stays alive!
-8. Various operations (weaken, storage constructor, etc.) — all balanced
-   within connection's mark scope
-9. Return $self: defers decrement for `$self`
-10. `apply(connection)` exit: **popMark** — M_connection removed
-11. `apply(connect)` exit: **popMark** — M_connect removed
-12. Back in caller: `my $schema = TestDB->connect(...)` via `setLargeRefCounted`:
-    refCount N→N+1. `flush()` — **no marks** → processes ALL pending entries.
-    At this point refCount is high enough to absorb all decrements.
-13. Schema stays alive. `$storage->{schema}` weak ref is valid!
-
-**Key property**: The caller's `setLargeRefCounted` always increments refCount
-BEFORE flush processes pending decrements. This mirrors Perl 5's guarantee that
-assignment happens before FREETMPS.
-
-#### Changes needed
-
-| File | Change | Notes |
-|------|--------|-------|
-| `RuntimeScalar.java` | Restore `MortalList.flush()` at end of `setLargeRefCounted` | Was removed because it caused premature DESTROY — but that was BEFORE marks existed. With marks, the flush is scoped correctly. |
-| `MortalList.java` | Add `popMark()` method (just removes mark, no flush) | Currently only has `pushMark()` and `popAndFlush()` |
-| `RuntimeCode.java` | Change `MortalList.popAndFlush()` → `MortalList.popMark()` in all 3 `apply()` finally blocks | Lines ~2266, ~2507, ~2675 |
-| `RuntimeList.java` | `suppressFlush` in `setFromList` likely becomes unnecessary | Marks handle the scoping now. Can remove or keep for safety. |
-
-#### Risk assessment
-
-- **Regression risk**: Restoring flush in `setLargeRefCounted` changes the
-  timing of ALL mortal processing. Every reference assignment now triggers a
-  scoped flush. Need to run full `make` + `perl_test_runner.pl` to verify.
-- **Performance**: Additional flush() calls per reference assignment. The mark
-  check (`marks.isEmpty() ? 0 : marks.getLast()`) adds a small cost. For the
-  common case where pending is empty, flush() returns immediately.
-- **Edge cases**: Void-context subroutine calls (return value discarded) —
-  `mortalizeForVoidDiscard` handles this. Objects with refCount=0 at return
-  time get bumped to 1 and deferred. With popMark (no flush), these entries
-  stay for the caller's flush. If the caller never calls `setLargeRefCounted`
-  (void context), the entries accumulate until the next scope-exit flush.
-
-#### Implementation plan
+Changed `popAndFlush()` → `popMark()` at apply() exit (don't flush, just
+remove the mark) and restored `MortalList.flush()` inside `setLargeRefCounted`
+(flush at assignment time, like Perl 5's per-statement FREETMPS). With marks,
+flush only processes entries since the last mark, protecting outer-scope entries.
 
 | Step | What | Status |
 |------|------|--------|
@@ -1847,184 +1726,27 @@ assignment happens before FREETMPS.
 
 ### Step 11.3: Why "popMark + flush in setLargeRefCounted" Failed (2026-04-11)
 
-#### What was attempted
+Mark-aware flush in `setLargeRefCounted` broke 4 tests across 2 files:
 
-Implemented the Step 11.2 plan exactly as designed:
+- **`destroy_collections.t`** tests 16, 22: `delete $h{key}` defers decrement; the
+  next subroutine call (`is_deeply`) pushes a mark that hides the entry from flush.
+  DESTROY fires too late (after `is_deeply` returns, not before it checks).
+- **`tie_scalar.t`** tests 11, 12: Same pattern — `untie` defers decrement, but the
+  next function call's mark hides it from flush.
 
-1. Added `popMark()` to `MortalList.java` (remove mark without flushing)
-2. Changed all 3 `popAndFlush()` → `popMark()` in `RuntimeCode.apply()` finally blocks
-3. Restored `MortalList.flush()` at end of `setLargeRefCounted` in `RuntimeScalar.java`
-4. Made `flush()` mark-aware: only processes entries from `marks.getLast()` onwards
+**Fundamental tension**: Marks protect outer entries from inner flushes (good for
+return values), but also prevent those entries from being flushed at block exits
+(bad for DESTROY timing on delete/untie/undef). Perl 5 solves this with
+per-statement FREETMPS + `sv_2mortal`, which PerlOnJava cannot trivially implement
+because JVM bytecode has no statement boundaries.
 
-`make` failed with 2 unit test regressions (4 individual test failures):
+**Conclusion**: The mortal flush timing cannot be changed globally without breaking
+DESTROY timing guarantees. The P0 issue (premature DESTROY during connect chain)
+was already fixed by `suppressFlush` in `setFromList`. The P1 GC leak (refcnt stays
+at 1 at END time) was investigated in Step 11.4 and found to have a different root
+cause (blessed-without-DESTROY objects not cascading cleanup).
 
-#### Failing tests
-
-**`unit/refcount/destroy_collections.t`** — 2 of 22 failed:
-
-| Test | Expected | Got | Root Cause |
-|------|----------|-----|------------|
-| 16: "new value destroyed on delete" | `["d:old", "d:new"]` | `["d:old"]` | `delete $h{key}` defers decrement; no flush fires before the `is_deeply` check |
-| 22: "destroyed when closure dropped" | `["d:closure"]` | `[]` | `undef $code` releases captures; deferred decrement not flushed before check |
-
-**`unit/tie_scalar.t`** — 2 of 12 subtests failed:
-
-| Subtest | Expected | Got | Root Cause |
-|---------|----------|-----|------------|
-| 11: "DESTROY called on untie" | DESTROY fires after untie | DESTROY doesn't fire | Tied object's refCount decrement deferred, not flushed |
-| 12: "UNTIE before DESTROY" | 2 methods called | 1 method called | Same — DESTROY pending |
-
-#### Root cause analysis — why the approach is fundamentally flawed
-
-The Step 11.2 design assumed that `flush()` inside `setLargeRefCounted` would
-process pending decrements from before the current subroutine call. This
-assumption is **wrong** because `flush()` respects marks, and subroutine calls
-push marks that hide entries from before the call.
-
-**Detailed trace through the failing pattern:**
-
-```perl
-{
-    my @log;
-    my %h;
-    $h{key} = MyObj->new("old");    # refCount incremented via setLargeRefCounted
-    $h{key} = MyObj->new("new");    # overwrite: old refCount decremented inline → DESTROY fires ✓
-    delete $h{key};                  # deferDecrementIfTracked adds "new" to pending at index N
-    is_deeply(\@log, ["d:old", "d:new"], "new value destroyed on delete");  # FAILS
-}
-```
-
-At the `is_deeply` call:
-1. `apply()` calls `pushMark()` — mark = N+1 (after the delete's entry at N)
-2. Inside `is_deeply`, any `setLargeRefCounted` calls trigger `flush()` — but `flush()`
-   starts from `marks.getLast()` = N+1, so the delete's entry at index N is **NOT processed**
-3. `is_deeply` checks `@log` — DESTROY for "new" has not fired
-4. `popMark()` at `is_deeply` exit just removes the mark, entry still in pending
-5. The delete entry is only processed when the next mark-free `flush()` fires (at
-   block exit via `emitScopeExitNullStores`)
-
-**This is too late.** The test expects DESTROY to fire between the `delete` and the
-`is_deeply` call, matching Perl 5's behavior where FREETMPS fires at statement
-boundaries.
-
-**How the old code (popAndFlush) handled this:**
-
-In the old code, `popAndFlush` at `is_deeply` exit processes entries from the mark
-onwards and removes them. The delete's entry (before the mark) was NOT processed by
-`popAndFlush` either. But it WAS eventually processed at the block exit `}` where
-`emitScopeExitNullStores(flush=true)` calls `MortalList.flush()`. Since the old
-`flush()` processed ALL entries (no mark awareness), the delete entry was processed
-at block exit.
-
-With the new mark-aware `flush()`, even block-exit `flush()` respects the current
-mark — and if there's an outer mark from a surrounding `apply()` (e.g., the test
-file's top-level execution), entries before that mark are never processed.
-
-**This reveals the fundamental tension:** marks protect outer entries from being
-flushed during inner subroutine calls (good for protecting return values), but they
-also prevent those entries from being flushed at block exits (bad for DESTROY timing
-on delete/untie/undef).
-
-#### How Perl 5 actually solves this
-
-Perl 5's solution is orthogonal to our mark-based approach:
-
-1. **Per-statement FREETMPS**: Perl 5 runs FREETMPS at every statement boundary,
-   not just at scope/subroutine boundaries. `delete $hash{key}; is_deeply(...)` —
-   FREETMPS fires between these two statements, processing the mortal from delete.
-
-2. **sv_2mortal for return values**: Return values get `sv_2mortal()` which keeps them
-   alive through exactly one FREETMPS cycle. The caller's assignment captures the value
-   before the NEXT FREETMPS. No marks needed — the mortal mechanism itself provides the
-   one-statement grace period.
-
-3. **No subroutine-level marks**: Perl 5 uses SAVETMPS/FREETMPS per *scope* (block,
-   sub body), but the return value survives via sv_2mortal, not via marks.
-
-PerlOnJava cannot trivially implement per-statement FREETMPS because:
-- JVM-generated bytecode doesn't have statement boundaries (expressions compile to
-  method call chains)
-- The interpreter could emit MORTAL_FLUSH at statement boundaries, but the JVM backend
-  would need the equivalent emitted between every statement
-
-#### Possible approaches for Step 11.3
-
-**Approach A: Return value refCount bump + deferred decrement**
-
-Instead of changing marks/flush semantics, protect the return value explicitly:
-
-1. Keep `popAndFlush` at subroutine exit (existing behavior — DESTROY fires promptly)
-2. Before `popAndFlush`, increment the return value's refCount by 1 ("return protection")
-3. After `popAndFlush`, add a deferred decrement for the return value in the caller's scope
-4. The caller's assignment increments refCount again, and the deferred decrement
-   balances the protection bump
-
-**Why Step 11.2 said this fails for multi-level returns:**
-Step 11.2 analysis noted that `shift->clone->connection(@_)` chains 2 returns of the
-same object, accumulating 2 deferred decrements but only 1 `setLargeRefCounted`. However,
-this analysis may be wrong — each return adds +1 protection and +1 deferred decrement.
-Each assignment adds +1 (setLargeRefCounted). At the top-level caller, the object has:
-- Base refCount from inner `my $clone` = 1
-- +1 from clone return protection = 2
-- -1 from clone `popAndFlush` scope-exit = 1 (or 0 if $clone was the only ref)
-
-Wait — the scope-exit for `$clone` fires during `popAndFlush`. If `$clone` was the only
-ref, refCount goes to 0 → DESTROY. The return protection (+1) should prevent this.
-
-This needs careful re-analysis with actual refCount tracing.
-
-**Approach B: Statement-boundary MORTAL_FLUSH in JVM backend**
-
-Emit `MortalList.flush()` calls between statements in JVM-generated code, matching
-Perl 5's per-statement FREETMPS. This is the most correct approach but:
-- Adds a method call per statement (performance cost, though flush() returns fast if empty)
-- Requires identifying statement boundaries in the JVM emitter
-- Return values would need sv_2mortal-equivalent protection (bump refCount, add to
-  pending, flush processes at next statement boundary)
-
-**Approach C: Hybrid — keep popAndFlush + suppressFlush for specific patterns**
-
-Keep the current `popAndFlush` at subroutine exit. For the specific DBIx::Class
-pattern (`shift->clone->connection(@_)`), add targeted protection:
-- In `setFromList` (list assignment from subroutine return), suppress flush
-  during materialization (already implemented via `suppressFlush`)
-- For method chaining (`$obj->method1->method2`), the intermediate result is
-  the JVM operand stack — it doesn't go through `popAndFlush`
-
-This approach accepts that the current `suppressFlush` in `setFromList` is the
-fix for the P0 issue, and focuses on the P1 GC leak as a separate problem.
-
-**Approach D: Targeted fix for the GC leak only**
-
-The P0 issue (premature DESTROY) is already fixed by `suppressFlush` in `setFromList`.
-The remaining P1 issue is the GC leak: `$storage->{schema}` weak ref is undef because
-Schema::DESTROY fires prematurely somewhere in the connect chain. Instead of
-redesigning the mortal mechanism, investigate exactly WHERE in the connect chain
-the premature DESTROY fires and add targeted protection (e.g., a temporary strong
-reference during `_copy_state_from`).
-
-#### Assessment
-
-| Approach | Correctness | Complexity | Risk |
-|----------|-------------|------------|------|
-| A: Return value bump | High if multi-level analysis is correct | Medium | Medium — needs careful refCount tracing |
-| B: Statement FREETMPS | Highest (matches Perl 5) | High | High — changes flush timing globally |
-| C: Keep suppressFlush | P0 solved; P1 unsolved | Low | Low — no change to existing behavior |
-| D: Targeted GC fix | P0 solved; P1 possibly solvable | Low-Medium | Low — targeted to specific code path |
-
-**Recommendation**: Start with Approach D (targeted GC fix). The P0 premature DESTROY
-is already fixed. The P1 GC leak is the only remaining issue. If the GC leak can be
-fixed by tracing and protecting the specific refCount underflow point in the
-connect → clone → _copy_state_from chain, we avoid risky changes to the mortal
-mechanism. If Approach D fails, escalate to Approach A (return value bump).
-
-#### Implementation plan (revised)
-
-|| Step | What | Status |
-||------|------|--------|
-|| 11.3a | ~~Instrument refCount tracing for Schema objects through `connect → clone → _copy_state_from → register_source → weaken`~~ | Superseded by Step 11.4 |
-|| 11.3b | ~~Identify exact point where Schema refCount drops to 0 (or DESTROY fires prematurely)~~ | Superseded by Step 11.4 |
-|| 11.3c–e | ~~Add targeted protection at the identified point~~ | Superseded by Step 11.4 |
+Superseded by Step 11.4.
 
 ### Step 11.4: Root Cause Found — Blessed Objects Without DESTROY Skip Hash Cleanup (2026-04-11)
 
@@ -2266,16 +1988,271 @@ Key finding: The `flushing` reentrancy guard means inner cascaded entries are NO
 |------|---------|
 | `src/main/java/org/perlonjava/runtime/perlmodule/DBI.java` | `toJdbcValue()` helper (Work Items 4, 6) |
 | `src/main/perl/lib/DBI.pm` | DBI_DRIVER env var handling (WI5), HandleError callback (WI8) |
+| `src/main/java/org/perlonjava/backend/jvm/EmitterMethodCreator.java` | try/catch trampoline for regular subs — **REVERTED** (Phase 13 uses apply()-level approach) |
+| `src/main/java/org/perlonjava/backend/bytecode/BytecodeInterpreter.java` | `propagatingException` + finally cleanup (keep — works for interpreter) |
 | `src/main/java/org/perlonjava/core/Configuration.java` | Auto-updated by `make` |
 
 ### Next Steps
 
-1. **Run tests for completed Work Items 4, 5, 6, 8** to confirm they pass
-2. **Continue Work Item 2**: Write sandbox test for `refaddr`/`weaken` in DESTROY during cascading cleanup; investigate the namespace resolution failure
-3. **Work Item 3** (bulk populate transactions): 10 assertions in t/100populate.t
-4. **Work Item 9** (transaction depth): 4 assertions in t/storage/txn_scope_guard.t
-5. **Work Item 10** (detached ResultSource): 5 assertions in t/sqlmaker/order_by_bindtransport.t
-6. **Commit and push** when tests verified
+1. ~~**Phase 13**: Implement DESTROY-on-die at apply() level~~ — **DONE** (2026-04-11)
+2. **Commit and push** DBI fixes (Work Items 4, 5, 6, 8) separately
+3. **Continue Work Item 2**: `refaddr`/`weaken` in DESTROY during cascading cleanup
+4. **Work Item 3** (bulk populate transactions): 10 assertions in t/100populate.t
+5. **Work Item 9** (transaction depth): 4 assertions in t/storage/txn_scope_guard.t
+6. **Work Item 10** (detached ResultSource): 5 assertions in t/sqlmaker/order_by_bindtransport.t
+
+---
+
+## Phase 13: DESTROY-on-die for Blessed Objects During Exception Unwinding
+
+### Status: COMPLETED (2026-04-11)
+
+### Problem
+
+When `die` propagates through a regular subroutine (no enclosing `eval` in the
+same frame), blessed objects in `my` variables don't get DESTROY called. The
+`scopeExitCleanup` bytecodes emitted at block exits are skipped by the exception.
+
+### Solution: MyVarCleanupStack (apply()-level approach)
+
+Instead of adding try/catch in the JVM emitter (which failed due to exception
+table ordering), we track `my` variables at runtime via a parallel stack:
+
+1. **`MyVarCleanupStack.java`** — new class with `pushMark()`, `register()`,
+   `unwindTo()`, `popMark()`. Uses `ArrayList<Object>` stack. No
+   `blessedObjectExists` guards (variables are created before `bless()` runs).
+2. **`EmitVariable.java`** — emits `register()` call after every `my` variable
+   ASTORE (line 1529). Only for `my` (not `state`/`our`).
+3. **`RuntimeCode.java`** — all 3 static `apply()` overloads wrapped with
+   `pushMark()` before try, `catch (RuntimeException)` calling `unwindTo()` +
+   `MortalList.flush()`, and `popMark()` in finally.
+
+### Key design decisions
+
+- **No `blessedObjectExists` guard** on `register()` or `pushMark()`: a variable
+  may be created before the first `bless()` in the same sub. Guard was the cause
+  of the initial "DESTROY not firing" bug.
+- **No `unregister()` at scope exit**: `evalExceptionScopeCleanup` is idempotent,
+  so double-cleanup (normal exit + exception) is safe. Saves one method call per
+  variable per scope exit.
+- **`PerlExitException` excluded**: `exit()` skips cleanup — global destruction
+  handles it.
+- **Performance**: O(1) amortized per `my` variable (ArrayList push/pop), inlined
+  by HotSpot. `popMark` after `unwindTo` is a no-op (entries already removed).
+
+### Files changed
+
+| File | Changes |
+|------|---------|
+| `MyVarCleanupStack.java` (new) | Runtime cleanup stack for my-variables |
+| `EmitVariable.java` | Emit `register()` after my-variable ASTORE |
+| `RuntimeCode.java` | `pushMark`/`unwindTo`/`popMark` in 3 static apply() |
+| `BytecodeInterpreter.java` | `propagatingException` + finally cleanup (interpreter backend, kept) |
+| `EmitterMethodCreator.java` | Reverted try/catch/trampoline for regular subs |
+
+### Test results
+
+- `make` (build + all unit tests): PASS
+- `try_catch.t`: PASS (was failing with emitter approach)
+- DESTROY-on-die through nested subs: PASS, fires in LIFO order
+- Normal return (no die): No double-DESTROY
+
+### Historical notes
+
+#### What already worked before Phase 13
+
+| Backend | eval {} blocks | Regular subs (die propagates) |
+|---------|---------------|-------------------------------|
+| **JVM** | Catch handler calls `evalExceptionScopeCleanup` for all recorded `my`-variable slots (LIFO), then `flush()`. Works correctly. | **BROKEN** — no cleanup. |
+| **Interpreter** | Catch handler inside dispatch loop handles it. Works correctly. | **FIXED** (uncommitted) — `propagatingException` flag + finally block walks `registers[]`. |
+
+#### Failed approach: Emitter try/catch (in uncommitted EmitterMethodCreator.java)
+
+Added try/catch-rethrow wrapping around every regular sub body in the JVM
+emitter, mirroring the eval catch handler's cleanup pattern. Used a
+pre-initialization trampoline to null-initialize my-variable slots before
+the try block (so ALOAD in the catch handler sees Object, not "top").
+
+**Result**: `local.t` passes (trampoline fixed VerifyError), BUT `try_catch.t`
+fails — `die` inside `try { } catch ($e) { }` is caught by the outer sub's
+handler instead of the inner try/catch handler.
+
+**Root cause**: JVM exception table ordering. `visitTryCatchBlock` for the outer
+sub is registered FIRST (before the body is compiled), so it appears first in
+the exception table. The JVM dispatches to the **first matching** handler. Inner
+eval/try handlers registered during body compilation come later in the table.
+Deferring `visitTryCatchBlock` to after compilation causes VerifyErrors because
+ASM's COMPUTE_FRAMES needs exception entries before the labels they reference.
+
+**This is a fundamental JVM limitation**: the exception table ordering is
+determined by registration order, and the outer handler must be registered
+before the body (which contains inner handlers) is compiled.
+
+### New approach: Cleanup at `apply()` call site in Java
+
+**Key insight**: The `local` mechanism already handles state restoration during
+exception unwinding. `local $x` pushes save state onto `InterpreterState` at
+runtime. If an exception propagates, the state is restored by unwinding the
+stack. The same pattern works for `my` variable cleanup — register variables
+at runtime on a cleanup stack, and unwind on exception.
+
+**Why apply() level works**:
+- The catch is in Java code (`RuntimeCode.apply()`), outside generated bytecodes
+- Inner eval/try handlers fire FIRST (they're in the generated code)
+- Only uncaught exceptions reach the apply() catch handler
+- No exception table ordering issues — there's no exception table involved
+- Single Java code change, works for the JVM backend
+
+**Architecture** (parallels the `local` mechanism):
+
+```
+Subroutine entry (in apply()):
+    mark = myVarCleanupStack.pushMark()
+
+During execution (emitted bytecodes):
+    my $x = bless {};
+        → myVarCleanupStack.register($x_slot)   // new: register for exception cleanup
+    ... code ...
+    } // block exit (normal path)
+        → scopeExitCleanup($x)                   // existing: deferred DESTROY decrement
+        → myVarCleanupStack.unregister($x_slot)  // new: no longer needs exception cleanup
+
+Subroutine exit — normal (in apply()):
+    myVarCleanupStack.popMark(mark)              // discard registrations (already cleaned up)
+
+Subroutine exit — exception (in apply() catch handler):
+    myVarCleanupStack.unwindTo(mark)             // run scopeExitCleanup for all registered-but-not-yet-cleaned vars
+    MortalList.flush()                            // process deferred DESTROY decrements
+    re-throw exception
+```
+
+### Implementation plan
+
+| Step | What | Files | Status |
+|------|------|-------|--------|
+| 13.1 | Add `MyVarCleanupStack` class with `pushMark()`, `register()`, `unregister()`, `unwindTo()` | New: `MyVarCleanupStack.java` (or add to `MortalList.java`) | |
+| 13.2 | Emit `register` bytecodes at `my` variable creation in JVM backend | `EmitVariable.java` or `EmitStatement.java` | |
+| 13.3 | Emit `unregister` bytecodes at normal scope exit alongside existing `scopeExitCleanup` | `EmitStatement.java` (`emitScopeExitNullStores`) | |
+| 13.4 | Add try/catch in `RuntimeCode.apply()` static methods: catch → `unwindTo(mark)` → `flush()` → re-throw | `RuntimeCode.java` (3 static overloads + `applyEval`) | |
+| 13.5 | **Revert** the EmitterMethodCreator.java try/catch/trampoline for regular subs | `EmitterMethodCreator.java` | |
+| 13.6 | Keep interpreter `propagatingException` implementation (already works) | `BytecodeInterpreter.java` — no change needed | |
+| 13.7 | Run `make` — verify all unit tests pass | | |
+| 13.8 | Test with `txn_scope_guard.t` to verify DBIx::Class fix | | |
+| 13.9 | Commit and push | | |
+
+### Design details
+
+#### MyVarCleanupStack
+
+Thread-local stack (same thread-safety model as `MortalList`):
+
+```java
+public class MyVarCleanupStack {
+    private static final ArrayList<RuntimeScalar> stack = new ArrayList<>();
+    private static final ArrayList<Integer> marks = new ArrayList<>();
+
+    /** Called at subroutine entry (in apply()). Returns mark position. */
+    public static int pushMark() {
+        int mark = stack.size();
+        marks.add(mark);
+        return mark;
+    }
+
+    /** Called by emitted bytecode when a my-variable is created. */
+    public static void register(RuntimeScalar var) {
+        stack.add(var);
+    }
+
+    /** Called by emitted bytecode at normal scope exit (after scopeExitCleanup). */
+    public static void unregister(RuntimeScalar var) {
+        // Remove from top of stack (LIFO — most recent registration first)
+        for (int i = stack.size() - 1; i >= 0; i--) {
+            if (stack.get(i) == var) {
+                stack.remove(i);
+                return;
+            }
+        }
+    }
+
+    /** Called on exception in apply(). Runs scopeExitCleanup for registered vars. */
+    public static void unwindTo(int mark) {
+        for (int i = stack.size() - 1; i >= mark; i--) {
+            RuntimeScalar var = stack.remove(i);
+            if (var != null) {
+                RuntimeScalar.scopeExitCleanup(var);
+            }
+        }
+        // Pop the mark
+        if (!marks.isEmpty()) marks.removeLast();
+    }
+
+    /** Called on normal exit in apply(). Discards registrations without cleanup. */
+    public static void popMark(int mark) {
+        while (stack.size() > mark) stack.removeLast();
+        if (!marks.isEmpty()) marks.removeLast();
+    }
+}
+```
+
+#### Changes to apply() (RuntimeCode.java)
+
+In each static `apply()` overload, wrap the call:
+
+```java
+int cleanupMark = MyVarCleanupStack.pushMark();
+try {
+    RuntimeList result = code.apply(a, callContext);
+    // ... existing tail-call trampoline, mortalizeForVoidDiscard ...
+    return result;
+} catch (PerlNonLocalReturnException e) {
+    // ... existing handler ...
+} catch (Throwable t) {
+    // Exception propagating out — clean up my-variables in unwound frames
+    MyVarCleanupStack.unwindTo(cleanupMark);
+    MortalList.flush();
+    throw t;
+} finally {
+    MyVarCleanupStack.popMark(cleanupMark);
+    // ... existing hint/warning cleanup ...
+}
+```
+
+**Important**: The catch handler fires for ALL exceptions propagating out,
+including those that will be caught by an outer eval. The `unwindTo()` only
+processes registrations from this subroutine's frame (mark-scoped), so it
+won't interfere with the outer eval's own cleanup.
+
+#### Optimization: Only register variables that could hold blessed refs
+
+To minimize overhead, only emit `register` calls for `my` variables that
+could hold blessed references (scalars with reference assignments). This
+is a compile-time heuristic — if a variable is only ever assigned integers
+or strings, skip the registration. For simplicity, the initial implementation
+can register ALL `my` scalars and optimize later.
+
+Hash/array `my` variables can also be registered (they may contain blessed
+refs). Use `MortalList.evalExceptionScopeCleanup(Object)` for type dispatch.
+
+### Risk assessment
+
+| Risk | Mitigation |
+|------|------------|
+| Performance: `register`/`unregister` on every `my` variable | Short-circuit when `MortalList.active == false` or `!blessedObjectExists`. Stack ops are O(1) push/pop for normal (LIFO) patterns. |
+| Correctness: double cleanup if normal path + exception path both fire | `unregister` at normal scope exit removes the entry. If exception fires after `unregister`, variable is not in the stack. If exception fires before `scopeExitCleanup`, `unwindTo` handles it. |
+| Correctness: captured variables (closures) | Same logic as existing `scopeExitCleanup` — captured vars with `captureCount > 0` skip cleanup for non-CODE refs. |
+| Exception in DESTROY during unwindTo | `DestroyDispatch.doCallDestroy` already catches exceptions in DESTROY and converts to warnings. |
+
+### Comparison with emitter try/catch approach
+
+| Aspect | Emitter try/catch (failed) | apply()-level (proposed) |
+|--------|---------------------------|-------------------------|
+| Exception table ordering | BROKEN — outer handler intercepts inner eval/try | N/A — no exception table changes |
+| JVM VerifyError | Needed pre-init trampoline | N/A — no bytecode changes in catch handler |
+| Per-sub overhead | One exception table entry per sub | `pushMark`/`popMark` per sub call (cheap) |
+| Cleanup access | ALOAD JVM locals (fragile) | Runtime stack (robust) |
+| Works for interpreter | No (separate implementation needed) | Interpreter already has `propagatingException` |
+
+---
 
 ## Related Documents
 
