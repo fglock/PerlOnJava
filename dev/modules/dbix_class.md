@@ -6,7 +6,7 @@
 **Test command**: `./jcpan -t DBIx::Class`  
 **Branch**: `feature/dbix-class-destroy-weaken`  
 **PR**: https://github.com/fglock/PerlOnJava/pull/485  
-**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 GC leak fix committed (Step 11.4, `4f1ed14ab`): blessed objects without DESTROY now cascade cleanup to hash elements. Remaining GC-only failures at END time are caused by Sub::Quote closure walk differences, not refcount tracking bugs.
+**Status**: Phase 12 — ALL tests must pass. Current: 27 pass, 146 GC-only fail, 25 real fail, 43 legitimately skipped. See Phase 12 plan below for 13 work items. Previous: Phase 11 Step 11.4 committed (`4f1ed14ab`) — blessed objects without DESTROY now cascade cleanup to hash elements.
 
 ## Dependency Tree
 
@@ -947,20 +947,349 @@ instead of relying on DESTROY.
 | hints.t | 13/18 | Tests 4-5 (${^WARNING_BITS} round-trip), test 8 (%^H in eval BEGIN), tests 9,14 (overload::constant) |
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
-### Next Steps
-1. **P1: Re-run full DBIx::Class suite** — get updated numbers with Step 11.4 fix. Focus on whether any previously-failing tests now pass.
-2. **P2: Fix `B::svref_2object($ref)->REFCNT` method chain leak** — low-impact but affects diagnostic code. Investigate temporary blessed object cleanup in method chains.
-3. **P2: Fix t/storage/on_connect_do.t table lock** — "database table is locked" (SQLite JDBC concurrency issue)
-4. **P2: Fix t/schema/anon.t chaining** — "Schema object not lost in chaining" (detached result source during init_schema)
-5. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
-6. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-7. UTF-8 flag semantics: 8 tests in t/85utf8.t (systemic JVM limitation)
-8. Long-term: Make `visit_refs` walk correctly follow PerlOnJava closure captures (would eliminate ~27 cosmetic GC failures)
+### Full Suite Results (2026-04-11, post Step 11.4)
 
-### Open Questions
-- **GC-only failures: accept or fix?** The ~27 GC-only failures are cosmetic (all real tests pass). Fixing them requires either making `visit_refs`/`isweak` work identically to Perl 5 for Sub::Quote closures, or patching `assert_empty_weakregistry` to be more lenient. Given the effort vs. benefit, accepting them as known cosmetic failures is reasonable.
-- **Performance of tracking all blessed objects**: Step 11.4 now tracks ALL blessed objects (not just those with DESTROY). `make` timing shows no measurable regression (35s vs. ~35s before). For pathological cases (millions of blessed-no-DESTROY objects), the overhead would be higher.
-- RowParser crash: safe to ignore since all real tests pass before it fires.
+| Category | Count | Notes |
+|----------|-------|-------|
+| Full pass | 27 | All assertions pass |
+| GC-only failures | 146 | Only `Expected garbage collection` failures — real tests all pass |
+| Real failures | 25 | Have non-GC `not ok` lines |
+| Skip/no output | 43 | No TAP output (skipped, errored, or missing deps) |
+| **Total files** | **241** | |
+| Total ok assertions | 11,646 | |
+| Total not-ok assertions | 746 | Most are GC-related |
+
+**Real failure breakdown** (non-GC not-ok count):
+- t/100populate.t (12), t/60core.t (12), t/85utf8.t (9), t/prefetch/count.t (7), t/sqlmaker/order_by_bindtransport.t (7)
+- t/storage/dbi_env.t (6), t/row/filter_column.t (6), t/multi_create/existing_in_chain.t (4), t/prefetch/manual.t (4), t/storage/txn_scope_guard.t (4)
+- 15 more files with 1-2 real failures each
+
+### Goal: ALL DBIx::Class Tests Must Pass
+
+**Target**: Every DBIx::Class test that can run (i.e., not legitimately skipped for missing external DB servers, ithreads, or by test design) must produce zero `not ok` lines — including GC assertions.
+
+---
+
+## Phase 12: Complete DBIx::Class Fix Plan (Handoff)
+
+### How to Run the Suite
+
+```bash
+# Build PerlOnJava first
+cd /Users/fglock/projects/PerlOnJava3
+make
+
+# Run the full suite (takes ~10 minutes)
+cd /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-13
+JPERL=/Users/fglock/projects/PerlOnJava3/jperl
+for t in t/*.t t/storage/*.t t/inflate/*.t t/multi_create/*.t t/prefetch/*.t \
+         t/relationship/*.t t/resultset/*.t t/row/*.t t/search/*.t \
+         t/sqlmaker/*.t t/sqlmaker/limit_dialects/*.t t/delete/*.t; do
+    [ -f "$t" ] || continue
+    timeout 120 "$JPERL" -Iblib/lib -Iblib/arch "$t" > /tmp/dbic_suite/$(echo "$t" | tr '/' '_' | sed 's/\.t$//').txt 2>&1
+done
+
+# Count results
+for f in /tmp/dbic_suite/*.txt; do
+    ok=$(grep -c "^ok " "$f" 2>/dev/null); ok=${ok:-0}
+    notok=$(grep -c "^not ok " "$f" 2>/dev/null); notok=${notok:-0}
+    [ "$notok" -gt 0 ] && echo "FAIL($notok): $(basename $f .txt)"
+done | sort
+```
+
+### Work Items Overview
+
+| # | Work Item | Impact | Files Affected | Difficulty |
+|---|-----------|--------|----------------|------------|
+| 1 | **GC: Fix object liveness at END** | 146 files, 658 assertions | PerlOnJava runtime | Hard |
+| 2 | **DBI: Statement handle finalization** | 12 assertions, 1 file | DBI.pm shim | Medium |
+| 3 | **DBI: Transaction wrapping for bulk populate** | 10 assertions, 1 file | DBI.pm / Storage::DBI | Medium |
+| 4 | **DBI: Numeric formatting (10.0 vs 10)** | 6 assertions, 1 file | DBD::SQLite JDBC shim | Easy |
+| 5 | **DBI: DBI_DRIVER env var handling** | 6 assertions, 1 file | DBI.pm shim | Easy |
+| 6 | **DBI: Overloaded object stringification in bind** | 1 assertion, 1 file | DBI.pm shim | Easy |
+| 7 | **DBI: Table locking on disconnect** | 1 assertion, 1 file | DBD::SQLite JDBC shim | Medium |
+| 8 | **DBI: Error handler after schema destruction** | 1 assertion, 1 file | DBI.pm / Storage::DBI | Easy |
+| 9 | **Transaction/savepoint depth tracking** | 4 assertions, 1 file | Storage::DBI / DBD::SQLite | Medium |
+| 10 | **Detached ResultSource (weak ref cleanup)** | 5 assertions, 1 file | PerlOnJava runtime | Medium |
+| 11 | **B::svref_2object method chain refcount leak** | Affects GC diagnostic accuracy | PerlOnJava compiler/runtime | Medium |
+| 12 | **UTF-8 byte-level string handling** | 8+ assertions, 1 file | Systemic JVM limitation | Hard |
+| 13 | **Bless/overload performance** | 1 assertion, 1 file | PerlOnJava runtime | Hard |
+
+---
+
+### Work Item 1: GC — Fix Object Liveness at END (HIGHEST PRIORITY)
+
+**Impact**: 146 test files, 658 `not ok` assertions. Fixing this alone would make 146 files go from "fail" to "pass".
+
+**What happens now**: Every test that uses `DBICTest` or `BaseSchema` registers `$schema->storage` and `$dbh` into a weak registry via `populate_weakregistry()`. At END time, `assert_empty_weakregistry($weak_registry, 'quiet')` checks whether those weakrefs have become `undef` (meaning the objects were GC'd). They haven't — the objects are still alive.
+
+**Objects that always survive** (3 per typical test, more for tests creating multiple connections):
+1. `DBIx::Class::Storage::DBI::SQLite=HASH(...)` — the storage object
+2. `DBIx::Class::Storage::DBI=HASH(...)` — same object, re-blessed name
+3. `DBI::db=HASH(...)` — the database handle
+
+**Root cause**: `$schema` is a file-scoped lexical in the test file. In Perl 5, file-scoped lexicals are destroyed before END blocks run (during the "destruct" phase). In PerlOnJava, file-scoped lexicals are NOT destroyed before END blocks — they remain live, keeping `$schema->storage` and its `$dbh` alive.
+
+**The "quiet" walk**: When `$quiet` is passed, `assert_empty_weakregistry` only walks `%Sub::Quote::QUOTED` closures to find "expected survivors". In Perl 5, this walk finds the Storage object through closure capture chains and excludes it. In PerlOnJava, `visit_refs` with `CV_TRACING` uses `PadWalker::closed_over()` which doesn't return the same captures (PerlOnJava closures capture differently from Perl 5).
+
+**Fix strategies** (choose one or combine):
+
+#### Strategy A: Implement file-scope lexical cleanup before END blocks
+Make PerlOnJava destroy file-scoped lexicals (decrement their refCounts and set to undef) before running END blocks, matching Perl 5 behavior. This is the "correct" fix.
+- **Pros**: Fixes the root cause; matches Perl 5 semantics exactly
+- **Cons**: Complex; may have side effects on other code that relies on file-scoped variables being alive in END blocks
+- **Files**: `src/main/java/org/perlonjava/runtime/` — look at how END blocks are dispatched and where `scopeExitCleanup` is called
+
+#### Strategy B: Make `visit_refs` / closure walking work for PerlOnJava
+Make `PadWalker::closed_over()` (or its PerlOnJava equivalent) return captures that match what Perl 5 returns, so the "quiet" walk in `assert_empty_weakregistry` correctly identifies Storage as an "expected survivor".
+- **Pros**: Doesn't change END block semantics
+- **Cons**: Still leaves objects alive (just excluded from the assertion); complex to implement
+- **Files**: `src/main/perl/lib/PadWalker.pm` (bundled), `RuntimeCode.java` (closure capture internals)
+
+#### Strategy C: Ensure Storage/dbh objects are actually GC'd before END
+Force `$schema->storage->disconnect` or `undef $schema` at the end of each test's main scope, before END runs. This could be done by wrapping test execution in a block scope that triggers cleanup.
+- **Pros**: Objects genuinely get GC'd; assertions pass naturally
+- **Cons**: Requires either patching DBICTest.pm or changing PerlOnJava's scope semantics
+- **Files**: `t/lib/DBICTest.pm`, `t/lib/DBICTest/BaseSchema.pm` — but we prefer NOT to modify tests
+
+#### Strategy D: Hybrid — destruct file-scoped lexicals + fix visit_refs as fallback
+Implement Strategy A as the primary fix. For any remaining edge cases where objects are legitimately alive through global structures (like `%Sub::Quote::QUOTED`), implement Strategy B as a fallback.
+
+**Recommended approach**: Strategy A (file-scope cleanup before END) is the most correct and would fix the most tests. Start there.
+
+**Key files to understand**:
+- `t/lib/DBICTest/Util/LeakTracer.pm` — `assert_empty_weakregistry` (line 203), `populate_weakregistry` (line 24), `visit_refs` (line 94)
+- `t/lib/DBICTest/BaseSchema.pm` — lines 307-341 (registration + END block)
+- `t/lib/DBICTest.pm` — lines 365-373 (registration + END block)
+- `src/main/java/org/perlonjava/runtime/` — END block dispatch, scope cleanup
+
+**Verification**: After fixing, run ANY single test and check for zero `not ok` lines:
+```bash
+cd /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-13
+/Users/fglock/projects/PerlOnJava3/jperl -Iblib/lib -Iblib/arch t/70auto.t
+# Should show: ok 1, ok 2, and NO "not ok 3/4/5" GC assertions
+```
+
+---
+
+### Work Item 2: DBI Statement Handle Finalization
+
+**Impact**: 12 assertions in t/60core.t (tests 82-93)
+
+**Symptom**: `Unreachable cached statement still active: SELECT me.artistid, me.name...` — prepared statement handles that should have been finalized remain active in the DBI handle cache.
+
+**Root cause**: PerlOnJava's JDBC-backed DBI doesn't properly mark prepared statement handles as inactive when they become unreachable. In Perl 5 DBI, when a `$sth` goes out of scope, its `DESTROY` method calls `finish()` which marks it inactive. The cached statement handle is then detected as inactive.
+
+**Fix**: In the DBI shim (`src/main/perl/lib/DBI.pm` or the Java DBI implementation), ensure that when a statement handle's refcount drops to zero (DESTROY fires), it calls `finish()` or sets `Active` to 0. Also check `CachedKids` cleanup.
+
+**Files**: `src/main/perl/lib/DBI.pm`, `src/main/java/org/perlonjava/runtime/perlmodule/DBI/` (Java DBI implementation)
+
+**Verification**: `./jperl -Iblib/lib -Iblib/arch t/60core.t 2>&1 | grep "not ok"` — should show only GC assertions, not "Unreachable cached statement" failures.
+
+---
+
+### Work Item 3: DBI Transaction Wrapping for Bulk Populate
+
+**Impact**: 10 assertions in t/100populate.t
+
+**Symptom**: SQL trace expects `BEGIN → INSERT → COMMIT` around `populate()` calls, but only gets bare `INSERT` statements. Also, `populate is atomic` test fails because partial inserts leak (no transaction to rollback).
+
+**Root cause**: `Storage::DBI::_dbh_execute_for_fetch()` or `insert_bulk()` doesn't wrap bulk operations in an explicit transaction via `$self->txn_do()`.
+
+**Fix**: Check how `DBIx::Class::Storage::DBI->insert_bulk` calls the underlying DBI. Ensure `AutoCommit` is properly set and `BEGIN`/`COMMIT` are emitted. This may be a JDBC SQLite autocommit behavior difference.
+
+**Files**: Search for `insert_bulk`, `execute_for_fetch`, `txn_begin` in `blib/lib/DBIx/Class/Storage/DBI.pm`
+
+---
+
+### Work Item 4: Numeric Formatting (10.0 vs 10)
+
+**Impact**: 6 assertions in t/row/filter_column.t
+
+**Symptom**: Integer values retrieved from SQLite come back as `'10.0'` instead of `'10'`.
+
+**Root cause**: JDBC's `ResultSet.getObject()` for SQLite returns `Double` for numeric columns. PerlOnJava's DBI shim converts this to a Perl scalar with `.0` suffix.
+
+**Fix**: In the DBD::SQLite JDBC shim, detect when a numeric value is a whole number and strip the `.0` suffix, or use `getInt()`/`getLong()` when the column type is INTEGER.
+
+**Files**: `src/main/perl/lib/DBD/SQLite.pm`, `src/main/java/org/perlonjava/runtime/perlmodule/DBI/` (JDBC result conversion)
+
+---
+
+### Work Item 5: DBI_DRIVER Environment Variable
+
+**Impact**: 6 assertions in t/storage/dbi_env.t
+
+**Symptom**: `$ENV{DBI_DRIVER}` is not consulted when the DSN has an empty driver slot (`dbi::path`). Error messages differ from Perl 5 DBI.
+
+**Fix**: In `DBI->connect()`, when the DSN doesn't specify a driver, check `$ENV{DBI_DRIVER}` and use it to resolve the DBD module. Also match error message wording.
+
+**Files**: `src/main/perl/lib/DBI.pm` — `connect()` method, driver resolution logic
+
+---
+
+### Work Item 6: Overloaded Object Stringification in DBI Bind
+
+**Impact**: 1 assertion in t/storage/prefer_stringification.t
+
+**Symptom**: An overloaded object passed as a bind parameter produces `''` instead of its stringified value `'999'`.
+
+**Fix**: In the DBI bind parameter handling, check if the value is a blessed reference with overloaded `""` (stringification) and call it before passing to JDBC.
+
+**Files**: `src/main/perl/lib/DBI.pm` — `execute()` / bind parameter marshaling
+
+---
+
+### Work Item 7: SQLite Table Locking on Disconnect
+
+**Impact**: 1 assertion in t/storage/on_connect_do.t
+
+**Symptom**: `database table is locked` when trying to drop a table during disconnect, because JDBC SQLite holds statement-level locks.
+
+**Fix**: Ensure all prepared statements are closed/finalized before executing DDL in disconnect callbacks. This relates to Work Item 2 (statement handle finalization).
+
+**Files**: `src/main/perl/lib/DBD/SQLite.pm`, JDBC connection cleanup code
+
+---
+
+### Work Item 8: DBI Error Handler After Schema Destruction
+
+**Impact**: 1 assertion in t/storage/error.t
+
+**Symptom**: After `$schema` goes out of scope, the DBI error handler callback produces `DBI Exception: DBI prepare failed: no such table` instead of the expected `DBI Exception...unhandled by DBIC...no such table`.
+
+**Fix**: The "unhandled by DBIC" prefix is added by `Storage::DBI::throw_exception` when `$self->_dbh_last_err` indicates the error wasn't caught. After schema destruction, the weak-ref-based error handler falls through to DBI's default, which doesn't add this prefix. Check the `HandleError` callback setup in `Storage::DBI`.
+
+**Files**: `blib/lib/DBIx/Class/Storage/DBI.pm` — error handler setup, `HandleError` callback
+
+---
+
+### Work Item 9: Transaction/Savepoint Depth Tracking
+
+**Impact**: 4 assertions in t/storage/txn_scope_guard.t
+
+**Symptom**: `transaction_depth` returns 3 when 2 is expected; nested rollback doesn't work (row persists); `UNIQUE constraint failed` from stale data.
+
+**Root cause**: Savepoint `BEGIN`/`RELEASE`/`ROLLBACK TO` may not properly update `transaction_depth`. Also, `TxnScopeGuard` DESTROY semantics may differ (test expects `Preventing *MULTIPLE* DESTROY()` warning).
+
+**Fix**: Trace the transaction depth counter through `txn_begin`, `svp_begin`, `svp_release`, `txn_commit`, `txn_rollback`. Ensure savepoints decrement depth correctly. Check TxnScopeGuard DESTROY guard.
+
+**Files**: `blib/lib/DBIx/Class/Storage/DBI.pm` — `txn_begin`, `svp_begin`, `svp_release`, `txn_rollback`; `blib/lib/DBIx/Class/Storage/TxnScopeGuard.pm` — DESTROY
+
+---
+
+### Work Item 10: Detached ResultSource (Weak Reference Cleanup)
+
+**Impact**: 5 assertions in t/sqlmaker/order_by_bindtransport.t
+
+**Symptom**: `Unable to perform storage-dependent operations with a detached result source (source 'FourKeys' is not associated with a schema)`.
+
+**Root cause**: The Schema→Source association is held via a weak reference that gets cleaned up prematurely. When the test calls `$schema->resultset('FourKeys')->result_source`, the source's `schema` backlink is already `undef`.
+
+**Fix**: Investigate why the weak ref from Source to Schema is being cleared. This may be related to PerlOnJava's weaken/scope cleanup — the Schema refcount may drop to 0 prematurely during test setup, clearing all weakrefs, then get "revived" by a later reference. Check `ResultSource::register_source` and how the schema↔source bidirectional refs are set up.
+
+**Files**: `blib/lib/DBIx/Class/ResultSource.pm`, `blib/lib/DBIx/Class/Schema.pm`, PerlOnJava's weaken implementation
+
+---
+
+### Work Item 11: B::svref_2object Method Chain Refcount Leak
+
+**Impact**: Affects GC diagnostic accuracy; indirectly contributes to GC assertion failures.
+
+**Symptom**: `B::svref_2object($ref)->REFCNT` leaks a refcount on `$ref`'s referent. Workaround: `my $sv = B::svref_2object($ref); $sv->REFCNT`.
+
+**Root cause chain**:
+1. `B::SV->new($ref)` creates `bless { ref => $ref }, 'B::SV'` — anonymous hash construction
+2. `RuntimeHash.createHashRef()` calls `createReferenceWithTrackedElements()` which bumps `$ref`'s referent's refCount via `incrementRefCountForContainerStore()`
+3. The blessed hash is returned as a **temporary** (stored only in a JVM local slot, not a Perl variable)
+4. No `scopeExitCleanup()` runs for JVM locals — only for Perl lexicals
+5. `mortalizeForVoidDiscard()` only fires for void-context calls, but this is scalar context (method invocant)
+6. The JVM GC eventually collects the temporary, but the Perl refCount decrements never happen
+
+**Why intermediate variable works**: `my $sv = B::svref_2object($ref)` triggers `setLargeRefCounted()` which increments the hash's refCount to 1 and sets `refCountOwned=true`. When `$sv` goes out of scope, `scopeExitCleanup()` decrements it back to 0, triggering `callDestroy()` which walks hash elements and decrements `$ref`'s referent's refCount.
+
+**Fix strategies** (choose one):
+
+A. **Simplest — change B.pm to avoid hash construction**: Since `REFCNT` always returns 1 anyway, store the ref in a way that doesn't trigger `createReferenceWithTrackedElements`. For example, use a plain (untracked) hash or store in an array.
+
+B. **Fix in compiler — mortalize method-chain temporaries**: In `Dereference.java` `handleArrowOperator()` (line 858+), after `callCached()` returns, emit cleanup for the invocant if it was an expression (not a variable). Check if the objectSlot holds a blessed ref with refCount==0 and add it to MortalList.
+
+C. **Fix in RuntimeCode.apply — mortalize non-void temporaries**: Extend `mortalizeForVoidDiscard()` to also handle scalar-context temporaries that are blessed and tracked. This would require distinguishing "result used as invocant" from "result stored in variable".
+
+**Key files**:
+- `src/main/perl/lib/B.pm` — lines 50-61 (B::SV::new, REFCNT), lines 328-360 (svref_2object)
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeHash.java` — lines 150-151, 578-591
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` — lines 804-811
+- `src/main/java/org/perlonjava/backend/jvm/Dereference.java` — lines 858-980
+- `src/main/java/org/perlonjava/runtime/RuntimeCode.java` — line 2248 (mortalizeForVoidDiscard)
+
+**Recommended**: Strategy A is simplest and sufficient for DBIx::Class. Strategy B is the "correct" general fix but more complex.
+
+---
+
+### Work Item 12: UTF-8 Byte-Level String Handling
+
+**Impact**: 8+ assertions in t/85utf8.t
+
+**Symptom**: Raw bytes retrieved from database have UTF-8 flag set; byte-level comparisons fail; dirty detection broken.
+
+**Root cause**: JVM strings are always Unicode. PerlOnJava doesn't maintain the Perl 5 distinction between "bytes" (Latin-1 encoded) and "characters" (UTF-8 flagged). Data round-trips through JDBC always come back as Java Strings (Unicode).
+
+**This is a systemic JVM limitation**. Partial mitigations:
+- Track the UTF-8 flag per scalar and preserve it through DB round-trips
+- In DBI fetch, don't set the UTF-8 flag unless the column was declared as unicode
+
+**Files**: `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java` (UTF8 flag handling), `src/main/perl/lib/DBD/SQLite.pm` (fetch result construction)
+
+---
+
+### Work Item 13: Bless/Overload Performance
+
+**Impact**: 1 assertion in t/zzzzzzz_perl_perf_bug.t
+
+**Symptom**: Overloaded/blessed object operations are 3.27× slower than unblessed, exceeding the 3× threshold.
+
+**Root cause**: PerlOnJava's `bless` and overload dispatch have overhead from refcount tracking, hash lookups for method resolution, etc.
+
+**Fix**: Profile and optimize the hot path. Consider caching overload method lookups. The threshold is 3×; we're at 3.27× so even a small improvement would pass.
+
+**Files**: `src/main/java/org/perlonjava/runtime/operators/ReferenceOperators.java` (bless), overload dispatch code
+
+---
+
+### Tests That Are Legitimately Skipped (43 files — NO ACTION NEEDED)
+
+| Category | Count | Reason |
+|----------|-------|--------|
+| Missing external DB (MySQL, PG, Oracle, etc.) | 20 | Need `$ENV{DBICTEST_*_DSN}` — requires real DB servers |
+| Missing Perl modules | 14 | Need DateTime::Format::*, SQL::Translator, Moose, etc. |
+| No ithread support | 3 | PerlOnJava platform limitation |
+| Deliberately skipped by test design | 4 | `is_plain` check, segfault-prone, disabled by upstream |
+| PerlOnJava `wait` operator not implemented | 2 | Only t/52leaks.t would benefit; t/746sybase.t also needs Sybase |
+
+### Tests With Only Upstream TODO/SKIP Failures (14 files — NO ACTION NEEDED)
+
+These 14 files have `not ok` lines, but ALL non-GC failures are in `TODO` blocks (known upstream DBIx::Class bugs, not PerlOnJava issues): t/88result_set_column.t, t/inflate/file_column.t, t/multi_create/existing_in_chain.t, t/prefetch/count.t, t/prefetch/grouped.t, t/prefetch/manual.t, t/prefetch/multiple_hasmany_torture.t, t/prefetch/via_search_related.t, t/relationship/core.t, t/relationship/malformed_declaration.t, t/resultset/plus_select.t, t/search/empty_attrs.t, t/sqlmaker/order_by_func.t, t/delete/related.t.
+
+TODO failures are expected and do NOT count against the pass/fail status in TAP.
+
+---
+
+### Recommended Work Order
+
+1. **Work Item 1** (GC liveness) — fixes 146 files in one shot
+2. **Work Item 4** (numeric formatting) — easy win, 6 assertions
+3. **Work Item 5** (DBI_DRIVER) — easy win, 6 assertions
+4. **Work Item 6** (stringification in bind) — easy win, 1 assertion
+5. **Work Item 8** (error handler) — easy win, 1 assertion
+6. **Work Item 2** (statement handle finalization) — 12 assertions, also helps Item 7
+7. **Work Item 3** (transaction wrapping) — 10 assertions
+8. **Work Item 9** (savepoint depth) — 4 assertions
+9. **Work Item 10** (detached ResultSource) — 5 assertions
+10. **Work Item 7** (table locking) — 1 assertion, may be fixed by Item 2
+11. **Work Item 11** (B::svref_2object) — improves GC diagnostic accuracy
+12. **Work Item 12** (UTF-8) — hard, systemic
+13. **Work Item 13** (performance) — marginal, may resolve with other optimizations
 
 ### Architecture Reference
 - See `dev/architecture/weaken-destroy.md` for the refCount state machine, `MortalList`, `WeakRefRegistry`, and `scopeExitCleanup` internals — essential for debugging the premature DESTROY and GC leak issues.
