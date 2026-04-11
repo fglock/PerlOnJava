@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.jvm.CustomClassLoader;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.io.StandardIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -11,6 +12,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
@@ -154,10 +156,22 @@ public final class PerlRuntime {
     final Stack<String> orsStack = new Stack<>();
 
     /**
+     * Internal ORS value that print reads — migrated from OutputRecordSeparator.internalORS
+     * for multiplicity thread-safety.
+     */
+    public String internalORS = "";
+
+    /**
      * OFS stack for OutputFieldSeparator "local $," save/restore —
      * migrated from OutputFieldSeparator.ofsStack.
      */
     final Stack<String> ofsStack = new Stack<>();
+
+    /**
+     * Internal OFS value that print reads — migrated from OutputFieldSeparator.internalOFS
+     * for multiplicity thread-safety.
+     */
+    public String internalOFS = "";
 
     /**
      * Errno stacks for ErrnoVariable "local $!" save/restore —
@@ -247,6 +261,39 @@ public final class PerlRuntime {
      * Default MRO algorithm (DFS by default, matching Perl 5).
      */
     public InheritanceResolver.MROAlgorithm currentMRO = InheritanceResolver.MROAlgorithm.DFS;
+
+    // ---- MRO state — migrated from Mro static fields for multiplicity ----
+
+    /** Package generation counters for mro::get_pkg_gen(). */
+    public final Map<String, Integer> mroPackageGenerations = new HashMap<>();
+
+    /** Reverse ISA cache (which classes inherit from a given class). */
+    public final Map<String, Set<String>> mroIsaRevCache = new HashMap<>();
+
+    /** Cached @ISA state per package — used to detect @ISA changes. */
+    public final Map<String, List<String>> mroPkgGenIsaState = new HashMap<>();
+
+    // ---- IO state — migrated from RuntimeIO static fields for multiplicity ----
+
+    /** Maximum number of file handles to keep in the LRU cache. */
+    private static final int MAX_OPEN_HANDLES = 100;
+
+    /** LRU cache of open file handles — per-runtime for multiplicity. */
+    public final Map<IOHandle, Boolean> openHandles =
+            new LinkedHashMap<IOHandle, Boolean>(MAX_OPEN_HANDLES, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<IOHandle, Boolean> eldest) {
+                    if (size() > MAX_OPEN_HANDLES) {
+                        try {
+                            eldest.getKey().flush();
+                        } catch (Exception e) {
+                            // Handle exception if needed
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+            };
 
     // ---- Symbol table state — migrated from GlobalVariable static fields ----
 
@@ -339,6 +386,15 @@ public final class PerlRuntime {
     /** Preserves BYTE_STRING type on captures. */
     public boolean regexLastMatchWasByteString = false;
 
+    /** Cache for /o modifier — maps callsite ID to compiled regex (only first compilation is used). */
+    public final Map<Integer, RuntimeScalar> regexOptimizedCache = new HashMap<>();
+
+    // ---- ByteCodeSourceMapper state — migrated for multiplicity ----
+
+    /** Per-runtime source-mapper state (file→line→package mappings for stack traces). */
+    public final org.perlonjava.backend.jvm.ByteCodeSourceMapper.State sourceMapperState =
+            new org.perlonjava.backend.jvm.ByteCodeSourceMapper.State();
+
     // ---- RuntimeCode compilation state — migrated from RuntimeCode static fields ----
 
     /** Tracks eval BEGIN block IDs during compilation. */
@@ -394,6 +450,45 @@ public final class PerlRuntime {
     public final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
     public final int[] inlineCacheMethodHash = new int[METHOD_CALL_CACHE_SIZE];
     public final RuntimeCode[] inlineCacheCode = new RuntimeCode[METHOD_CALL_CACHE_SIZE];
+
+    // ---- Warning/Hints stacks — migrated from WarningBitsRegistry ThreadLocals ----
+
+    /** Stack of warning bits for the current execution context. */
+    public final Deque<String> warningCurrentBitsStack = new ArrayDeque<>();
+
+    /** Warning bits at the current call site. */
+    public String warningCallSiteBits = null;
+
+    /** Stack saving caller's call-site warning bits across subroutine calls. */
+    public final Deque<String> warningCallerBitsStack = new ArrayDeque<>();
+
+    /** Compile-time $^H (hints) at the current call site. */
+    public int warningCallSiteHints = 0;
+
+    /** Stack saving caller's $^H hints across subroutine calls. */
+    public final Deque<Integer> warningCallerHintsStack = new ArrayDeque<>();
+
+    /** Compile-time %^H (hints hash) snapshot at the current call site. */
+    public Map<String, RuntimeScalar> warningCallSiteHintHash = new HashMap<>();
+
+    /** Stack saving caller's %^H across subroutine calls. */
+    public final Deque<Map<String, RuntimeScalar>> warningCallerHintHashStack = new ArrayDeque<>();
+
+    // ---- HintHashRegistry stacks — migrated from HintHashRegistry ThreadLocals ----
+
+    /** Current call site's hint hash snapshot ID. */
+    public int hintCallSiteSnapshotId = 0;
+
+    /** Stack saving caller's hint hash snapshot ID across subroutine calls. */
+    public final Deque<Integer> hintCallerSnapshotIdStack = new ArrayDeque<>();
+
+    // ---- RuntimeCode stacks — migrated from RuntimeCode ThreadLocals ----
+
+    /** Eval runtime context (used during eval STRING compilation). */
+    public Object evalRuntimeContext = null;
+
+    /** Stack of @_ argument arrays across subroutine calls. */
+    public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
 
     // ---- Static accessors ----
 
@@ -454,6 +549,83 @@ public final class PerlRuntime {
         PerlRuntime rt = new PerlRuntime();
         CURRENT.set(rt);
         return rt;
+    }
+
+    // ---- Batch push/pop methods for subroutine call hot path ----
+
+    /**
+     * Pushes all caller state in one shot for the static apply() dispatch path.
+     * Replaces 4 separate PerlRuntime.current() lookups with 1.
+     * Called from RuntimeCode's static apply() methods.
+     *
+     * @param warningBits warning bits for the code being called, or null
+     */
+    public void pushCallerState(String warningBits) {
+        if (warningBits != null) {
+            warningCurrentBitsStack.push(warningBits);
+        }
+        // Save caller's call-site warning bits (for caller()[9])
+        warningCallerBitsStack.push(warningCallSiteBits != null ? warningCallSiteBits : "");
+        // Save caller's $^H (for caller()[8])
+        warningCallerHintsStack.push(warningCallSiteHints);
+        // Save caller's hint hash snapshot ID and reset for callee
+        hintCallerSnapshotIdStack.push(hintCallSiteSnapshotId);
+        hintCallSiteSnapshotId = 0;
+    }
+
+    /**
+     * Pops all caller state in one shot for the static apply() dispatch path.
+     * Replaces 4 separate PerlRuntime.current() lookups with 1.
+     *
+     * @param hadWarningBits true if warningBits was non-null on the matching push
+     */
+    public void popCallerState(boolean hadWarningBits) {
+        // Restore hint hash snapshot ID
+        if (!hintCallerSnapshotIdStack.isEmpty()) {
+            hintCallSiteSnapshotId = hintCallerSnapshotIdStack.pop();
+        }
+        // Restore caller hints
+        if (!warningCallerHintsStack.isEmpty()) {
+            warningCallerHintsStack.pop();
+        }
+        // Restore caller bits
+        if (!warningCallerBitsStack.isEmpty()) {
+            warningCallerBitsStack.pop();
+        }
+        // Restore warning bits
+        if (hadWarningBits && !warningCurrentBitsStack.isEmpty()) {
+            warningCurrentBitsStack.pop();
+        }
+    }
+
+    /**
+     * Pushes subroutine entry state (args + warning bits) in one shot.
+     * Replaces 2 separate PerlRuntime.current() lookups with 1.
+     * Called from RuntimeCode's instance apply() methods.
+     *
+     * @param args the @_ arguments array
+     * @param warningBits warning bits for the code being called, or null
+     */
+    public void pushSubState(RuntimeArray args, String warningBits) {
+        argsStack.push(args);
+        if (warningBits != null) {
+            warningCurrentBitsStack.push(warningBits);
+        }
+    }
+
+    /**
+     * Pops subroutine exit state (args + warning bits) in one shot.
+     * Replaces 2 separate PerlRuntime.current() lookups with 1.
+     *
+     * @param hadWarningBits true if warningBits was non-null on the matching push
+     */
+    public void popSubState(boolean hadWarningBits) {
+        if (hadWarningBits && !warningCurrentBitsStack.isEmpty()) {
+            warningCurrentBitsStack.pop();
+        }
+        if (!argsStack.isEmpty()) {
+            argsStack.pop();
+        }
     }
 
     /**
