@@ -2248,6 +2248,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // variable (e.g., discarded return values from constructors).
                 if (callContext == RuntimeContextType.VOID) {
                     MortalList.mortalizeForVoidDiscard(result);
+                    // Flush deferred DESTROY decrements from the sub's scope exit.
+                    // Sub bodies use flush=false in emitScopeExitNullStores to protect
+                    // return values on the stack, but in void context there is no return
+                    // value to protect. Without this flush, DESTROY fires outside the
+                    // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
+                    // causing Test::Warn to miss warnings from DESTROY.
+                    MortalList.flush();
                 }
                 return result;
             } catch (PerlNonLocalReturnException e) {
@@ -2434,8 +2441,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // WORKAROUND for eval-defined subs not filling lexical forward declarations:
         // If the RuntimeScalar is undef (forward declaration never filled),
         // silently return undef so tests can continue running.
-        // This is a temporary workaround for the architectural limitation that eval
-        // contexts are captured at compile time.
+        // This is a temporary workaround for the architectural limitation that eval        // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
             // Return undef in appropriate context
             if (callContext == RuntimeContextType.LIST) {
@@ -2501,7 +2507,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
-                    return code.apply(subroutineName, a, callContext);
+                    RuntimeList result = code.apply(subroutineName, a, callContext);
+                    // Flush deferred DESTROY decrements for void-context calls.
+                    // See the 3-arg apply() overload for detailed rationale.
+                    if (callContext == RuntimeContextType.VOID) {
+                        MortalList.mortalizeForVoidDiscard(result);
+                        MortalList.flush();
+                    }
+                    return result;
                 } catch (PerlNonLocalReturnException e) {
                     // Non-local return from map/grep block
                     if (code.isMapGrepBlock || code.isEvalBlock) {
@@ -2675,7 +2688,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 int cleanupMark = MyVarCleanupStack.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
-                    return code.apply(subroutineName, a, callContext);
+                    RuntimeList result = code.apply(subroutineName, a, callContext);
+                    // Flush deferred DESTROY decrements for void-context calls.
+                    // See the 3-arg apply() overload for detailed rationale.
+                    if (callContext == RuntimeContextType.VOID) {
+                        MortalList.mortalizeForVoidDiscard(result);
+                        MortalList.flush();
+                    }
+                    return result;
                 } catch (PerlNonLocalReturnException e) {
                     // Non-local return from map/grep block
                     if (code.isMapGrepBlock || code.isEvalBlock) {
