@@ -992,9 +992,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return Match result, or throws exception if timeout
      */
     private static RuntimeBase matchRegexWithTimeout(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx, int timeoutSeconds) {
+        // Capture the current PerlRuntime so the executor thread can access per-runtime regex state
+        PerlRuntime parentRuntime = PerlRuntime.current();
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         java.util.concurrent.Future<RuntimeBase> future = executor.submit(() -> {
-            return matchRegexDirect(quotedRegex, string, ctx);
+            PerlRuntime.setCurrent(parentRuntime);
+            try {
+                return matchRegexDirect(quotedRegex, string, ctx);
+            } finally {
+                PerlRuntime.setCurrent(null);
+            }
         });
 
         try {
