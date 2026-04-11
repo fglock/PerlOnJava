@@ -231,8 +231,11 @@ public class Operator {
             }
         }
 
-        // Preserve BYTE_STRING type: if input was BYTE_STRING, all split results should be too
-        if (string.type == RuntimeScalarType.BYTE_STRING) {
+        // Preserve UTF-8 flag semantics: split results should only have the UTF-8 flag
+        // (STRING type) if the input string had it. When input is BYTE_STRING, INTEGER,
+        // DOUBLE, UNDEF, etc., the results should be BYTE_STRING (no UTF-8 flag).
+        // This matches Perl's behavior where split doesn't spontaneously add UTF-8 flag.
+        if (string.type != RuntimeScalarType.STRING) {
             for (RuntimeBase element : splitElements) {
                 if (element instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.STRING) {
                     rs.type = RuntimeScalarType.BYTE_STRING;
@@ -450,10 +453,20 @@ public class Operator {
                 // Ensure length is within bounds
                 length = Math.min(length, size - offset);
 
-                // Remove elements
+                // Remove elements — defer refCount decrement for tracked blessed refs.
+                // The removed elements are returned to the caller, which may store them
+                // in a new container (incrementing refCount). The deferred decrement
+                // accounts for the removal from the source array.
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
                     RuntimeBase removed = runtimeArray.elements.remove(offset);
-                    removedElements.elements.add(removed != null ? removed : new RuntimeScalar());
+                    if (removed != null) {
+                        if (removed instanceof RuntimeScalar rs) {
+                            MortalList.deferDecrementIfTracked(rs);
+                        }
+                        removedElements.elements.add(removed);
+                    } else {
+                        removedElements.elements.add(new RuntimeScalar());
+                    }
                 }
 
                 // Add new elements

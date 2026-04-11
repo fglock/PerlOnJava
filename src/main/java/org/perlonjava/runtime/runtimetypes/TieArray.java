@@ -62,6 +62,12 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         this.previousValue = previousValue;
         this.self = self;
         this.parent = parent;
+        // Increment refCount: the tie wrapper holds a strong reference to the tied object.
+        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base
+                && base.refCount >= 0) {
+            base.refCount++;
+        }
     }
 
     /**
@@ -225,5 +231,19 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     public RuntimeScalar get(int i) {
         return parent.get(i);
+    }
+
+    /**
+     * Releases the tie wrapper's strong reference to the tied object.
+     * Decrements refCount and triggers DESTROY if it reaches 0.
+     */
+    public void releaseTiedObject() {
+        if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base) {
+            if (base.refCount > 0 && --base.refCount == 0) {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
+        }
     }
 }

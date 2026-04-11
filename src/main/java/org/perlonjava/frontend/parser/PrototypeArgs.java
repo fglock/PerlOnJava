@@ -100,12 +100,21 @@ public class PrototypeArgs {
      * makes them list operators.
      *
      * @param prototype The prototype string
-     * @return true if the prototype is exactly "$" or "_"
+     * @return true if the prototype is "$", "_", ";$", or ";_"
      */
     private static boolean isNamedUnaryPrototype(String prototype) {
-        if (prototype.length() != 1) return false;
-        char first = prototype.charAt(0);
-        return first == '$' || first == '_';
+        if (prototype.length() == 1) {
+            char first = prototype.charAt(0);
+            return first == '$' || first == '_';
+        }
+        // ";$" and ";_" are also named unary (optional single scalar argument).
+        // This matters for expressions like ArrayRef[Int] | HashRef[Int] where
+        // the | must NOT be consumed as part of ArrayRef's argument.
+        if (prototype.length() == 2 && prototype.charAt(0) == ';') {
+            char second = prototype.charAt(1);
+            return second == '$' || second == '_';
+        }
+        return false;
     }
 
     /**
@@ -137,7 +146,26 @@ public class PrototypeArgs {
                 next.text.equals("||=") ||
                 next.text.equals("//=") ||
                 next.text.equals("x=") ||
-                next.text.equals(".=");
+                next.text.equals(".=") ||
+                // Binary-only infix operators that cannot start a primary expression
+                // should terminate argument parsing. For example, with `;$` prototype:
+                //   Foo | Bar  → (Foo()) | (Bar())  not  Foo(| Bar)
+                // This matches Perl's behavior where these operators signal
+                // "no argument provided" to the function.
+                next.text.equals("|") ||
+                next.text.equals("^") ||
+                next.text.equals("|.") ||
+                next.text.equals("^.") ||
+                next.text.equals("&.") ||
+                next.text.equals("==") ||
+                next.text.equals("!=") ||
+                next.text.equals(">") ||
+                next.text.equals(">=") ||
+                next.text.equals("..") ||
+                next.text.equals("...") ||
+                next.text.equals("=~") ||
+                next.text.equals("!~") ||
+                next.text.equals("?");
     }
 
     /**
@@ -164,7 +192,7 @@ public class PrototypeArgs {
         // than comparison operators. So `reftype $h eq 'HASH'` parses as
         // `(reftype($h)) eq 'HASH'`, not `reftype($h eq 'HASH')`.
         if (!hasParentheses && prototype != null && isNamedUnaryPrototype(prototype)) {
-            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>")) {
+            if (isArgumentTerminator(parser) || TokenUtils.peek(parser).text.equals("=>") || isComma(TokenUtils.peek(parser))) {
                 // No argument - check if optional
                 if (!allowsZeroArguments(prototype)) {
                     throwNotEnoughArgumentsError(parser);
@@ -208,6 +236,10 @@ public class PrototypeArgs {
 //            for (Node element : args.elements) {
 //                element.setAnnotation("context", "LIST");
 //            }
+        } else if (prototype.isEmpty()) {
+            // Empty prototype "()" means zero arguments - nothing to parse.
+            // Don't enter parsePrototypeArguments which would incorrectly check
+            // for consecutive commas in the outer context (e.g., "Num ,=> Int").
         } else {
             parsePrototypeArguments(parser, args, prototype, hasParentheses);
 
@@ -692,6 +724,35 @@ public class PrototypeArgs {
     }
 
     /**
+     * Unwraps my(@array) and my(%hash) declarations for backslash prototypes.
+     *
+     * <p>When Perl parses {@code tie(my(@bar), "Class")}, the {@code my(@bar)} produces
+     * an AST like {@code OperatorNode("my", ListNode(OperatorNode("@")))}.
+     * For the backslash prototype {@code \[$@%*]}, we need the same result as
+     * {@code tie(my @bar, "Class")} which produces {@code OperatorNode("my", OperatorNode("@"))}.
+     * This method unwraps the extra ListNode so the {@code \} operator correctly creates
+     * an ARRAYREFERENCE or HASHREFERENCE.</p>
+     *
+     * @param arg The argument node to potentially unwrap
+     * @return The unwrapped node if applicable, or the original node
+     */
+    private static Node unwrapMyListDeclaration(Node arg) {
+        // Check if arg is my/our/local with a ListNode operand containing a single array/hash
+        if (!(arg instanceof OperatorNode myOp)) return arg;
+        if (!myOp.operator.equals("my") && !myOp.operator.equals("our") && !myOp.operator.equals("local")) return arg;
+        if (!(myOp.operand instanceof ListNode listNode)) return arg;
+        if (listNode.elements.size() != 1) return arg;
+
+        Node element = listNode.elements.get(0);
+        if (element instanceof OperatorNode varOp &&
+                (varOp.operator.equals("@") || varOp.operator.equals("%") || varOp.operator.equals("*"))) {
+            // Unwrap: my(ListNode(@bar)) → my(@bar)
+            myOp.operand = element;
+        }
+        return arg;
+    }
+
+    /**
      * Unwraps unary plus from expressions like +(%hash) or +(@array) for backslash prototypes.
      * In Perl, +() is used for disambiguation but should be transparent for \% and \@ prototypes.
      *
@@ -785,6 +846,12 @@ public class PrototypeArgs {
             // Handle +(%hash) and +(@array) constructs for \% and \@ prototypes
             // The unary + is used for disambiguation but should be transparent for prototypes
             referenceArg = unwrapUnaryPlus(referenceArg, refType);
+
+            // Handle my(@array) and my(%hash) for backslash prototypes.
+            // When my(@bar) is parsed, it creates OperatorNode("my", ListNode(OperatorNode("@")))
+            // but \my(@bar) should produce an ARRAYREFERENCE, same as \my @bar.
+            // Unwrap the ListNode so we get OperatorNode("my", OperatorNode("@")).
+            referenceArg = unwrapMyListDeclaration(referenceArg);
             // For \& prototype, check for invalid forms like &foo(), foo(), or bareword foo
             if (refType == '&') {
                 String subName = parser.ctx.symbolTable.getCurrentSubroutine();

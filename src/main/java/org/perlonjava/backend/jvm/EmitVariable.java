@@ -881,35 +881,71 @@ public class EmitVariable {
                     }
                 }
 
+                // Check for ref aliasing (\$y = $ref) BEFORE emitting LHS
+                if (nodeLeft != null && nodeLeft.operator.equals("\\")) {
+                    // `\$b = \$a` requires "refaliasing"
+                    if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+                        throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
+                    }
+                    // Emit experimental warning if warnings are enabled
+                    if (ctx.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
+                        try {
+                            WarnDie.warn(
+                                    new RuntimeScalar("Aliasing via reference is experimental"),
+                                    new RuntimeScalar(ctx.errorUtil.warningLocation(node.tokenIndex))
+                            );
+                        } catch (Exception e) {
+                            // If warning system isn't initialized yet, fall back to System.err
+                            System.err.println("Aliasing via reference is experimental" + ctx.errorUtil.warningLocation(node.tokenIndex) + ".");
+                        }
+                    }
+
+                    // Handle scalar ref aliasing: \$y = $ref
+                    // Makes $y an alias for the scalar referenced by $ref
+                    if (nodeLeft.operand instanceof OperatorNode varNode && varNode.operator.equals("$")) {
+                        String varName;
+                        if (varNode.operand instanceof IdentifierNode idNode) {
+                            varName = "$" + idNode.name;
+                        } else {
+                            throw new PerlCompilerException(node.tokenIndex, "Assignment to unsupported ref aliasing target", ctx.errorUtil);
+                        }
+                        SymbolTable.SymbolEntry symEntry = ctx.symbolTable.getSymbolEntry(varName);
+
+                        if (symEntry != null && (symEntry.decl().equals("my") || symEntry.decl().equals("state"))) {
+                            // Load RHS (the reference) onto stack
+                            if (spillRhs) {
+                                mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                            }
+                            // else RHS is already on top of stack
+
+                            // Dereference: get the RuntimeScalar that the reference points to
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                    "scalarDeref",
+                                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+
+                            // Duplicate: one copy for the return value, one for ASTORE
+                            mv.visitInsn(Opcodes.DUP);
+
+                            // Store the dereferenced scalar directly into the variable's local slot
+                            // This creates the alias: $y now points to the same RuntimeScalar object
+                            mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
+
+                            if (pooledRhs) {
+                                ctx.javaClassInfo.releaseSpillSlot();
+                            }
+                            break;
+                        }
+                    }
+                    // Fall through for unsupported ref aliasing targets (global vars, etc.)
+                }
+
                 node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
 
                 if (spillRhs) {
                     mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                     mv.visitInsn(Opcodes.SWAP);
-                }
-
-                if (nodeLeft != null) {
-                    if (nodeLeft.operator.equals("\\")) {
-                        // `\\$b = \\$a` requires "refaliasing"
-                        if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
-                            throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
-                        }
-                        // Emit experimental warning if warnings are enabled
-                        if (ctx.symbolTable.isWarningCategoryEnabled("experimental::refaliasing")) {
-                            try {
-                                WarnDie.warn(
-                                        new RuntimeScalar("Aliasing via reference is experimental"),
-                                        new RuntimeScalar(ctx.errorUtil.warningLocation(node.tokenIndex))
-                                );
-                            } catch (Exception e) {
-                                // If warning system isn't initialized yet, fall back to System.err
-                                System.err.println("Aliasing via reference is experimental" + ctx.errorUtil.warningLocation(node.tokenIndex) + ".");
-                            }
-                        }
-                        // TODO: Implement proper reference aliasing
-                        // For now, we just assign the reference value without creating an alias
-                        // This is not fully correct but allows tests to progress
-                    }
                 }
 
                 boolean isGlob = false;

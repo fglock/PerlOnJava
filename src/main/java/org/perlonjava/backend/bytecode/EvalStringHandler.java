@@ -122,8 +122,13 @@ public class EvalStringHandler {
                 // Create minimal EmitterContext for parsing
                 // IMPORTANT: Inherit strict/feature/warning flags from parent scope
                 // This matches Perl's eval STRING semantics where eval inherits lexical pragmas
+                // Generate a unique eval filename so ByteCodeSourceMapper entries from
+                // different evals don't collide (each eval's token indices start from 0,
+                // so sharing a single filename would mix package-at-location data).
+                String evalFileName = RuntimeCode.getNextEvalFilename();
+
                 CompilerOptions opts = new CompilerOptions();
-                opts.fileName = sourceName + " (eval)";
+                opts.fileName = evalFileName;
                 ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
                 // Add standard variables that are always available in eval context.
@@ -249,7 +254,7 @@ public class EvalStringHandler {
                 // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
                 // The compile-time package is already propagated via ctx.symbolTable.
                 BytecodeCompiler compiler = new BytecodeCompiler(
-                        sourceName + " (eval)",
+                        evalFileName,
                         sourceLine,
                         errorUtil,
                         adjustedRegistry  // Pass adjusted registry for variable capture
@@ -340,8 +345,11 @@ public class EvalStringHandler {
                 Lexer lexer = new Lexer(perlCode);
                 List<LexerToken> tokens = lexer.tokenize();
 
+                // Generate a unique eval filename (see comment in evalStringList above)
+                String evalFileName = RuntimeCode.getNextEvalFilename();
+
                 CompilerOptions opts = new CompilerOptions();
-                opts.fileName = sourceName + " (eval)";
+                opts.fileName = evalFileName;
                 ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
                 // Add standard variables that are always available in eval context.
@@ -371,7 +379,7 @@ public class EvalStringHandler {
                 // IMPORTANT: Do NOT call compiler.setCompilePackage() here — same reason as the
                 // first evalString overload above: it corrupts die/warn location baking.
                 BytecodeCompiler compiler = new BytecodeCompiler(
-                        sourceName + " (eval)",
+                        evalFileName,
                         sourceLine,
                         errorUtil
                 );

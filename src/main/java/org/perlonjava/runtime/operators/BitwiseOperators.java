@@ -215,6 +215,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNot(RuntimeScalar runtimeScalar) {
+        // Check for overloaded '~' operator on blessed objects
+        int blessId = blessedId(runtimeScalar);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
+                    runtimeScalar, blessId, "(~", "~", BitwiseOperators::bitwiseNot);
+            if (result != null) return result;
+        }
+
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
         RuntimeScalar val = runtimeScalar.type < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
                 runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
@@ -257,6 +265,14 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer bitwise NOT operation.
      */
     public static RuntimeScalar integerBitwiseNot(RuntimeScalar runtimeScalar) {
+        // Check for overloaded '~' operator on blessed objects
+        int blessId = blessedId(runtimeScalar);
+        if (blessId < 0) {
+            RuntimeScalar result = OverloadContext.tryOneArgumentOverload(
+                    runtimeScalar, blessId, "(~", "~", BitwiseOperators::integerBitwiseNot);
+            if (result != null) return result;
+        }
+
         // Fetch tied/readonly scalar once to avoid redundant FETCH calls
         RuntimeScalar val = runtimeScalar.type < RuntimeScalarType.TIED_SCALAR ? runtimeScalar :
                 runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :

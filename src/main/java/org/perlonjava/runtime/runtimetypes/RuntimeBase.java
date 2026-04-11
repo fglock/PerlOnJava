@@ -13,6 +13,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // Index to the class that this reference belongs
     public int blessId;
 
+    // Reference count for blessed objects with DESTROY.
+    // Four-state lifecycle counter:
+    //   -1                = Not tracked (unblessed, or blessed without DESTROY)
+    //    0                = Tracked, zero counted containers (fresh from bless)
+    //   >0                = Being tracked; N named-variable containers exist
+    //   Integer.MIN_VALUE = DESTROY already called (or in progress)
+    // MUST be explicitly initialized to -1 (Java defaults int to 0, which would
+    // mean "tracked, zero containers" — silently breaking all unblessed objects).
+    public int refCount = -1;
+
+    /**
+     * Global flag: true once any object has been blessed (blessId set to non-zero).
+     * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
+     * walks when no blessed objects have ever been created in this JVM instance.
+     * Once set to true, it stays true forever (conservative but safe).
+     */
+    public static volatile boolean blessedObjectExists = false;
+
     /**
      * Adds this entity to the specified RuntimeList.
      *
@@ -84,6 +102,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     public void setBlessId(int blessId) {
         this.blessId = blessId;
+        if (blessId != 0) blessedObjectExists = true;
     }
 
     /**
@@ -128,6 +147,18 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * @return a RuntimeScalar representing the reference
      */
     public abstract RuntimeScalar createReference();
+
+    /**
+     * Creates a reference and tracks refCounts for contained elements.
+     * Used for anonymous array/hash construction ([...], {...}) where elements
+     * need refCount tracking to prevent premature destruction of referents.
+     * Default implementation delegates to createReference().
+     *
+     * @return a RuntimeScalar representing the reference
+     */
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        return createReference();
+    }
 
     /**
      * Undefines the elements of the object.

@@ -302,6 +302,77 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar __SUB__;
 
     /**
+     * Captured RuntimeScalar variables from the enclosing scope.
+     * Set by {@link #makeCodeObject} for closures that capture lexical variables.
+     * Used to properly track blessed object lifetimes across closure boundaries:
+     * captured variables' blessed refs should not be destroyed at the inner scope
+     * exit, but only when the closure itself is released.
+     */
+    public RuntimeScalar[] capturedScalars;
+
+    /**
+     * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
+     * When the CODE slot of a glob is replaced, weak references to these constants
+     * are cleared to emulate Perl 5's "optree reaping" behavior.
+     */
+    public RuntimeBase[] padConstants;
+
+    /**
+     * Registry mapping generated class names to their pad constants.
+     * Used to transfer pad constants from compile time to runtime for anonymous subs.
+     */
+    public static final java.util.concurrent.ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Clears weak references to this subroutine's pad constants.
+     * Called when the CODE slot of a glob is replaced, emulating Perl 5's
+     * behavior where replacing a sub frees its op-tree and clears weak refs
+     * to compile-time constants.
+     */
+    public void clearPadConstantWeakRefs() {
+        if (padConstants != null) {
+            for (RuntimeBase constant : padConstants) {
+                WeakRefRegistry.clearWeakRefsTo(constant);
+            }
+        }
+    }
+
+    /**
+     * Release captured variable references. Called when this closure is being
+     * discarded (scope exit, undef, or reassignment of the variable holding
+     * this CODE ref). Decrements {@code captureCount} on each captured scalar,
+     * and if it reaches zero, defers the blessed ref decrement via MortalList.
+     * <p>
+     * Handles cascading: if a captured scalar itself holds a CODE ref with
+     * captures, those are released recursively.
+     */
+    public void releaseCaptures() {
+        if (capturedScalars != null) {
+            RuntimeScalar[] scalars = capturedScalars;
+            capturedScalars = null;  // null out first to prevent re-entry
+            for (RuntimeScalar s : scalars) {
+                s.captureCount--;
+                if (s.captureCount == 0) {
+                    // If the captured scalar itself holds a CODE ref with captures,
+                    // release those recursively (handles nested closures).
+                    if (s.type == RuntimeScalarType.CODE && s.value instanceof RuntimeCode innerCode) {
+                        innerCode.releaseCaptures();
+                    }
+                    // The captured variable's scope has exited but refCount was NOT
+                    // decremented at that time (scopeExitCleanup returns early for
+                    // captured variables to prevent premature clearing while the
+                    // closure is alive). Now that the last closure is releasing this
+                    // capture, decrement refCount to balance the original increment.
+                    if (s.scopeExited) {
+                        MortalList.deferDecrementIfTracked(s);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Constructs a RuntimeCode instance with the specified prototype and attributes.
      *
      * @param prototype  the prototype of the subroutine
@@ -404,6 +475,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static EvalRuntimeContext getEvalRuntimeContext() {
         return (EvalRuntimeContext) PerlRuntime.current().evalRuntimeContext;
+    }
+
+    /**
+     * Save and clear the eval runtime context.
+     * Used by require/do to prevent inner compilations from seeing the eval's captured variables.
+     * The returned value should be passed to {@link #restoreEvalRuntimeContext} to restore it.
+     *
+     * @return The saved eval runtime context (may be null)
+     */
+    public static EvalRuntimeContext saveAndClearEvalRuntimeContext() {
+        PerlRuntime rt = PerlRuntime.current();
+        EvalRuntimeContext saved = (EvalRuntimeContext) rt.evalRuntimeContext;
+        if (saved != null) {
+            rt.evalRuntimeContext = null;
+        }
+        return saved;
+    }
+
+    /**
+     * Restore a previously saved eval runtime context.
+     *
+     * @param saved The context returned by {@link #saveAndClearEvalRuntimeContext}
+     */
+    public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
+        if (saved != null) {
+            PerlRuntime.current().evalRuntimeContext = saved;
+        }
     }
 
     /**
@@ -1407,6 +1505,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (packageName != null) {
             code.packageName = packageName;
         }
+
+        // Look up pad constants registered at compile time for this class.
+        // These track cached string literals referenced via \ inside the sub,
+        // needed for optree reaping (clearing weak refs when sub is replaced).
+        String internalClassName = clazz.getName().replace('.', '/');
+        RuntimeBase[] padConsts = padConstantsByClassName.remove(internalClassName);
+        if (padConsts != null) {
+            code.padConstants = padConsts;
+        }
+
+        // Extract captured RuntimeScalar fields for closure DESTROY tracking.
+        // Each instance field of type RuntimeScalar (except __SUB__) is a
+        // captured lexical variable. We store them so that releaseCaptures()
+        // can decrement blessed ref refCounts when the closure is discarded.
+        Field[] allFields = clazz.getDeclaredFields();
+        List<RuntimeScalar> captured = new ArrayList<>();
+        for (Field f : allFields) {
+            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
+                RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
+                if (capturedVar != null) {
+                    captured.add(capturedVar);
+                    capturedVar.captureCount++;
+                }
+            }
+        }
+        if (!captured.isEmpty()) {
+            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+            // Enable refCount tracking for closures with captures.
+            // When the CODE ref's refCount drops to 0, releaseCaptures()
+            // fires (via DestroyDispatch.callDestroy), letting captured
+            // blessed objects run DESTROY.
+            code.refCount = 0;
+        }
+
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
         // Set the __SUB__ instance field
@@ -1461,8 +1593,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          int callContext) {
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
-            if (RuntimeScalarType.isReference(runtimeScalar)) {
-                int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            // Unwrap READONLY_SCALAR for blessId check (same as in call())
+            RuntimeScalar invocant = runtimeScalar;
+            while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+                invocant = (RuntimeScalar) invocant.value;
+            }
+            if (RuntimeScalarType.isReference(invocant)) {
+                int blessId = ((RuntimeBase) invocant.value).blessId;
                 if (blessId != 0) {
                     int methodHash = System.identityHashCode(method.value);
                     int cacheIndex = callsiteId & (PerlRuntime.METHOD_CALL_CACHE_SIZE - 1);
@@ -1485,12 +1622,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
                                 if (autoloadVariableName != null) {
                                     String methodName = method.toString();
-                                    // Use the original calling class (perlClassName), not the class
-                                    // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
-                                    // even when AUTOLOAD is inherited from Base.
-                                    String perlClassName = NameNormalizer.getBlessStr(blessId);
-                                    String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
-                                    getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    // Only set $AUTOLOAD when dispatching to AUTOLOAD as a fallback
+                                    // (method name != "AUTOLOAD"). When calling AUTOLOAD directly
+                                    // (e.g., $self->SUPER::AUTOLOAD), the caller has already set it.
+                                    if (!methodName.equals("AUTOLOAD")) {
+                                        // Use the original calling class (perlClassName), not the class
+                                        // where AUTOLOAD was found. Perl sets $AUTOLOAD to Child::method
+                                        // even when AUTOLOAD is inherited from Base.
+                                        String perlClassName = NameNormalizer.getBlessStr(blessId);
+                                        String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+                                        getGlobalVariable(autoloadVariableName).set(fullMethodName);
+                                    }
                                 }
                                 
                                 // Prefer PerlSubroutine interface over MethodHandle
@@ -1538,7 +1680,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             String autoloadVariableName = code.autoloadVariableName;
-                            if (autoloadVariableName != null) {
+                            if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
                                 // Use the original calling class, not where AUTOLOAD was found
                                 String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
@@ -1581,21 +1723,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         String methodName = method.toString();
 
+        // Unwrap READONLY_SCALAR for method dispatch.
+        // Constants created via `use constant` with blessed refs go through
+        // Internals::SvREADONLY which wraps the scalar in READONLY_SCALAR.
+        // We must unwrap to see the actual reference type and blessId.
+        RuntimeScalar invocant = runtimeScalar;
+        while (invocant.type == RuntimeScalarType.READONLY_SCALAR) {
+            invocant = (RuntimeScalar) invocant.value;
+        }
+
         // Retrieve Perl class name
         String perlClassName;
 
-        if (RuntimeScalarType.isReference(runtimeScalar)) {
+        if (RuntimeScalarType.isReference(invocant)) {
             // Handle all reference types (REFERENCE, ARRAYREFERENCE, HASHREFERENCE, etc.)
-            int blessId = ((RuntimeBase) runtimeScalar.value).blessId;
+            int blessId = ((RuntimeBase) invocant.value).blessId;
             if (blessId == 0) {
-                if (runtimeScalar.type == GLOBREFERENCE) {
+                if (invocant.type == GLOBREFERENCE) {
                     // Auto-bless file handler to IO::File which inherits from both IO::Handle and IO::Seekable
                     // This allows GLOBs to call methods like seek, tell, etc.
                     perlClassName = "IO::File";
                     // Load the module if needed
                     // TODO - optimize by creating a flag in RuntimeIO
                     ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-                } else if (runtimeScalar.type == REGEX) {
+                } else if (invocant.type == REGEX) {
                     // qr// objects are implicitly blessed into the Regexp class in Perl 5
                     // This allows $qr->isa("Regexp"), $qr->can("..."), etc.
                     perlClassName = "Regexp";
@@ -1606,15 +1757,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else {
                 perlClassName = NameNormalizer.getBlessStr(blessId);
             }
-        } else if (runtimeScalar.type == RuntimeScalarType.GLOB) {
+        } else if (invocant.type == RuntimeScalarType.GLOB) {
             // Bare typeglob used as method invocant (e.g., *FH->print(...))
             // Auto-bless to IO::File, same as GLOBREFERENCE
             perlClassName = "IO::File";
             ModuleOperators.require(new RuntimeScalar("IO/File.pm"));
-        } else if (!runtimeScalar.getDefinedBoolean()) {
+        } else if (!invocant.getDefinedBoolean()) {
             throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
         } else {
-            perlClassName = runtimeScalar.toString();
+            perlClassName = invocant.toString();
             if (perlClassName.isEmpty()) {
                 throw new PerlCompilerException("Can't call method \"" + methodName + "\" on an undefined value");
             }
@@ -1713,7 +1864,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // System.out.println("call ->" + method + " " + currentPackage + " " + args + " AUTOLOAD: " + ((RuntimeCode) method.value).autoloadVariableName);
 
             String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
-            if (autoloadVariableName != null) {
+            if (autoloadVariableName != null
+                    && !methodName.equals("AUTOLOAD") && !methodName.endsWith("::AUTOLOAD")) {
                 // The inherited method is an autoloaded subroutine
                 // Set the $AUTOLOAD variable to the name of the method that was called
 
@@ -1761,7 +1913,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
         RuntimeList res = new RuntimeList();
         int frame = 0;
-        if (!args.isEmpty()) {
+        boolean hasExplicitExpr = !args.isEmpty();
+        if (hasExplicitExpr) {
             frame = args.getFirst().getInt();
         }
 
@@ -1796,6 +1949,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
+
+                // Perl's caller() without EXPR returns only 3 elements: (package, filename, line).
+                // caller(EXPR) returns 11 elements including subroutine name, hasargs, etc.
+                if (hasExplicitExpr) {
 
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
@@ -1927,6 +2084,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         res.add(RuntimeScalarCache.scalarUndef);
                     }
                 }
+                } // end if (hasExplicitExpr)
             }
         } else if (frame >= stackTraceSize) {
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
@@ -2016,6 +2174,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
+        // NOTE: flush() was removed from here. Return values from nested calls
+        // (e.g., receiver(coerce => quote_sub(...))) may have pending refCount
+        // decrements from their scope exits. Flushing here would decrement them
+        // to 0 and call clearWeakRefsTo before the callee captures them, breaking
+        // weak ref tracking (Sub::Quote/Sub::Defer pattern). DESTROY still fires
+        // at the next setLarge() or popAndFlush() — typically inside the callee.
+
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), a, callContext);
@@ -2111,6 +2276,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
                 }
+                // Mortal-ize blessed refs with refCount==0 in void-context calls.
+                // These are objects that were created but never stored in a named
+                // variable (e.g., discarded return values from constructors).
+                if (callContext == RuntimeContextType.VOID) {
+                    MortalList.mortalizeForVoidDiscard(result);
+                }
                 return result;
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
@@ -2121,6 +2292,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
             } finally {
                 rt.popCallerState(warningBits != null);
+                // eval BLOCK is compiled as an immediately-invoked anonymous sub
+                // (sub { ... }->()) that captures outer lexicals, incrementing their
+                // captureCount. Unlike a normal closure that may be stored and reused,
+                // eval BLOCK executes once and is discarded. Release captures eagerly
+                // so captureCount is decremented promptly, allowing scopeExitCleanup
+                // to properly decrement refCount when the outer scope exits.
+                // (eval STRING uses applyEval() which already does this.)
+                if (code.isEvalBlock) {
+                    code.releaseCaptures();
+                }
             }
         }
 
@@ -2199,6 +2380,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return new RuntimeList(new RuntimeScalar());
         } finally {
             decrementEvalDepth();
+            // Release captured variable references from the eval's code object.
+            // After eval STRING finishes executing, its captures are no longer needed.
+            if (runtimeScalar.type == RuntimeScalarType.CODE && runtimeScalar.value instanceof RuntimeCode code) {
+                code.releaseCaptures();
+            }
         }
     }
 
@@ -2747,19 +2933,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 elems.set(i, concrete);
             } else if (elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
-                // Replace the RuntimeArray reference with a new RuntimeArray containing copies.
-                RuntimeArray copy = new RuntimeArray();
-                for (RuntimeScalar arrElem : arr.elements) {
-                    copy.elements.add(arrElem == null ? null : new RuntimeScalar(arrElem));
+                // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
+                // since TieArray.elements (the ArrayList) is empty — data lives in the tied object.
+                // For regular arrays, copy elements directly.
+                if (arr.type == RuntimeArray.TIED_ARRAY) {
+                    RuntimeList arrList = arr.getList();
+                    elems.set(i, arrList);
+                } else {
+                    RuntimeArray copy = new RuntimeArray();
+                    for (RuntimeScalar arrElem : arr.elements) {
+                        copy.elements.add(arrElem == null ? null : new RuntimeScalar(arrElem));
+                    }
+                    elems.set(i, copy);
                 }
-                elems.set(i, copy);
             } else if (elem instanceof RuntimeHash hash) {
-                // Copy hash elements for the same reason as arrays
-                RuntimeHash copy = new RuntimeHash();
-                for (var entry : hash.elements.entrySet()) {
-                    copy.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                // Copy hash elements for the same reason as arrays.
+                // For tied hashes, use getList() which dispatches through FIRSTKEY/NEXTKEY/FETCH.
+                if (hash.type == RuntimeHash.TIED_HASH) {
+                    RuntimeList hashList = hash.getList();
+                    elems.set(i, hashList);
+                } else {
+                    RuntimeHash copy = new RuntimeHash();
+                    for (var entry : hash.elements.entrySet()) {
+                        copy.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                    }
+                    elems.set(i, copy);
                 }
-                elems.set(i, copy);
             }
         }
     }

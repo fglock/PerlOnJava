@@ -298,8 +298,65 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void exitScope() {
+        exitScope(false);
+    }
+
+    /**
+     * Exit the current scope, emitting cleanup opcodes.
+     *
+     * @param flush If true, emit MORTAL_PUSH_MARK before and MORTAL_POP_FLUSH after
+     *              cleanup to trigger DESTROY for blessed objects whose refCount drops
+     *              to 0. Only entries added by the cleanup are flushed (scoped flush).
+     *              Must be false for subroutine body scopes where the return value
+     *              is on the stack.
+     */
+    private void exitScope(boolean flush) {
         if (!scopeIndices.isEmpty()) {
-            symbolTable.exitScope(scopeIndices.pop());
+            int scopeIdx = scopeIndices.pop();
+
+            // Gather variable indices to determine if cleanup is needed.
+            java.util.List<Integer> scalarIndices = symbolTable.getMyScalarIndicesInScope(scopeIdx);
+            java.util.List<Integer> hashIndices = symbolTable.getMyHashIndicesInScope(scopeIdx);
+            java.util.List<Integer> arrayIndices = symbolTable.getMyArrayIndicesInScope(scopeIdx);
+
+            // Only emit pushMark/popAndFlush when there are variables that need cleanup.
+            // Scopes with no my-variables skip this entirely.
+            boolean needsCleanup = flush
+                    && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+
+            // Push mark so popAndFlush only drains entries added by
+            // scopeExitCleanup. Entries from method returns within the block
+            // that are below the mark will be processed by the next setLarge()
+            // or undefine() flush, or by the enclosing scope's exit.
+            if (needsCleanup) {
+                emit(Opcodes.MORTAL_PUSH_MARK);
+            }
+
+            // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
+            // This calls RuntimeScalar.scopeExitCleanup() which handles:
+            // 1. IO fd recycling for anonymous filehandle globs
+            // 2. refCount decrement for blessed references with DESTROY
+            for (int reg : scalarIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                emitReg(reg);
+            }
+
+            // Walk hash/array variables for nested blessed references.
+            for (int reg : hashIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                emitReg(reg);
+            }
+            for (int reg : arrayIndices) {
+                emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                emitReg(reg);
+            }
+
+            // Pop mark and flush only entries added since the mark
+            if (needsCleanup) {
+                emit(Opcodes.MORTAL_POP_FLUSH);
+            }
+
+            symbolTable.exitScope(scopeIdx);
             if (!savedNextRegister.isEmpty()) {
                 nextRegister = savedNextRegister.pop();
             }
@@ -1015,6 +1072,7 @@ public class BytecodeCompiler implements Visitor {
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
             recycleTemporaryRegisters();
+
         }
 
         // Use the saved result reg from the last meaningful statement if subsequent
@@ -1037,8 +1095,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(regexSaveReg);
         }
 
-        // Exit scope restores register state
-        exitScope();
+        // Exit scope restores register state.
+        // Flush mortal list for non-subroutine blocks so DESTROY fires promptly
+        // at scope exit. Subroutine body blocks must NOT flush — the implicit
+        // return value may still be in a register and flushing could destroy it.
+        exitScope(!node.getBooleanAnnotation("blockIsSubroutine"));
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -3279,6 +3340,35 @@ public class BytecodeCompiler implements Visitor {
                             if (hasVariable(varName)) {
                                 // Already declared, just use existing register
                                 reg = getVariableRegister(varName);
+
+                                // For 'our' declarations, we must ALWAYS load from the global table
+                                // even if the variable name already exists in scope.  This handles
+                                // the case where eval STRING captures outer 'my' variables into
+                                // registers, but the eval's 'our $var' needs to rebind the register
+                                // to the actual package global.
+                                // (Matches the single-variable our handling above.)
+                                String globalVarName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) sigilOp.operand).name,
+                                        getCurrentPackage()
+                                );
+                                int nameIdx = addToStringPool(globalVarName);
+                                switch (sigil) {
+                                    case "$" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "@" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                    case "%" -> {
+                                        emit(Opcodes.LOAD_GLOBAL_HASH);
+                                        emitReg(reg);
+                                        emit(nameIdx);
+                                    }
+                                }
                             } else {
                                 // Allocate register and add to symbol table
                                 reg = addVariable(varName, "our");
@@ -5400,7 +5490,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 13: Pop loop info and exit scope
         loopStack.pop();
-        exitScope();
+        exitScope(true);  // safe to flush — foreach loop, not subroutine body
 
         if (foreachRegexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
@@ -5438,6 +5528,17 @@ public class BytecodeCompiler implements Visitor {
                 emitInt(0);
             }
 
+            // Save local variable level so that `last` exits restore `local` variables.
+            // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
+            // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
+            // On normal exit, the body already restored locals, so this is a no-op.
+            int blockLocalLevelReg = -1;
+            if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+                blockLocalLevelReg = allocateRegister();
+                emit(Opcodes.GET_LOCAL_LEVEL);
+                emitReg(blockLocalLevelReg);
+            }
+
             // Push loop info so that redo/next/last inside bare blocks work
             // (Perl 5 allows redo/next/last in bare blocks)
             // Unlabeled bare blocks are targets for unlabeled redo/next/last;
@@ -5459,7 +5560,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             } finally {
                 // Exit scope to clean up lexical variables
-                exitScope();
+                exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
             // next jumps here (continue point = end of body, before exit)
@@ -5484,8 +5585,14 @@ public class BytecodeCompiler implements Visitor {
                 patchJump(exitPcPlaceholder, exitPc);
             }
 
-            // Patch last (break) PCs to jump past the block
+            // Patch last (break) PCs to jump to local cleanup (or past the block if no locals).
+            // POP_LOCAL_LEVEL must be at endPc so `last` runs it.
+            // On normal exit this is a no-op since the body's POP_LOCAL_LEVEL already ran.
             int endPc = bytecode.size();
+            if (blockLocalLevelReg >= 0) {
+                emit(Opcodes.POP_LOCAL_LEVEL);
+                emitReg(blockLocalLevelReg);
+            }
             for (int pc2 : loopInfo.breakPcs) {
                 patchJump(pc2, endPc);
             }
@@ -5504,6 +5611,17 @@ public class BytecodeCompiler implements Visitor {
         // Step 1: Execute initialization (for C-style loops only)
         if (node.initialization != null) {
             node.initialization.accept(this);
+        }
+
+        // Save local variable level so that `last` exits restore `local` variables.
+        // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
+        // bypasses the body's POP_LOCAL_LEVEL. This outer pair catches that case.
+        // On normal exit, the body already restored locals, so POP_LOCAL_LEVEL is a no-op.
+        int for3LocalLevelReg = -1;
+        if (FindDeclarationVisitor.containsLocalOrDefer(node)) {
+            for3LocalLevelReg = allocateRegister();
+            emit(Opcodes.GET_LOCAL_LEVEL);
+            emitReg(for3LocalLevelReg);
         }
 
         // Step 2: Push loop info onto stack for last/next/redo
@@ -5609,8 +5727,14 @@ public class BytecodeCompiler implements Visitor {
             emitInt(loopStartPc);
         }
 
-        // Step 10: Loop end - patch the forward jump (last jumps here)
+        // Step 10: Loop end - restore local variables and patch jumps.
+        // POP_LOCAL_LEVEL must be at loopEndPc so `last` runs it.
+        // On normal exit (condition false) this is a no-op since the body already cleaned up.
         int loopEndPc = bytecode.size();
+        if (for3LocalLevelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(for3LocalLevelReg);
+        }
         if (loopEndJumpPc != -1) {
             patchJump(loopEndJumpPc, loopEndPc);
         }

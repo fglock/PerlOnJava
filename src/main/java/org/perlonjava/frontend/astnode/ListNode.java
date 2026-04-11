@@ -1,6 +1,5 @@
 package org.perlonjava.frontend.astnode;
 
-import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
@@ -20,9 +19,7 @@ import java.util.List;
  * <p>
  * Unlike {@link ArrayLiteralNode} which creates an array reference, ListNode represents
  * a flat list that can be assigned to arrays or used in list context.
- * <p>
  *
- * @see LargeNodeRefactorer
  * @see ArrayLiteralNode
  * @see HashLiteralNode
  */
@@ -33,9 +30,6 @@ public class ListNode extends AbstractNode {
      * Each element is an AST node representing an expression. Elements are evaluated
      * in the context determined by how the list is used (list context for assignments,
      * scalar context for the last element in scalar context, etc.).
-     * <p>
-     * Note: This field is non-final because LargeNodeRefactorer may replace
-     * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
 

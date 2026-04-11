@@ -60,15 +60,20 @@ Example format at the end of a design doc:
 - Keep docs updated as implementation progresses
 - Reference related docs and skills at the end
 
+### Partially Implemented Features
+
+| Feature | Status |
+|---------|--------|
+| `weaken` / `isweak` | Implemented. Uses cooperative reference counting on top of JVM GC. See `dev/architecture/weaken-destroy.md` for details. |
+| `DESTROY` | Implemented. Fires deterministically for tracked objects (blessed into a class with DESTROY). See `dev/architecture/weaken-destroy.md`. |
+| `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
+
 ### Unimplemented Features
 
 PerlOnJava does **not** implement the following Perl features:
 
 | Feature | Impact |
 |---------|--------|
-| `weaken` / `isweak` | No weak reference tracking. `weaken()` is a no-op, `isweak()` always returns false (since nothing is ever weakened). JVM's tracing GC handles circular references natively. |
-| `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
-| `DESTROY` | Object destructors never called; DEMOLISH patterns and cleanup code won't run |
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 | `threads` | Perl threads not supported; use Java threading via inline Java if needed |
 
@@ -172,7 +177,16 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 4. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
-   gh pr create --title "Title" --body "Description"
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
+   ```
+   **IMPORTANT: Never use `--body` with inline text containing backticks.** Bash
+   interprets backticks as command substitution, silently corrupting the PR body.
+   Always write the body to a temp file first and use `--body-file`:
+   ```bash
+   cat > /tmp/pr_body.md << 'EOF'
+   PR body with `backticks` and other markdown...
+   EOF
+   gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
 
 5. **Wait for review** before merging
@@ -200,6 +214,19 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
   Replace `TOOL_NAME`, `TOOL_DOCS_URL`, and `TOOL_BOT_EMAIL` as described in [AI_POLICY.md](AI_POLICY.md).
 - Reference the design doc or issue in commit messages when relevant
 - Use conventional commit format when possible
+- **Write commit messages to a file** to avoid shell quoting issues (apostrophes, backticks, special characters). Use `git commit -F /tmp/commit_msg.txt` instead of `-m`:
+  ```bash
+  cat > /tmp/commit_msg.txt << 'ENDMSG'
+  fix: description of the change
+
+  Details about what was fixed and why.
+
+  Generated with [TOOL_NAME](TOOL_DOCS_URL)
+
+  Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
+  ENDMSG
+  git commit -F /tmp/commit_msg.txt
+  ```
 - **Commit Attribution:** AI-assisted commits must include attribution markers in the commit message (see [AI_POLICY.md](AI_POLICY.md)):
   ```
   Generated with [TOOL_NAME](TOOL_DOCS_URL)

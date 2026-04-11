@@ -77,8 +77,13 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
-        // JVM uses garbage collection, not reference counting.
-        // Return 1 as a reasonable default for compatibility.
+        RuntimeScalar arg = args.get(0);
+        if (arg.value instanceof RuntimeBase base) {
+            int rc = base.refCount;
+            if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
+            if (rc < 0) return new RuntimeScalar(1).getList(); // untracked
+            return new RuntimeScalar(rc).getList();
+        }
         return new RuntimeScalar(1).getList();
     }
 

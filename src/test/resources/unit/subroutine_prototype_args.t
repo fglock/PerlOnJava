@@ -254,5 +254,25 @@ subtest 'Glob and reference prototype *\$$;$' => sub {
         "Hash ref in \$ position without parentheses gives ref constructor error" );
 };
 
+subtest "Optional scalar prototype with binary-only infix operators" => sub {
+    # Functions with ;$ prototype should treat binary-only operators as
+    # argument terminators, parsing Foo | Bar as (Foo()) | (Bar())
+    sub opt_five (;$) { return $_[0] // 5 }
+    sub opt_three (;$) { return $_[0] // 3 }
+
+    is( opt_five | opt_three, 7, 'optional proto with | infix operator' );
+    is( opt_five ^ opt_three, 6, 'optional proto with ^ infix operator' );
+    ok( opt_five == 5, 'optional proto with == infix operator' );
+    ok( opt_five != 3, 'optional proto with != infix operator' );
+    ok( opt_five > 3, 'optional proto with > infix operator' );
+    ok( opt_five >= 5, 'optional proto with >= infix operator' );
+    ok( opt_five =~ /5/, 'optional proto with =~ infix operator' );
+    ok( opt_five !~ /3/, 'optional proto with !~ infix operator' );
+    is( (opt_five ? "yes" : "no"), "yes", 'optional proto with ? ternary operator' );
+
+    # With parentheses should still work normally
+    is( opt_five(2) | opt_three(1), 3, 'optional proto with explicit args and | operator' );
+};
+
 done_testing();
 

@@ -71,7 +71,7 @@ Savings: 600 - 233 = 367 bytes (61% reduction!)
 
 ### Why Method-Level Centralization Doesn't Work
 
-We also investigated centralizing to a single TABLESWITCH at the method's `returnLabel`. Here's why it was rejected:
+We also investigated centralizing to a single dispatcher at the method's `returnLabel`. Here's why it was rejected:
 
 **Problems:**
 1. **Frame computation issues**: Jumping from `returnLabel` (outside loop scope) back to loop labels (inside loop scope) causes "Bad local variable type" errors
@@ -113,11 +113,12 @@ We also investigated centralizing to a single TABLESWITCH at the method's `retur
 #### ControlFlowType Enum
 ```java
 public enum ControlFlowType {
-    LAST(0),    // Exit loop
-    NEXT(1),    // Continue to next iteration
-    REDO(2),    // Restart current iteration
-    GOTO(3),    // Jump to label or named goto
-    TAILCALL(4) // Tail call optimization
+    LAST,      // Exit loop (ordinal 0)
+    NEXT,      // Continue to next iteration (ordinal 1)
+    REDO,      // Restart current iteration (ordinal 2)
+    GOTO,      // Jump to label or named goto (ordinal 3)
+    TAILCALL,  // Tail call optimization (ordinal 4)
+    RETURN     // Non-local return from map/grep block (ordinal 5)
 }
 ```
 
@@ -126,6 +127,8 @@ public enum ControlFlowType {
 public class ControlFlowMarker {
     ControlFlowType type;
     String label;              // Loop/block label (may be null)
+    RuntimeScalar codeRef;     // Code reference for TAILCALL
+    RuntimeArray args;         // Arguments for TAILCALL
     String fileName;           // Source location for errors
     int lineNumber;
 }
@@ -135,10 +138,7 @@ public class ControlFlowMarker {
 ```java
 public class RuntimeControlFlowList extends RuntimeList {
     ControlFlowMarker marker;
-
-    // For tail calls:
-    RuntimeScalar tailCallCodeRef;
-    RuntimeArray tailCallArgs;
+    RuntimeBase returnValue;   // For RETURN type (non-local return from map/grep)
 }
 ```
 
@@ -184,6 +184,9 @@ ISTORE controlFlowActionSlot
 ILOAD controlFlowActionSlot
 ICONST_2
 IF_ICMPGT propagateToCaller
+// Higher ordinals (GOTO=3, TAILCALL=4, RETURN=5) are handled separately:
+// GOTO and TAILCALL propagate to caller; RETURN is unwrapped for
+// non-map/grep blocks or propagated for map/grep blocks.
 
 // Loop through visible loop labels
 for each visible loop {
@@ -227,37 +230,56 @@ skipDispatcher:
 - Subsequent calls with same signature reuse the existing dispatcher
 
 #### EmitterMethodCreator.java
-**Tail call trampoline** at `returnLabel`:
+**Return label** — handles normal returns and propagation:
 
 ```java
-// Check if result is marked
+returnLabel:
 ALOAD returnListSlot
 INVOKEVIRTUAL isNonLocalGoto()
 IFEQ normalReturn
 
-// Get control flow type ordinal
-ALOAD returnListSlot
-CHECKCAST RuntimeControlFlowList
-ASTORE controlFlowTempSlot
-ALOAD controlFlowTempSlot
-INVOKEVIRTUAL getControlFlowType()
-INVOKEVIRTUAL ordinal()
+// For eval blocks: check if RETURN type — if so, propagate
+// Otherwise: non-local control flow escaped eval, set $@ and return empty
+// For regular subs: propagate marker to caller
+ARETURN
 
-// Dispatch with TABLESWITCH
-TABLESWITCH (0-4) {
-  case 0: handleLast
-  case 1: handleNext
-  case 2: handleRedo
-  case 3: handleGoto
-  case 4: handleTailcall
-  default: handleError
-}
+normalReturn:
+ARETURN
 ```
 
-Each case handler:
-- Checks loop labels to find matching target
-- Jumps to appropriate loop label (lastLabel/nextLabel/redoLabel)
-- Or propagates marker to caller if no match found
+**Tail call trampoline** — emitted at each call site in `EmitSubroutine.java` (not at returnLabel):
+
+```java
+// At each call site, after isNonLocalGoto check:
+ALOAD controlFlowTempSlot
+CHECKCAST RuntimeControlFlowList
+INVOKEVIRTUAL getControlFlowType()
+INVOKEVIRTUAL ordinal()
+ICONST_4                          // TAILCALL ordinal
+IF_ICMPNE blockDispatcher         // Not a tail call, go to dispatcher
+
+tailcallLoop:
+ALOAD controlFlowTempSlot
+CHECKCAST RuntimeControlFlowList
+INVOKEVIRTUAL getTailCallCodeRef()
+ASTORE codeRefSlot
+INVOKEVIRTUAL getTailCallArgs()
+ASTORE argsSlot
+// Re-invoke
+ALOAD codeRefSlot
+ALOAD argsSlot
+INVOKESTATIC RuntimeCode.apply(...)
+ASTORE controlFlowTempSlot
+
+// Check if result is another tail call
+ALOAD controlFlowTempSlot
+INVOKEVIRTUAL isNonLocalGoto()
+IFEQ notControlFlow
+// Get type ordinal, check if still TAILCALL
+ICONST_4
+IF_ICMPEQ tailcallLoop           // Loop if still TAILCALL
+GOTO blockDispatcher              // Otherwise dispatch normally
+```
 
 ---
 
@@ -295,29 +317,14 @@ for my $i (1..10) {
 At call site:
 ```
 INVOKESTATIC RuntimeCode.apply(...)  # Call inner()
-ASTORE checkTempSlot                 # Store result
-ALOAD checkTempSlot
-INSTANCEOF RuntimeControlFlowList
-IFEQ notControlFlow
-ALOAD checkTempSlot
-ASTORE returnValueSlot
-GOTO returnLabel                     # Jump to dispatcher
-notControlFlow:
-ALOAD checkTempSlot
-```
-
-At returnLabel (TABLESWITCH dispatcher):
-```
-ALOAD returnValueSlot
+ASTORE controlFlowTempSlot          # Store result
+ALOAD controlFlowTempSlot
 INVOKEVIRTUAL isNonLocalGoto()
-IFEQ normalReturn
-# ... get ordinal ...
-TABLESWITCH -> handleLast
+IFEQ notControlFlow
 
-handleLast:
-# Check if loop label matches
-# If match: GOTO lastLabel
-# Else: propagate to caller
+GOTO blockDispatcher                 # Jump to block-level dispatcher
+notControlFlow:
+ALOAD controlFlowTempSlot
 ```
 
 ### Example 3: Tail Call
@@ -353,8 +360,16 @@ IFEQ normalReturn
 ICONST_4
 IF_ICMPEQ tailcallLoop  # Loop if still TAILCALL
 
-# Not TAILCALL anymore, dispatch via TABLESWITCH
+# Not TAILCALL anymore, dispatch via block dispatcher
 ```
+
+### Non-Local Return from Map/Grep Blocks
+
+When `return` is used inside a `map` or `grep` block, it should return from the enclosing subroutine, not just the block. This uses the `RETURN` control flow type:
+
+- Inside map/grep blocks (`isMapGrepBlock`), `return` creates a `RuntimeControlFlowList` with `ControlFlowType.RETURN` and carries the return value in `returnValue`
+- The block dispatcher recognizes RETURN (ordinal 5) and unwraps the return value if the current context is a normal subroutine (not map/grep)
+- If unwrapping fails, `PerlNonLocalReturnException` is thrown for stack unwinding through Java-level map/grep calls
 
 ---
 
@@ -406,8 +421,7 @@ IF_ICMPEQ tailcallLoop  # Loop if still TAILCALL
   - One GOTO to shared dispatcher (if marked)
   - Shared dispatcher logic executes once (not per call)
   - O(1) dispatch regardless of loop depth
-  - One TABLESWITCH at dispatcher
-  - O(1) dispatch regardless of loop depth
+  - Conditional branch chain at dispatcher
 - **Tail calls**: Iterative trampoline (constant stack space)
 
 ---
@@ -437,17 +451,17 @@ ALOAD tempSlot                // Stack: [result]
 
 **Key principle:** All control flow paths must arrive at labels with identical stack heights.
 
-### Why Centralized TABLESWITCH?
+### Why Block-Level Shared Dispatchers?
 
 **Old approach:** Check and dispatch at each call site (150 bytes each)
 
 **New approach:**
-1. Call site: Simple check + jump to returnLabel (~20 bytes)
-2. returnLabel: Single TABLESWITCH dispatches all types (100 bytes total)
+1. Call site: Simple check + jump to block dispatcher (~20 bytes)
+2. Block-level dispatcher handles all types using conditional branches (emitted once per unique loop state)
 
 **Benefits:**
 - **Massive bytecode savings** (130 bytes per call)
-- **O(1) dispatch** via TABLESWITCH (hardware-optimized)
+- **Efficient dispatch** using conditional branch chain
 - **Better JIT compilation** (less bytecode to optimize)
 - **Single point of control** (easier to maintain/debug)
 
@@ -465,12 +479,13 @@ The `controlFlowTempSlot` holds the `RuntimeControlFlowList` during dispatch, se
 
 ```java
 // EmitSubroutine.java
-ENABLE_CONTROL_FLOW_CHECKS = true;  // ✅ Call-site checks
+ENABLE_CONTROL_FLOW_CHECKS = true;  // Call-site checks
 
 // EmitterMethodCreator.java
-ENABLE_TAILCALL_TRAMPOLINE = true;  // ✅ Tail call optimization
+ENABLE_TAILCALL_TRAMPOLINE = true;  // Tail call optimization
 
 // EmitControlFlow.java
+ENABLE_TAGGED_RETURNS = true;       // Tagged return values
 DEBUG_CONTROL_FLOW = false;         // Debug output
 ```
 
@@ -499,39 +514,12 @@ DEBUG_CONTROL_FLOW = false;         // Debug output
 
 ---
 
-## Historical Context
-
-### Evolution of the Implementation
-
-**Phase 1: Exception-Based (2024)**
-- Used Java exceptions (LastException, NextException)
-- Problems: VerifyErrors, stack consistency issues, "Method too large"
-- Pass rate: ~70%
-
-**Phase 2: Tagged Returns v1 (2025-11)**
-- Introduced RuntimeControlFlowList
-- Call-site checks with DUP/stack manipulation
-- Problem: ASM frame computation failures
-- Pass rate: 30% (massive regression)
-
-**Phase 3: Runtime Registry (2025-11)**
-- ThreadLocal storage for control flow markers
-- Checks at loop boundaries instead of call sites
-- Success: 100% pass rate
-- Trade-off: Additional checks at every labeled loop
-
-**Phase 4: Optimized Tagged Returns (2026-02) ← CURRENT**
-- Tagged returns with register-only bytecode
-- Centralized TABLESWITCH dispatch
-- **Success: 100% pass rate with minimal bytecode**
-- No stack manipulation, ASM-friendly patterns
-
-### Key Learnings
+## Design Lessons
 
 1. **ASM's COMPUTE_FRAMES is fragile** with stack manipulation after method calls
 2. **Local variable slots are ASM-friendly**, stack operations are not
 3. **Centralized dispatch** is more efficient than per-call-site dispatch
-4. **TABLESWITCH is perfect** for control flow type dispatch
+4. **Conditional branch chains** efficiently dispatch control flow types
 5. **Zero-overhead local flow** is achievable with direct GOTO
 
 ---
@@ -539,14 +527,14 @@ DEBUG_CONTROL_FLOW = false;         // Debug output
 ## Implementation Files
 
 ### Core Implementation
-- `src/main/java/org/perlonjava/runtime/ControlFlowType.java`
-- `src/main/java/org/perlonjava/runtime/ControlFlowMarker.java`
-- `src/main/java/org/perlonjava/runtime/RuntimeControlFlowList.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ControlFlowType.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ControlFlowMarker.java`
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList.java`
 
 ### Code Generation
-- `src/main/java/org/perlonjava/codegen/EmitControlFlow.java` - Emit control flow operators
-- `src/main/java/org/perlonjava/codegen/EmitSubroutine.java` - Call-site checks
-- `src/main/java/org/perlonjava/codegen/EmitterMethodCreator.java` - TABLESWITCH dispatcher
+- `src/main/java/org/perlonjava/backend/jvm/EmitControlFlow.java` - Emit control flow operators
+- `src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java` - Call-site checks
+- `src/main/java/org/perlonjava/backend/jvm/EmitterMethodCreator.java` - Return label and eval handling
 
 ### Tests
 - `src/test/resources/unit/control_flow.t`
@@ -613,16 +601,16 @@ if (ctx.javaClassInfo.hasLabeledBlocks) {
 
 ---
 
-## Why Centralized TABLESWITCH Doesn't Work
+## Why Full Centralization Doesn't Work
 
-**Initial idea:** Move all control flow checking to a single TABLESWITCH dispatcher at the method's returnLabel to reduce per-call-site bytecode.
+**Initial idea:** Move all control flow checking to a single centralized dispatcher at the method's returnLabel to reduce per-call-site bytecode.
 
 **Problem:** The centralized dispatcher would need to check ALL loop labels in the entire method, not just the labels visible at each call site. For complex methods with many nested loops:
 
-- **Old approach (distributed):** Each of N calls checks M visible labels = N × M × ~13 bytes
-- **New approach (centralized):** Each of N calls: ~20 bytes + central dispatcher checking ALL L labels = N × 20 + L × 3 × ~13 bytes
+- **Distributed block-level approach:** Each of N calls checks M visible labels = N × M × ~13 bytes
+- **Fully centralized approach:** Each of N calls: ~20 bytes + central dispatcher checking ALL L labels = N × 20 + L × 3 × ~13 bytes
 
-The centralized approach only helps when:
+The fully centralized approach only helps when:
 ```
 N × M × 13 > N × 20 + L × 3 × 13
 N × (M × 13 - 20) > L × 39
@@ -631,9 +619,9 @@ N > L × 39 / (M × 13 - 20)
 
 For typical values (M=5, L=20): N > 20 × 39 / 45 ≈ 17.3
 
-So centralization only helps when there are 18+ call sites AND each call site has fewer visible labels than the method has total labels. In practice, this rarely occurs.
+So full centralization only helps when there are 18+ call sites AND each call site has fewer visible labels than the method has total labels. In practice, this rarely occurs.
 
-**Conclusion:** The distributed approach with fast-path optimization (implemented above) is superior.
+**Conclusion:** The distributed block-level dispatcher approach with fast-path optimization (implemented above) is superior.
 
 ---
 
@@ -678,8 +666,6 @@ The current control flow implementation represents a **mature, production-ready 
 
 ## References
 
-- **Implementation branch:** `master` (merged 2026-02-04)
-- **Original design docs:** `dev/design/CONTROL_FLOW_*.md` (archived)
 - **ASM documentation:** https://asm.ow2.io/javadoc/
 - **JVM Spec on stack frames:** https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.4
 - **Perl control flow semantics:** https://perldoc.perl.org/perlsyn#Basic-BLOCKs

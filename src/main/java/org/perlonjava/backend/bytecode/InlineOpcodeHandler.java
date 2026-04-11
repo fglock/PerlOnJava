@@ -499,19 +499,15 @@ public class InlineOpcodeHandler {
     }
 
     /**
-     * Array size: rd = scalar(@array) or scalar(value)
-     * Special case for RuntimeList: return size, not last element.
+     * Scalar conversion: rd = operand.scalar()
+     * Converts arrays to count, lists to last element, scalars to self.
      * Format: ARRAY_SIZE rd operandReg
      */
     public static int executeArraySize(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int operandReg = bytecode[pc++];
         RuntimeBase operand = registers[operandReg];
-        if (operand instanceof RuntimeList) {
-            registers[rd] = new RuntimeScalar(((RuntimeList) operand).size());
-        } else {
-            registers[rd] = operand.scalar();
-        }
+        registers[rd] = operand.scalar();
         return pc;
     }
 
@@ -545,12 +541,10 @@ public class InlineOpcodeHandler {
             array = new RuntimeArray(list);
         }
 
-        registers[rd] = array.createReference();
+        registers[rd] = array.createReferenceWithTrackedElements();
         return pc;
     }
 
-    // =========================================================================
-    // HASH OPERATIONS
     // =========================================================================
 
     /**
@@ -912,7 +906,7 @@ public class InlineOpcodeHandler {
         RuntimeBase list = registers[listReg];
         RuntimeHash hash = RuntimeHash.createHash(list);
 
-        registers[rd] = hash.createReference();
+        registers[rd] = hash.createReferenceWithTrackedElements();
         return pc;
     }
 
@@ -944,7 +938,9 @@ public class InlineOpcodeHandler {
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
-        RuntimeList result = ListOperators.map(list, closure, ctx);
+        // Pass outer @_ (register 1) so map blocks can access $_[0], $_[1], etc.
+        RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
+        RuntimeList result = ListOperators.map(list, closure, outerArgs, ctx);
         registers[rd] = result;
         return pc;
     }
@@ -964,7 +960,9 @@ public class InlineOpcodeHandler {
         RuntimeBase listBase = registers[listReg];
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
-        RuntimeList result = ListOperators.grep(list, closure, ctx);
+        // Pass outer @_ (register 1) so grep blocks can access $_[0], $_[1], etc.
+        RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
+        RuntimeList result = ListOperators.grep(list, closure, outerArgs, ctx);
         registers[rd] = result;
         return pc;
     }

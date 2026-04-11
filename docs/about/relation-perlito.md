@@ -4,5 +4,5 @@ The key difference between PerlOnJava and Perlito (https://github.com/fglock/Per
 
 From an architectural standpoint, PerlOnJava is more mature. However, Perlito is currently more feature-rich due to its longer development history. PerlOnJava, however, doesn't support JavaScript like Perlito does.
 
-Both compilers share certain limitations imposed by the JVM, such as the lack of support for DESTROY, XS modules, and auto-closing filehandles, among others.
+Both compilers share certain limitations imposed by the JVM, such as the lack of support for XS modules and auto-closing filehandles, among others. PerlOnJava implements `DESTROY` via cooperative reference counting.
 

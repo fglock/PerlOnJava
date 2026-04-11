@@ -159,12 +159,13 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for weaken() method");
         }
-        // Placeholder for weaken functionality
+        RuntimeScalar ref = args.get(0);
+        WeakRefRegistry.weaken(ref);
         return new RuntimeScalar().getList();
     }
 
     /**
-     * Placeholder for the unweaken functionality.
+     * Restore a weak reference to a strong reference.
      *
      * @param args The arguments passed to the method.
      * @param ctx  The context in which the method is called.
@@ -174,7 +175,8 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for unweaken() method");
         }
-        // Placeholder for unweaken functionality
+        RuntimeScalar ref = args.get(0);
+        WeakRefRegistry.unweaken(ref);
         return new RuntimeScalar().getList();
     }
 
@@ -189,10 +191,8 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isweak() method");
         }
-        // On the JVM, the tracing garbage collector handles circular references
-        // natively, so weaken() is a no-op. Since nothing is ever actually
-        // weakened, isweak() should always return false.
-        return new RuntimeScalar(false).getList();
+        RuntimeScalar ref = args.get(0);
+        return new RuntimeScalar(WeakRefRegistry.isweak(ref)).getList();
     }
 
     /**

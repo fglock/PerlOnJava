@@ -5,10 +5,20 @@ import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.UnicodeSet;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 public class UnicodeResolver {
+    /**
+     * Cache for user-defined property subroutine results.
+     * Perl only calls user-defined property subs once per unique name and caches the result.
+     * Key: fully qualified sub name (e.g., "main::IsMyUpper")
+     * Value: the parsed character class pattern from parseUserDefinedProperty
+     */
+    private static final Map<String, String> userPropertyCache = new HashMap<>();
+
     /**
      * Retrieves the Unicode code point for a given character name.
      * Supports:
@@ -150,24 +160,22 @@ public class UnicodeResolver {
             if (line.startsWith("+")) {
                 // Add another property
                 String propName = line.substring(1).trim();
-                String propPattern = resolvePropertyReference(propName, recursionSet, propertyName);
-                UnicodeSet propSet = new UnicodeSet(propPattern);
+                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
                 resultSet.addAll(propSet);
             } else if (line.startsWith("-") || line.startsWith("!")) {
                 // Remove a property
                 String propName = line.substring(1).trim();
-                String propPattern = resolvePropertyReference(propName, recursionSet, propertyName);
-                UnicodeSet propSet = new UnicodeSet(propPattern);
+                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
                 resultSet.removeAll(propSet);
             } else if (line.startsWith("&")) {
                 // Intersection with a property
                 String propName = line.substring(1).trim();
-                String propPattern = resolvePropertyReference(propName, recursionSet, propertyName);
+                UnicodeSet propSet = resolvePropertyReferenceAsSet(propName, recursionSet, propertyName);
                 if (!hasIntersection) {
-                    intersectionSet = new UnicodeSet(propPattern);
+                    intersectionSet = propSet;
                     hasIntersection = true;
                 } else {
-                    intersectionSet.retainAll(new UnicodeSet(propPattern));
+                    intersectionSet.retainAll(propSet);
                 }
             } else {
                 // Parse hex range - extract the hex part before any comments
@@ -184,7 +192,9 @@ public class UnicodeResolver {
                     try {
                         long codePoint = Long.parseLong(hexStr, 16);
                         if (codePoint > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            // JVM only supports Unicode up to U+10FFFF; silently clamp
+                            // (Perl supports 31-bit/32-bit code points, but Java doesn't)
+                            codePoint = 0x10FFFF;
                         }
                         resultSet.add((int) codePoint);
                     } catch (NumberFormatException e) {
@@ -204,11 +214,14 @@ public class UnicodeResolver {
                         long start = Long.parseLong(startHex, 16);
                         long end = Long.parseLong(endHex, 16);
 
+                        // JVM only supports Unicode up to U+10FFFF; clamp values
+                        // (Perl supports 31-bit/32-bit code points, but Java doesn't)
                         if (start > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            // Entire range is beyond JVM limit; skip it
+                            continue;
                         }
                         if (end > 0x10FFFF) {
-                            throw new IllegalArgumentException("Code point too large in \"" + line.trim() + "\" in expansion of " + propertyName);
+                            end = 0x10FFFF;
                         }
                         if (start > end) {
                             throw new IllegalArgumentException("Illegal range in \"" + line.trim() + "\" in expansion of " + propertyName);
@@ -231,14 +244,16 @@ public class UnicodeResolver {
     }
 
     /**
-     * Resolves a property reference (like utf8::InHiragana or main::IsMyProp).
+     * Resolves a property reference to a UnicodeSet (like utf8::InHiragana or main::IsMyProp).
+     * Returns a UnicodeSet directly instead of a Java regex pattern string, so the result
+     * can be used with UnicodeSet set operations (addAll, removeAll, retainAll).
      *
      * @param propRef        The property reference
      * @param recursionSet   Set to track recursive property calls
      * @param parentProperty The parent property name (for error messages)
-     * @return A character class pattern
+     * @return A UnicodeSet representing the property
      */
-    private static String resolvePropertyReference(String propRef, Set<String> recursionSet, String parentProperty) {
+    private static UnicodeSet resolvePropertyReferenceAsSet(String propRef, Set<String> recursionSet, String parentProperty) {
         // Check for recursion
         if (recursionSet.contains(propRef)) {
             // Build recursion chain for error message
@@ -257,23 +272,166 @@ public class UnicodeResolver {
         }
 
         // Remove utf8:: prefix if present
+        String propName = propRef;
         if (propRef.startsWith("utf8::")) {
-            String stdProp = propRef.substring(6);
+            propName = propRef.substring(6);
+        }
+
+        // Try to resolve as a standard Unicode property via ICU4J
+        UnicodeSet result = resolveStandardPropertyAsSet(propName, recursionSet);
+        if (result != null) {
+            return result;
+        }
+
+        // Try as user-defined property (calls the Perl sub)
+        String fallbackRef = propRef.startsWith("utf8::") ? "main::" + propRef.substring(6) : propRef;
+        String userProp = tryUserDefinedProperty(fallbackRef, recursionSet);
+        if (userProp != null) {
+            // userProp is a character class pattern from unicodeSetToJavaPattern
+            return new UnicodeSet("[" + userProp + "]");
+        }
+
+        throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + propRef);
+    }
+
+    /**
+     * Resolves a standard Unicode property name to a UnicodeSet using ICU4J directly.
+     * Handles the same aliases as translateUnicodeProperty but returns a UnicodeSet.
+     *
+     * @param property     The property name (without utf8:: prefix)
+     * @param recursionSet Set to track recursive property calls
+     * @return A UnicodeSet, or null if the property cannot be resolved
+     */
+    private static UnicodeSet resolveStandardPropertyAsSet(String property, Set<String> recursionSet) {
+        // Handle well-known Perl property aliases
+        switch (property) {
+            case "XPosixSpace": case "XPerlSpace": case "SpacePerl":
+            case "Space": case "White_Space": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("White_Space", "True");
+                return set;
+            }
+            case "XPosixAlnum": case "Alnum": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Alphabetic", "True");
+                UnicodeSet digits = new UnicodeSet();
+                digits.applyPropertyAlias("gc", "Nd");
+                set.addAll(digits);
+                return set;
+            }
+            case "XPosixAlpha": case "Alpha": case "Alphabetic": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Alphabetic", "True");
+                return set;
+            }
+            case "XPosixUpper": case "Upper": case "Uppercase": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Uppercase", "True");
+                return set;
+            }
+            case "Titlecase": case "TitlecaseLetter": case "Titlecase_Letter": case "Lt": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("gc", "Lt");
+                return set;
+            }
+            case "XPosixLower": case "Lower": case "Lowercase": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Lowercase", "True");
+                return set;
+            }
+            case "XPosixDigit": case "Decimal_Number": case "Digit": case "Nd": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("gc", "Nd");
+                return set;
+            }
+            case "XPosixPunct": case "Punct": case "Punctuation": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("gc", "P");
+                return set;
+            }
+            case "Dash": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Dash", "True");
+                return set;
+            }
+            case "Hex_Digit": case "Hex": case "XPosixXDigit": case "XDigit":
+            case "ASCII_Hex_Digit": case "AHex": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("ASCII_Hex_Digit", "True");
+                return set;
+            }
+            case "Cn": {
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("gc", "Cn");
+                return set;
+            }
+            case "ASCII": {
+                return new UnicodeSet("[\\u0000-\\u007F]");
+            }
+            default:
+                break;
+        }
+
+        // Strip Is/In prefix for Perl compatibility
+        String stripped = property;
+        if (property.length() > 2
+                && (property.charAt(0) == 'I' || property.charAt(0) == 'i')
+                && (property.charAt(1) == 's' || property.charAt(1) == 'S')
+                && Character.isUpperCase(property.charAt(2))) {
+            stripped = property.substring(2);
+            // Recurse with stripped name
+            UnicodeSet result = resolveStandardPropertyAsSet(stripped, recursionSet);
+            if (result != null) {
+                return result;
+            }
+        } else if (property.length() > 2
+                && (property.charAt(0) == 'I' || property.charAt(0) == 'i')
+                && (property.charAt(1) == 'n' || property.charAt(1) == 'N')
+                && Character.isUpperCase(property.charAt(2))) {
+            stripped = property.substring(2);
+            // Try as block name
             try {
-                // Try as standard property
-                return translateUnicodeProperty(stdProp, false, recursionSet);
-            } catch (IllegalArgumentException e) {
-                // Fall through to user-defined property lookup
-                propRef = "main::" + stdProp;
+                UnicodeSet set = new UnicodeSet();
+                set.applyPropertyAlias("Block", stripped);
+                return set;
+            } catch (IllegalArgumentException ignored) {
             }
         }
 
-        // Try as user-defined property
-        return translateUnicodeProperty(propRef, false, recursionSet);
+        // Map ASCII alias to block name
+        if (stripped.equalsIgnoreCase("ASCII")) {
+            return new UnicodeSet("[\\u0000-\\u007F]");
+        }
+
+        // Try direct ICU4J lookup as general category, script, or binary property
+        try {
+            UnicodeSet set = new UnicodeSet();
+            set.applyPropertyAlias(stripped, "True");
+            return set;
+        } catch (IllegalArgumentException ignored) {
+        }
+        try {
+            UnicodeSet set = new UnicodeSet();
+            set.applyPropertyAlias(stripped, "");
+            return set;
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        // Try as block name
+        try {
+            UnicodeSet set = new UnicodeSet();
+            set.applyPropertyAlias("Block", stripped);
+            return set;
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        return null;
     }
 
     /**
      * Tries to look up a user-defined property by calling a Perl subroutine.
+     * Results are cached per sub name, matching Perl's behavior of only calling
+     * user-defined property subs once per unique property name.
      *
      * @param property     The property name (e.g., "IsMyUpper" or "main::IsMyUpper")
      * @param recursionSet Set to track recursive property calls
@@ -291,6 +449,11 @@ public class UnicodeResolver {
             subName = "main::" + subName;
         }
 
+        // Check cache first — Perl only calls user-defined property subs once
+        if (userPropertyCache.containsKey(subName)) {
+            return userPropertyCache.get(subName);
+        }
+
         // Look up the subroutine
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
         if (codeRef == null || !codeRef.getDefinedBoolean()) {
@@ -303,13 +466,17 @@ public class UnicodeResolver {
             RuntimeList result = RuntimeCode.apply(codeRef, args, RuntimeContextType.SCALAR);
 
             if (result.elements.isEmpty()) {
-                return "";
+                String parsed = "";
+                userPropertyCache.put(subName, parsed);
+                return parsed;
             }
 
             String definition = result.elements.getFirst().toString();
 
-            // Parse and return the property definition
-            return parseUserDefinedProperty(definition, newRecursionSet, subName);
+            // Parse and cache the property definition
+            String parsed = parseUserDefinedProperty(definition, newRecursionSet, subName);
+            userPropertyCache.put(subName, parsed);
+            return parsed;
 
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
@@ -334,7 +501,10 @@ public class UnicodeResolver {
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
             // Check for user-defined properties (Is... or In...)
-            if (property.matches("^(.*::)?(Is|In)[A-Z].*")) {
+            // Perl treats ANY property starting with Is/In (case-insensitive prefix)
+            // as potentially user-defined, regardless of the character after the prefix
+            // (e.g., Is_q, IsMyProp, InMyBlock all trigger user-defined lookup)
+            if (property.matches("^(.*::)?([Ii][sSNn]).+")) {
                 String userProp = tryUserDefinedProperty(property, recursionSet);
                 if (userProp != null) {
                     return wrapCharClass(userProp, negated);
@@ -351,9 +521,12 @@ public class UnicodeResolver {
                 case "XPosixSpace":
                 case "XPerlSpace":
                 case "SpacePerl":
+                case "Space":
+                case "White_Space":
                     // Use ICU4J UnicodeSet for accurate XPosixSpace
                     return getXPosixSpacePattern(negated);
                 case "XPosixAlnum":
+                case "Alnum":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}", negated);
                 case "XPosixAlpha":
                 case "Alpha":
@@ -384,11 +557,18 @@ public class UnicodeResolver {
                 case "Print":
                     return wrapCharClass("\\p{IsAlphabetic}\\p{IsDigit}\\p{IsPunctuation}\\p{IsWhite_Space}", negated);
                 case "XPosixPunct":
+                case "Punct":
+                case "Punctuation":
                     return wrapProperty("IsPunctuation", negated);
                 case "XPosixUpper":
                 case "Upper":
                 case "Uppercase":
                     return wrapProperty("IsUppercase", negated);
+                case "Titlecase":
+                case "TitlecaseLetter":
+                case "Titlecase_Letter":
+                case "Lt":
+                    return wrapProperty("gc=Lt", negated);
                 case "XPosixWord":
                 case "Word":
                 case "IsWord":
@@ -453,9 +633,12 @@ public class UnicodeResolver {
                 }
             }
 
-            // Strip 'Is' prefix for Perl compatibility (e.g., IsPrint -> Print, IsDigit -> Digit)
-            // ICU4J doesn't recognize Is-prefixed property names, but they're valid in Perl
-            if (property.startsWith("Is") && property.length() > 2 && Character.isUpperCase(property.charAt(2))) {
+            // Strip 'Is'/'is' prefix for Perl compatibility (e.g., IsPrint -> Print, isAlpha -> Alpha)
+            // Perl is case-insensitive for the 'Is' prefix on Unicode property names
+            if (property.length() > 2
+                    && (property.charAt(0) == 'I' || property.charAt(0) == 'i')
+                    && (property.charAt(1) == 's' || property.charAt(1) == 'S')
+                    && Character.isUpperCase(property.charAt(2))) {
                 property = property.substring(2);
             }
 
@@ -480,11 +663,28 @@ public class UnicodeResolver {
 
             // Standard Unicode properties
             UnicodeSet unicodeSet = new UnicodeSet();
-            if (isBlockProperty(property)) {
-                unicodeSet.applyPropertyAlias("Block", property);
+
+            // Handle Property=Value syntax (e.g., ASCII_Hex_Digit=True, gc=Ll)
+            String propName = property;
+            String propValue = "";
+            int eqIdx = property.indexOf('=');
+            if (eqIdx > 0 && eqIdx < property.length() - 1) {
+                propName = property.substring(0, eqIdx);
+                propValue = property.substring(eqIdx + 1);
+                // Handle negation: Property=False means \P{Property}
+                if (propValue.equalsIgnoreCase("False") || propValue.equalsIgnoreCase("No") || propValue.equals("N") || propValue.equals("F")) {
+                    negated = !negated;
+                    propValue = "True";
+                } else if (propValue.equalsIgnoreCase("True") || propValue.equalsIgnoreCase("Yes") || propValue.equals("Y") || propValue.equals("T")) {
+                    propValue = "True";
+                }
+            }
+
+            if (isBlockProperty(propName)) {
+                unicodeSet.applyPropertyAlias("Block", propName);
             } else {
                 try {
-                    unicodeSet.applyPropertyAlias(property, "");
+                    unicodeSet.applyPropertyAlias(propName, propValue);
                 } catch (IllegalArgumentException ex) {
                     // Property not found as general category/script - try as a Unicode block name.
                     // Perl resolves \p{Emoticons} as \p{Block=Emoticons}, etc.

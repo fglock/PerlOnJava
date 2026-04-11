@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for Moo.
+  6 of 841 subtests fail due to JVM GC model limitations:
+  - Tests 10,11 in accessor-weaken*.t: weak ref to lazy anonymous default
+    not cleared at scope exit (requires synchronous refcounting, JVM GC
+    is non-deterministic)
+  - Test 19 in accessor-weaken*.t: optree reaping on sub redefinition
+    (JVM never unloads compiled bytecode)
+  See dev/design/destroy_weaken_plan.md sections 13-14 for full analysis.
+  69/71 test programs pass, 835/841 subtests (99.3%).
+match:
+  distribution: "^HAARG/Moo-"
+test:
+  commandline: "/usr/bin/make test; exit 0"

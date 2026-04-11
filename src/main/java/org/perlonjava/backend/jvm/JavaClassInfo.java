@@ -5,10 +5,9 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
+import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+
+import java.util.*;
 
 /**
  * Represents information about a Java class being generated.
@@ -112,6 +111,13 @@ public class JavaClassInfo {
     public Map<String, Label> blockDispatcherLabels;
 
     /**
+     * Constants referenced via backslash (e.g., \"yay") inside this subroutine.
+     * When the CODE slot of a glob is replaced, weak references to these constants
+     * are cleared to emulate Perl 5's "optree reaping" behavior.
+     */
+    public List<RuntimeBase> padConstants;
+
+    /**
      * Constructs a new JavaClassInfo object.
      * Initializes the class name, stack level manager, and loop label stack.
      */
@@ -125,6 +131,16 @@ public class JavaClassInfo {
         this.blockDispatcherLabels = new HashMap<>();
         this.spillSlots = new int[0];
         this.spillTop = 0;
+    }
+
+    /**
+     * Records a cached constant that was referenced via backslash in this subroutine.
+     */
+    public void addPadConstant(RuntimeBase constant) {
+        if (padConstants == null) {
+            padConstants = new ArrayList<>();
+        }
+        padConstants.add(constant);
     }
 
     public int acquireSpillSlot() {

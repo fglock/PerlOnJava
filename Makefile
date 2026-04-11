@@ -196,5 +196,5 @@ sbom-clean:
 check-links:
 	@command -v lychee >/dev/null 2>&1 || { echo "Error: lychee not found. Install with: brew install lychee"; exit 1; }
 	@echo "Checking documentation links..."
-	lychee --offline *.md docs/ dev/design/
+	lychee --offline *.md docs/ dev/design/ dev/architecture/
 

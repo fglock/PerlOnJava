@@ -923,16 +923,37 @@ public class CompileOperator {
                         ? Opcodes.RETURN_NONLOCAL : Opcodes.RETURN;
                 if (node.operand != null) {
                     node.operand.accept(bytecodeCompiler);
-                    int exprReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
-                    bytecodeCompiler.emitReg(exprReg);
                 } else {
                     int undefReg = bytecodeCompiler.allocateRegister();
                     bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                     bytecodeCompiler.emitReg(undefReg);
-                    bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
-                    bytecodeCompiler.emitReg(undefReg);
                 }
+                int exprReg = bytecodeCompiler.lastResultReg;
+
+                // Emit scope exit cleanup for all my-scalars, my-hashes, and my-arrays
+                // in the subroutine scope (scope 0). Explicit 'return' bypasses the
+                // normal scope exit cleanup at block end, so we must do it here.
+                // Skip the exprReg (return value register) — SCOPE_EXIT_CLEANUP nulls
+                // the register, which would destroy the return value if it's a my-variable.
+                java.util.List<Integer> scalarIdxs = bytecodeCompiler.symbolTable.getMyScalarIndicesInScope(0);
+                for (int idx : scalarIdxs) {
+                    if (idx == exprReg) continue;
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP);
+                    bytecodeCompiler.emitReg(idx);
+                }
+                java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
+                for (int idx : hashIdxs) {
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+                    bytecodeCompiler.emitReg(idx);
+                }
+                java.util.List<Integer> arrayIdxs = bytecodeCompiler.symbolTable.getMyArrayIndicesInScope(0);
+                for (int idx : arrayIdxs) {
+                    bytecodeCompiler.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+                    bytecodeCompiler.emitReg(idx);
+                }
+
+                bytecodeCompiler.emitWithToken(returnOpcode, node.getIndex());
+                bytecodeCompiler.emitReg(exprReg);
                 bytecodeCompiler.lastResultReg = -1;
             }
             case "last", "next", "redo" -> {
@@ -1174,12 +1195,17 @@ public class CompileOperator {
         if (!arrayOp.operator.equals("@")) bc.throwCompilerException("splice requires array variable: splice @array, ...");
         int arrayReg = resolveArrayOperand(bc, new OperatorNode("splice", arrayOp, node.tokenIndex), "splice");
         List<Integer> argRegs = new ArrayList<>();
+        // Compile splice arguments in LIST context so replacement values
+        // (after offset and length) are properly flattened.
+        int savedCtx = bc.currentCallContext;
+        bc.currentCallContext = RuntimeContextType.LIST;
         for (int i = 1; i < list.elements.size(); i++) { list.elements.get(i).accept(bc); argRegs.add(bc.lastResultReg); }
+        bc.currentCallContext = savedCtx;
         int argsListReg = bc.allocateRegister();
         bc.emit(Opcodes.CREATE_LIST); bc.emitReg(argsListReg); bc.emit(argRegs.size());
         for (int argReg : argRegs) bc.emitReg(argReg);
         int rd = bc.allocateOutputRegister();
-        bc.emit(Opcodes.SPLICE); bc.emitReg(rd); bc.emitReg(arrayReg); bc.emitReg(argsListReg); bc.emit(bc.currentCallContext);
+        bc.emit(Opcodes.SPLICE); bc.emitReg(rd); bc.emitReg(arrayReg); bc.emitReg(argsListReg); bc.emit(savedCtx);
         bc.lastResultReg = rd;
     }
 

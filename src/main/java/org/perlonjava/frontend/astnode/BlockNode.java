@@ -1,6 +1,5 @@
 package org.perlonjava.frontend.astnode;
 
-import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
@@ -15,8 +14,6 @@ import java.util.List;
 public class BlockNode extends AbstractNode {
     /**
      * The list of child nodes contained in this BlockNode.
-     * Note: This field is non-final because {@link LargeBlockRefactorer} may modify
-     * the list during parse-time refactoring.
      */
     public List<Node> elements;
 

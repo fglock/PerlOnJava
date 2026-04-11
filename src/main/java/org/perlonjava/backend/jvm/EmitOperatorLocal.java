@@ -75,7 +75,11 @@ public class EmitOperatorLocal {
                     var symbolEntry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
                     isOurVariable = symbolEntry != null && "our".equals(symbolEntry.decl());
                 }
-                if (varIndex == -1 || isOurVariable) {
+                // @_ is always lexical (parameter at slot 1) - use register-based
+                // localization, not global. This matches EmitVariable.java line 410
+                // where @_ access is always treated as lexical.
+                boolean isAtUnderscore = varName.equals("@_");
+                if ((varIndex == -1 || isOurVariable) && !isAtUnderscore) {
                     String fullName = NameNormalizer.normalizeVariableName(idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                     mv.visitLdcInsn(fullName);
                     mv.visitMethodInsn(Opcodes.INVOKESTATIC,

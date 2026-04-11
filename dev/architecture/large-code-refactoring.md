@@ -1,30 +1,27 @@
-# Large Code Refactoring - Automatic Retry Implementation
-
-## Status: ✅ IMPLEMENTED
+# Large Code Handling — JVM 64KB Method Limit
 
 ## Overview
 
-PerlOnJava automatically handles large code blocks that exceed JVM's 65KB method size limit through on-demand refactoring. When compilation fails with "Method too large" error, the compiler automatically retries with refactoring enabled.
+PerlOnJava uses a **two-tier strategy** to handle Perl code that exceeds the JVM's 65,535-byte method size limit:
 
-## Problem Discovery
+1. **Proactive**: During codegen, large blocks are detected and wrapped in a closure call to push them into a separate JVM method
+2. **Reactive fallback**: If ASM still produces a method that's too large, the code is compiled using the bytecode interpreter backend instead
 
-When attempting to enable proactive refactoring by default, all 151 unit tests failed with errors like:
-```
-Global symbol "%Config" requires explicit package name
-```
+## The Problem
 
-### Root Cause
+The JVM limits each method to 65,535 bytes of bytecode. PerlOnJava compiles each Perl subroutine (or eval block) into a single JVM method. Large Perl files — such as test suites with thousands of assertions, or modules with large data structures — can exceed this limit.
 
-Large-code refactoring wraps chunks of block statements in closures to avoid JVM's 65KB method size limit. However, when `use` or `require` statements are wrapped in closures, their imports happen in the closure's lexical scope instead of the package scope, breaking code that expects those imports to be available.
+### Closure Scoping Complication
 
-Example:
+The natural fix is to wrap large blocks in anonymous subs: `sub { ...block... }->(@_)`. However, this changes lexical scoping. When `use` or `require` statements are wrapped in closures, their imports happen in the closure's scope instead of the package scope:
+
 ```perl
 # Original code
 package Foo;
 use Config qw/%Config/;   # Import %Config into Foo package
 my $x = $Config{foo};      # Access imported variable
 
-# After refactoring (BROKEN)
+# After naive refactoring (BROKEN)
 package Foo;
 sub {
     use Config qw/%Config/;   # Import happens in closure scope!
@@ -32,156 +29,102 @@ sub {
 my $x = $Config{foo};      # ERROR: %Config not in scope
 ```
 
-## Solution Evolution
+This is why proactive refactoring skips subroutines, special blocks (BEGIN/END/INIT/CHECK/UNITCHECK), and blocks with unsafe control flow.
 
-### Initial Approach: Proactive Detection
-First considered detecting `use`/`require`/`BEGIN` statements and keeping them in unrefactored prefix sections. However, this approach had several issues:
-- Estimation overhead for all code
-- Complex logic to detect all compile-time statements
-- Still produces false positives
-- Changes semantics even when refactoring not needed
+## Tier 1: Proactive Block Wrapping
 
-### Better Approach: Reactive/On-Demand Refactoring ✅
+### Entry Point
 
-Instead of predicting when refactoring is needed, **react to actual compilation errors**:
+`LargeBlockRefactorer.processBlock()` is called from `EmitBlock.emitBlock()` during bytecode emission for every `BlockNode`.
 
-**Old flow (Proactive):**
+### Flow
+
 ```
-Parse → Estimate size → Refactor if large → Compile
-Problems:
-- Estimation overhead for all code
-- False positives break imports
-- Semantic changes even when not needed
-```
-
-**New flow (Reactive):**
-```
-Parse → Compile normally
-  ↓ (if Method too large error)
-Catch error → Enable refactoring → Retry compilation
-Benefits:
-- Zero overhead for normal code
-- Only refactor when truly necessary
-- No semantic changes unless required
+EmitBlock.emitBlock(visitor, blockNode)
+  └── LargeBlockRefactorer.processBlock(visitor, blockNode)
+        ├── Skip if: already refactored, is subroutine, is special block, ≤4 elements
+        ├── Estimate bytecode size (capped at 2 × LARGE_BYTECODE_SIZE)
+        ├── If estimated > LARGE_BYTECODE_SIZE (40,000):
+        │     └── tryWholeBlockRefactoring():
+        │           ├── Check for unsafe control flow (unlabeled next/last/redo/goto) → abort if found
+        │           ├── Mark blockAlreadyRefactored = true
+        │           └── Wrap entire block in: sub { <block> }->(@_)
+        └── Return false → normal block emission continues
 ```
 
-## Implementation
+Wrapping pushes the block's code into a separate JVM method (the anonymous sub body), giving it its own 64KB budget. This effectively doubles the available space for that block.
 
-### Code Changes
+### Limitations
 
-#### LargeBlockRefactorer.java
-Added support for automatic retry that bypasses the `IS_REFACTORING_ENABLED` check:
+The wrapping is a **single-level** operation — it wraps the entire block in one closure. It does not recursively split the block into smaller chunks. This means:
+- For blocks up to ~2x the 64KB limit, wrapping succeeds (the block fits in the new method)
+- For blocks larger than ~2x the limit, wrapping is insufficient and the `MethodTooLargeException` still occurs, triggering Tier 2
 
-```java
-public static void forceRefactorForCodegen(BlockNode node, boolean isAutoRetry) {
-    // Only check IS_REFACTORING_ENABLED if NOT auto-retry
-    if (!isAutoRetry && !IS_REFACTORING_ENABLED) {
-        return;
-    }
-    if (node == null) {
-        return;
-    }
-    // Prevent infinite retry loops
-    Object attemptsObj = node.getAnnotation("refactorAttempts");
-    int attempts = attemptsObj instanceof Integer ? (Integer) attemptsObj : 0;
-    if (attempts >= MAX_REFACTOR_ATTEMPTS) {
-        return;
-    }
-    node.setAnnotation("refactorAttempts", attempts + 1);
-    node.setAnnotation("blockAlreadyRefactored", false);
-    trySmartChunking(node, null, 256);
-    processPendingRefactors();
-}
+### Thresholds
+
+| Constant | Value | File | Purpose |
+|----------|-------|------|---------|
+| `LARGE_BYTECODE_SIZE` | 40,000 bytes | `BlockRefactor.java` | Trigger threshold (below 65,535 for safety margin) |
+| `MIN_CHUNK_SIZE` | 4 elements | `BlockRefactor.java` | Minimum block size to consider refactoring |
+
+### Key Classes
+
+- **`BlockRefactor`** (`backend/jvm/astrefactor/BlockRefactor.java`) — Constants and `createAnonSubCall()` utility that creates `sub { ... }->(@_)` AST nodes
+- **`LargeBlockRefactorer`** (`backend/jvm/astrefactor/LargeBlockRefactorer.java`) — Orchestrates block-level refactoring: size estimation, control flow safety checks, whole-block wrapping
+
+## Tier 2: Interpreter Fallback
+
+When the proactive wrapping is insufficient (or skipped due to unsafe control flow), ASM throws `MethodTooLargeException`. The fallback catches this and compiles the code using the bytecode interpreter instead.
+
+### Flow
+
+```
+EmitterMethodCreator.createRuntimeCode(ctx, ast, useTryCatch)
+  └── try: createClassWithMethod() → getBytecode() → ASM toByteArray()
+        └── MethodTooLargeException thrown by ASM
+  └── catch (MethodTooLargeException):
+        └── if USE_INTERPRETER_FALLBACK (default: true):
+              └── compileToInterpreter(ast, ctx, useTryCatch)
+                    → Returns InterpretedCode (walks AST at runtime)
 ```
 
-#### EmitterMethodCreator.java
-Modified to catch `MethodTooLargeException` and automatically retry with refactoring:
+Both `CompiledCode` and `InterpretedCode` extend `RuntimeCode`, so call sites don't need to know which backend was used.
 
-```java
-try {
-    return getBytecodeInternal(ctx, ast, useTryCatch, false);
-} catch (MethodTooLargeException tooLarge) {
-    // Automatic retry with refactoring on "Method too large" error
-    if (ast instanceof BlockNode blockAst) {
-        try {
-            // Notify user that automatic refactoring is happening
-            System.err.println("Note: Method too large, retrying with automatic refactoring.");
-            // Force refactoring with auto-retry flag
-            LargeBlockRefactorer.forceRefactorForCodegen(blockAst, true);
-            // Reset JavaClassInfo to avoid reusing partially-resolved Labels
-            if (ctx != null && ctx.javaClassInfo != null) {
-                String previousName = ctx.javaClassInfo.javaClassName;
-                ctx.javaClassInfo = new JavaClassInfo();
-                ctx.javaClassInfo.javaClassName = previousName;
-                ctx.clearContextCache();
-            }
-            return getBytecodeInternal(ctx, ast, useTryCatch, false);
-        } catch (MethodTooLargeException retryTooLarge) {
-            throw retryTooLarge;
-        } catch (Throwable retryError) {
-            System.err.println("Warning: Automatic refactoring failed: " + retryError.getMessage());
-        }
-    }
-    throw tooLarge;
-}
+### Configuration
+
+`USE_INTERPRETER_FALLBACK` is enabled by default. It can be disabled with the environment variable `JPERL_DISABLE_INTERPRETER_FALLBACK`.
+
+The fallback also handles other compilation failures (`VerifyError`, `ClassFormatError`, certain `PerlCompilerException` and `RuntimeException` cases).
+
+### User Message
+
+When fallback is triggered with `JPERL_SHOW_FALLBACK=1`:
 ```
-
-## Testing Results
-
-### Test Case: 30,000 Element Array
-
-```bash
-# Automatic retry (default behavior)
-./jperl /tmp/test_auto_refactor.pl
-# Output: "Note: Method too large, retrying with automatic refactoring."
-#         May still fail if code is extremely large (exceeds limits even after refactoring)
+Note: Method too large, using interpreter backend.
 ```
-
-### Unit Tests
-- ✅ All 2012 unit tests pass
-- ✅ Normal code has zero overhead (no refactoring unless needed)
-- ✅ Config imports work correctly
-- ✅ op/pack.t: 14656/14726 ok (same as before)
-
-## Benefits
-
-1. **Zero overhead for normal code** - No bytecode estimation unless actually needed
-2. **Semantic correctness** - Imports and `use` statements work normally
-3. **Automatic handling** - Users don't need to set environment variables
-4. **Fail-safe** - Catches extreme cases that exceed limits even after refactoring
-
-## User Messages
-
-### On automatic retry:
-```
-Note: Method too large, retrying with automatic refactoring.
-```
-
-### On failure after retry:
-```
-Hint: If this is a 'Method too large' error after automatic refactoring,
-      the code may be too complex to compile. Consider splitting into smaller methods.
-```
-
-## Usage Recommendations
-
-- **Default behavior (on-demand)**: ✅ Automatic and transparent for all code
-- No configuration needed - refactoring happens automatically when required
 
 ## Technical Details
 
-### JVM Method Size Limits
+### JVM Constraints
 - Maximum method bytecode size: 65,535 bytes (64KB)
-- Threshold for refactoring check: 40,000 bytes
-- Refactoring splits large blocks into closure-wrapped chunks
+- Proactive refactoring threshold: 40,000 bytes (safety margin)
 
 ### Refactoring Strategy
-1. **Smart chunking**: Groups statements into manageable chunks
-2. **Closure wrapping**: Each chunk becomes `sub { ... }->()`
-3. **Context preservation**: Return values and control flow maintained
-4. **Safe boundaries**: Never splits statements mid-expression
+1. **Whole-block wrapping**: The entire block becomes `sub { <block> }->(@_)`
+2. **`@_` passthrough**: Arguments are forwarded so the wrapper is transparent
+3. **Anti-recursion guard**: `blockAlreadyRefactored` annotation prevents infinite recursion when the wrapper's BlockNode is processed
+4. **Safe boundaries**: Blocks with unlabeled control flow (`next`/`last`/`redo`/`goto` outside loops) are not refactored, since these would break when wrapped in a closure
 
-### Retry Logic
-- Maximum retry attempts per block: 1 (prevents infinite loops)
-- Tracks attempts via block annotation `refactorAttempts`
-- Resets `JavaClassInfo` between attempts to clear partial state
+## Implementation Files
+
+| File | Role |
+|------|------|
+| `backend/jvm/astrefactor/BlockRefactor.java` | Constants, closure-wrapping utility |
+| `backend/jvm/astrefactor/LargeBlockRefactorer.java` | Block-level proactive refactoring |
+| `backend/jvm/EmitBlock.java` | Calls `processBlock()` during block emission |
+| `backend/jvm/EmitterMethodCreator.java` | Catches `MethodTooLargeException`, triggers interpreter fallback |
+
+## See Also
+
+- [control-flow.md](control-flow.md) — Control flow interacts with refactoring (unsafe control flow prevents block wrapping)
+- [../design/interpreter.md](../design/interpreter.md) — Bytecode interpreter design (the fallback backend)

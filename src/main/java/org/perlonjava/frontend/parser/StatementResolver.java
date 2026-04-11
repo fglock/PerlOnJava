@@ -728,15 +728,30 @@ public class StatementResolver {
                     // declaration before the BlockNode to preserve correct scoping.
                     // This is analogous to handleStatementModifierWithMy for if/unless.
                     Node hoistedMyDecl = null;
-                    if (modifierExpression instanceof BinaryOperatorNode assignNode
+
+                    // Unwrap single-element ListNode from outer parentheses.
+                    // "for (my @w = LIST)" parses as ListNode([BinaryOperatorNode])
+                    // while "for my @w = LIST" parses as BinaryOperatorNode directly.
+                    Node listExprCandidate = modifierExpression;
+                    if (listExprCandidate instanceof ListNode ln && ln.elements.size() == 1) {
+                        listExprCandidate = ln.elements.get(0);
+                    }
+
+                    if (listExprCandidate instanceof BinaryOperatorNode assignNode
                             && assignNode.operator.equals("=")) {
                         Node left = assignNode.left;
                         if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
-                            // Extract "my @w" as a standalone declaration
+                            // Extract "my @w" or "my ($s, @a)" as a standalone declaration
                             hoistedMyDecl = left;
                             // Replace "my @w = LIST" with "@w = LIST" in the foreach list
-                            modifierExpression = new BinaryOperatorNode(
+                            Node newAssign = new BinaryOperatorNode(
                                     "=", myNode.operand, assignNode.right, parser.tokenIndex);
+                            // Preserve ListNode wrapper if present (from outer parens)
+                            if (modifierExpression instanceof ListNode) {
+                                modifierExpression = new ListNode(List.of(newAssign), parser.tokenIndex);
+                            } else {
+                                modifierExpression = newAssign;
+                            }
                         }
                     }
 

@@ -112,6 +112,14 @@ public class PerlLanguageProvider {
         ensureRuntimeInitialized();
         PerlRuntime runtime = PerlRuntime.current();
 
+        // Save and clear the eval runtime context so that modules loaded via require/do
+        // during eval STRING execution don't see the eval's captured variables.
+        // Without this, SpecialBlockParser.runSpecialBlock would incorrectly alias
+        // local variables in required modules to the eval's captured variables when
+        // they share the same name (e.g., $caller in constant.pm vs $caller in eval scope).
+        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
+                RuntimeCode.saveAndClearEvalRuntimeContext();
+
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;
 
@@ -257,6 +265,9 @@ public class PerlLanguageProvider {
             if (savedCurrentScope != null && !isTopLevelScript) {
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
+            // Restore the eval runtime context so the caller's eval STRING compilation
+            // can continue with its captured variables.
+            RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
         }
     }
 
@@ -293,6 +304,10 @@ public class PerlLanguageProvider {
 
         // Save the current scope so we can restore it after execution.
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
+
+        // Save and clear the eval runtime context (same reason as executePerlCode)
+        RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
+                RuntimeCode.saveAndClearEvalRuntimeContext();
 
         ScopedSymbolTable globalSymbolTable = new ScopedSymbolTable();
         globalSymbolTable.enterScope();
@@ -361,6 +376,8 @@ public class PerlLanguageProvider {
                 WarningBitsRegistry.snapshotCurrentHintHash();
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
             }
+            // Restore the eval runtime context
+            RuntimeCode.restoreEvalRuntimeContext(savedEvalRuntimeContext);
         }
     }
 
@@ -418,6 +435,8 @@ public class PerlLanguageProvider {
                     } finally {
                         CallerStack.pop();
                     }
+                    // Global destruction: walk stashes for tracked blessed objects
+                    GlobalDestruction.runGlobalDestruction();
                 }
             } catch (Throwable endException) {
                 RuntimeIO.closeAllHandles();
@@ -532,7 +551,7 @@ public class PerlLanguageProvider {
                 if (needsInterpreterFallback(e)) {
                     boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
                     if (showFallback) {
-                        System.err.println("Note: Method too large after AST splitting, using interpreter backend.");
+                        System.err.println("Note: Method too large, using interpreter backend.");
                     }
 
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Falling back to bytecode interpreter due to method size");

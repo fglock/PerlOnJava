@@ -104,7 +104,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
-                yield result != null ? result : scalarUndef;
+                if (result != null) {
+                    yield result;
+                }
+                yield scalarUndef;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
@@ -130,7 +133,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
-                yield result != null ? result : scalarUndef;
+                if (result != null) {
+                    yield result;
+                }
+                yield scalarUndef;
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
@@ -600,8 +606,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == READONLY_ARRAY) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
         this.elements.add(value);
+        MortalList.flush();
         return this;
     }
 
@@ -626,6 +634,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
 
                 int originalSize = this.elements.size();
+                MortalList.deferDestroyForContainerClear(this.elements);
                 if (needsCopy) {
                     // Make a defensive copy of the list before clearing
                     RuntimeList listCopy = new RuntimeList();
@@ -646,11 +655,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     list.addToArray(this);
                 }
 
+                // Increment refCount for tracked references stored in the array.
+                // addToArray creates copies via the copy constructor (which doesn't
+                // increment refCount), so we do it here for the final container store.
+                for (RuntimeScalar elem : this.elements) {
+                    RuntimeScalar.incrementRefCountForContainerStore(elem);
+                }
+
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
                 RuntimeArray result = new RuntimeArray();
                 result.elements.addAll(this.elements);
                 result.scalarContextSize = this.elements.size();
+                // Flush deferred DESTROY for refs removed from the container
+                MortalList.flush();
                 yield result;
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -689,6 +707,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReference() {
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.ARRAYREFERENCE;
+        result.value = this;
+        return result;
+    }
+
+    /**
+     * Creates a reference to the array and tracks refCounts for all elements.
+     * Use this for anonymous array construction ([...]) where elements are copies
+     * that need refCount tracking to prevent premature destruction of referents.
+     *
+     * @return A scalar representing the array reference.
+     */
+    public RuntimeScalar createReferenceWithTrackedElements() {
+        for (RuntimeScalar elem : this.elements) {
+            RuntimeScalar.incrementRefCountForContainerStore(elem);
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;
@@ -1060,7 +1095,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated RuntimeArray after undefining.
      */
     public RuntimeArray undefine() {
+        MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
+        MortalList.flush();
         return this;
     }
 

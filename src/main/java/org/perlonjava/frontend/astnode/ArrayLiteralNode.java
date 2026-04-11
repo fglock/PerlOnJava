@@ -1,6 +1,5 @@
 package org.perlonjava.frontend.astnode;
 
-import org.perlonjava.backend.jvm.astrefactor.LargeNodeRefactorer;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.parser.Parser;
 
@@ -15,9 +14,7 @@ import java.util.List;
  *   <li>{@code [$a, @b, %c]} - array with mixed elements</li>
  *   <li>{@code [[1,2], [3,4]]} - nested array literals</li>
  * </ul>
- * <p>
  *
- * @see LargeNodeRefactorer
  * @see HashLiteralNode
  * @see ListNode
  */
@@ -28,9 +25,6 @@ public class ArrayLiteralNode extends AbstractNode {
      * Each element is evaluated in LIST context when the array is constructed.
      * Elements may be scalars, arrays (which flatten), hashes (which flatten to key-value pairs),
      * or any expression.
-     * <p>
-     * Note: This field is non-final because {@link LargeNodeRefactorer} may replace
-     * the original list with a refactored version containing chunk wrappers.
      */
     public List<Node> elements;
 

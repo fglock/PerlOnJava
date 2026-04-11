@@ -57,11 +57,23 @@ public class CompileAssignment {
                         // For reserved variables like @_, use register-based localization
                         if (bc.isReservedVariable(varName)) {
                             int regIdx = bc.getVariableRegister(varName);
+                            // If RHS and LHS use the same register (e.g. local @_ = @_),
+                            // PUSH_LOCAL_VARIABLE would clear the array before ARRAY_SET_FROM_LIST
+                            // can read from it. Copy RHS to a temp register first.
+                            int srcReg = valueReg;
+                            if (valueReg == regIdx) {
+                                srcReg = bc.allocateRegister();
+                                bc.emit(Opcodes.NEW_ARRAY);
+                                bc.emitReg(srcReg);
+                                bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
+                                bc.emitReg(srcReg);
+                                bc.emitReg(valueReg);
+                            }
                             bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                             bc.emitReg(regIdx);
                             bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
                             bc.emitReg(regIdx);
-                            bc.emitReg(valueReg);
+                            bc.emitReg(srcReg);
                             bc.lastResultReg = regIdx;
                             return true;
                         }
@@ -1090,6 +1102,41 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported hash dereference");
                     }
+                } else if (leftOp.operator.equals("\\")) {
+                    // Ref aliasing: \$y = $ref
+                    // Check that refaliasing feature is enabled
+                    if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+                        bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
+                    }
+                    // Handle scalar ref aliasing: \$y = $ref
+                    if (leftOp.operand instanceof OperatorNode varNode && varNode.operator.equals("$")) {
+                        String varName;
+                        if (varNode.operand instanceof IdentifierNode idNode) {
+                            varName = "$" + idNode.name;
+                        } else {
+                            bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target");
+                            return;
+                        }
+
+                        if (bytecodeCompiler.hasVariable(varName)) {
+                            int targetReg = bytecodeCompiler.getVariableRegister(varName);
+                            // Dereference the RHS to get the aliased scalar
+                            int derefReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(derefReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            // Alias: make targetReg share the same object as derefReg
+                            // This creates a true alias (same RuntimeScalar object)
+                            bytecodeCompiler.emit(Opcodes.ALIAS);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emitReg(derefReg);
+                            bytecodeCompiler.lastResultReg = targetReg;
+                        } else {
+                            bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                        }
+                    } else {
+                        bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target: " + leftOp.operator);
+                    }
                 } else {
                     if (leftOp.operator.equals("chop") || leftOp.operator.equals("chomp")) {
                         bytecodeCompiler.throwCompilerException("Can't modify " + leftOp.operator + " in scalar assignment");
@@ -1142,31 +1189,54 @@ public class CompileAssignment {
                 // Handle array slice assignment: @array[1, 3, 5] = (20, 30, 40)
                 if (leftBin.operator.equals("[") && leftBin.left instanceof OperatorNode arrayOp) {
 
-                    // Must be @array (not $array)
-                    if (arrayOp.operator.equals("@") && arrayOp.operand instanceof IdentifierNode) {
-                        String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
-
+                    // Must be @array or @$ref (not $array)
+                    if (arrayOp.operator.equals("@")) {
                         int arrayReg;
-                        if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
-                                && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+
+                        if (arrayOp.operand instanceof IdentifierNode) {
+                            String varName = "@" + ((IdentifierNode) arrayOp.operand).name;
+
+                            if (bytecodeCompiler.currentSubroutineBeginId != 0 && bytecodeCompiler.currentSubroutineClosureVars != null
+                                    && bytecodeCompiler.currentSubroutineClosureVars.contains(varName)) {
+                                arrayReg = bytecodeCompiler.allocateRegister();
+                                int nameIdx = bytecodeCompiler.addToStringPool(varName);
+                                bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emit(nameIdx);
+                                bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
+                            } else if (bytecodeCompiler.hasVariable(varName)) {
+                                arrayReg = bytecodeCompiler.getVariableRegister(varName);
+                            } else {
+                                arrayReg = bytecodeCompiler.allocateRegister();
+                                String globalArrayName = NameNormalizer.normalizeVariableName(
+                                        ((IdentifierNode) arrayOp.operand).name,
+                                        bytecodeCompiler.getCurrentPackage()
+                                );
+                                int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
+                                bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emit(nameIdx);
+                            }
+                        } else if (arrayOp.operand instanceof OperatorNode || arrayOp.operand instanceof BlockNode) {
+                            // @$ref[@idx] = ... or @{expr}[@idx] = ...
+                            // Compile the scalar reference expression and dereference to array
+                            bytecodeCompiler.compileNode(arrayOp.operand, -1, RuntimeContextType.SCALAR);
+                            int scalarReg = bytecodeCompiler.lastResultReg;
                             arrayReg = bytecodeCompiler.allocateRegister();
-                            int nameIdx = bytecodeCompiler.addToStringPool(varName);
-                            bytecodeCompiler.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emit(nameIdx);
-                            bytecodeCompiler.emit(bytecodeCompiler.currentSubroutineBeginId);
-                        } else if (bytecodeCompiler.hasVariable(varName)) {
-                            arrayReg = bytecodeCompiler.getVariableRegister(varName);
+                            if (bytecodeCompiler.isStrictRefsEnabled()) {
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                            } else {
+                                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                                bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex());
+                                bytecodeCompiler.emitReg(arrayReg);
+                                bytecodeCompiler.emitReg(scalarReg);
+                                bytecodeCompiler.emit(pkgIdx);
+                            }
                         } else {
-                            arrayReg = bytecodeCompiler.allocateRegister();
-                            String globalArrayName = NameNormalizer.normalizeVariableName(
-                                    ((IdentifierNode) arrayOp.operand).name,
-                                    bytecodeCompiler.getCurrentPackage()
-                            );
-                            int nameIdx = bytecodeCompiler.addToStringPool(globalArrayName);
-                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_ARRAY);
-                            bytecodeCompiler.emitReg(arrayReg);
-                            bytecodeCompiler.emit(nameIdx);
+                            bytecodeCompiler.throwCompilerException("Array slice assignment requires identifier or reference");
+                            return;
                         }
 
                         // Compile indices (right side of [])

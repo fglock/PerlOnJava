@@ -568,6 +568,19 @@ public class RuntimeList extends RuntimeBase {
                 RuntimeScalar assigned = (rhsIndex < rhsSize) ? rhsElements.get(rhsIndex++) : null;
                 runtimeScalar.set(assigned != null ? assigned : new RuntimeScalar());
                 result.elements.add(runtimeScalar);  // Add reference to the variable itself
+                // Undo the materialized copy's refCount increment.
+                // The materialization (addToArray → addToScalar → set → setLarge) incremented
+                // refCount on the copy. The target's set() above created its own increment.
+                // The copy's increment is now redundant and would leak (the temporary copy
+                // sits in the local `rhs` array which is never scope-exit-cleaned).
+                // Array/hash targets take direct ownership of materialized copies, so only
+                // scalar targets need this correction.
+                if (assigned != null && assigned.refCountOwned
+                        && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
+                    base.refCount--;
+                    assigned.refCountOwned = false;
+                }
             } else if (elem instanceof RuntimeArray runtimeArray) {
                 List<RuntimeScalar> remaining = (rhsIndex < rhsSize)
                         ? new ArrayList<>(rhsElements.subList(rhsIndex, rhsSize))
@@ -583,7 +596,19 @@ public class RuntimeList extends RuntimeBase {
                     RuntimeList remainingList = new RuntimeList();
                     remainingList.elements.addAll(remaining);
                     runtimeArray.setFromList(remainingList);
+                    // Undo materialized copies' refCount increments.
+                    // setFromList creates new copies via incrementRefCountForContainerStore;
+                    // the materialized rhs elements' increments are now redundant.
+                    for (RuntimeScalar r : remaining) {
+                        if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                            base.refCount--;
+                            r.refCountOwned = false;
+                        }
+                    }
                 } else {
+                    // Plain array: directly reuse the materialized copies.
+                    // Their refCountOwned=true transfers to the array elements.
                     runtimeArray.elements = remaining;
                 }
                 result.elements.addAll(remaining);  // Use original references
@@ -600,6 +625,19 @@ public class RuntimeList extends RuntimeBase {
                 for (Map.Entry<String, RuntimeScalar> entry : hash.elements.entrySet()) {
                     result.elements.add(new RuntimeScalar(entry.getKey()));
                     result.elements.add(entry.getValue());  // Add reference to hash value
+                }
+                // Undo materialized copies' refCount increments.
+                // createHashForAssignment creates new RuntimeScalars for hash values
+                // (via createHashNoWarn's `new RuntimeScalar(iterator.next())`), which
+                // do NOT inherit refCountOwned. The original rhs elements' refCount
+                // increments (from materialization via addToArray → setLarge) are now
+                // redundant and would leak since nobody decrements them.
+                for (RuntimeScalar r : remainingArr.elements) {
+                    if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.refCount--;
+                        r.refCountOwned = false;
+                    }
                 }
                 rhsIndex = rhsSize; // Consume the rest
             }

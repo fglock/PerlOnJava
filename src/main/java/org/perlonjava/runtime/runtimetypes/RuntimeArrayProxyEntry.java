@@ -36,6 +36,26 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
     }
 
     /**
+     * Creates a reference to the underlying lvalue, vivifying it first.
+     * In Perl, \$arr[$i] auto-vivifies the array element so that the reference
+     * points to the actual array element, not a temporary.
+     * Checks for existing elements first to avoid overwriting tied or special elements.
+     */
+    @Override
+    public RuntimeScalar createReference() {
+        if (lvalue == null) {
+            // Check if the element already exists (e.g., a tied scalar)
+            List<RuntimeScalar> elements = parent.elements;
+            if (key >= 0 && key < elements.size() && elements.get(key) != null) {
+                lvalue = elements.get(key);
+            } else {
+                vivify();
+            }
+        }
+        return lvalue.createReference();
+    }
+
+    /**
      * Vivifies (initializes) the element in the parent array if it does not exist.
      * If the element at the specified index is not present, it creates new
      * RuntimeScalar instances up to that index and assigns them in the parent array.
@@ -105,11 +125,21 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack().pop();
             if (previousState == null) {
+                // Element didn't exist before.
+                // Decrement refCount of the current value being displaced.
+                if (this.lvalue != null
+                        && (this.lvalue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && this.lvalue.value instanceof RuntimeBase displacedBase
+                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                    displacedBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(displacedBase);
+                }
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
             } else {
                 // Restore the type, value from the saved state
+                // this.set() goes through setLarge() which handles refCount
                 this.set(previousState);
                 this.lvalue.blessId = previousState.blessId;
                 this.blessId = previousState.blessId;

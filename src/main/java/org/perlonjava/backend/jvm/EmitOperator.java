@@ -534,9 +534,28 @@ public class EmitOperator {
 
                 if (first != null) {
                     try {
+                        MethodVisitor mv = emitterVisitor.ctx.mv;
                         first.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                        // Spill the first operand before evaluating remaining args so
+                        // non-local control flow can't jump to returnLabel with an
+                        // extra value on the JVM operand stack.
+                        int firstSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                        boolean pooled = firstSlot >= 0;
+                        if (!pooled) {
+                            firstSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                        }
+                        mv.visitVarInsn(Opcodes.ASTORE, firstSlot);
+
                         // Accept the remaining arguments in LIST context.
                         args.accept(emitterVisitor.with(RuntimeContextType.LIST));
+
+                        mv.visitVarInsn(Opcodes.ALOAD, firstSlot);
+                        mv.visitInsn(Opcodes.SWAP);
+
+                        if (pooled) {
+                            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                        }
                     } finally {
                         listArgs.elements.addFirst(first);
                     }
@@ -1630,6 +1649,23 @@ public class EmitOperator {
                 }
 
                 node.operand.accept(emitterVisitor.with(contextType));
+
+                // Track cached string constants referenced via backslash for optree reaping.
+                // When a subroutine is replaced (e.g., *foo = sub {}), weak refs to these
+                // constants need to be cleared.
+                if (node.operand instanceof StringNode strNode) {
+                    int idx = RuntimeScalarCache.lookupByteStringIndex(strNode.value);
+                    if (idx >= 0) {
+                        emitterVisitor.ctx.javaClassInfo.addPadConstant(
+                                RuntimeScalarCache.getScalarByteString(idx));
+                    } else {
+                        idx = RuntimeScalarCache.lookupStringIndex(strNode.value);
+                        if (idx >= 0) {
+                            emitterVisitor.ctx.javaClassInfo.addPadConstant(
+                                    RuntimeScalarCache.getScalarString(idx));
+                        }
+                    }
+                }
 
                 // Always create a proper reference - don't special case CODE references
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,

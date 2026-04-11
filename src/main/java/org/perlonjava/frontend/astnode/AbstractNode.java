@@ -14,14 +14,11 @@ import java.util.Map;
  */
 public abstract class AbstractNode implements Node {
     private static final int FLAG_BLOCK_ALREADY_REFACTORED = 1;
-    private static final int FLAG_QUEUED_FOR_REFACTOR = 2;
-    private static final int FLAG_CHUNK_ALREADY_REFACTORED = 4;
     public int tokenIndex;
     // Lazy initialization - only created when first annotation is set
     public Map<String, Object> annotations;
     private int internalAnnotationFlags;
     private int cachedBytecodeSize = Integer.MIN_VALUE;
-    private byte cachedHasAnyControlFlow = -1;
 
     @Override
     public int getIndex() {
@@ -57,14 +54,6 @@ public abstract class AbstractNode implements Node {
                 internalAnnotationFlags |= FLAG_BLOCK_ALREADY_REFACTORED;
                 return;
             }
-            if ("queuedForRefactor".equals(key)) {
-                internalAnnotationFlags |= FLAG_QUEUED_FOR_REFACTOR;
-                return;
-            }
-            if ("chunkAlreadyRefactored".equals(key)) {
-                internalAnnotationFlags |= FLAG_CHUNK_ALREADY_REFACTORED;
-                return;
-            }
         }
         if (annotations == null) {
             annotations = new HashMap<>();
@@ -80,23 +69,9 @@ public abstract class AbstractNode implements Node {
         this.cachedBytecodeSize = size;
     }
 
-    public Boolean getCachedHasAnyControlFlow() {
-        return cachedHasAnyControlFlow < 0 ? null : cachedHasAnyControlFlow != 0;
-    }
-
-    public void setCachedHasAnyControlFlow(boolean hasAnyControlFlow) {
-        this.cachedHasAnyControlFlow = (byte) (hasAnyControlFlow ? 1 : 0);
-    }
-
     public Object getAnnotation(String key) {
         if ("blockAlreadyRefactored".equals(key)) {
             return (internalAnnotationFlags & FLAG_BLOCK_ALREADY_REFACTORED) != 0;
-        }
-        if ("queuedForRefactor".equals(key)) {
-            return (internalAnnotationFlags & FLAG_QUEUED_FOR_REFACTOR) != 0;
-        }
-        if ("chunkAlreadyRefactored".equals(key)) {
-            return (internalAnnotationFlags & FLAG_CHUNK_ALREADY_REFACTORED) != 0;
         }
         return annotations == null ? null : annotations.get(key);
     }
