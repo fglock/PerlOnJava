@@ -282,6 +282,7 @@ sub do {
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     my $rows = $sth->rows;
+    $sth->finish();  # Close JDBC statement to release locks
     ($rows == 0) ? "0E0" : $rows;
 }
 

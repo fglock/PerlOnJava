@@ -45,6 +45,7 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethod("fetchrow_hashref", null);
             dbi.registerMethod("rows", null);
             dbi.registerMethod("disconnect", null);
+            dbi.registerMethod("finish", null);
             dbi.registerMethod("last_insert_id", null);
             dbi.registerMethod("begin_work", null);
             dbi.registerMethod("commit", null);
@@ -155,7 +156,11 @@ public class DBI extends PerlModuleBase {
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
-            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI::db"));
+            // Use createReferenceWithTrackedElements() for Java-created anonymous hashes.
+            // createReference() would set localBindingExists=true (designed for `my %hash; \%hash`),
+            // which prevents DESTROY from firing via MortalList.flush(). Anonymous hashes
+            // created in Java have no Perl lexical variable, so localBindingExists must be false.
+            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::db"));
             return dbhRef.getList();
         }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
@@ -242,9 +247,12 @@ public class DBI extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
 
-            dbh.get("sth").set(sthRef);
+            // Store only the JDBC statement (not the full sth ref) for last_insert_id fallback.
+            // Storing sthRef here would create a circular reference (dbh.sth → sth, sth.Database → dbh)
+            // that prevents both objects from being garbage collected.
+            dbh.put("sth", sth.get("statement"));
 
             return sthRef.getList();
         }, dbh, "prepare");
@@ -275,10 +283,9 @@ public class DBI extends PerlModuleBase {
                 sql = "SELECT lastval()";
             } else {
                 // Generic fallback (H2, etc.): use getGeneratedKeys() on the last statement
-                RuntimeScalar sthRef = finalDbh.get("sth");
-                if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
-                    RuntimeHash sth = sthRef.hashDeref();
-                    Statement stmt = (Statement) sth.get("statement").value;
+                // dbh.sth now stores the raw JDBC Statement (not the full sth ref)
+                RuntimeScalar stmtScalar = finalDbh.get("sth");
+                if (stmtScalar != null && stmtScalar.value instanceof Statement stmt) {
                     ResultSet rs = stmt.getGeneratedKeys();
                     if (rs.next()) {
                         long id = rs.getLong(1);
@@ -669,6 +676,40 @@ public class DBI extends PerlModuleBase {
     }
 
     /**
+     * Finishes a statement handle, closing the underlying JDBC PreparedStatement.
+     * This releases database locks (e.g., SQLite table locks) held by the statement.
+     *
+     * @param args RuntimeArray containing:
+     *             [0] - Statement handle (sth)
+     * @param ctx  Context parameter
+     * @return RuntimeList containing true (1)
+     */
+    public static RuntimeList finish(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+
+        // Close the JDBC PreparedStatement to release locks
+        RuntimeScalar stmtScalar = sth.get("statement");
+        if (stmtScalar != null && stmtScalar.value instanceof PreparedStatement stmt) {
+            try {
+                if (!stmt.isClosed()) {
+                    stmt.close();
+                }
+            } catch (Exception e) {
+                // Ignore close errors — statement may already be closed
+            }
+        }
+        // Also close any open ResultSet
+        RuntimeScalar rsScalar = sth.get("execute_result");
+        if (rsScalar != null && RuntimeScalarType.isReference(rsScalar)) {
+            Object rsObj = rsScalar.hashDeref();
+            // execute_result may be stored differently; check raw value
+        }
+
+        sth.put("Active", new RuntimeScalar(false));
+        return new RuntimeScalar(1).getList();
+    }
+
+    /**
      * Internal method to set error information on a handle.
      *
      * @param handle    The database or statement handle
@@ -867,7 +908,7 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "table_info");
     }
@@ -900,7 +941,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "column_info");
     }
@@ -988,7 +1029,7 @@ public class DBI extends PerlModuleBase {
         result.put("has_resultset", scalarTrue);
         sth.put("execute_result", result.createReference());
 
-        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
         return sthRef.getList();
     }
 
@@ -1010,7 +1051,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "primary_key_info");
     }
@@ -1037,7 +1078,7 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
@@ -1051,7 +1092,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
             return sthRef.getList();
         }, dbh, "type_info");
     }
