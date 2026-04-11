@@ -6,7 +6,7 @@
 **Test command**: `./jcpan -t DBIx::Class`  
 **Branch**: `feature/dbix-class-destroy-weaken`  
 **PR**: https://github.com/fglock/PerlOnJava/pull/485  
-**Status**: Phase 10 — Full 314-test re-baseline; P0 blocker: weak ref cleared during `clone → _copy_state_from`
+**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 GC leak under investigation
 
 ## Dependency Tree
 
@@ -292,20 +292,23 @@ A `DestroyGuard` could work similarly:
 
 **Impact**: Fixes t/100populate.t tests 37-42, 53. Would also fix TxnScopeGuard usage across all DBIx::Class tests and any other CPAN module using scope guards (Scope::Guard, Guard, etc.).
 
-### SYSTEMIC: GC / `weaken` / `isweak` absence
+### SYSTEMIC: GC / `weaken` / `isweak` — PARTIALLY RESOLVED
 
-**Symptom**: Every DBIx::Class test file appends 5+ garbage collection leak tests that always fail.
+**Previous status**: `weaken()` was a no-op, `isweak()` always returned false.
 
-**Affected tests**: All 36 "GC-only" failures, plus the GC portion of all 12 "real failure" tests.
+**Current status** (Phase 11): `weaken()` and `isweak()` are fully implemented via
+selective reference counting (PR #464). Weak refs are tracked in `WeakRefRegistry`
+and cleared when a tracked object's refCount hits 0.
 
-**Root cause**: JVM uses tracing GC, not reference counting. PerlOnJava cannot implement `weaken`/`isweak` from `Scalar::Util`. DBIx::Class uses `Test::DBIx::Class::LeakTracer` which inserts `is_refcount`-based leak tests at END time.
+**Remaining issue**: Transient refCount underflow during `connect → set_schema → weaken`
+causes weak refs to be immediately cleared (see Phase 11 Step 11.2). This means:
+- `$storage->{schema}` weak ref is always undef after `connect()` despite schema being alive
+- GC leak assertions fail because cascading destruction can't reach the storage
+- The `LeakTracer`'s weakened registry entries remain defined at END time
 
-**What's needed to fix**:
-- **Option A (hard)**: Implement reference counting alongside JVM GC using a side table mapping object IDs to manual ref counts. Would require wrapping every `RuntimeScalar` assignment. Massive performance impact.
-- **Option B (pragmatic)**: Accept these as known failures. The GC tests verify Perl-specific memory patterns that don't apply to JVM. Real functionality works correctly.
-- **Option C (workaround)**: Patch DBIx::Class's test infrastructure to skip leak tests when `Scalar::Util::weaken` is not functional. Could set `$ENV{DBIC_SKIP_LEAK_TESTS}` or similar.
-
-**Impact**: Makes test output noisy (287 GC-only sub-test failures) but does NOT affect functionality.
+**Impact**: ~27 test files show GC-only failures (all real tests pass). The weak ref
+system works correctly for simple cases but fails in complex method chains where
+accumulated MortalList decrements cause transient refCount underflow.
 
 ### RowParser.pm line 260 crash (post-test cleanup)
 
@@ -903,16 +906,18 @@ instead of relying on DESTROY.
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
 ### Next Steps
-1. **P0: Fix weak ref cleared during `clone → _copy_state_from → register_extra_source`** — 155 tests blocked (see Phase 10)
-2. **P1: Fix GC leak assertions** (refcnt stays at 1 at END time) — ~20 tests with GC-only failures
-3. **P2: Triage remaining real failures** (see Phase 10 categorization)
-4. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
-5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-6. UTF-8 flag semantics: 2 tests in t/85utf8.t (systemic JVM limitation)
+1. **P0: DONE** — suppressFlush fix in setFromList (commit `d34d2bc4b`)
+2. **P1: Fix transient refCount underflow** — schema's refCount temporarily hits 0 during `set_schema → weaken`, clearing weak refs irreversibly. Need to trace exact decrement source in the `connect` chain. See Phase 11 Step 11.2 for detailed findings.
+3. **P1b: Fix GC leak assertions** (refcnt stays at 1 at END time) — cascading destruction from schema→storage not working because `$schema->{storage}` reference is already cleared
+4. **P2: Re-run full test suite** after P0 fix to measure impact on 155 previously-blocked tests
+5. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
+6. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+7. UTF-8 flag semantics: 2 tests in t/85utf8.t (systemic JVM limitation)
 
 ### Open Questions
-- Weak ref cleared during `connect → clone → _copy_state_from`: Is the intermediate schema object from `shift->clone` being destroyed before `->connection(@_)` returns? See investigation in Phase 10.
-- GC leak at END: is the `$schema` variable's `scopeExitCleanup` not decrementing properly, or is the cascade from schema → storage → dbh not propagating?
+- **Transient refCount underflow**: The schema temporarily hits refCount 0 during `connect → set_schema → weaken`, triggering DESTROY + clearWeakRefsTo. The refCount then recovers but weak refs are already cleared. Is the extra decrement coming from a flush inside the accessor's `setLarge()`, or from the `weaken` decrement itself? Need to trace the exact refCount values at each step.
+- **Schema hash element clearing**: During DESTROY, `$schema->{storage}` is already empty (ref returns ""). Is this because clearWeakRefsTo on the schema's weak-ref sources cascades into clearing the schema hash itself? Or is the storage element being overwritten during Schema::DESTROY's source re-registration logic?
+- GC leak at END: Even if the transient underflow is fixed (making `$storage->{schema}` stay alive), will the cascade from schema → storage → dbh propagate correctly on scope exit?
 - RowParser crash: is it safe to ignore since all real tests pass before it fires?
 
 ### Architecture Reference
@@ -1204,45 +1209,82 @@ All real subtests pass; only appended "Expected garbage collection" assertions f
 
 | Step | What | Impact | Priority | Status |
 |------|------|--------|----------|--------|
-| 10.5a | Fix weak ref cleared during `clone → _copy_state_from` | **Unblock 155+ test programs** (including 5 error tests that crash on detached source) | P0 | |
-| 10.5b | Fix GC leak assertions (refcnt stays at 1 at END) | 27 GC-only test programs → fully passing | P1 | |
+| 10.5a | Fix weak ref cleared during `clone → _copy_state_from` | **Unblock 155+ test programs** | P0 | **DONE** (Phase 11, `d34d2bc4b`) |
+| 10.5b | Fix GC leak assertions (refcnt stays at 1 at END) | 27 GC-only test programs → fully passing | P1 | IN PROGRESS (see Phase 11.2) |
 | 10.5c | Fix t/storage/on_connect_do.t table lock, t/schema/anon.t chaining | 2 real failures | P2 | |
 | 10.5d | Re-run full suite after P0 fix | Updated numbers | P0 | |
 
 ### Key insight for P0 fix
 
-The `shift->clone->connection(@_)` pattern creates a temporary object from `clone()`
-that has no named variable holding it. In PerlOnJava's refCount system (see
-`dev/architecture/weaken-destroy.md`), temporaries in method chains may not be
-properly tracked through `MortalList`. If the clone's refCount reaches 0 during
-`_copy_state_from`, `Schema::DESTROY` fires and clears the weakened `{schema}` refs
-on all sources.
+The `shift->clone->connection(@_)` pattern creates a temporary with no named
+variable. During `_copy_state_from`, `MortalList.flush()` processes a pending
+decrement that drops the clone's refCount to 0, triggering Schema::DESTROY.
+Fixed by `suppressFlush` in `setFromList` — see Phase 11.1.
 
-**Confirmed via DESTROY tracing**: Schema::DESTROY fires during `_copy_state_from`:
-```
-*** DESTROY called on DBICTest::Schema=HASH(0x59838256)
-  [0] DBIx::Class::Schema :: main::__ANON__ at Schema.pm:1033
-  [1] DBIx::Class::Schema :: _copy_state_from at Schema.pm:1015
-  [2] DBICTest::BaseSchema :: DBIx::Class::Schema::clone at BaseSchema.pm:334
-  [3] DBIx::Class::Schema :: DBICTest::BaseSchema::clone at Schema.pm:524
-  [4] main :: DBIx::Class::Schema::connect at -e:24
-```
+## Phase 11: suppressFlush Fix + GC Leak (2026-04-11)
 
-The clone (blessed into a class with DESTROY) is created as a temporary in the
-method chain `shift->clone->connection(@_)`. During `_copy_state_from` (called
-from within `clone`), the clone's refCount drops to 0, triggering DESTROY.
-DESTROY nullifies all weakened `{schema}` refs on the sources.
+### Step 11.1: P0 Fix — suppressFlush in setFromList (DONE)
 
-**Potential fixes** (in order of investigation):
-1. Check if `MortalList` correctly handles temporaries in chained method calls
-   (`a->b->c` — does the result of `a->b` stay alive while `->c` runs?)
-2. Check if `bless` inside `clone()` triggers refCount tracking (Schema has DESTROY),
-   and whether the tracking correctly accounts for the implicit `$self` in `->connection`
-3. As a workaround, `connect()` could be rewritten to hold the clone in a named variable:
-   ```perl
-   sub connect { my $clone = shift->clone; $clone->connection(@_) }
-   ```
-   But this would require patching DBIx::Class, which we want to avoid.
+**Commit**: `d34d2bc4b` — `MortalList.java`, `RuntimeList.java`
+
+`setFromList` now wraps materialization + LHS assignment in `suppressFlush(true)`,
+preventing `MortalList.flush()` from processing pending decrements mid-assignment.
+Added reentrancy guard on `flush()` itself. All unit tests pass; `t/70auto.t`
+real tests pass (previously crashed with "detached result source").
+
+### Step 11.2: P1 — Schema DESTROY fires during connect chain (OPEN)
+
+**Problem**: `$storage->{schema}` (a weakened ref) is undef immediately after
+`connect()` returns. This means the schema's refCount drops to 0 somewhere in the
+connect chain, `callDestroy` fires (setting refCount = MIN_VALUE permanently), and
+`clearWeakRefsTo` nullifies all weak refs to the schema. The schema object is then
+permanently destroyed even though the caller still holds a reference to it.
+
+**Consequence**: At END time, storage has `refcnt 1` (leaked) because the schema's
+cascading destruction can't properly decrement storage's refCount — the schema's
+hash contents are already cleared.
+
+**Observed symptoms** (reproduce with `t/70auto.t`):
+1. `$storage->{schema}` is undef right after `connect()` — even re-setting it
+   via `set_schema` + `weaken` results in undef
+2. Inside DESTROY, `$self->{storage}` is empty (hash already walked by cascading
+   destruction from the premature DESTROY)
+3. Explicit `delete $schema->{storage}` does free storage correctly — refCount
+   tracking itself is sound
+4. Plain blessed hashes work fine — the bug is specific to the DBIx::Class
+   `connect → clone → Storage::new → set_schema → weaken` call chain
+
+**Root cause hypothesis** (not yet confirmed — needs tracing):
+
+A `MortalList.flush()` inside the connect chain (likely in an accessor's `setLarge`)
+processes accumulated pending decrements that drop the schema's refCount to 0.
+`callDestroy` fires immediately, setting refCount = MIN_VALUE (permanent — no
+recovery). The caller continues using the dead object. Note: `callDestroy` sets
+MIN_VALUE, so the "transient underflow" framing is wrong — this is permanent
+destruction, not a temporary dip.
+
+**What needs to happen next**:
+
+1. **Trace schema refCount through the connect chain** — add temporary logging to
+   `MortalList.flush()` and `callDestroy` to print the schema's refCount at each
+   flush point. Identify which specific flush call processes the fatal decrement.
+   The prior session used `-Dmortallist.trace=true`; re-enable this.
+
+2. **Once the flush point is identified**, determine why the schema's refCount is
+   too low at that point. Either:
+   - A scope exit is queuing a decrement too early (before the caller captures it)
+   - The `suppressFlush` window in `setFromList` doesn't cover this code path
+   - An accessor's `setLarge` triggers a flush that shouldn't happen during setup
+
+3. **Fix the refCount accounting** so the schema's refCount is >= 2 when `weaken`
+   decrements it. This is the correct fix — the schema should have at least one
+   strong ref from the caller's variable and one from the hash element being
+   weakened.
+
+4. **Re-run `t/70auto.t`** — all 5 tests (2 real + 3 GC) should pass.
+
+5. **Re-run full DBIx::Class suite** (`./jcpan --jobs 8 -t DBIx::Class`) to
+   measure impact on the 27 GC-only test programs from Step 10.5b.
 
 ## Related Documents
 
