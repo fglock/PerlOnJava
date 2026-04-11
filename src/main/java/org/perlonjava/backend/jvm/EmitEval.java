@@ -34,7 +34,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
  *       for each eval site. This tag links the runtime eval to its compile-time context</li>
  *   <li><b>Reflection for Instantiation:</b> We use Constructor.newInstance() rather than
  *       direct instantiation because class names are generated at runtime</li>
- *   <li><b>Global ClassLoader:</b> All eval classes use GlobalVariable.globalClassLoader
+ *   <li><b>Global ClassLoader:</b> All eval classes use GlobalVariable.getGlobalClassLoader()
  *       to ensure they can reference each other and share the same namespace</li>
  * </ul>
  *
@@ -135,7 +135,7 @@ public class EmitEval {
 
         // Generate unique identifier for this eval site
         // This counter is incremented globally, ensuring each eval gets a unique tag
-        int counter = EmitterMethodCreator.classCounter++;
+        int counter = EmitterMethodCreator.classCounter.getAndIncrement();
 
         // Create compiler options specific to this eval
         // The filename becomes "(eval N)" for better error messages
@@ -169,7 +169,7 @@ public class EmitEval {
 
         // Store the context in a static map, indexed by evalTag
         // This allows the runtime compilation to access the compile-time environment
-        RuntimeCode.evalContext.put(evalTag, evalCtx);
+        RuntimeCode.<EmitterContext>getEvalContext().put(evalTag, evalCtx);
 
         // Generate bytecode to evaluate the eval string expression
         // This pushes the string value onto the stack

@@ -236,11 +236,11 @@ public class DiamondIO {
             // Use the resolved path to ensure we write to the correct location
             currentWriter = RuntimeIO.open(originalPath.toString(), ">");
             getGlobalIO("main::ARGVOUT").set(currentWriter);
-            RuntimeIO.lastAccesseddHandle = currentWriter;
+            RuntimeIO.setLastAccessedHandle(currentWriter);
 
             // CRITICAL: Update selectedHandle so print statements without explicit filehandle
             // write to the original file during in-place editing
-            RuntimeIO.selectedHandle = currentWriter;
+            RuntimeIO.setSelectedHandle(currentWriter);
         }
 
         // Open the renamed file for reading

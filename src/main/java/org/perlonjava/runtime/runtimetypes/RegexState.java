@@ -4,6 +4,7 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.regex.Matcher;
 
+
 /**
  * Snapshot of regex-related global state (Perl's $1, $&amp;, $`, $', etc.).
  *
@@ -28,19 +29,21 @@ public class RegexState implements DynamicState {
     private final boolean lastMatchWasByteString;
 
     public RegexState() {
-        this.globalMatcher = RuntimeRegex.globalMatcher;
-        this.globalMatchString = RuntimeRegex.globalMatchString;
-        this.lastMatchedString = RuntimeRegex.lastMatchedString;
-        this.lastMatchStart = RuntimeRegex.lastMatchStart;
-        this.lastMatchEnd = RuntimeRegex.lastMatchEnd;
-        this.lastSuccessfulMatchedString = RuntimeRegex.lastSuccessfulMatchedString;
-        this.lastSuccessfulMatchStart = RuntimeRegex.lastSuccessfulMatchStart;
-        this.lastSuccessfulMatchEnd = RuntimeRegex.lastSuccessfulMatchEnd;
-        this.lastSuccessfulMatchString = RuntimeRegex.lastSuccessfulMatchString;
-        this.lastSuccessfulPattern = RuntimeRegex.lastSuccessfulPattern;
-        this.lastMatchUsedPFlag = RuntimeRegex.lastMatchUsedPFlag;
-        this.lastCaptureGroups = RuntimeRegex.lastCaptureGroups;
-        this.lastMatchWasByteString = RuntimeRegex.lastMatchWasByteString;
+        // Single PerlRuntime.current() lookup instead of 13 separate ones
+        PerlRuntime rt = PerlRuntime.current();
+        this.globalMatcher = rt.regexGlobalMatcher;
+        this.globalMatchString = rt.regexGlobalMatchString;
+        this.lastMatchedString = rt.regexLastMatchedString;
+        this.lastMatchStart = rt.regexLastMatchStart;
+        this.lastMatchEnd = rt.regexLastMatchEnd;
+        this.lastSuccessfulMatchedString = rt.regexLastSuccessfulMatchedString;
+        this.lastSuccessfulMatchStart = rt.regexLastSuccessfulMatchStart;
+        this.lastSuccessfulMatchEnd = rt.regexLastSuccessfulMatchEnd;
+        this.lastSuccessfulMatchString = rt.regexLastSuccessfulMatchString;
+        this.lastSuccessfulPattern = rt.regexLastSuccessfulPattern;
+        this.lastMatchUsedPFlag = rt.regexLastMatchUsedPFlag;
+        this.lastCaptureGroups = rt.regexLastCaptureGroups;
+        this.lastMatchWasByteString = rt.regexLastMatchWasByteString;
     }
 
     public static void save() {
@@ -57,18 +60,20 @@ public class RegexState implements DynamicState {
 
     @Override
     public void dynamicRestoreState() {
-        RuntimeRegex.globalMatcher = this.globalMatcher;
-        RuntimeRegex.globalMatchString = this.globalMatchString;
-        RuntimeRegex.lastMatchedString = this.lastMatchedString;
-        RuntimeRegex.lastMatchStart = this.lastMatchStart;
-        RuntimeRegex.lastMatchEnd = this.lastMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchedString = this.lastSuccessfulMatchedString;
-        RuntimeRegex.lastSuccessfulMatchStart = this.lastSuccessfulMatchStart;
-        RuntimeRegex.lastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
-        RuntimeRegex.lastSuccessfulMatchString = this.lastSuccessfulMatchString;
-        RuntimeRegex.lastSuccessfulPattern = this.lastSuccessfulPattern;
-        RuntimeRegex.lastMatchUsedPFlag = this.lastMatchUsedPFlag;
-        RuntimeRegex.lastCaptureGroups = this.lastCaptureGroups;
-        RuntimeRegex.lastMatchWasByteString = this.lastMatchWasByteString;
+        // Single PerlRuntime.current() lookup instead of 13 separate ones
+        PerlRuntime rt = PerlRuntime.current();
+        rt.regexGlobalMatcher = this.globalMatcher;
+        rt.regexGlobalMatchString = this.globalMatchString;
+        rt.regexLastMatchedString = this.lastMatchedString;
+        rt.regexLastMatchStart = this.lastMatchStart;
+        rt.regexLastMatchEnd = this.lastMatchEnd;
+        rt.regexLastSuccessfulMatchedString = this.lastSuccessfulMatchedString;
+        rt.regexLastSuccessfulMatchStart = this.lastSuccessfulMatchStart;
+        rt.regexLastSuccessfulMatchEnd = this.lastSuccessfulMatchEnd;
+        rt.regexLastSuccessfulMatchString = this.lastSuccessfulMatchString;
+        rt.regexLastSuccessfulPattern = this.lastSuccessfulPattern;
+        rt.regexLastMatchUsedPFlag = this.lastMatchUsedPFlag;
+        rt.regexLastCaptureGroups = this.lastCaptureGroups;
+        rt.regexLastMatchWasByteString = this.lastMatchWasByteString;
     }
 }

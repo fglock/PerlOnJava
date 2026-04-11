@@ -21,10 +21,11 @@ import java.util.List;
 public class RegexUsageDetector {
 
     /**
-     * Unary operators that perform regex matching/substitution.
+     * Unary operators that perform regex matching/substitution,
+     * or that may dynamically introduce regex operations (eval STRING).
      */
     private static final java.util.Set<String> REGEX_OPERATORS =
-            java.util.Set.of("matchRegex", "replaceRegex");
+            java.util.Set.of("matchRegex", "replaceRegex", "eval");
     /**
      * Binary operators that perform regex matching (=~, !~) or use regex internally (split).
      */

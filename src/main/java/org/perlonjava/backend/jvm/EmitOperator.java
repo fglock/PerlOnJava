@@ -150,9 +150,9 @@ public class EmitOperator {
         } else {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
         }
-        emitterVisitor.ctx.mv.visitFieldInsn(Opcodes.PUTSTATIC,
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeIO",
-                "lastReadlineHandleName", "Ljava/lang/String;");
+                "setLastReadlineHandleName", "(Ljava/lang/String;)V", false);
 
         // Emit the File Handle
         emitFileHandle(emitterVisitor.with(RuntimeContextType.SCALAR), node.left);

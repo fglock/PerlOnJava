@@ -100,8 +100,8 @@ public class TieOperators {
                 glob.IO.value = tieHandle;
                 // Update selectedHandle so that `print` without explicit filehandle
                 // goes through the tied handle (e.g., Test2::Plugin::IOEvents)
-                if (previousValue == RuntimeIO.selectedHandle) {
-                    RuntimeIO.selectedHandle = tieHandle;
+                if (previousValue == RuntimeIO.getSelectedHandle()) {
+                    RuntimeIO.setSelectedHandle(tieHandle);
                 }
             }
             default -> {
@@ -178,8 +178,8 @@ public class TieOperators {
                     IO.type = 0;    // XXX there is no type defined for IO handles
                     IO.value = previousValue;
                     // Restore selectedHandle if it pointed to the tied handle
-                    if (currentTieHandle == RuntimeIO.selectedHandle) {
-                        RuntimeIO.selectedHandle = previousValue;
+                    if (currentTieHandle == RuntimeIO.getSelectedHandle()) {
+                        RuntimeIO.setSelectedHandle(previousValue);
                     }
                     currentTieHandle.releaseTiedObject();
                 }

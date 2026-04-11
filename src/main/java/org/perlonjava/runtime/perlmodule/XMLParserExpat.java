@@ -3,6 +3,7 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.Readline;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
@@ -1062,7 +1063,7 @@ public class XMLParserExpat extends PerlModuleBase {
         }
         // Set systemId to the current working directory so SAX resolves relative URIs correctly.
         // This also allows unresolveSysId to strip this prefix and recover relative paths.
-        String cwd = System.getProperty("user.dir");
+        String cwd = PerlRuntime.getCwd();
         String baseUri = new java.io.File(cwd, "dummy").toURI().toString();
         baseUri = baseUri.substring(0, baseUri.lastIndexOf('/') + 1);
         inputSource.setSystemId(baseUri);
@@ -2132,7 +2133,7 @@ public class XMLParserExpat extends PerlModuleBase {
         // Try to strip file:// + CWD prefix to recover relative or absolute file paths
         if (systemId.startsWith("file:")) {
             try {
-                String cwd = System.getProperty("user.dir");
+                String cwd = PerlRuntime.getCwd();
                 String filePath;
                 if (systemId.startsWith("file:///")) {
                     filePath = systemId.substring(7); // file:///path -> /path

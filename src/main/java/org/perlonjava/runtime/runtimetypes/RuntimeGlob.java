@@ -15,7 +15,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
 
-    private static final Stack<GlobSlotSnapshot> globSlotStack = new Stack<>();
+    // Glob slot stack is now held per-PerlRuntime.
+    @SuppressWarnings("unchecked")
+    private static Stack<GlobSlotSnapshot> globSlotStack() {
+        return (Stack<GlobSlotSnapshot>) (Stack<?>) PerlRuntime.current().globSlotStack;
+    }
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
@@ -151,7 +155,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     public static boolean isGlobAssigned(String globName) {
-        return GlobalVariable.globalGlobs.getOrDefault(globName, false);
+        return GlobalVariable.getGlobalGlobsMap().getOrDefault(globName, false);
     }
 
     /**
@@ -163,27 +167,27 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeScalar defined() {
         // Check if the glob has been assigned (any slot has content)
-        if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
+        if (GlobalVariable.getGlobalGlobsMap().getOrDefault(this.globName, false)) {
             return RuntimeScalarCache.scalarTrue;
         }
         // Check scalar slot - must have defined value
-        if (GlobalVariable.globalVariables.containsKey(this.globName)) {
-            RuntimeScalar scalar = GlobalVariable.globalVariables.get(this.globName);
+        if (GlobalVariable.getGlobalVariablesMap().containsKey(this.globName)) {
+            RuntimeScalar scalar = GlobalVariable.getGlobalVariablesMap().get(this.globName);
             if (scalar != null && scalar.getDefinedBoolean()) {
                 return RuntimeScalarCache.scalarTrue;
             }
         }
         // Check array slot - exists = defined (even if empty)
-        if (GlobalVariable.globalArrays.containsKey(this.globName)) {
+        if (GlobalVariable.getGlobalArraysMap().containsKey(this.globName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         // Check hash slot - exists = defined (even if empty)
-        if (GlobalVariable.globalHashes.containsKey(this.globName)) {
+        if (GlobalVariable.getGlobalHashesMap().containsKey(this.globName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         // Check code slot - must have defined value
-        if (GlobalVariable.globalCodeRefs.containsKey(this.globName)) {
-            RuntimeScalar code = GlobalVariable.globalCodeRefs.get(this.globName);
+        if (GlobalVariable.getGlobalCodeRefsMap().containsKey(this.globName)) {
+            RuntimeScalar code = GlobalVariable.getGlobalCodeRefsMap().get(this.globName);
             if (code != null && code.getDefinedBoolean()) {
                 return RuntimeScalarCache.scalarTrue;
             }
@@ -235,7 +239,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // isSubs for any CODE typeglob assignment — the parser only checks
                 // isSubs for names in the OVERRIDABLE_OP set, so marking non-overridable
                 // names has no effect.
-                GlobalVariable.isSubs.put(this.globName, true);
+                GlobalVariable.getIsSubsMap().put(this.globName, true);
 
                 // Increment package generation counter for mro::get_pkg_gen
                 int lastColonIdx = this.globName.lastIndexOf("::");
@@ -260,7 +264,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeArray arr) {
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
-                        GlobalVariable.globalArrays.put(aliasedName, arr);
+                        GlobalVariable.getGlobalArraysMap().put(aliasedName, arr);
                     }
                     // Mark as explicitly declared for strict vars (e.g., Exporter imports)
                     GlobalVariable.declareGlobalArray(this.globName);
@@ -271,7 +275,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeHash hash) {
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
-                        GlobalVariable.globalHashes.put(aliasedName, hash);
+                        GlobalVariable.getGlobalHashesMap().put(aliasedName, hash);
                     }
                     // Mark as explicitly declared for strict vars (e.g., Exporter imports)
                     GlobalVariable.declareGlobalHash(this.globName);
@@ -361,9 +365,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             // Update selectedHandle if the old IO was the currently selected output handle.
             // This ensures that `local *STDOUT = $fh` redirects bare `print` (no filehandle)
             // to the new handle, not just explicit `print STDOUT`.
-            if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+            if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.getSelectedHandle()
                     && value.IO != null && value.IO.value instanceof RuntimeIO newRIO) {
-                RuntimeIO.selectedHandle = newRIO;
+                RuntimeIO.setSelectedHandle(newRIO);
             }
 
             return value.scalar();
@@ -414,22 +418,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         targetIO.IO = sourceIO.IO;
 
         // Update selectedHandle if the old IO was the currently selected output handle
-        if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
+        if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.getSelectedHandle()
                 && sourceIO.IO != null && sourceIO.IO.value instanceof RuntimeIO newRIO) {
-            RuntimeIO.selectedHandle = newRIO;
+            RuntimeIO.setSelectedHandle(newRIO);
         }
 
         // Alias the ARRAY slot: both names point to the same RuntimeArray object
         RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
-        GlobalVariable.globalArrays.put(this.globName, sourceArray);
+        GlobalVariable.getGlobalArraysMap().put(this.globName, sourceArray);
 
         // Alias the HASH slot: both names point to the same RuntimeHash object
         RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
-        GlobalVariable.globalHashes.put(this.globName, sourceHash);
+        GlobalVariable.getGlobalHashesMap().put(this.globName, sourceHash);
 
         // Alias the SCALAR slot: both names point to the same RuntimeScalar object
         RuntimeScalar sourceScalar = GlobalVariable.getGlobalVariable(globName);
-        GlobalVariable.globalVariables.put(this.globName, sourceScalar);
+        GlobalVariable.getGlobalVariablesMap().put(this.globName, sourceScalar);
 
         // Alias the FORMAT slot: both names point to the same RuntimeFormat object
         RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
@@ -452,7 +456,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         //
         // Later, during compilation of built-in operators (like 'do EXPR'), we can consult
         // this map to determine whether to check for an override in CORE::GLOBAL.
-        GlobalVariable.globalGlobs.put(globName, true);
+        GlobalVariable.getGlobalGlobsMap().put(globName, true);
     }
 
     /**
@@ -478,7 +482,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // we want to see if the sub is actually in the stash, not if it was
                 // ever defined and pinned. This is critical for Moo's bootstrap
                 // mechanism where a sub deletes itself from the stash.
-                RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefsMap().get(this.globName);
                 if (codeRef != null && codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
                     if (code.defined() || code.isDeclared) {
                         yield codeRef;
@@ -614,8 +618,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (io.value instanceof RuntimeIO runtimeIO) {
             runtimeIO.globName = this.globName;
             // Update selectedHandle if the old IO was the selected handle
-            if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
-                RuntimeIO.selectedHandle = runtimeIO;
+            if (oldIO != null && oldIO == RuntimeIO.getSelectedHandle()) {
+                RuntimeIO.setSelectedHandle(runtimeIO);
             }
         }
         return this;
@@ -640,8 +644,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Update selectedHandle if the old IO was the selected handle
         // This ensures that when STDOUT is redirected, print without explicit
         // filehandle uses the new handle
-        if (oldIO != null && oldIO == RuntimeIO.selectedHandle) {
-            RuntimeIO.selectedHandle = io;
+        if (oldIO != null && oldIO == RuntimeIO.getSelectedHandle()) {
+            RuntimeIO.setSelectedHandle(io);
         }
         return this;
     }
@@ -867,10 +871,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
 
         // Undefine ARRAY - create empty array
-        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+        GlobalVariable.getGlobalArraysMap().put(this.globName, new RuntimeArray());
 
         // Undefine HASH - create empty hash
-        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        GlobalVariable.getGlobalHashesMap().put(this.globName, new RuntimeHash());
 
         return this;
     }
@@ -889,24 +893,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // after Capture::Tiny or similar modules localize STDOUT.
         RuntimeIO savedSelectedHandle = null;
         boolean isSelectedHandle = false;
-        if (this.IO != null && this.IO.value instanceof RuntimeIO rio && rio == RuntimeIO.selectedHandle) {
-            savedSelectedHandle = RuntimeIO.selectedHandle;
+        if (this.IO != null && this.IO.value instanceof RuntimeIO rio && rio == RuntimeIO.getSelectedHandle()) {
+            savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
-        } else if (this.IO != null && this.IO.type == TIED_SCALAR && this.IO.value == RuntimeIO.selectedHandle) {
-            savedSelectedHandle = RuntimeIO.selectedHandle;
+        } else if (this.IO != null && this.IO.type == TIED_SCALAR && this.IO.value == RuntimeIO.getSelectedHandle()) {
+            savedSelectedHandle = RuntimeIO.getSelectedHandle();
             isSelectedHandle = true;
         }
-        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
+        globSlotStack().push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
         // aliased (e.g., via *glob = $blessed_ref), and calling dynamicSaveState() on
         // them would clear/corrupt the original blessed reference's data.
-        GlobalVariable.globalVariables.put(this.globName, new RuntimeScalar());
-        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
-        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        GlobalVariable.getGlobalVariablesMap().put(this.globName, new RuntimeScalar());
+        GlobalVariable.getGlobalArraysMap().put(this.globName, new RuntimeArray());
+        GlobalVariable.getGlobalHashesMap().put(this.globName, new RuntimeHash());
         RuntimeScalar newCode = new RuntimeScalar();
-        GlobalVariable.globalCodeRefs.put(this.globName, newCode);
+        GlobalVariable.getGlobalCodeRefsMap().put(this.globName, newCode);
         // Also redirect pinnedCodeRefs to the new empty code for the local scope.
         // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
         // assignments during the local scope would mutate the saved snapshot instead
@@ -934,15 +938,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeIO stubIO = new RuntimeIO();
             stubIO.globName = this.globName;
             newGlob.IO = new RuntimeScalar(stubIO);
-            RuntimeIO.selectedHandle = stubIO;
+            RuntimeIO.setSelectedHandle(stubIO);
         }
 
-        GlobalVariable.globalIORefs.put(this.globName, newGlob);
+        GlobalVariable.getGlobalIORefsMap().put(this.globName, newGlob);
     }
 
     @Override
     public void dynamicRestoreState() {
-        GlobSlotSnapshot snap = globSlotStack.pop();
+        GlobSlotSnapshot snap = globSlotStack().pop();
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
@@ -951,19 +955,19 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // This ensures that after local(*STDOUT) + restore, print without explicit
         // filehandle goes through the correct (possibly tied) handle.
         if (snap.savedSelectedHandle != null) {
-            RuntimeIO.selectedHandle = snap.savedSelectedHandle;
+            RuntimeIO.setSelectedHandle(snap.savedSelectedHandle);
         }
 
         // Put this (old) glob back in globalIORefs, replacing the local scope's glob.
         // Any references captured during the local scope still point to the local glob,
         // which is now an independent orphaned glob (matching Perl 5 GV behavior).
-        GlobalVariable.globalIORefs.put(snap.globName, this);
+        GlobalVariable.getGlobalIORefsMap().put(snap.globName, this);
 
         // Restore saved objects directly - they were never mutated, so no
         // dynamicRestoreState() call is needed.
-        GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
-        GlobalVariable.globalHashes.put(snap.globName, snap.hash);
-        GlobalVariable.globalArrays.put(snap.globName, snap.array);
+        GlobalVariable.getGlobalVariablesMap().put(snap.globName, snap.scalar);
+        GlobalVariable.getGlobalHashesMap().put(snap.globName, snap.hash);
+        GlobalVariable.getGlobalArraysMap().put(snap.globName, snap.array);
 
         // Before replacing the code ref, decrement the refCount of the CODE
         // that was installed during the local scope. The local scope's code
@@ -973,14 +977,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `local *Foo::bar; sub bar { ... }` in Sub::Quote's unquote_sub)
         // have permanently overcounted refCount, preventing releaseCaptures
         // from firing at the right time.
-        RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
+        RuntimeScalar localCode = GlobalVariable.getGlobalCodeRefsMap().get(snap.globName);
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
             if (localBase.refCount > 0 && --localBase.refCount == 0) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
             }
         }
-        GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
+        GlobalVariable.getGlobalCodeRefsMap().put(snap.globName, snap.code);
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.
         GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);

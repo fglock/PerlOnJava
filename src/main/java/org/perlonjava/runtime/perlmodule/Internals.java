@@ -216,7 +216,7 @@ public class Internals extends PerlModuleBase {
      * @return RuntimeScalar with the current working directory path
      */
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(System.getProperty("user.dir")).getList();
+        return new RuntimeScalar(PerlRuntime.getCwd()).getList();
     }
 
     /**
@@ -233,7 +233,7 @@ public class Internals extends PerlModuleBase {
         try {
             java.io.File file = new java.io.File(path);
             if (!file.isAbsolute()) {
-                file = new java.io.File(System.getProperty("user.dir"), path);
+                file = new java.io.File(PerlRuntime.getCwd(), path);
             }
             if (!file.exists()) {
                 return new RuntimeScalar().getList();  // return undef

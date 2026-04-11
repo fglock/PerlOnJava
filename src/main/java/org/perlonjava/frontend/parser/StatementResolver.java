@@ -271,7 +271,7 @@ public class StatementResolver {
 
                                 // For state variables, assign a unique ID for persistent tracking
                                 if (declaration.equals("state")) {
-                                    innerVarNode.id = EmitterMethodCreator.classCounter++;
+                                    innerVarNode.id = EmitterMethodCreator.classCounter.getAndIncrement();
                                 }
 
                                 // Now create the outer declaration node (state/my $hiddenVarName)

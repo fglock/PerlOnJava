@@ -3,6 +3,9 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.backend.jvm.InterpreterFallbackException;
+import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.backend.jvm.JvmClosureTemplate;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
@@ -76,8 +79,8 @@ public class BytecodeCompiler implements Visitor {
     // Token index tracking for error reporting
     private final TreeMap<Integer, Integer> pcToTokenIndex = new TreeMap<>();
     int currentTokenIndex = -1;  // Track current token for error reporting
-    // Callsite ID counter for /o modifier support (unique across all compilations)
-    private static int nextCallsiteId = 1;
+    // Callsite ID counter for /o modifier support (unique across all compilations, thread-safe)
+    private static final java.util.concurrent.atomic.AtomicInteger nextCallsiteId = new java.util.concurrent.atomic.AtomicInteger(1);
     // Track last result register for expression chaining
     int lastResultReg = -1;
     // Target output register for ALIAS elimination (same save/restore pattern as currentCallContext).
@@ -2426,7 +2429,7 @@ public class BytecodeCompiler implements Visitor {
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
 
-                    Integer beginId = RuntimeCode.evalBeginIds.get(sigilOp);
+                    Integer beginId = RuntimeCode.getEvalBeginIds().get(sigilOp);
                     if (beginId != null) {
                         // BEGIN-captured variable: use RETRIEVE_BEGIN_* (destructive removal from global storage)
                         int persistId = beginId;
@@ -2831,7 +2834,7 @@ public class BytecodeCompiler implements Visitor {
                                 continue;
                             }
 
-                            Integer beginId2 = RuntimeCode.evalBeginIds.get(sigilOp);
+                            Integer beginId2 = RuntimeCode.getEvalBeginIds().get(sigilOp);
                             if (beginId2 != null || op.equals("state")) {
                                 int persistId = beginId2 != null ? beginId2 : sigilOp.id;
                                 int reg = allocateRegister();
@@ -4461,7 +4464,7 @@ public class BytecodeCompiler implements Visitor {
      * Each callsite with /o gets a unique ID so the pattern is compiled only once per callsite.
      */
     int allocateCallsiteId() {
-        return nextCallsiteId++;
+        return nextCallsiteId.getAndIncrement();
     }
 
     int allocateOutputRegister() {
@@ -4875,7 +4878,7 @@ public class BytecodeCompiler implements Visitor {
 
         int beginId = 0;
         if (!closureVarIndices.isEmpty()) {
-            beginId = EmitterMethodCreator.classCounter++;
+            beginId = EmitterMethodCreator.classCounter.getAndIncrement();
 
             // Store each closure variable in PersistentVariable globals
             for (int i = 0; i < closureVarNames.size(); i++) {
@@ -4999,6 +5002,10 @@ public class BytecodeCompiler implements Visitor {
      * <p>
      * Compiles the subroutine body to bytecode with closure support.
      * Anonymous subs capture lexical variables from the enclosing scope.
+     * <p>
+     * When compiled inside eval STRING with an EmitterContext available,
+     * attempts JVM compilation first for better runtime performance.
+     * Falls back to interpreter bytecode if JVM compilation fails.
      */
     private void visitAnonymousSubroutine(SubroutineNode node) {
         // Step 1: Collect closure variables.
@@ -5014,7 +5021,141 @@ public class BytecodeCompiler implements Visitor {
 
         closureCapturedVarNames.addAll(closureVarNames);
 
-        // Step 3: Create a new BytecodeCompiler for the subroutine body
+        // Step 2: Try JVM compilation first if we have an EmitterContext (eval STRING path)
+        // Skip JVM attempt for defer blocks and map/grep blocks which have special control flow
+        Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
+        Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
+        boolean skipJvm = (isDeferBlock != null && isDeferBlock)
+                || (isMapGrepBlock != null && isMapGrepBlock);
+
+        if (this.emitterContext != null && !skipJvm) {
+            try {
+                emitJvmAnonymousSub(node, closureVarNames, closureVarIndices);
+                return; // JVM compilation succeeded
+            } catch (Exception e) {
+                // JVM compilation failed, fall through to interpreter path
+                if (System.getenv("JPERL_SHOW_FALLBACK") != null) {
+                    System.err.println("JVM compilation failed for anonymous sub in eval STRING, using interpreter: "
+                            + e.getClass().getSimpleName() + ": " + e.getMessage());
+                }
+            }
+        }
+
+        // Step 3: Interpreter compilation (existing path)
+        emitInterpretedAnonymousSub(node, closureVarNames, closureVarIndices);
+    }
+
+    /**
+     * Attempt to compile an anonymous sub body to JVM bytecode.
+     * Creates an EmitterContext, calls EmitterMethodCreator.createClassWithMethod(),
+     * and emits interpreter opcodes to instantiate the JVM class at runtime.
+     */
+    private void emitJvmAnonymousSub(SubroutineNode node,
+                                      List<String> closureVarNames,
+                                      List<Integer> closureVarIndices) {
+        // Build a ScopedSymbolTable for the sub body with captured variables
+        ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
+        newSymbolTable.enterScope();
+
+        // Add reserved variables first to occupy slots 0-2
+        // EmitterMethodCreator skips these (skipVariables=3) but they must be present
+        // in the symbol table to keep captured variable indices aligned at 3+
+        newSymbolTable.addVariable("this", "", getCurrentPackage(), null);
+        newSymbolTable.addVariable("@_", "", getCurrentPackage(), null);
+        newSymbolTable.addVariable("wantarray", "", getCurrentPackage(), null);
+
+        // Add captured variables to the symbol table
+        // They will be at indices 3, 4, 5, ... (after this/@_/wantarray)
+        for (String varName : closureVarNames) {
+            newSymbolTable.addVariable(varName, "my", getCurrentPackage(), null);
+        }
+
+        // Copy package and pragma flags from the current BytecodeCompiler state
+        newSymbolTable.setCurrentPackage(getCurrentPackage(), symbolTable.currentPackageIsClass());
+        newSymbolTable.strictOptionsStack.pop();
+        newSymbolTable.strictOptionsStack.push(symbolTable.strictOptionsStack.peek());
+        newSymbolTable.featureFlagsStack.pop();
+        newSymbolTable.featureFlagsStack.push(symbolTable.featureFlagsStack.peek());
+        newSymbolTable.warningFlagsStack.pop();
+        newSymbolTable.warningFlagsStack.push((java.util.BitSet) symbolTable.warningFlagsStack.peek().clone());
+        newSymbolTable.warningFatalStack.pop();
+        newSymbolTable.warningFatalStack.push((java.util.BitSet) symbolTable.warningFatalStack.peek().clone());
+        newSymbolTable.warningDisabledStack.pop();
+        newSymbolTable.warningDisabledStack.push((java.util.BitSet) symbolTable.warningDisabledStack.peek().clone());
+
+        // Reset variable index past the captured variables
+        String[] newEnv = newSymbolTable.getVariableNames();
+        int currentVarIndex = newSymbolTable.getCurrentLocalVariableIndex();
+        int resetTo = Math.max(newEnv.length, currentVarIndex);
+        newSymbolTable.resetLocalVariableIndex(resetTo);
+
+        // Create EmitterContext for JVM compilation
+        JavaClassInfo newJavaClassInfo = new JavaClassInfo();
+        EmitterContext subCtx = new EmitterContext(
+                newJavaClassInfo,
+                newSymbolTable,
+                null,  // mv - will be set by EmitterMethodCreator
+                null,  // cw - will be set by EmitterMethodCreator
+                RuntimeContextType.RUNTIME,
+                true,
+                this.errorUtil,
+                this.emitterContext.compilerOptions,
+                new RuntimeArray()
+        );
+
+        // Try JVM compilation - may throw InterpreterFallbackException or other exceptions
+        Class<?> generatedClass = EmitterMethodCreator.createClassWithMethod(
+                subCtx, node.block, false);
+
+        // Cache the generated class
+        RuntimeCode.getAnonSubs().put(subCtx.javaClassInfo.javaClassName, generatedClass);
+
+        // Emit interpreter opcodes to create the code reference at runtime
+        int codeReg = allocateRegister();
+        String packageName = getCurrentPackage();
+
+        if (closureVarIndices.isEmpty()) {
+            // No closures - instantiate JVM class at compile time
+            JvmClosureTemplate template = new JvmClosureTemplate(
+                    generatedClass, node.prototype, packageName);
+            RuntimeScalar codeScalar = template.instantiateNoClosure();
+
+            // Handle attributes
+            if (node.attributes != null && !node.attributes.isEmpty() && packageName != null) {
+                RuntimeCode code = (RuntimeCode) codeScalar.value;
+                code.attributes = node.attributes;
+                Attributes.runtimeDispatchModifyCodeAttributes(packageName, codeScalar);
+            }
+
+            int constIdx = addToConstantPool(codeScalar);
+            emit(Opcodes.LOAD_CONST);
+            emitReg(codeReg);
+            emit(constIdx);
+        } else {
+            // Has closures - store JvmClosureTemplate in constant pool
+            // CREATE_CLOSURE opcode handles both InterpretedCode and JvmClosureTemplate
+            JvmClosureTemplate template = new JvmClosureTemplate(
+                    generatedClass, node.prototype, packageName);
+            int templateIdx = addToConstantPool(template);
+            emit(Opcodes.CREATE_CLOSURE);
+            emitReg(codeReg);
+            emit(templateIdx);
+            emit(closureVarIndices.size());
+            for (int regIdx : closureVarIndices) {
+                emit(regIdx);
+            }
+        }
+
+        lastResultReg = codeReg;
+    }
+
+    /**
+     * Compile an anonymous sub to InterpretedCode (the fallback/default path).
+     * This is the original implementation of visitAnonymousSubroutine.
+     */
+    private void emitInterpretedAnonymousSub(SubroutineNode node,
+                                              List<String> closureVarNames,
+                                              List<Integer> closureVarIndices) {
         // Build a variable registry from current scope to pass to sub-compiler
         // This allows nested closures to see grandparent scope variables
         Map<String, Integer> parentRegistry = new HashMap<>();

@@ -20,8 +20,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static final int AUTOVIVIFY_ARRAY = 1;
     public static final int TIED_ARRAY = 2;
     public static final int READONLY_ARRAY = 3;
-    // Static stack to store saved "local" states of RuntimeArray instances
-    private static final Stack<RuntimeArray> dynamicStateStack = new Stack<>();
+    // Dynamic state stack is now held per-PerlRuntime.
+    private static Stack<RuntimeArray> dynamicStateStack() {
+        return PerlRuntime.current().arrayDynamicStateStack;
+    }
     // Internal type of array - PLAIN_ARRAY, AUTOVIVIFY_ARRAY, TIED_ARRAY, or READONLY_ARRAY
     public int type;
     public boolean strictAutovivify;
@@ -1172,7 +1174,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // Copy the current blessId to the new state
         currentState.blessId = this.blessId;
         // Push the current state onto the stack
-        dynamicStateStack.push(currentState);
+        dynamicStateStack().push(currentState);
         // Clear the array elements (for tied arrays, this calls CLEAR)
         if (this.type == TIED_ARRAY) {
             TieArray.tiedClear(this);
@@ -1191,9 +1193,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack.isEmpty()) {
+        if (!dynamicStateStack().isEmpty()) {
             // Pop the most recent saved state from the stack
-            RuntimeArray previousState = dynamicStateStack.pop();
+            RuntimeArray previousState = dynamicStateStack().pop();
             // Restore the elements from the saved state
             this.elements = previousState.elements;
             // Restore the type from the saved state (important for tied arrays)

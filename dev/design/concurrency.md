@@ -892,3 +892,683 @@ comparable to Perl 5 interpreter clones.
 - Updated virtual thread pinning caveat with JEP 491 reference
 - Updated timeline with risk assessment
 - Moved resolved questions out of open questions
+
+---
+
+## Progress Tracking
+
+### Current Status: Phase 0 complete, full runtime isolation achieved (2026-04-10)
+
+All mutable runtime state has been migrated from static fields into `PerlRuntime`
+instance fields with ThreadLocal-based access. Multiple independent Perl interpreters
+can now coexist within the same JVM process with isolated state. Compilation is
+thread-safe via a global `COMPILE_LOCK` (ReentrantLock) that serializes all
+parsing/emitting, while allowing concurrent execution of compiled code.
+
+### Completed Phases
+
+- [x] **Phase 1: PerlRuntime Shell** (2026-04-10)
+  - Created `PerlRuntime.java` with `ThreadLocal<PerlRuntime> CURRENT`
+  - Added `current()`, `initialize()`, `setCurrent()` API
+  - Wired `PerlRuntime.initialize()` into `Main.main()` and test setUp methods
+  - Added `ensureRuntimeInitialized()` safety net in `PerlLanguageProvider`
+
+- [x] **Phase 2: De-static-ify I/O** (2026-04-10)
+  - Moved `RuntimeIO.stdout/stderr/stdin` into `PerlRuntime`
+  - Moved `selectedHandle`, `lastWrittenHandle`, `lastAccessedHandle`, `lastReadlineHandleName`
+  - Added static getter/setter methods on `RuntimeIO`
+  - Updated `EmitOperator` to use `INVOKESTATIC` instead of `PUTSTATIC`
+  - Updated 15 consumer files (IOOperator, RuntimeGlob, TieOperators, etc.)
+
+- [x] **Phase 3: De-static-ify CallerStack + DynamicScope** (2026-04-10)
+  - Moved `CallerStack.callerStack` to `PerlRuntime.callerStack`
+  - Moved `DynamicVariableManager.variableStack` to `PerlRuntime.dynamicVariableStack`
+  - Moved `RuntimeScalar.dynamicStateStack` to `PerlRuntime.dynamicStateStack`
+
+- [x] **Phase 4: De-static-ify SpecialBlocks** (2026-04-10)
+  - Moved `SpecialBlock.endBlocks/initBlocks/checkBlocks` to PerlRuntime
+  - Added public getters on SpecialBlock
+
+- [x] **Phase 5a: De-static-ify InheritanceResolver** (2026-04-10)
+  - Moved 7 static fields: linearizedClassesCache, packageMRO, methodCache,
+    overloadContextCache, isaStateCache, autoloadEnabled, currentMRO
+  - Updated DFS.java, C3.java, and 4 consumer files
+
+- [x] **Phase 5b: De-static-ify GlobalVariable** (2026-04-10)
+  - Moved all 17 static fields: symbol tables (globalVariables, globalArrays,
+    globalHashes, globalCodeRefs), IO/Format refs, aliasing maps, caches,
+    classloader, declared variable tracking
+  - Added static accessor methods (getGlobalVariablesMap(), etc.)
+  - Updated 20 consumer files across frontend, backend, and runtime packages
+
+- [x] **Phase 5c: De-static-ify Regex State** (2026-04-10)
+  - Moved 14 static fields from RuntimeRegex into PerlRuntime: globalMatcher,
+    globalMatchString, lastMatchedString, lastMatch start/end, lastSuccessful*,
+    lastSuccessfulPattern, lastMatchUsedPFlag, lastMatchUsedBackslashK,
+    lastCaptureGroups, lastMatchWasByteString
+  - Added static getter/setter methods on RuntimeRegex
+  - Updated RegexState.java, ScalarSpecialVariable.java, HashSpecialVariable.java
+
+- [x] **Phase 5d: De-static-ify RuntimeCode Caches** (2026-04-10)
+  - Moved evalBeginIds, evalCache, methodHandleCache, anonSubs, interpretedSubs,
+    evalContext, evalDepth, inline method cache arrays into PerlRuntime
+  - Added static getter methods on RuntimeCode (getEvalBeginIds(), getEvalCache(),
+    getAnonSubs(), getInterpretedSubs(), getEvalContext())
+  - Added incrementEvalDepth()/decrementEvalDepth()/getEvalDepth() methods
+  - Changed EmitterMethodCreator bytecode from GETSTATIC/PUTSTATIC to INVOKESTATIC
+  - Changed EmitSubroutine bytecode from GETSTATIC to INVOKESTATIC for interpretedSubs
+  - Updated 13 consumer files: ScalarSpecialVariable, BytecodeInterpreter,
+    EmitterMethodCreator, EmitEval, EmitSubroutine, WarnDie, EvalStringHandler,
+    SpecialBlockParser, SubroutineParser, BytecodeCompiler, EmitVariable,
+    CompileAssignment
+  - Decision: evalCache/methodHandleCache are per-runtime (simpler, no sharing)
+
+### Files Created
+- `src/main/java/org/perlonjava/runtime/runtimetypes/PerlRuntime.java`
+
+### Key Design Decisions
+- Kept original static method signatures on migrated classes — callers don't change
+- Used public accessor methods (e.g., `GlobalVariable.getGlobalVariablesMap()`) for
+  cross-package access to PerlRuntime fields
+- ThreadLocal overhead is negligible (~1ns per access, JIT-optimized)
+- evalCache/methodHandleCache are per-runtime (not shared) — simpler, avoids
+  cross-runtime class compatibility issues
+
+### Multiplicity Demo (2026-04-10)
+- Created `dev/sandbox/multiplicity/MultiplicityDemo.java` — launches N threads, each with its
+  own PerlRuntime, compiles and executes a Perl script, captures per-thread STDOUT
+- Uses `PerlLanguageProvider.executePerlCode()` which handles the full lifecycle:
+  initialization, compilation (under COMPILE_LOCK), and execution (no lock)
+- INIT/CHECK/UNITCHECK/END blocks execute correctly for each interpreter
+- Successfully tested with 126 concurrent interpreters running unit tests
+- **122/126 tests pass**; remaining 4 failures are pre-existing `DESTROY` TODO:
+  - `tie_array.t`, `tie_handle.t`, `tie_hash.t`, `tie_scalar.t` — object destructors not implemented
+- Run with: `./dev/sandbox/multiplicity/run_multiplicity_demo.sh`
+
+### Local Save/Restore Stack Fix (2026-04-10)
+
+**Problem:** After Phase 3 migrated `DynamicVariableManager.variableStack` and
+`RuntimeScalar.dynamicStateStack` to per-runtime, `local` still failed under
+multiplicity. With 2+ interpreters, `local $x` would not restore the original value
+at scope exit — all "restored" assertions failed.
+
+**Root cause:** Phase 3 only migrated 2 of 17 dynamic state stacks. The remaining
+15 were still shared static fields. The most critical was
+`GlobalRuntimeScalar.localizedStack` — this is the stack used when `local` is
+applied to package variables (the most common case). With 2 threads doing
+`local $global_var` concurrently, they pushed/popped from the same stack, causing
+each thread to restore the other thread's saved state.
+
+**Fix (commit e2f16ec07):** Migrated all 16 remaining stacks to per-PerlRuntime
+instance fields, following the same accessor-method pattern:
+
+| Class | Stack Field(s) | Type |
+|-------|----------------|------|
+| `GlobalRuntimeScalar` | `localizedStack` | `Stack<Object>` (SavedGlobalState) |
+| `GlobalRuntimeArray` | `localizedStack` | `Stack<Object>` (SavedGlobalArrayState) |
+| `GlobalRuntimeHash` | `localizedStack` | `Stack<Object>` (SavedGlobalHashState) |
+| `RuntimeArray` | `dynamicStateStack` | `Stack<RuntimeArray>` |
+| `RuntimeHash` | `dynamicStateStack` | `Stack<RuntimeHash>` |
+| `RuntimeStash` | `dynamicStateStack` | `Stack<RuntimeStash>` |
+| `RuntimeGlob` | `globSlotStack` | `Stack<Object>` (GlobSlotSnapshot) |
+| `RuntimeHashProxyEntry` | `dynamicStateStack` | `Stack<RuntimeScalar>` |
+| `RuntimeArrayProxyEntry` | `dynamicStateStackInt` + `dynamicStateStack` | `Stack<Integer>` + `Stack<RuntimeScalar>` |
+| `ScalarSpecialVariable` | `inputLineStateStack` | `Stack<Object>` (InputLineState) |
+| `OutputAutoFlushVariable` | `stateStack` | `Stack<Object>` (State) |
+| `OutputRecordSeparator` | `orsStack` | `Stack<String>` |
+| `OutputFieldSeparator` | `ofsStack` | `Stack<String>` |
+| `ErrnoVariable` | `errnoStack` + `messageStack` | `Stack<int[]>` + `Stack<String>` |
+
+Each class now has a `private static Stack<T> stackName()` accessor that delegates
+to `PerlRuntime.current().<field>`. Inner types (SavedGlobalState, etc.) remain
+private to their classes; `PerlRuntime` stores them as `Stack<Object>` with
+`@SuppressWarnings("unchecked")` casts in the accessor methods.
+
+**Impact:** Fixed 8 previously-failing tests under multiplicity: `local.t` (74/74),
+`chomp.t`, `defer.t`, `local_glob_dynamic.t`, `sysread_syswrite.t`,
+`array_autovivification.t`, `vstring.t`, `nested_for_loops.t`.
+
+### Phase 0: Compilation Thread Safety (2026-04-10)
+
+**Problem:** The multiplicity demo serializes initial compilation with a `COMPILE_LOCK`,
+but `eval "string"` at runtime goes through `EvalStringHandler` → `Lexer` → `Parser` →
+emitter → class loading with **no locking**. Concurrent `eval` from multiple threads
+will corrupt shared mutable static state.
+
+Additionally, `executePerlCode()` (the main entry point for running Perl code) had no
+locking at all — it was only safe for single-threaded CLI use. And `globalInitialized`
+was a shared static boolean, causing thread 2+ to skip `initializeGlobals()` entirely.
+
+**Architecture fix (commit TBD):**
+
+1. **`globalInitialized` moved to per-PerlRuntime** — Each runtime tracks its own
+   initialization state. Previously, thread 1 set the shared static to `true`,
+   causing threads 2-N to skip `initializeGlobals()` and run without `$_`, `@INC`,
+   built-in modules, etc.
+
+2. **`executePerlCode()` now uses COMPILE_LOCK** — The compilation phase (tokenize,
+   parse, compile) runs under the lock, then the lock is released before execution:
+   ```
+   COMPILE_LOCK.lock()
+     savedScope = getCurrentScope()
+     initializeGlobals() (per-runtime, idempotent)
+     tokenize → parse → compileToExecutable()
+   COMPILE_LOCK.unlock()
+
+   executeCode() — runs UNITCHECK, CHECK, INIT, main code, END (no lock)
+   ```
+
+3. **Demo simplified** — Uses `executePerlCode()` instead of `compilePerlCode()` +
+   `apply()`. No more redundant demo-level lock. INIT/CHECK/UNITCHECK blocks now
+   execute correctly (previously skipped, causing begincheck.t failures).
+
+**Audit results** — shared mutable state found in three subsystems:
+
+#### Parser (frontend/) — 11 fields
+
+| Severity | File | Field | Issue |
+|----------|------|-------|-------|
+| HIGH | `SpecialBlockParser.java:25` | `symbolTable` | Global parser scope, read/written from 27 call sites |
+| HIGH | `NumberParser.java:27` | `numificationCache` | LRU LinkedHashMap; `.get()` mutates internal state |
+| MEDIUM | `ScopedSymbolTable.java:38` | `nextWarningBitPosition` | Non-atomic counter for `use warnings::register` |
+| MEDIUM | `StringSegmentParser.java:50` | `codeBlockCaptureCounter` | Non-atomic counter for regex code block captures |
+| MEDIUM | `ScopedSymbolTable.java:18` | `warningBitPositions` | HashMap mutated by `registerCustomWarningCategory()` |
+| MEDIUM | `ScopedSymbolTable.java:21` | `packageVersions` | HashMap mutated during `use` and `clear()`ed on reset |
+| MEDIUM | `DataSection.java:24` | `processedPackages` | HashSet mutated during `__DATA__` parsing |
+| MEDIUM | `DataSection.java:29` | `placeholderCreated` | HashSet mutated during `__DATA__` parsing |
+| MEDIUM | `FieldRegistry.java:17` | `classFields` | HashMap mutated by `registerField()` |
+| MEDIUM | `FieldRegistry.java:21` | `classParents` | HashMap mutated by `registerField()` |
+| LOW | `Lexer.java:44` | `isOperator` | Not final but never mutated after class init |
+
+#### Emitter (backend/) — 8 fields
+
+| Severity | File | Field | Issue |
+|----------|------|-------|-------|
+| HIGH | `ByteCodeSourceMapper.java:17-29` | 7 HashMap/ArrayList collections | Source mapping; concurrent `computeIfAbsent()` corrupts HashMap internals |
+| HIGH | `LargeBlockRefactorer.java:29` | `controlFlowDetector` | Single shared visitor; `reset()`/`scan()` race → wrong bytecode |
+| HIGH | `EmitterMethodCreator.java:52` | `classCounter` | Non-atomic `++`; duplicate class names → `LinkageError` |
+| MEDIUM | `BytecodeCompiler.java:80` | `nextCallsiteId` | Non-atomic `++`; duplicate IDs corrupt `/o` regex cache |
+| MEDIUM | `EmitRegex.java:21` | `nextCallsiteId` | Non-atomic `++`; same issue for JVM path |
+| MEDIUM | `Dereference.java:19` | `nextMethodCallsiteId` | Non-atomic `++`; duplicate IDs corrupt inline method cache |
+| LOW | `EmitterMethodCreator.java:50` | `skipVariables` | Never mutated; should be `final` |
+
+#### Class loader — already safe
+`CustomClassLoader` is per-`PerlRuntime` (migrated in Phase 5b).
+
+**Implementation plan (two-part):**
+
+1. **Quick fixes (no lock needed):** ✅ Done
+   - Replaced 4 counters with `AtomicInteger`: `classCounter`, `nextCallsiteId` (×2),
+     `nextMethodCallsiteId`
+   - Marked `skipVariables` as `final`
+   - Replaced `LargeBlockRefactorer.controlFlowDetector` singleton with new instance
+     per call (matches the existing `controlFlowFinderTl` ThreadLocal pattern on line 34)
+
+2. **Global compile lock:** ✅ Done
+   - Added `static final ReentrantLock COMPILE_LOCK` to `PerlLanguageProvider`
+   - Acquired in `compilePerlCode()` and in both `EvalStringHandler.evalString()` overloads
+   - This serializes all compilation (initial + runtime eval) but guarantees safety
+   - Lock is reentrant so nested evals work without deadlock
+   - Future optimization: migrate parser/emitter static state to per-runtime, remove lock
+
+### Reentrancy Analysis (2026-04-10)
+
+**Question:** What happens when `eval "string"` triggers a BEGIN block that itself
+requires a module (nested compilation)?
+
+**Answer:** `ReentrantLock` handles this correctly. The call chain runs entirely on
+the same thread:
+
+```
+eval "use Foo"
+  → EvalStringHandler.evalString() acquires COMPILE_LOCK (count=1)
+    → Parser.parse() encounters `use Foo` → BEGIN block
+      → SpecialBlockParser.runSpecialBlock() → executePerlAST()
+        → require Foo → PerlLanguageProvider.compilePerlCode()
+          → COMPILE_LOCK.lock() — same thread, count=2
+          → compile module → unlock (count=1)
+        → continue executing BEGIN block (execution, no lock needed — but lock
+          is still held at count=1 by the outer compilation)
+    → Parser continues parsing the rest of the eval string
+  → unlock (count=0)
+```
+
+Same-thread reentrancy works because `ReentrantLock` increments the hold count on
+each nested `lock()` and decrements on each `unlock()`.
+
+**Bug found and fixed:** `evalStringWithInterpreter` used `isHeldByCurrentThread()`
+in its `finally` block to decide whether to release the lock. This over-decrements
+in nested scenarios:
+
+```
+Outer compilation holds lock (count=1)
+  → BEGIN triggers inner evalStringWithInterpreter
+    → lock (count=2)
+    → compile OK, explicit unlock before execution (count=1)
+    → execution runs
+    → finally: isHeldByCurrentThread() → TRUE (outer holds it!)
+    → unlock (count=0) ← BUG: released the outer's lock!
+```
+
+**Fix (commit 510106cd9):** Replaced `isHeldByCurrentThread()` with a `boolean
+compileLockReleased` flag that tracks whether the success-path unlock already
+happened. The finally block only unlocks if the flag is false (error path).
+
+**Why not release the lock during BEGIN execution?** `runSpecialBlock` is called
+**mid-parse** — the parser is suspended with its state intact (token position,
+symbol table, scope depth). That state lives in shared statics like
+`SpecialBlockParser.symbolTable` and `ByteCodeSourceMapper` collections. If the
+lock were released, another thread could start compiling and corrupt this state.
+Releasing the lock around BEGIN blocks is only viable after migrating parser/emitter
+state from shared statics to per-compilation-context (which would eliminate the
+lock entirely).
+
+### Per-Runtime CWD Isolation (2026-04-10)
+
+**Problem:** `chdir()` called `System.setProperty("user.dir", ...)` which is JVM-global.
+When multiple interpreters called `chdir()` concurrently, they overwrote each other's
+working directory. This caused `directory.t` and `glob.t` to fail under multiplicity.
+
+**Fix (commit c30eeb487):** Added per-runtime `String cwd` field to `PerlRuntime`,
+initialized from `System.getProperty("user.dir")` at construction time.
+
+- `PerlRuntime.cwd` — per-runtime CWD field
+- `PerlRuntime.getCwd()` — static accessor with fallback to `System.getProperty("user.dir")`
+- `Directory.chdir()` — updates `PerlRuntime.current().cwd` instead of `System.setProperty()`
+- `RuntimeIO.resolvePath()` — resolves relative paths against `PerlRuntime.getCwd()`
+- Updated all 21 `System.getProperty("user.dir")` call sites across 12 files:
+  `SystemOperator.java`, `FileSpec.java`, `POSIX.java`, `Internals.java`,
+  `IPCOpen3.java`, `XMLParserExpat.java`, `ScalarGlobOperator.java`, `DirectoryIO.java`,
+  `PipeInputChannel.java`, `PipeOutputChannel.java`, `Directory.java`, `RuntimeIO.java`
+- `ArgumentParser.java` kept as-is (sets initial `user.dir` before runtime creation for `-C` flag)
+
+**Impact:** `directory.t` (9/9) and `glob.t` (15/15) now pass under concurrent interpreters.
+
+### Per-Runtime PID and Pipe Thread Fix (2026-04-10)
+
+**Problem 1 — Shared `$$`:** All interpreters shared the same JVM PID via
+`ProcessHandle.current().pid()`. Tests that use `$$` in temp filenames
+(`io_read.t`, `io_seek.t`, `io_layers.t`) produced identical filenames across
+concurrent interpreters, causing file collisions and data races.
+
+**Problem 2 — Unbound pipe threads:** `PipeInputChannel` and `PipeOutputChannel`
+spawn background daemon threads for stderr/stdout consumption. These threads had
+no `PerlRuntime` bound via `ThreadLocal`, so `GlobalVariable.getGlobalIO("main::STDERR")`
+calls threw `IllegalStateException` and fell back to `System.out`/`System.err`,
+bypassing per-runtime STDOUT/STDERR redirection. Under concurrent multiplicity testing,
+this caused `io_pipe.t` failures.
+
+**Fix (commit 0179c888e):**
+
+1. **Per-runtime unique PID:** Added `AtomicLong PID_COUNTER` to `PerlRuntime`, starting
+   at the real JVM PID. Each runtime gets `PID_COUNTER.getAndIncrement()` — first runtime
+   gets the real PID (backward compatible), subsequent runtimes get unique incrementing values.
+   `GlobalContext.initializeGlobals()` sets `$$` from `PerlRuntime.current().pid`.
+
+2. **Pipe thread runtime binding:** Both `PipeInputChannel.setupProcess()` and
+   `PipeOutputChannel.setupProcess()` now capture `PerlRuntime.currentOrNull()` before
+   spawning background threads, and call `PerlRuntime.setCurrent(parentRuntime)` inside
+   the thread lambda. This ensures pipe stderr/stdout consumer threads can access the
+   correct per-runtime IO handles.
+
+**Impact:** Fixed 5 previously-failing tests: `io_read.t`, `io_seek.t`, `io_pipe.t`,
+`io_layers.t`, `digest.t`. Multiplicity stress test improved from 117/126 to **122/126**.
+
+### Next Steps
+
+1. **Phase 6:** Implement `threads` module (requires runtime cloning — see Sections 5.1-5.4
+   for the full cloning protocol). This is new functionality: deep-cloning runtime state,
+   closure capture fixup, `CLONE($pkg)` callbacks, `threads::shared` wrappers.
+
+2. **Phase 7: Runtime Pool** — An optimization/convenience layer, not a new capability.
+   The core multiplicity infrastructure is already complete; `PerlRuntime` instances can
+   be created and destroyed ad-hoc (as the `MultiplicityDemo` does). The pool amortizes
+   runtime initialization cost (loading built-in modules, setting up `@INC`/`%ENV`, etc.)
+   by reusing warm runtimes instead of re-creating them per request. Also provides
+   concurrency limiting (cap simultaneous runtimes to prevent OOM) and clean reset
+   between uses. Same pattern as JDBC connection pools or servlet thread pools. Primarily
+   useful for high-throughput web server embedding (mod_perl model), not needed for CLI
+   usage or the demo.
+
+3. **Future optimization:** Migrate parser/emitter static state to per-runtime, remove COMPILE_LOCK
+
+### Performance Baseline: master vs feature/multiplicity (2026-04-10)
+
+Benchmarks run on both branches with `make clean ; make` before each run.
+All benchmarks are in `dev/bench/`.
+
+#### Speed Benchmarks
+
+| Benchmark | master (ops/s) | branch (ops/s) | Change |
+|-----------|---------------|-----------------|--------|
+| lexical (local var loop) | 394,139 | 374,732 | **-4.9%** |
+| global (global var loop) | 77,720 | 73,550 | **-5.4%** |
+| eval_string (`eval "..."`) | 86,327 | 82,183 | **-4.8%** |
+| closure (create + call) | 863 | 569 | **-34.1%** |
+| method (dispatch) | 436 | 319 | **-26.9%** |
+| regex (matching) | 50,760 | 47,219 | **-7.0%** |
+| string (operations) | 28,884 | 30,752 | **+6.5%** |
+
+#### Memory Benchmarks
+
+Memory is essentially unchanged (within noise): ~88MB RSS startup,
+identical delta ratios for arrays (15.4x), hashes (2.3x), strings (8.0x),
+nested structures (2.7x).
+
+#### Analysis
+
+Most benchmarks show a 5-7% slowdown from ThreadLocal routing, consistent with
+the design doc estimate of "0.25-25%." Two benchmarks show larger regressions:
+
+**Closure (-34%):** The closure call path (`RuntimeCode.apply()`) has **zero**
+`PerlRuntime.current()` lookups but **14-17 other ThreadLocal lookups** per
+invocation from `WarningBitsRegistry` (7 ThreadLocals x push/pop),
+`HintHashRegistry` (3 ops), and `argsStack` (2 ops). These are the pre-existing
+ThreadLocal stacks that were already present on master. The regression likely
+comes from increased ThreadLocal contention or JIT optimization interference
+from the additional ThreadLocal fields on `PerlRuntime`.
+
+**Method (-27%):** The method dispatch path has two modes:
+- **Cache hit** (`callCached()`): Only 1 `PerlRuntime.current()` lookup — fast
+- **Cache miss** (`findMethodInHierarchy()`): **12-14** `PerlRuntime.current()`
+  lookups plus 14-17 from `apply()` = ~26-31 total ThreadLocal lookups
+
+The regression suggests the inline cache hit rate may have decreased, or the
+cache-miss path is being exercised more due to per-runtime cache isolation
+(each runtime starts with a cold cache).
+
+#### Optimization Plan
+
+**Goal:** Reduce the closure and method dispatch regressions to under 10%
+(matching the 5-7% range of other benchmarks). The general 5-7% slowdown
+from ThreadLocal routing is acceptable and expected.
+
+**Git workflow:**
+
+```
+feature/multiplicity          (this branch — known good, all tests pass)
+  └── feature/multiplicity-opt  (create this — do optimization work here)
+```
+
+1. Fetch and check out this branch:
+   ```bash
+   git fetch origin feature/multiplicity
+   git checkout feature/multiplicity
+   ```
+2. Create a new branch for optimization work:
+   ```bash
+   git checkout -b feature/multiplicity-opt
+   ```
+3. Do the optimization work on `feature/multiplicity-opt` (see tiers below).
+   Commit after each step so progress is preserved.
+4. **If the optimization succeeds** (target benchmarks within 10% of master):
+   merge back into `feature/multiplicity` and push:
+   ```bash
+   git checkout feature/multiplicity
+   git merge feature/multiplicity-opt
+   git push origin feature/multiplicity
+   ```
+5. **If the optimization fails** (no measurable gain, or introduces regressions):
+   go back to `feature/multiplicity`, document the failure in this section
+   (what was tried, what the benchmark numbers were, why it did not work),
+   commit and **push** so the findings are preserved, then delete the work branch:
+   ```bash
+   git checkout feature/multiplicity
+   # Edit this file: add findings to the "Failed Optimization Attempts" section below
+   git commit -am "docs: document failed optimization attempt"
+   git push origin feature/multiplicity
+   git branch -D feature/multiplicity-opt
+   ```
+   This ensures the next engineer knows what was already tried and can
+   avoid repeating the same work.
+
+**Methodology for each optimization step:**
+
+1. Create a commit on `feature/multiplicity-opt` with the optimization
+2. Run `make clean ; make` to verify no test regressions
+3. Run the relevant benchmark(s) 3 times, take the median:
+   ```bash
+   ./jperl dev/bench/benchmark_closure.pl   # target: closure
+   ./jperl dev/bench/benchmark_method.pl    # target: method
+   ./jperl dev/bench/benchmark_lexical.pl   # control: should not regress
+   ./jperl dev/bench/benchmark_global.pl    # control: should not regress
+   ```
+4. Compare against the baseline numbers in the table above
+5. **Revert if:** the optimization does not measurably improve the target
+   benchmark AND does not improve code architecture (e.g., reducing
+   unnecessary abstraction layers). Keep only if it delivers measurable
+   improvement or is architecturally cleaner regardless of performance.
+6. Run the 126-interpreter stress test to verify multiplicity still works:
+   ```bash
+   bash dev/sandbox/multiplicity/run_multiplicity_demo.sh src/test/resources/unit/*.t
+   ```
+
+Listed in order of expected impact. Each tier is independent — do not
+proceed to Tier 2 unless Tier 1 has been completed and benchmarked.
+
+---
+
+**Tier 1: Cache `PerlRuntime.current()` in local variables (LOW RISK)**
+
+These are mechanical changes — cache the ThreadLocal result at method entry
+instead of calling `PerlRuntime.current()` multiple times. Pattern:
+
+```java
+// BEFORE: N ThreadLocal lookups
+public static Foo doSomething(String key) {
+    Foo a = PerlRuntime.current().mapA.get(key);  // lookup 1
+    Foo b = PerlRuntime.current().mapB.get(key);  // lookup 2
+    PerlRuntime.current().mapC.put(key, b);       // lookup 3
+    return a;
+}
+
+// AFTER: 1 ThreadLocal lookup
+public static Foo doSomething(String key) {
+    PerlRuntime rt = PerlRuntime.current();        // lookup 1
+    Foo a = rt.mapA.get(key);
+    Foo b = rt.mapB.get(key);
+    rt.mapC.put(key, b);
+    return a;
+}
+```
+
+**Step 1a: `GlobalVariable.getGlobalCodeRef()`**
+- File: `src/main/java/org/perlonjava/runtime/runtimetypes/GlobalVariable.java`
+- Currently 4 `PerlRuntime.current()` calls per invocation (pinnedCodeRefs,
+  globalCodeRefs get, globalCodeRefs put, pinnedCodeRefs put)
+- Called N times during method hierarchy traversal in `findMethodInHierarchy()`
+- Expected savings: 3 lookups per call x N calls per method dispatch
+- **Expected impact on method benchmark:** moderate (reduces cache-miss cost)
+- Benchmark after this step before proceeding
+
+**Step 1b: `InheritanceResolver.findMethodInHierarchy()`**
+- File: `src/main/java/org/perlonjava/runtime/mro/InheritanceResolver.java`
+- Currently 12-14 `PerlRuntime.current()` calls per cache-miss invocation
+  across `getMethodCache()`, `getIsaStateCache()`, `getLinearizedClassesCache()`,
+  `getPackageMROMap()`, `getCurrentMRO()`, `isAutoloadEnabled()`
+- Two approaches (pick one):
+  - (a) Add `PerlRuntime rt` parameter to `findMethodInHierarchy()` and its
+    internal methods — cleaner but changes method signatures
+  - (b) Cache `PerlRuntime rt` as a local at the top of `findMethodInHierarchy()`
+    and replace each `getXxxCache()` call with direct `rt.xxxCache` access —
+    fewer signature changes but less encapsulated
+- **Expected impact on method benchmark:** high (this is the main cache-miss path)
+- Benchmark after this step
+
+**Step 1c: Other `GlobalVariable` accessors**
+- Same file as 1a
+- Apply the same pattern to `getGlobalVariable()`, `getGlobalArray()`,
+  `getGlobalHash()`, `existsGlobalCodeRef()`, `resolveStashAlias()`
+- Each saves 1 lookup per call; these are called pervasively
+- **Expected impact:** small per-method, cumulative across all benchmarks
+- Benchmark all 4 benchmarks after this step
+
+After Tier 1, re-run all benchmarks and record results. If closure and method
+are within 10% of master, the optimization work is done. If not, proceed to
+Tier 2.
+
+---
+
+**Tier 2: Consolidate WarningBits/HintHash stacks into PerlRuntime (MEDIUM RISK)**
+
+This tier targets the **closure** regression specifically. The closure call
+path has zero `PerlRuntime.current()` lookups (Tier 1 will not help it) but
+14-17 ThreadLocal lookups from 7 separate ThreadLocal stacks:
+
+| ThreadLocal | Class | push/pop per call |
+|-------------|-------|-------------------|
+| `currentBitsStack` | WarningBitsRegistry | 2 (push + pop) |
+| `callerBitsStack` | WarningBitsRegistry | 2 |
+| `callerHintsStack` | WarningBitsRegistry | 2 |
+| `callSiteBits` | WarningBitsRegistry | 1 (get) |
+| `callSiteHints` | WarningBitsRegistry | 1 (get) |
+| `callSiteSnapshotId` | HintHashRegistry | 2 (get + set) |
+| `callerSnapshotIdStack` | HintHashRegistry | 2 |
+| `argsStack` | RuntimeCode | 2 |
+
+**Approach:** Migrate these 8 ThreadLocal stacks into `PerlRuntime` instance
+fields, following the same accessor-method pattern used for all other
+migrated stacks (see "Local Save/Restore Stack Fix" section above). This
+turns 14-17 ThreadLocal lookups into 1 (`PerlRuntime.current()` at method
+entry, then direct field access).
+
+Concrete steps:
+1. Add 8 stack fields to `PerlRuntime.java`
+2. Add `private static` accessor methods in each source class that delegate
+   to `PerlRuntime.current().<field>` (same pattern as `localizedStack()` etc.)
+3. Replace `threadLocalField.get()` with the accessor call in each push/pop site
+4. Remove the ThreadLocal field declarations from WarningBitsRegistry,
+   HintHashRegistry, and RuntimeCode
+5. Verify: `make` passes, then benchmark closure
+
+**Expected impact on closure benchmark:** high — 14 fewer ThreadLocal lookups
+per call. This is the dominant cost in the closure path.
+
+**Revert criteria:** If closure benchmark does not improve by at least 15%
+(i.e., does not recover at least half the 34% regression), revert unless the
+migration is considered architecturally desirable for consistency with the
+other stack migrations.
+
+---
+
+**Tier 3: Investigate inline method cache effectiveness (LOW RISK)**
+
+Only pursue this if method dispatch is still >10% slower after Tier 1.
+
+Each `PerlRuntime` starts with empty inline method cache arrays
+(`inlineCacheBlessId`, `inlineCacheMethodHash`, `inlineCacheCode`). The
+cache is indexed by `callsiteId % CACHE_SIZE`, so it relies on a warm
+steady state.
+
+**Diagnostic step (before any code change):**
+```bash
+# Add temporary counters to callCached() to measure hit/miss ratio:
+# - Count cache hits (blessId matches AND methodHash matches)
+# - Count cache misses
+# Run benchmark_method.pl and report hit rate
+```
+
+If hit rate is >95%, the cache is working and the regression is from the
+single `PerlRuntime.current()` lookup per call (unavoidable overhead of ~2-5ns).
+If hit rate is low, investigate why — possible causes:
+- `callsiteId` collisions across runtimes (IDs are global AtomicIntegers)
+- Cache size too small for the workload
+- BlessId instability across runtime initialization
+
+---
+
+**Failed Optimization Attempts**
+
+(Document failed attempts here so future engineers know what was already tried.
+For each attempt, record: what was changed, benchmark numbers before/after,
+and why it was reverted.)
+
+*None yet.*
+
+---
+
+### Optimization Results (2026-04-10)
+
+**Branch:** `feature/multiplicity-opt` (created from `feature/multiplicity`)
+
+#### JFR Profiling Findings
+
+Profiled the closure benchmark (`dev/bench/benchmark_closure.pl`) with Java
+Flight Recorder to identify the dominant overhead sources. Key findings:
+
+| Category | JFR Samples | Source |
+|----------|-------------|--------|
+| `PerlRuntime.current()` / ThreadLocal | 143 | The ThreadLocal.get() call itself |
+| RuntimeRegex accessors | ~126 | **Dominant source** — 13 getters + 13 setters per sub call via RegexState save/restore |
+| DynamicVariableManager | ~90 | `local` variable save/restore (includes regex state push) |
+| pushCallerState (batch) | 10 | Caller bits/hints/hint-hash state |
+| pushSubState (batch) | 3 | Args + warning bits |
+| ArrayDeque.push | 13 | Stack operations |
+
+**Critical finding:** `RegexState` save/restore was calling 13 individual
+`RuntimeRegex` static accessors (each doing its own `PerlRuntime.current()`
+ThreadLocal lookup) on every subroutine entry AND exit — **26 ThreadLocal
+lookups per sub call** — even when the subroutine never uses regex.
+
+#### Optimizations Applied
+
+| Tier | Optimization | Files Changed | ThreadLocal Lookups Eliminated |
+|------|-------------|---------------|-------------------------------|
+| 1 | Cache `PerlRuntime.current()` in local variables | GlobalVariable.java, InheritanceResolver.java | ~12 per method cache miss |
+| 2 | Migrate WarningBits/HintHash/args stacks to PerlRuntime fields | WarningBitsRegistry.java, HintHashRegistry.java, RuntimeCode.java, PerlRuntime.java | 14-17 per sub call (separate ThreadLocals -> 1 ThreadLocal) |
+| 2b | Batch pushCallerState/popCallerState and pushSubState/popSubState | PerlRuntime.java, RuntimeCode.java | 8-12 per sub call -> 2 |
+| 2c | Batch RegexState save/restore | RegexState.java | **24 per sub call** (13 getters + 13 setters -> 2) |
+| 2d | Skip RegexState save/restore for subs without regex | EmitterMethodCreator.java, RegexUsageDetector.java | **Entire save/restore eliminated** for non-regex subs |
+| 3 | JVM-compile anonymous subs inside `eval STRING` | BytecodeCompiler.java, OpcodeHandlerExtended.java, JvmClosureTemplate.java (new) | N/A (execution speedup, not ThreadLocal reduction) |
+
+**Tier 3: JVM compilation of eval STRING anonymous subs.** Previously,
+`BytecodeCompiler.visitAnonymousSubroutine()` always compiled anonymous sub bodies
+to `InterpretedCode`. This meant hot closures created via `eval STRING` (e.g.,
+Benchmark.pm's `sub { for (1..$n) { &$c } }`) ran in the bytecode interpreter.
+The fix tries JVM compilation first via `EmitterMethodCreator.createClassWithMethod()`,
+falling back to the interpreter on any failure (e.g., ASM frame computation crash).
+A new `JvmClosureTemplate` class holds the JVM-compiled class and instantiates it
+with captured variables via reflection. Measured 4.5x speedup for eval STRING closures
+in isolation (6.4M iter/s vs 1.4M iter/s). The broader benchmark improvements (method
++36.7% vs pre-opt, global +10.8%) likely reflect this change improving Benchmark.pm's
+own infrastructure which is used by all benchmarks.
+
+#### Benchmark Results (updated 2026-04-10, after JVM eval STRING closures)
+
+| Benchmark | master | branch (pre-opt) | **Current** | vs master | vs pre-opt |
+|-----------|--------|-------------------|-------------|-----------|------------|
+| **closure** | 863 | 569 (-34.1%) | **1,220** | **+41.4%** | +114.4% |
+| **method** | 436 | 319 (-26.9%) | **436** | **0.0%** | +36.7% |
+| **lexical** | 394K | 375K (-4.9%) | **480K** | **+21.8%** | +28.0% |
+| global | 78K | 74K (-5.4%) | **82K** | +5.1% | +10.8% |
+| eval_string | 86K | 82K (-4.8%) | **89K** | +3.1% | +8.5% |
+| regex | 51K | 47K (-7.0%) | **46K** | -9.4% | -2.1% |
+| string | 29K | 31K (+6.5%) | **29K** | +0.3% | -5.6% |
+
+All benchmarks that originally regressed are now **at or above master**. Closure is
+41% faster than master, method matches master exactly, lexical is 22% faster, and
+global is 5% faster. The closure and lexical improvements come from eliminating
+unnecessary RegexState save/restore for subroutines that don't use regex — an
+overhead that existed on master too (via separate ThreadLocals) but was masked by
+lower per-lookup cost. The regex benchmark shows a small regression (~9%) from
+ThreadLocal routing overhead in regex-heavy code paths.
+
+#### Remaining Optimization Opportunities (not yet pursued)
+
+These are lower-priority since the main goal (closure/method within 10%) is exceeded:
+
+| Option | Effort | Expected Impact | Notes |
+|--------|--------|-----------------|-------|
+| Pass `PerlRuntime rt` from static apply to instance apply | Low | Eliminates 1 of 2 remaining lookups per sub call | Changes method signatures |
+| Cache warning bits on RuntimeCode field | Low | Avoids ConcurrentHashMap lookup per call | `getWarningBitsForCode()` in profile |
+| Batch RuntimeRegex field access in match methods | Medium | Eliminates ~10-15 lookups per regex match | Profile showed many individual accessors in RuntimeRegex.java; may help the -9% regex regression |
+| DynamicVariableManager.variableStack() caching | Low | 1 lookup per call eliminated | 10 samples in profile |
+
+Note: "Lazy regex state save (skip when sub doesn't use regex)" was listed here previously
+and has been implemented as Tier 2d above.
+
+### Open Questions
+- `runtimeEvalCounter` and `nextCallsiteId` remain static (shared across runtimes) —
+  acceptable for unique ID generation but may want per-runtime counters in future
+- Should `ByteCodeSourceMapper` collections be migrated to per-runtime long-term?
+  (Currently they're only needed during compilation, so the global lock is sufficient)

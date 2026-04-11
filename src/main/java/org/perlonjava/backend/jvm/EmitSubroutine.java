@@ -224,7 +224,7 @@ public class EmitSubroutine {
             String newClassNameDot = subCtx.javaClassInfo.javaClassName.replace('/', '.');
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class name: " + newClassNameDot + " internal " + subCtx.javaClassInfo.javaClassName);
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
-            RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
+            RuntimeCode.getAnonSubs().put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
             // Transfer pad constants (cached string literals referenced via \) from compile time
             // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
@@ -291,14 +291,15 @@ public class EmitSubroutine {
             
             // Store the InterpretedCode in the interpretedSubs map with a unique key
             String fallbackKey = "interpreted_" + System.identityHashCode(fallback.interpretedCode);
-            RuntimeCode.interpretedSubs.put(fallbackKey, fallback.interpretedCode);
+            RuntimeCode.getInterpretedSubs().put(fallbackKey, fallback.interpretedCode);
             
             // Generate bytecode to retrieve and configure the InterpretedCode
             // 1. Load the InterpretedCode from the map
-            mv.visitFieldInsn(Opcodes.GETSTATIC,
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "interpretedSubs",
-                    "Ljava/util/HashMap;");
+                    "getInterpretedSubs",
+                    "()Ljava/util/HashMap;",
+                    false);
             mv.visitLdcInsn(fallbackKey);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "java/util/HashMap",

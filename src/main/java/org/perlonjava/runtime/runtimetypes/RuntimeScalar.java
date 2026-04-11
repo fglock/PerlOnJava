@@ -31,8 +31,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
-    // Static stack to store saved "local" states of RuntimeScalar instances
-    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
+    // Dynamic state stack is now held per-PerlRuntime.
+    private static Stack<RuntimeScalar> dynamicStateStack() {
+        return PerlRuntime.current().dynamicStateStack;
+    }
 
     // Pre-compiled regex pattern for decimal numification fast-path
     // INTEGER_PATTERN replaced with isIntegerString() for better performance
@@ -2701,7 +2703,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.value = this.value;
         currentState.blessId = this.blessId;
         // Push the current state onto the stack
-        dynamicStateStack.push(currentState);
+        dynamicStateStack().push(currentState);
         // Clear the current type and value
         this.type = UNDEF;
         this.value = null;
@@ -2716,9 +2718,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack.isEmpty()) {
+        Stack<RuntimeScalar> stack = dynamicStateStack();
+        if (!stack.isEmpty()) {
             // Pop the most recent saved state from the stack
-            RuntimeScalar previousState = dynamicStateStack.pop();
+            RuntimeScalar previousState = stack.pop();
 
             // Decrement refCount of the CURRENT value being displaced.
             // Do NOT increment the restored value — it already has the correct

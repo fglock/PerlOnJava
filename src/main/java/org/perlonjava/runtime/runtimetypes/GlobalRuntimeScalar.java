@@ -8,8 +8,11 @@ import java.util.Stack;
  * global symbol table and restoring it when the context exits.
  */
 public class GlobalRuntimeScalar extends RuntimeScalar {
-    // Stack to store the previous values when localized
-    private static final Stack<SavedGlobalState> localizedStack = new Stack<>();
+    // Localized stack is now held per-PerlRuntime.
+    @SuppressWarnings("unchecked")
+    private static Stack<SavedGlobalState> localizedStack() {
+        return (Stack<SavedGlobalState>) (Stack<?>) PerlRuntime.current().globalScalarLocalizedStack;
+    }
     private final String fullName;
 
     public GlobalRuntimeScalar(String fullName) {
@@ -44,9 +47,9 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     @Override
     public void dynamicSaveState() {
         // Save the current global reference
-        var originalVariable = GlobalVariable.globalVariables.get(fullName);
+        var originalVariable = GlobalVariable.getGlobalVariablesMap().get(fullName);
 
-        localizedStack.push(new SavedGlobalState(fullName, originalVariable));
+        localizedStack().push(new SavedGlobalState(fullName, originalVariable));
 
         // Create a new variable for the localized scope.
         // For output separator variables, create the matching special type so that
@@ -64,7 +67,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         }
 
         // Replace this variable in the global symbol table with the new one
-        GlobalVariable.globalVariables.put(fullName, newLocal);
+        GlobalVariable.getGlobalVariablesMap().put(fullName, newLocal);
 
         // Also update all glob aliases to point to the new local variable.
         // This implements Perl 5 semantics where after `*verbose = *Verbose`,
@@ -72,22 +75,23 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.globalVariables.put(alias, newLocal);
+                GlobalVariable.getGlobalVariablesMap().put(alias, newLocal);
             }
         }
     }
 
     @Override
     public void dynamicRestoreState() {
-        if (!localizedStack.isEmpty()) {
-            SavedGlobalState saved = localizedStack.peek();
+        Stack<SavedGlobalState> stack = localizedStack();
+        if (!stack.isEmpty()) {
+            SavedGlobalState saved = stack.peek();
             if (saved.fullName.equals(this.fullName)) {
-                localizedStack.pop();
+                stack.pop();
 
                 // Decrement refCount of the CURRENT (local) value being displaced.
                 // Do NOT increment the restored value — it already has the correct
                 // refCount from its original counting.
-                RuntimeScalar currentVar = GlobalVariable.globalVariables.get(saved.fullName);
+                RuntimeScalar currentVar = GlobalVariable.getGlobalVariablesMap().get(saved.fullName);
                 if (currentVar != null
                         && (currentVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && currentVar.value instanceof RuntimeBase displacedBase
@@ -104,13 +108,13 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                 }
 
                 // Restore the original variable in the global symbol table
-                GlobalVariable.globalVariables.put(saved.fullName, saved.originalVariable);
+                GlobalVariable.getGlobalVariablesMap().put(saved.fullName, saved.originalVariable);
 
                 // Also restore all glob aliases to the original shared variable
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.globalVariables.put(alias, saved.originalVariable);
+                        GlobalVariable.getGlobalVariablesMap().put(alias, saved.originalVariable);
                     }
                 }
             }

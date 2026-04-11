@@ -91,71 +91,51 @@ public class RuntimeIO extends RuntimeScalar {
     private static final Map<String, Set<StandardOpenOption>> MODE_OPTIONS = new HashMap<>();
 
     /**
-     * Maximum number of file handles to keep in the LRU cache.
-     * Older handles are flushed (not closed) when this limit is exceeded.
+     * Returns the per-runtime LRU cache of open file handles.
+     * Migrated from a static field for multiplicity thread-safety.
      */
-    private static final int MAX_OPEN_HANDLES = 100;
-
-    /**
-     * LRU (Least Recently Used) cache for managing open file handles.
-     * This helps prevent resource exhaustion by limiting open handles and
-     * automatically flushing less recently used ones.
-     */
-    private static final Map<IOHandle, Boolean> openHandles = new LinkedHashMap<IOHandle, Boolean>(MAX_OPEN_HANDLES, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<IOHandle, Boolean> eldest) {
-            if (size() > MAX_OPEN_HANDLES) {
-                try {
-                    // Flush but don't close the eldest handle
-                    eldest.getKey().flush();
-                } catch (Exception e) {
-                    // Handle exception if needed
-                }
-                return true;
-            }
-            return false;
-        }
-    };
+    private static Map<IOHandle, Boolean> openHandles() {
+        return PerlRuntime.current().openHandles;
+    }
 
     private static final Map<Long, Process> childProcesses = new java.util.concurrent.ConcurrentHashMap<>();
-    /**
-     * Standard output stream handle (STDOUT)
-     */
-    public static RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
-    /**
-     * Standard error stream handle (STDERR)
-     * Note: autoFlush is set to true to match Perl's unbuffered stderr behavior
-     */
-    public static RuntimeIO stderr = new RuntimeIO(new StandardIO(System.err, false));
-    
-    static {
-        // STDERR should be unbuffered (autoFlush) by default, like in Perl
-        stderr.autoFlush = true;
-    }
-    
-    /**
-     * Standard input stream handle (STDIN)
-     */
-    public static RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
-    /**
-     * The last accessed filehandle, used for Perl's ${^LAST_FH} special variable.
-     * Updated whenever a filehandle is used for I/O operations.
-     */
-    public static RuntimeIO lastAccesseddHandle;
-    /**
-     * The variable/handle name used in the last readline operation (e.g., "$f", "STDIN").
-     * Set by the JVM backend before calling readline, used by WarnDie for error messages
-     * when the handle's globName is null (e.g., lexical filehandles).
-     */
-    public static String lastReadlineHandleName;
-    // Tracks the last handle used for output writes (print/say/etc). This must not
-    // clobber lastAccesseddHandle, which is used for ${^LAST_FH} and $.
-    public static RuntimeIO lastWrittenHandle;
-    /**
-     * The currently selected filehandle for output operations.
-     * Used by print/printf when no filehandle is specified.
-     */
-    public static RuntimeIO selectedHandle;
+
+    // ---- I/O state is now per-PerlRuntime. These static accessors delegate to current runtime. ----
+
+    /** Returns the standard output handle for the current runtime. */
+    public static RuntimeIO getStdout() { return PerlRuntime.current().ioStdout; }
+    /** Sets the standard output handle for the current runtime. */
+    public static void setStdout(RuntimeIO io) { PerlRuntime.current().ioStdout = io; }
+
+    /** Returns the standard error handle for the current runtime. */
+    public static RuntimeIO getStderr() { return PerlRuntime.current().ioStderr; }
+    /** Sets the standard error handle for the current runtime. */
+    public static void setStderr(RuntimeIO io) { PerlRuntime.current().ioStderr = io; }
+
+    /** Returns the standard input handle for the current runtime. */
+    public static RuntimeIO getStdin() { return PerlRuntime.current().ioStdin; }
+    /** Sets the standard input handle for the current runtime. */
+    public static void setStdin(RuntimeIO io) { PerlRuntime.current().ioStdin = io; }
+
+    /** Returns the last accessed handle for the current runtime. */
+    public static RuntimeIO getLastAccessedHandle() { return PerlRuntime.current().ioLastAccessedHandle; }
+    /** Sets the last accessed handle for the current runtime. */
+    public static void setLastAccessedHandle(RuntimeIO io) { PerlRuntime.current().ioLastAccessedHandle = io; }
+
+    /** Returns the last readline handle name for the current runtime. */
+    public static String getLastReadlineHandleName() { return PerlRuntime.current().ioLastReadlineHandleName; }
+    /** Sets the last readline handle name for the current runtime. */
+    public static void setLastReadlineHandleName(String name) { PerlRuntime.current().ioLastReadlineHandleName = name; }
+
+    /** Returns the last written handle for the current runtime. */
+    public static RuntimeIO getLastWrittenHandle() { return PerlRuntime.current().ioLastWrittenHandle; }
+    /** Sets the last written handle for the current runtime. */
+    public static void setLastWrittenHandle(RuntimeIO io) { PerlRuntime.current().ioLastWrittenHandle = io; }
+
+    /** Returns the currently selected output handle for the current runtime. */
+    public static RuntimeIO getSelectedHandle() { return PerlRuntime.current().ioSelectedHandle; }
+    /** Sets the currently selected output handle for the current runtime. */
+    public static void setSelectedHandle(RuntimeIO io) { PerlRuntime.current().ioSelectedHandle = io; }
 
     /**
      * Fileno registry for select() support.
@@ -459,7 +439,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @param out the OutputStream to wrap
      */
     public static void setCustomOutputStream(OutputStream out) {
-        lastWrittenHandle = new RuntimeIO(new CustomOutputStreamHandle(out));
+        setLastWrittenHandle(new RuntimeIO(new CustomOutputStreamHandle(out)));
     }
 
     /**
@@ -545,12 +525,12 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void initStdHandles() {
         // Initialize STDOUT, STDERR, STDIN in the main package
-        getGlobalIO("main::STDOUT").setIO(stdout);
-        getGlobalIO("main::STDERR").setIO(stderr);
-        getGlobalIO("main::STDIN").setIO(stdin);
-        lastAccesseddHandle = null;
-        lastWrittenHandle = stdout;
-        selectedHandle = stdout;
+        getGlobalIO("main::STDOUT").setIO(getStdout());
+        getGlobalIO("main::STDERR").setIO(getStderr());
+        getGlobalIO("main::STDIN").setIO(getStdin());
+        setLastAccessedHandle(null);
+        setLastWrittenHandle(getStdout());
+        setSelectedHandle(getStdout());
     }
 
     /**
@@ -956,8 +936,8 @@ public class RuntimeIO extends RuntimeScalar {
             return path.toAbsolutePath();
         }
 
-        // For relative paths, resolve against current directory
-        return Paths.get(System.getProperty("user.dir")).resolve(sanitized).toAbsolutePath();
+        // For relative paths, resolve against per-runtime current directory
+        return Paths.get(PerlRuntime.getCwd()).resolve(sanitized).toAbsolutePath();
     }
 
     /**
@@ -967,11 +947,13 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void flushFileHandles() {
         // Flush stdout and stderr before sleep, in case we are displaying a prompt
-        if (stdout.needFlush) {
-            stdout.flush();
+        RuntimeIO out = getStdout();
+        RuntimeIO err = getStderr();
+        if (out.needFlush) {
+            out.flush();
         }
-        if (stderr.needFlush) {
-            stderr.flush();
+        if (err.needFlush) {
+            err.flush();
         }
     }
 
@@ -981,8 +963,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @param handle the IOHandle to cache
      */
     public static void addHandle(IOHandle handle) {
-        synchronized (openHandles) {
-            openHandles.put(handle, Boolean.TRUE);
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            handles.put(handle, Boolean.TRUE);
         }
     }
 
@@ -992,8 +975,9 @@ public class RuntimeIO extends RuntimeScalar {
      * @param handle the IOHandle to remove
      */
     public static void removeHandle(IOHandle handle) {
-        synchronized (openHandles) {
-            openHandles.remove(handle);
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            handles.remove(handle);
         }
     }
 
@@ -1002,8 +986,9 @@ public class RuntimeIO extends RuntimeScalar {
      * This ensures all buffered data is written without closing files.
      */
     public static void flushAllHandles() {
-        synchronized (openHandles) {
-            for (IOHandle handle : openHandles.keySet()) {
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            for (IOHandle handle : handles.keySet()) {
                 handle.flush();
             }
         }
@@ -1016,8 +1001,9 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static void closeAllHandles() {
         flushAllHandles();
-        synchronized (openHandles) {
-            for (IOHandle handle : openHandles.keySet()) {
+        Map<IOHandle, Boolean> handles = openHandles();
+        synchronized (handles) {
+            for (IOHandle handle : handles.keySet()) {
                 try {
                     handle.close();
                     handle = new ClosedIOHandle();
@@ -1025,7 +1011,7 @@ public class RuntimeIO extends RuntimeScalar {
                     // Handle exception if needed
                 }
             }
-            openHandles.clear(); // Clear the cache after closing all handles
+            handles.clear(); // Clear the cache after closing all handles
         }
     }
 
@@ -1400,7 +1386,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar with true if at EOF
      */
     public RuntimeScalar eof() {
-        lastAccesseddHandle = this;
+        setLastAccessedHandle(this);
         return ioHandle.eof();
     }
 
@@ -1411,7 +1397,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar with the current position
      */
     public RuntimeScalar tell() {
-        lastAccesseddHandle = this;
+        setLastAccessedHandle(this);
         return ioHandle.tell();
     }
 
@@ -1423,7 +1409,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeScalar indicating success/failure
      */
     public RuntimeScalar seek(long pos) {
-        lastAccesseddHandle = this;
+        setLastAccessedHandle(this);
         return ioHandle.seek(pos);
     }
 
@@ -1460,14 +1446,15 @@ public class RuntimeIO extends RuntimeScalar {
         needFlush = true;
         // Only flush lastAccessedHandle if it's a different handle AND doesn't share the same ioHandle
         // (duplicated handles share the same ioHandle, so flushing would be redundant and could cause deadlocks)
-        if (lastWrittenHandle != null &&
-                lastWrittenHandle != this &&
-                lastWrittenHandle.needFlush &&
-                lastWrittenHandle.ioHandle != this.ioHandle) {
+        RuntimeIO lastWritten = getLastWrittenHandle();
+        if (lastWritten != null &&
+                lastWritten != this &&
+                lastWritten.needFlush &&
+                lastWritten.ioHandle != this.ioHandle) {
             // Synchronize terminal output for stdout and stderr
-            lastWrittenHandle.flush();
+            lastWritten.flush();
         }
-        lastWrittenHandle = this;
+        setLastWrittenHandle(this);
 
         // When no encoding layer is active, check for wide characters (> 0xFF).
         // Perl 5 warns and outputs UTF-8 encoding of the entire string in this case.

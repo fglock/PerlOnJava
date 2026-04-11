@@ -10,20 +10,50 @@ import java.util.*;
  * for method resolution and linearized class hierarchies to improve performance.
  */
 public class InheritanceResolver {
-    // Cache for linearized class hierarchies
-    static final Map<String, List<String>> linearizedClassesCache = new HashMap<>();
     private static final boolean TRACE_METHOD_RESOLUTION = false;  // Set to true for debugging
-    // Per-package MRO settings
-    private static final Map<String, MROAlgorithm> packageMRO = new HashMap<>();
-    // Method resolution cache
-    private static final Map<String, RuntimeScalar> methodCache = new HashMap<>();
-    // Cache for OverloadContext instances by blessing ID
-    private static final Map<Integer, OverloadContext> overloadContextCache = new HashMap<>();
-    // Track ISA array states for change detection
-    private static final Map<String, List<String>> isaStateCache = new HashMap<>();
-    public static boolean autoloadEnabled = true;
-    // Default MRO algorithm
-    private static MROAlgorithm currentMRO = MROAlgorithm.DFS;
+
+    // ---- Accessors delegating to PerlRuntime.current() ----
+
+    /** Returns the linearized classes cache from the current PerlRuntime. */
+    static Map<String, List<String>> getLinearizedClassesCache() {
+        return PerlRuntime.current().linearizedClassesCache;
+    }
+
+    /** Returns the method cache from the current PerlRuntime. */
+    private static Map<String, RuntimeScalar> getMethodCache() {
+        return PerlRuntime.current().methodCache;
+    }
+
+    /** Returns the overload context cache from the current PerlRuntime. */
+    private static Map<Integer, OverloadContext> getOverloadContextCache() {
+        return PerlRuntime.current().overloadContextCache;
+    }
+
+    /** Returns the ISA state cache from the current PerlRuntime. */
+    private static Map<String, List<String>> getIsaStateCache() {
+        return PerlRuntime.current().isaStateCache;
+    }
+
+    /** Returns the per-package MRO map from the current PerlRuntime. */
+    private static Map<String, MROAlgorithm> getPackageMROMap() {
+        return PerlRuntime.current().packageMRO;
+    }
+
+    // ---- autoloadEnabled getter/setter ----
+
+    public static boolean isAutoloadEnabled() {
+        return PerlRuntime.current().autoloadEnabled;
+    }
+
+    public static void setAutoloadEnabled(boolean enabled) {
+        PerlRuntime.current().autoloadEnabled = enabled;
+    }
+
+    // ---- currentMRO getter (used internally) ----
+
+    private static MROAlgorithm getCurrentMRO() {
+        return PerlRuntime.current().currentMRO;
+    }
 
     /**
      * Sets the default MRO algorithm.
@@ -31,7 +61,7 @@ public class InheritanceResolver {
      * @param algorithm The MRO algorithm to use as default.
      */
     public static void setDefaultMRO(MROAlgorithm algorithm) {
-        currentMRO = algorithm;
+        PerlRuntime.current().currentMRO = algorithm;
         invalidateCache();
     }
 
@@ -42,7 +72,7 @@ public class InheritanceResolver {
      * @param algorithm   The MRO algorithm to use for this package.
      */
     public static void setPackageMRO(String packageName, MROAlgorithm algorithm) {
-        packageMRO.put(packageName, algorithm);
+        getPackageMROMap().put(packageName, algorithm);
         invalidateCache();
     }
 
@@ -53,7 +83,7 @@ public class InheritanceResolver {
      * @return The MRO algorithm for the package, or the default if not set.
      */
     public static MROAlgorithm getPackageMRO(String packageName) {
-        return packageMRO.getOrDefault(packageName, currentMRO);
+        return getPackageMROMap().getOrDefault(packageName, getCurrentMRO());
     }
 
     /**
@@ -63,19 +93,21 @@ public class InheritanceResolver {
      * @return A list of class names in the order of method resolution.
      */
     public static List<String> linearizeHierarchy(String className) {
+        PerlRuntime rt = PerlRuntime.current();
         // Check if ISA has changed and invalidate cache if needed
-        if (hasIsaChanged(className)) {
-            invalidateCacheForClass(className);
+        if (hasIsaChanged(className, rt)) {
+            invalidateCacheForClass(className, rt);
         }
 
+        Map<String, List<String>> cache = rt.linearizedClassesCache;
         // Check cache first
-        List<String> cached = linearizedClassesCache.get(className);
+        List<String> cached = cache.get(className);
         if (cached != null) {
             // Return a copy of the cached list to prevent modification of the cached version
             return new ArrayList<>(cached);
         }
 
-        MROAlgorithm mro = getPackageMRO(className);
+        MROAlgorithm mro = rt.packageMRO.getOrDefault(className, rt.currentMRO);
 
         List<String> result;
         switch (mro) {
@@ -90,7 +122,7 @@ public class InheritanceResolver {
         }
 
         // Cache the result (store a copy to prevent external modifications)
-        linearizedClassesCache.put(className, new ArrayList<>(result));
+        cache.put(className, new ArrayList<>(result));
         return result;
     }
 
@@ -98,6 +130,10 @@ public class InheritanceResolver {
      * Checks if the @ISA array for a class has changed since last cached.
      */
     private static boolean hasIsaChanged(String className) {
+        return hasIsaChanged(className, PerlRuntime.current());
+    }
+
+    private static boolean hasIsaChanged(String className, PerlRuntime rt) {
         RuntimeArray isaArray = GlobalVariable.getGlobalArray(className + "::ISA");
         
         // Build current ISA list
@@ -109,11 +145,12 @@ public class InheritanceResolver {
             }
         }
 
-        List<String> cachedIsa = isaStateCache.get(className);
+        Map<String, List<String>> isCache = rt.isaStateCache;
+        List<String> cachedIsa = isCache.get(className);
 
         // If ISA changed, update cache and return true
         if (!currentIsa.equals(cachedIsa)) {
-            isaStateCache.put(className, currentIsa);
+            isCache.put(className, currentIsa);
             return true;
         }
         
@@ -124,12 +161,19 @@ public class InheritanceResolver {
      * Invalidate cache for a specific class and its dependents.
      */
     private static void invalidateCacheForClass(String className) {
+        invalidateCacheForClass(className, PerlRuntime.current());
+    }
+
+    private static void invalidateCacheForClass(String className, PerlRuntime rt) {
+        Map<String, List<String>> linCache = rt.linearizedClassesCache;
+        Map<String, RuntimeScalar> mCache = rt.methodCache;
+
         // Remove exact class and subclasses from linearization cache
-        linearizedClassesCache.remove(className);
-        linearizedClassesCache.entrySet().removeIf(entry -> entry.getKey().startsWith(className + "::"));
+        linCache.remove(className);
+        linCache.entrySet().removeIf(entry -> entry.getKey().startsWith(className + "::"));
 
         // Remove from method cache (entries for this class and subclasses)
-        methodCache.entrySet().removeIf(entry ->
+        mCache.entrySet().removeIf(entry ->
                 entry.getKey().startsWith(className + "::") || entry.getKey().contains("::" + className + "::"));
 
         // Could also notify dependents here if we had that information
@@ -140,10 +184,11 @@ public class InheritanceResolver {
      * This should be called whenever the class hierarchy or method definitions change.
      */
     public static void invalidateCache() {
-        methodCache.clear();
-        linearizedClassesCache.clear();
-        overloadContextCache.clear();
-        isaStateCache.clear();
+        PerlRuntime rt = PerlRuntime.current();
+        rt.methodCache.clear();
+        rt.linearizedClassesCache.clear();
+        rt.overloadContextCache.clear();
+        rt.isaStateCache.clear();
         // Also clear the inline method cache in RuntimeCode
         RuntimeCode.clearInlineMethodCache();
         // Clear DESTROY-related caches (destroyClasses BitSet and destroyMethodCache)
@@ -157,7 +202,7 @@ public class InheritanceResolver {
      * @return The cached OverloadContext, or null if not found.
      */
     public static OverloadContext getCachedOverloadContext(int blessId) {
-        return overloadContextCache.get(blessId);
+        return getOverloadContextCache().get(blessId);
     }
 
     /**
@@ -167,7 +212,7 @@ public class InheritanceResolver {
      * @param context The OverloadContext to cache (can be null to indicate no overloading).
      */
     public static void cacheOverloadContext(int blessId, OverloadContext context) {
-        overloadContextCache.put(blessId, context);
+        getOverloadContextCache().put(blessId, context);
     }
 
     /**
@@ -177,7 +222,7 @@ public class InheritanceResolver {
      * @return The cached RuntimeScalar representing the method, or null if not found.
      */
     public static RuntimeScalar getCachedMethod(String normalizedMethodName) {
-        return methodCache.get(normalizedMethodName);
+        return getMethodCache().get(normalizedMethodName);
     }
 
     /**
@@ -187,7 +232,7 @@ public class InheritanceResolver {
      * @param method               The RuntimeScalar representing the method to cache.
      */
     public static void cacheMethod(String normalizedMethodName, RuntimeScalar method) {
-        methodCache.put(normalizedMethodName, method);
+        getMethodCache().put(normalizedMethodName, method);
     }
 
     /**
@@ -269,6 +314,8 @@ public class InheritanceResolver {
      * @return RuntimeScalar representing the found method, or null if not found
      */
     public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex) {
+        PerlRuntime rt = PerlRuntime.current();
+
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("TRACE InheritanceResolver.findMethodInHierarchy:");
             System.err.println("  methodName: '" + methodName + "'");
@@ -288,17 +335,18 @@ public class InheritanceResolver {
         }
 
         // Check if ISA changed for this class - if so, invalidate relevant caches
-        if (hasIsaChanged(perlClassName)) {
-            invalidateCacheForClass(perlClassName);
+        if (hasIsaChanged(perlClassName, rt)) {
+            invalidateCacheForClass(perlClassName, rt);
         }
 
         // Check the method cache - handles both found and not-found cases
-        if (methodCache.containsKey(cacheKey)) {
+        Map<String, RuntimeScalar> mCache = rt.methodCache;
+        if (mCache.containsKey(cacheKey)) {
             if (TRACE_METHOD_RESOLUTION) {
-                System.err.println("  Found in cache: " + (methodCache.get(cacheKey) != null ? "YES" : "NULL"));
+                System.err.println("  Found in cache: " + (mCache.get(cacheKey) != null ? "YES" : "NULL"));
                 System.err.flush();
             }
-            return methodCache.get(cacheKey);
+            return mCache.get(cacheKey);
         }
 
         // Get the linearized inheritance hierarchy using the appropriate MRO
@@ -328,7 +376,7 @@ public class InheritanceResolver {
                 if (!codeRef.getDefinedBoolean()) {
                     continue;
                 }
-                cacheMethod(cacheKey, codeRef);
+                mCache.put(cacheKey, codeRef);
                 if (TRACE_METHOD_RESOLUTION) {
                     System.err.println("  FOUND method!");
                     System.err.flush();
@@ -340,7 +388,7 @@ public class InheritanceResolver {
         // Second pass — method not found anywhere, check AUTOLOAD in class hierarchy.
         // This matches Perl semantics: AUTOLOAD is only tried after the full MRO
         // search (including UNIVERSAL) fails to find the method.
-        if (autoloadEnabled && !methodName.startsWith("(")) {
+        if (rt.autoloadEnabled && !methodName.startsWith("(")) {
             for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
                 String className = linearizedClasses.get(i);
                 String effectiveClassName = GlobalVariable.resolveStashAlias(className);
@@ -359,7 +407,7 @@ public class InheritanceResolver {
                         } else {
                             autoloadCode.autoloadVariableName = autoloadName;
                         }
-                        cacheMethod(cacheKey, autoload);
+                        mCache.put(cacheKey, autoload);
                         return autoload;
                     }
                 }
@@ -367,7 +415,7 @@ public class InheritanceResolver {
         }
 
         // Cache the fact that method was not found (using null)
-        methodCache.put(cacheKey, null);
+        mCache.put(cacheKey, null);
         return null;
     }
 

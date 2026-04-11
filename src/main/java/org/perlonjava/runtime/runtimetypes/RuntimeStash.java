@@ -8,8 +8,10 @@ import java.util.*;
  * The RuntimeStash class simulates Perl stash hashes.
  */
 public class RuntimeStash extends RuntimeHash {
-    // Static stack to store saved "local" states of RuntimeStash instances
-    private static final Stack<RuntimeStash> dynamicStateStack = new Stack<>();
+    // Dynamic state stack is now held per-PerlRuntime.
+    private static Stack<RuntimeStash> dynamicStateStack() {
+        return PerlRuntime.current().stashDynamicStateStack;
+    }
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
     public String namespace;
@@ -163,12 +165,12 @@ public class RuntimeStash extends RuntimeHash {
         String fullKey = namespace + k;
 
         // Check if the glob exists
-        boolean exists = GlobalVariable.globalCodeRefs.containsKey(fullKey) ||
-                GlobalVariable.globalVariables.containsKey(fullKey) ||
-                GlobalVariable.globalArrays.containsKey(fullKey) ||
-                GlobalVariable.globalHashes.containsKey(fullKey) ||
-                GlobalVariable.globalIORefs.containsKey(fullKey) ||
-                GlobalVariable.globalFormatRefs.containsKey(fullKey);
+        boolean exists = GlobalVariable.getGlobalCodeRefsMap().containsKey(fullKey) ||
+                GlobalVariable.getGlobalVariablesMap().containsKey(fullKey) ||
+                GlobalVariable.getGlobalArraysMap().containsKey(fullKey) ||
+                GlobalVariable.getGlobalHashesMap().containsKey(fullKey) ||
+                GlobalVariable.getGlobalIORefsMap().containsKey(fullKey) ||
+                GlobalVariable.getGlobalFormatRefsMap().containsKey(fullKey);
 
         if (!exists) {
             return new RuntimeScalar();
@@ -176,21 +178,21 @@ public class RuntimeStash extends RuntimeHash {
 
         // Save all slot values BEFORE deleting so they can be accessed
         // on the returned glob (e.g., *{$old}{SCALAR} in namespace::clean)
-        RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(fullKey);
-        RuntimeArray savedArray = GlobalVariable.globalArrays.get(fullKey);
-        RuntimeHash savedHash = GlobalVariable.globalHashes.get(fullKey);
-        RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
-        RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
+        RuntimeScalar savedScalar = GlobalVariable.getGlobalVariablesMap().get(fullKey);
+        RuntimeArray savedArray = GlobalVariable.getGlobalArraysMap().get(fullKey);
+        RuntimeHash savedHash = GlobalVariable.getGlobalHashesMap().get(fullKey);
+        RuntimeGlob savedIO = GlobalVariable.getGlobalIORefsMap().get(fullKey);
+        RuntimeScalar savedCode = GlobalVariable.getGlobalCodeRefsMap().get(fullKey);
 
         // Delete all slots from GlobalVariable
         // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
         // to continue calling the subroutine (Perl caches CVs at compile time)
-        GlobalVariable.globalCodeRefs.remove(fullKey);
-        GlobalVariable.globalVariables.remove(fullKey);
-        GlobalVariable.globalArrays.remove(fullKey);
-        GlobalVariable.globalHashes.remove(fullKey);
-        GlobalVariable.globalIORefs.remove(fullKey);
-        GlobalVariable.globalFormatRefs.remove(fullKey);
+        GlobalVariable.getGlobalCodeRefsMap().remove(fullKey);
+        GlobalVariable.getGlobalVariablesMap().remove(fullKey);
+        GlobalVariable.getGlobalArraysMap().remove(fullKey);
+        GlobalVariable.getGlobalHashesMap().remove(fullKey);
+        GlobalVariable.getGlobalIORefsMap().remove(fullKey);
+        GlobalVariable.getGlobalFormatRefsMap().remove(fullKey);
 
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
@@ -219,12 +221,12 @@ public class RuntimeStash extends RuntimeHash {
         String childPrefix = "main::".equals(namespace) ? k : namespace + k;
 
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
-        GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalVariables.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalArrays.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
-        GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalCodeRefsMap().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalVariablesMap().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalArraysMap().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalHashesMap().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalIORefsMap().keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.getGlobalFormatRefsMap().keySet().removeIf(key -> key.startsWith(childPrefix));
 
         // Clear pinned code refs so deleted subs don't get resurrected
         // by getGlobalCodeRef() lookups (e.g., in SubroutineParser redefinition check)
@@ -389,12 +391,12 @@ public class RuntimeStash extends RuntimeHash {
 
         GlobalVariable.clearStashAlias(prefix);
 
-        GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
-        GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalVariablesMap().keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalArraysMap().keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalHashesMap().keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalCodeRefsMap().keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalIORefsMap().keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.getGlobalFormatRefsMap().keySet().removeIf(k -> k.startsWith(prefix));
 
         this.elements.clear();
 
@@ -449,7 +451,7 @@ public class RuntimeStash extends RuntimeHash {
         currentState.elements = new HashMap<>(this.elements);
         ((RuntimeHash) currentState).elements = currentState.elements;
         currentState.blessId = this.blessId;
-        dynamicStateStack.push(currentState);
+        dynamicStateStack().push(currentState);
         // Clear the hash
         this.elements.clear();
         super.elements = this.elements;
@@ -462,9 +464,9 @@ public class RuntimeStash extends RuntimeHash {
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack.isEmpty()) {
+        if (!dynamicStateStack().isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
-            RuntimeStash previousState = dynamicStateStack.pop();
+            RuntimeStash previousState = dynamicStateStack().pop();
             this.elements = previousState.elements;
             super.elements = this.elements;
             this.blessId = previousState.blessId;

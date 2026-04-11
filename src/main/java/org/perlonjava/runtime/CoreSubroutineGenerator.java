@@ -96,7 +96,7 @@ public class CoreSubroutineGenerator {
     }
 
     /**
-     * Install a RuntimeCode wrapper into GlobalVariable.globalCodeRefs.
+     * Install a RuntimeCode wrapper into GlobalVariable.getGlobalCodeRefsMap().
      */
     private static boolean installWrapper(String fullName, String operatorName,
                                           String prototype, PerlSubroutine sub) {
