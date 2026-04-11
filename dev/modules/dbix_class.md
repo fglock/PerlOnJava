@@ -6,7 +6,7 @@
 **Test command**: `./jcpan -t DBIx::Class`  
 **Branch**: `feature/dbix-class-destroy-weaken`  
 **PR**: https://github.com/fglock/PerlOnJava/pull/485  
-**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 Step 11.2 approach failed (see Step 11.3 for analysis and revised plan)
+**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 GC leak root cause identified (Step 11.4): blessed objects without DESTROY don't cascade cleanup to hash elements
 
 ## Dependency Tree
 
@@ -300,15 +300,18 @@ A `DestroyGuard` could work similarly:
 selective reference counting (PR #464). Weak refs are tracked in `WeakRefRegistry`
 and cleared when a tracked object's refCount hits 0.
 
-**Remaining issue**: Transient refCount underflow during `connect → set_schema → weaken`
-causes weak refs to be immediately cleared (see Phase 11 Step 11.2). This means:
-- `$storage->{schema}` weak ref is always undef after `connect()` despite schema being alive
-- GC leak assertions fail because cascading destruction can't reach the storage
-- The `LeakTracer`'s weakened registry entries remain defined at END time
+**Remaining issue**: Blessed objects whose class has no `DESTROY` method do not
+cascade cleanup to their hash/array elements when they go out of scope. This means
+refcounts on contained references are never decremented, causing leaks.
+See Phase 11 Step 11.4 for full analysis.
 
 **Impact**: ~27 test files show GC-only failures (all real tests pass). The weak ref
-system works correctly for simple cases but fails in complex method chains where
-accumulated MortalList decrements cause transient refCount underflow.
+system works correctly. The GC leak is caused by `BlockRunner` (a Moo class without
+DESTROY) holding a strong ref to Storage — when BlockRunner is cleaned up, Storage's
+refcount is not decremented.
+
+**Reproduction**: `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — 13 tests
+that all pass in Perl 5 but 7 fail in PerlOnJava, demonstrating the missing cascade.
 
 ### RowParser.pm line 260 crash (post-test cleanup)
 
@@ -906,16 +909,17 @@ instead of relying on DESTROY.
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
 ### Next Steps
-1. **P1: Implement Step 11.3 revised approach** — The Step 11.2 "popMark + flush in setLargeRefCounted" approach failed (see Step 11.3 below). Need a new approach that protects return values in method chains without breaking DESTROY timing for delete/untie/undef.
-2. **P1b: Fix GC leak assertions** (refcnt stays at 1 at END time) — once the return-value protection issue is solved, verify that schema → storage → dbh cascade works correctly on scope exit
-3. **P2: Re-run full test suite** after P1 fix to measure impact on 155+ previously-blocked tests
+1. **P1: Fix `DestroyDispatch.callDestroy` for blessed-no-DESTROY objects (Step 11.4)** — When a blessed hash/array whose class has no DESTROY method reaches refCount 0, `callDestroy` must still call `scopeExitCleanupHash`/`scopeExitCleanupArray` to decrement refcounts on the container's values. Test: `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t`
+2. **P1b: Re-run `t/70auto.t` and full DBIx::Class suite** to verify GC leak assertions now pass
+3. **P2: Re-run full test suite** after fix to measure impact on 155+ previously-blocked tests
 4. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
 5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
 6. UTF-8 flag semantics: 2 tests in t/85utf8.t (systemic JVM limitation)
 
 ### Open Questions
-- **Core tension**: How to defer scope-exit decrements long enough for return values (protecting `shift->clone->connection(@_)`) while still processing them promptly for void-context operations (delete, untie, undef). See Step 11.3 for detailed analysis.
-- **GC cascade at END**: Even after fixing weak ref clearing, will the schema → storage → dbh DESTROY cascade work correctly at program exit? The cascade requires DESTROY on schema to release storage, then DESTROY on storage to close dbh. This depends on correct refCount tracking through the entire object graph.
+- **Scope of the fix**: The `DestroyDispatch.callDestroy` fix affects ALL blessed objects without DESTROY, not just BlockRunner. Need to verify no regressions in existing unit tests where blessed-no-DESTROY objects are expected to be lightweight (no cascading cleanup).
+- **GC cascade at END**: After the fix, the full cascade should work: Schema DESTROY → storage refcount drops to 0 → Storage DESTROY → dbh refcount drops to 0 → DBI::db DESTROY → JDBC connection close. Verify with `t/70auto.t` GC assertions.
+- **Performance**: The fix adds `scopeExitCleanupHash`/`scopeExitCleanupArray` calls for every blessed-no-DESTROY object reaching refCount 0. For objects with many hash keys, this could add overhead. Measure with `make` timing.
 - RowParser crash: is it safe to ignore since all real tests pass before it fires?
 
 ### Architecture Reference
@@ -1571,18 +1575,167 @@ mechanism. If Approach D fails, escalate to Approach A (return value bump).
 
 #### Implementation plan (revised)
 
+|| Step | What | Status |
+||------|------|--------|
+|| 11.3a | ~~Instrument refCount tracing for Schema objects through `connect → clone → _copy_state_from → register_source → weaken`~~ | Superseded by Step 11.4 |
+|| 11.3b | ~~Identify exact point where Schema refCount drops to 0 (or DESTROY fires prematurely)~~ | Superseded by Step 11.4 |
+|| 11.3c–e | ~~Add targeted protection at the identified point~~ | Superseded by Step 11.4 |
+
+### Step 11.4: Root Cause Found — Blessed Objects Without DESTROY Skip Hash Cleanup (2026-04-11)
+
+#### What changed from Step 11.3's hypothesis
+
+**Step 11.3 believed**: The GC leak was caused by premature DESTROY of the Schema
+during the `connect → clone → _copy_state_from` chain. The hypothesis was that
+Schema's refCount dropped to 0 transiently, triggering DESTROY mid-operation, which
+cleared `$storage->{schema}` (the weak backref) and prevented cascading cleanup later.
+
+**Step 11.4 discovered**: Schema is NOT prematurely destroyed during connect. Tracing
+with monkey-patched DESTROY confirmed that Schema survives all operations correctly
+and `$storage->{schema}` stays defined throughout `connect()`, `deploy_schema()`,
+and `populate_schema()`. The weak ref is only cleared when Schema legitimately goes
+out of scope at test end.
+
+The actual root cause is completely different: **`BlockRunner`, a Moo class without
+a DESTROY method, holds a strong ref to Storage. When BlockRunner is cleaned up,
+PerlOnJava does not decrement refcounts on its hash elements.** This leaves Storage
+with an extra refcount, so the cascade from Schema::DESTROY only reduces it from 2
+to 1 instead of 0.
+
+#### Investigation path that led to the discovery
+
+1. **Confirmed `schema => undef` in Storage**: The `t/70auto.t` output shows Storage
+   with `schema => undef` (weak ref cleared) and `refcnt 1` (not collected).
+
+2. **Traced Schema lifecycle**: Monkey-patched `Schema::DESTROY`, `clone()`,
+   `connection()`, `connect()`. Found Schema is properly created, weak refs stay
+   valid, DESTROY only fires at legitimate scope exit. No premature DESTROY.
+
+3. **Bisected the trigger**: Tested connect-only (OK), connect+deploy (LEAKED),
+   connect+`_get_dbh` (OK), connect+`dbh_do` (**LEAKED**). A single `dbh_do` call
+   is sufficient to trigger the leak.
+
+4. **Identified BlockRunner as the culprit**: `dbh_do` creates a `BlockRunner` Moo
+   object with `storage => $self`. Creating the BlockRunner without calling `run()`
+   still leaks. Using `preserve_context`+`Try::Tiny` without Moo doesn't leak.
+
+5. **Reduced to minimal case**: A blessed hash (any class, not just Moo) that holds
+   a reference to a tracked object, where the blessed class has no DESTROY method,
+   does not release the contained reference when it goes out of scope. Unblessed
+   hashrefs and blessed hashes WITH DESTROY both work correctly.
+
+#### Root cause in Java code
+
+In `DestroyDispatch.callDestroy()` (lines 65–96):
+
+```java
+public static void callDestroy(RuntimeBase referent) {
+    // ...
+    WeakRefRegistry.clearWeakRefsTo(referent);          // line 72
+    // ...
+    int blessId = referent.blessId;
+    if (blessId == 0) {
+        // UNBLESSED: walks hash/array and decrements contents
+        if (referent instanceof RuntimeHash hash) {
+            MortalList.scopeExitCleanupHash(hash);      // line 89
+        } else if (referent instanceof RuntimeArray arr) {
+            MortalList.scopeExitCleanupArray(arr);       // line 92
+        }
+        return;                                          // line 93
+    }
+    // BLESSED: look up DESTROY method
+    doCallDestroy(referent, className);                  // line 95
+}
+```
+
+In `doCallDestroy()` (lines 101–187):
+
+```java
+private static void doCallDestroy(RuntimeBase referent, String className) {
+    RuntimeCode destroyMethod = resolveDestroyMethod(className); // line 103-110
+    if (destroyMethod == null) {
+        return;  // ← NO scopeExitCleanupHash! Hash elements not walked!
+    }
+    // ... call DESTROY ...
+    // ... THEN cascade:
+    if (referent instanceof RuntimeHash hash) {
+        MortalList.scopeExitCleanupHash(hash);           // line 161
+        MortalList.flush();                               // line 162
+    }
+}
+```
+
+**The bug**: When `destroyMethod == null` (blessed class has no DESTROY), `doCallDestroy`
+returns immediately without calling `scopeExitCleanupHash`. The hash elements' refcounts
+are never decremented. In Perl 5, the hash is freed by the memory allocator regardless
+of whether DESTROY exists, and all values' refcounts are decremented.
+
+#### The fix
+
+Add `scopeExitCleanupHash`/`scopeExitCleanupArray` + `flush()` before the early return
+in `doCallDestroy`:
+
+```java
+if (destroyMethod == null) {
+    // No DESTROY method, but still need to cascade cleanup
+    if (referent instanceof RuntimeHash hash) {
+        MortalList.scopeExitCleanupHash(hash);
+        MortalList.flush();
+    } else if (referent instanceof RuntimeArray arr) {
+        MortalList.scopeExitCleanupArray(arr);
+        MortalList.flush();
+    }
+    return;
+}
+```
+
+#### Test file
+
+`dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — 13 tests covering:
+
+| Test | Pattern | Perl 5 | PerlOnJava |
+|------|---------|--------|------------|
+| 1-2 | Blessed holder WITHOUT DESTROY releases tracked content | PASS | **FAIL** |
+| 3-4 | Blessed holder WITH DESTROY releases tracked content (control) | PASS | PASS |
+| 5-6 | Unblessed hashref releases tracked content (control) | PASS | PASS |
+| 7 | Nested blessed-no-DESTROY chain | PASS | **FAIL** |
+| 8-9 | Schema/Storage/BlockRunner pattern (DBIx::Class scenario) | PASS | **FAIL** |
+| 10-12 | Explicit undef of blessed-no-DESTROY holder | PASS | **FAIL** |
+| 13 | Array-based blessed-no-DESTROY | PASS | **FAIL** |
+
+#### How this connects to DBIx::Class
+
+The full chain in `dbh_do`:
+
+1. `$schema->storage->dbh_do(sub { ... })` — enters `dbh_do`
+2. `BlockRunner->new(storage => $storage, ...)` — Moo creates blessed hash `{ storage => $storage }`.
+   Storage's refCount increments from 1 to 2.
+3. `BlockRunner->run(sub { ... })` — runs the coderef, then returns
+4. BlockRunner goes out of scope — `callDestroy` fires but `doCallDestroy` finds no DESTROY method.
+   **Returns without decrementing Storage.** Storage's refCount stays at 2.
+5. Later: `$schema` goes out of scope → Schema::DESTROY fires → cascading `scopeExitCleanupHash`
+   decrements Storage from 2 to 1. **Not 0!** Storage survives.
+6. `assert_empty_weakregistry` sees Storage alive with `refcnt 1` and `schema => undef`.
+
+With the fix, step 4 calls `scopeExitCleanupHash`, decrementing Storage from 2 to 1.
+Then step 5 decrements from 1 to 0. Storage::DESTROY fires. DBI handle is released.
+GC assertions pass.
+
+#### Implementation plan
+
 | Step | What | Status |
 |------|------|--------|
-| 11.3a | Instrument refCount tracing for Schema objects through `connect → clone → _copy_state_from → register_source → weaken` | |
-| 11.3b | Identify exact point where Schema refCount drops to 0 (or DESTROY fires prematurely) | |
-| 11.3c | Add targeted protection at the identified point | |
-| 11.3d | Run `make` + `t/70auto.t` to verify fix | |
-| 11.3e | Run full DBIx::Class suite to measure GC leak impact | |
+| 11.4a | Add `scopeExitCleanupHash`/`Array` + `flush()` to `doCallDestroy` early return | |
+| 11.4b | Run `make` — verify all unit tests pass | |
+| 11.4c | Run `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — verify 13/13 pass | |
+| 11.4d | Run `t/70auto.t` — verify GC assertions pass | |
+| 11.4e | Run full DBIx::Class suite — measure impact on ~27 GC-only test files | |
 
 ## Related Documents
 
 - `dev/architecture/weaken-destroy.md` — **Weaken & DESTROY architecture** (refCount state machine, MortalList, WeakRefRegistry, scopeExitCleanup — essential for Phase 10 debugging)
 - `dev/design/destroy_weaken_plan.md` — DESTROY/weaken implementation plan (PR #464)
+- `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — **Reproduction test** for blessed-no-DESTROY cleanup bug (13 tests, all pass in Perl 5, 7 fail in PerlOnJava)
 - `dev/modules/moo_support.md` — Moo support (dependency of DBIx::Class)
 - `dev/modules/xs_fallback.md` — XS fallback mechanism
 - `dev/modules/makemaker_perlonjava.md` — MakeMaker for PerlOnJava
