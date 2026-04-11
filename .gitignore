@@ -2,6 +2,7 @@
 *.jar
 *.swp
 *.bak
+*.ent
 *.versionsBackup
 dependency-reduced-pom.xml
 asm-9.7.jar

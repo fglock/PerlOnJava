@@ -110,14 +110,11 @@ sudo dpkg -r perlonjava
 ```bash
 ./jperl -E 'print "Hello World"'
 ./jperl myscript.pl
-CLASSPATH="jdbc-drivers/h2-2.2.224.jar" ./jperl myscript.pl
 ```
 
 **Windows:**
 ```bash
 jperl -E "print 'Hello World'"
-jperl myscript.pl
-set CLASSPATH=jdbc-drivers\h2-2.2.224.jar
 jperl myscript.pl
 ```
 
@@ -132,17 +129,22 @@ jperl myscript.pl
 
 1. Using Configure.pl:
 ```bash
-./Configure.pl --search mysql-connector-java
+./jperl Configure.pl --search mysql-connector-java
 ```
 
 2. Using Java classpath (shown in platform-specific examples above)
 
 ### Database Connection Example
+
+SQLite is bundled with PerlOnJava — no additional installation needed:
+
 ```perl
 use DBI;
-my $dbh = DBI->connect("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1");
-$dbh->do("CREATE TABLE test (id INT, name VARCHAR(50))");
+my $dbh = DBI->connect("dbi:SQLite:dbname=:memory:", "", "");
+$dbh->do("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)");
 ```
+
+For other databases, add JDBC drivers via CLASSPATH or Configure.pl (see below).
 
 See [Database Access Guide](../guides/database-access.md) for detailed connection examples and supported databases.
 
@@ -165,33 +167,37 @@ See [Database Access Guide](../guides/database-access.md) for detailed connectio
 
 The `Configure.pl` script manages configuration settings and dependencies for PerlOnJava.
 
+> **Tip:** Using `./jperl` to run Configure.pl is recommended because it includes
+> built-in HTTPS support. System Perl may require additional modules
+> (`IO::Socket::SSL`, `Net::SSLeay`) for the Maven Central search to work.
+
 ### Common Tasks
 
 **View current configuration:**
 ```bash
-./Configure.pl
+./jperl Configure.pl
 ```
 
 **Add JDBC driver (search):**
 ```bash
-./Configure.pl --search mysql
+./jperl Configure.pl --search mysql
 make  # Rebuild to include driver
 ```
 
 **Add JDBC driver (direct):**
 ```bash
-./Configure.pl --direct com.h2database:h2:2.2.224
+./jperl Configure.pl --direct com.mysql:mysql-connector-j:8.2.0
 make  # Rebuild to include driver
 ```
 
 **Update configuration:**
 ```bash
-./Configure.pl -D perlVersion=v5.42.0
+./jperl Configure.pl -D perlVersion=v5.42.0
 ```
 
 **Upgrade all dependencies:**
 ```bash
-./Configure.pl --upgrade
+./jperl Configure.pl --upgrade
 ```
 
 ### Available Options
