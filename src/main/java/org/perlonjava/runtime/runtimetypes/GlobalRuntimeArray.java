@@ -16,11 +16,7 @@ import java.util.Stack;
  * and {@link GlobalRuntimeScalar} for scalars.
  */
 public class GlobalRuntimeArray implements DynamicState {
-    // Localized stack is now held per-PerlRuntime.
-    @SuppressWarnings("unchecked")
-    private static Stack<SavedGlobalArrayState> localizedStack() {
-        return (Stack<SavedGlobalArrayState>) (Stack<?>) PerlRuntime.current().globalArrayLocalizedStack;
-    }
+    private static final Stack<SavedGlobalArrayState> localizedStack = new Stack<>();
     private final String fullName;
 
     public GlobalRuntimeArray(String fullName) {
@@ -44,37 +40,37 @@ public class GlobalRuntimeArray implements DynamicState {
     @Override
     public void dynamicSaveState() {
         // Save the current array reference from the global map
-        RuntimeArray original = GlobalVariable.getGlobalArraysMap().get(fullName);
-        localizedStack().push(new SavedGlobalArrayState(fullName, original));
+        RuntimeArray original = GlobalVariable.globalArrays.get(fullName);
+        localizedStack.push(new SavedGlobalArrayState(fullName, original));
 
         // Install a fresh empty array in the global map
         RuntimeArray newLocal = new RuntimeArray();
-        GlobalVariable.getGlobalArraysMap().put(fullName, newLocal);
+        GlobalVariable.globalArrays.put(fullName, newLocal);
 
         // Update glob aliases so they all point to the new local array
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);
         for (String alias : aliasGroup) {
             if (!alias.equals(fullName)) {
-                GlobalVariable.getGlobalArraysMap().put(alias, newLocal);
+                GlobalVariable.globalArrays.put(alias, newLocal);
             }
         }
     }
 
     @Override
     public void dynamicRestoreState() {
-        if (!localizedStack().isEmpty()) {
-            SavedGlobalArrayState saved = localizedStack().peek();
+        if (!localizedStack.isEmpty()) {
+            SavedGlobalArrayState saved = localizedStack.peek();
             if (saved.fullName.equals(this.fullName)) {
-                localizedStack().pop();
+                localizedStack.pop();
 
                 // Restore the original array reference in the global map
-                GlobalVariable.getGlobalArraysMap().put(saved.fullName, saved.originalArray);
+                GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
 
                 // Restore glob aliases
                 java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(saved.fullName);
                 for (String alias : aliasGroup) {
                     if (!alias.equals(saved.fullName)) {
-                        GlobalVariable.getGlobalArraysMap().put(alias, saved.originalArray);
+                        GlobalVariable.globalArrays.put(alias, saved.originalArray);
                     }
                 }
             }

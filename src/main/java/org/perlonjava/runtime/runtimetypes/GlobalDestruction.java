@@ -20,12 +20,12 @@ public class GlobalDestruction {
         GlobalVariable.getGlobalVariable(GlobalContext.GLOBAL_PHASE).set("DESTRUCT");
 
         // Walk all global scalars
-        for (RuntimeScalar val : GlobalVariable.getGlobalVariablesMap().values()) {
+        for (RuntimeScalar val : GlobalVariable.globalVariables.values()) {
             destroyIfTracked(val);
         }
 
         // Walk global arrays for blessed ref elements
-        for (RuntimeArray arr : GlobalVariable.getGlobalArraysMap().values()) {
+        for (RuntimeArray arr : GlobalVariable.globalArrays.values()) {
             // Skip tied arrays — iterating them calls FETCHSIZE/FETCH on the
             // tie object, which may already be destroyed or invalid at global
             // destruction time (e.g., broken ties from eval+last).
@@ -36,7 +36,7 @@ public class GlobalDestruction {
         }
 
         // Walk global hashes for blessed ref values
-        for (RuntimeHash hash : GlobalVariable.getGlobalHashesMap().values()) {
+        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
             // Skip tied hashes — iterating them dispatches through FIRSTKEY/
             // NEXTKEY/FETCH which may fail if the tie object is already gone.
             if (hash.type == RuntimeHash.TIED_HASH) continue;

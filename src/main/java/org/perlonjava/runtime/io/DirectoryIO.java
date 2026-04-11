@@ -1,7 +1,6 @@
 package org.perlonjava.runtime.io;
 
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import java.nio.file.DirectoryStream;
 import java.nio.file.Path;
@@ -42,7 +41,7 @@ public class DirectoryIO {
         // Resolve and store absolute path
         Path path = Paths.get(directoryPath);
         if (!path.isAbsolute()) {
-            path = Paths.get(PerlRuntime.getCwd(), directoryPath);
+            path = Paths.get(System.getProperty("user.dir"), directoryPath);
         }
         this.absoluteDirectoryPath = path.toAbsolutePath().normalize();
     }

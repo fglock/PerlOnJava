@@ -4,7 +4,6 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.*;
@@ -92,7 +91,7 @@ public class PipeInputChannel implements IOHandle {
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
         // Set working directory to current directory
-        String userDir = PerlRuntime.getCwd();
+        String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment
@@ -107,17 +106,9 @@ public class PipeInputChannel implements IOHandle {
         // Create reader for stderr only
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
-        // Capture the parent thread's PerlRuntime so the background thread
-        // can access per-runtime STDERR handle for proper output routing
-        PerlRuntime parentRuntime = PerlRuntime.currentOrNull();
-
         // Start a thread to consume stderr and route through Perl STDERR handle
         // This ensures Perl-level redirections are honored (e.g., open STDERR, ">", $file)
         Thread errorThread = new Thread(() -> {
-            // Bind this thread to the same PerlRuntime as the parent
-            if (parentRuntime != null) {
-                PerlRuntime.setCurrent(parentRuntime);
-            }
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {

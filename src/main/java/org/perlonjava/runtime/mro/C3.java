@@ -13,7 +13,7 @@ public class C3 {
      */
     public static List<String> linearizeC3(String className) {
         String cacheKey = className + "::C3";
-        List<String> result = InheritanceResolver.getLinearizedClassesCache().get(cacheKey);
+        List<String> result = InheritanceResolver.linearizedClassesCache.get(cacheKey);
         if (result == null) {
             Map<String, List<String>> isaMap = new HashMap<>();
             InheritanceResolver.populateIsaMap(className, isaMap);
@@ -34,7 +34,7 @@ public class C3 {
                 }
             }
 
-            InheritanceResolver.getLinearizedClassesCache().put(cacheKey, result);
+            InheritanceResolver.linearizedClassesCache.put(cacheKey, result);
         }
         return result;
     }

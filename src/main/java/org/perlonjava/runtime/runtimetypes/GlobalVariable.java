@@ -6,6 +6,7 @@ import org.perlonjava.frontend.parser.ParserTables;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -20,94 +21,81 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  * the existence of these global entities, initializing them as necessary.
  */
 public class GlobalVariable {
-    // ---- Static accessor methods delegating to PerlRuntime.current() ----
-    // These replace the former static fields. External code should use these methods.
+    // Global variables and subroutines
+    public static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
+    public static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
+    public static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+    // Cache for package existence checks
+    public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
+    // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
+    // Maps fully-qualified names (package::subname) to indicate they should be called
+    // as user-defined subroutines instead of built-in operators
+    public static final Map<String, Boolean> isSubs = new HashMap<>();
+    public static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
+    static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
-    public static Map<String, RuntimeScalar> getGlobalVariablesMap() {
-        return PerlRuntime.current().globalVariables;
-    }
+    // Pinned code references: RuntimeScalars that were accessed at compile time
+    // and should survive stash deletion. This matches Perl's behavior where
+    // compiled bytecode holds direct references to CVs that survive stash deletion.
+    private static final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
 
-    public static Map<String, RuntimeArray> getGlobalArraysMap() {
-        return PerlRuntime.current().globalArrays;
-    }
+    // Stash aliasing: `*{Dst::} = *{Src::}` effectively makes Dst:: symbol table
+    // behave like Src:: for method lookup and stash operations.
+    // We keep this separate from globalCodeRefs/globalVariables so existing references
+    // to Dst:: symbols can still point to their original objects.
+    static final Map<String, String> stashAliases = new HashMap<>();
 
-    public static Map<String, RuntimeHash> getGlobalHashesMap() {
-        return PerlRuntime.current().globalHashes;
-    }
+    // Glob aliasing: `*a = *b` makes a and b share the same glob.
+    // Maps glob names to their canonical (target) name.
+    // When looking up or assigning to glob slots, we resolve through this map.
+    static final Map<String, String> globAliases = new HashMap<>();
 
-    public static Map<String, Boolean> getPackageExistsCacheMap() {
-        return PerlRuntime.current().packageExistsCache;
-    }
+    // Flags used by operator override
+    // globalGlobs: Tracks typeglob assignments (e.g., *CORE::GLOBAL::hex = sub {...})
+    // Used to detect when built-in operators have been globally overridden
+    static final Map<String, Boolean> globalGlobs = new HashMap<>();
+    // Global class loader for all generated classes - not final so we can replace it
+    public static CustomClassLoader globalClassLoader =
+            new CustomClassLoader(GlobalVariable.class.getClassLoader());
 
-    public static Map<String, Boolean> getIsSubsMap() {
-        return PerlRuntime.current().isSubs;
-    }
-
-    public static Map<String, RuntimeScalar> getGlobalCodeRefsMap() {
-        return PerlRuntime.current().globalCodeRefs;
-    }
-
-    public static Map<String, RuntimeGlob> getGlobalIORefsMap() {
-        return PerlRuntime.current().globalIORefs;
-    }
-
-    public static Map<String, RuntimeFormat> getGlobalFormatRefsMap() {
-        return PerlRuntime.current().globalFormatRefs;
-    }
-
-    public static Map<String, RuntimeScalar> getPinnedCodeRefsMap() {
-        return PerlRuntime.current().pinnedCodeRefs;
-    }
-
-    public static Map<String, String> getStashAliasesMap() {
-        return PerlRuntime.current().stashAliases;
-    }
-
-    public static Map<String, String> getGlobAliasesMap() {
-        return PerlRuntime.current().globAliases;
-    }
-
-    public static Map<String, Boolean> getGlobalGlobsMap() {
-        return PerlRuntime.current().globalGlobs;
-    }
-
-    public static CustomClassLoader getGlobalClassLoader() {
-        return PerlRuntime.current().globalClassLoader;
-    }
-
-    public static void setGlobalClassLoader(CustomClassLoader loader) {
-        PerlRuntime.current().globalClassLoader = loader;
-    }
-
-    // Regular expression for regex variables like $main::1 (compile-time constant)
+    // Regular expression for regex variables like $main::1
     static Pattern regexVariablePattern = Pattern.compile("^main::(\\d+)$");
+
+    // Track explicitly declared global variables (via use vars, our, Exporter glob assignment).
+    // Separate from globalVariables/globalArrays/globalHashes to distinguish intentional
+    // declarations from auto-vivification under 'no strict'. Used by strict vars check
+    // for single-letter variable names like $A-$Z (excluding $a/$b).
+    private static final Set<String> declaredGlobalVariables = new HashSet<>();
+    private static final Set<String> declaredGlobalArrays = new HashSet<>();
+    private static final Set<String> declaredGlobalHashes = new HashSet<>();
 
     /**
      * Marks a global variable as explicitly declared (e.g., via use vars, Exporter import).
      */
     public static void declareGlobalVariable(String key) {
-        PerlRuntime.current().declaredGlobalVariables.add(key);
+        declaredGlobalVariables.add(key);
     }
 
     /**
      * Marks a global array as explicitly declared.
      */
     public static void declareGlobalArray(String key) {
-        PerlRuntime.current().declaredGlobalArrays.add(key);
+        declaredGlobalArrays.add(key);
     }
 
     /**
      * Marks a global hash as explicitly declared.
      */
     public static void declareGlobalHash(String key) {
-        PerlRuntime.current().declaredGlobalHashes.add(key);
+        declaredGlobalHashes.add(key);
     }
 
     /**
      * Checks if a global variable was explicitly declared (not just auto-vivified).
      */
     public static boolean isDeclaredGlobalVariable(String key) {
-        return PerlRuntime.current().declaredGlobalVariables.contains(key)
+        return declaredGlobalVariables.contains(key)
                 || key.endsWith("::a") || key.endsWith("::b");
     }
 
@@ -115,14 +103,14 @@ public class GlobalVariable {
      * Checks if a global array was explicitly declared.
      */
     public static boolean isDeclaredGlobalArray(String key) {
-        return PerlRuntime.current().declaredGlobalArrays.contains(key);
+        return declaredGlobalArrays.contains(key);
     }
 
     /**
      * Checks if a global hash was explicitly declared.
      */
     public static boolean isDeclaredGlobalHash(String key) {
-        return PerlRuntime.current().declaredGlobalHashes.contains(key);
+        return declaredGlobalHashes.contains(key);
     }
 
     /**
@@ -130,22 +118,21 @@ public class GlobalVariable {
      * Also destroys and recreates the global class loader to allow GC of old classes.
      */
     public static void resetAllGlobals() {
-        PerlRuntime rt = PerlRuntime.current();
         // Clear all global state
-        rt.globalVariables.clear();
-        rt.globalArrays.clear();
-        rt.globalHashes.clear();
-        rt.globalCodeRefs.clear();
-        rt.pinnedCodeRefs.clear();
-        rt.globalIORefs.clear();
-        rt.globalFormatRefs.clear();
-        rt.globalGlobs.clear();
-        rt.isSubs.clear();
-        rt.stashAliases.clear();
-        rt.globAliases.clear();
-        rt.declaredGlobalVariables.clear();
-        rt.declaredGlobalArrays.clear();
-        rt.declaredGlobalHashes.clear();
+        globalVariables.clear();
+        globalArrays.clear();
+        globalHashes.clear();
+        globalCodeRefs.clear();
+        pinnedCodeRefs.clear();
+        globalIORefs.clear();
+        globalFormatRefs.clear();
+        globalGlobs.clear();
+        isSubs.clear();
+        stashAliases.clear();
+        globAliases.clear();
+        declaredGlobalVariables.clear();
+        declaredGlobalArrays.clear();
+        declaredGlobalHashes.clear();
         clearPackageCache();
 
         RuntimeCode.clearCaches();
@@ -153,9 +140,9 @@ public class GlobalVariable {
         // Clear special blocks (INIT, END, CHECK, UNITCHECK) to prevent stale code references.
         // When the classloader is replaced, old INIT blocks may reference evalTags that no longer
         // exist in the cleared evalContext, causing "ctx is null" errors.
-        SpecialBlock.getInitBlocks().elements.clear();
-        SpecialBlock.getEndBlocks().elements.clear();
-        SpecialBlock.getCheckBlocks().elements.clear();
+        SpecialBlock.initBlocks.elements.clear();
+        SpecialBlock.endBlocks.elements.clear();
+        SpecialBlock.checkBlocks.elements.clear();
 
         // Method resolution caches can grow across test scripts.
         InheritanceResolver.invalidateCache();
@@ -175,24 +162,23 @@ public class GlobalVariable {
 
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
-        rt.globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
+        globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
     }
 
     public static void setStashAlias(String dstNamespace, String srcNamespace) {
         String dst = dstNamespace.endsWith("::") ? dstNamespace : dstNamespace + "::";
         String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
-        PerlRuntime.current().stashAliases.put(dst, src);
+        stashAliases.put(dst, src);
     }
 
     public static void clearStashAlias(String namespace) {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
-        PerlRuntime.current().stashAliases.remove(key);
+        stashAliases.remove(key);
     }
 
     public static String resolveStashAlias(String namespace) {
-        PerlRuntime rt = PerlRuntime.current();
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
-        String aliased = rt.stashAliases.get(key);
+        String aliased = stashAliases.get(key);
         if (aliased == null) {
             return namespace;
         }
@@ -210,14 +196,13 @@ public class GlobalVariable {
     public static void setGlobAlias(String fromGlob, String toGlob) {
         // Find the canonical name for toGlob (in case it's already an alias)
         String canonical = resolveGlobAlias(toGlob);
-        PerlRuntime rt = PerlRuntime.current();
         // Don't create self-loops
         if (!fromGlob.equals(canonical)) {
-            rt.globAliases.put(fromGlob, canonical);
+            globAliases.put(fromGlob, canonical);
         }
         // Also ensure toGlob points to the canonical name (unless it would create a self-loop)
         if (!toGlob.equals(canonical) && !toGlob.equals(fromGlob)) {
-            rt.globAliases.put(toGlob, canonical);
+            globAliases.put(toGlob, canonical);
         }
     }
 
@@ -226,7 +211,7 @@ public class GlobalVariable {
      * If the glob is aliased, returns the target name; otherwise returns the input.
      */
     public static String resolveGlobAlias(String globName) {
-        String aliased = PerlRuntime.current().globAliases.get(globName);
+        String aliased = globAliases.get(globName);
         if (aliased != null && !aliased.equals(globName)) {
             // Follow the chain in case of multiple aliases
             return resolveGlobAlias(aliased);
@@ -242,7 +227,7 @@ public class GlobalVariable {
         String canonical = resolveGlobAlias(globName);
         java.util.List<String> group = new java.util.ArrayList<>();
         group.add(canonical);
-        for (Map.Entry<String, String> entry : PerlRuntime.current().globAliases.entrySet()) {
+        for (Map.Entry<String, String> entry : globAliases.entrySet()) {
             if (resolveGlobAlias(entry.getKey()).equals(canonical) && !group.contains(entry.getKey())) {
                 group.add(entry.getKey());
             }
@@ -258,8 +243,7 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global variable.
      */
     public static RuntimeScalar getGlobalVariable(String key) {
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeScalar var = rt.globalVariables.get(key);
+        RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
             // Need to initialize global variable
             Matcher matcher = regexVariablePattern.matcher(key);
@@ -275,20 +259,19 @@ public class GlobalVariable {
                 // Normal "non-magic" global variable
                 var = new RuntimeScalar();
             }
-            rt.globalVariables.put(key, var);
+            globalVariables.put(key, var);
         }
         return var;
     }
 
     public static RuntimeScalar aliasGlobalVariable(String key, String to) {
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeScalar var = rt.globalVariables.get(to);
-        rt.globalVariables.put(key, var);
+        RuntimeScalar var = globalVariables.get(to);
+        globalVariables.put(key, var);
         return var;
     }
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
-        PerlRuntime.current().globalVariables.put(key, var);
+        globalVariables.put(key, var);
     }
 
     /**
@@ -308,7 +291,7 @@ public class GlobalVariable {
      * @return True if the global variable exists, false otherwise.
      */
     public static boolean existsGlobalVariable(String key) {
-        return PerlRuntime.current().globalVariables.containsKey(key)
+        return globalVariables.containsKey(key)
                 || key.endsWith("::a")  // $a, $b always exist
                 || key.endsWith("::b");
     }
@@ -320,7 +303,7 @@ public class GlobalVariable {
      * @return True if the variable exists and is defined, false otherwise.
      */
     public static boolean isGlobalVariableDefined(String key) {
-        RuntimeScalar var = PerlRuntime.current().globalVariables.get(key);
+        RuntimeScalar var = globalVariables.get(key);
         return var != null && var.getDefinedBoolean();
     }
 
@@ -331,7 +314,7 @@ public class GlobalVariable {
      * @return The removed RuntimeScalar, or null if it did not exist.
      */
     public static RuntimeScalar removeGlobalVariable(String key) {
-        return PerlRuntime.current().globalVariables.remove(key);
+        return globalVariables.remove(key);
     }
 
     /**
@@ -341,11 +324,10 @@ public class GlobalVariable {
      * @return The RuntimeArray representing the global array.
      */
     public static RuntimeArray getGlobalArray(String key) {
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeArray var = rt.globalArrays.get(key);
+        RuntimeArray var = globalArrays.get(key);
         if (var == null) {
             var = new RuntimeArray();
-            rt.globalArrays.put(key, var);
+            globalArrays.put(key, var);
         }
         return var;
     }
@@ -357,7 +339,7 @@ public class GlobalVariable {
      * @return True if the global array exists, false otherwise.
      */
     public static boolean existsGlobalArray(String key) {
-        return PerlRuntime.current().globalArrays.containsKey(key);
+        return globalArrays.containsKey(key);
     }
 
     /**
@@ -367,7 +349,7 @@ public class GlobalVariable {
      * @return The removed RuntimeArray, or null if it did not exist.
      */
     public static RuntimeArray removeGlobalArray(String key) {
-        return PerlRuntime.current().globalArrays.remove(key);
+        return globalArrays.remove(key);
     }
 
     /**
@@ -377,8 +359,7 @@ public class GlobalVariable {
      * @return The RuntimeHash representing the global hash.
      */
     public static RuntimeHash getGlobalHash(String key) {
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeHash var = rt.globalHashes.get(key);
+        RuntimeHash var = globalHashes.get(key);
         if (var == null) {
             // Check if this is a package stash (ends with ::)
             if (key.endsWith("::")) {
@@ -386,7 +367,7 @@ public class GlobalVariable {
             } else {
                 var = new RuntimeHash();
             }
-            rt.globalHashes.put(key, var);
+            globalHashes.put(key, var);
         }
         return var;
     }
@@ -398,7 +379,7 @@ public class GlobalVariable {
      * @return True if the global hash exists, false otherwise.
      */
     public static boolean existsGlobalHash(String key) {
-        return PerlRuntime.current().globalHashes.containsKey(key);
+        return globalHashes.containsKey(key);
     }
 
     /**
@@ -408,7 +389,7 @@ public class GlobalVariable {
      * @return The removed RuntimeHash, or null if it did not exist.
      */
     public static RuntimeHash removeGlobalHash(String key) {
-        return PerlRuntime.current().globalHashes.remove(key);
+        return globalHashes.remove(key);
     }
 
     /**
@@ -423,18 +404,17 @@ public class GlobalVariable {
         if (key == null) {
             return new RuntimeScalar();
         }
-        PerlRuntime rt = PerlRuntime.current();
         // First check if we have a pinned reference that survives stash deletion
-        RuntimeScalar pinned = rt.pinnedCodeRefs.get(key);
+        RuntimeScalar pinned = pinnedCodeRefs.get(key);
         if (pinned != null) {
             // Return the pinned ref so compiled code keeps working, but do NOT
-            // re-add to rt.globalCodeRefs. If it was deleted from the stash (e.g., by
+            // re-add to globalCodeRefs. If it was deleted from the stash (e.g., by
             // namespace::clean), that deletion should be respected for method
             // resolution via can() and the inheritance hierarchy.
             return pinned;
         }
 
-        RuntimeScalar var = rt.globalCodeRefs.get(key);
+        RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = new RuntimeScalar();
             var.type = RuntimeScalarType.CODE;  // value is null
@@ -455,11 +435,11 @@ public class GlobalVariable {
             // It will be set specifically for \&{string} patterns in createCodeReference
 
             var.value = runtimeCode;
-            rt.globalCodeRefs.put(key, var);
+            globalCodeRefs.put(key, var);
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
-        rt.pinnedCodeRefs.put(key, var);
+        pinnedCodeRefs.put(key, var);
 
         return var;
     }
@@ -467,7 +447,7 @@ public class GlobalVariable {
     /**
      * Retrieves a global code reference for the purpose of DEFINING code.
      * Unlike getGlobalCodeRef(), this also ensures the entry is visible in
-     * PerlRuntime.current().globalCodeRefs for method resolution via can() and the inheritance hierarchy.
+     * globalCodeRefs for method resolution via can() and the inheritance hierarchy.
      * Use this when assigning code to a glob (e.g., *Foo::bar = sub { ... }).
      *
      * @param key The key of the global code reference.
@@ -475,10 +455,9 @@ public class GlobalVariable {
      */
     public static RuntimeScalar defineGlobalCodeRef(String key) {
         RuntimeScalar ref = getGlobalCodeRef(key);
-        PerlRuntime rt = PerlRuntime.current();
-        // Ensure it's in rt.globalCodeRefs so method resolution finds it
-        if (!rt.globalCodeRefs.containsKey(key)) {
-            rt.globalCodeRefs.put(key, ref);
+        // Ensure it's in globalCodeRefs so method resolution finds it
+        if (!globalCodeRefs.containsKey(key)) {
+            globalCodeRefs.put(key, ref);
         }
         return ref;
     }
@@ -490,7 +469,7 @@ public class GlobalVariable {
      * @return True if the global code reference exists, false otherwise.
      */
     public static boolean existsGlobalCodeRef(String key) {
-        return PerlRuntime.current().globalCodeRefs.containsKey(key);
+        return globalCodeRefs.containsKey(key);
     }
 
     /**
@@ -502,9 +481,8 @@ public class GlobalVariable {
      * @param codeRef The new RuntimeScalar to pin (typically a new empty one).
      */
     static void replacePinnedCodeRef(String key, RuntimeScalar codeRef) {
-        Map<String, RuntimeScalar> pinned = PerlRuntime.current().pinnedCodeRefs;
-        if (pinned.containsKey(key)) {
-            pinned.put(key, codeRef);
+        if (pinnedCodeRefs.containsKey(key)) {
+            pinnedCodeRefs.put(key, codeRef);
         }
     }
 
@@ -516,7 +494,7 @@ public class GlobalVariable {
      * @return True if the code reference exists and is defined, false otherwise.
      */
     public static boolean isGlobalCodeRefDefined(String key) {
-        RuntimeScalar var = PerlRuntime.current().globalCodeRefs.get(key);
+        RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             return runtimeCode.defined();
         }
@@ -524,7 +502,7 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
-        RuntimeScalar var = PerlRuntime.current().globalCodeRefs.get(key);
+        RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             // Use the RuntimeCode.defined() method to check if the subroutine actually exists
             // This checks methodHandle, constantValue, and compilerSupplier
@@ -569,7 +547,7 @@ public class GlobalVariable {
             }
         }
 
-        RuntimeScalar var = PerlRuntime.current().globalCodeRefs.get(key);
+        RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             return runtimeCode.defined() ? scalarTrue : scalarFalse;
         }
@@ -601,7 +579,7 @@ public class GlobalVariable {
 
 
     public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
-        RuntimeScalar deleted = PerlRuntime.current().globalCodeRefs.remove(key);
+        RuntimeScalar deleted = globalCodeRefs.remove(key);
         return deleted != null ? deleted : scalarFalse;
     }
 
@@ -632,7 +610,7 @@ public class GlobalVariable {
      * @param prefix The namespace prefix (e.g., "Foo::") to clear.
      */
     public static void clearPinnedCodeRefsForNamespace(String prefix) {
-        PerlRuntime.current().pinnedCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        pinnedCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
     }
 
     /**
@@ -640,7 +618,7 @@ public class GlobalVariable {
      * Should be called when new packages are loaded or code refs are modified.
      */
     public static void clearPackageCache() {
-        PerlRuntime.current().packageExistsCache.clear();
+        packageExistsCache.clear();
     }
 
     /**
@@ -650,9 +628,8 @@ public class GlobalVariable {
      * @return true if any methods exist in the class namespace
      */
     public static boolean isPackageLoaded(String className) {
-        PerlRuntime rt = PerlRuntime.current();
         // Check cache first
-        Boolean cached = rt.packageExistsCache.get(className);
+        Boolean cached = packageExistsCache.get(className);
         if (cached != null) {
             return cached;
         }
@@ -664,11 +641,11 @@ public class GlobalVariable {
         // A key like "Foo::Bar::baz" belongs to package "Foo::Bar", not "Foo".
         // After stripping the prefix, the remaining part must NOT contain "::"
         // to be a direct member of this package.
-        boolean exists = rt.globalCodeRefs.keySet().stream()
+        boolean exists = globalCodeRefs.keySet().stream()
                 .anyMatch(key -> key.startsWith(prefix) && !key.substring(prefix.length()).contains("::"));
 
         // Cache the result
-        rt.packageExistsCache.put(className, exists);
+        packageExistsCache.put(className, exists);
         return exists;
     }
 
@@ -692,7 +669,7 @@ public class GlobalVariable {
         int lastDoubleColon = fullName.lastIndexOf("::");
         if (lastDoubleColon >= 0) {
             String pkgPart = fullName.substring(0, lastDoubleColon + 2);
-            RuntimeHash stashHash = PerlRuntime.current().globalHashes.get(pkgPart);
+            RuntimeHash stashHash = globalHashes.get(pkgPart);
             if (stashHash instanceof RuntimeStash stash && !stash.namespace.equals(pkgPart)) {
                 String shortName = fullName.substring(lastDoubleColon + 2);
                 return stash.namespace + shortName;
@@ -713,11 +690,10 @@ public class GlobalVariable {
      */
     public static RuntimeGlob getGlobalIO(String key) {
         String resolvedKey = resolveStashHashRedirect(key);
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeGlob glob = rt.globalIORefs.get(resolvedKey);
+        RuntimeGlob glob = globalIORefs.get(resolvedKey);
         if (glob == null) {
             glob = new RuntimeGlob(resolvedKey);
-            rt.globalIORefs.put(resolvedKey, glob);
+            globalIORefs.put(resolvedKey, glob);
         }
         return glob;
     }
@@ -747,7 +723,7 @@ public class GlobalVariable {
      * @return True if the global IO reference exists, false otherwise.
      */
     public static boolean existsGlobalIO(String key) {
-        return PerlRuntime.current().globalIORefs.containsKey(key);
+        return globalIORefs.containsKey(key);
     }
 
     /**
@@ -758,7 +734,7 @@ public class GlobalVariable {
      * @return True if the IO reference exists and has a real IO handle, false otherwise.
      */
     public static boolean isGlobalIODefined(String key) {
-        RuntimeGlob glob = PerlRuntime.current().globalIORefs.get(key);
+        RuntimeGlob glob = globalIORefs.get(key);
         if (glob != null && glob.type == RuntimeScalarType.GLOB) {
             // Check the IO slot, not glob.value - IO is stored in glob.IO
             return glob.IO != null && glob.IO.getDefinedBoolean();
@@ -775,7 +751,7 @@ public class GlobalVariable {
      * @return The RuntimeGlob if it exists in the stash, null otherwise.
      */
     public static RuntimeGlob getExistingGlobalIO(String key) {
-        return PerlRuntime.current().globalIORefs.get(key);
+        return globalIORefs.get(key);
     }
 
     /**
@@ -804,41 +780,39 @@ public class GlobalVariable {
             return RuntimeScalarCache.scalarTrue;
         }
         
-        PerlRuntime rt = PerlRuntime.current();
-
         // Check if glob was explicitly assigned
-        if (rt.globalGlobs.getOrDefault(varName, false)) {
+        if (globalGlobs.getOrDefault(varName, false)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
         // Check scalar slot - slot existence makes glob defined (not value definedness)
         // In Perl, `defined *FOO` is true if $FOO exists, even if $FOO is undef
-        if (rt.globalVariables.containsKey(varName)) {
+        if (globalVariables.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
         // Check array slot - exists = defined (even if empty)
-        if (rt.globalArrays.containsKey(varName)) {
+        if (globalArrays.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
         // Check hash slot - exists = defined (even if empty)
-        if (rt.globalHashes.containsKey(varName)) {
+        if (globalHashes.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
         // Check code slot - slot existence makes glob defined
-        if (rt.globalCodeRefs.containsKey(varName)) {
+        if (globalCodeRefs.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
-        // Check IO slot (via rt.globalIORefs)
-        if (rt.globalIORefs.containsKey(varName)) {
+        // Check IO slot (via globalIORefs)
+        if (globalIORefs.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
         // Check format slot
-        if (rt.globalFormatRefs.containsKey(varName)) {
+        if (globalFormatRefs.containsKey(varName)) {
             return RuntimeScalarCache.scalarTrue;
         }
         
@@ -852,11 +826,10 @@ public class GlobalVariable {
      * @return The RuntimeFormat representing the global format reference.
      */
     public static RuntimeFormat getGlobalFormatRef(String key) {
-        PerlRuntime rt = PerlRuntime.current();
-        RuntimeFormat format = rt.globalFormatRefs.get(key);
+        RuntimeFormat format = globalFormatRefs.get(key);
         if (format == null) {
             format = new RuntimeFormat(key);
-            rt.globalFormatRefs.put(key, format);
+            globalFormatRefs.put(key, format);
         }
         return format;
     }
@@ -869,7 +842,7 @@ public class GlobalVariable {
      * @param format The RuntimeFormat object to set.
      */
     public static void setGlobalFormatRef(String key, RuntimeFormat format) {
-        PerlRuntime.current().globalFormatRefs.put(key, format);
+        globalFormatRefs.put(key, format);
     }
 
     /**
@@ -879,11 +852,11 @@ public class GlobalVariable {
      * @return True if the global format reference exists, false otherwise.
      */
     public static boolean existsGlobalFormat(String key) {
-        return PerlRuntime.current().globalFormatRefs.containsKey(key);
+        return globalFormatRefs.containsKey(key);
     }
 
     public static RuntimeScalar existsGlobalFormatAsScalar(String key) {
-        return PerlRuntime.current().globalFormatRefs.containsKey(key) ? scalarTrue : scalarFalse;
+        return globalFormatRefs.containsKey(key) ? scalarTrue : scalarFalse;
     }
 
     public static RuntimeScalar existsGlobalFormatAsScalar(RuntimeScalar key) {
@@ -897,14 +870,13 @@ public class GlobalVariable {
      * @return True if the format reference exists and is defined, false otherwise.
      */
     public static boolean isGlobalFormatDefined(String key) {
-        RuntimeFormat format = PerlRuntime.current().globalFormatRefs.get(key);
+        RuntimeFormat format = globalFormatRefs.get(key);
         return format != null && format.isFormatDefined();
     }
 
     public static RuntimeScalar definedGlobalFormatAsScalar(String key) {
-        PerlRuntime rt = PerlRuntime.current();
-        return rt.globalFormatRefs.containsKey(key) ?
-                (rt.globalFormatRefs.get(key).isFormatDefined() ? scalarTrue : scalarFalse) : scalarFalse;
+        return globalFormatRefs.containsKey(key) ?
+                (globalFormatRefs.get(key).isFormatDefined() ? scalarTrue : scalarFalse) : scalarFalse;
     }
 
     public static RuntimeScalar definedGlobalFormatAsScalar(RuntimeScalar key) {
@@ -918,9 +890,8 @@ public class GlobalVariable {
      * @param currentPackage The current package name with "::" suffix
      */
     public static void resetGlobalVariables(Set<Character> resetChars, String currentPackage) {
-        PerlRuntime rt = PerlRuntime.current();
         // Reset scalar variables
-        for (Map.Entry<String, RuntimeScalar> entry : rt.globalVariables.entrySet()) {
+        for (Map.Entry<String, RuntimeScalar> entry : globalVariables.entrySet()) {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
@@ -930,7 +901,7 @@ public class GlobalVariable {
         }
 
         // Reset array variables
-        for (Map.Entry<String, RuntimeArray> entry : rt.globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> entry : globalArrays.entrySet()) {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
@@ -940,7 +911,7 @@ public class GlobalVariable {
         }
 
         // Reset hash variables
-        for (Map.Entry<String, RuntimeHash> entry : rt.globalHashes.entrySet()) {
+        for (Map.Entry<String, RuntimeHash> entry : globalHashes.entrySet()) {
             String key = entry.getKey();
 
             if (key.startsWith(currentPackage) && shouldResetVariable(key, currentPackage, resetChars)) {
@@ -992,7 +963,7 @@ public class GlobalVariable {
      */
     public static Map<String, RuntimeArray> getAllIsaArrays() {
         Map<String, RuntimeArray> result = new HashMap<>();
-        for (Map.Entry<String, RuntimeArray> entry : PerlRuntime.current().globalArrays.entrySet()) {
+        for (Map.Entry<String, RuntimeArray> entry : globalArrays.entrySet()) {
             if (entry.getKey().endsWith("::ISA")) {
                 result.put(entry.getKey(), entry.getValue());
             }

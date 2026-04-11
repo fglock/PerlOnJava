@@ -74,7 +74,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.getGlobalMatcher();
+            Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null) {
                 Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
                 for (String name : namedGroups.keySet()) {
@@ -106,12 +106,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // System.out.println("EntrySet ");
             // Collect all keys from GlobalVariable
             Set<String> allKeys = new HashSet<>();
-            allKeys.addAll(GlobalVariable.getGlobalVariablesMap().keySet());
-            allKeys.addAll(GlobalVariable.getGlobalArraysMap().keySet());
-            allKeys.addAll(GlobalVariable.getGlobalHashesMap().keySet());
-            allKeys.addAll(GlobalVariable.getGlobalCodeRefsMap().keySet());
-            allKeys.addAll(GlobalVariable.getGlobalIORefsMap().keySet());
-            allKeys.addAll(GlobalVariable.getGlobalFormatRefsMap().keySet());
+            allKeys.addAll(GlobalVariable.globalVariables.keySet());
+            allKeys.addAll(GlobalVariable.globalArrays.keySet());
+            allKeys.addAll(GlobalVariable.globalHashes.keySet());
+            allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
+            allKeys.addAll(GlobalVariable.globalIORefs.keySet());
+            allKeys.addAll(GlobalVariable.globalFormatRefs.keySet());
 
             // Process each key to extract the namespace part
             Set<String> uniqueKeys = new HashSet<>(); // Set to track unique keys
@@ -182,7 +182,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Matcher matcher = RuntimeRegex.getGlobalMatcher();
+            Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
                 // Encode the Perl name to Java regex name (underscore encoding)
                 String encodedName = CaptureNameEncoder.encodeGroupName(name);
@@ -210,12 +210,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         } else if (this.mode == Id.STASH) {
             String prefix = namespace + key;
             // System.out.println("Get Key " + prefix);
-            if (containsNamespace(GlobalVariable.getGlobalVariablesMap(), prefix) ||
-                    containsNamespace(GlobalVariable.getGlobalArraysMap(), prefix) ||
-                    containsNamespace(GlobalVariable.getGlobalHashesMap(), prefix) ||
-                    containsNamespace(GlobalVariable.getGlobalCodeRefsMap(), prefix) ||
-                    containsNamespace(GlobalVariable.getGlobalIORefsMap(), prefix) ||
-                    containsNamespace(GlobalVariable.getGlobalFormatRefsMap(), prefix)) {
+            if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
+                    containsNamespace(GlobalVariable.globalArrays, prefix) ||
+                    containsNamespace(GlobalVariable.globalHashes, prefix) ||
+                    containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                    containsNamespace(GlobalVariable.globalFormatRefs, prefix)) {
                 return new RuntimeStashEntry(prefix, true);
             }
             return new RuntimeStashEntry(prefix, false);
@@ -227,7 +227,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public boolean containsKey(Object key) {
         if (this.mode == Id.CAPTURE_ALL) {
             // For %-, all named groups exist (even non-participating ones)
-            Matcher matcher = RuntimeRegex.getGlobalMatcher();
+            Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
                 String encodedName = CaptureNameEncoder.encodeGroupName(name);
                 return matcher.pattern().namedGroups().containsKey(encodedName);
@@ -236,7 +236,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         }
         if (this.mode == Id.CAPTURE) {
             // For %+, only groups that actually captured
-            Matcher matcher = RuntimeRegex.getGlobalMatcher();
+            Matcher matcher = RuntimeRegex.globalMatcher;
             if (matcher != null && key instanceof String name) {
                 String encodedName = CaptureNameEncoder.encodeGroupName(name);
                 return matcher.pattern().namedGroups().containsKey(encodedName) && matcher.group(encodedName) != null;
@@ -271,12 +271,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             String fullKey = namespace + key;
 
             // Check if the glob exists
-            boolean exists = containsNamespace(GlobalVariable.getGlobalVariablesMap(), fullKey) ||
-                    containsNamespace(GlobalVariable.getGlobalArraysMap(), fullKey) ||
-                    containsNamespace(GlobalVariable.getGlobalHashesMap(), fullKey) ||
-                    containsNamespace(GlobalVariable.getGlobalCodeRefsMap(), fullKey) ||
-                    containsNamespace(GlobalVariable.getGlobalIORefsMap(), fullKey) ||
-                    containsNamespace(GlobalVariable.getGlobalFormatRefsMap(), fullKey);
+            boolean exists = containsNamespace(GlobalVariable.globalVariables, fullKey) ||
+                    containsNamespace(GlobalVariable.globalArrays, fullKey) ||
+                    containsNamespace(GlobalVariable.globalHashes, fullKey) ||
+                    containsNamespace(GlobalVariable.globalCodeRefs, fullKey) ||
+                    containsNamespace(GlobalVariable.globalIORefs, fullKey) ||
+                    containsNamespace(GlobalVariable.globalFormatRefs, fullKey);
 
             if (!exists) {
                 return scalarUndef;
@@ -285,12 +285,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // Get references to all the slots before deleting
             // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
             // to continue calling the subroutine (Perl caches CVs at compile time)
-            RuntimeScalar code = GlobalVariable.getGlobalCodeRefsMap().remove(fullKey);
-            RuntimeScalar scalar = GlobalVariable.getGlobalVariablesMap().remove(fullKey);
-            RuntimeArray array = GlobalVariable.getGlobalArraysMap().remove(fullKey);
-            RuntimeHash hash = GlobalVariable.getGlobalHashesMap().remove(fullKey);
-            RuntimeGlob io = GlobalVariable.getGlobalIORefsMap().remove(fullKey);
-            RuntimeScalar format = GlobalVariable.getGlobalFormatRefsMap().remove(fullKey);
+            RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
+            RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
+            RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
+            RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
+            RuntimeGlob io = GlobalVariable.globalIORefs.remove(fullKey);
+            RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
 
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
@@ -308,12 +308,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
         if (this.mode == Id.STASH) {
             String prefix = namespace;
 
-            GlobalVariable.getGlobalVariablesMap().keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.getGlobalArraysMap().keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.getGlobalHashesMap().keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.getGlobalCodeRefsMap().keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.getGlobalIORefsMap().keySet().removeIf(k -> k.startsWith(prefix));
-            GlobalVariable.getGlobalFormatRefsMap().keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
 
             InheritanceResolver.invalidateCache();
             GlobalVariable.clearPackageCache();

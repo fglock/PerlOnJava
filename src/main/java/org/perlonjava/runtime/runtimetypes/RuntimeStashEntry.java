@@ -136,7 +136,7 @@ public class RuntimeStashEntry extends RuntimeGlob {
             if (value.value instanceof RuntimeArray) {
                 RuntimeArray targetArray = value.arrayDeref();
                 // Make the target array slot point to the same RuntimeArray object (aliasing)
-                GlobalVariable.getGlobalArraysMap().put(this.globName, targetArray);
+                GlobalVariable.globalArrays.put(this.globName, targetArray);
 
                 // Also create a constant subroutine for bareword access
                 RuntimeCode code = new RuntimeCode("", null);
@@ -309,10 +309,10 @@ public class RuntimeStashEntry extends RuntimeGlob {
         GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
 
         // Undefine ARRAY - create empty array
-        GlobalVariable.getGlobalArraysMap().put(this.globName, new RuntimeArray());
+        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
 
         // Undefine HASH - create empty hash
-        GlobalVariable.getGlobalHashesMap().put(this.globName, new RuntimeHash());
+        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
 
         // Invalidate the method resolution cache
         InheritanceResolver.invalidateCache();

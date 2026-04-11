@@ -15,9 +15,8 @@ import static org.perlonjava.backend.jvm.EmitSubroutine.handleSelfCallOperator;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 
 public class Dereference {
-    // Callsite ID counter for inline method caching (unique across all compilations, thread-safe)
-    private static final java.util.concurrent.atomic.AtomicInteger nextMethodCallsiteId =
-            new java.util.concurrent.atomic.AtomicInteger(0);
+    // Callsite ID counter for inline method caching (unique across all compilations)
+    private static int nextMethodCallsiteId = 0;
     
     /**
      * Handles the postfix `[]` operator.
@@ -966,7 +965,7 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
 
             // Allocate a unique callsite ID for inline method caching
-            int callsiteId = nextMethodCallsiteId.getAndIncrement();
+            int callsiteId = nextMethodCallsiteId++;
             mv.visitLdcInsn(callsiteId);
             mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);

@@ -5,7 +5,10 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.util.*;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,87 +36,38 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static final int DOTALL = Pattern.DOTALL;
     // Maximum size for the regex cache
     private static final int MAX_REGEX_CACHE_SIZE = 1000;
-    // Cache to store compiled regex patterns (synchronized for multiplicity thread-safety)
-    private static final Map<String, RuntimeRegex> regexCache = Collections.synchronizedMap(
-            new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
-                    return size() > MAX_REGEX_CACHE_SIZE;
-                }
-            });
-    // Cache for /o modifier is now per-PerlRuntime (regexOptimizedCache field)
-
-    // ---- Regex match state accessors (delegating to PerlRuntime.current()) ----
-
-    /** Gets the global Matcher from current runtime. */
-    public static Matcher getGlobalMatcher() { return PerlRuntime.current().regexGlobalMatcher; }
-    /** Sets the global Matcher on current runtime. */
-    public static void setGlobalMatcher(Matcher m) { PerlRuntime.current().regexGlobalMatcher = m; }
-
-    /** Gets the global match string from current runtime. */
-    public static String getGlobalMatchString() { return PerlRuntime.current().regexGlobalMatchString; }
-    /** Sets the global match string on current runtime. */
-    public static void setGlobalMatchString(String s) { PerlRuntime.current().regexGlobalMatchString = s; }
-
-    /** Gets lastMatchedString from current runtime. */
-    public static String getLastMatchedString() { return PerlRuntime.current().regexLastMatchedString; }
-    /** Sets lastMatchedString on current runtime. */
-    public static void setLastMatchedString(String s) { PerlRuntime.current().regexLastMatchedString = s; }
-
-    /** Gets lastMatchStart from current runtime. */
-    public static int getLastMatchStart() { return PerlRuntime.current().regexLastMatchStart; }
-    /** Sets lastMatchStart on current runtime. */
-    public static void setLastMatchStart(int v) { PerlRuntime.current().regexLastMatchStart = v; }
-
-    /** Gets lastMatchEnd from current runtime. */
-    public static int getLastMatchEnd() { return PerlRuntime.current().regexLastMatchEnd; }
-    /** Sets lastMatchEnd on current runtime. */
-    public static void setLastMatchEnd(int v) { PerlRuntime.current().regexLastMatchEnd = v; }
-
-    /** Gets lastSuccessfulMatchedString from current runtime. */
-    public static String getLastSuccessfulMatchedString() { return PerlRuntime.current().regexLastSuccessfulMatchedString; }
-    /** Sets lastSuccessfulMatchedString on current runtime. */
-    public static void setLastSuccessfulMatchedString(String s) { PerlRuntime.current().regexLastSuccessfulMatchedString = s; }
-
-    /** Gets lastSuccessfulMatchStart from current runtime. */
-    public static int getLastSuccessfulMatchStart() { return PerlRuntime.current().regexLastSuccessfulMatchStart; }
-    /** Sets lastSuccessfulMatchStart on current runtime. */
-    public static void setLastSuccessfulMatchStart(int v) { PerlRuntime.current().regexLastSuccessfulMatchStart = v; }
-
-    /** Gets lastSuccessfulMatchEnd from current runtime. */
-    public static int getLastSuccessfulMatchEnd() { return PerlRuntime.current().regexLastSuccessfulMatchEnd; }
-    /** Sets lastSuccessfulMatchEnd on current runtime. */
-    public static void setLastSuccessfulMatchEnd(int v) { PerlRuntime.current().regexLastSuccessfulMatchEnd = v; }
-
-    /** Gets lastSuccessfulMatchString from current runtime. */
-    public static String getLastSuccessfulMatchString() { return PerlRuntime.current().regexLastSuccessfulMatchString; }
-    /** Sets lastSuccessfulMatchString on current runtime. */
-    public static void setLastSuccessfulMatchString(String s) { PerlRuntime.current().regexLastSuccessfulMatchString = s; }
-
-    /** Gets lastSuccessfulPattern from current runtime. */
-    public static RuntimeRegex getLastSuccessfulPattern() { return PerlRuntime.current().regexLastSuccessfulPattern; }
-    /** Sets lastSuccessfulPattern on current runtime. */
-    public static void setLastSuccessfulPattern(RuntimeRegex p) { PerlRuntime.current().regexLastSuccessfulPattern = p; }
-
-    /** Gets lastMatchUsedPFlag from current runtime. */
-    public static boolean getLastMatchUsedPFlag() { return PerlRuntime.current().regexLastMatchUsedPFlag; }
-    /** Sets lastMatchUsedPFlag on current runtime. */
-    public static void setLastMatchUsedPFlag(boolean v) { PerlRuntime.current().regexLastMatchUsedPFlag = v; }
-
-    /** Gets lastMatchUsedBackslashK from current runtime. */
-    public static boolean getLastMatchUsedBackslashK() { return PerlRuntime.current().regexLastMatchUsedBackslashK; }
-    /** Sets lastMatchUsedBackslashK on current runtime. */
-    public static void setLastMatchUsedBackslashK(boolean v) { PerlRuntime.current().regexLastMatchUsedBackslashK = v; }
-
-    /** Gets lastCaptureGroups from current runtime. */
-    public static String[] getLastCaptureGroups() { return PerlRuntime.current().regexLastCaptureGroups; }
-    /** Sets lastCaptureGroups on current runtime. */
-    public static void setLastCaptureGroups(String[] g) { PerlRuntime.current().regexLastCaptureGroups = g; }
-
-    /** Gets lastMatchWasByteString from current runtime. */
-    public static boolean getLastMatchWasByteString() { return PerlRuntime.current().regexLastMatchWasByteString; }
-    /** Sets lastMatchWasByteString on current runtime. */
-    public static void setLastMatchWasByteString(boolean v) { PerlRuntime.current().regexLastMatchWasByteString = v; }
+    // Cache to store compiled regex patterns
+    private static final Map<String, RuntimeRegex> regexCache = new LinkedHashMap<String, RuntimeRegex>(MAX_REGEX_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, RuntimeRegex> eldest) {
+            return size() > MAX_REGEX_CACHE_SIZE;
+        }
+    };
+    // Cache for /o modifier - maps callsite ID to compiled regex (only first compilation is used)
+    private static final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
+    // Global matcher used for regex operations
+    public static Matcher globalMatcher;    // Provides Perl regex variables like %+, %-
+    public static String globalMatchString; // Provides Perl regex variables like $&
+    // Store match information to avoid IllegalStateException from Matcher
+    public static String lastMatchedString = null;
+    public static int lastMatchStart = -1;
+    public static int lastMatchEnd = -1;
+    // Store match information from last successful pattern (persists across failed matches)
+    public static String lastSuccessfulMatchedString = null;
+    public static int lastSuccessfulMatchStart = -1;
+    public static int lastSuccessfulMatchEnd = -1;
+    public static String lastSuccessfulMatchString = null;
+    // ${^LAST_SUCCESSFUL_PATTERN}
+    public static RuntimeRegex lastSuccessfulPattern = null;
+    public static boolean lastMatchUsedPFlag = false;
+    // Tracks if the last match used \K, so matcherStart/matcherEnd/matcherSize adjust group offsets
+    public static boolean lastMatchUsedBackslashK = false;
+    // Capture groups from the last successful match that had captures.
+    // In Perl 5, $1/$2/etc persist across non-capturing matches.
+    public static String[] lastCaptureGroups = null;
+    // Track whether the last successful match was on a BYTE_STRING input,
+    // so that captures ($1, $2, $&, etc.) preserve BYTE_STRING type.
+    public static boolean lastMatchWasByteString = false;
     // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
     public Pattern pattern;
     // Compiled regex pattern for Unicode strings (Unicode \w, \d)
@@ -521,16 +475,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // to preserve state: /o caches the compiled pattern, m?PAT? preserves the
         // 'matched' flag that tracks whether the pattern has already matched once)
         if (modifierStr.contains("o") || modifierStr.contains("?")) {
-            Map<Integer, RuntimeScalar> cache = PerlRuntime.current().regexOptimizedCache;
             // Check if we already have a cached regex for this callsite
-            RuntimeScalar cached = cache.get(callsiteId);
+            RuntimeScalar cached = optimizedRegexCache.get(callsiteId);
             if (cached != null) {
                 return cached;
             }
             
             // Compile the regex and cache it
             RuntimeScalar result = getQuotedRegex(patternString, modifiers);
-            cache.put(callsiteId, result);
+            optimizedRegexCache.put(callsiteId, result);
             return result;
         }
         
@@ -664,25 +617,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
         if (regex.patternString == null || regex.patternString.isEmpty()) {
-            if (PerlRuntime.current().regexLastSuccessfulPattern != null) {
+            if (lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current flags (especially /g and /i)
-                Pattern pattern = PerlRuntime.current().regexLastSuccessfulPattern.pattern;
+                Pattern pattern = lastSuccessfulPattern.pattern;
                 // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(PerlRuntime.current().regexLastSuccessfulPattern.regexFlags)) {
+                if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
                     // Need to recompile with current flags using preprocessed pattern
                     int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString != null
-                            ? PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString : PerlRuntime.current().regexLastSuccessfulPattern.patternString;
+                    String recompilePattern = lastSuccessfulPattern.javaPatternString != null
+                            ? lastSuccessfulPattern.javaPatternString : lastSuccessfulPattern.patternString;
                     pattern = Pattern.compile(recompilePattern, newFlags);
                 }
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = PerlRuntime.current().regexLastSuccessfulPattern.patternUnicode;
-                tempRegex.patternString = PerlRuntime.current().regexLastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString;
-                tempRegex.hasPreservesMatch = PerlRuntime.current().regexLastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
+                tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.javaPatternString = lastSuccessfulPattern.javaPatternString;
+                tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 regex = tempRegex;
@@ -843,52 +796,52 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
                 found = true;
-                PerlRuntime.current().regexLastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+                lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
                 int captureCount = matcher.groupCount();
 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
-                PerlRuntime.current().regexGlobalMatcher = matcher;
-                PerlRuntime.current().regexGlobalMatchString = inputStr;
-                PerlRuntime.current().regexLastMatchUsedBackslashK = regex.hasBackslashK;
+                globalMatcher = matcher;
+                globalMatchString = inputStr;
+                lastMatchUsedBackslashK = regex.hasBackslashK;
                 if (captureCount > 0) {
                     if (regex.hasBackslashK) {
                         // Skip the internal perlK capture group
                         int perlKGroup = getPerlKGroup(matcher);
                         int userGroupCount = captureCount - 1;
                         if (userGroupCount > 0) {
-                            PerlRuntime.current().regexLastCaptureGroups = new String[userGroupCount];
+                            lastCaptureGroups = new String[userGroupCount];
                             int destIdx = 0;
                             for (int i = 1; i <= captureCount; i++) {
                                 if (i == perlKGroup) continue;
-                                PerlRuntime.current().regexLastCaptureGroups[destIdx++] = matcher.group(i);
+                                lastCaptureGroups[destIdx++] = matcher.group(i);
                             }
                         } else {
-                            PerlRuntime.current().regexLastCaptureGroups = null;
+                            lastCaptureGroups = null;
                         }
                     } else {
-                        PerlRuntime.current().regexLastCaptureGroups = new String[captureCount];
+                        lastCaptureGroups = new String[captureCount];
                         for (int i = 0; i < captureCount; i++) {
-                            PerlRuntime.current().regexLastCaptureGroups[i] = matcher.group(i + 1);
+                            lastCaptureGroups[i] = matcher.group(i + 1);
                         }
                     }
                 } else {
-                    PerlRuntime.current().regexLastCaptureGroups = null;
+                    lastCaptureGroups = null;
                 }
 
                 // For \K, adjust match start/string so $& is only the post-\K portion
                 if (regex.hasBackslashK) {
                     int keepEnd = matcher.end("perlK");
-                    PerlRuntime.current().regexLastMatchedString = inputStr.substring(keepEnd, matcher.end());
-                    PerlRuntime.current().regexLastMatchStart = keepEnd;
+                    lastMatchedString = inputStr.substring(keepEnd, matcher.end());
+                    lastMatchStart = keepEnd;
                 } else {
-                    PerlRuntime.current().regexLastMatchedString = matcher.group(0);
-                    PerlRuntime.current().regexLastMatchStart = matcher.start();
+                    lastMatchedString = matcher.group(0);
+                    lastMatchStart = matcher.start();
                 }
-                PerlRuntime.current().regexLastMatchEnd = matcher.end();
+                lastMatchEnd = matcher.end();
 
                 if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
                     // Global match and no captures, in list context return the matched string
-                    String matchedStr = regex.hasBackslashK ? PerlRuntime.current().regexLastMatchedString : matcher.group(0);
+                    String matchedStr = regex.hasBackslashK ? lastMatchedString : matcher.group(0);
                     matchedGroups.add(makeMatchResultScalar(matchedStr));
                 } else {
                     // save captures in return list if needed
@@ -978,24 +931,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (!found) {
             // No match: scalar match vars ($`, $&, $') should become undef.
-            // Keep lastSuccessful* and the previous PerlRuntime.current().regexGlobalMatcher intact so @-/@+ do not get clobbered
+            // Keep lastSuccessful* and the previous globalMatcher intact so @-/@+ do not get clobbered
             // by internal regex checks that fail (e.g. in test libraries).
-            PerlRuntime.current().regexGlobalMatchString = null;
-            PerlRuntime.current().regexLastMatchedString = null;
-            PerlRuntime.current().regexLastMatchStart = -1;
-            PerlRuntime.current().regexLastMatchEnd = -1;
-            // Don't clear PerlRuntime.current().regexLastCaptureGroups - Perl preserves $1 across failed matches
+            globalMatchString = null;
+            lastMatchedString = null;
+            lastMatchStart = -1;
+            lastMatchEnd = -1;
+            // Don't clear lastCaptureGroups - Perl preserves $1 across failed matches
         }
 
         if (found) {
             regex.matched = true; // Counter for m?PAT?
-            PerlRuntime.current().regexLastMatchUsedPFlag = regex.hasPreservesMatch;
-            PerlRuntime.current().regexLastSuccessfulPattern = regex;
+            lastMatchUsedPFlag = regex.hasPreservesMatch;
+            lastSuccessfulPattern = regex;
             // Store last successful match information (persists across failed matches)
-            PerlRuntime.current().regexLastSuccessfulMatchedString = PerlRuntime.current().regexLastMatchedString;
-            PerlRuntime.current().regexLastSuccessfulMatchStart = PerlRuntime.current().regexLastMatchStart;
-            PerlRuntime.current().regexLastSuccessfulMatchEnd = PerlRuntime.current().regexLastMatchEnd;
-            PerlRuntime.current().regexLastSuccessfulMatchString = PerlRuntime.current().regexGlobalMatchString;
+            lastSuccessfulMatchedString = lastMatchedString;
+            lastSuccessfulMatchStart = lastMatchStart;
+            lastSuccessfulMatchEnd = lastMatchEnd;
+            lastSuccessfulMatchString = globalMatchString;
 
             // Update $^R if this regex has code block captures (performance optimization)
             if (regex.hasCodeBlockCaptures) {
@@ -1009,9 +962,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST && posScalar != null) {
                 posScalar.set(scalarUndef);
             }
-            // System.err.println("DEBUG: Match completed, PerlRuntime.current().regexGlobalMatcher is " + (PerlRuntime.current().regexGlobalMatcher == null ? "null" : "set"));
+            // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
         } else {
-            // System.err.println("DEBUG: No match found, PerlRuntime.current().regexGlobalMatcher is " + (PerlRuntime.current().regexGlobalMatcher == null ? "null" : "set"));
+            // System.err.println("DEBUG: No match found, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
         }
 
         if (ctx == RuntimeContextType.LIST) {
@@ -1105,25 +1058,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
         if (regex.patternString == null || regex.patternString.isEmpty()) {
-            if (PerlRuntime.current().regexLastSuccessfulPattern != null) {
+            if (lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current replacement and flags (especially /g and /i)
-                Pattern pattern = PerlRuntime.current().regexLastSuccessfulPattern.pattern;
+                Pattern pattern = lastSuccessfulPattern.pattern;
                 // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(PerlRuntime.current().regexLastSuccessfulPattern.regexFlags)) {
+                if (originalFlags != null && !originalFlags.equals(lastSuccessfulPattern.regexFlags)) {
                     // Need to recompile with current flags using preprocessed pattern
                     int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString != null
-                            ? PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString : PerlRuntime.current().regexLastSuccessfulPattern.patternString;
+                    String recompilePattern = lastSuccessfulPattern.javaPatternString != null
+                            ? lastSuccessfulPattern.javaPatternString : lastSuccessfulPattern.patternString;
                     pattern = Pattern.compile(recompilePattern, newFlags);
                 }
                 // Create a temporary regex with the right pattern and current flags
                 RuntimeRegex tempRegex = new RuntimeRegex();
                 tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = PerlRuntime.current().regexLastSuccessfulPattern.patternUnicode;
-                tempRegex.patternString = PerlRuntime.current().regexLastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = PerlRuntime.current().regexLastSuccessfulPattern.javaPatternString;
-                tempRegex.hasPreservesMatch = PerlRuntime.current().regexLastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
+                tempRegex.patternUnicode = lastSuccessfulPattern.patternUnicode;
+                tempRegex.patternString = lastSuccessfulPattern.patternString;
+                tempRegex.javaPatternString = lastSuccessfulPattern.javaPatternString;
+                tempRegex.hasPreservesMatch = lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
                 tempRegex.regexFlags = originalFlags;
                 tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
                 tempRegex.replacement = replacement;
@@ -1178,7 +1131,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Determine if the replacement is a code that needs to be evaluated
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
 
-        // Don't reset PerlRuntime.current().regexGlobalMatcher here - only reset it if we actually find a match
+        // Don't reset globalMatcher here - only reset it if we actually find a match
         // This preserves capture variables from previous matches when substitution doesn't match
 
         // Track position for manual replacement when \K is used
@@ -1188,47 +1141,47 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         try {
             while (matcher.find()) {
                 found++;
-                PerlRuntime.current().regexLastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+                lastMatchWasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
                 // Initialize $1, $2, @+, @- only when we have a match
-                PerlRuntime.current().regexGlobalMatcher = matcher;
-                PerlRuntime.current().regexGlobalMatchString = inputStr;
-                PerlRuntime.current().regexLastMatchUsedBackslashK = regex.hasBackslashK;
+                globalMatcher = matcher;
+                globalMatchString = inputStr;
+                lastMatchUsedBackslashK = regex.hasBackslashK;
                 if (matcher.groupCount() > 0) {
                     if (regex.hasBackslashK) {
                         // Skip the internal perlK capture group when populating $1, $2, etc.
                         int perlKGroup = getPerlKGroup(matcher);
                         int userGroupCount = matcher.groupCount() - 1;
                         if (userGroupCount > 0) {
-                            PerlRuntime.current().regexLastCaptureGroups = new String[userGroupCount];
+                            lastCaptureGroups = new String[userGroupCount];
                             int destIdx = 0;
                             for (int i = 1; i <= matcher.groupCount(); i++) {
                                 if (i == perlKGroup) continue;
-                                PerlRuntime.current().regexLastCaptureGroups[destIdx++] = matcher.group(i);
+                                lastCaptureGroups[destIdx++] = matcher.group(i);
                             }
                         } else {
-                            PerlRuntime.current().regexLastCaptureGroups = null;
+                            lastCaptureGroups = null;
                         }
                     } else {
-                        PerlRuntime.current().regexLastCaptureGroups = new String[matcher.groupCount()];
+                        lastCaptureGroups = new String[matcher.groupCount()];
                         for (int i = 0; i < matcher.groupCount(); i++) {
-                            PerlRuntime.current().regexLastCaptureGroups[i] = matcher.group(i + 1);
+                            lastCaptureGroups[i] = matcher.group(i + 1);
                         }
                     }
                 } else {
-                    PerlRuntime.current().regexLastCaptureGroups = null;
+                    lastCaptureGroups = null;
                 }
 
                 // For \K, adjust match start so $& is only the post-\K portion
                 if (regex.hasBackslashK) {
                     int keepEnd = matcher.end("perlK");
-                    PerlRuntime.current().regexLastMatchStart = keepEnd;
-                    PerlRuntime.current().regexLastMatchedString = inputStr.substring(keepEnd, matcher.end());
+                    lastMatchStart = keepEnd;
+                    lastMatchedString = inputStr.substring(keepEnd, matcher.end());
                 } else {
-                    PerlRuntime.current().regexLastMatchStart = matcher.start();
-                    PerlRuntime.current().regexLastMatchedString = matcher.group(0);
+                    lastMatchStart = matcher.start();
+                    lastMatchedString = matcher.group(0);
                 }
-                PerlRuntime.current().regexLastMatchEnd = matcher.end();
+                lastMatchEnd = matcher.end();
 
                 String replacementStr;
                 if (replacementIsCode) {
@@ -1276,8 +1229,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
             // Store as last successful pattern for empty pattern reuse
-            PerlRuntime.current().regexLastMatchUsedPFlag = regex.hasPreservesMatch;
-            PerlRuntime.current().regexLastSuccessfulPattern = regex;
+            lastMatchUsedPFlag = regex.hasPreservesMatch;
+            lastSuccessfulPattern = regex;
 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
@@ -1312,15 +1265,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static void reset() {
         // Iterate over the regexCache and reset the `matched` flag for each cached regex
-        // Synchronized because Collections.synchronizedMap requires manual sync for iteration
-        synchronized (regexCache) {
-            for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
-                RuntimeRegex regex = entry.getValue();
-                regex.matched = false; // Reset the matched field
-            }
+        for (Map.Entry<String, RuntimeRegex> entry : regexCache.entrySet()) {
+            RuntimeRegex regex = entry.getValue();
+            regex.matched = false; // Reset the matched field
         }
-        // Also reset m?PAT? patterns cached per-callsite in regexOptimizedCache
-        for (Map.Entry<Integer, RuntimeScalar> entry : PerlRuntime.current().regexOptimizedCache.entrySet()) {
+        // Also reset m?PAT? patterns cached per-callsite in optimizedRegexCache
+        for (Map.Entry<Integer, RuntimeScalar> entry : optimizedRegexCache.entrySet()) {
             RuntimeScalar scalar = entry.getValue();
             if (scalar.value instanceof RuntimeRegex regex) {
                 regex.matched = false;
@@ -1334,48 +1284,48 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static void initialize() {
         // Reset all match state
-        PerlRuntime.current().regexGlobalMatcher = null;
-        PerlRuntime.current().regexGlobalMatchString = null;
+        globalMatcher = null;
+        globalMatchString = null;
 
         // Reset current match information
-        PerlRuntime.current().regexLastMatchedString = null;
-        PerlRuntime.current().regexLastMatchStart = -1;
-        PerlRuntime.current().regexLastMatchEnd = -1;
+        lastMatchedString = null;
+        lastMatchStart = -1;
+        lastMatchEnd = -1;
 
         // Reset last successful match information
-        PerlRuntime.current().regexLastSuccessfulPattern = null;
-        PerlRuntime.current().regexLastSuccessfulMatchedString = null;
-        PerlRuntime.current().regexLastSuccessfulMatchStart = -1;
-        PerlRuntime.current().regexLastSuccessfulMatchEnd = -1;
-        PerlRuntime.current().regexLastSuccessfulMatchString = null;
-        PerlRuntime.current().regexLastMatchUsedPFlag = false;
-        PerlRuntime.current().regexLastCaptureGroups = null;
+        lastSuccessfulPattern = null;
+        lastSuccessfulMatchedString = null;
+        lastSuccessfulMatchStart = -1;
+        lastSuccessfulMatchEnd = -1;
+        lastSuccessfulMatchString = null;
+        lastMatchUsedPFlag = false;
+        lastCaptureGroups = null;
 
         // Reset regex cache matched flags
         reset();
     }
 
     public static String matchString() {
-        if (PerlRuntime.current().regexGlobalMatcher != null && PerlRuntime.current().regexLastMatchedString != null) {
+        if (globalMatcher != null && lastMatchedString != null) {
             // Current match data available
-            return PerlRuntime.current().regexLastMatchedString;
+            return lastMatchedString;
         }
         return null;
     }
 
     public static String preMatchString() {
-        if (PerlRuntime.current().regexGlobalMatcher != null && PerlRuntime.current().regexGlobalMatchString != null && PerlRuntime.current().regexLastMatchStart != -1) {
+        if (globalMatcher != null && globalMatchString != null && lastMatchStart != -1) {
             // Current match data available
-            String result = PerlRuntime.current().regexGlobalMatchString.substring(0, PerlRuntime.current().regexLastMatchStart);
+            String result = globalMatchString.substring(0, lastMatchStart);
             return result;
         }
         return null;
     }
 
     public static String postMatchString() {
-        if (PerlRuntime.current().regexGlobalMatcher != null && PerlRuntime.current().regexGlobalMatchString != null && PerlRuntime.current().regexLastMatchEnd != -1) {
+        if (globalMatcher != null && globalMatchString != null && lastMatchEnd != -1) {
             // Current match data available
-            String result = PerlRuntime.current().regexGlobalMatchString.substring(PerlRuntime.current().regexLastMatchEnd);
+            String result = globalMatchString.substring(lastMatchEnd);
             return result;
         }
         return null;
@@ -1383,24 +1333,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static String captureString(int group) {
         if (group <= 0) {
-            return PerlRuntime.current().regexLastMatchedString;
+            return lastMatchedString;
         }
-        if (PerlRuntime.current().regexLastCaptureGroups == null || group > PerlRuntime.current().regexLastCaptureGroups.length) {
+        if (lastCaptureGroups == null || group > lastCaptureGroups.length) {
             return null;
         }
-        return PerlRuntime.current().regexLastCaptureGroups[group - 1];
+        return lastCaptureGroups[group - 1];
     }
 
     public static String lastCaptureString() {
-        if (PerlRuntime.current().regexLastCaptureGroups == null || PerlRuntime.current().regexLastCaptureGroups.length == 0) {
+        if (lastCaptureGroups == null || lastCaptureGroups.length == 0) {
             return null;
         }
         // $+ returns the highest-numbered capture group that actually participated
         // in the match (i.e., is non-null). Non-participating groups in alternations
         // have null values from Java's Matcher.group().
-        for (int i = PerlRuntime.current().regexLastCaptureGroups.length - 1; i >= 0; i--) {
-            if (PerlRuntime.current().regexLastCaptureGroups[i] != null) {
-                return PerlRuntime.current().regexLastCaptureGroups[i];
+        for (int i = lastCaptureGroups.length - 1; i >= 0; i--) {
+            if (lastCaptureGroups[i] != null) {
+                return lastCaptureGroups[i];
             }
         }
         return null;
@@ -1415,7 +1365,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return RuntimeScalarCache.scalarUndef;
         }
         RuntimeScalar scalar = new RuntimeScalar(value);
-        if (PerlRuntime.current().regexLastMatchWasByteString) {
+        if (lastMatchWasByteString) {
             scalar.type = RuntimeScalarType.BYTE_STRING;
         }
         return scalar;
@@ -1423,18 +1373,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static RuntimeScalar matcherStart(int group) {
         if (group == 0) {
-            return PerlRuntime.current().regexLastMatchStart >= 0 ? getScalarInt(PerlRuntime.current().regexLastMatchStart) : scalarUndef;
+            return lastMatchStart >= 0 ? getScalarInt(lastMatchStart) : scalarUndef;
         }
-        if (PerlRuntime.current().regexGlobalMatcher == null) {
+        if (globalMatcher == null) {
             return scalarUndef;
         }
         try {
             // Adjust group number to skip the internal perlK group
             int javaGroup = adjustGroupForBackslashK(group);
-            if (javaGroup < 0 || javaGroup > PerlRuntime.current().regexGlobalMatcher.groupCount()) {
+            if (javaGroup < 0 || javaGroup > globalMatcher.groupCount()) {
                 return scalarUndef;
             }
-            int start = PerlRuntime.current().regexGlobalMatcher.start(javaGroup);
+            int start = globalMatcher.start(javaGroup);
             if (start == -1) {
                 return scalarUndef;
             }
@@ -1446,18 +1396,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static RuntimeScalar matcherEnd(int group) {
         if (group == 0) {
-            return PerlRuntime.current().regexLastMatchEnd >= 0 ? getScalarInt(PerlRuntime.current().regexLastMatchEnd) : scalarUndef;
+            return lastMatchEnd >= 0 ? getScalarInt(lastMatchEnd) : scalarUndef;
         }
-        if (PerlRuntime.current().regexGlobalMatcher == null) {
+        if (globalMatcher == null) {
             return scalarUndef;
         }
         try {
             // Adjust group number to skip the internal perlK group
             int javaGroup = adjustGroupForBackslashK(group);
-            if (javaGroup < 0 || javaGroup > PerlRuntime.current().regexGlobalMatcher.groupCount()) {
+            if (javaGroup < 0 || javaGroup > globalMatcher.groupCount()) {
                 return scalarUndef;
             }
-            int end = PerlRuntime.current().regexGlobalMatcher.end(javaGroup);
+            int end = globalMatcher.end(javaGroup);
             if (end == -1) {
                 return scalarUndef;
             }
@@ -1468,12 +1418,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static int matcherSize() {
-        if (PerlRuntime.current().regexGlobalMatcher == null) {
+        if (globalMatcher == null) {
             return 0;
         }
-        int size = PerlRuntime.current().regexGlobalMatcher.groupCount();
+        int size = globalMatcher.groupCount();
         // Subtract the internal perlK group if \K was used
-        if (PerlRuntime.current().regexLastMatchUsedBackslashK) {
+        if (lastMatchUsedBackslashK) {
             size--;
         }
         // +1 because groupCount is zero-based, and we include the entire match
@@ -1485,10 +1435,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * skipping the internal perlK named group when \K is active.
      */
     private static int adjustGroupForBackslashK(int perlGroup) {
-        if (!PerlRuntime.current().regexLastMatchUsedBackslashK || PerlRuntime.current().regexGlobalMatcher == null) {
+        if (!lastMatchUsedBackslashK || globalMatcher == null) {
             return perlGroup;
         }
-        int perlKGroup = getPerlKGroup(PerlRuntime.current().regexGlobalMatcher);
+        int perlKGroup = getPerlKGroup(globalMatcher);
         if (perlKGroup < 0) return perlGroup;
         // Perl groups before perlK: same number. At or after: add 1.
         return perlGroup >= perlKGroup ? perlGroup + 1 : perlGroup;
@@ -1797,7 +1747,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return The constant value for $^R, or null if no code block was matched
      */
     public RuntimeScalar getLastCodeBlockResult() {
-        Matcher matcher = PerlRuntime.current().regexGlobalMatcher;
+        Matcher matcher = globalMatcher;
         if (matcher == null) {
             return null;
         }

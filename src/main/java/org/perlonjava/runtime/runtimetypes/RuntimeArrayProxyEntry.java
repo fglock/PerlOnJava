@@ -9,13 +9,8 @@ import java.util.Stack;
  * when they are accessed.
  */
 public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
-    // Dynamic state stacks are now held per-PerlRuntime.
-    private static Stack<Integer> dynamicStateStackInt() {
-        return PerlRuntime.current().arrayProxyDynamicStateStackInt;
-    }
-    private static Stack<RuntimeScalar> dynamicStateStack() {
-        return PerlRuntime.current().arrayProxyDynamicStateStack;
-    }
+    private static final Stack<Integer> dynamicStateStackInt = new Stack<>();
+    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
     // Reference to the parent RuntimeArray
     private final RuntimeArray parent;
@@ -96,10 +91,10 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicSaveState() {
-        dynamicStateStackInt().push(parent.elements.size());
+        dynamicStateStackInt.push(parent.elements.size());
         // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
-            dynamicStateStack().push(null);
+            dynamicStateStack.push(null);
             vivify();
         } else {
             RuntimeScalar currentState = new RuntimeScalar();
@@ -107,7 +102,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             currentState.type = this.lvalue.type;
             currentState.value = this.lvalue.value;
             currentState.blessId = this.lvalue.blessId;
-            dynamicStateStack().push(currentState);
+            dynamicStateStack.push(currentState);
             // Clear the current type and value
             this.undefine();
         }
@@ -121,9 +116,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack().isEmpty()) {
+        if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
-            RuntimeScalar previousState = dynamicStateStack().pop();
+            RuntimeScalar previousState = dynamicStateStack.pop();
             if (previousState == null) {
                 // Element didn't exist before.
                 // Decrement refCount of the current value being displaced.
@@ -144,7 +139,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 this.lvalue.blessId = previousState.blessId;
                 this.blessId = previousState.blessId;
             }
-            int previousSize = dynamicStateStackInt().pop();
+            int previousSize = dynamicStateStackInt.pop();
             while (parent.elements.size() > previousSize) {
                 parent.elements.removeLast();
             }

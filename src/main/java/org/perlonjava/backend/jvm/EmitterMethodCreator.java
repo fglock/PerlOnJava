@@ -14,7 +14,6 @@ import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
-import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.CompilerFlagNode;
@@ -25,7 +24,6 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,13 +47,13 @@ public class EmitterMethodCreator implements Opcodes {
     private static final boolean SHOW_FALLBACK =
             System.getenv("JPERL_SHOW_FALLBACK") != null;
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
-    public static final int skipVariables = 3;
-    // Counter for generating unique class names (thread-safe)
-    public static final AtomicInteger classCounter = new AtomicInteger(0);
+    public static int skipVariables = 3;
+    // Counter for generating unique class names
+    public static int classCounter = 0;
 
     // Generate a unique internal class name
     public static String generateClassName() {
-        return "org/perlonjava/anon" + classCounter.getAndIncrement();
+        return "org/perlonjava/anon" + classCounter++;
     }
 
     private static String insnToString(AbstractInsnNode n) {
@@ -630,14 +628,8 @@ public class EmitterMethodCreator implements Opcodes {
             // Store dynamicIndex so goto &sub can access it for cleanup before tail call
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
-            // Only save/restore regex state if the subroutine body contains regex
-            // operations (or eval STRING which may introduce them at runtime).
-            // Subroutines without regex don't modify regex state, and callees
-            // that use regex do their own save/restore.
-            if (RegexUsageDetector.containsRegexOperation(ast)) {
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
-            }
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
@@ -1243,7 +1235,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1285,7 +1277,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1335,7 +1327,7 @@ public class EmitterMethodCreator implements Opcodes {
                     PrintWriter verifyPw = new PrintWriter(System.err);
                     String thisClassNameDot = className.replace('/', '.');
                     final byte[] verifyClassData = classData;
-                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.getGlobalClassLoader()) {
+                    ClassLoader verifyLoader = new ClassLoader(GlobalVariable.globalClassLoader) {
                         @Override
                         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                             if (name.equals(thisClassNameDot)) {
@@ -1489,7 +1481,7 @@ public class EmitterMethodCreator implements Opcodes {
      */
     public static Class<?> loadBytecode(EmitterContext ctx, byte[] classData) {
         // Use the global class loader to ensure all generated classes are in the same namespace
-        CustomClassLoader loader = GlobalVariable.getGlobalClassLoader();
+        CustomClassLoader loader = GlobalVariable.globalClassLoader;
 
         // Create a "Java" class name with dots instead of slashes
         String javaClassNameDot = ctx.javaClassInfo.javaClassName.replace('/', '.');
@@ -1830,21 +1822,27 @@ public class EmitterMethodCreator implements Opcodes {
 
     /**
      * Emits bytecode to increment RuntimeCode.evalDepth (for $^S support).
-     * Calls RuntimeCode.incrementEvalDepth() static method.
-     * Stack effect: net 0.
+     * Stack effect: net 0 (pushes 2, pops 2).
      */
     private static void emitEvalDepthIncrement(MethodVisitor mv) {
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "incrementEvalDepth", "()V", false);
+        mv.visitFieldInsn(Opcodes.GETSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.IADD);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
     }
 
     /**
      * Emits bytecode to decrement RuntimeCode.evalDepth (for $^S support).
-     * Calls RuntimeCode.decrementEvalDepth() static method.
-     * Stack effect: net 0.
+     * Stack effect: net 0 (pushes 2, pops 2).
      */
     private static void emitEvalDepthDecrement(MethodVisitor mv) {
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "decrementEvalDepth", "()V", false);
+        mv.visitFieldInsn(Opcodes.GETSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.ISUB);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode", "evalDepth", "I");
     }
 }

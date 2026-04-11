@@ -494,7 +494,7 @@ public class OperatorParser {
             if (operator.equals("state")) {
                 // Give the variable a persistent id (See: PersistentVariable.java)
                 if (operandNode.id == 0) {
-                    operandNode.id = EmitterMethodCreator.classCounter.getAndIncrement();
+                    operandNode.id = EmitterMethodCreator.classCounter++;
                 }
             }
 
@@ -1338,12 +1338,12 @@ public class OperatorParser {
             RuntimeArray.push(canArgs, new RuntimeScalar(packageName));
             RuntimeArray.push(canArgs, new RuntimeScalar(modifyMethod));
 
-            InheritanceResolver.setAutoloadEnabled(false);
+            InheritanceResolver.autoloadEnabled = false;
             RuntimeList codeList;
             try {
                 codeList = Universal.can(canArgs, RuntimeContextType.SCALAR);
             } finally {
-                InheritanceResolver.setAutoloadEnabled(true);
+                InheritanceResolver.autoloadEnabled = true;
             }
 
             boolean hasHandler = codeList.size() == 1 && codeList.getFirst().getBoolean();

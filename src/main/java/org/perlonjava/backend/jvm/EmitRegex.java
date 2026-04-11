@@ -17,9 +17,8 @@ import java.util.HashMap;
  * transliteration and replacement.
  */
 public class EmitRegex {
-    // Callsite ID counter for /o modifier support (unique across all JVM compilations, thread-safe)
-    private static final java.util.concurrent.atomic.AtomicInteger nextCallsiteId =
-            new java.util.concurrent.atomic.AtomicInteger(100000);  // Start at 100000 to avoid collision with interpreter IDs
+    // Callsite ID counter for /o modifier support (unique across all JVM compilations)
+    private static int nextCallsiteId = 100000;  // Start at 100000 to avoid collision with interpreter IDs
 
     /**
      * Handles the binding regex operation where a variable is bound to a regex operation.
@@ -281,7 +280,7 @@ public class EmitRegex {
 
         // Create the regex matcher (use 3-argument version for /o or m?PAT?)
         if (needsCallsiteCache) {
-            int callsiteId = nextCallsiteId.getAndIncrement();
+            int callsiteId = nextCallsiteId++;
             emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/regex/RuntimeRegex", "getQuotedRegex",

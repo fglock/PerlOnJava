@@ -8,10 +8,7 @@ import java.util.Stack;
  * when they are accessed.
  */
 public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
-    // Dynamic state stack is now held per-PerlRuntime.
-    private static Stack<RuntimeScalar> dynamicStateStack() {
-        return PerlRuntime.current().hashProxyDynamicStateStack;
-    }
+    private static final Stack<RuntimeScalar> dynamicStateStack = new Stack<>();
 
     // Reference to the parent RuntimeHash
     private final RuntimeHash parent;
@@ -90,7 +87,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     public void dynamicSaveState() {
         // Create a new RuntimeScalar to save the current state
         if (this.lvalue == null) {
-            dynamicStateStack().push(null);
+            dynamicStateStack.push(null);
             vivify();
         } else {
             RuntimeScalar currentState = new RuntimeScalar();
@@ -98,7 +95,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             currentState.type = this.lvalue.type;
             currentState.value = this.lvalue.value;
             currentState.blessId = this.lvalue.blessId;
-            dynamicStateStack().push(currentState);
+            dynamicStateStack.push(currentState);
             // Clear the current type and value
             this.undefine();
         }
@@ -112,9 +109,9 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack().isEmpty()) {
+        if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
-            RuntimeScalar previousState = dynamicStateStack().pop();
+            RuntimeScalar previousState = dynamicStateStack.pop();
             if (previousState == null) {
                 // Key didn't exist before — remove it.
                 // Decrement refCount of the current value being displaced.

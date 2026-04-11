@@ -331,29 +331,25 @@ public class ErrnoVariable extends RuntimeScalar {
         set(0);
     }
 
-    // Errno stacks are now held per-PerlRuntime.
-    private static java.util.Stack<int[]> errnoStack() {
-        return PerlRuntime.current().errnoStack;
-    }
-    private static java.util.Stack<String> messageStack() {
-        return PerlRuntime.current().errnoMessageStack;
-    }
+    // Stack to save errno/message during local()
+    private static final java.util.Stack<int[]> errnoStack = new java.util.Stack<>();
+    private static final java.util.Stack<String> messageStack = new java.util.Stack<>();
 
     @Override
     public void dynamicSaveState() {
-        errnoStack().push(new int[]{errno});
-        messageStack().push(message);
+        errnoStack.push(new int[]{errno});
+        messageStack.push(message);
         super.dynamicSaveState();
     }
 
     @Override
     public void dynamicRestoreState() {
         super.dynamicRestoreState();
-        if (!errnoStack().isEmpty()) {
-            errno = errnoStack().pop()[0];
+        if (!errnoStack.isEmpty()) {
+            errno = errnoStack.pop()[0];
         }
-        if (!messageStack().isEmpty()) {
-            message = messageStack().pop();
+        if (!messageStack.isEmpty()) {
+            message = messageStack.pop();
         }
     }
 }

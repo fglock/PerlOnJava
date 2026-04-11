@@ -1,7 +1,6 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import java.io.File;
 import java.util.*;
@@ -226,7 +225,7 @@ public class ScalarGlobOperator {
                 startSegment = 1;
             }
         } else {
-            startDir = new File(PerlRuntime.getCwd());
+            startDir = new File(System.getProperty("user.dir"));
             prefix = "";
             startSegment = 0;
         }
@@ -347,7 +346,7 @@ public class ScalarGlobOperator {
             filePattern = normalizedPattern.substring(lastSep + 1);
         } else {
             // No directory separator - use current directory
-            baseDir = new File(PerlRuntime.getCwd());
+            baseDir = new File(System.getProperty("user.dir"));
         }
 
         return new PathComponents(baseDir, filePattern, hasDirectory, directoryPart);
