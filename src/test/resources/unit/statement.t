@@ -122,4 +122,39 @@ for my $i (1..3) {
 }
 is($scope_test, 12, 'scope in loops calculation');
 
+# our with statement modifier unless - variable must be declared before condition is evaluated
+{
+    package TestOurUnless;
+    use strict;
+    our $DEBUG = 0 unless defined $DEBUG;
+    ::is($DEBUG, 0, 'our $VAR = VAL unless defined $VAR - declares and assigns');
+}
+
+# our with statement modifier if
+{
+    package TestOurIf;
+    use strict;
+    our $FLAG = 1 if !defined $FLAG;
+    ::is($FLAG, 1, 'our $VAR = VAL if !defined $VAR - declares and assigns');
+}
+
+# our with statement modifier unless - pre-defined value preserved
+{
+    package TestOurPreDefined;
+    use strict;
+    $TestOurPreDefined::LEVEL = 42;
+    our $LEVEL = 0 unless defined $LEVEL;
+    ::is($LEVEL, 42, 'our $VAR = VAL unless defined $VAR - preserves pre-defined value');
+}
+
+# state with statement modifier unless
+{
+    use feature 'state';
+    sub state_unless_test {
+        state $counter = 0 unless defined $counter;
+        return $counter;
+    }
+    is(state_unless_test(), 0, 'state $VAR = VAL unless defined $VAR - works');
+}
+
 done_testing();

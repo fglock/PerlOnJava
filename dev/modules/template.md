@@ -23,8 +23,9 @@ its test suite on PerlOnJava.
 | After Fix 7 | **3/106** | ~23/2884 | **2884** | XSLoader jar: shim overrides + stale .ttc cleanup |
 | After Fix 8 | **2/106** | ~3/2884 | **2884** | `use bytes` length fix for Latin-1 strings |
 | After Fix 9 | **1/106** | ~2/2884 | **2884** | Scope `packageExistsCache` sub entries to declaring package |
+| After Fix 10 | **21/106** | 3/2642 | **2642** | `our`/`state` statement modifier fix (DESTROY regression: 20 tests) |
 
-### Current: 105/106 passing (99%), 11 skipped, 1 truly failing (leak.t — DESTROY not implemented)
+### Current: 85/106 passing (80%), 12 skipped, 21 failing (20 due to premature DESTROY — fix in progress on separate branch)
 
 ---
 
@@ -83,35 +84,57 @@ XS module with a Perl parent.
 
 **File:** `src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java`
 
+### Fix 10: `our`/`state` Statement Modifier Hoisting
+
+`Template::Service` (and 15 other TT files) declare `our $DEBUG = 0 unless defined $DEBUG`.
+The parser's `handleStatementModifierWithMy` transformed this to `defined($DEBUG) || (our $DEBUG = 0)`,
+placing the `$DEBUG` reference before the `our` declaration.  Under `use strict`, this caused
+"Global symbol requires explicit package name", preventing `Makefile.PL` from running at all.
+
+**Root cause:** The method only checked for `my` declarations (line 1046), not `our` or `state`.
+
+**Fix:** Extended the check in `StatementResolver.java` to handle `my`, `our`, and `state`:
+```
+our $X = EXPR unless COND  →  (our $X, COND || ($X = EXPR))
+```
+This ensures the variable is declared before the condition is evaluated.
+
+**Files:** `src/main/java/org/perlonjava/frontend/parser/StatementResolver.java`,
+`src/test/resources/unit/statement.t`
+
 ---
 
-## Remaining Failures (1/106 programs)
+## Remaining Failures (21/106 programs)
 
-### leak.t — 2/11 subtests failing (expected)
+### Premature DESTROY — 20 test programs failing
+
+`Template::Context::DESTROY` sets `$self->{STASH} = undef` to break circular references.
+Since DESTROY was implemented (commit `97ec12b8b`), PerlOnJava's refCount tracking triggers
+DESTROY prematurely during `Template::_output()`, nullifying the stash while the Context is
+still in use.  This affects any test that calls `process()` with `INCLUDE`/`PROCESS` directives.
+
+**Status:** Fix in progress on a separate branch.
+
+### leak.t — subtests failing (expected)
 
 | Test | Failed | Total | Issue |
 |------|--------|-------|-------|
-| leak.t | 2 | 11 | Tests 7, 11 — DESTROY not implemented in PerlOnJava (known limitation) |
+| leak.t | varies | 11 | Premature DESTROY + original DESTROY timing tests |
 
 ---
 
 ## Next Steps
 
-### Ready for merge
-This branch is ready for review and merge. All actionable failures have been fixed.
-The only remaining failure (`leak.t`) is due to a known PerlOnJava limitation (no DESTROY support).
+### Premature DESTROY fix (separate branch)
+The 20 failing tests are all caused by `Template::Context::DESTROY` firing while the Context
+is still in use.  A fix for PerlOnJava's refCount tracking is in progress on a separate branch.
+Once merged, Template Toolkit should return to 105/106 passing.
 
 ### Post-merge: jcpan parallel test ordering
 When running `./jcpan --jobs 8 -t Template`, the compile tests (`compile2.t`, `compile3.t`,
 `compile5.t`) may spuriously fail because they depend on `compile1.t` having run first
 to populate the compiled template cache. Running them sequentially (or with `-j 1`) always
 passes. This is a test-harness ordering issue, not a PerlOnJava bug.
-
-### Not planned (known limitation)
-- **leak.t tests 7, 11** — These tests verify that DESTROY is called when objects go out
-  of scope. PerlOnJava does not implement DESTROY (the JVM's tracing GC handles circular
-  references natively, making destructor-based cleanup unnecessary). These 2 subtests will
-  remain failing until/unless DESTROY support is added to PerlOnJava.
 
 ---
 
@@ -150,9 +173,13 @@ passes. This is a test-harness ordering issue, not a PerlOnJava bug.
   - evalperl.t: 18/19 → **19/19** — RAWPERL blocks with illegal code now correctly eval'd
   - File: SubroutineParser.java
 - [x] Template tests: **105/106 passing** (1 failing, 11 skipped) — **99% pass rate**
+- [x] Fix 10: `our`/`state` statement modifier hoisting in StatementResolver.java (2026-04-11)
+  - `our $DEBUG = 0 unless defined $DEBUG` now correctly hoists the declaration
+  - Unblocked Makefile.PL — Template Toolkit can now configure and build
+  - 20 tests regressed due to premature DESTROY (separate issue, separate branch)
 
-### Remaining (not planned)
-- [ ] leak.t tests 7, 11 — DESTROY not implemented
+### Remaining
+- [ ] Premature DESTROY — 20 tests failing (fix in progress on separate branch)
 
 ---
 
