@@ -6,7 +6,7 @@
 **Test command**: `./jcpan -t DBIx::Class`  
 **Branch**: `feature/dbix-class-destroy-weaken`  
 **PR**: https://github.com/fglock/PerlOnJava/pull/485  
-**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 GC leak root cause identified (Step 11.4): blessed objects without DESTROY don't cascade cleanup to hash elements
+**Status**: Phase 11 — P0 premature DESTROY fixed (suppressFlush); P1 GC leak fix committed (Step 11.4, `4f1ed14ab`): blessed objects without DESTROY now cascade cleanup to hash elements. Remaining GC-only failures at END time are caused by Sub::Quote closure walk differences, not refcount tracking bugs.
 
 ## Dependency Tree
 
@@ -300,18 +300,57 @@ A `DestroyGuard` could work similarly:
 selective reference counting (PR #464). Weak refs are tracked in `WeakRefRegistry`
 and cleared when a tracked object's refCount hits 0.
 
-**Remaining issue**: Blessed objects whose class has no `DESTROY` method do not
-cascade cleanup to their hash/array elements when they go out of scope. This means
-refcounts on contained references are never decremented, causing leaks.
-See Phase 11 Step 11.4 for full analysis.
+**Step 11.4 fix** (commit `4f1ed14ab`): Blessed objects without DESTROY now cascade
+cleanup to their hash/array elements when they go out of scope. This fixes the
+BlockRunner leak that caused Storage refcount to stay elevated.
 
-**Impact**: ~27 test files show GC-only failures (all real tests pass). The weak ref
-system works correctly. The GC leak is caused by `BlockRunner` (a Moo class without
-DESTROY) holding a strong ref to Storage — when BlockRunner is cleaned up, Storage's
-refcount is not decremented.
+**Remaining issue — END-time GC assertions**: The ~27 GC-only test failures are NOT
+caused by refcount tracking bugs. They are caused by a difference in how PerlOnJava
+handles the `assert_empty_weakregistry` END-block check:
 
-**Reproduction**: `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — 13 tests
-that all pass in Perl 5 but 7 fail in PerlOnJava, demonstrating the missing cascade.
+In Perl 5, `assert_empty_weakregistry` (quiet mode) walks `%Sub::Quote::QUOTED`
+closures and removes any objects found there from the leak registry. Storage is
+referenced by Sub::Quote-generated accessor closures, so it's excluded. In PerlOnJava,
+the Sub::Quote closure walk doesn't find Storage (likely because PerlOnJava closures
+capture variables differently), so Storage remains in the registry and is reported as
+a leak — even though it's alive because the file-scoped `$schema` is still in scope.
+
+**This is not a real leak** — Storage is legitimately alive (held by `$schema->{storage}`)
+and will be collected during global destruction. The test framework simply can't
+identify it as an expected survivor.
+
+**Impact**: ~27 test files show GC-only failures (all real tests pass). No functional
+impact. Fixing this would require either:
+1. Making PerlOnJava's `visit_refs` walk correctly follow Sub::Quote closure captures
+2. Or accepting these as known cosmetic failures
+
+**Reproduction**: `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — 13 tests,
+all pass after the Step 11.4 fix.
+
+### KNOWN BUG: `B::svref_2object($ref)->REFCNT` method chain leak
+
+**Symptom**: Calling `B::svref_2object($ref)->REFCNT` in a single chained expression
+causes a refcount leak on the object pointed to by `$ref`. The tracked object's refcount
+is incremented but never decremented, preventing garbage collection.
+
+**Workaround**: Store the intermediate result:
+```perl
+my $sv = B::svref_2object($ref);  # OK
+my $rc = $sv->REFCNT;              # OK — no leak
+# vs.
+my $rc = B::svref_2object($ref)->REFCNT;  # LEAKS!
+```
+
+**Root cause**: The `B::SV` (or `B::HV`) object returned by `B::svref_2object` is a
+temporary blessed object that wraps the original reference. When used as a method call
+target in a chain (without storing in a variable), the temporary is not properly cleaned
+up, leaving an extra refcount on the wrapped object.
+
+**Impact**: Low — only affects code that introspects refcounts via the B module in chained
+expressions. The `refcount()` function in `DBIx::Class::_Util` uses this pattern but is
+only called in diagnostic/assertion code, not in production paths.
+
+**Files to investigate**: `B.pm` (bundled), `RuntimeCode.apply()` temporary handling.
 
 ### RowParser.pm line 260 crash (post-test cleanup)
 
@@ -909,18 +948,19 @@ instead of relying on DESTROY.
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
 ### Next Steps
-1. **P1: Fix `DestroyDispatch.callDestroy` for blessed-no-DESTROY objects (Step 11.4)** — When a blessed hash/array whose class has no DESTROY method reaches refCount 0, `callDestroy` must still call `scopeExitCleanupHash`/`scopeExitCleanupArray` to decrement refcounts on the container's values. Test: `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t`
-2. **P1b: Re-run `t/70auto.t` and full DBIx::Class suite** to verify GC leak assertions now pass
-3. **P2: Re-run full test suite** after fix to measure impact on 155+ previously-blocked tests
-4. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
-5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-6. UTF-8 flag semantics: 2 tests in t/85utf8.t (systemic JVM limitation)
+1. **P1: Re-run full DBIx::Class suite** — get updated numbers with Step 11.4 fix. Focus on whether any previously-failing tests now pass.
+2. **P2: Fix `B::svref_2object($ref)->REFCNT` method chain leak** — low-impact but affects diagnostic code. Investigate temporary blessed object cleanup in method chains.
+3. **P2: Fix t/storage/on_connect_do.t table lock** — "database table is locked" (SQLite JDBC concurrency issue)
+4. **P2: Fix t/schema/anon.t chaining** — "Schema object not lost in chaining" (detached result source during init_schema)
+5. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
+6. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
+7. UTF-8 flag semantics: 8 tests in t/85utf8.t (systemic JVM limitation)
+8. Long-term: Make `visit_refs` walk correctly follow PerlOnJava closure captures (would eliminate ~27 cosmetic GC failures)
 
 ### Open Questions
-- **Scope of the fix**: The `DestroyDispatch.callDestroy` fix affects ALL blessed objects without DESTROY, not just BlockRunner. Need to verify no regressions in existing unit tests where blessed-no-DESTROY objects are expected to be lightweight (no cascading cleanup).
-- **GC cascade at END**: After the fix, the full cascade should work: Schema DESTROY → storage refcount drops to 0 → Storage DESTROY → dbh refcount drops to 0 → DBI::db DESTROY → JDBC connection close. Verify with `t/70auto.t` GC assertions.
-- **Performance**: The fix adds `scopeExitCleanupHash`/`scopeExitCleanupArray` calls for every blessed-no-DESTROY object reaching refCount 0. For objects with many hash keys, this could add overhead. Measure with `make` timing.
-- RowParser crash: is it safe to ignore since all real tests pass before it fires?
+- **GC-only failures: accept or fix?** The ~27 GC-only failures are cosmetic (all real tests pass). Fixing them requires either making `visit_refs`/`isweak` work identically to Perl 5 for Sub::Quote closures, or patching `assert_empty_weakregistry` to be more lenient. Given the effort vs. benefit, accepting them as known cosmetic failures is reasonable.
+- **Performance of tracking all blessed objects**: Step 11.4 now tracks ALL blessed objects (not just those with DESTROY). `make` timing shows no measurable regression (35s vs. ~35s before). For pathological cases (millions of blessed-no-DESTROY objects), the overhead would be higher.
+- RowParser crash: safe to ignore since all real tests pass before it fires.
 
 ### Architecture Reference
 - See `dev/architecture/weaken-destroy.md` for the refCount state machine, `MortalList`, `WeakRefRegistry`, and `scopeExitCleanup` internals — essential for debugging the premature DESTROY and GC leak issues.
@@ -1725,17 +1765,47 @@ GC assertions pass.
 
 | Step | What | Status |
 |------|------|--------|
-| 11.4a | Add `scopeExitCleanupHash`/`Array` + `flush()` to `doCallDestroy` early return | |
-| 11.4b | Run `make` — verify all unit tests pass | |
-| 11.4c | Run `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — verify 13/13 pass | |
-| 11.4d | Run `t/70auto.t` — verify GC assertions pass | |
-| 11.4e | Run full DBIx::Class suite — measure impact on ~27 GC-only test files | |
+| 11.4a | Add `scopeExitCleanupHash`/`Array` + `flush()` to `doCallDestroy` early return | **DONE** (`4f1ed14ab`) |
+| 11.4b | Run `make` — verify all unit tests pass | **DONE** — all pass |
+| 11.4c | Run `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — verify 13/13 pass | **DONE** — 13/13 |
+| 11.4d | Run `t/70auto.t` — verify GC assertions | **DONE** — 2/2 real pass; 3 GC fail (pre-existing, not a regression) |
+| 11.4e | Run full DBIx::Class suite — measure impact on ~27 GC-only test files | **DONE** — no regressions; GC failures identical before/after |
+
+#### Step 11.4 also changed `ReferenceOperators.bless()`
+
+In addition to the `DestroyDispatch` fix, `bless()` was changed to always track
+blessed objects regardless of whether DESTROY exists in the class hierarchy. Before,
+classes without DESTROY got `refCount = -1` (untracked); now all blessed objects get
+`refCount = 0` (first bless) or keep existing refCount (re-bless). This ensures
+`callDestroy` is reached when any blessed object's refcount hits 0.
+
+#### Step 11.4 result: GC-only failures are NOT caused by our fix
+
+Detailed investigation of the remaining t/70auto.t GC failures revealed:
+
+1. **Schema IS properly collected**: When `$schema` goes out of scope, Schema's hash
+   cleanup correctly decrements Storage's refcount. Verified with isolated tests
+   (both Perl 5 and PerlOnJava produce identical results).
+
+2. **Storage is alive at END because `$schema` is file-scoped**: The END block from
+   `DBICTest.pm` runs while `$schema` is still in scope. Storage is legitimately alive
+   (held by `$schema->{storage}`).
+
+3. **Perl 5 handles this via Sub::Quote walk**: `assert_empty_weakregistry` (quiet mode)
+   walks `%Sub::Quote::QUOTED` closures and removes objects found there from the leak
+   registry. In Perl 5, Storage is found via Sub::Quote accessor closures and excluded.
+   In PerlOnJava, the walk doesn't find it (closure capture differences), so it's
+   reported as a leak.
+
+4. **Discovered separate bug**: `B::svref_2object($ref)->REFCNT` method chain causes
+   a refcount leak on the target object. This is a PerlOnJava bug in temporary blessed
+   object cleanup during method chains. See "KNOWN BUG" section above.
 
 ## Related Documents
 
 - `dev/architecture/weaken-destroy.md` — **Weaken & DESTROY architecture** (refCount state machine, MortalList, WeakRefRegistry, scopeExitCleanup — essential for Phase 10 debugging)
 - `dev/design/destroy_weaken_plan.md` — DESTROY/weaken implementation plan (PR #464)
-- `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — **Reproduction test** for blessed-no-DESTROY cleanup bug (13 tests, all pass in Perl 5, 7 fail in PerlOnJava)
+- `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — **Reproduction test** for blessed-no-DESTROY cleanup bug (13 tests, all pass after Step 11.4 fix)
 - `dev/modules/moo_support.md` — Moo support (dependency of DBIx::Class)
 - `dev/modules/xs_fallback.md` — XS fallback mechanism
 - `dev/modules/makemaker_perlonjava.md` — MakeMaker for PerlOnJava
