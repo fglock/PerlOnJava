@@ -326,7 +326,7 @@ public class CompileAssignment {
                         if (sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode) {
                             String varName = "$" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdObj = RuntimeCode.getEvalBeginIds().get(sigilOp);
+                            Integer beginIdObj = RuntimeCode.evalBeginIds.get(sigilOp);
                             if (beginIdObj != null) {
                                 int beginId = beginIdObj;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -415,7 +415,7 @@ public class CompileAssignment {
                             // Handle my @array = ...
                             String varName = "@" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdArr = RuntimeCode.getEvalBeginIds().get(sigilOp);
+                            Integer beginIdArr = RuntimeCode.evalBeginIds.get(sigilOp);
                             if (beginIdArr != null) {
                                 int beginId = beginIdArr;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -479,7 +479,7 @@ public class CompileAssignment {
                             // Handle my %hash = ...
                             String varName = "%" + ((IdentifierNode) sigilOp.operand).name;
 
-                            Integer beginIdHash = RuntimeCode.getEvalBeginIds().get(sigilOp);
+                            Integer beginIdHash = RuntimeCode.evalBeginIds.get(sigilOp);
                             if (beginIdHash != null) {
                                 int beginId = beginIdHash;
                                 int nameIdx = bytecodeCompiler.addToStringPool(varName);
@@ -575,7 +575,7 @@ public class CompileAssignment {
                                     String varName = sigil + ((IdentifierNode) sigilOp.operand).name;
                                     int varReg;
 
-                                    Integer beginIdList = RuntimeCode.getEvalBeginIds().get(sigilOp);
+                                    Integer beginIdList = RuntimeCode.evalBeginIds.get(sigilOp);
                                     if (beginIdList != null) {
                                         int beginId = beginIdList;
                                         int nameIdx = bytecodeCompiler.addToStringPool(varName);

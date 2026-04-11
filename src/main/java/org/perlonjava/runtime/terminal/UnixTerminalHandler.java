@@ -97,7 +97,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
 
     @Override
     public char readSingleChar(double timeoutSeconds, RuntimeIO fh) throws IOException {
-        if (fh != RuntimeIO.getStdin()) {
+        if (fh != RuntimeIO.stdin) {
             RuntimeScalar result = fh.ioHandle.read(1);
             if (!result.getDefinedBoolean()) {
                 return 0;
@@ -147,7 +147,7 @@ public abstract class UnixTerminalHandler implements TerminalHandler {
     @Override
     public String readLineWithTimeout(double timeoutSeconds, RuntimeIO fh) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(
-                fh == RuntimeIO.getStdin() ? System.in : new ByteArrayInputStream(new byte[0])));
+                fh == RuntimeIO.stdin ? System.in : new ByteArrayInputStream(new byte[0])));
 
         if (timeoutSeconds < 0) {
             // Non-blocking read

@@ -187,7 +187,7 @@ public class SystemOperator {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-            String userDir = PerlRuntime.getCwd();
+            String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -287,7 +287,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
-            String userDir = PerlRuntime.getCwd();
+            String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -339,7 +339,7 @@ public class SystemOperator {
             flushAllHandles();
 
             ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
-            String userDir = PerlRuntime.getCwd();
+            String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
             
             // Copy %ENV to the subprocess environment
@@ -655,7 +655,7 @@ public class SystemOperator {
             
             // Run command and capture output
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            processBuilder.directory(new File(PerlRuntime.getCwd()));
+            processBuilder.directory(new File(System.getProperty("user.dir")));
             copyPerlEnvToProcessBuilder(processBuilder);
             processBuilder.redirectErrorStream(false);  // Keep stderr separate
             
@@ -716,7 +716,7 @@ public class SystemOperator {
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder(shellCommand);
-        String userDir = PerlRuntime.getCwd();
+        String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment
@@ -739,7 +739,7 @@ public class SystemOperator {
      */
     private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
-        String userDir = PerlRuntime.getCwd();
+        String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
         
         // Copy %ENV to the subprocess environment

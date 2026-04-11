@@ -391,7 +391,7 @@ public class POSIX extends PerlModuleBase {
     }
 
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(PerlRuntime.getCwd()).getList();
+        return new RuntimeScalar(System.getProperty("user.dir")).getList();
     }
 
     public static RuntimeList strerror(RuntimeArray args, int ctx) {
@@ -514,9 +514,9 @@ public class POSIX extends PerlModuleBase {
 
         // If targeting fd 0/1/2, update the static handles
         switch (newFd) {
-            case 0 -> RuntimeIO.setStdin(target);
-            case 1 -> RuntimeIO.setStdout(target);
-            case 2 -> RuntimeIO.setStderr(target);
+            case 0 -> RuntimeIO.stdin = target;
+            case 1 -> RuntimeIO.stdout = target;
+            case 2 -> RuntimeIO.stderr = target;
         }
 
         return new RuntimeScalar(newFd == 0 ? "0 but true" : (Object) newFd).getList();
@@ -529,9 +529,9 @@ public class POSIX extends PerlModuleBase {
         RuntimeIO rio = RuntimeIO.getByFileno(fd);
         if (rio != null) return rio;
         return switch (fd) {
-            case 0 -> RuntimeIO.getStdin();
-            case 1 -> RuntimeIO.getStdout();
-            case 2 -> RuntimeIO.getStderr();
+            case 0 -> RuntimeIO.stdin;
+            case 1 -> RuntimeIO.stdout;
+            case 2 -> RuntimeIO.stderr;
             default -> null;
         };
     }

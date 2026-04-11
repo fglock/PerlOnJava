@@ -10,10 +10,9 @@ import java.util.Deque;
  * to their original states.
  */
 public class DynamicVariableManager {
-    // State is now held per-PerlRuntime. This accessor delegates to the current runtime.
-    private static Deque<DynamicState> variableStack() {
-        return PerlRuntime.current().dynamicVariableStack;
-    }
+    // A stack to hold the dynamic states of variables.
+    // Using ArrayDeque instead of Stack for better performance (no synchronization overhead).
+    private static final Deque<DynamicState> variableStack = new ArrayDeque<>();
 
     /**
      * Returns the current local level, which is the size of the variable stack.
@@ -22,7 +21,7 @@ public class DynamicVariableManager {
      * @return the number of dynamic states in the stack.
      */
     public static int getLocalLevel() {
-        return variableStack().size();
+        return variableStack.size();
     }
 
     /**
@@ -34,14 +33,14 @@ public class DynamicVariableManager {
     public static RuntimeBase pushLocalVariable(RuntimeBase variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack().addLast(variable);
+        variableStack.addLast(variable);
         return variable;
     }
 
     public static RuntimeScalar pushLocalVariable(RuntimeScalar variable) {
         // Save the current state of the variable and push it onto the stack.
         variable.dynamicSaveState();
-        variableStack().addLast(variable);
+        variableStack.addLast(variable);
         return variable;
     }
 
@@ -49,7 +48,7 @@ public class DynamicVariableManager {
         // Save the current state of the variable and push it onto the stack.
         // dynamicSaveState() creates a NEW glob in globalIORefs for the local scope.
         variable.dynamicSaveState();
-        variableStack().addLast(variable);
+        variableStack.addLast(variable);
         // Return the NEW glob from globalIORefs (installed by dynamicSaveState),
         // not the old one. This ensures `local *FH` returns the fresh local glob,
         // so that \do { local *FH } captures a unique glob per call (Perl 5 parity).
@@ -58,7 +57,7 @@ public class DynamicVariableManager {
 
     public static void pushLocalVariable(DynamicState variable) {
         variable.dynamicSaveState();
-        variableStack().addLast(variable);
+        variableStack.addLast(variable);
     }
 
     /**
@@ -73,9 +72,8 @@ public class DynamicVariableManager {
      * @param targetLocalLevel the target size of the stack after popping variables.
      */
     public static void popToLocalLevel(int targetLocalLevel) {
-        Deque<DynamicState> stack = variableStack();
         // Ensure the target level is non-negative and does not exceed the current stack size
-        if (targetLocalLevel < 0 || targetLocalLevel > stack.size()) {
+        if (targetLocalLevel < 0 || targetLocalLevel > variableStack.size()) {
             throw new IllegalArgumentException("Invalid target local level: " + targetLocalLevel);
         }
 
@@ -83,8 +81,8 @@ public class DynamicVariableManager {
         Throwable pendingException = null;
 
         // Pop variables until the stack size matches the target local level
-        while (stack.size() > targetLocalLevel) {
-            DynamicState variable = stack.removeLast();
+        while (variableStack.size() > targetLocalLevel) {
+            DynamicState variable = variableStack.removeLast();
             try {
                 variable.dynamicRestoreState();
             } catch (Throwable t) {

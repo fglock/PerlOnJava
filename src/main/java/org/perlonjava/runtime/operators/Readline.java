@@ -53,7 +53,7 @@ public class Readline {
         }
 
         // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
-        RuntimeIO.setLastAccessedHandle(runtimeIO);
+        RuntimeIO.lastAccesseddHandle = runtimeIO;
 
         // Get the input record separator (equivalent to Perl's $/)
         RuntimeScalar rsScalar = getGlobalVariable("main::/");

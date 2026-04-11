@@ -4,7 +4,6 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
 import java.io.*;
@@ -151,7 +150,7 @@ public class PipeOutputChannel implements IOHandle {
      */
     private void setupProcess(ProcessBuilder processBuilder) throws IOException {
         // Set working directory to current directory
-        String userDir = PerlRuntime.getCwd();
+        String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
 
         // Copy %ENV to the subprocess environment
@@ -167,17 +166,9 @@ public class PipeOutputChannel implements IOHandle {
         outputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
         errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
 
-        // Capture the parent thread's PerlRuntime so background threads
-        // can access per-runtime STDOUT/STDERR handles for proper output routing
-        PerlRuntime parentRuntime = PerlRuntime.currentOrNull();
-
         // Start threads to consume stdout and stderr and route through Perl handles
         // This ensures Perl-level redirections are honored
         Thread outputThread = new Thread(() -> {
-            // Bind this thread to the same PerlRuntime as the parent
-            if (parentRuntime != null) {
-                PerlRuntime.setCurrent(parentRuntime);
-            }
             try (BufferedReader out = outputReader) {
                 String line;
                 while ((line = out.readLine()) != null) {
@@ -200,10 +191,6 @@ public class PipeOutputChannel implements IOHandle {
         outputThread.start();
 
         Thread errorThread = new Thread(() -> {
-            // Bind this thread to the same PerlRuntime as the parent
-            if (parentRuntime != null) {
-                PerlRuntime.setCurrent(parentRuntime);
-            }
             try (BufferedReader err = errorReader) {
                 String line;
                 while ((line = err.readLine()) != null) {

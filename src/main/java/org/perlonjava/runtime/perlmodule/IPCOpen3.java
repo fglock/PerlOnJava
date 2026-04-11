@@ -5,7 +5,6 @@ import org.perlonjava.runtime.io.ProcessOutputHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.operators.WaitpidOperator;
 import org.perlonjava.runtime.runtimetypes.*;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 
 import java.io.File;
 import java.io.InputStream;
@@ -122,7 +121,7 @@ public class IPCOpen3 extends PerlModuleBase {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            String userDir = PerlRuntime.getCwd();
+            String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
 
             // Copy %ENV to the subprocess
@@ -350,7 +349,7 @@ public class IPCOpen3 extends PerlModuleBase {
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
-            String userDir = PerlRuntime.getCwd();
+            String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
 
             // Copy %ENV to the subprocess

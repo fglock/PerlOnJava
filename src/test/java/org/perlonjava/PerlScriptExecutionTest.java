@@ -8,7 +8,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.runtime.io.StandardIO;
-import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -159,11 +158,6 @@ public class PerlScriptExecutionTest {
      */
     @BeforeEach
     void setUp() {
-        // Ensure PerlRuntime is initialized for this test thread
-        if (PerlRuntime.currentOrNull() == null) {
-            PerlRuntime.initialize();
-        }
-
         originalOut = System.out;
         outputStream = new ByteArrayOutputStream();
 
@@ -171,11 +165,11 @@ public class PerlScriptExecutionTest {
         StandardIO newStdout = new StandardIO(outputStream, true);
 
         // Replace RuntimeIO.stdout with a new instance
-        RuntimeIO.setStdout(new RuntimeIO(newStdout));
+        RuntimeIO.stdout = new RuntimeIO(newStdout);
         // Keep Perl's global *STDOUT/*STDERR in sync with the RuntimeIO static fields.
         // Some tests call `binmode STDOUT/STDERR` and expect it to affect the real globals.
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
 
         // Also update System.out for any direct Java calls
         System.setOut(new PrintStream(outputStream));
@@ -187,9 +181,9 @@ public class PerlScriptExecutionTest {
     @AfterEach
     void tearDown() {
         // Restore original stdout
-        RuntimeIO.setStdout(new RuntimeIO(new StandardIO(originalOut, true)));
-        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.getStdout());
-        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.getStderr());
+        RuntimeIO.stdout = new RuntimeIO(new StandardIO(originalOut, true));
+        GlobalVariable.getGlobalIO("main::STDOUT").setIO(RuntimeIO.stdout);
+        GlobalVariable.getGlobalIO("main::STDERR").setIO(RuntimeIO.stderr);
         System.setOut(originalOut);
     }
 

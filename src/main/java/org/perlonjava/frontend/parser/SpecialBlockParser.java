@@ -198,10 +198,10 @@ public class SpecialBlockParser {
                                     new IdentifierNode(packageName, tokenIndex), tokenIndex));
                 } else {
                     OperatorNode ast = entry.ast();
-                    isFromOuterScope = RuntimeCode.getEvalBeginIds().containsKey(ast);
-                    int beginId = RuntimeCode.getEvalBeginIds().computeIfAbsent(
+                    isFromOuterScope = RuntimeCode.evalBeginIds.containsKey(ast);
+                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
                             ast,
-                            k -> EmitterMethodCreator.classCounter.getAndIncrement());
+                            k -> EmitterMethodCreator.classCounter++);
                     packageName = PersistentVariable.beginPackage(beginId);
                     // Emit: package BEGIN_PKG
                     nodes.add(
@@ -231,13 +231,13 @@ public class SpecialBlockParser {
 
                             // Put in the appropriate global map based on variable type
                             if (runtimeValue instanceof RuntimeArray) {
-                                GlobalVariable.getGlobalArraysMap().put(fullName, (RuntimeArray) runtimeValue);
+                                GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
                                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased array " + fullName);
                             } else if (runtimeValue instanceof RuntimeHash) {
-                                GlobalVariable.getGlobalHashesMap().put(fullName, (RuntimeHash) runtimeValue);
+                                GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
                                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased hash " + fullName);
                             } else if (runtimeValue instanceof RuntimeScalar) {
-                                GlobalVariable.getGlobalVariablesMap().put(fullName, (RuntimeScalar) runtimeValue);
+                                GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
                                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("BEGIN block: Aliased scalar " + fullName);
                             }
                         }

@@ -549,13 +549,13 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.STORE_GLOBAL_CODE -> {
-                                // Store global code: GlobalVariable.getGlobalCodeRefsMap().put(name, codeRef)
+                                // Store global code: GlobalVariable.globalCodeRefs.put(name, codeRef)
                                 int nameIdx = bytecode[pc++];
                                 int codeReg = bytecode[pc++];
                                 String name = code.stringPool[nameIdx];
                                 RuntimeScalar codeRef = (RuntimeScalar) registers[codeReg];
                                 // Store the code reference in the global namespace
-                                GlobalVariable.getGlobalCodeRefsMap().put(name, codeRef);
+                                GlobalVariable.globalCodeRefs.put(name, codeRef);
                             }
 
                             case Opcodes.CREATE_CLOSURE -> {
@@ -1061,7 +1061,7 @@ public class BytecodeInterpreter {
                                             }
                                             // Jump to eval catch handler
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.decrementEvalDepth();
+                                            RuntimeCode.evalDepth--;
                                             break;
                                         }
                                         return result;
@@ -1175,7 +1175,7 @@ public class BytecodeInterpreter {
                                                 DynamicVariableManager.popToLocalLevel(savedLevel);
                                             }
                                             pc = evalCatchStack.pop();
-                                            RuntimeCode.decrementEvalDepth();
+                                            RuntimeCode.evalDepth--;
                                             break;
                                         }
                                         return result;
@@ -1553,7 +1553,7 @@ public class BytecodeInterpreter {
                                 evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
 
                                 // Track eval depth for $^S
-                                RuntimeCode.incrementEvalDepth();
+                                RuntimeCode.evalDepth++;
 
                                 // Clear $@ at start of eval block
                                 GlobalVariable.setGlobalVariable("main::@", "");
@@ -1579,7 +1579,7 @@ public class BytecodeInterpreter {
                                 }
 
                                 // Track eval depth for $^S
-                                RuntimeCode.decrementEvalDepth();
+                                RuntimeCode.evalDepth--;
                             }
 
                             case Opcodes.EVAL_CATCH -> {
@@ -2104,7 +2104,7 @@ public class BytecodeInterpreter {
                             int savedLevel = evalLocalLevelStack.pop();
                             DynamicVariableManager.popToLocalLevel(savedLevel);
                         }
-                        RuntimeCode.decrementEvalDepth();
+                        RuntimeCode.evalDepth--;
                         WarnDie.catchEval(e);
                         pc = catchPc;
                         continue outer;
@@ -2147,7 +2147,7 @@ public class BytecodeInterpreter {
                         }
 
                         // Track eval depth for $^S
-                        RuntimeCode.decrementEvalDepth();
+                        RuntimeCode.evalDepth--;
 
                         // Call WarnDie.catchEval() to set $@
                         WarnDie.catchEval(e);

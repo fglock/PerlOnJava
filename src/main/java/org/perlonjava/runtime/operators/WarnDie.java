@@ -81,7 +81,7 @@ public class WarnDie {
             // By the time we reach catchEval(), evalDepth has already been decremented
             // by the eval catch block, but the handler should see $^S=1 since we are
             // conceptually still inside eval (Perl 5 calls the handler before unwinding).
-            RuntimeCode.incrementEvalDepth();
+            RuntimeCode.evalDepth++;
             try {
                 RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
             } catch (Throwable handlerException) {
@@ -99,7 +99,7 @@ public class WarnDie {
                     err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(handlerException)));
                 }
             } finally {
-                RuntimeCode.decrementEvalDepth();
+                RuntimeCode.evalDepth--;
                 // Restore $SIG{__DIE__}
                 DynamicVariableManager.popToLocalLevel(level);
             }
@@ -505,8 +505,8 @@ public class WarnDie {
      * @return String with filehandle context (including leading ", "), or null if no context
      */
     public static String getFilehandleContext() {
-        if (RuntimeIO.getLastAccessedHandle() != null && RuntimeIO.getLastAccessedHandle().currentLineNumber > 0) {
-            String handleName = findFilehandleName(RuntimeIO.getLastAccessedHandle());
+        if (RuntimeIO.lastAccesseddHandle != null && RuntimeIO.lastAccesseddHandle.currentLineNumber > 0) {
+            String handleName = findFilehandleName(RuntimeIO.lastAccesseddHandle);
             if (handleName != null) {
                 // Perl 5 uses "line" only when $/ is exactly "\n".
                 // Everything else (undef, "", custom separator, ref) uses "chunk".
@@ -519,7 +519,7 @@ public class WarnDie {
                 } catch (Exception ignored) {
                     // Default to "chunk" if we can't read $/
                 }
-                return ", <" + handleName + "> " + unit + " " + RuntimeIO.getLastAccessedHandle().currentLineNumber;
+                return ", <" + handleName + "> " + unit + " " + RuntimeIO.lastAccesseddHandle.currentLineNumber;
             }
         }
         return null;
@@ -543,6 +543,6 @@ public class WarnDie {
             return name;
         }
         // Fall back to the variable name set during the last readline (e.g., "$f")
-        return RuntimeIO.getLastReadlineHandleName();
+        return RuntimeIO.lastReadlineHandleName;
     }
 }

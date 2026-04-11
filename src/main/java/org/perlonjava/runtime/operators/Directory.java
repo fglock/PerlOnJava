@@ -93,8 +93,7 @@ public class Directory {
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
             // Normalize the path to remove redundant . and .. components
-            // Update per-runtime CWD (not the JVM-global user.dir property)
-            PerlRuntime.current().cwd = absoluteDir.toPath().normalize().toString();
+            System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
             return scalarTrue;
         } else {
             // Set errno to ENOENT (No such file or directory)

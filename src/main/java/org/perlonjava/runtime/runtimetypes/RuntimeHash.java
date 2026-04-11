@@ -18,10 +18,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public static final int PLAIN_HASH = 0;
     public static final int AUTOVIVIFY_HASH = 1;
     public static final int TIED_HASH = 2;
-    // Dynamic state stack is now held per-PerlRuntime.
-    private static Stack<RuntimeHash> dynamicStateStack() {
-        return PerlRuntime.current().hashDynamicStateStack;
-    }
+    // Static stack to store saved "local" states of RuntimeHash instances
+    private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
     private static final RuntimeArray EMPTY_KEYS = new RuntimeArray();
 
     static {
@@ -1032,7 +1030,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         currentState.elements = new StableHashMap<>(this.elements);
         currentState.blessId = this.blessId;
         currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
-        dynamicStateStack().push(currentState);
+        dynamicStateStack.push(currentState);
         // Clear the hash
         this.elements.clear();
         this.byteKeys = null;
@@ -1045,9 +1043,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     @Override
     public void dynamicRestoreState() {
-        if (!dynamicStateStack().isEmpty()) {
+        if (!dynamicStateStack.isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
-            RuntimeHash previousState = dynamicStateStack().pop();
+            RuntimeHash previousState = dynamicStateStack.pop();
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
