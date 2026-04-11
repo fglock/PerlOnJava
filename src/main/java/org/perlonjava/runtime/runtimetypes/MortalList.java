@@ -328,24 +328,60 @@ public class MortalList {
     /**
      * Process all pending decrements. Called at statement boundaries.
      * Equivalent to Perl 5's FREETMPS.
+     * <p>
+     * Reentrancy guard: flush() can be called recursively when callDestroy()
+     * triggers DESTROY → doCallDestroy → scopeExitCleanupHash → flush().
+     * Without the guard, the inner flush() re-processes entries from the same
+     * pending list that the outer flush is iterating over, causing double
+     * decrements and premature destruction (e.g., DBIx::Class Schema clones
+     * being destroyed mid-construction, clearing weak refs to still-live
+     * objects). With the guard, only the outermost flush() processes entries;
+     * new entries added by cascading DESTROY are picked up by the outer
+     * loop's continuing iteration (since it checks pending.size() each pass).
+     * <p>
+     * Also used by {@link RuntimeList#setFromList} to suppress flushing during
+     * list assignment materialization. This prevents premature destruction of
+     * return values while the caller is still capturing them into variables.
      */
+    private static boolean flushing = false;
+
+    /**
+     * Suppress or unsuppress flushing. Used by setFromList to prevent pending
+     * decrements from earlier scopes (e.g., clone's $self) being processed
+     * during the materialization of list assignment (@_ → local vars).
+     * Without this, return values from chained method calls like
+     * {@code shift->clone->connection(@_)} can be destroyed mid-capture.
+     *
+     * @return the previous value of the flushing flag (for nesting).
+     */
+    public static boolean suppressFlush(boolean suppress) {
+        boolean prev = flushing;
+        flushing = suppress;
+        return prev;
+    }
+
     public static void flush() {
-        if (!active || pending.isEmpty()) return;
-        // Process list — DESTROY may add new entries, so use index-based loop
-        for (int i = 0; i < pending.size(); i++) {
-            RuntimeBase base = pending.get(i);
-            if (base.refCount > 0 && --base.refCount == 0) {
-                if (base.localBindingExists) {
-                    // Named container: local variable may still exist. Skip callDestroy.
-                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else {
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
+        if (!active || pending.isEmpty() || flushing) return;
+        flushing = true;
+        try {
+            // Process list — DESTROY may add new entries, so use index-based loop
+            for (int i = 0; i < pending.size(); i++) {
+                RuntimeBase base = pending.get(i);
+                if (base.refCount > 0 && --base.refCount == 0) {
+                    if (base.localBindingExists) {
+                        // Named container: local variable may still exist. Skip callDestroy.
+                        // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                    } else {
+                        base.refCount = Integer.MIN_VALUE;
+                        DestroyDispatch.callDestroy(base);
+                    }
                 }
             }
+            pending.clear();
+            marks.clear(); // All entries drained; marks are meaningless now
+        } finally {
+            flushing = false;
         }
-        pending.clear();
-        marks.clear(); // All entries drained; marks are meaningless now
     }
 
     /**

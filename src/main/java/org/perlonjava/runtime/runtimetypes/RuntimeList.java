@@ -532,6 +532,14 @@ public class RuntimeList extends RuntimeBase {
             }
         }
 
+        // Suppress flushing during materialization and LHS assignments.
+        // Return values from chained method calls (e.g., shift->clone->connection(@_))
+        // may have pending decrements from their inner scope exits. Flushing during
+        // materialization would process those decrements before the LHS variables
+        // (like $self) capture the return values, causing premature DESTROY.
+        // The pending entries are processed later when the next unsuppressed flush fires.
+        boolean wasFlushing = MortalList.suppressFlush(true);
+
         // Materialize the RHS once into a flat list.
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
         RuntimeArray rhs = new RuntimeArray();
@@ -642,6 +650,11 @@ public class RuntimeList extends RuntimeBase {
                 rhsIndex = rhsSize; // Consume the rest
             }
         }
+
+        // Restore previous flushing state. Now that all LHS variables hold references
+        // to the return values, it's safe to process pending decrements.
+        MortalList.suppressFlush(wasFlushing);
+
         return result;
     }
 
