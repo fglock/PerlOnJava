@@ -117,8 +117,18 @@ public class MortalList {
      */
     public static void scopeExitCleanupHash(RuntimeHash hash) {
         if (!active || hash == null) return;
+        // Clear localBindingExists: the named variable's scope is ending.
+        // This allows subsequent refCount==0 events (from setLargeRefCounted
+        // or flush) to correctly trigger callDestroy, since the local
+        // variable no longer holds a strong reference.
+        hash.localBindingExists = false;
         // If no object has ever been blessed in this JVM, container walks are pointless
         if (!RuntimeBase.blessedObjectExists) return;
+        // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
+        // do NOT clean up elements — the hash is still alive and its elements are
+        // accessible through the reference. Cleanup will happen when the last
+        // reference is released (in DestroyDispatch.callDestroy).
+        if (hash.refCount > 0) return;
         // Quick scan: skip if no value could transitively contain blessed/tracked refs.
         boolean needsWalk = false;
         for (RuntimeScalar val : hash.elements.values()) {
@@ -160,8 +170,18 @@ public class MortalList {
      */
     public static void scopeExitCleanupArray(RuntimeArray arr) {
         if (!active || arr == null) return;
+        // Clear localBindingExists: the named variable's scope is ending.
+        // This allows subsequent refCount==0 events (from setLargeRefCounted
+        // or flush) to correctly trigger callDestroy, since the local
+        // variable no longer holds a strong reference.
+        arr.localBindingExists = false;
         // If no object has ever been blessed in this JVM, container walks are pointless
         if (!RuntimeBase.blessedObjectExists) return;
+        // If the array has outstanding references (e.g., from \@array stored elsewhere),
+        // do NOT clean up elements — the array is still alive and its elements are
+        // accessible through the reference. Cleanup will happen when the last
+        // reference is released (in DestroyDispatch.callDestroy).
+        if (arr.refCount > 0) return;
         // Quick scan: check if any element either:
         //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
         //   2. Is a direct blessed reference (blessId != 0), OR
@@ -315,8 +335,13 @@ public class MortalList {
         for (int i = 0; i < pending.size(); i++) {
             RuntimeBase base = pending.get(i);
             if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+                if (base.localBindingExists) {
+                    // Named container: local variable may still exist. Skip callDestroy.
+                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else {
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
             }
         }
         pending.clear();
@@ -349,8 +374,12 @@ public class MortalList {
         for (int i = mark; i < pending.size(); i++) {
             RuntimeBase base = pending.get(i);
             if (base.refCount > 0 && --base.refCount == 0) {
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+                if (base.localBindingExists) {
+                    // Named container: local variable may still exist. Skip callDestroy.
+                } else {
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
             }
         }
         // Remove only the entries we processed (keep entries before mark)

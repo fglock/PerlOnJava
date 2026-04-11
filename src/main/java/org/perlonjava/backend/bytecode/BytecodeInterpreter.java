@@ -174,21 +174,27 @@ public class BytecodeInterpreter {
                             case Opcodes.SCOPE_EXIT_CLEANUP -> {
                                 // Scope-exit cleanup for a my-scalar register
                                 int reg = bytecode[pc++];
-                                RuntimeScalar.scopeExitCleanup((RuntimeScalar) registers[reg]);
+                                if (registers[reg] instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.scopeExitCleanup(rs);
+                                }
                                 registers[reg] = null;
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
                                 // Scope-exit cleanup for a my-hash register
                                 int reg = bytecode[pc++];
-                                MortalList.scopeExitCleanupHash((RuntimeHash) registers[reg]);
+                                if (registers[reg] instanceof RuntimeHash rh) {
+                                    MortalList.scopeExitCleanupHash(rh);
+                                }
                                 registers[reg] = null;
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
                                 // Scope-exit cleanup for a my-array register
                                 int reg = bytecode[pc++];
-                                MortalList.scopeExitCleanupArray((RuntimeArray) registers[reg]);
+                                if (registers[reg] instanceof RuntimeArray ra) {
+                                    MortalList.scopeExitCleanupArray(ra);
+                                }
                                 registers[reg] = null;
                             }
 

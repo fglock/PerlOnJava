@@ -4,9 +4,9 @@
 
 **Module**: DBIx::Class 0.082844  
 **Test command**: `./jcpan -t DBIx::Class`  
-**Branch**: `feature/dbix-class-fixes`  
-**PR**: https://github.com/fglock/PerlOnJava/pull/415 (original), PR TBD (current)  
-**Status**: Phase 5 — Fix runtime issues iteratively
+**Branch**: `feature/dbix-class-destroy-weaken`  
+**PR**: https://github.com/fglock/PerlOnJava/pull/485  
+**Status**: Phase 10 — Full 314-test re-baseline; P0 blocker: weak ref cleared during `clone → _copy_state_from`
 
 ## Dependency Tree
 
@@ -903,19 +903,351 @@ instead of relying on DESTROY.
 | leaks.t | 5/9 | 4 failures all weaken-related |
 
 ### Next Steps
-1. Remaining real failures are systemic: DESTROY/TxnScopeGuard (12 t/60core.t + 12 t/100populate.t), UTF-8 flag (8 tests)
-2. Phase 7: TxnScopeGuard fix for t/100populate.t (explicit try/catch rollback)
-3. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
-4. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
+1. **P0: Fix weak ref cleared during `clone → _copy_state_from → register_extra_source`** — 155 tests blocked (see Phase 10)
+2. **P1: Fix GC leak assertions** (refcnt stays at 1 at END time) — ~20 tests with GC-only failures
+3. **P2: Triage remaining real failures** (see Phase 10 categorization)
+4. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
 5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-6. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
+6. UTF-8 flag semantics: 2 tests in t/85utf8.t (systemic JVM limitation)
 
 ### Open Questions
-- `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
+- Weak ref cleared during `connect → clone → _copy_state_from`: Is the intermediate schema object from `shift->clone` being destroyed before `->connection(@_)` returns? See investigation in Phase 10.
+- GC leak at END: is the `$schema` variable's `scopeExitCleanup` not decrementing properly, or is the cascade from schema → storage → dbh not propagating?
 - RowParser crash: is it safe to ignore since all real tests pass before it fires?
+
+### Architecture Reference
+- See `dev/architecture/weaken-destroy.md` for the refCount state machine, `MortalList`, `WeakRefRegistry`, and `scopeExitCleanup` internals — essential for debugging the premature DESTROY and GC leak issues.
+
+---
+
+## Phase 9: Re-baseline After DESTROY/weaken (2026-04-10)
+
+### Background
+
+PR #464 merged DESTROY and weaken/isweak/unweaken into master with refCount tracking.
+This fundamentally changes the DBIx::Class compatibility landscape:
+- `Scalar::Util::isweak()` now returns true for weakened refs
+- DESTROY fires for blessed objects when refCount reaches 0
+- `Scope::Guard`, `TxnScopeGuard` destructors now fire
+- `Devel::GlobalDestruction::in_global_destruction()` works
+
+### Step 9.1: Fix interpreter fallback regressions (DONE)
+
+Two regressions from PR #464 fixed in commit `756f9a46a`:
+
+| Issue | Root cause | Fix |
+|-------|-----------|-----|
+| `ClassCastException` in `SCOPE_EXIT_CLEANUP_ARRAY` | Interpreter registers can hold unexpected types in fallback path | Added `instanceof` guards in `BytecodeInterpreter.java` |
+| `ConcurrentModificationException` in `Makefile.PL` | DESTROY callbacks modify global variable maps during `GlobalDestruction` iteration | Snapshot with `toArray()` in `GlobalDestruction.java` |
+
+### Step 9.2: Current test results (92 files, 2026-04-10)
+
+| Category | Count | Details |
+|----------|-------|---------|
+| Fully passing | 15 | All subtests pass including GC epilogue |
+| GC-only failures | ~13 | Real tests pass; END-block GC assertions fail (refcnt 1) |
+| Blocked by premature DESTROY | 20 | Schema destroyed during `populate_schema()` — no real tests run |
+| Real + GC failures | ~12 | Mix of logic bugs + GC assertion failures |
+| Skipped | ~26 | No DB driver / fork / threads |
+| Errors | ~6 | Parse errors, missing modules |
+
+**Individual test counts**: 645 ok / 183 not ok (total 828 tests emitted)
+
+### Key improvements from DESTROY/weaken
+
+| Before (Phase 5 final) | After (Phase 9) |
+|------------------------|-----------------|
+| t/60core.t: 12 "cached statement" failures | **1 failure** — sth DESTROY now calls `finish()` |
+| `isweak()` always returned false | `isweak()` returns true — Moo accessor validation works |
+| TxnScopeGuard::DESTROY never fired | DESTROY fires on scope exit |
+| weaken() was a no-op | weaken() properly decrements refCount |
+
+### Blocker: Premature DESTROY (20 tests)
+
+**Symptom**: `DBICTest::populate_schema()` crashes with:
+```
+Unable to perform storage-dependent operations with a detached result source
+  (source 'Genre' is not associated with a schema)
+```
+
+**Affected tests** (all show ok=0, fail=2):
+t/64db.t, t/65multipk.t, t/69update.t, t/70auto.t, t/76joins.t, t/77join_count.t,
+t/78self_referencial.t, t/79aliasing.t, t/82cascade_copy.t, t/83cache.t,
+t/87ordered.t, t/90ensure_class_loaded.t, t/91merge_joinpref_attr.t,
+t/93autocast.t, t/94pk_mutation.t, t/104view.t, t/18insert_default.t,
+t/63register_class.t, t/discard_changes_in_DESTROY.t, t/resultset_overload.t
+
+**Root cause**: The schema object's refCount drops to 0 during the `populate()`
+call chain (`populate()` → `dbh_do()` → `BlockRunner` → `Try::Tiny` → storage
+operations). DESTROY fires mid-operation, disconnecting the database. The schema
+is still referenced by `$schema` in the test, so refCount should be >= 1.
+
+**Investigation needed**:
+- Trace where the schema's refCount goes from 1 → 0 during `populate_schema()`
+- Likely a code path that creates a temporary copy of the schema ref (incrementing
+  refCount) then exits scope (decrementing back), but the decrement is applied to
+  the wrong object or at the wrong time
+- The `BlockRunner` → `Try::Tiny` → `Context::Preserve` chain involves multiple
+  scope transitions where refCount could be incorrectly managed
+
+### Blocker: GC leak at END time (refcnt 1)
+
+**Symptom**: All tests that complete their real content still show `refcnt 1` for
+DBI::db, Storage::DBI, and Schema objects at END time. The weak refs in the leak
+tracker registry remain defined instead of becoming undef.
+
+**Impact**: Tests report 2–20 GC assertion failures after passing all real tests.
+In the old plan (pre-DESTROY/weaken), these tests were counted as "GC-only failures"
+with no functional impact. With DESTROY/weaken, the GC tracker now sees real refcounts
+but the cascade to 0 doesn't happen.
+
+**Root cause**: When `$schema` goes out of scope at test end:
+1. `scopeExitCleanup` should decrement schema's refCount to 0
+2. DESTROY should fire on schema, releasing storage (refCount → 0)
+3. DESTROY should fire on storage, closing DBI handle (refCount → 0)
+
+Step 1 or the cascade at steps 2-3 is not happening correctly.
+
+### Tests with real (non-GC) failures
+
+| Test | ok | fail | Notes |
+|------|-----|------|-------|
+| t/60core.t | 91 | 7 | 1 cached stmt, 2 cascading delete (new), 4 GC |
+| t/100populate.t | 36 | 10 | Transaction depth + JDBC batch + GC |
+| t/752sqlite.t | 37 | 20 | Mostly GC (multiple schemas × GC assertions) |
+| t/85utf8.t | 9 | 5 | UTF-8 flag (systemic JVM) |
+| t/93single_accessor_object.t | 10 | 12 | GC heavy |
+| t/84serialize.t | 115 | 5 | All GC (real tests pass) |
+| t/88result_set_column.t | 46 | 6 | GC + TODO |
+| t/101populate_rs.t | 17 | 4 | Needs investigation |
+| t/106dbic_carp.t | 3 | 4 | Needs investigation |
+| t/33exception_wrap.t | 3 | 5 | Needs investigation |
+| t/34exception_action.t | 9 | 4 | Needs investigation |
+
+### Items obsoleted by DESTROY/weaken
+
+These items from the old plan are no longer needed:
+- **Phase 7 (TxnScopeGuard explicit try/catch rollback)** — DESTROY handles this
+- **"Systemic: DESTROY / TxnScopeGuard" section** — resolved by PR #464
+- **"Systemic: GC / weaken / isweak absence" section** — resolved by PR #464
+- **Open Question about weaken/isweak Option B vs C** — moot, they work now
+
+### Implementation Plan (Phase 9 continued)
+
+| Step | What | Impact | Status |
+|------|------|--------|--------|
+| 9.1 | Fix interpreter SCOPE_EXIT_CLEANUP + GlobalDestruction CME | Unblock all testing | DONE |
+| 9.2 | Re-baseline test suite | Get current numbers | DONE |
+| 9.3 | Fix premature DESTROY in populate_schema | Unblock 20 tests | |
+| 9.4 | Fix refcount cascade at scope exit | Fix GC leak assertions | |
+| 9.5 | Triage remaining real failures | Reduce fail count | |
+| 9.6 | Re-run full suite after fixes | Updated numbers | |
+
+## Phase 10: Full Suite Re-baseline (314 tests, 2026-04-10)
+
+### Background
+
+After bundling `Devel::GlobalDestruction` (with plain Exporter) and
+`DBI::Const::GetInfoType` + related modules, re-ran the full 314-test suite
+via `./jcpan -t DBIx::Class`. This gives a complete picture of all failures
+across all test programs, not just the 92-file subset from Phase 9.
+
+### Step 10.1: Bundled modules (DONE)
+
+| Commit | What |
+|--------|------|
+| `a59814308` | Bundle `Devel::GlobalDestruction` with plain Exporter (bypasses Sub::Exporter::Progressive caller() bug) |
+| `e0b7db79e` | Bundle `DBI::Const::GetInfoType`, `GetInfo::ANSI`, `GetInfo::ODBC`, real `GetInfoReturn` |
+
+- `in_global_destruction` bareword error: **0 occurrences** (was widespread)
+- `DBI::Const::GetInfoType` missing: **0 occurrences** (was blocking several tests)
+
+### Step 10.2: Full test results (314 files, 2026-04-10)
+
+**Summary:** 118/314 pass, 196/314 fail, 431/8034 subtests failed
+
+| Category | Count | Details |
+|----------|-------|---------|
+| Fully passing | 28 | All subtests pass (includes DB-skip tests) |
+| Skipped (no DB/threads) | 90 | `no summary found` — need specific DB backends or fork/threads |
+| **Blocked by detached source** | **~155** | `tests=2 fail=2 exit=255` — `DBICTest::init_schema` crashes |
+| GC-only failures | ~10 | Real tests pass; only END-block GC assertions fail |
+| Real + GC failures | ~25 | Mix of functional bugs + GC assertion failures |
+| Errors | ~6 | Parse errors, missing modules (Sybase, MSSQL, etc.) |
+
+### Step 10.3: Root cause analysis — "detached result source" (#1 blocker)
+
+**155 test programs** fail with identical pattern:
+```
+Unable to perform storage-dependent operations with a detached result source
+  (source 'Genre' is not associated with a schema)
+  at t/lib/DBICTest.pm line 435
+```
+
+**Call chain**: `Schema->connect` (line 524 of Schema.pm) does:
+```perl
+sub connect { shift->clone->connection(@_) }
+```
+
+1. `shift` removes the class/object from `@_`
+2. `->clone` creates a new blessed schema via `_copy_state_from`
+3. Inside `_copy_state_from`, for each source:
+   ```perl
+   $self->register_extra_source($source_name => $new);
+   ```
+4. `_register_source` does:
+   ```perl
+   $source->schema($self);                    # sets $source->{schema} = $self
+   weaken $source->{schema} if ref($self);    # weakens it
+   ```
+5. **Problem**: The weakened `$source->{schema}` is **already undef** by the time
+   `_register_source` returns. Verified with instrumentation.
+
+**Root cause hypothesis**: The intermediate schema object created by `clone()` is
+a temporary — `shift->clone` returns a new object, but during the method chain
+`->clone->connection(@_)`, the clone's refcount may drop to 0 at some point in
+the `_copy_state_from` loop, triggering `Schema::DESTROY`. DESTROY (lines 1430+)
+iterates all registered sources and reattaches/weakens them, which can clear the
+schema backref.
+
+**Key code in Schema::DESTROY** (line 1430+):
+```perl
+sub DESTROY {
+    return if $global_phase_destroy ||= in_global_destruction;
+    my $self = shift;
+    my $srcs = $self->source_registrations;
+    for my $source_name (keys %$srcs) {
+        if (length ref $srcs->{$source_name} and refcount($srcs->{$source_name}) > 1) {
+            local $@;
+            eval {
+                $srcs->{$source_name}->schema($self);
+                weaken $srcs->{$source_name};
+                1;
+            } or do { $global_phase_destroy = 1; };
+            last;
+        }
+    }
+}
+```
+
+**Investigation path** (see `dev/architecture/weaken-destroy.md` for refCount internals):
+1. Trace the refCount of the clone object through `_copy_state_from`
+2. Check whether `register_extra_source` → `_register_source` creates temporary
+   copies that decrement refCount below the threshold
+3. Check whether `DESTROY` is firing on the clone during `_copy_state_from`
+4. Verify that `MortalList` scope tracking correctly handles the `shift->clone->method`
+   chain (the clone is created as a temporary with no named variable)
+
+### Step 10.4: Categorized non-detached failures (40 tests)
+
+Detailed analysis shows **27 GC-only, 2 real+GC, 3 real-only, 8 error/can't-run**.
+Only **4 actual real test failures** exist across all 40 non-detached test files.
+
+#### GC-only failures (27 tests)
+All real subtests pass; only appended "Expected garbage collection" assertions fail:
+
+| Test | Tests | GC Fail | Notes |
+|------|-------|---------|-------|
+| t/storage/error.t | 84 | 39 | Tests 1-45 pass; 46-84 all GC |
+| t/storage/on_connect_do.t | 18 | 5 | 13 planned pass; 5 GC appended |
+| t/storage/on_connect_call.t | 21 | 4 | 17 planned pass; 4 GC appended |
+| t/storage/quote_names.t | 27 | 2 | 25 planned pass; 2 GC appended |
+| t/sqlmaker/dbihacks_internals.t | 6494 | 2 | 6492 pass; 2 GC at end |
+| t/storage/exception.t | 5 | 3 | 2 planned pass; 3 GC appended |
+| t/storage/ping_count.t | 4 | 3 | 1 pass; 3 GC |
+| t/storage/dbi_env.t | 2 | 2 | Both tests are GC |
+| t/storage/savepoints.t | 3 | 3 | All 3 are GC; then detached crash |
+| t/106dbic_carp.t | 6 | 3 | 3 planned pass; 3 GC appended |
+| t/53lean_startup.t | 6 | 3 | 3 planned pass; 3 GC appended |
+| t/752sqlite.t | 5 | 4 | 1 pass; 4 GC (DBI::db, Storage::DBI) |
+| t/85utf8.t | 10 | 2 | 8 pass; 2 GC appended |
+| t/resultset_class.t | 7 | 2 | 5 pass; 2 GC |
+| t/sqlmaker/rebase.t | 7 | 3 | 4 pass; 3 GC |
+| t/sqlmaker/limit_dialects/mssql_torture.t | 1 | 1 | GC on MSSQL storage_type |
+| t/storage/stats.t | 3 | 2 | 1 pass; 2 GC; then detached crash |
+| t/storage/prefer_stringification.t | 5 | 3 | 2 pass; 3 GC |
+| t/storage/nobindvars.t | 3 | 3 | All 3 GC |
+| t/inflate/hri_torture.t | 3 | 3 | All 3 GC; then detached crash |
+| t/multi_create/find_or_multicreate.t | 3 | 3 | All 3 GC |
+| t/prefetch/false_colvalues.t | 3 | 3 | All 3 GC |
+| t/prefetch/manual.t | 3 | 3 | All 3 GC; then `_unnamed_` detached crash |
+| t/relationship/custom_opaque.t | 3 | 3 | All 3 GC |
+| t/resultset/inflate_result_api.t | 3 | 3 | All 3 GC |
+| t/row/filter_column.t | 3 | 3 | All 3 GC |
+| t/sqlmaker/literal_with_bind.t | 3 | 3 | All 3 GC |
+| t/26dumper.t | 3 | 2 | 1 pass; 2 GC; then detached crash |
+
+#### Real failures (5 tests with actual functional bugs)
+
+| Test | Tests | Real Fail | GC Fail | Root Cause |
+|------|-------|-----------|---------|------------|
+| t/schema/anon.t | 3 | 1 | 2 | "Schema object not lost in chaining" — detached result source during init_schema |
+| t/storage/on_connect_do.t | 18 | 1 | 5 | "Reading from dropped table" — `database table is locked` (SQLite JDBC) |
+| t/zzzzzzz_perl_perf_bug.t | 3 | 1 | 0 | Overload/bless perf ratio 3.2x > 3.0x threshold |
+| t/resultset/rowparser_internals.t | 7 | 0+crash | 0 | All 7 pass, then `_resolve_collapse` crash after tests |
+| t/row/inflate_result.t | 2 | 0+crash | 0 | Both pass, then detached `User` source crash after tests |
+
+#### Error / can't-run (8 tests)
+
+| Test | Issue |
+|------|-------|
+| t/52leaks.t | `wait()` not implemented in PerlOnJava |
+| t/746sybase.t | `wait()` not implemented in PerlOnJava |
+| t/storage/global_destruction.t | `fork()` not supported; 4 phantom GC tests from TAP bleed |
+| t/sqlmaker/limit_dialects/custom.t | Detached source crash before any tests emitted |
+| t/sqlmaker/limit_dialects/rownum.t | Detached source crash before any tests emitted |
+| t/sqlmaker/msaccess.t | Detached source crash before any tests emitted |
+| t/sqlmaker/quotes.t | Detached source crash before any tests emitted |
+| t/sqlmaker/pg.t | Detached source crash before any tests emitted |
+
+### Step 10.5: Implementation plan
+
+| Step | What | Impact | Priority | Status |
+|------|------|--------|----------|--------|
+| 10.5a | Fix weak ref cleared during `clone → _copy_state_from` | **Unblock 155+ test programs** (including 5 error tests that crash on detached source) | P0 | |
+| 10.5b | Fix GC leak assertions (refcnt stays at 1 at END) | 27 GC-only test programs → fully passing | P1 | |
+| 10.5c | Fix t/storage/on_connect_do.t table lock, t/schema/anon.t chaining | 2 real failures | P2 | |
+| 10.5d | Re-run full suite after P0 fix | Updated numbers | P0 | |
+
+### Key insight for P0 fix
+
+The `shift->clone->connection(@_)` pattern creates a temporary object from `clone()`
+that has no named variable holding it. In PerlOnJava's refCount system (see
+`dev/architecture/weaken-destroy.md`), temporaries in method chains may not be
+properly tracked through `MortalList`. If the clone's refCount reaches 0 during
+`_copy_state_from`, `Schema::DESTROY` fires and clears the weakened `{schema}` refs
+on all sources.
+
+**Confirmed via DESTROY tracing**: Schema::DESTROY fires during `_copy_state_from`:
+```
+*** DESTROY called on DBICTest::Schema=HASH(0x59838256)
+  [0] DBIx::Class::Schema :: main::__ANON__ at Schema.pm:1033
+  [1] DBIx::Class::Schema :: _copy_state_from at Schema.pm:1015
+  [2] DBICTest::BaseSchema :: DBIx::Class::Schema::clone at BaseSchema.pm:334
+  [3] DBIx::Class::Schema :: DBICTest::BaseSchema::clone at Schema.pm:524
+  [4] main :: DBIx::Class::Schema::connect at -e:24
+```
+
+The clone (blessed into a class with DESTROY) is created as a temporary in the
+method chain `shift->clone->connection(@_)`. During `_copy_state_from` (called
+from within `clone`), the clone's refCount drops to 0, triggering DESTROY.
+DESTROY nullifies all weakened `{schema}` refs on the sources.
+
+**Potential fixes** (in order of investigation):
+1. Check if `MortalList` correctly handles temporaries in chained method calls
+   (`a->b->c` — does the result of `a->b` stay alive while `->c` runs?)
+2. Check if `bless` inside `clone()` triggers refCount tracking (Schema has DESTROY),
+   and whether the tracking correctly accounts for the implicit `$self` in `->connection`
+3. As a workaround, `connect()` could be rewritten to hold the clone in a named variable:
+   ```perl
+   sub connect { my $clone = shift->clone; $clone->connection(@_) }
+   ```
+   But this would require patching DBIx::Class, which we want to avoid.
 
 ## Related Documents
 
+- `dev/architecture/weaken-destroy.md` — **Weaken & DESTROY architecture** (refCount state machine, MortalList, WeakRefRegistry, scopeExitCleanup — essential for Phase 10 debugging)
+- `dev/design/destroy_weaken_plan.md` — DESTROY/weaken implementation plan (PR #464)
 - `dev/modules/moo_support.md` — Moo support (dependency of DBIx::Class)
 - `dev/modules/xs_fallback.md` — XS fallback mechanism
 - `dev/modules/makemaker_perlonjava.md` — MakeMaker for PerlOnJava
