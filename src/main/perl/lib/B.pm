@@ -50,7 +50,19 @@ use constant {
 package B::SV {
     sub new {
         my ($class, $ref) = @_;
-        return bless { ref => $ref }, $class;
+        # Two-step construction avoids a cooperative refcount leak:
+        # A single-expression `bless { ref => $ref }` creates a hash literal
+        # via createReferenceWithTrackedElements(), which bumps the referent's
+        # cooperative refcount. But B::SV objects are typically method-chain
+        # temporaries (e.g., svref_2object($ref)->REFCNT) that never enter
+        # cooperative refcounting — the bump is never reversed, permanently
+        # inflating the referent's refcount. By storing in `my $self` first,
+        # the hash enters cooperative refcounting (refCount 0→1 via
+        # setLargeRefCounted), and scope-exit cleanup cascades into elements,
+        # properly reversing the bump.
+        my $self = bless {}, $class;
+        $self->{ref} = $ref;
+        return $self;
     }
 
     sub REFCNT {

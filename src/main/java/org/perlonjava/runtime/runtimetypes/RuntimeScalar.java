@@ -2122,7 +2122,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
         // - ioOwner=false → IO fd recycling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) return;
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) {
+            // Special case: CODE refs with unreleased captures that were never
+            // stored via set() (e.g., anonymous subs passed directly as arguments).
+            // These have refCount=0 (from makeCodeObject) and refCountOwned=false
+            // (never went through setLargeRefCounted). Without this check,
+            // releaseCaptures() would never fire, permanently elevating
+            // captureCount on captured variables and leaking blessed objects.
+            // The null check on capturedScalars ensures we only fire once
+            // (releaseCaptures sets capturedScalars=null to prevent re-entry).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && code.capturedScalars != null
+                    && code.refCount == 0) {
+                code.releaseCaptures();
+            }
+            return;
+        }
 
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
@@ -2177,6 +2193,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && scalar.value instanceof RuntimeCode) {
                 // Fall through to deferDecrementIfTracked below
             } else {
+                // For non-CODE blessed refs with DESTROY: register for deferred
+                // cleanup after the main script returns. The interpreter captures
+                // ALL visible lexicals for eval STRING support, inflating
+                // captureCount on variables that closures don't actually use.
+                // At inner scope exit we can't decrement (closures in outer scopes
+                // may legitimately keep the object alive), but after the main
+                // script finishes ALL scopes have exited, so it's safe.
+                if (scalar.refCountOwned
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeBase rb
+                        && rb.blessId != 0) {
+                    MortalList.addDeferredCapture(scalar);
+                }
                 return;
             }
         }

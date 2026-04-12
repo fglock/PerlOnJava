@@ -31,6 +31,13 @@ public class MortalList {
     // Drained at statement boundaries (FREETMPS equivalent).
     private static final ArrayList<RuntimeBase> pending = new ArrayList<>();
 
+    // Scalars whose scope has exited while captureCount > 0.
+    // These variables hold blessed references that could not be decremented
+    // at scope exit because closures still reference the RuntimeScalar.
+    // Processed by flushDeferredCaptures() after the main script returns,
+    // before END blocks run.
+    private static final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
+
     /**
      * Schedule a deferred refCount decrement for a tracked referent.
      * Called from delete() when removing a tracked blessed reference
@@ -38,6 +45,44 @@ public class MortalList {
      */
     public static void deferDecrement(RuntimeBase base) {
         pending.add(base);
+    }
+
+    /**
+     * Record a captured scalar whose scope has exited but whose refCount
+     * could not be decremented because {@code captureCount > 0}.
+     * Called from {@link RuntimeScalar#scopeExitCleanup} for non-CODE
+     * blessed references that are captured by closures.
+     * <p>
+     * These entries are processed by {@link #flushDeferredCaptures()} after
+     * the main script returns, before END blocks run.
+     */
+    public static void addDeferredCapture(RuntimeScalar scalar) {
+        deferredCaptures.add(scalar);
+    }
+
+    /**
+     * Process all deferred captured scalars.
+     * For each scalar, schedule a refCount decrement via
+     * {@link #deferDecrementIfTracked}, then flush the pending list.
+     * <p>
+     * Called from PerlLanguageProvider after the main script's
+     * {@code MortalList.flush()} and before END blocks, so that
+     * blessed objects whose refCount was kept elevated by interpreter
+     * closure captures (which capture ALL visible lexicals, not just
+     * referenced ones) have DESTROY fire before END block leak checks.
+     * <p>
+     * This is safe because at this point ALL lexical scopes have exited
+     * (the main script has returned). Closures installed in stashes still
+     * hold JVM references to the RuntimeScalar, but the cooperative
+     * refCount should reflect that the declaring scope is gone.
+     */
+    public static void flushDeferredCaptures() {
+        if (deferredCaptures.isEmpty()) return;
+        for (RuntimeScalar scalar : deferredCaptures) {
+            deferDecrementIfTracked(scalar);
+        }
+        deferredCaptures.clear();
+        flush();
     }
 
     /**
