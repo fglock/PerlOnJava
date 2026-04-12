@@ -388,6 +388,15 @@ public class PerlLanguageProvider {
 
             try {
                 if (isMainProgram) {
+                    // Flush deferred mortal decrements from file-scoped lexical cleanup.
+                    // The main script's apply() runs scopeExitCleanup for all my-variables
+                    // (deferring refCount decrements), but the MortalList is not flushed
+                    // inside the subroutine (flush=false for blockIsSubroutine). Process
+                    // those decrements now so objects reach refCount=0 and DESTROY fires
+                    // BEFORE END blocks run — matching Perl 5's destruct sequence where
+                    // file-scoped lexicals are destroyed before END block dispatch.
+                    MortalList.flush();
+
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                     try {
                         runEndBlocks();
@@ -414,6 +423,7 @@ public class PerlLanguageProvider {
             result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
         } catch (Throwable t) {
             if (isMainProgram) {
+                MortalList.flush();  // Flush file-scoped lexical cleanup before END
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                 try {
                     runEndBlocks(false);  // Don't reset $? on exception path

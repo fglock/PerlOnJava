@@ -11,6 +11,24 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 
 public class ListOperators {
     /**
+     * Eagerly release captured variable references from an ephemeral grep/map/all/any
+     * block closure. Like eval BLOCK closures, these blocks execute and are immediately
+     * discarded. Without this, captureCount stays elevated on captured variables,
+     * preventing scopeExitCleanup from decrementing blessed ref refCounts — causing
+     * objects to never reach refCount 0 and DESTROY to never fire.
+     * <p>
+     * Only releases captures for closures flagged as isMapGrepBlock (set by the
+     * compiler for BLOCK syntax). Named subs and user closures are not affected.
+     */
+    private static void releaseEphemeralCaptures(RuntimeScalar closure) {
+        if (closure.type == RuntimeScalarType.CODE
+                && closure.value instanceof RuntimeCode code
+                && code.isMapGrepBlock) {
+            code.releaseCaptures();
+        }
+    }
+
+    /**
      * Transforms the elements of this RuntimeArray using a Perl subroutine.
      * This version passes the outer @_ to the map block for Perl compatibility.
      *
@@ -70,6 +88,7 @@ public class ListOperators {
             }
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            releaseEphemeralCaptures(perlMapClosure);
         }
     }
 
@@ -169,6 +188,9 @@ public class ListOperators {
         // Create a new RuntimeList to hold the sorted elements
         RuntimeList sortedList = new RuntimeList(array);
 
+        // Release captures from ephemeral sort block closure
+        releaseEphemeralCaptures(perlComparatorClosure);
+
         // Return the sorted RuntimeList
         return sortedList;
     }
@@ -237,6 +259,7 @@ public class ListOperators {
             }
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            releaseEphemeralCaptures(perlFilterClosure);
         }
     }
 
@@ -295,6 +318,7 @@ public class ListOperators {
             return scalarTrue.getList();
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            releaseEphemeralCaptures(perlFilterClosure);
         }
     }
 
@@ -353,6 +377,7 @@ public class ListOperators {
             return scalarFalse.getList();
         } finally {
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
+            releaseEphemeralCaptures(perlFilterClosure);
         }
     }
 

@@ -480,6 +480,8 @@ public class WarnDie {
         // is going to be given to exit(). You can modify $? in an END
         // subroutine to change the exit status of your program."
         getGlobalVariable("main::?").set(exitCode);
+        // Flush file-scoped lexical cleanup before END blocks
+        MortalList.flush();
         try {
             runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
         } catch (Throwable t) {
