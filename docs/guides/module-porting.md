@@ -207,6 +207,7 @@ To add tests for a new bundled module:
 - [ ] Compare output with system Perl
 - [ ] `make` passes all unit tests
 - [ ] `make test-bundled-modules` passes module-specific tests
+- [ ] Update `docs/reference/bundled-modules.md` — add the module to the appropriate category table (include external requirements if any)
 
 ---
 
@@ -557,6 +558,7 @@ Run with `perl` (not `jperl`) because it uses fork.
 
 ## See Also
 
+- [Bundled Modules Reference](../reference/bundled-modules.md) — Complete list of included modules (update when adding new ones)
 - [XS Compatibility Reference](../reference/xs-compatibility.md) — XS modules with Java implementations and PP fallbacks
 - [Using CPAN Modules](using-cpan-modules.md) — Installing and using CPAN modules with jcpan
 - [Feature Matrix](../reference/feature-matrix.md) — Perl feature compatibility

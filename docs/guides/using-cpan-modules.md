@@ -263,6 +263,7 @@ Check the module's documentation for fallback behavior.
 
 ## See Also
 
+- [Bundled Modules Reference](../reference/bundled-modules.md) - Complete list of included modules
 - [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility
 - [Module Porting Guide](module-porting.md) - How to port modules to PerlOnJava
 - [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility
