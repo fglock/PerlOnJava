@@ -24,6 +24,13 @@ public class DestroyDispatch {
     private static final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache =
             new ConcurrentHashMap<>();
 
+    // DESTROY rescue detection: when DESTROY stores $self in a hash element,
+    // the object should survive (like Perl 5's Schema::DESTROY self-save pattern).
+    // These fields track the current DESTROY target so RuntimeHash.put can detect
+    // when the referent is being "rescued" by storing it elsewhere.
+    static volatile RuntimeBase currentDestroyTarget = null;
+    static volatile boolean destroyTargetRescued = false;
+
     /**
      * Check whether the class identified by blessId defines DESTROY (or AUTOLOAD).
      * Result is cached in the destroyClasses BitSet.
@@ -65,12 +72,6 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
-        // Clear weak refs BEFORE calling DESTROY (or returning for unblessed objects).
-        // For unblessed objects this clears weak refs to birth-tracked anonymous
-        // containers (e.g., anonymous hashes from createReferenceWithTrackedElements).
-        // Untracked objects (refCount == -1) never reach callDestroy under Strategy A.
-        WeakRefRegistry.clearWeakRefsTo(referent);
-
         // Release closure captures when a CODE ref's refCount hits 0.
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
@@ -88,10 +89,9 @@ public class DestroyDispatch {
 
         String className = NameNormalizer.getBlessStr(referent.blessId);
         if (className == null || className.isEmpty()) {
-            // Unblessed object — no DESTROY to call, but cascade into elements
+            // Unblessed object — clear weak refs immediately and cascade into elements
             // to decrement refCounts of any tracked references they hold.
-            // Without this, unblessed containers like `$args = {@_}` would leak
-            // element refCounts when going out of scope.
+            WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
             } else if (referent instanceof RuntimeArray arr) {
@@ -100,6 +100,12 @@ public class DestroyDispatch {
             return;
         }
 
+        // Blessed object — DEFER clearWeakRefsTo until after DESTROY.
+        // In Perl 5, weak references are only cleared after DESTROY if the object
+        // was NOT resurrected. Schema::DESTROY relies on $source->{schema} (a weak
+        // ref to the Schema) still being alive during DESTROY so it can find a
+        // source with refcount > 1 and re-attach. Clearing weak refs before DESTROY
+        // would break this self-save pattern.
         doCallDestroy(referent, className);
     }
 
@@ -118,10 +124,11 @@ public class DestroyDispatch {
         }
 
         if (destroyMethod == null || destroyMethod.type != RuntimeScalarType.CODE) {
-            // No DESTROY method, but still need to cascade cleanup into elements
+            // No DESTROY method — clear weak refs and cascade cleanup into elements
             // to decrement refCounts of any tracked references they hold.
             // Without this, blessed objects without DESTROY (e.g., Moo objects like
             // DBIx::Class::Storage::BlockRunner) leak their contained references.
+            WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
                 MortalList.flush();
@@ -148,6 +155,17 @@ public class DestroyDispatch {
         savedDollarAt.type = dollarAt.type;
         savedDollarAt.value = dollarAt.value;
 
+        // Enable rescue detection: track the DESTROY target and reset the flag.
+        // During DESTROY, if $self is stored in a hash element (e.g.,
+        // Schema::DESTROY reattaching to a ResultSource), RuntimeHash.put
+        // will detect the referent and set destroyTargetRescued = true.
+        // After DESTROY, if rescued, skip cascade to keep internals alive.
+        // Note: refCount stays at MIN_VALUE to prevent re-entrant DESTROY calls.
+        RuntimeBase savedTarget = currentDestroyTarget;
+        boolean savedRescued = destroyTargetRescued;
+        currentDestroyTarget = referent;
+        destroyTargetRescued = false;
+
         try {
             // Build $self reference to pass as $_[0]
             RuntimeScalar self = new RuntimeScalar();
@@ -173,10 +191,29 @@ public class DestroyDispatch {
             args.push(self);
             RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
 
-            // Cascading destruction: after DESTROY runs, walk the destroyed object's
-            // internal fields for any blessed references and defer their refCount
-            // decrements. This ensures nested objects (e.g., $self->{inner}) are
-            // destroyed when their parent is destroyed.
+            // Check if DESTROY rescued the object by storing $self somewhere.
+            // If destroyTargetRescued was set during DESTROY (detected by
+            // RuntimeScalar.set), the object should survive — skip cascade.
+            if (destroyTargetRescued) {
+                // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
+                // Mark as untracked (-1) so cooperative refcounting won't trigger
+                // DESTROY again. The JVM GC will handle final cleanup.
+                // Setting to 1 instead would cause infinite DESTROY loops because
+                // the temporary reference that triggered DESTROY is already gone,
+                // so refCount would immediately drop back to 0.
+                referent.refCount = -1;
+                return;
+            }
+
+            // Object was NOT rescued — clear weak refs now (deferred from callDestroy).
+            // In Perl 5, weak refs are cleared after DESTROY only if the object
+            // wasn't resurrected. We match that by clearing here.
+            WeakRefRegistry.clearWeakRefsTo(referent);
+
+            // Cascading destruction: after DESTROY runs and the object was NOT rescued,
+            // walk the destroyed object's internal fields for any blessed references
+            // and defer their refCount decrements. This ensures nested objects
+            // (e.g., $self->{inner}) are destroyed when their parent is destroyed.
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
                 MortalList.flush();
@@ -198,6 +235,9 @@ public class DestroyDispatch {
                     new RuntimeScalar(warning),
                     new RuntimeScalar(""));
         } finally {
+            // Restore the DESTROY target and rescue flag for nested DESTROY calls
+            currentDestroyTarget = savedTarget;
+            destroyTargetRescued = savedRescued;
             // Restore $@ — must happen whether DESTROY succeeded or threw.
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;

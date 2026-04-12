@@ -1012,6 +1012,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = value.value;
 
+        // DESTROY rescue detection for reference types.
+        // Only trigger when the OLD value was a reference to the DESTROY target
+        // (e.g., a weak ref being overwritten by a strong ref to the same object).
+        // This detects Schema::DESTROY's self-save pattern where:
+        //   $source->{schema} = $self  (overwriting weak ref with strong ref)
+        // But avoids false positives from:
+        //   my $self = shift  (new local variable, oldBase is null)
+        if (DestroyDispatch.currentDestroyTarget != null
+                && oldBase == DestroyDispatch.currentDestroyTarget
+                && this.value instanceof RuntimeBase base
+                && base == DestroyDispatch.currentDestroyTarget) {
+            DestroyDispatch.destroyTargetRescued = true;
+        }
+
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {

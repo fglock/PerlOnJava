@@ -66,11 +66,12 @@ package B::SV {
     }
 
     sub REFCNT {
-        # JVM uses tracing GC, not reference counting.
-        # Return 1 as a reasonable default for compatibility.
-        # This aligns with Internals::SvREFCNT() and Devel::Peek::SvREFCNT()
-        # which also return 1, and makes is_oneref() checks pass.
-        return 1;
+        # Return the actual cooperative refcount via Internals::SvREFCNT.
+        # This enables DBIC's Schema::DESTROY self-save mechanism (checks
+        # refcount > 1 to detect if someone else still holds a reference)
+        # and the leak tracer (checks if objects have been properly released).
+        my $self = shift;
+        return Internals::SvREFCNT($self->{ref});
     }
 
     sub RV {
