@@ -105,9 +105,9 @@ public class EmitStatement {
 
         // Only emit flush when there are variables that need cleanup.
         // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
-        // skip the flush entirely, eliminating a method call per loop iteration.
-        boolean needsCleanup = flush
-                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
+        // skip the Phase 1/1b cleanup but still flush: pending entries from inner sub
+        // scope exits (e.g., Foo->new()->method() chain temporaries) may need processing.
+        boolean needsCleanup = !scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
 
         // Phase 1: Run scopeExitCleanup for scalar variables.
         // This defers refCount decrements for blessed references with DESTROY,
@@ -162,7 +162,9 @@ public class EmitStatement {
         //   2. The pending entries are only deferred decrements that should
         //      have been processed earlier (Perl 5 FREETMPS at statement
         //      boundaries), not entries that need to be preserved.
-        if (needsCleanup) {
+        // Flush when requested (non-sub, non-do blocks) even without my-variables,
+        // because pending entries may exist from inner sub scope exits.
+        if (flush) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "flush",

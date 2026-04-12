@@ -205,10 +205,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // First, fully materialize the right-hand side list BEFORE clearing
                 // This is critical for self-referential assignments like: %h = (new_stuff, %h)
                 // We must capture the current hash contents before clearing.
+                // Use direct element addition (not push()) to avoid spurious refCount
+                // increments on the temporary materialized list — push() calls
+                // incrementRefCountForContainerStore, which would create unmatched
+                // refCounts that prevent DESTROY from firing.
                 RuntimeArray materializedList = new RuntimeArray();
                 Iterator<RuntimeScalar> iterator = value.iterator();
                 while (iterator.hasNext()) {
-                    materializedList.push(new RuntimeScalar(iterator.next()));
+                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
                 // Store the original list size for scalar context
@@ -272,10 +276,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // First, fully materialize the right-hand side list
                 // This is important for cases like %t1 = (@t2{'a','b'})
                 // where @t2 is also tied and we need to fetch values before clearing
+                // Use direct element addition (not push()) — see PLAIN_HASH comment.
                 RuntimeArray materializedList = new RuntimeArray();
                 Iterator<RuntimeScalar> iterator = value.iterator();
                 while (iterator.hasNext()) {
-                    materializedList.push(new RuntimeScalar(iterator.next()));
+                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
                 // Now clear and repopulate from the materialized list

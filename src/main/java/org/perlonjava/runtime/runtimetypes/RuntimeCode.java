@@ -1632,7 +1632,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 inlineCacheCode[cacheIndex] = code;
                             }
                             
-                            // Call the method
+                            // Call the method with function-scoped mortal boundary
                             RuntimeArray a = new RuntimeArray();
                             a.elements.add(runtimeScalar);
                             for (RuntimeBase arg : args) {
@@ -1645,7 +1645,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String fullMethodName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
                                 getGlobalVariable(autoloadVariableName).set(fullMethodName);
                             }
-                            return code.apply(a, callContext);
+                            MortalList.pushMark();
+                            try {
+                                return code.apply(a, callContext);
+                            } finally {
+                                MortalList.popMark();
+                            }
                         }
                     }
                 }
@@ -2232,6 +2237,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Save caller's call-site hint hash so caller()[10] can retrieve them
             HintHashRegistry.pushCallerHintHash();
             int cleanupMark = MyVarCleanupStack.pushMark();
+            // Establish a function-scoped mortal boundary so that
+            // statement-boundary flushAboveMark() inside this function
+            // only processes entries from this scope, not entries from
+            // the caller (e.g., bless mortal entries for method chain
+            // temporaries like Foo->new()->method()).
+            MortalList.pushMark();
             try {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(a, callContext);
@@ -2274,6 +2285,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 throw e;
             } finally {
+                // Pop the function-scoped mortal mark. Entries added by this
+                // function's scope-exit cleanup "fall" to the caller's scope
+                // and will be processed by the caller's flushAboveMark().
+                MortalList.popMark();
                 // After unwindTo, entries are already removed; popMark is a no-op.
                 // On normal return, popMark discards registrations without cleanup.
                 MyVarCleanupStack.popMark(cleanupMark);
@@ -2505,6 +2520,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash();
                 int cleanupMark = MyVarCleanupStack.pushMark();
+                MortalList.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     RuntimeList result = code.apply(subroutineName, a, callContext);
@@ -2529,6 +2545,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     throw e;
                 } finally {
+                    MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();
@@ -2686,6 +2703,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
                 HintHashRegistry.pushCallerHintHash();
                 int cleanupMark = MyVarCleanupStack.pushMark();
+                MortalList.pushMark();
                 try {
                     // Cast the value to RuntimeCode and call apply()
                     RuntimeList result = code.apply(subroutineName, a, callContext);
@@ -2710,6 +2728,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     throw e;
                 } finally {
+                    MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
                     HintHashRegistry.popCallerHintHash();
                     WarningBitsRegistry.popCallerHints();

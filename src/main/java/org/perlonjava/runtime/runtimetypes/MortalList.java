@@ -412,11 +412,64 @@ public class MortalList {
      * Called before scope-exit cleanup so that popAndFlush() only
      * processes entries added by the cleanup (not earlier entries
      * from outer scopes or prior operations).
+     * Also called at function entry (RuntimeCode.apply) to establish
+     * a function-scoped mortal boundary — entries from the caller's
+     * scope stay below the mark and are not processed by statement-
+     * boundary flushes inside the callee.
      * Analogous to Perl 5's SAVETMPS.
      */
     public static void pushMark() {
         if (!active) return;
         marks.add(pending.size());
+    }
+
+    /**
+     * Pop the most recent mark without flushing.
+     * Called at function return to remove the function-scoped boundary.
+     * Entries that were above the mark "fall" into the caller's scope
+     * and will be processed by the caller's flushAboveMark() at the
+     * next statement boundary.
+     */
+    public static void popMark() {
+        if (!active || marks.isEmpty()) return;
+        marks.removeLast();
+    }
+
+    /**
+     * Flush entries above the top mark without popping it.
+     * Used at statement boundaries (FREETMPS equivalent) to process
+     * deferred decrements from the current function scope only.
+     * Entries below the mark (from caller scopes) are untouched,
+     * preventing premature DESTROY of method chain temporaries like
+     * {@code Foo->new()->method()} where the bless mortal entry
+     * must survive until the caller's statement boundary.
+     * <p>
+     * If no mark exists (top-level code), behaves like {@link #flush()}.
+     */
+    public static void flushAboveMark() {
+        if (!active || pending.isEmpty() || flushing) return;
+        int mark = marks.isEmpty() ? 0 : marks.getLast();
+        if (pending.size() <= mark) return;
+        flushing = true;
+        try {
+            for (int i = mark; i < pending.size(); i++) {
+                RuntimeBase base = pending.get(i);
+                if (base.refCount > 0 && --base.refCount == 0) {
+                    if (base.localBindingExists) {
+                        // Named container: local variable may still exist.
+                    } else {
+                        base.refCount = Integer.MIN_VALUE;
+                        DestroyDispatch.callDestroy(base);
+                    }
+                }
+            }
+            // Remove only entries above the mark
+            while (pending.size() > mark) {
+                pending.removeLast();
+            }
+        } finally {
+            flushing = false;
+        }
     }
 
     /**

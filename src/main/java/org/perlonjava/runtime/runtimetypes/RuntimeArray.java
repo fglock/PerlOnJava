@@ -29,6 +29,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public List<RuntimeScalar> elements;
     // For hash assignment in scalar context: %h = (1,2,3,4) should return 4, not 2
     public Integer scalarContextSize;
+    // True if elements have been stored with refCount tracking (via push/setFromList
+    // calling incrementRefCountForContainerStore). False for @_ which uses aliasing
+    // (setArrayOfAlias) without refCount increments. Checked by pop/shift to decide
+    // whether to mortal-ize removed elements.
+    public boolean elementsOwned;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
 
@@ -103,6 +108,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
+                    // If this element owned a refCount (stored via push or array assignment),
+                    // defer the decrement so the caller can capture the value first.
+                    // This matches Perl 5's sv_2mortal on popped values.
+                    // Only do this for arrays that own their elements (elementsOwned=true).
+                    // @_ uses aliasing (setArrayOfAlias) without refCount increments,
+                    // so its elements must NOT be mortal-ized on shift/pop — doing so
+                    // would corrupt the caller's refCount tracking.
+                    if (runtimeArray.elementsOwned && result.refCountOwned
+                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && result.value instanceof RuntimeBase base
+                            && base.refCount > 0) {
+                        result.refCountOwned = false;
+                        MortalList.deferDecrement(base);
+                    }
                     yield result;
                 }
                 yield scalarUndef;
@@ -132,6 +151,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
+                    // If this element owned a refCount, defer the decrement.
+                    // See pop() for rationale and elementsOwned guard.
+                    if (runtimeArray.elementsOwned && result.refCountOwned
+                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && result.value instanceof RuntimeBase base
+                            && base.refCount > 0) {
+                        result.refCountOwned = false;
+                        MortalList.deferDecrement(base);
+                    }
                     yield result;
                 }
                 yield scalarUndef;
@@ -169,7 +197,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeBase value) {
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
+                int sizeBefore = runtimeArray.elements.size();
                 value.addToArray(runtimeArray);
+                // Increment refCount for tracked references stored by push.
+                // addToArray creates copies via copy constructor (no refCount increment),
+                // so we must account for the container store here, matching the behavior
+                // of array assignment (setFromList) which also calls this.
+                for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
+                    RuntimeScalar.incrementRefCountForContainerStore(runtimeArray.elements.get(i));
+                }
+                runtimeArray.elementsOwned = true;
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -659,6 +696,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 for (RuntimeScalar elem : this.elements) {
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
+                this.elementsOwned = true;
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -676,9 +714,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case TIED_ARRAY -> {
                 // First, fully materialize the right-hand side list
                 // This is important when the right-hand side contains tied variables
+                // Use direct element addition (not push()) to avoid spurious refCount
+                // increments on the temporary materialized list.
                 RuntimeArray materializedList = new RuntimeArray();
                 for (RuntimeScalar element : list) {
-                    materializedList.push(new RuntimeScalar(element));
+                    materializedList.elements.add(new RuntimeScalar(element));
                 }
 
                 // Now clear and repopulate from the materialized list

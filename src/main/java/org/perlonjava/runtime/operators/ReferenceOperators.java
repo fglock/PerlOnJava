@@ -37,10 +37,25 @@ public class ReferenceOperators {
             int newBlessId = NameNormalizer.getBlessId(str);
 
             if (referent.refCount >= 0) {
-                // Re-bless: update class, keep refCount.
+                // Already-tracked referent (e.g., anonymous hash from `bless {}`).
                 // Always keep tracking — even classes without DESTROY need
                 // cascading cleanup of their hash/array elements when freed.
-                referent.setBlessId(newBlessId);
+                if (referent.blessId == 0) {
+                    // First bless of a tracked referent. Mortal-ize: bump refCount
+                    // and queue a deferred decrement so that if the blessed ref is
+                    // never stored in a named variable (method-chain temporaries like
+                    // `Foo->new()->method()`), the flush brings refCount back to 0
+                    // and fires DESTROY.  If the ref IS stored (the common
+                    // `my $self = bless {}, $class` pattern), setLargeRefCounted()
+                    // increments refCount first, so the mortal flush leaves it at the
+                    // correct count.
+                    referent.setBlessId(newBlessId);
+                    referent.refCount++;  // 0 → 1 (or N → N+1 for edge cases)
+                    MortalList.deferDecrement(referent);
+                } else {
+                    // Re-bless: update class, keep refCount.
+                    referent.setBlessId(newBlessId);
+                }
             } else {
                 // First bless (or previously untracked)
                 boolean wasAlreadyBlessed = referent.blessId != 0;
@@ -55,10 +70,23 @@ public class ReferenceOperators {
                     referent.refCount = 1;
                     runtimeScalar.refCountOwned = true;
                 } else {
-                    // First bless (e.g., inside new()): the RuntimeScalar is a
-                    // temporary that will be copied into a named variable via
-                    // setLarge(), which increments refCount. Start at 0.
-                    referent.refCount = 0;
+                    // First bless: start at refCount=1 and add to MortalList.
+                    // The mortal entry will decrement back to 0 at the next
+                    // statement-boundary flush (FREETMPS equivalent).
+                    //
+                    // If the blessed ref is stored in a named variable (the
+                    // common `my $self = bless {}, $class` pattern), setLarge()
+                    // increments refCount to 2. The mortal flush then brings it
+                    // back to 1, which is correct: only the variable owns it.
+                    //
+                    // If the blessed ref is returned directly without storage
+                    // (e.g., `sub new { bless {}, shift }`), the mortal entry
+                    // ensures the object is properly cleaned up when the caller's
+                    // statement boundary flushes, fixing method chain temporaries
+                    // like `Foo->new()->method()` where the invocant was never
+                    // tracked.
+                    referent.refCount = 1;
+                    MortalList.deferDecrement(referent);
                 }
                 // Activate the mortal mechanism
                 MortalList.active = true;
