@@ -337,10 +337,18 @@ These are loaded automatically or via `use`:
 - **Java + Perl** — Java provides the XS-equivalent functions; a Perl `.pm`
   file provides the high-level API.
 
+## Adding a New Bundled Module
+
+To bundle a new module into PerlOnJava, see the
+**[Module Porting Guide](../guides/module-porting.md)**.  After adding the
+module, update this page — add an entry to the appropriate category table
+with the module name, implementation type, and any notes about external
+requirements.
+
 ## See Also
 
+- [Module Porting Guide](../guides/module-porting.md) — How to bundle new modules
 - [Using CPAN Modules](../guides/using-cpan-modules.md) — Installing additional modules
 - [Database Access Guide](../guides/database-access.md) — DBI + JDBC setup
 - [XS Compatibility](xs-compatibility.md) — Status of XS module support
 - [Feature Matrix](feature-matrix.md) — Perl language feature support
-- [Module Porting Guide](../guides/module-porting.md) — Contributing new modules
