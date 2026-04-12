@@ -271,7 +271,7 @@ sub _flush {
 
     # Update state: output becomes new source, clear pending
     @{$st->{sources}} = ($output);
-    @{$st->{pending}} = [];
+    @{$st->{pending}} = ();
 
     # Update the array (one image for now; multi-frame support later)
     @$self = ($output);
