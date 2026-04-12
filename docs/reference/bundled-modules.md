@@ -68,20 +68,6 @@ $img->Write('output.png');
 See the design document for implementation details:
 [dev/modules/image_magick.md](../../dev/modules/image_magick.md).
 
-### Net::SSLeay / IO::Socket::SSL — TLS/SSL
-
-These modules have Java-backed implementations that use the JVM's built-in
-TLS stack (JSSE).  No OpenSSL installation is needed — TLS just works.
-
-```perl
-use IO::Socket::SSL;
-my $sock = IO::Socket::SSL->new(
-    PeerHost => 'example.com',
-    PeerPort => 443,
-    SSL_verify_mode => SSL_VERIFY_PEER,
-);
-```
-
 ---
 
 ## Module Categories
@@ -172,8 +158,8 @@ These are loaded automatically or via `use`:
 | `IO::Socket::INET` | Perl | |
 | `IO::Socket::IP` | Perl | |
 | `IO::Socket::UNIX` | Perl | |
-| `IO::Socket::SSL` | Java + Perl | Uses JVM TLS (JSSE) |
-| `Net::SSLeay` | Java + Perl | Uses JVM TLS (JSSE) |
+| `IO::Socket::SSL` | Java + Perl | Uses JVM TLS (JSSE) — no OpenSSL needed |
+| `Net::SSLeay` | Java + Perl | Uses JVM TLS (JSSE) — no OpenSSL needed |
 | `Net::FTP` | Perl | |
 | `Net::SMTP` | Perl | |
 | `Net::POP3` | Perl | |
@@ -234,7 +220,7 @@ These are loaded automatically or via `use`:
 | `Time::HiRes` | Java | `System.nanoTime()` |
 | `Time::Piece` | Java + Perl | |
 | `Time::Local` | Perl | |
-| `DateTime` | Java + Perl | Uses `java.time` APIs |
+| `DateTime` | Java + Perl | Java backend bundled; install `DateTime` from CPAN with `jcpan -i DateTime` (timezone data gets frequent updates) |
 | `POSIX` | Java | Includes `strftime`, `mktime`, etc. |
 
 ### Math
