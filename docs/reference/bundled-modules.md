@@ -1,0 +1,354 @@
+# Bundled Modules Reference
+
+PerlOnJava ships with 150+ modules built into the JAR — no installation needed.
+Additional pure-Perl modules can be installed from CPAN with
+[jcpan](../guides/using-cpan-modules.md).
+
+This page lists every bundled module, grouped by category, and documents
+modules that have **external requirements** or **special instructions**.
+
+---
+
+## Modules with External Requirements
+
+Some bundled modules need external software to be installed separately.
+
+### DBI — Database Access
+
+`DBI` is bundled with a JDBC backend.  **SQLite works out of the box** (the
+driver is included in the JAR).  Other databases require adding a JDBC driver.
+
+```perl
+use DBI;
+my $dbh = DBI->connect("dbi:SQLite:dbname=:memory:", "", "");
+```
+
+For MySQL, PostgreSQL, Oracle, BigQuery, and other databases, see the full
+guide: **[Database Access Guide](../guides/database-access.md)**.
+
+| Database   | Driver setup |
+|------------|-------------|
+| SQLite     | Built-in — nothing to install |
+| MySQL      | `./jperl Configure.pl --search mysql-connector-java` |
+| PostgreSQL | `./jperl Configure.pl --search postgresql` |
+| Oracle     | `./jperl Configure.pl --search ojdbc` |
+
+### Image::Magick — Image Processing
+
+`Image::Magick` is a pure-Perl CLI wrapper that delegates to ImageMagick
+command-line tools.  It provides the same API as the CPAN XS module
+(Read, Write, Resize, Crop, Annotate, etc.) without requiring native
+PerlMagick bindings.
+
+**Requires ImageMagick CLI tools to be installed and in PATH.**
+
+```bash
+# macOS
+brew install imagemagick
+
+# Ubuntu / Debian
+sudo apt install imagemagick
+
+# Windows
+choco install imagemagick
+```
+
+ImageMagick 7 (`magick` command) is preferred.  ImageMagick 6
+(`convert`/`identify`) is also supported on Linux and macOS.
+
+```perl
+use Image::Magick;
+my $img = Image::Magick->new;
+$img->Set(size => '200x200');
+$img->Read('xc:white');
+$img->Resize(geometry => '100x100');
+$img->Write('output.png');
+```
+
+See the design document for implementation details:
+[dev/modules/image_magick.md](../../dev/modules/image_magick.md).
+
+### Net::SSLeay / IO::Socket::SSL — TLS/SSL
+
+These modules have Java-backed implementations that use the JVM's built-in
+TLS stack (JSSE).  No OpenSSL installation is needed — TLS just works.
+
+```perl
+use IO::Socket::SSL;
+my $sock = IO::Socket::SSL->new(
+    PeerHost => 'example.com',
+    PeerPort => 443,
+    SSL_verify_mode => SSL_VERIFY_PEER,
+);
+```
+
+---
+
+## Module Categories
+
+### Core / Pragmas
+
+These are loaded automatically or via `use`:
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `strict` | Java | |
+| `warnings` | Java | |
+| `utf8` | Java | |
+| `feature` | Java | |
+| `integer` | Java | |
+| `bytes` | Java | |
+| `lib` | Java | |
+| `base` | Java | |
+| `parent` | Java | |
+| `vars` | Java | |
+| `subs` | Java | |
+| `attributes` | Java | |
+| `overload` | Java + Perl | |
+| `overloading` | Java | |
+| `re` | Java | |
+| `mro` | Java | |
+| `builtin` | Java | |
+| `version` | Java + Perl | |
+| `Exporter` | Perl | |
+| `AutoLoader` | Perl | |
+| `English` | Perl | |
+| `Env` | Perl | |
+| `Fatal` | Perl | |
+| `Config` | Perl | |
+| `Errno` | Perl | |
+| `Fcntl` | Perl | |
+| `B` | Perl | Partial — enough for B::Deparse |
+| `UNIVERSAL` | Java | `isa`, `can`, `DOES`, `VERSION` |
+
+### Data Processing
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Data::Dumper` | Java + Perl | |
+| `JSON` / `JSON::PP` | Java | Fast encode/decode via fastjson2 |
+| `YAML::PP` | Java + Perl | |
+| `TOML` | Java | |
+| `Text::CSV` | Java | |
+| `Storable` | Java + Perl | `freeze`, `thaw`, `dclone` |
+| `Clone` | Java + Perl | Deep copy |
+| `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |
+| `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, etc. |
+| `Hash::Util` | Java | `lock_keys`, `lock_hash`, etc. |
+
+### File & I/O
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `File::Spec` | Java + Perl | Platform-specific variants included |
+| `File::Basename` | Perl | |
+| `File::Copy` | Perl | |
+| `File::Find` | Perl | |
+| `File::Glob` | Perl | |
+| `File::Path` | Perl | `make_path`, `remove_tree` |
+| `File::Temp` | Java + Perl | |
+| `File::stat` | Perl | |
+| `File::Compare` | Perl | |
+| `Cwd` | Java | |
+| `IO::File` | Perl | |
+| `IO::Handle` | Java + Perl | |
+| `IO::Dir` | Perl | |
+| `IO::Select` | Perl | |
+| `IO::Seekable` | Perl | |
+| `IO::Zlib` | Perl | |
+| `FileHandle` | Perl | |
+| `DirHandle` | Perl | |
+| `SelectSaver` | Perl | |
+| `PerlIO::encoding` | Perl | |
+
+### Network & Web
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `HTTP::Tiny` | Java + Perl | Java `HttpClient` backend |
+| `HTTP::Date` | Perl | |
+| `HTTP::CookieJar` | Perl | |
+| `Socket` | Java + Perl | |
+| `IO::Socket::INET` | Perl | |
+| `IO::Socket::IP` | Perl | |
+| `IO::Socket::UNIX` | Perl | |
+| `IO::Socket::SSL` | Java + Perl | Uses JVM TLS (JSSE) |
+| `Net::SSLeay` | Java + Perl | Uses JVM TLS (JSSE) |
+| `Net::FTP` | Perl | |
+| `Net::SMTP` | Perl | |
+| `Net::POP3` | Perl | |
+| `Net::NNTP` | Perl | |
+| `Net::Ping` | Perl | |
+| `Net::Cmd` | Perl | |
+| `URI::Escape` | Perl | |
+
+### Database
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `DBI` | Java + Perl | JDBC backend; see [Database Access](../guides/database-access.md) |
+| `DBD::SQLite` | Perl | Built-in — no driver setup needed |
+| `DBD::Mem` | Perl | In-memory tables |
+
+### Cryptography & Encoding
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Digest::MD5` | Java | `java.security.MessageDigest` |
+| `Digest::SHA` | Java | `java.security.MessageDigest` |
+| `Digest` | Perl | |
+| `MIME::Base64` | Java | |
+| `MIME::QuotedPrint` | Java | |
+| `Encode` | Java + Perl | |
+| `Unicode::Normalize` | Java | |
+| `Unicode::UCD` | Java | |
+
+### Archives & Compression
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Archive::Tar` | Perl | |
+| `Archive::Zip` | Java + Perl | Uses `java.util.zip` |
+| `Compress::Raw::Zlib` | Java | Uses `java.util.zip` |
+| `Compress::Zlib` | Java + Perl | |
+| `IO::Zlib` | Perl | |
+
+### XML & HTML
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `XML::Parser` | Perl | |
+| `XML::Parser::Expat` | Java | Uses Java SAX parser |
+| `HTML::Parser` | Java | |
+
+### Image Processing
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Image::Magick` | Perl | CLI wrapper; requires `magick` in PATH |
+
+### Date & Time
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Time::HiRes` | Java | `System.nanoTime()` |
+| `Time::Piece` | Java + Perl | |
+| `Time::Local` | Perl | |
+| `DateTime` | Java + Perl | Uses `java.time` APIs |
+| `POSIX` | Java | Includes `strftime`, `mktime`, etc. |
+
+### Math
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Math::BigInt` | Java | Uses `java.math.BigInteger` |
+
+### Process Control
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `IPC::Open2` | Perl | |
+| `IPC::Open3` | Java | |
+| `IPC::System::Simple` | Perl | |
+
+### Terminal
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Term::ReadKey` | Java | |
+| `Term::ReadLine` | Java | |
+| `Term::ANSIColor` | Perl | |
+| `Term::Table` | Perl | |
+
+### OOP & Introspection
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Scalar::Util` | Java | |
+| `Sub::Name` | Java | |
+| `Sub::Util` | Java | |
+| `Class::Struct` | Perl | |
+| `Attribute::Handlers` | Perl | |
+| `Devel::Cycle` | Perl | |
+| `Devel::Peek` | Perl | |
+
+### Testing
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Test::More` | Perl | |
+| `Test::Simple` | Perl | |
+| `Test::Builder` | Perl | |
+| `Test::Harness` | Perl | |
+| `Test2::Suite` | Perl | Full Test2 stack (~100 files) |
+| `TAP::Harness` | Perl | Full TAP stack (~43 files) |
+| `App::Prove` | Perl | `prove` command |
+
+### Build & Install
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `ExtUtils::MakeMaker` | Perl | PerlOnJava-specific version |
+| `CPAN` | Perl | Full CPAN client (~30 sub-modules) |
+| `CPAN::Meta` | Perl | |
+| `Module::Build::Base` | Perl | |
+| `Parse::CPAN::Meta` | Perl | |
+| `DynaLoader` / `XSLoader` | Java | Routes XS loads to Java implementations |
+
+### Documentation
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Pod::Simple` | Perl | ~22 sub-modules |
+| `Pod::Perldoc` | Perl | ~12 sub-modules |
+| `Pod::Text` | Perl | + Color, Overstrike, Termcap |
+| `Pod::Man` | Perl | |
+| `Pod::Usage` | Perl | |
+| `Pod::Checker` | Perl | |
+
+### Java Integration
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Java::System` | Java + Perl | Access JVM system properties |
+
+### Miscellaneous
+
+| Module | Implementation | Notes |
+|--------|---------------|-------|
+| `Getopt::Long` | Perl | |
+| `Getopt::Std` | Perl | |
+| `Sys::Hostname` | Java | |
+| `I18N::Langinfo` | Java | |
+| `Benchmark` | Perl | |
+| `Filter::Simple` | Perl | |
+| `Filter::Util::Call` | Java | |
+| `Tie::Hash` / `Tie::Array` / `Tie::Scalar` | Perl | |
+| `Tie::RefHash` | Perl | |
+
+---
+
+## Implementation Types
+
+- **Java** — Core functionality implemented in Java for performance or JVM
+  integration.  These are in `src/main/java/org/perlonjava/runtime/perlmodule/`.
+- **Perl** — Pure-Perl module bundled in the JAR
+  (`src/main/perl/lib/`).
+- **Java + Perl** — Java provides the XS-equivalent functions; a Perl `.pm`
+  file provides the high-level API.
+
+## Adding a New Bundled Module
+
+To bundle a new module into PerlOnJava, see the
+**[Module Porting Guide](../guides/module-porting.md)**.  After adding the
+module, update this page — add an entry to the appropriate category table
+with the module name, implementation type, and any notes about external
+requirements.
+
+## See Also
+
+- [Module Porting Guide](../guides/module-porting.md) — How to bundle new modules
+- [Using CPAN Modules](../guides/using-cpan-modules.md) — Installing additional modules
+- [Database Access Guide](../guides/database-access.md) — DBI + JDBC setup
+- [XS Compatibility](xs-compatibility.md) — Status of XS module support
+- [Feature Matrix](feature-matrix.md) — Perl language feature support
