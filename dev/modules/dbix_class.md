@@ -6,7 +6,7 @@
 **Test command**: `./jcpan -t DBIx::Class`  
 **Branch**: `feature/dbix-class-destroy-weaken`  
 **PR**: https://github.com/fglock/PerlOnJava/pull/485  
-**Status**: Phase 15 — Cleanup noise & GC. Phases 1-13 DONE, Phase 14 stashRefCount fix DONE.
+**Status**: Phases 1-14 DONE. Three work directions remain: GC liveness, real test failures, `wait` operator.
 
 ## How to Run the Suite
 
@@ -44,277 +44,242 @@ done | sort
 | Total ok assertions | 11,646 | |
 | Total not-ok assertions | 746 | Most are GC-related |
 
-**Real failure breakdown** (non-GC not-ok count):
-- t/100populate.t (12), t/60core.t (12), t/85utf8.t (9), t/prefetch/count.t (7), t/sqlmaker/order_by_bindtransport.t (7)
-- t/storage/dbi_env.t (6), t/row/filter_column.t (6), t/multi_create/existing_in_chain.t (4), t/prefetch/manual.t (4), t/storage/txn_scope_guard.t (4)
-- 15 more files with 1-2 real failures each
-
 ---
 
-## Phase 14 (DONE): stashRefCount — Prevent Premature Weak Ref Clearing
+## Direction 1: GC Test Failures (146 files, ~658 assertions)
 
-**Completed 2026-04-12.** Commit `db846e687`, `ef424f783`.
+### Symptom
+```
+not ok - Expected garbage collection of DBICTest::Schema=HASH(0x...)
+not ok - Expected garbage collection of DBIx::Class::Storage::DBI::SQLite=HASH(0x...)
+not ok - Expected garbage collection of DBI::db=HASH(0x...)
+```
 
-### Problem
-DBIx::Class/Moo/Sub::Quote infinite recursion caused by premature `releaseCaptures()`
-on CODE refs whose cooperative refCount falsely reached 0. Stash assignments
-(`*Foo::bar = $coderef`) were invisible to the cooperative refCount mechanism.
+The `assert_empty_weakregistry()` END block checks that weak refs became `undef` (object was
+GC'd). On PerlOnJava, objects remain alive because cooperative refcounts never reach 0.
 
-### Fix
-- Added `stashRefCount` field to `RuntimeCode` tracking glob/stash references
-- `DestroyDispatch` skips `releaseCaptures()` when `stashRefCount > 0`
-- `releaseCaptures()` only cascades `deferDecrementIfTracked` for blessed referents
-  (not unblessed containers whose cooperative refCount can falsely reach 0)
-- Increased test JVM heap to 1g in `build.gradle`
+### Root Cause Analysis
 
-### Results
-- `DBICTest->init_schema()` succeeds (was infinite recursion)
-- 1275 functional tests pass across 30+ test files
-- All 42 `weaken_edge_cases.t` pass; `make` passes
+**Bug A (primary): `B::svref_2object($ref)->REFCNT` leaks refcount**
 
----
+The leak chain:
+1. `B::SV->new($ref)` creates `bless { ref => $ref }, 'B::SV'`
+2. The `{ ref => $ref }` hash literal goes through `createReferenceWithTrackedElements()`
+3. This calls `incrementRefCountForContainerStore($ref)` → bumps the **referent's** refCount
+4. The B::SV hash is a JVM-local temporary, never stored in a `my` variable
+5. `scopeExitCleanup()` never fires on it → the refCount increment is **never reversed**
 
-## Phase 15: Cleanup Noise & GC Liveness
+Impact: `DBIx::Class::_Util::refcount()` calls `B::svref_2object($ref)->REFCNT` in
+`assert_empty_weakregistry`. Each call leaks +1 refCount on the inspected object. Since the
+leak tracer calls this on every registered object at END time, ALL objects get inflated
+refcounts and ALL GC assertions fail.
 
-Three categories of test output noise/failures remain. They don't affect functional
-correctness but do affect test pass counts and produce confusing stderr output.
+**Bug B (secondary): File-scoped lexicals and shutdown ordering**
+
+The shutdown sequence is correct: `MortalList.flush()` → `runEndBlocks()` →
+`GlobalDestruction.runGlobalDestruction()`. But the flush only triggers DESTROY for objects
+whose cooperative refcount reaches 0. With Bug A inflating refcounts, the flush is ineffective.
+
+Once Bug A is fixed, this mechanism should work. If not, the infrastructure already exists:
+`SCOPE_EXIT_CLEANUP` opcodes, `MyVarCleanupStack`, `ScopedSymbolTable.getMyScalarIndicesInScope()`.
+
+### Fix Plan
+
+| Step | What | Difficulty | Impact |
+|------|------|------------|--------|
+| **GC-1** | Fix `B::SV::new` to not store `$ref` in tracked hash | Easy | Fixes all 658 GC assertions |
+| **GC-2** | Re-run full suite, measure improvement | - | Verify Bug A was the sole cause |
+| **GC-3** | If gaps remain, investigate file-scope lexical destruction | Medium | Fix remaining GC failures |
+
+**Step GC-1 options** (in order of preference):
+1. Don't store `$ref` in the B::SV hash — capture it via closure or store as refaddr integer
+2. Use a non-tracked hash (skip `createReferenceWithTrackedElements`)
+3. Store REFCNT value eagerly in a plain scalar that doesn't hold a reference
+
+**What didn't work / what to avoid**:
+- The B::SV wrapper hash must NOT go through `createReferenceWithTrackedElements()` with a
+  reference value as an element — this is the fundamental leak mechanism
+- Workaround of storing intermediate `my $sv = B::svref_2object($ref); $sv->REFCNT` doesn't
+  help because `$sv` still holds the leaking B::SV hash
+- `System.gc()` is advisory — can't guarantee collection before assertion time; this is NOT
+  a viable fix path
 
 ### Issue 15.1: `in_global_destruction` Bareword Error During Cleanup
 
 **Symptom**: 278 occurrences per test of:
 ```
 (in cleanup) Bareword "in_global_destruction" not allowed while "strict subs"
-  in use at blib/lib/DBIx/Class/ResultSource.pm line 2317, near ";"
 ```
 
-**Affected code** (`ResultSource.pm:2312-2317`):
-```perl
-use Devel::GlobalDestruction;   # line 14 — imports in_global_destruction
-use namespace::clean;            # line 18 — schedules removal at end of scope
-# ...
-my $global_phase_destroy;
-sub DESTROY {
-    return if $global_phase_destroy ||= in_global_destruction;  # line 2317
-```
-
-**Analysis**:
-- `namespace::clean` removes `in_global_destruction` from the stash at end of compilation
-- Compiled bytecode should resolve it via `pinnedCodeRefs` (see `GlobalVariable.java:407-414`)
-- Simple reproduction cases work fine — the function resolves correctly
-- The error only appears during larger tests (t/60core.t, etc.) with many ResultSource
-  objects being destroyed, suggesting a specific interaction with cascading DESTROY,
-  mortal flush, or bytecode resolution under load
-- The error fires inside DESTROY (the `(in cleanup)` prefix from `DestroyDispatch`)
-  meaning the bytecode IS executing the DESTROY method, but the `in_global_destruction`
-  call is throwing a compile/resolution error at runtime
+**Root cause**: `namespace::clean` removes `in_global_destruction` from the
+`DBIx::Class::ResultSource` stash at end of compilation. The compiled bytecode should resolve
+it via `pinnedCodeRefs`, but the runtime lookup fails during DESTROY in larger tests.
 
 **Investigation needed**:
-1. Check if the bytecode emitter generates `LOAD_GLOBAL_CODE` for `in_global_destruction`
-   or treats it as a bareword when `namespace::clean` has already removed it from the stash
-   during the same compilation unit (deferred cleanup via `B::Hooks::EndOfScope`)
-2. Check if `pinnedCodeRefs` actually contains
-   `DBIx::Class::ResultSource::in_global_destruction` after compilation
-3. Test whether the `()` prototype on `in_global_destruction` affects how PerlOnJava's
-   parser resolves it (Perl 5 treats `()` prototyped subs as known calls even without parens)
-4. Check if the error correlates with DESTROY firing during `MortalList.flush()` vs
+1. Check if `pinnedCodeRefs` contains `DBIx::Class::ResultSource::in_global_destruction`
+2. Check if `()` prototype recognition affects parser resolution (bareword vs sub call)
+3. Check if the error correlates with DESTROY firing during `MortalList.flush()` vs
    `GlobalDestruction.runGlobalDestruction()`
 
-**Fix approach** (in order of preference):
-1. **Fix the resolution bug**: If `pinnedCodeRefs` is correctly populated but runtime
-   lookup fails, the bug is in `getGlobalCodeRef()` or the bytecode instruction used.
-   Add logging in `getGlobalCodeRef()` when a bareword error is about to fire for a
-   key that exists in pinnedCodeRefs.
-2. **Ensure prototype recognition**: If the `()` prototype isn't being recognized by
-   the parser, `in_global_destruction` may compile as bareword under strict subs.
-   Fix: make the parser check the prototype of imported subs before flagging bareword.
-3. **Fallback**: Patch `Devel::GlobalDestruction.pm` to install `in_global_destruction`
-   as a constant sub (`use constant`-style) which PerlOnJava may handle differently.
-
-**Difficulty**: Medium. Requires understanding the exact point where the resolution fails.
+**Fix approach**: Add logging in `getGlobalCodeRef()` when a bareword error fires for a key
+that exists in pinnedCodeRefs. If the key IS there, the bug is in bytecode instruction
+selection. If NOT, the bug is in `namespace::clean` interaction with pinnedCodeRefs.
 
 ### Issue 15.2: Class::XSAccessor "Attempt to reload" Warning
 
-**Symptom**:
-```
-Class::XSAccessor exists but failed to load with error: Attempt to reload
-  Class/XSAccessor.pm aborted.
-Compilation failed in require at Class/XSAccessor.pm
-  at /Users/fglock/.perlonjava/lib/Moo/_Utils.pm line 162.
-```
+**Symptom**: `Class::XSAccessor exists but failed to load` — 2 stderr lines per test.
 
-**Root cause** — Two-phase loading failure:
+**Root cause**: Failed `require` sets `$INC{...} = undef` instead of deleting the entry.
+Second `require` sees poisoned `$INC` entry → "Attempt to reload ... aborted".
 
-1. **First load** (by `Class::Accessor::Grouped` or similar):
-   - `require Class/XSAccessor.pm` finds the CPAN XS version in `~/.perlonjava/lib/`
-   - `doFile()` sets `$INC{'Class/XSAccessor.pm'}` to the file path
-   - Inside the file, `XSLoader::load('Class::XSAccessor')` fails (no Java XS impl)
-   - `doFile()` removes `$INC` entry, but `require()` sets `$INC{...} = undef` (line 861
-     of `ModuleOperators.java`)
+**Fix**: In `ModuleOperators.java:861`, change `set undef` to `delete`. This matches Perl 5
+behavior where a failed `require` in `eval` doesn't prevent subsequent attempts.
 
-2. **Second load** (by `Moo::_Utils::_maybe_load_module`):
-   - `require 'Class/XSAccessor.pm'` finds `$INC{...}` exists with value `undef`
-   - PerlOnJava throws `"Attempt to reload Class/XSAccessor.pm aborted"`
-   - Moo's error check sees this isn't `"Can't locate ..."` → emits the warning
-
-**`@INC` priority issue**: `~/.perlonjava/lib/` has higher priority than `jar:PERL5LIB`.
-A bundled stub in `src/main/perl/lib/Class/XSAccessor.pm` would be shadowed by the
-CPAN version.
-
-**Fix approach** (options, in order of preference):
-
-1. **Fix `require` to delete `$INC{...}` on failure** (not set it to `undef`):
-   - In `ModuleOperators.java:861`, change `set undef` to `delete`
-   - This way the second `require` doesn't see a poisoned entry
-   - Moo's `_maybe_load_module` then gets `"Can't locate ..."` on retry → no warning
-   - **This is the cleanest fix** — it matches Perl 5 behavior where a failed `require`
-     in `eval` doesn't prevent subsequent attempts
-
-2. **Bundled pure-Perl `Class::XSAccessor`** + `%INC` pre-registration:
-   - Create `src/main/perl/lib/Class/XSAccessor.pm` implementing accessor generation
-     with pure-Perl closures (getters, setters, accessors, predicates, constructors)
-   - Make `XSLoader.java` check for a jar-bundled `.pm` fallback before dying
-   - High effort but gives Moo/CAG actual XS-equivalent accessors
-
-3. **Delete the CPAN XS version** from `~/.perlonjava/lib/`:
-   - Quick workaround: `rm -rf ~/.perlonjava/lib/Class/XSAccessor*`
-   - Then `require` genuinely fails with `"Can't locate ..."` → Moo silently falls back
-   - Not durable (re-appears if user installs modules with deps on Class::XSAccessor)
-
-**Recommendation**: Fix option 1 first (simplest, broadest impact — helps ALL XS modules
-that get installed via CPAN but can't load on JVM). Option 2 as a follow-up for
-performance (XSAccessor closures are faster than Moo's generated Perl accessors).
-
-**Difficulty**: Easy (option 1), Hard (option 2).
-
-### Issue 15.3: "Expected garbage collection" Test Failures
-
-**Symptom**: ~658 assertions across 146 test files:
-```
-not ok - Expected garbage collection of DBIx::Class::Storage::DBI::SQLite=HASH(0x...)
-not ok - Expected garbage collection of DBI::db=HASH(0x...)
-not ok - Expected garbage collection of DBICTest::Schema=HASH(0x...)
-```
-
-**Mechanism** (`t/lib/DBICTest/Util/LeakTracer.pm`):
-- `populate_weakregistry($registry, $obj)` — stores a weakened ref keyed by `hrefaddr`
-- `assert_empty_weakregistry($registry, $quiet)` — at END time, checks if weak refs
-  became `undef` (object was GC'd); objects still alive but not reachable from the
-  symbol table are reported as leaks
-- All DBICTest-based tests register `$schema->storage`, `$dbh`, and clones automatically
-  in `BaseSchema::connection()` and assert in an END block
-
-**Root cause**: Three factors combine to prevent objects from being GC'd before END:
-
-1. **Bug A: `B::svref_2object($ref)->REFCNT` leaks refcount** (pre-existing):
-   - Chained `B::svref_2object($ref)->REFCNT` creates a temporary blessed hash via
-     `createReferenceWithTrackedElements()` which bumps the inner ref's refcount
-   - The JVM-local temporary never gets `scopeExitCleanup` → leaked refcount
-   - `DBIx::Class::_Util::refcount()` uses this pattern in `assert_empty_weakregistry`
-
-2. **Bug B: File-scoped lexicals not destroyed before END blocks**:
-   - In Perl 5, file-scoped `my $schema` is destroyed during the "destruct" phase
-     before END blocks
-   - In PerlOnJava, `$schema` remains alive during END → Storage/DBI handles alive
-   - The shutdown sequence is: `MortalList.flush()` → `runEndBlocks()` →
-     `GlobalDestruction.runGlobalDestruction()` (see `PerlLanguageProvider.java:390-407`)
-   - File-scoped lexicals should be cleaned before END blocks, not after
-
-3. **JVM GC non-determinism** (inherent limitation):
-   - Even if cooperative refcounting reaches 0, JVM GC is non-deterministic
-   - `System.gc()` is advisory — can't guarantee collection before assertion time
-   - This is fundamentally different from Perl 5's deterministic refcounting
-
-**Fix approach**:
-
-| Step | What | Impact | Difficulty |
-|------|------|--------|------------|
-| 15.3a | Fix `B::svref_2object()` refcount leak | Fix `refcount()` accuracy for diagnostics | Easy |
-| 15.3b | Implement file-scope lexical cleanup before END | Fix the root cause for most GC tests | Medium |
-| 15.3c | Re-run full suite, measure improvement | - | - |
-
-**Step 15.3a**: Change `B.pm` to avoid `createReferenceWithTrackedElements()` for the
-wrapper hash, or store the REFCNT value eagerly in a plain scalar that doesn't hold
-a reference to the original object.
-
-**Step 15.3b**: In `PerlLanguageProvider.java`, add file-scope lexical cleanup BEFORE
-`runEndBlocks()`. This requires tracking which `RuntimeScalar` instances are file-scoped
-lexicals and decrementing their refcounts (triggering DESTROY cascades) before END fires.
-
-**Note**: Even with 15.3a+b, some GC assertions may still fail due to JVM GC
-non-determinism. In Perl 5, `undef $schema` → immediate DESTROY → immediate DBI handle
-close → weak ref cleared. On JVM, even with cooperative refcount reaching 0, the actual
-object deallocation happens at JVM GC's discretion.
+**Difficulty**: Easy. Broadest impact — helps ALL XS modules installed via CPAN that can't load.
 
 ---
 
-## Remaining Work Items
+## Direction 2: Real (Non-GC) Test Failures (25 files, ~91 assertions)
 
-| # | Work Item | Impact | Status |
-|---|-----------|--------|--------|
-| 1 | **`in_global_destruction` bareword** (15.1) | 278 stderr warnings per test | Investigation needed |
-| 2 | **Class::XSAccessor reload warning** (15.2) | 2 stderr lines per test | Fix `require` %INC behavior |
-| 3 | **GC liveness at END** (15.3) | 146 files, 658 assertions | Bug A + Bug B |
-| 4 | **DBI: Statement handle finalization** | 12 assertions, t/60core.t | Investigation in progress |
-| 5 | **DBI: Transaction wrapping for bulk populate** | 10 assertions, t/100populate.t | Pending |
-| 6 | **DBI: Numeric formatting (10.0 vs 10)** | 6 assertions | **DONE** |
-| 7 | **DBI: DBI_DRIVER env var handling** | 6 assertions | **DONE** |
-| 8 | **DBI: Overloaded stringification in bind** | 1 assertion | **DONE** |
-| 9 | **DBI: Table locking on disconnect** | 1 assertion | Pending |
-| 10 | **DBI: HandleError callback** | 1 assertion | **DONE** |
-| 11 | **Transaction/savepoint depth tracking** | 4 assertions, txn_scope_guard.t | Pending |
-| 12 | **Detached ResultSource (weak ref)** | 5 assertions, order_by_bindtransport.t | Pending |
-| 13 | **B::svref_2object refcount leak** | Affects GC accuracy | Part of 15.3a |
-| 14 | **UTF-8 byte-level string handling** | 8+ assertions, t/85utf8.t | Systemic JVM limitation |
-| 15 | **Bless/overload performance** | 1 assertion, perf_bug.t | Hard |
-| 16 | **stashRefCount / premature weak ref clearing** | Moo infinite recursion | **DONE** (Phase 14) |
+### Category A: DBI Statement Handle Lifecycle — 12 failures (t/60core.t)
 
-### Work Item 4: DBI Statement Handle Finalization
+After `$or_rs->reset` and `$rel_rs->reset`, cached statement handles remain `Active` because
+Cursor DESTROY doesn't fire deterministically on JVM. `detected_reinvoked_destructor` in
+Cursor::DESTROY calls `refaddr`/`weaken` which may fail during cascading cleanup.
 
-**Impact**: 12 assertions in t/60core.t (tests 82-93) — "Unreachable cached statement still active"
+**Fix options**:
+1. **(Proper)** Fix cooperative refcount for Cursor lifecycle — when ResultSet goes out of
+   scope, Cursor refcount should reach 0, triggering `__finish_sth`
+2. **(Quick)** Add explicit `$sth->finish()` in DBI `fetchrow_arrayref` when result set is
+   exhausted (no more rows)
+3. **(Workaround)** Auto-finish stale Active statements in `prepare_cached()`
 
-**Root cause**: Prepared statements not finalized when `$sth` goes out of scope.
-Cascading DESTROY works for simple cases (Step 11.4), but DBIx::Class Cursor's
-DESTROY uses `detected_reinvoked_destructor` which calls `refaddr()` + `weaken()`.
-During cascading cleanup, imported function lookup fails:
+**Priority**: HIGH — 12 failures from single root cause.
+
+### Category B: Transaction Wrapping / TxnScopeGuard DESTROY — 16 failures (2 files)
+
+**t/100populate.t (12)**: `_insert_bulk` uses `txn_scope_guard` for atomicity. Guard DESTROY
+should trigger rollback on error, but JVM GC non-determinism means failed bulk inserts don't
+rollback → `transaction_depth` stays elevated → `BEGIN`/`COMMIT` disappear from traces.
+
+**Pre-built patches exist** at `dev/patches/cpan/DBIx-Class-0.082844/` (ResultSet.pm.patch,
+Storage-DBI.pm.patch) that wrap `txn_scope_guard`-protected code in explicit
+`eval { ... } or do { rollback; die }`. **NOT YET APPLIED.**
+
+**t/storage/txn_scope_guard.t (4)**: Guard goes out of scope without `commit()` — expects
+DESTROY to fire rollback + warning. Same GC non-determinism root cause.
+
+**Priority**: HIGH for t/100populate.t (patches ready). MEDIUM for txn_scope_guard.t.
+
+### Category C: UTF-8 Byte/Character Distinction — 9 failures (t/85utf8.t)
+
+JVM strings are always Unicode. PerlOnJava tracks `BYTE_STRING` vs `STRING` types but:
+- `cmp_ok($bytestream, 'ne', $utf8)` may not see a difference
+- JDBC always returns Unicode strings (can't get raw bytes from DB)
+- `utf8::is_utf8()` on DB-fetched data always returns true
+
+**Priority**: LOW — systemic JVM limitation. UTF8Columns is deprecated upstream.
+
+### Category D: Premature Schema Detachment — 7 failures (t/sqlmaker/order_by_bindtransport.t)
+
+```perl
+my $rs = DBICTest->init_schema->resultset('FourKeys');  # schema is a temporary
 ```
-(in cleanup) Undefined subroutine &Cursor::refaddr called at -e line 16.
-```
-Needs investigation: namespace resolution during cascading DESTROY.
 
-### Work Item 5: Bulk Populate Transactions
+Schema's cooperative refcount reaches 0 at statement end → ResultSource::DESTROY weakens
+`{schema}` → ResultSet finds detached source. In Perl 5, the schema stays alive through
+Schema→Source registration strong refs.
 
-**Impact**: 10 assertions in t/100populate.t
+**Fix options**:
+1. Fix cooperative refcounting so schema temporary doesn't prematurely reach 0 while derived
+   ResultSet is still in scope
+2. Have ResultSet keep a strong ref to schema (PerlOnJava-specific change)
 
-**Symptom**: SQL trace expects `BEGIN → INSERT → COMMIT` around `populate()` calls.
-`_insert_bulk` / `txn_scope_guard` interaction with transaction depth tracking.
+**Priority**: MEDIUM — 7 failures, broader impact on weak-ref chains.
 
-### Work Item 12: Detached ResultSource
+### Category E: DBI Environment Variables — 6 failures (t/storage/dbi_env.t)
 
-**Impact**: 5 assertions in t/sqlmaker/order_by_bindtransport.t
+Marked **DONE** in Phase 12. The 6 failures in the snapshot may be stale. **Re-run to verify.**
 
-**Symptom**: `Unable to perform storage-dependent operations with a detached result source`.
-Schema→Source weak ref cleared prematurely during test setup.
+### Category F: FilterColumn Callback Counting — 6 failures (t/row/filter_column.t)
+
+Exact invocation counts of `filter_from_storage`/`filter_to_storage` callbacks don't match.
+Needs investigation with `DBIC_TRACE=1` to compare callback patterns between Perl 5 and
+PerlOnJava.
+
+**Priority**: MEDIUM — 6 failures, requires investigation.
+
+### Category G: Upstream TODO Failures — 15 failures (3 files, NO ACTION NEEDED)
+
+- t/prefetch/count.t (7): `local $TODO = "Chaining with prefetch is fundamentally broken"`
+- t/multi_create/existing_in_chain.t (4): `todo_skip $TODO_msg`
+- t/prefetch/manual.t (4): `local $TODO = "...deprecated..."`
+
+These fail in Perl 5 too. Not PerlOnJava bugs.
+
+### Category H: Remaining 1-2 Failure Files (~20 failures, 15 files)
+
+Need full suite re-run to identify. Many likely share root causes with Categories A-D.
+
+### Recommended Fix Order
+
+| Step | Category | Files | Failures Fixed | Effort |
+|------|----------|-------|----------------|--------|
+| 1 | B (partial) | t/100populate.t | 10 of 12 | Easy — apply existing patches |
+| 2 | E | t/storage/dbi_env.t | 6 | Verify — likely already fixed |
+| 3 | A | t/60core.t | 12 | Medium — Cursor DESTROY chain |
+| 4 | D | t/sqlmaker/order_by_bindtransport.t | 7 | Medium — schema temporary refcount |
+| 5 | B (rest) | t/storage/txn_scope_guard.t | 4 | Medium — TxnScopeGuard DESTROY |
+| 6 | F | t/row/filter_column.t | 6 | Medium — investigate callbacks |
+| 7 | G | 3 files | 15 | None — upstream TODOs |
+| 8 | C | t/85utf8.t | 9 | Hard — systemic UTF-8 |
+| 9 | H | 15 files | ~20 | TBD — run suite, triage |
+
+**Total fixable** (steps 1-6): ~45 of ~91 real failures.  
+**Upstream TODOs** (step 7): 15 — no action needed.  
+**Hard/systemic** (steps 8-9): ~31 — require deep changes or investigation.
 
 ---
 
-## Known Bugs
+## Direction 3: `wait` Operator
+
+### Current Status: FULLY IMPLEMENTED (commit dddab71e1)
+
+The `wait` operator is implemented across all three backends:
+- **Parser**: `ParserTables.java:304` — prototype `""` (no args)
+- **JVM backend**: `EmitOperatorNode.java:97` → `WaitpidOperator.waitForChild()`
+- **Bytecode backend**: `Opcodes.java:2249` (`WAIT_OP = 468`), `BytecodeInterpreter.java:1791`
+- **Interpreter fallback**: `CoreSubroutineGenerator.java:210`
+- **Runtime**: `WaitpidOperator.java` (174 lines) — waits for Java-tracked child processes,
+  falls back to FFM POSIX `waitpid()` syscall, sets `$?` and `${^CHILD_ERROR_NATIVE}`
+
+### Remaining Work
+
+The `wait` operator itself works, but the two test files that needed it are skipped for
+**other reasons**:
+- `t/52leaks.t` — needs `fork` (unimplemented on JVM) for leak detection
+- `t/746sybase.t` — needs `$ENV{DBICTEST_SYBASE_DSN}` (external Sybase DB)
+
+**No further action needed** for `wait` in the DBIx::Class context.
+
+---
+
+## Known Bugs (reference)
 
 ### `B::svref_2object($ref)->REFCNT` method chain leak
-
-**Workaround**: Store intermediate: `my $sv = B::svref_2object($ref); $sv->REFCNT`
-
-**Root cause**: Temporary blessed hash from `createReferenceWithTrackedElements()` bumps
-inner ref's refcount but JVM-local temporary never gets `scopeExitCleanup`. See Phase 15.3a.
+Temporary blessed hash from `createReferenceWithTrackedElements()` bumps inner ref's refcount
+but JVM-local temporary never gets `scopeExitCleanup`. See Direction 1, Step GC-1.
 
 ### RowParser.pm line 260 crash (post-test cleanup)
-
 `Not a HASH reference` in `_resolve_collapse` — occurs in END blocks with stale data.
 Non-blocking: all real tests complete before the crash.
 
 ### UTF-8 byte-level strings (systemic)
+JVM strings are always Unicode. PerlOnJava doesn't maintain Perl 5's distinction between
+"bytes" (Latin-1) and "characters" (UTF-8 flagged). See Direction 2, Category C.
 
-JVM strings are always Unicode. PerlOnJava doesn't maintain the Perl 5 distinction
-between "bytes" (Latin-1) and "characters" (UTF-8 flagged). 8+ assertions in t/85utf8.t.
+### Stale comment in RuntimeIO.java:189
+Says "PerlOnJava doesn't implement DESTROY or reference counting" — outdated since PR #464.
 
 ---
 
@@ -326,7 +291,23 @@ between "bytes" (Latin-1) and "characters" (UTF-8 flagged). 8+ assertions in t/8
 | Missing Perl modules | 14 | Need DateTime::Format::*, SQL::Translator, Moose, etc. |
 | No ithread support | 3 | PerlOnJava platform limitation |
 | Deliberately skipped by test design | 4 | `is_plain` check, segfault-prone, disabled upstream |
-| `wait` operator not implemented | 2 | Only t/52leaks.t and t/746sybase.t |
+| Need fork (t/52leaks.t) | 1 | PerlOnJava platform limitation |
+| Need external DB (t/746sybase.t) | 1 | Need Sybase DSN |
+
+---
+
+## What Didn't Work (avoid re-trying)
+
+These approaches were tried during Phases 1-14 and either failed or were superseded:
+
+| Approach | Why it didn't work |
+|----------|--------------------|
+| `System.gc()` before END assertions | Advisory, no guarantee of collection |
+| Store intermediate `my $sv = B::svref_2object($ref); $sv->REFCNT` | `$sv` still holds the leaking B::SV hash — doesn't fix the refcount bump |
+| `releaseCaptures()` on ALL unblessed containers | False positives — unblessed containers can have cooperative refCount falsely reach 0 via stash refs; caused Moo infinite recursion |
+| Using `interpreterFrameIndex` as proxy for lazy CallerStack entries | Frame count doesn't match lazy entry count; fixed with `CallerStack.countLazyFromTop()` |
+| `Math.max(callerStackIndex, interpreterFrameIndex)` for caller() skipping | Wrong when interpreter frame count ≠ lazy entry count; replaced with `callerStackIndex + countLazyFromTop(callerStackIndex)` |
+| `git stash` for testing alternatives | **Lost completed work** — never use git stash during active debugging |
 
 ---
 
@@ -351,58 +332,41 @@ DBD::SQLite (>=1.29, JDBC shim)
 
 ---
 
-## Completed Phases (Summary)
+## Completed Phases (1-14 Summary)
 
-### Phase 1: Unblock Makefile.PL (2025-03-31)
-Fixed 4 blockers: `strict::bits`, `UNIVERSAL::can` AUTOLOAD filter, `goto &sub`
-wantarray + eval `@_` sharing, `%{+{@a}}` parsing.
+| Phase | Date | What | Key Commits |
+|-------|------|------|-------------|
+| 1 | 2025-03-31 | Unblock Makefile.PL — `strict::bits`, `UNIVERSAL::can`, `goto &sub`, `%{+{@a}}` | - |
+| 2 | 2025-03-31 | 11 pure-Perl dependency modules installed | - |
+| 3 | 2025-03-31 | DBI version detection (`$VERSION = '1.643'`) | - |
+| 4 | 2025-03-31 | DBD::SQLite JDBC shim, sqlite-jdbc 3.49.1.0 | - |
+| 4.5-4.8 | 2025-03-31 | Parser/compiler fixes: `CORE::GLOBAL::caller`, stash aliasing, mixed-context ternary, `cp` read-only | - |
+| 5 | 2026-03-31 — 2026-04-02 | 58 runtime fixes (5.1-5.58): DBI core, transactions, parser, compiler, Storable, B module, overload. 15→96.7% pass rate (8923/9231) | - |
+| 6 | 2026-04-02 | DBI statement handle lifecycle (`Active` flag): t/60core.t 45→12 failures | - |
+| 9-11 | 2026-04-10 — 2026-04-11 | DESTROY/weaken integration: interpreter fallback, Devel::GlobalDestruction, `suppressFlush`, cascading cleanup | - |
+| 12 | 2026-04-11 | DBI fixes: numeric formatting, DBI_DRIVER, overloaded stringify, HandleError — all DONE | - |
+| 13 | 2026-04-11 | DESTROY-on-die: `MyVarCleanupStack`, void-context DESTROY flush, DBI lifecycle fixes | - |
+| 14 | 2026-04-12 | stashRefCount — prevent premature weak ref clearing for stash-installed closures. `DBICTest->init_schema()` succeeds, 1275 tests pass | `db846e687`, `ef424f783` |
+| — | 2026-04-12 | caller() fix: `countLazyFromTop()` for correct package in `use`/`import` through interpreter | `f08d437f5` |
+| — | 2026-04-12 | `wait` operator: full implementation across JVM/bytecode/interpreter backends | `dddab71e1` |
 
-### Phase 2: Install Dependencies (2025-03-31)
-11 pure-Perl modules installed via `./jcpan -fi`.
+### Phase 5 Key Milestones (for reference)
+- 5.1-5.12: DBI core (bind_columns, column_info, etc.)
+- 5.13-5.16: Transaction handling (AutoCommit, BEGIN/COMMIT/ROLLBACK)
+- 5.17-5.24: Parser/compiler ($^S, MODIFY_CODE_ATTRIBUTES, @INC CODE refs)
+- 5.25-5.37: JDBC errors, Storable hooks, //= short-circuit, parser disambiguation
+- 5.38-5.56: SQL counter, multi-create FK, Storable binary, DBI Active flag lifecycle
+- 5.57-5.58: Post-rebase regressions, pack/unpack 32-bit
 
-### Phase 3: DBI Version Detection (2025-03-31)
-Added `$VERSION = '1.643'` to DBI.pm.
-
-### Phase 4: DBD::SQLite JDBC Shim (2025-03-31)
-Created DSN translation shim, added sqlite-jdbc 3.49.1.0 dependency.
-
-### Phases 4.5-4.8: Parser/Compiler Fixes (2025-03-31)
-- 4.5: `CORE::GLOBAL::caller` override bug (Sub::Uplevel)
-- 4.6: Stash aliasing glob vivification (Package::Stash::PP)
-- 4.7: Mixed-context ternary lvalue assignment (Class::Accessor::Grouped)
-- 4.8: `cp` on read-only installed files (ExtUtils::MakeMaker)
-
-### Phase 5: Runtime Fixes (2026-03-31 — 2026-04-02)
-58 individual fixes (steps 5.1-5.58) across parser, compiler, interpreter, DBI,
-Storable, B module, overload, and more. Went from ~15/65 active tests passing to
-96.7% individual test pass rate (8,923/9,231).
-
-Key milestones:
-- Steps 5.1-5.12: DBI core functionality (bind_columns, column_info, etc.)
-- Steps 5.13-5.16: Transaction handling (AutoCommit, BEGIN/COMMIT/ROLLBACK)
-- Steps 5.17-5.24: Parser/compiler fixes ($^S, MODIFY_CODE_ATTRIBUTES, @INC CODE refs)
-- Steps 5.25-5.37: JDBC errors, Storable hooks, //= short-circuit, parser disambiguation
-- Steps 5.38-5.56: SQL counter, multi-create FK, Storable binary, DBI Active flag lifecycle
-- Steps 5.57-5.58: Post-rebase regressions, pack/unpack 32-bit
-
-### Phase 6: DBI Statement Handle Lifecycle (2026-04-02)
-Fixed sth Active flag: false after prepare, true after execute with results, false
-on fetch exhaustion. t/60core.t: 45→12 cached stmt failures.
-
-### Phases 9-11: DESTROY/weaken Integration (2026-04-10 — 2026-04-11)
-- 9.1: Fixed interpreter fallback regressions (ClassCastException, ConcurrentModificationException)
-- 10.1: Bundled Devel::GlobalDestruction, DBI::Const::GetInfoType
-- 11.1: `suppressFlush` in `setFromList` — fixed premature DESTROY during `clone->connection` chain
-- 11.4: Blessed objects without DESTROY now cascade cleanup to hash elements
-
-### Phase 12: DBI Fixes (2026-04-11)
-Work Items 4 (numeric formatting), 5 (DBI_DRIVER), 6 (overloaded stringify), 8 (HandleError) — all DONE.
-
-### Phase 13: DESTROY-on-die (2026-04-11)
-New `MyVarCleanupStack` for exception-path cleanup of `my` variables. Registers
-every `my` variable at ASTORE. `RuntimeCode.apply()` catches exceptions and calls
-`unwindTo()` + `flush()`. Also: void-context DESTROY flush in all 3 `apply()` overloads.
-DBI lifecycle fixes: localBindingExists, finish(), circular ref break.
+### Phase 14 Details (stashRefCount)
+- **Problem**: Moo/Sub::Quote infinite recursion — `releaseCaptures()` fired on CODE refs
+  whose cooperative refCount falsely reached 0 because stash assignments
+  (`*Foo::bar = $coderef`) were invisible to the cooperative refCount mechanism
+- **Fix**: Added `stashRefCount` field to `RuntimeCode`; `DestroyDispatch` skips
+  `releaseCaptures()` when `stashRefCount > 0`; `releaseCaptures()` only cascades
+  `deferDecrementIfTracked` for blessed referents (not unblessed containers)
+- **Results**: `DBICTest->init_schema()` succeeds; 1275 functional tests pass; all 42
+  `weaken_edge_cases.t` pass
 
 ---
 
@@ -410,7 +374,7 @@ DBI lifecycle fixes: localBindingExists, finish(), circular ref break.
 
 - `dev/architecture/weaken-destroy.md` — refCount state machine, MortalList, WeakRefRegistry, scopeExitCleanup
 - `dev/design/destroy_weaken_plan.md` — DESTROY/weaken implementation plan (PR #464)
-- `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — blessed-no-DESTROY cleanup test (13 tests)
+- `dev/sandbox/destroy_weaken/destroy_no_destroy_method.t` — blessed-no-DESTROY cleanup test
 - `dev/modules/moo_support.md` — Moo support
 - `dev/modules/cpan_client.md` — jcpan CPAN client
-- `docs/guides/database-access.md` — JDBC database guide
+- `dev/patches/cpan/DBIx-Class-0.082844/` — unapplied patches for t/100populate.t transaction wrapping
