@@ -38,6 +38,7 @@
 
 use strict;
 use warnings;
+$| = 1;  # autoflush STDOUT so progress is visible when redirected to a file
 use File::Basename;
 use File::Spec;
 use File::Path qw(make_path);
@@ -293,6 +294,7 @@ for my $module (@selected) {
     save_dat($pass_dat, \%pass_modules);
     save_dat($fail_dat, \%fail_modules);
     save_dat($skip_dat, \%skip_modules);
+    generate_report();  # keep .md in sync with .dat files
 }
 
 # ──────────────────────────────────────────────────────────────────────

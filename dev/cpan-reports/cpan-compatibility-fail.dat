@@ -1,2 +1,134 @@
+A1z::Html	FAIL			Unknown test outcome	2026-04-12		
+Alien::Base::Wrapper	FAIL			Unknown test outcome	2026-04-12		
+AnnoCPAN::Perldoc::SyncDB	FAIL			No parseable output	2026-04-12		
+Announcements	FAIL			Configure failed	2026-04-12		
+App::Cmd::Setup	FAIL	57	31	26/57 subtests failed	2026-04-12		
+Asm::Preproc	FAIL	1	0	1/1 subtests failed	2026-04-12		
+BerkeleyDB	FAIL	3	3		2026-04-12		
+Bit::Vector	FAIL	1	0	14/1 subtests failed	2026-04-12		
+CGI::Emulate::PSGI	FAIL	41	28	13/41 subtests failed	2026-04-12		
+CGI::PSGI	FAIL			Configure failed	2026-04-12		
+Carp::Clan	FAIL	116	58	58/116 subtests failed	2026-04-12		
+Child	FAIL	8	8		2026-04-12		
+Class::Accessor	FAIL	139	137	2/139 subtests failed	2026-04-12		
+Class::Accessor::Lite	FAIL			Configure failed	2026-04-12		
+Class::Load	FAIL	86	70	16/86 subtests failed	2026-04-12		
+Class::XSAccessor	FAIL	10	0	184/10 subtests failed	2026-04-12		
+Const::Fast	FAIL	1	0	1/1 subtests failed	2026-04-12		
+Crypt::Sodium	FAIL	1	0	1/1 subtests failed	2026-04-12		
+DBIx::Class::Schema::PopulateMore	FAIL			Configure failed	2026-04-12		
+DBIx::Class::TimeStamp	FAIL			Configure failed	2026-04-12		
+DBIx::Class::UUIDColumns	FAIL			Configure failed	2026-04-12		
+DBIx::Tree::NestedSet	FAIL				2026-04-12		
+Dancer2::Plugin::CSRF	FAIL	1	0	1/1 subtests failed	2026-04-12		
+Dancer2::Plugin::SlapbirdAPM	FAIL	1	0	1/1 subtests failed	2026-04-12		
+Data::Alias	FAIL	1	0	635/1 subtests failed	2026-04-12		
+Data::Dump	FAIL				2026-04-12		
+Data::Serializer::JSON	FAIL	480	231	249/480 subtests failed	2026-04-12		
+Data::Stream::Bulk	FAIL	13	0	13/13 subtests failed	2026-04-12		
+Data::UUID	FAIL	1	0	32/1 subtests failed	2026-04-12		
+Data::Visitor	FAIL	1	0	1/1 subtests failed	2026-04-12		
+Date::Calc	FAIL	2997	2951	46/2997 subtests failed	2026-04-12		
+DateTime::Format::Builder	FAIL	11	9	2/11 subtests failed	2026-04-12		
 DateTime::Format::Duration::XSD	FAIL	1	0	37/1 subtests failed	2026-04-12		
+DateTime::Format::Flexible	FAIL			Unknown test outcome	2026-04-12		
+Devel::Caller	FAIL	1	0	72/1 subtests failed	2026-04-12		
+Devel::CheckCompiler	FAIL	7	4	3/7 subtests failed	2026-04-12		
+Devel::PPPort	FAIL			Configure failed	2026-04-12		
+Devel::Symdump	FAIL			Configure failed	2026-04-12		
+Digest::SHA1	FAIL				2026-04-12		
+Directory::Scratch	FAIL			Unknown test outcome	2026-04-12		
+FFI::CheckLib	FAIL			Unknown test outcome	2026-04-12		
+File::Copy::Recursive::Reduced	FAIL				2026-04-12		
+File::Path::Expand	FAIL	1	0	8/1 subtests failed	2026-04-12		
+Filter::signatures	FAIL	10	0	59/10 subtests failed	2026-04-12		
+Font::Metrics::Courier	FAIL	2	2	Missing: Font/AFM.pm	2026-04-12		
+Geo::IP	FAIL			Configure failed	2026-04-12		
+HTML::FormatText	FAIL	29	11	18/29 subtests failed	2026-04-12		
+HTML::FormatText::Any	FAIL			PerlOnJava: register limit exceeded	2026-04-12		
+HTML::Summary	FAIL				2026-04-12		
+HTML::Template	FAIL	608	605	3/608 subtests failed	2026-04-12		
+HTML::TreeBuilder	FAIL	399	0	593/399 subtests failed	2026-04-12		
+HTML::Widgets::NavMenu	FAIL	46	0	321/46 subtests failed	2026-04-12		
+HTTP::Headers::ActionPack	FAIL	448	445	3/448 subtests failed	2026-04-12		
+HTTP::Server::Simple	FAIL	14	0	76/14 subtests failed	2026-04-12		
+I18N::String	FAIL			Unknown test outcome	2026-04-12		
+IO::Infiles	FAIL	8	6	2/8 subtests failed	2026-04-12		
+IO::Pipe	FAIL	16586	8581	8005/16586 subtests failed	2026-04-12		
+Iterator::Array::Jagged	FAIL			Unknown test outcome	2026-04-12		
+Iterator::Simple	FAIL			Configure failed	2026-04-12		
+Iterator::Simple::Lookahead	FAIL	1	1	Missing: Iterator/Simple.pm	2026-04-12		
+JSON::RPC	FAIL	30	21	9/30 subtests failed	2026-04-12		
+JSON::Validator::Ref	FAIL			Unknown test outcome	2026-04-12		
+Jcode	FAIL			Missing: diagnostics.pm	2026-04-12		
+LabKey::Query	FAIL	12	6	6/12 subtests failed	2026-04-12		
+LinuxRealTime	FAIL	1	0	1/1 subtests failed	2026-04-12		
+List::MoreUtils	FAIL			Unknown test outcome	2026-04-12		
+Mac::SystemDirectory	FAIL			Configure failed	2026-04-12		
+Mixin::Linewise::Readers	FAIL	1	1		2026-04-12		
+Module::Build::XSUtil	FAIL	3	1	2/3 subtests failed	2026-04-12		
+MooX::BuildArgs	FAIL				2026-04-12		
+MooX::Enumeration	FAIL			Configure failed	2026-04-12		
+Moose	FAIL			Configure failed	2026-04-12		
+Moose::Meta::TypeConstraint::Role	FAIL			Configure failed	2026-04-12		
+Moose::Util::TypeConstraints	FAIL			Configure failed	2026-04-12		
+MooseX::Attribute::Localize	FAIL	2	0	10/2 subtests failed	2026-04-12		
+MooseX::DOM	FAIL			Configure failed	2026-04-12		
+MooseX::NonMoose	FAIL	1	1	Missing: Moose.pm	2026-04-12		
+MooseX::Params::Validate	FAIL	5	1	4/5 subtests failed	2026-04-12		
+MooseX::StrictConstructor	FAIL	1	1	Missing: Test/Moose.pm	2026-04-12		
+MooseX::Types	FAIL	11	4	7/11 subtests failed	2026-04-12		
+MooseX::Types::Moose	FAIL	11	4	7/11 subtests failed	2026-04-12		
+MooseX::Types::Path::Class	FAIL	3	3	Missing: Moose.pm	2026-04-12		
+MouseX::Types	FAIL			Configure failed	2026-04-12		
+Net::DNS	FAIL			Unknown test outcome	2026-04-12		
+OpenGL::XScreenSaver	FAIL	1	0	11/1 subtests failed	2026-04-12		
+OpusVL::SimpleCrypto	FAIL	1	1		2026-04-12		
+OvhApi	FAIL	1	0	1/1 subtests failed	2026-04-12		
+PDF::FromHTML	FAIL			Configure failed	2026-04-12		
+PONAPI::Document	FAIL			Unknown test outcome	2026-04-12		
+Package::Variant	FAIL				2026-04-12		
+PadWalker	FAIL				2026-04-12		
+Params::Validate	FAIL			Build failed	2026-04-12		
+PerlIO::utf8_strict	FAIL	5816	2389	3427/5816 subtests failed	2026-04-12		
+PkgConfig	FAIL			Unknown test outcome	2026-04-12		
+Pod::Coverage	FAIL			Unknown test outcome	2026-04-12		
+Pod::Coverage::TrustPod	FAIL	5	1	4/5 subtests failed	2026-04-12		
+Pod::Eventual::Simple	FAIL	1	0	4/1 subtests failed	2026-04-12		
+Pod::Find	FAIL	25	24	1/25 subtests failed	2026-04-12		
+Pod::Spell	FAIL	45	45		2026-04-12		
+REST::Client	FAIL	2	2		2026-04-12		
+Router::Simple	FAIL	1	0	1/1 subtests failed	2026-04-12		
+SWIFT::Factory::Tag::Tag30	FAIL			Unknown test outcome	2026-04-12		
+SWIFT::Factory::Tag::Tag30T	FAIL			Unknown test outcome	2026-04-12		
+Smart::Args	FAIL	1	0	1/1 subtests failed	2026-04-12		
+Smart::Comments	FAIL			Unknown test outcome	2026-04-12		
+SpamMonkey	FAIL			Missing: File/Path/Expand.pm	2026-04-12		
+Spiffy	FAIL	168	148	20/168 subtests failed	2026-04-12		
+String::CamelCase	FAIL	31	27	4/31 subtests failed	2026-04-12		
+Sub::Exporter::ForMethods	FAIL	10	6	4/10 subtests failed	2026-04-12		
+SystemTray::Applet	FAIL			No parseable output	2026-04-12		
+Test::Base	FAIL			Unknown test outcome	2026-04-12		
+Test::Differences	FAIL	49	45	4/49 subtests failed	2026-04-12		
+Test::Memory::Cycle	FAIL	38	19	19/38 subtests failed	2026-04-12		
+Test::Spelling	FAIL	23	6	17/23 subtests failed	2026-04-12		
+Test::TempDir	FAIL	7	1	6/7 subtests failed	2026-04-12		
+Text::Template	FAIL	163	100	63/163 subtests failed	2026-04-12		
+Tie::File	FAIL	4725	4389	336/4725 subtests failed	2026-04-12		
+Types::Serialiser	FAIL			Missing: common/sense.pm	2026-04-12		
+UNIX::Cal	FAIL			Configure failed	2026-04-12		
+URI::Find	FAIL	619	617	2/619 subtests failed	2026-04-12		
+URI::Template::Restrict	FAIL			Configure failed	2026-04-12		
+VM::CloudAtCost	FAIL	1	0	1/1 subtests failed	2026-04-12		
+WWW::Mechanize	FAIL			Unknown test outcome	2026-04-12		
+WebService::ChatWorkApi	FAIL	14	4	10/14 subtests failed	2026-04-12		
+Win32::GUI::HyperLink	FAIL			Configure failed	2026-04-12		
 WordList::ID::KBBI::ByClass::Noun	FAIL			No parseable output	2026-04-12		
+XML::GDOME	FAIL			Missing: XML/GDOME.pm	2026-04-12		
+XML::SAX	FAIL	109	105	4/109 subtests failed	2026-04-12		
+XML::SAX::Base	FAIL			Unknown test outcome	2026-04-12		
+XML::Twig	FAIL			Unknown test outcome	2026-04-12		
+XML::Writer	FAIL	273	267	6/273 subtests failed	2026-04-12		
+YAML::Syck	FAIL			Configure failed	2026-04-12		
+YAML::XS	FAIL	2	0	48/2 subtests failed	2026-04-12		
+strictures	FAIL	5	4	1/5 subtests failed	2026-04-12		
