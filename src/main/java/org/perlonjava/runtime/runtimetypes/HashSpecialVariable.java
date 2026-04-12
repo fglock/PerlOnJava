@@ -286,6 +286,12 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
             // to continue calling the subroutine (Perl caches CVs at compile time)
             RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
+            // Decrement stashRefCount on the removed CODE ref
+            if (code != null && code.value instanceof RuntimeCode removedCode) {
+                if (removedCode.stashRefCount > 0) {
+                    removedCode.stashRefCount--;
+                }
+            }
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);

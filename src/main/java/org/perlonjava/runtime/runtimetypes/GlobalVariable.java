@@ -580,6 +580,12 @@ public class GlobalVariable {
 
     public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
         RuntimeScalar deleted = globalCodeRefs.remove(key);
+        // Decrement stashRefCount on the removed CODE ref
+        if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {
+            if (removedCode.stashRefCount > 0) {
+                removedCode.stashRefCount--;
+            }
+        }
         return deleted != null ? deleted : scalarFalse;
     }
 

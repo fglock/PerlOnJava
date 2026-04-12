@@ -186,6 +186,12 @@ public class RuntimeStash extends RuntimeHash {
         // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
         // to continue calling the subroutine (Perl caches CVs at compile time)
         GlobalVariable.globalCodeRefs.remove(fullKey);
+        // Decrement stashRefCount on the removed CODE ref
+        if (savedCode != null && savedCode.value instanceof RuntimeCode removedCode) {
+            if (removedCode.stashRefCount > 0) {
+                removedCode.stashRefCount--;
+            }
+        }
         GlobalVariable.globalVariables.remove(fullKey);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);

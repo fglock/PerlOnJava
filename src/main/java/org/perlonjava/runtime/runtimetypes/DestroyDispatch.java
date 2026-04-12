@@ -74,8 +74,16 @@ public class DestroyDispatch {
         // Release closure captures when a CODE ref's refCount hits 0.
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
+        // However, skip releaseCaptures if the CODE ref is still installed in the
+        // stash (stashRefCount > 0). The cooperative refCount can falsely reach 0
+        // for stash-installed closures because glob assignments, closure captures,
+        // and other JVM-level references aren't always counted. Releasing captures
+        // prematurely would cascade to clear weak references (e.g., in Sub::Defer's
+        // %DEFERRED hash), causing infinite recursion in Moo/DBIx::Class.
         if (referent instanceof RuntimeCode code) {
-            code.releaseCaptures();
+            if (code.stashRefCount <= 0) {
+                code.releaseCaptures();
+            }
         }
 
         String className = NameNormalizer.getBlessStr(referent.blessId);

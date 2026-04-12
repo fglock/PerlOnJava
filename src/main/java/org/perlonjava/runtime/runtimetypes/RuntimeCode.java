@@ -308,6 +308,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar[] capturedScalars;
 
     /**
+     * Tracks the number of stash (glob) entries that reference this CODE object.
+     * Stash entries created via {@code *Foo::bar = $coderef} are invisible to the
+     * cooperative refCount because glob assignments go through a container that
+     * may be overwritten independently.
+     * <p>
+     * When stashRefCount > 0, the CODE ref should NOT be considered dead even if
+     * the cooperative refCount reaches 0, because the stash still holds a live
+     * reference. This prevents premature {@code releaseCaptures()} which would
+     * cascade to clear weak references (e.g., in Sub::Defer's %DEFERRED hash).
+     */
+    public int stashRefCount = 0;
+
+    /**
      * Cached constants referenced via backslash (e.g., \"yay") inside this subroutine.
      * When the CODE slot of a glob is replaced, weak references to these constants
      * are cleared to emulate Perl 5's "optree reaping" behavior.
@@ -361,8 +374,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // captured variables to prevent premature clearing while the
                     // closure is alive). Now that the last closure is releasing this
                     // capture, decrement refCount to balance the original increment.
+                    //
+                    // Only cascade for BLESSED referents. For unblessed containers
+                    // (arrays, hashes), the cooperative refCount from releaseCaptures
+                    // can falsely reach 0 (because closure captures hold JVM references
+                    // not counted in refCount). Cascading to callDestroy for such
+                    // containers would clear weak references prematurely, breaking
+                    // Sub::Defer/Moo's %DEFERRED and %QUOTED weak ref tables.
+                    // The JVM GC handles truly-dead unblessed containers eventually.
                     if (s.scopeExited) {
-                        MortalList.deferDecrementIfTracked(s);
+                        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                                && s.value instanceof RuntimeBase rb
+                                && rb.blessId != 0) {
+                            MortalList.deferDecrementIfTracked(s);
+                        }
                     }
                 }
             }
