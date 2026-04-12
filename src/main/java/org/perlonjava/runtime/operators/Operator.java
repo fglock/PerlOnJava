@@ -454,13 +454,15 @@ public class Operator {
                 length = Math.min(length, size - offset);
 
                 // Remove elements — defer refCount decrement for tracked blessed refs.
-                // The removed elements are returned to the caller, which may store them
-                // in a new container (incrementing refCount). The deferred decrement
-                // accounts for the removal from the source array.
+                // Only decrement if the array owns the elements' refCounts
+                // (elementsOwned == true). For @_ arrays (populated via setArrayOfAlias),
+                // elementsOwned is false because the elements are aliases to the caller's
+                // variables. Decrementing their refCounts would incorrectly destroy the
+                // caller's objects. This matches the guard used by shift() and pop().
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
                     RuntimeBase removed = runtimeArray.elements.remove(offset);
                     if (removed != null) {
-                        if (removed instanceof RuntimeScalar rs) {
+                        if (runtimeArray.elementsOwned && removed instanceof RuntimeScalar rs) {
                             MortalList.deferDecrementIfTracked(rs);
                         }
                         removedElements.elements.add(removed);
@@ -469,7 +471,13 @@ public class Operator {
                     }
                 }
 
-                // Add new elements
+                // Add new elements.
+                // Note: we do NOT set runtimeArray.elementsOwned = true here, even though
+                // the inserted elements may have refCountOwned = true (from push's
+                // incrementRefCountForContainerStore). Setting elementsOwned = true would
+                // be incorrect for @_ arrays because remaining alias elements would then
+                // be subject to spurious DEC by subsequent shift/pop. The per-element
+                // refCountOwned flag handles cleanup when the array is cleared/destroyed.
                 if (!list.elements.isEmpty()) {
                     RuntimeArray arr = new RuntimeArray();
                     RuntimeArray.push(arr, list);
