@@ -21,7 +21,9 @@ BEGIN {
         *bootstrap = sub {
             my ($module) = @_;
             $module = caller() unless defined $module;
-            die "Can't load module $module\n";
+            # Delegate to XSLoader::load for its multi-stage fallback
+            require XSLoader;
+            return XSLoader::load($module);
         };
     }
 

@@ -37,11 +37,16 @@ public class DynaLoader extends PerlModuleBase {
             ).getList();
         }
 
-        String module = args.getFirst().toString();
-        return WarnDie.die(
-                new RuntimeScalar("Can't load module " + module),
-                new RuntimeScalar("\n")
-        ).getList();
+        // Delegate to XSLoader::load() which has a multi-stage fallback:
+        //   1. Java XS class found       → initialize and return true
+        //   2. @ISA has functional parent → return true (inheritance fallback)
+        //   3. ::PP companion loaded      → return true
+        //   4. die with "Can't load loadable object..." (matches /loadable object/
+        //      pattern that CPAN modules use to detect XS failure and fall back)
+        //
+        // This makes DynaLoader-based modules (Image::Magick, Tk, etc.)
+        // behave the same as XSLoader-based modules in PerlOnJava.
+        return XSLoader.load(args, ctx);
     }
 
     public static RuntimeList boot_DynaLoader(RuntimeArray args, int ctx) {
