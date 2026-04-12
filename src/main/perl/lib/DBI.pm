@@ -37,8 +37,11 @@ XSLoader::load( 'DBI' );
             # Track statement handle count (Kids) and last statement
             $dbh->{Kids} = ($dbh->{Kids} || 0) + 1;
             $dbh->{Statement} = $sql;
-            # Link sth back to parent dbh
+            # Link sth back to parent dbh (weak ref to avoid circular reference
+            # with CachedKids: $dbh → CachedKids → $sth → Database → $dbh).
+            # In Perl 5's XS-based DBI, child→parent references are weak.
             $result->{Database} = $dbh;
+            Scalar::Util::weaken($result->{Database});
         }
         return $result;
     };

@@ -1552,6 +1552,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        // Establish a MyVarCleanupStack boundary so that my-variables
+        // registered by the called method's bytecode are cleaned up if
+        // the method dies. Without this, the method's my-variable entries
+        // linger on the stack and their refCount decrements are lost,
+        // causing blessed objects to leak (DESTROY never fires).
+        int cleanupMark = MyVarCleanupStack.pushMark();
+        try {
+        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, args, callContext);
+        } catch (RuntimeException e) {
+            if (!(e instanceof PerlExitException)) {
+                MyVarCleanupStack.unwindTo(cleanupMark);
+                MortalList.flush();
+            }
+            throw e;
+        } finally {
+            MyVarCleanupStack.popMark(cleanupMark);
+        }
+    }
+
+    private static RuntimeList callCachedInner(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeBase[] args,
+                                         int callContext) {
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
             // Unwrap READONLY_SCALAR for blessId check (same as in call())
