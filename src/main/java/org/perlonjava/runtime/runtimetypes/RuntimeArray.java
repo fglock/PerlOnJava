@@ -772,6 +772,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReferenceWithTrackedElements() {
+        // Birth-track anonymous arrays: set refCount=0 so setLarge() can
+        // accurately count strong references. Anonymous arrays are only
+        // reachable through references (no lexical variable slot), so
+        // refCount is complete and reaching 0 means truly no strong refs.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
         for (RuntimeScalar elem : this.elements) {
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
