@@ -92,7 +92,9 @@ When these modules are loaded, the Java implementation is used automatically for
 
 ## Available Built-in Modules
 
-PerlOnJava includes these modules without installation:
+PerlOnJava includes 150+ modules without installation. The highlights are
+listed below; for the complete list see
+**[Bundled Modules Reference](../reference/bundled-modules.md)**.
 
 ### Core Modules
 - `strict`, `warnings`, `utf8`, `feature`
