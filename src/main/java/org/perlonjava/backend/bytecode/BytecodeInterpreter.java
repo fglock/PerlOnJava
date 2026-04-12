@@ -1788,6 +1788,10 @@ public class BytecodeInterpreter {
                                 int rd = bytecode[pc++];
                                 registers[rd] = org.perlonjava.runtime.operators.Time.time();
                             }
+                            case Opcodes.WAIT_OP -> {
+                                int rd = bytecode[pc++];
+                                registers[rd] = org.perlonjava.runtime.operators.WaitpidOperator.waitForChild();
+                            }
                             case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,

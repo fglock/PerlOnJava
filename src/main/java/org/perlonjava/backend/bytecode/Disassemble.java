@@ -1309,6 +1309,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("TIME_OP r").append(rd).append(" = time()\n");
                         break;
+                    case Opcodes.WAIT_OP:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("WAIT_OP r").append(rd).append(" = wait()\n");
+                        break;
                     case Opcodes.SLEEP_OP:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];

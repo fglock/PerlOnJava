@@ -2242,6 +2242,12 @@ public class Opcodes {
      */
     public static final short SCOPE_EXIT_CLEANUP_ARRAY = 467;
 
+    /**
+     * Perl wait() builtin: rd = wait for any child process.
+     * Format: WAIT_OP rd
+     */
+    public static final short WAIT_OP = 468;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
