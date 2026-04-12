@@ -568,6 +568,27 @@ sub selectall_hashref {
     return $sth->fetchall_hashref($key_field);
 }
 
+sub selectcol_arrayref {
+    my ($dbh, $statement, $attr, @bind_values) = @_;
+    my $sth = ref($statement) ? $statement : $dbh->prepare($statement, $attr)
+        or return undef;
+    $sth->execute(@bind_values) or return undef;
+    my @col;
+    my $columns = $attr && ref($attr) eq 'HASH' && $attr->{Columns}
+        ? $attr->{Columns} : [1];
+    if (@$columns == 1) {
+        my $idx = $columns->[0] - 1;
+        while (my $row = $sth->fetchrow_arrayref()) {
+            push @col, $row->[$idx];
+        }
+    } else {
+        while (my $row = $sth->fetchrow_arrayref()) {
+            push @col, map { $row->[$_ - 1] } @$columns;
+        }
+    }
+    return \@col;
+}
+
 sub bind_columns {
     my ($sth, @refs) = @_;
     return 1 unless @refs;

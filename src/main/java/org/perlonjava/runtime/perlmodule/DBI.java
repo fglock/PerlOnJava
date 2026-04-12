@@ -785,6 +785,12 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
+            // Perl 5 DBI: begin_work throws if AutoCommit is already off
+            // (i.e., a transaction is already in progress)
+            RuntimeScalar ac = dbh.get("AutoCommit");
+            if (ac != null && !ac.getBoolean()) {
+                throw new RuntimeException("begin_work invalidates a transaction already in progress");
+            }
             Connection conn = (Connection) dbh.get("connection").value;
             conn.setAutoCommit(false);
             dbh.put("AutoCommit", scalarFalse);

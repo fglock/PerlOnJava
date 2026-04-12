@@ -858,9 +858,11 @@ public class ModuleOperators {
                     fullErr += "\n";
                 }
                 message = fullErr + "Compilation failed in require";
-                // Set %INC as undef to mark compilation failure — prevents
-                // re-executing the file on subsequent require attempts.
-                incHash.put(fileName, new RuntimeScalar());
+                // Delete %INC entry on compilation failure (modern Perl 5 behavior,
+                // perl commit 44f8325f). This allows subsequent require attempts
+                // (e.g., fallback from XS to pure-Perl) instead of triggering
+                // "Attempt to reload ... aborted".
+                incHash.elements.remove(fileName);
                 // Update $@ so eval{} sees the full message (catchEval preserves $@ for PerlCompilerException)
                 getGlobalVariable("main::@").set(message);
                 throw new PerlCompilerException(message);
