@@ -114,7 +114,11 @@ public class ExceptionFormatter {
                 // the CORRECT package, file, and line for the BEGIN block context. Use it to
                 // correct the preceding anon class frame, which may have wrong source mapper
                 // data when its tokenIndex falls in a gap in ByteCodeSourceMapper entries.
-                var callerInfo = CallerStack.peek(callerStackIndex);
+                // Use effectiveIndex to skip past CallerStack entries consumed by interpreter
+                // frames (BytecodeInterpreter pushes CallerStack entries for sub calls that
+                // sit on top of compile-time entries from parseUseDeclaration/runSpecialBlock).
+                int effectiveIndex = Math.max(callerStackIndex, interpreterFrameIndex);
+                var callerInfo = CallerStack.peek(effectiveIndex);
                 if (callerInfo != null) {
                     if (!stackTrace.isEmpty()) {
                         var lastEntry = stackTrace.getLast();
@@ -126,7 +130,7 @@ public class ExceptionFormatter {
                         lastEntry.set(2, String.valueOf(callerInfo.line()));
                     }
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
-                    callerStackIndex++;
+                    callerStackIndex = effectiveIndex + 1;
                 }
                 lastWasRunSpecialBlock = true;
                 continue;
@@ -137,8 +141,12 @@ public class ExceptionFormatter {
             
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
-                // Artificial caller stack entry created at `use` statement
-                var callerInfo = CallerStack.peek(callerStackIndex);
+                // Artificial caller stack entry created at `use` statement.
+                // Use effectiveIndex to skip past CallerStack entries consumed by interpreter
+                // frames (BytecodeInterpreter pushes CallerStack entries for sub calls that
+                // sit on top of compile-time entries from parseUseDeclaration/runSpecialBlock).
+                int effectiveIndex = Math.max(callerStackIndex, interpreterFrameIndex);
+                var callerInfo = CallerStack.peek(effectiveIndex);
                 if (callerInfo != null) {
                     var entry = new ArrayList<String>();
                     String ciPkg = callerInfo.packageName();
@@ -148,7 +156,7 @@ public class ExceptionFormatter {
                     entry.add(null);  // No subroutine name available for use statements
                     stackTrace.add(entry);
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
-                    callerStackIndex++;
+                    callerStackIndex = effectiveIndex + 1;
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.InterpretedCode") &&
                     element.getMethodName().equals("apply")) {
