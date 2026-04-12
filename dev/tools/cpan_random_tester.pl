@@ -23,10 +23,10 @@
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
 #
 # Output:
-#   - dev/reports/cpan-compatibility.md        (human-readable report)
-#   - dev/reports/cpan-compatibility-pass.dat  (machine-readable pass list)
-#   - dev/reports/cpan-compatibility-fail.dat  (machine-readable fail list)
-#   - dev/reports/cpan-compatibility-skip.dat  (machine-readable skip list)
+#   - dev/cpan-reports/cpan-compatibility.md        (human-readable report)
+#   - dev/cpan-reports/cpan-compatibility-pass.dat  (machine-readable pass list)
+#   - dev/cpan-reports/cpan-compatibility-fail.dat  (machine-readable fail list)
+#   - dev/cpan-reports/cpan-compatibility-skip.dat  (machine-readable skip list)
 #   - Per-module logs to /tmp/cpan_random_logs/
 #
 # Run with `perl` (not jperl) because this script uses fork and backticks.
@@ -50,7 +50,7 @@ use POSIX qw(strftime);
 my $script_dir   = dirname(File::Spec->rel2abs($0));
 my $project_root = File::Spec->catdir($script_dir, '..', '..');
 my $jcpan        = File::Spec->catfile($project_root, 'jcpan');
-my $report_dir   = File::Spec->catdir($project_root, 'dev', 'reports');
+my $report_dir   = File::Spec->catdir($project_root, 'dev', 'cpan-reports');
 my $report_md    = File::Spec->catfile($report_dir, 'cpan-compatibility.md');
 my $pass_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-pass.dat');
 my $fail_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-fail.dat');
@@ -669,9 +669,9 @@ perl dev/tools/cpan_random_tester.pl --seed 42 --count 20
 
 ## Data Files
 
-- `dev/reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
-- `dev/reports/cpan-compatibility-fail.dat` — Fail list (TSV)
-- `dev/reports/cpan-compatibility-skip.dat` — Skip list (TSV)
+- `dev/cpan-reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
+- `dev/cpan-reports/cpan-compatibility-fail.dat` — Fail list (TSV)
+- `dev/cpan-reports/cpan-compatibility-skip.dat` — Skip list (TSV)
 - `/tmp/cpan_random_logs/<Module-Name>.log` — Per-module test output
 FOOTER
 
@@ -727,10 +727,10 @@ Examples:
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report
 
 Output:
-  dev/reports/cpan-compatibility.md         Markdown report
-  dev/reports/cpan-compatibility-pass.dat   Pass list (TSV)
-  dev/reports/cpan-compatibility-fail.dat   Fail list (TSV)
-  dev/reports/cpan-compatibility-skip.dat   Skip list (TSV)
+  dev/cpan-reports/cpan-compatibility.md         Markdown report
+  dev/cpan-reports/cpan-compatibility-pass.dat   Pass list (TSV)
+  dev/cpan-reports/cpan-compatibility-fail.dat   Fail list (TSV)
+  dev/cpan-reports/cpan-compatibility-skip.dat   Skip list (TSV)
   /tmp/cpan_random_logs/                    Per-module logs
 
 USAGE

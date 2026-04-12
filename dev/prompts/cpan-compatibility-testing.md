@@ -44,17 +44,17 @@ perl dev/tools/cpan_random_tester.pl --report-only
 
 6. **Crash-safe persistence**: Results are saved to `.dat` files after each target module, so partial runs are never lost.
 
-7. **Report**: A Markdown report is generated at `dev/reports/cpan-compatibility.md`.
+7. **Report**: A Markdown report is generated at `dev/cpan-reports/cpan-compatibility.md`.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `dev/tools/cpan_random_tester.pl` | Main test script (run with `perl`, not `jperl`) |
-| `dev/reports/cpan-compatibility.md` | Human-readable report |
-| `dev/reports/cpan-compatibility-pass.dat` | Pass list (TSV, includes git commit) |
-| `dev/reports/cpan-compatibility-fail.dat` | Fail list (TSV) |
-| `dev/reports/cpan-compatibility-skip.dat` | Skip list (TSV) |
+| `dev/cpan-reports/cpan-compatibility.md` | Human-readable report |
+| `dev/cpan-reports/cpan-compatibility-pass.dat` | Pass list (TSV, includes git commit) |
+| `dev/cpan-reports/cpan-compatibility-fail.dat` | Fail list (TSV) |
+| `dev/cpan-reports/cpan-compatibility-skip.dat` | Skip list (TSV) |
 | `/tmp/cpan_random_logs/` | Per-module test output logs |
 
 ## Workflow for Growing the Report
@@ -90,10 +90,10 @@ perl dev/tools/cpan_random_tester.pl --count 50
 After testing, commit the updated report and data files:
 
 ```bash
-git add dev/reports/cpan-compatibility.md
-git add dev/reports/cpan-compatibility-pass.dat
-git add dev/reports/cpan-compatibility-fail.dat
-git add dev/reports/cpan-compatibility-skip.dat
+git add dev/cpan-reports/cpan-compatibility.md
+git add dev/cpan-reports/cpan-compatibility-pass.dat
+git add dev/cpan-reports/cpan-compatibility-fail.dat
+git add dev/cpan-reports/cpan-compatibility-skip.dat
 git commit -m "docs: update CPAN compatibility report"
 ```
 

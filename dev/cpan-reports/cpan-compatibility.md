@@ -56,7 +56,7 @@ perl dev/tools/cpan_random_tester.pl --seed 42 --count 20
 
 ## Data Files
 
-- `dev/reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
-- `dev/reports/cpan-compatibility-fail.dat` — Fail list (TSV)
-- `dev/reports/cpan-compatibility-skip.dat` — Skip list (TSV)
+- `dev/cpan-reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
+- `dev/cpan-reports/cpan-compatibility-fail.dat` — Fail list (TSV)
+- `dev/cpan-reports/cpan-compatibility-skip.dat` — Skip list (TSV)
 - `/tmp/cpan_random_logs/<Module-Name>.log` — Per-module test output
