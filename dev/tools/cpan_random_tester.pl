@@ -42,7 +42,7 @@ use File::Basename;
 use File::Spec;
 use File::Path qw(make_path);
 use Getopt::Long;
-use POSIX qw(strftime);
+use POSIX qw(strftime WNOHANG);
 
 # ──────────────────────────────────────────────────────────────────────
 # Paths
@@ -189,19 +189,10 @@ for my $module (@selected) {
     printf "[%d/%d] jcpan %s %s\n", $target_count, scalar @selected, $mode, $module;
 
     my $start = time();
+    my $cmd = $install ? "$jcpan $module" : "$jcpan -t $module";
 
-    my $output = '';
-    my $timed_out = 0;
-    eval {
-        local $SIG{ALRM} = sub { die "TIMEOUT\n" };
-        alarm($timeout);
-        my $cmd = $install ? "$jcpan $module" : "$jcpan -t $module";
-        $output = `$cmd 2>&1`;
-        alarm(0);
-    };
-    if ($@ && $@ =~ /TIMEOUT/) {
-        $timed_out = 1;
-    }
+    my ($output, $timed_out) = run_with_timeout($cmd, $timeout);
+
     my $elapsed = sprintf('%.1f', time() - $start);
 
     save_log($module, $output);
@@ -494,6 +485,100 @@ sub parse_all_module_results {
 # ══════════════════════════════════════════════════════════════════════
 # Helpers
 # ══════════════════════════════════════════════════════════════════════
+
+# Run a command with a hard timeout.  On timeout, kills the entire
+# process group so no orphaned jperl/java children survive.
+# Returns ($output, $timed_out).
+#
+# Strategy (borrowed from perl_test_runner.pl):
+#   1. Prefer external `timeout` / `gtimeout` — they send SIGTERM to the
+#      process group and handle cleanup natively.
+#   2. Fallback: fork + setpgrp + kill(-$pid) for platforms without
+#      coreutils.
+sub run_with_timeout {
+    my ($cmd, $secs) = @_;
+
+    # --- Strategy 1: external timeout command ---
+    my $timeout_cmd = _find_timeout_cmd();
+    if ($timeout_cmd) {
+        my $full = "$timeout_cmd ${secs}s $cmd 2>&1";
+        my $output = `$full`;
+        my $exit_code = $? >> 8;
+        my $timed_out = ($exit_code == 124);  # timeout exits 124
+        return ($output // '', $timed_out);
+    }
+
+    # --- Strategy 2: fork + process-group kill ---
+    my $output    = '';
+    my $timed_out = 0;
+
+    my $pid = open my $pipe, '-|';
+    if (!defined $pid) {
+        warn "fork failed: $!\n";
+        return ('', 0);
+    }
+
+    if ($pid == 0) {
+        # Child: run in its own process group so kill(-pid) reaches
+        # the entire tree (jcpan → jperl → java, make, etc.)
+        setpgrp(0, 0);
+        open STDERR, '>&', \*STDOUT;
+        exec('/bin/sh', '-c', $cmd);
+        exit 127;
+    }
+
+    # Parent: read with alarm timeout
+    eval {
+        local $SIG{ALRM} = sub { die "TIMEOUT\n" };
+        alarm($secs);
+        local $/;
+        $output = <$pipe>;
+        alarm(0);
+    };
+
+    if ($@ && $@ =~ /TIMEOUT/) {
+        $timed_out = 1;
+        # Kill the entire process group (negative PID)
+        kill 'TERM', -$pid;
+        # Give children a moment to exit, then force-kill
+        my $reaped = 0;
+        for (1..10) {
+            if (waitpid($pid, WNOHANG) > 0) {
+                $reaped = 1;
+                last;
+            }
+            select(undef, undef, undef, 0.2);
+        }
+        unless ($reaped) {
+            kill 'KILL', -$pid;
+            waitpid($pid, 0);
+        }
+    }
+
+    close $pipe;    # always close to avoid FD leak
+    # Reap child if not already reaped (close may have done it, but
+    # waitpid on an already-reaped pid is harmless)
+    waitpid($pid, WNOHANG) unless $timed_out;
+
+    return ($output // '', $timed_out);
+}
+
+{
+    my $_timeout_cmd;       # cached result (undef = not checked yet)
+    my $_checked = 0;
+
+    sub _find_timeout_cmd {
+        return $_timeout_cmd if $_checked;
+        $_checked = 1;
+        for my $candidate (qw(timeout gtimeout)) {
+            if (system("which $candidate >/dev/null 2>&1") == 0) {
+                $_timeout_cmd = $candidate;
+                return $_timeout_cmd;
+            }
+        }
+        return undef;
+    }
+}
 
 sub save_log {
     my ($module, $output) = @_;
