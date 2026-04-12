@@ -1247,6 +1247,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeArray previousState = dynamicStateStack.pop();
+            // Before discarding the current (local scope's) elements, defer
+            // refCount decrements for any tracked blessed references they own.
+            // Without this, `local @_ = ($obj)` where $obj is tracked would
+            // leak refCounts because the local elements are replaced without
+            // ever going through scopeExitCleanup.
+            MortalList.deferDestroyForContainerClear(this.elements);
             // Restore the elements from the saved state
             this.elements = previousState.elements;
             // Restore the type from the saved state (important for tied arrays)

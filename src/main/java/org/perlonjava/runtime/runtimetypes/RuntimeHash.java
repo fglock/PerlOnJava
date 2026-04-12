@@ -1060,6 +1060,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!dynamicStateStack.isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
             RuntimeHash previousState = dynamicStateStack.pop();
+            // Before discarding the current (local scope's) elements, defer
+            // refCount decrements for any tracked blessed references they own.
+            // Without this, `local %hash = (key => $obj)` where $obj is tracked
+            // would leak refCounts because the local elements are replaced without
+            // ever going through scopeExitCleanup.
+            MortalList.deferDestroyForContainerClear(this.elements.values());
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
