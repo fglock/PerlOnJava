@@ -57,30 +57,26 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-13, post Fix 1+2+3+GC sweep)
+## Current Test Results (2026-04-11, post Fix 5: next::method C3)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
-| Total assertions | **12,335 OK / 28 not-ok** (excl TODO) | **99.77% pass rate** |
+| Total assertions | **12,348 OK / 15 not-ok** (excl TODO) | **99.88% pass rate** |
 | GC-only failures | **0 files** | Eliminated by clearAllBlessedWeakRefs + exit path fix |
 | TODO failures | **35 assertions** | Upstream expected failures |
-| Real PerlOnJava failures | **28 assertions** in 10 files | See breakdown below |
+| Real PerlOnJava failures | **15 assertions** in 6 files | See breakdown below |
 
 ### Real (Non-GC, Non-TODO) Failures
 
 | File | Failures | Root Cause | Fix |
 |------|----------|------------|-----|
 | t/85utf8.t | 8 | JVM strings always Unicode | Systemic — won't fix |
-| t/cdbi/columns_as_hashes.t | 9 | Tied hash column access not impl | CDBI compat — low priority |
-| t/cdbi/09-has_many.t | 1 | Cascade delete not working | CDBI compat |
-| t/cdbi/14-might_have.t | 1 | Cascade delete not working | CDBI compat |
-| t/cdbi/23-cascade.t | 2 | Cascade delete not working | CDBI compat |
-| t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | CDBI compat |
-| t/storage/cursor.t | 2 | Class::Unload + no auto-reload | Pre-existing |
-| t/60core.t | 1 | Cached statement still Active | Fix 4: auto-finish |
-| t/storage/error.t | 1 | Schema gone after GC | Pre-existing |
-| t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Low priority |
+| t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | DESTROY timing — see analysis below |
+| t/storage/cursor.t | 2 | Class::Unload + no auto-reload | Weak ref not cleared on stash delete |
+| t/60core.t | 1 | Cached statement still Active | DESTROY timing for method-chain temporaries |
+| t/storage/error.t | 1 | Schema gone after GC | Schema DESTROY rescue prevents weak ref clearing |
+| t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Non-debug mode, low priority |
 
 ---
 
@@ -227,15 +223,97 @@ statement handles remain Active. Test checks `CachedKids` and fails for Active h
 **Fix**: In DBI.pm's `prepare_cached`, when reusing a cached sth that is Active,
 call `$sth->finish()` before returning. Standard DBI `if (3)` behavior.
 
-### Not Fixing
+### Fix 6: next::method always uses C3 linearization — COMPLETED
 
-| Issue | Reason |
-|-------|--------|
-| t/85utf8.t (8 failures) | JVM strings always Unicode — systemic limitation |
-| t/storage/txn_scope_guard.t test 18 | `@DB::args` population — niche edge case |
-| t/cdbi/columns_as_hashes.t (9 failures) | Requires tied hash column access — CDBI-specific feature |
-| Version mismatch warning | Not a test failure — `Exception::Class` hardcodes `$VERSION='1.1'` for generated subclasses |
-| Upstream TODOs (35 assertions) | Fail in Perl 5 too |
+**Commit**: `9badbda1f`
+
+**Impact**: Fixed **13 assertions** across **4 test files** that were previously failing.
+Pass rate improved from 99.77% to **99.88%**.
+
+**Fixed test files**:
+- `t/cdbi/23-cascade.t` — 2 → 0 failures (cascade delete now works)
+- `t/cdbi/09-has_many.t` — 1 → 0 failures (cascade delete)
+- `t/cdbi/14-might_have.t` — 1 → 0 failures (cascade delete)
+- `t/cdbi/columns_as_hashes.t` — 9 → 0 failures (tied hash column access works)
+
+**Root cause**: In Perl 5, `next::method` **always uses C3 linearization** regardless of
+the class's MRO setting (dfs or c3). PerlOnJava was using the class's configured MRO.
+
+This matters because CDBI test classes (`Film`, `Director`) use `use base 'DBIC::Test::SQLite'`
+which does NOT set c3 MRO (only `inject_base` does). So these classes have DFS MRO.
+With DFS, `ColumnGroups → Row` pulls `Row` into the linearization before `ColumnsAsHash`
+and `CascadeActions`, causing `next::method` chains to skip critical intermediate methods:
+
+- `Triggers::delete → CascadeActions::delete → Row::delete` — CascadeActions was skipped
+- `ColumnsAsHash::new` (which calls `_make_columns_as_hash`) — was never reached
+
+**What was done**:
+1. Added `InheritanceResolver.linearizeC3Always(className)` — always uses C3 regardless
+   of the class's per-package MRO setting, with separate cache key (`::__C3__`)
+2. Changed `NextMethod.java` to use `linearizeC3Always` instead of `linearizeHierarchy`
+
+**Files changed**: `InheritanceResolver.java`, `NextMethod.java`
+
+**Diagnostic proof** (Perl 5 vs PerlOnJava behavior confirmed identical):
+```perl
+# Film has DFS MRO, ColumnGroups ISA Row creates diamond
+# DFS: Triggers[4] → Row[5] → ColumnsAsHash[7] → CascadeActions[10]
+# C3:  Triggers[4] → ColumnsAsHash[5] → CascadeActions[8] → Row[9]
+# Perl 5 next::method always uses C3: Triggers->ColHash->Cascade->Row ✓
+```
+
+---
+
+### Detailed Analysis of Remaining 15 Failures
+
+#### t/85utf8.t (8 failures) — Won't Fix
+JVM strings are always Unicode internally. No byte-level UTF-8 flag distinction possible.
+
+#### t/cdbi/02-Film.t tests 70-71 (2 failures) — DESTROY Timing
+- **Test 70**: Creates Film object with dirty columns, scope exit should trigger DESTROY
+  which warns about unsaved changes. The warn handler captures it. But DESTROY doesn't
+  fire at scope exit due to inflated cooperative refCount from MRO method chain.
+- **Test 71**: Cascading failure — if DESTROY didn't fire, the dirty object stays in the
+  LiveObjectIndex cache, so `Film->retrieve` returns the stale dirty object.
+- **Root cause**: Return-chain refcount drift through `Film->retrieve → inflate_result →
+  LiveObjectIndex::inflate_result → ColumnsAsHash::inflate_result`. Each method return
+  may increment refCount without matching decrement.
+- **Fix approach**: Improve MortalList tracking for method-chain return values, or track
+  intermediate blessed return values more carefully in the cooperative refcounting system.
+
+#### t/storage/cursor.t tests 3-4 (2 failures) — Weak Ref + Stash Delete
+- **What**: `Class::Unload->unload('DBICTest::Cursor')` deletes stash entries and `%INC`.
+  DBIC's `get_component_class` should detect the weakened ref became undef, then reload.
+- **Root cause**: Stash deletion doesn't clear weak references to the deleted package variable.
+  `WeakRefRegistry` only clears on explicit `undefine()`, not on stash delete.
+- **Fix approach**: Enhance `RuntimeStash.delete()` to check for and clear weak references
+  to deleted values via `WeakRefRegistry.clearWeakRefsTo()`.
+
+#### t/60core.t test 82 (1 failure) — Cached Statement Active
+- **What**: After `$rs->next->cdid`, the temporary cursor from `->next` should DESTROY
+  (calling `__finish_sth`). But the cursor is not assigned to a lexical, so refCount
+  tracking doesn't trigger deterministic DESTROY.
+- **Root cause**: Systemic limitation of cooperative refcounting for purely temporary
+  blessed objects in method chains.
+- **Fix approach**: Skip/TODO, or improve MortalList temporary tracking.
+
+#### t/storage/error.t test 49 (1 failure) — Schema DESTROY Rescue
+- **What**: After `undef($schema)`, weak ref `$weak_self` in HandleError callback should
+  become undef. Test expects error message containing "unhandled by DBIC".
+- **Root cause**: Schema DESTROY rescue pattern keeps the storage alive. The weak ref
+  `$weak_self` in the callback closure stays defined because the storage object is still
+  reachable through the rescued Schema.
+- **Fix approach**: Ensure explicit `undef($var)` bypasses rescue detection, or clear
+  external weak refs even when rescue is detected.
+
+#### t/storage/txn_scope_guard.t test 18 (1 failure) — @DB::args
+- **What**: Test walks call stack from `package DB` which should populate `@DB::args`
+  with actual frame arguments. This captures a reference to the TxnScopeGuard, triggering
+  a second DESTROY when released.
+- **Root cause**: `RuntimeCode.java` sets `@DB::args` to empty array in non-debug mode
+  (lines 2020-2024).
+- **Fix approach**: Record `@_` per frame in CallerStack, or skip test (the bug this
+  test guards against can't happen in PerlOnJava since `@DB::args` never leaks refs).
 
 ---
 
@@ -266,6 +344,7 @@ call `$sth->finish()` before returning. Standard DBI `if (3)` behavior.
 | 2026-04-13 | Scope exit LIFO ordering (LinkedHashMap + reverse) | `bca73bd5c` |
 | 2026-04-13 | Deferred weak-ref clearing for rescued objects | `4eb76322c` |
 | 2026-04-13 | DBI RootClass + clearAllBlessedWeakRefs + exit path fix | `7df81dc46` |
+| 2026-04-11 | Fix 6: next::method always uses C3 linearization | `9badbda1f` |
 
 ## Architecture Reference
 
