@@ -10,6 +10,7 @@ our $VERSION = '2.21';
 
 use strict;
 use warnings;
+use Carp;
 use Exporter ();
 
 use XSLoader;

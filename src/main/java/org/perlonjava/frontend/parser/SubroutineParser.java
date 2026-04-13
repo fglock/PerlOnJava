@@ -357,7 +357,8 @@ public class SubroutineParser {
                     || nextTok.text.equals(":"));
             if (!terminator
                     && !infixOp
-                    && nextTok.type != LexerTokenType.IDENTIFIER
+                    && (nextTok.type != LexerTokenType.IDENTIFIER
+                        || subName.contains("::"))
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
                 // Check if this looks like indirect object syntax: method $object, args
