@@ -194,6 +194,21 @@ our %EXPORT_TAGS = (
         WSTOPSIG WTERMSIG WUNTRACED wait waitpid
     )],
 
+    termios_h => [qw(
+        B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400
+        B4800 B9600 B19200 B38400
+        BRKINT
+        CS5 CS6 CS7 CS8 CSIZE CSTOPB CREAD PARENB PARODD HUPCL CLOCAL
+        ECHO ECHOE ECHOK ECHONL
+        ICANON IEXTEN ISIG
+        ICRNL INPCK ISTRIP IXON IXOFF IGNBRK IGNCR IGNPAR INLCR IXANY PARMRK
+        OPOST
+        TCSADRAIN TCSAFLUSH TCSANOW
+        VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
+        cfgetispeed cfgetospeed cfsetispeed cfsetospeed
+        tcdrain tcflow tcflush tcgetattr tcsendbreak tcsetattr
+    )],
+
     unistd_h => [qw(
         _exit access alarm chdir chmod chown close ctermid dup dup2
         execl execle execlp execv execve execvp fork fpathconf
@@ -292,6 +307,17 @@ sub rmdir { POSIX::_rmdir(@_) }
 sub getcwd { POSIX::_getcwd() }
 sub chdir { POSIX::_chdir(@_) }
 
+# Terminal functions
+sub isatty {
+    my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
+    return POSIX::_isatty($fd);
+}
+sub setsid { POSIX::_setsid() }
+sub ttyname {
+    my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
+    return POSIX::_ttyname($fd);
+}
+
 # Time functions
 sub time { POSIX::_time() }
 sub sleep { POSIX::_sleep(@_) }
@@ -379,6 +405,98 @@ sub handler { return $_[0]->{handler} }
 sub mask    { return $_[0]->{sigset} }
 sub flags   { return $_[0]->{flags} }
 
+# POSIX::Termios - terminal I/O control
+# The Java backend stores a native struct termios as an opaque byte string
+# in the blessed hashref's "_data" key.  All field access goes through the
+# Java POSIX module's termios_* methods.
+package POSIX::Termios;
+
+sub new {
+    my $class = shift;
+    my $data = POSIX::Termios::_new();
+    return bless { _data => $data }, $class;
+}
+
+sub getattr {
+    my ($self, $fd) = @_;
+    $fd = fileno($fd) if ref $fd;
+    $fd = 0 unless defined $fd;
+    my @r = POSIX::Termios::_getattr($self->{_data}, $fd);
+    return undef unless @r && defined $r[0];
+    $self->{_data} = $r[0];
+    return $r[1];  # "0 but true"
+}
+
+sub setattr {
+    my ($self, $fd, $action) = @_;
+    $fd = fileno($fd) if ref $fd;
+    $fd = 0 unless defined $fd;
+    $action = 0 unless defined $action;  # TCSANOW
+    return POSIX::Termios::_setattr($self->{_data}, $fd, $action);
+}
+
+sub getiflag { return POSIX::Termios::_getiflag($_[0]->{_data}) }
+sub getoflag { return POSIX::Termios::_getoflag($_[0]->{_data}) }
+sub getcflag { return POSIX::Termios::_getcflag($_[0]->{_data}) }
+sub getlflag { return POSIX::Termios::_getlflag($_[0]->{_data}) }
+
+sub getcc {
+    my ($self, $idx) = @_;
+    return POSIX::Termios::_getcc($self->{_data}, $idx);
+}
+
+sub setiflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setiflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setoflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setoflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setcflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setcflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setlflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setlflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setcc {
+    my ($self, $idx, $val) = @_;
+    my @r = POSIX::Termios::_setcc($self->{_data}, $idx, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub getispeed { return POSIX::Termios::_getispeed($_[0]->{_data}) }
+sub getospeed { return POSIX::Termios::_getospeed($_[0]->{_data}) }
+
+sub setispeed {
+    my ($self, $speed) = @_;
+    my @r = POSIX::Termios::_setispeed($self->{_data}, $speed);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setospeed {
+    my ($self, $speed) = @_;
+    my @r = POSIX::Termios::_setospeed($self->{_data}, $speed);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
 package POSIX;
 
 # Constants - generate subs for each constant that has Java implementation
@@ -396,6 +514,14 @@ for my $const (qw(
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT
     SIGSTOP SIGTSTP
+
+    TCSANOW TCSADRAIN TCSAFLUSH
+
+    ECHO ECHOE ECHOK ECHONL ICANON IEXTEN ISIG
+    BRKINT ICRNL INPCK ISTRIP IXON
+    OPOST
+    CS8 CSIZE PARENB
+    VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";

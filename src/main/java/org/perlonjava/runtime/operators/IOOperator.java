@@ -2244,11 +2244,10 @@ public class IOOperator {
 
     /**
      * ioctl(FILEHANDLE, FUNCTION, SCALAR)
-     * Implements device control operations.
-     * 
-     * Note: ioctl is highly system-specific and most operations cannot be
-     * implemented in Java. This stub allows code that uses ioctl to compile
-     * and run, but operations will generally fail or be no-ops.
+     * Implements device control operations via FFM native ioctl.
+     *
+     * Perl semantics: returns "0 but true" when ioctl returns 0,
+     * the actual integer for non-zero success, undef on error (with $! set).
      */
     public static RuntimeScalar ioctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) {
@@ -2257,14 +2256,64 @@ public class IOOperator {
         }
 
         try {
-            // ioctl is generally not implementable in pure Java
-            // Return false to indicate the operation is not supported
-            getGlobalVariable("main::!").set("ioctl not implemented on this platform");
-            return scalarFalse;
+            RuntimeScalar fileHandle = args[0].scalar();
+            long request = args[1].scalar().getLong();
+            RuntimeScalar scalarArg = args[2].scalar();
 
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null || fh.ioHandle == null) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return scalarUndef;
+            }
+
+            // Get the native file descriptor
+            RuntimeScalar filenoResult = fh.ioHandle.fileno();
+            int fd = filenoResult.getDefinedBoolean() ? filenoResult.getInt() : -1;
+
+            if (fd < 0 || NativeUtils.IS_WINDOWS) {
+                getGlobalVariable("main::!").set("ioctl not supported on this handle");
+                return scalarUndef;
+            }
+
+            // Determine if this is a pointer-type or int-type ioctl.
+            // Perl ioctl passes either a packed binary string (pointer-type)
+            // or an integer scalar (int-type, e.g., TIOCSCTTY with arg 0).
+            // We detect by checking if the scalar looks like a binary buffer
+            // (length > 4 is a good heuristic — struct winsize is 8 bytes).
+            String scalarStr = scalarArg.toString();
+            byte[] buf = scalarStr.getBytes(StandardCharsets.ISO_8859_1);
+            int result;
+
+            if (buf.length >= 8) {
+                // Pointer argument — pass the scalar's bytes as a buffer
+                result = FFMPosix.get().ioctlWithPointer(fd, request, buf);
+                if (result >= 0) {
+                    // Write modified buffer back to the scalar (for read-type ioctls like TIOCGWINSZ)
+                    scalarArg.set(new String(buf, StandardCharsets.ISO_8859_1));
+                }
+            } else {
+                // Integer argument (e.g., TIOCSCTTY with arg 0, or TIOCNOTTY)
+                int intArg = scalarArg.getInt();
+                result = FFMPosix.get().ioctlWithInt(fd, request, intArg);
+            }
+
+            if (result < 0) {
+                getGlobalVariable("main::!").set(FFMPosix.get().errno());
+                return scalarUndef;
+            }
+
+            // Perl convention: ioctl returns "0 but true" for 0, or the integer value
+            if (result == 0) {
+                return new RuntimeScalar("0 but true");
+            }
+            return new RuntimeScalar(result);
+
+        } catch (UnsupportedOperationException e) {
+            getGlobalVariable("main::!").set("ioctl not implemented on this platform");
+            return scalarUndef;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("ioctl failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
     }
 

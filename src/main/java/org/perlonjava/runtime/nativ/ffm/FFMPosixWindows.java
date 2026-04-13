@@ -288,6 +288,92 @@ public class FFMPosixWindows implements FFMPosixInterface {
         return 0;
     }
     
+    // ==================== PTY/Terminal Functions ====================
+    // Pseudo-terminals are not supported on Windows.
+    // The Perl shim checks $^O and dies before reaching these.
+    
+    private static final String PTY_UNSUPPORTED = "Pseudo-terminals are not supported on Windows";
+    
+    @Override
+    public int posix_openpt(int flags) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int grantpt(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int unlockpt(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public String ptsname(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int setsid() {
+        throw new UnsupportedOperationException("setsid is not supported on Windows");
+    }
+    
+    @Override
+    public String ttyname(int fd) {
+        return null;  // No tty device names on Windows
+    }
+    
+    @Override
+    public int nativeOpen(String path, int flags) {
+        throw new UnsupportedOperationException("nativeOpen is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeClose(int fd) {
+        throw new UnsupportedOperationException("nativeClose is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeRead(int fd, byte[] buf, int count) {
+        throw new UnsupportedOperationException("nativeRead is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeWrite(int fd, byte[] buf, int count) {
+        throw new UnsupportedOperationException("nativeWrite is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeDup(int fd) {
+        throw new UnsupportedOperationException("nativeDup is not supported on Windows");
+    }
+    
+    @Override
+    public int fcntlDupFd(int fd, int minFd) {
+        throw new UnsupportedOperationException("fcntlDupFd is not supported on Windows");
+    }
+    
+    @Override
+    public int ioctlWithPointer(int fd, long request, byte[] buf) {
+        throw new UnsupportedOperationException("ioctl is not supported on Windows");
+    }
+    
+    @Override
+    public int ioctlWithInt(int fd, long request, int arg) {
+        throw new UnsupportedOperationException("ioctl is not supported on Windows");
+    }
+    
+    @Override
+    public int tcgetattr(int fd, byte[] termios) {
+        throw new UnsupportedOperationException("tcgetattr is not supported on Windows");
+    }
+    
+    @Override
+    public int tcsetattr(int fd, int optionalActions, byte[] termios) {
+        throw new UnsupportedOperationException("tcsetattr is not supported on Windows");
+    }
+    
     // ==================== File Control Functions ====================
     
     @Override

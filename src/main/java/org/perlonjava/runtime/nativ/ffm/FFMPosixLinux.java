@@ -58,6 +58,54 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle setpwentHandle;
     private static MethodHandle endpwentHandle;
     
+    // Method handles for PTY/terminal functions
+    private static MethodHandle posixOpenptHandle;
+    private static MethodHandle grantptHandle;
+    private static MethodHandle unlockptHandle;
+    private static MethodHandle ptsnameHandle;
+    private static MethodHandle setsidHandle;
+    private static MethodHandle ttynameHandle;
+    private static MethodHandle openHandle;
+    private static MethodHandle closeHandle;
+    private static MethodHandle readHandle;
+    private static MethodHandle writeHandle;
+    private static MethodHandle dupHandle;
+    private static MethodHandle fcntlHandle;
+    private static MethodHandle ioctlPtrHandle;
+    private static MethodHandle ioctlIntHandle;
+    private static MethodHandle tcgetattrHandle;
+    private static MethodHandle tcsetattrHandle;
+    
+    // Platform-specific constants for PTY operations
+    public static final int O_RDWR;
+    public static final int O_NOCTTY;
+    public static final long TIOCGWINSZ;
+    public static final long TIOCSWINSZ;
+    public static final long TIOCSCTTY;
+    public static final long TIOCNOTTY;
+    public static final int F_DUPFD = 0;  // Same on both platforms
+    public static final int TERMIOS_SIZE;
+    
+    static {
+        if (IS_MACOS) {
+            O_RDWR = 0x0002;
+            O_NOCTTY = 0x20000;
+            TIOCGWINSZ = 0x40087468L;
+            TIOCSWINSZ = 0x80087467L;
+            TIOCSCTTY = 0x20007461L;
+            TIOCNOTTY = 0x20007471L;
+            TERMIOS_SIZE = 72;  // macOS struct termios
+        } else {
+            O_RDWR = 0x0002;
+            O_NOCTTY = 0x0100;
+            TIOCGWINSZ = 0x5413L;
+            TIOCSWINSZ = 0x5414L;
+            TIOCSCTTY = 0x540EL;
+            TIOCNOTTY = 0x5422L;
+            TERMIOS_SIZE = 60;  // Linux struct termios
+        }
+    }
+    
     // Linker options for errno capture
     private static Linker.Option captureErrno;
     private static long errnoOffset;
@@ -204,6 +252,115 @@ public class FFMPosixLinux implements FFMPosixInterface {
             
             // Initialize passwd struct offsets
             initPasswdOffsets();
+            
+            // PTY/Terminal functions (all need errno capture)
+            posixOpenptHandle = linker.downcallHandle(
+                stdlib.find("posix_openpt").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            grantptHandle = linker.downcallHandle(
+                stdlib.find("grantpt").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            unlockptHandle = linker.downcallHandle(
+                stdlib.find("unlockpt").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // ptsname: char* ptsname(int fd)
+            ptsnameHandle = linker.downcallHandle(
+                stdlib.find("ptsname").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // setsid: pid_t setsid(void)
+            setsidHandle = linker.downcallHandle(
+                stdlib.find("setsid").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // ttyname: char* ttyname(int fd)
+            ttynameHandle = linker.downcallHandle(
+                stdlib.find("ttyname").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+            
+            // open: int open(const char *path, int flags)
+            openHandle = linker.downcallHandle(
+                stdlib.find("open").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // close: int close(int fd)
+            closeHandle = linker.downcallHandle(
+                stdlib.find("close").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // read: ssize_t read(int fd, void *buf, size_t count)
+            readHandle = linker.downcallHandle(
+                stdlib.find("read").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+                captureErrno
+            );
+            
+            // write: ssize_t write(int fd, const void *buf, size_t count)
+            writeHandle = linker.downcallHandle(
+                stdlib.find("write").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+                captureErrno
+            );
+            
+            // dup: int dup(int fd)
+            dupHandle = linker.downcallHandle(
+                stdlib.find("dup").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // fcntl: int fcntl(int fd, int cmd, ...)
+            fcntlHandle = linker.downcallHandle(
+                stdlib.find("fcntl").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                Linker.Option.firstVariadicArg(2), captureErrno
+            );
+            
+            // ioctl with pointer arg: int ioctl(int fd, unsigned long request, void *arg)
+            ioctlPtrHandle = linker.downcallHandle(
+                stdlib.find("ioctl").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS),
+                Linker.Option.firstVariadicArg(2), captureErrno
+            );
+            
+            // ioctl with int arg: int ioctl(int fd, unsigned long request, int arg)
+            ioctlIntHandle = linker.downcallHandle(
+                stdlib.find("ioctl").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT),
+                Linker.Option.firstVariadicArg(2), captureErrno
+            );
+            
+            // tcgetattr: int tcgetattr(int fd, struct termios *termios_p)
+            tcgetattrHandle = linker.downcallHandle(
+                stdlib.find("tcgetattr").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
+                captureErrno
+            );
+            
+            // tcsetattr: int tcsetattr(int fd, int optional_actions, const struct termios *termios_p)
+            tcsetattrHandle = linker.downcallHandle(
+                stdlib.find("tcsetattr").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
+                captureErrno
+            );
             
             initialized = true;
         } catch (Throwable e) {
@@ -646,8 +803,299 @@ public class FFMPosixLinux implements FFMPosixInterface {
     
     @Override
     public int fcntl(int fd, int cmd, int arg) {
-        // TODO: Implement with FFM in Phase 3
-        throw new UnsupportedOperationException("FFM fcntl() not yet implemented - use JNR-POSIX");
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) fcntlHandle.invokeExact(capturedState, fd, cmd, arg);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(22); // EINVAL
+            return -1;
+        }
+    }
+    
+    // ==================== PTY/Terminal Functions ====================
+    
+    @Override
+    public int posix_openpt(int flags) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) posixOpenptHandle.invokeExact(capturedState, flags);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(38); // ENOSYS
+            return -1;
+        }
+    }
+    
+    @Override
+    public int grantpt(int masterFd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) grantptHandle.invokeExact(capturedState, masterFd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public int unlockpt(int masterFd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) unlockptHandle.invokeExact(capturedState, masterFd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public String ptsname(int masterFd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            MemorySegment result = (MemorySegment) ptsnameHandle.invokeExact(capturedState, masterFd);
+            if (result.address() == 0) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return null;
+            }
+            return result.reinterpret(256).getString(0);
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return null;
+        }
+    }
+    
+    @Override
+    public int setsid() {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) setsidHandle.invokeExact(capturedState);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(1); // EPERM
+            return -1;
+        }
+    }
+    
+    @Override
+    public String ttyname(int fd) {
+        ensureInitialized();
+        try {
+            MemorySegment result = (MemorySegment) ttynameHandle.invokeExact(fd);
+            if (result.address() == 0) {
+                return null;
+            }
+            return result.reinterpret(256).getString(0);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+    
+    @Override
+    public int nativeOpen(String path, int flags) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pathSegment = arena.allocateFrom(path);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) openHandle.invokeExact(capturedState, pathSegment, flags);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public int nativeClose(int fd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) closeHandle.invokeExact(capturedState, fd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public int nativeRead(int fd, byte[] buf, int count) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocate(count);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            long result = (long) readHandle.invokeExact(capturedState, fd, nativeBuf, (long) count);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            // Copy data from native buffer to Java array
+            MemorySegment.copy(nativeBuf, ValueLayout.JAVA_BYTE, 0, buf, 0, (int) result);
+            return (int) result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public int nativeWrite(int fd, byte[] buf, int count) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocateFrom(ValueLayout.JAVA_BYTE, buf);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            long result = (long) writeHandle.invokeExact(capturedState, fd, nativeBuf, (long) count);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            return (int) result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public int nativeDup(int fd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) dupHandle.invokeExact(capturedState, fd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public int fcntlDupFd(int fd, int minFd) {
+        return fcntl(fd, F_DUPFD, minFd);
+    }
+    
+    @Override
+    public int ioctlWithPointer(int fd, long request, byte[] buf) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocate(buf.length);
+            // Copy input data to native buffer
+            MemorySegment.copy(buf, 0, nativeBuf, ValueLayout.JAVA_BYTE, 0, buf.length);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) ioctlPtrHandle.invokeExact(capturedState, fd, request, nativeBuf);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            // Copy output data back to Java array
+            MemorySegment.copy(nativeBuf, ValueLayout.JAVA_BYTE, 0, buf, 0, buf.length);
+            return result;
+        } catch (Throwable e) {
+            setErrno(22); // EINVAL
+            return -1;
+        }
+    }
+    
+    @Override
+    public int ioctlWithInt(int fd, long request, int arg) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) ioctlIntHandle.invokeExact(capturedState, fd, request, arg);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(22); // EINVAL
+            return -1;
+        }
+    }
+    
+    @Override
+    public int tcgetattr(int fd, byte[] termios) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocate(termios.length);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) tcgetattrHandle.invokeExact(capturedState, fd, nativeBuf);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            MemorySegment.copy(nativeBuf, ValueLayout.JAVA_BYTE, 0, termios, 0, termios.length);
+            return result;
+        } catch (Throwable e) {
+            setErrno(25); // ENOTTY
+            return -1;
+        }
+    }
+    
+    @Override
+    public int tcsetattr(int fd, int optionalActions, byte[] termios) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocate(termios.length);
+            MemorySegment.copy(termios, 0, nativeBuf, ValueLayout.JAVA_BYTE, 0, termios.length);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) tcsetattrHandle.invokeExact(capturedState, fd, optionalActions, nativeBuf);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(25); // ENOTTY
+            return -1;
+        }
     }
     
     @Override
