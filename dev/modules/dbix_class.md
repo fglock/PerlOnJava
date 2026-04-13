@@ -57,25 +57,23 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-11, post Fix 5: next::method C3)
+## Current Test Results (2026-04-11, post Fix 7: stash delete + B::REFCNT)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
-| Total assertions | **12,348 OK / 15 not-ok** (excl TODO) | **99.88% pass rate** |
+| Total assertions | **12,351 OK / 12 not-ok** (excl TODO) | **99.90% pass rate** |
 | GC-only failures | **0 files** | Eliminated by clearAllBlessedWeakRefs + exit path fix |
 | TODO failures | **35 assertions** | Upstream expected failures |
-| Real PerlOnJava failures | **15 assertions** in 6 files | See breakdown below |
+| Real PerlOnJava failures | **12 assertions** in 4 files | See breakdown below |
 
 ### Real (Non-GC, Non-TODO) Failures
 
 | File | Failures | Root Cause | Fix |
 |------|----------|------------|-----|
-| t/85utf8.t | 8 | JVM strings always Unicode | Systemic — won't fix |
+| t/85utf8.t | 8 | DBI returns STRING, utf8::decode always sets STRING | DBI BYTE_STRING + conditional utf8 flag — see analysis below |
 | t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | DESTROY timing — see analysis below |
-| t/storage/cursor.t | 2 | Class::Unload + no auto-reload | Weak ref not cleared on stash delete |
 | t/60core.t | 1 | Cached statement still Active | DESTROY timing for method-chain temporaries |
-| t/storage/error.t | 1 | Schema gone after GC | Schema DESTROY rescue prevents weak ref clearing |
 | t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Non-debug mode, low priority |
 
 ---
@@ -225,7 +223,7 @@ call `$sth->finish()` before returning. Standard DBI `if (3)` behavior.
 
 ### Fix 6: next::method always uses C3 linearization — COMPLETED
 
-**Commit**: `9badbda1f`
+**Commit**: `beebccd69`
 
 **Impact**: Fixed **13 assertions** across **4 test files** that were previously failing.
 Pass rate improved from 99.77% to **99.88%**.
@@ -262,58 +260,72 @@ and `CascadeActions`, causing `next::method` chains to skip critical intermediat
 # Perl 5 next::method always uses C3: Triggers->ColHash->Cascade->Row ✓
 ```
 
+### Fix 7: Clear weak refs on stash delete + fix B::REFCNT inflation — COMPLETED
+
+**Commit**: `d6dd158da`
+
+**Impact**: Fixed **3 assertions** across **2 test files**. Pass rate improved from
+99.88% to **99.90%**.
+
+**Fixed test files**:
+- `t/storage/cursor.t` — 2 → 0 failures (Class::Unload reload works)
+- `t/storage/error.t` — 1 → 0 failures (weak ref cleared after schema freed)
+
+**Two changes**:
+
+1. **RuntimeStash.deleteGlob(): Clear weak refs on stash delete** — When a reference-
+   holding scalar is deleted from a stash, trigger weak ref clearing on the referent
+   if the stash was the only strong reference. This implements the Perl 5 behavior where
+   deleting a stash entry drops the strong reference to its referent, causing the referent
+   to be freed if no other strong refs exist, which in turn clears all weak refs to it.
+   Critical for the Class::Unload + DBIC AccessorGroup sentinel pattern.
+
+2. **B::SV::REFCNT: Subtract 1 for tracked objects** — PerlOnJava's B::SV stores the
+   reference in a hash slot (`$self->{ref}`), which inflates the cooperative refcount by 1
+   via `setLargeRefCounted`. In Perl 5, B::SV holds a raw C pointer without incrementing
+   REFCNT. Without this fix, `refcount()` in Schema::DESTROY sees sources with refcount=2
+   (instead of correct 1), incorrectly triggers the rescue path, and skips cascade cleanup.
+   This prevented Storage weak refs from being cleared when the schema was freed.
+
+**Files changed**: `RuntimeStash.java`, `B.pm`
+
 ---
 
-### Detailed Analysis of Remaining 15 Failures
+### Detailed Analysis of Remaining 12 Failures
 
-#### t/85utf8.t (8 failures) — Won't Fix
-JVM strings are always Unicode internally. No byte-level UTF-8 flag distinction possible.
+#### t/85utf8.t (8 failures) — DBI STRING / utf8::decode Issues
+
+PerlOnJava DOES have UTF-8 flag emulation via STRING vs BYTE_STRING types.
+The failures are caused by two specific, fixable issues:
+
+**Root Cause #1: DBI fetch returns STRING instead of BYTE_STRING (6 tests)**
+JDBC returns Java Strings → RuntimeScalar STRING type. Perl 5's DBD::SQLite
+(without `sqlite_unicode`) returns byte strings. Tests 17,18,19,22,23,28 fail
+because UTF8Columns's `get_column` skips `utf8::decode` on STRING values.
+- Fix: In DBI.java `fetchrow_arrayref`, check if all chars ≤ 0xFF → BYTE_STRING.
+
+**Root Cause #2: utf8::decode always sets STRING (1 test)**
+Perl 5 only sets UTF-8 flag if string contains multi-byte characters. PerlOnJava's
+`Utf8.java:257` always sets STRING. Test 20 fails for ASCII-only 'nonunicode'.
+- Fix: In Utf8.java, after decode, check if decoded string has chars > 0x7F.
+
+**Root Cause #3: Known upstream DBIC create() bug (1 test)**
+Test 11 is a known DBIC bug since 2006 — `create()` sends original values to DB
+instead of `store_column`-processed values. Perl 5 masks this via DBI driver encoding.
 
 #### t/cdbi/02-Film.t tests 70-71 (2 failures) — DESTROY Timing
 - **Test 70**: Creates Film object with dirty columns, scope exit should trigger DESTROY
-  which warns about unsaved changes. The warn handler captures it. But DESTROY doesn't
-  fire at scope exit due to inflated cooperative refCount from MRO method chain.
-- **Test 71**: Cascading failure — if DESTROY didn't fire, the dirty object stays in the
-  LiveObjectIndex cache, so `Film->retrieve` returns the stale dirty object.
-- **Root cause**: Return-chain refcount drift through `Film->retrieve → inflate_result →
-  LiveObjectIndex::inflate_result → ColumnsAsHash::inflate_result`. Each method return
-  may increment refCount without matching decrement.
-- **Fix approach**: Improve MortalList tracking for method-chain return values, or track
-  intermediate blessed return values more carefully in the cooperative refcounting system.
-
-#### t/storage/cursor.t tests 3-4 (2 failures) — Weak Ref + Stash Delete
-- **What**: `Class::Unload->unload('DBICTest::Cursor')` deletes stash entries and `%INC`.
-  DBIC's `get_component_class` should detect the weakened ref became undef, then reload.
-- **Root cause**: Stash deletion doesn't clear weak references to the deleted package variable.
-  `WeakRefRegistry` only clears on explicit `undefine()`, not on stash delete.
-- **Fix approach**: Enhance `RuntimeStash.delete()` to check for and clear weak references
-  to deleted values via `WeakRefRegistry.clearWeakRefsTo()`.
+  which warns about unsaved changes. But DESTROY doesn't fire at scope exit due to
+  inflated cooperative refCount from MRO method chain.
+- **Test 71**: Cascading failure — stale dirty object stays in LiveObjectIndex cache.
 
 #### t/60core.t test 82 (1 failure) — Cached Statement Active
-- **What**: After `$rs->next->cdid`, the temporary cursor from `->next` should DESTROY
-  (calling `__finish_sth`). But the cursor is not assigned to a lexical, so refCount
-  tracking doesn't trigger deterministic DESTROY.
-- **Root cause**: Systemic limitation of cooperative refcounting for purely temporary
-  blessed objects in method chains.
-- **Fix approach**: Skip/TODO, or improve MortalList temporary tracking.
-
-#### t/storage/error.t test 49 (1 failure) — Schema DESTROY Rescue
-- **What**: After `undef($schema)`, weak ref `$weak_self` in HandleError callback should
-  become undef. Test expects error message containing "unhandled by DBIC".
-- **Root cause**: Schema DESTROY rescue pattern keeps the storage alive. The weak ref
-  `$weak_self` in the callback closure stays defined because the storage object is still
-  reachable through the rescued Schema.
-- **Fix approach**: Ensure explicit `undef($var)` bypasses rescue detection, or clear
-  external weak refs even when rescue is detected.
+- After `$rs->next->cdid`, the temporary cursor's DESTROY doesn't fire because the
+  cursor is a method-chain temporary with no lexical storage.
 
 #### t/storage/txn_scope_guard.t test 18 (1 failure) — @DB::args
-- **What**: Test walks call stack from `package DB` which should populate `@DB::args`
-  with actual frame arguments. This captures a reference to the TxnScopeGuard, triggering
-  a second DESTROY when released.
-- **Root cause**: `RuntimeCode.java` sets `@DB::args` to empty array in non-debug mode
-  (lines 2020-2024).
-- **Fix approach**: Record `@_` per frame in CallerStack, or skip test (the bug this
-  test guards against can't happen in PerlOnJava since `@DB::args` never leaks refs).
+- `@DB::args` not populated in non-debug mode. Expected warning about "Preventing
+  *MULTIPLE* DESTROY()" never appears.
 
 ---
 
@@ -344,7 +356,8 @@ JVM strings are always Unicode internally. No byte-level UTF-8 flag distinction 
 | 2026-04-13 | Scope exit LIFO ordering (LinkedHashMap + reverse) | `bca73bd5c` |
 | 2026-04-13 | Deferred weak-ref clearing for rescued objects | `4eb76322c` |
 | 2026-04-13 | DBI RootClass + clearAllBlessedWeakRefs + exit path fix | `7df81dc46` |
-| 2026-04-11 | Fix 6: next::method always uses C3 linearization | `9badbda1f` |
+| 2026-04-11 | Fix 6: next::method always uses C3 linearization | `beebccd69` |
+| 2026-04-11 | Fix 7: Stash delete weak ref clearing + B::REFCNT inflation fix | `d6dd158da` |
 
 ## Architecture Reference
 
