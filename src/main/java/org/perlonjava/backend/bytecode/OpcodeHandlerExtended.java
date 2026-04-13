@@ -837,8 +837,13 @@ public class OpcodeHandlerExtended {
         RuntimeScalar fh = (RuntimeScalar) registers[fhReg];
         // Diamond operator <> passes a plain string scalar (not a glob/IO).
         // Route to DiamondIO.readline which manages @ARGV / STDIN iteration.
+        // But blessed objects may have <> overload, so route those to Readline.
         if (fh.getRuntimeIO() == null) {
-            registers[rd] = DiamondIO.readline(fh, ctx);
+            if (RuntimeScalarType.blessedId(fh) < 0) {
+                registers[rd] = Readline.readline(fh, ctx);
+            } else {
+                registers[rd] = DiamondIO.readline(fh, ctx);
+            }
         } else {
             registers[rd] = Readline.readline(fh, ctx);
         }
