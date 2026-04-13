@@ -1975,20 +1975,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     //   ref(\*FH)                      → "GLOB"
     //   UNIVERSAL::isa(\*FH, 'GLOB')   → 1
     //
-    // Without this check, \$scalar_holding_a_glob would produce a plain
-    // REFERENCE (not GLOBREFERENCE), causing isa(\$val, 'GLOB') to return
-    // false.  This broke Params::Validate::PP::_get_type() which relies on
-    //   UNIVERSAL::isa(\$_[0], 'GLOB')
-    // to detect glob-typed parameters.
+    // We return type=REFERENCE with value=this (the RuntimeScalar).
+    // ReferenceOperators.ref() already handles this: when a REFERENCE points
+    // to a RuntimeScalar with type GLOB, it returns "GLOB".
+    // Universal.isa() also handles this for unblessed refs.
+    //
+    // We deliberately do NOT set type=GLOBREFERENCE here because that would
+    // store the RuntimeGlob directly, losing the reference to this container.
+    // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
-        if (this.type == RuntimeScalarType.GLOB && this.value instanceof RuntimeGlob) {
-            result.type = RuntimeScalarType.GLOBREFERENCE;
-            result.value = this.value;   // point to the RuntimeGlob directly
-        } else {
-            result.type = RuntimeScalarType.REFERENCE;
-            result.value = this;
-        }
+        result.type = RuntimeScalarType.REFERENCE;
+        result.value = this;
         return result;
     }
 

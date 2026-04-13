@@ -289,6 +289,9 @@ public class Universal extends PerlModuleBase {
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
                                     || type == REFERENCE && argString.equals("SCALAR")
+                                            && !(object.value instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.GLOB)
+                                    || type == REFERENCE && argString.equals("GLOB")
+                                            && object.value instanceof RuntimeScalar rs2 && rs2.type == RuntimeScalarType.GLOB
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
                                     || type == FORMAT && argString.equals("FORMAT")
                                     || type == REGEX && (argString.equals("Regexp") || argString.equals("REGEXP"))
