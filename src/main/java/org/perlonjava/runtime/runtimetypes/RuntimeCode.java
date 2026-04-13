@@ -151,6 +151,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Thread-local stack tracking whether each call frame created a fresh @_ (hasargs).
+     * In Perl 5, caller()[4] (hasargs) is 1 when the subroutine was called with explicit
+     * arguments (func() or &func()), and false/empty when called via &func (no parens)
+     * which inherits the caller's @_.
+     *
+     * Push/pop is handled alongside argsStack in the apply() methods.
+     */
+    private static final ThreadLocal<Deque<Boolean>> hasArgsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
      * Get the current subroutine's @_ array.
      * Used by Java-implemented functions (like List::Util::any) that need to pass
      * the caller's @_ to code blocks.
@@ -192,7 +203,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Pop @_ from the args stack when exiting a subroutine.
+     * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
+     * Both stacks are pushed in the instance apply() methods and must be popped together.
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
@@ -200,6 +212,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             stack.pop();
         }
+        Deque<Boolean> haStack = hasArgsStack.get();
+        if (!haStack.isEmpty()) {
+            haStack.pop();
+        }
+    }
+
+    /**
+     * Get the hasargs flag for a given call depth.
+     * depth=0 is the current (innermost) frame, depth=1 is its caller, etc.
+     *
+     * This depth maps directly to the user-supplied argument of caller(N):
+     * caller(0) queries depth 0, caller(1) queries depth 1, etc.
+     * The mapping works because hasArgsStack has one entry per Perl subroutine
+     * call (pushed in the instance apply() methods), and the Deque iteration
+     * order is LIFO (most recent first), matching the call stack order.
+     *
+     * @return true if the frame at that depth created fresh @_, false if it
+     *         inherited @_ (via &amp;func with no parens), null if depth is out of range
+     */
+    public static Boolean getHasArgsAt(int depth) {
+        Deque<Boolean> stack = hasArgsStack.get();
+        int i = 0;
+        for (Boolean b : stack) {
+            if (i == depth) return b;
+            i++;
+        }
+        return null;
     }
 
     /**
@@ -1878,6 +1917,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame = args.getFirst().getInt();
         }
 
+        // Save the original user-supplied frame before the JVM skip adjustment.
+        // This value maps directly to hasArgsStack depth: caller(0) → depth 0 (current frame),
+        // caller(1) → depth 1 (caller's frame), etc. The hasArgsStack is pushed/popped in the
+        // instance apply() methods, one entry per Perl subroutine call, so the Nth entry from
+        // the top corresponds to the Nth caller() frame.
+        int originalFrame = frame;
+
         Throwable t = new Throwable();
         ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(t);
         ArrayList<ArrayList<String>> stackTrace = result.frames();
@@ -1970,12 +2016,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
-                // Add hasargs (element 4): 1 if @_ was populated for this sub
-                // Subroutines always have @_ available, so this is 1 for subs
-                // Check the subroutine name to determine if this is a sub call
-                boolean hasArgs = subName != null && !subName.isEmpty() && 
-                                  !subName.equals("(eval)") && !subName.endsWith("::(eval)");
-                res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                // Add hasargs (element 4): whether @_ was freshly created for this call.
+                // In Perl 5, this is 1 for func(args) and &func(args), but false/empty
+                // for &func (no parens) which inherits the caller's @_.
+                // We consult hasArgsStack which is pushed in the instance apply() methods:
+                //   - apply(RuntimeArray, int) pushes false  (shared args / &func)
+                //   - apply(String, RuntimeArray, int) pushes true  (fresh args / func())
+                // Fall back to the name-based heuristic for frames outside our tracking
+                // (e.g., top-level code, eval frames).
+                Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
+                if (hasArgsFromStack != null) {
+                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                } else {
+                    // Fallback: assume hasargs=true for named subs, false for eval
+                    boolean hasArgs = subName != null && !subName.isEmpty() && 
+                                      !subName.equals("(eval)") && !subName.endsWith("::(eval)");
+                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list
                 // We don't currently track this per-frame, so return undef
@@ -3064,7 +3121,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
-            
+
+            // hasArgs tracking for caller()[4]:
+            // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
+            // That static method is the "shared args" path — used when Perl code calls &func (no parens),
+            // which inherits the caller's @_ instead of creating a fresh one.
+            // Perl's caller()[4] (hasargs) should be false/empty for these calls.
+            // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
+            hasArgsStack.get().push(false);
+
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3085,7 +3150,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
-                popArgs();
+                popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
@@ -3161,7 +3226,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
-            
+
+            // hasArgs tracking for caller()[4]:
+            // This is the 3-arg instance method, called from the 4-arg static apply(scalar, name, args[], ctx).
+            // That static method is the "fresh args" path — used for normal func(args) and &func(args) calls,
+            // which create a new @_ from the supplied arguments.
+            // Perl's caller()[4] (hasargs) should be true (1) for these calls.
+            // See also: the 2-arg instance method apply(array, ctx) which pushes false.
+            hasArgsStack.get().push(true);
+
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3182,7 +3255,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
-                popArgs();
+                popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();

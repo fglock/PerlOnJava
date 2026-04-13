@@ -233,14 +233,16 @@ sub _install_pure_perl {
             }, 'blib/lib');
         }
         
-        # Fallback: scan current directory for .pm files (flat layout)
-        # Some CPAN distributions (e.g. Crypt::RC4) have .pm files at the
-        # root level instead of in lib/. Standard MakeMaker handles this via
-        # PMLIBDIRS which defaults to ['lib', $self->{BASEEXT}].
-        # We derive the install subdirectory from the NAME parameter.
-        if (!%pm && $name) {
+        # Scan root-level .pm files and BASEEXT directory.
+        # Standard MakeMaker maps:  ./*.pm => $(INST_LIBDIR)/*.pm
+        # where INST_LIBDIR = INST_LIB/Parent/Path (derived from NAME).
+        # PMLIBDIRS defaults to ['lib', $BASEEXT], so both lib/ (handled
+        # above) and root .pm files / BASEEXT dir are always scanned.
+        # This handles distributions like Math::Base::Convert where the
+        # main .pm lives at the root alongside sub-modules in lib/.
+        if ($name) {
             my @parts = split /::/, $name;
-            my $baseext = pop @parts;  # Remove BASEEXT (e.g. XML::Parser -> Parser)
+            my $baseext = pop @parts;  # BASEEXT (e.g. XML::Parser -> Parser)
             my $parent_dir = @parts ? File::Spec->catdir(@parts) : '';
             
             # Scan flat .pm files in current directory
@@ -251,7 +253,8 @@ sub _install_pure_perl {
                     my $dest_rel = $parent_dir
                         ? File::Spec->catfile($parent_dir, $file)
                         : $file;
-                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel);
+                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel)
+                        unless exists $pm{$file};
                 }
                 closedir($dh);
             }
@@ -266,7 +269,8 @@ sub _install_pure_perl {
                         my $rel = $parent_dir
                             ? File::Spec->catfile($parent_dir, $src)
                             : $src;
-                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel)
+                            unless exists $pm{$src};
                     },
                     no_chdir => 1,
                 }, $baseext);
