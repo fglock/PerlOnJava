@@ -42,6 +42,21 @@ match:
 test:
   commandline: "/usr/bin/make test; exit 0"
 YAML
+        'Params-Validate.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for Params::Validate.
+  Force pure-Perl build: PerlOnJava cannot compile XS C code, so we
+  pass --pp to Build.PL and set PARAMS_VALIDATE_IMPLEMENTATION=PP.
+  38/38 test programs pass, 2515/2515 subtests (100%).
+match:
+  distribution: "^DROLSKY/Params-Validate-"
+pl:
+  args:
+    - "--pp"
+  env:
+    PARAMS_VALIDATE_IMPLEMENTATION: PP
+YAML
     );
 
     # Check if any files need to be written

@@ -69,7 +69,18 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         super();
         // Don't pre-compute numeric values for strings as this would trigger
         // "Argument isn't numeric" warnings at construction time instead of at use time.
-        this.b = !s.isEmpty();  // String boolean: true if non-empty
+        //
+        // Perl boolean rules for strings: "" and "0" are false, everything else is true.
+        // This must match the logic in RuntimeScalar.getBooleanLarge() (STRING case):
+        //     !s.isEmpty() && !s.equals("0")
+        //
+        // Previously this was `!s.isEmpty()` which made "0" truthy — breaking any code
+        // that uses a string literal "0" in boolean context without an intermediate copy
+        // into a mutable RuntimeScalar.  The most visible symptom was for-loop variables
+        // aliased to literal lists:
+        //     for my $v ("0") { $v ? "true" : "false" }  # was "true", should be "false"
+        // because the loop variable directly references this RuntimeScalarReadOnly object.
+        this.b = !s.isEmpty() && !s.equals("0");
         this.i = null;  // Computed lazily on first getInt() call
         this.s = s;
         this.d = null;  // Computed lazily on first getDouble() call
