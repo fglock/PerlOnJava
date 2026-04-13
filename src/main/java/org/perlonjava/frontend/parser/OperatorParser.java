@@ -365,12 +365,22 @@ public class OperatorParser {
                 TokenUtils.consume(parser); // consume __PACKAGE__/__CLASS__
                 varType = parser.ctx.symbolTable.getCurrentPackage();
             } else {
-                // If a package name follows, then it is a type declaration
+                // If a package name follows, then it is a type declaration.
+                // In Perl, `my Foo::Bar $x` is valid when Foo::Bar is loaded.
+                // We accept the type name at parse time when unambiguously followed
+                // by a sigil ($, @, %, \) or opening paren, and defer the "No such class"
+                // check to runtime — matching Perl's behavior while handling the JVM
+                // architectural difference (entire file compiled before execution).
                 int currentIndex2 = parser.tokenIndex;
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
-                boolean packageExists = GlobalVariable.isPackageLoaded(packageName);
-                // System.out.println("maybe type: " + packageName + " " + packageExists);
-                if (packageExists) {
+                LexerToken afterType = peek(parser);
+                boolean followedBySigil = "$".equals(afterType.text) || "@".equals(afterType.text)
+                        || "%".equals(afterType.text) || "\\".equals(afterType.text)
+                        || "(".equals(afterType.text);
+                if (followedBySigil) {
+                    // Unambiguously a type annotation (followed by a variable sigil or paren list)
+                    varType = packageName;
+                } else if (GlobalVariable.isPackageLoaded(packageName)) {
                     varType = packageName;
                 } else {
                     // Backtrack
@@ -507,6 +517,9 @@ public class OperatorParser {
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
         if (isDeclaredReference) {
             decl.setAnnotation("isDeclaredReference", true);
+        }
+        if (varType != null) {
+            decl.setAnnotation("varType", varType);
         }
 
         // Initialize a list to store any attributes the declaration might have.

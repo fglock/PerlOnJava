@@ -65,16 +65,20 @@ public class FFMPosixLinux implements FFMPosixInterface {
     private static MethodHandle ptsnameHandle;
     private static MethodHandle setsidHandle;
     private static MethodHandle ttynameHandle;
+    // Method handles for low-level FD operations
+    private static MethodHandle pipeHandle;
     private static MethodHandle openHandle;
     private static MethodHandle closeHandle;
     private static MethodHandle readHandle;
     private static MethodHandle writeHandle;
     private static MethodHandle dupHandle;
+    private static MethodHandle lseekHandle;
     private static MethodHandle fcntlHandle;
     private static MethodHandle ioctlPtrHandle;
     private static MethodHandle ioctlIntHandle;
     private static MethodHandle tcgetattrHandle;
     private static MethodHandle tcsetattrHandle;
+    private static MethodHandle nativeOpenHandle;  // 2-arg open for PTY operations
     
     // Platform-specific constants for PTY operations
     public static final int O_RDWR;
@@ -85,7 +89,6 @@ public class FFMPosixLinux implements FFMPosixInterface {
     public static final long TIOCNOTTY;
     public static final int F_DUPFD = 0;  // Same on both platforms
     public static final int TERMIOS_SIZE;
-    
     static {
         if (IS_MACOS) {
             O_RDWR = 0x0002;
@@ -292,38 +295,60 @@ public class FFMPosixLinux implements FFMPosixInterface {
                 FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
             );
             
-            // open: int open(const char *path, int flags)
-            openHandle = linker.downcallHandle(
+            // nativeOpen: int open(const char *path, int flags) - 2-arg for PTY operations
+            nativeOpenHandle = linker.downcallHandle(
                 stdlib.find("open").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
                 captureErrno
             );
             
-            // close: int close(int fd)
+            // Low-level FD operations with errno capture
+            // int pipe(int pipefd[2])
+            pipeHandle = linker.downcallHandle(
+                stdlib.find("pipe").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
+                captureErrno
+            );
+            
+            // int dup(int oldfd)
+            dupHandle = linker.downcallHandle(
+                stdlib.find("dup").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // int open(const char *pathname, int flags, mode_t mode)
+            openHandle = linker.downcallHandle(
+                stdlib.find("open").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+                captureErrno
+            );
+            
+            // int close(int fd)
             closeHandle = linker.downcallHandle(
                 stdlib.find("close").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
                 captureErrno
             );
             
-            // read: ssize_t read(int fd, void *buf, size_t count)
+            // ssize_t read(int fd, void *buf, size_t count)
             readHandle = linker.downcallHandle(
                 stdlib.find("read").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
                 captureErrno
             );
             
-            // write: ssize_t write(int fd, const void *buf, size_t count)
+            // ssize_t write(int fd, const void *buf, size_t count)
             writeHandle = linker.downcallHandle(
                 stdlib.find("write").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
                 captureErrno
             );
             
-            // dup: int dup(int fd)
-            dupHandle = linker.downcallHandle(
-                stdlib.find("dup").orElseThrow(),
-                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT),
+            // off_t lseek(int fd, off_t offset, int whence)
+            lseekHandle = linker.downcallHandle(
+                stdlib.find("lseek").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT),
                 captureErrno
             );
             
@@ -799,6 +824,139 @@ public class FFMPosixLinux implements FFMPosixInterface {
         }
     }
     
+    // ==================== Low-level FD Functions ====================
+    
+    @Override
+    public int pipe(int[] fds) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pipeBuf = arena.allocate(ValueLayout.JAVA_INT, 2);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) pipeHandle.invokeExact(capturedState, pipeBuf);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            fds[0] = pipeBuf.getAtIndex(ValueLayout.JAVA_INT, 0);
+            fds[1] = pipeBuf.getAtIndex(ValueLayout.JAVA_INT, 1);
+            return 0;
+        } catch (Throwable e) {
+            setErrno(24); // EMFILE
+            return -1;
+        }
+    }
+    
+    @Override
+    public int dup(int fd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) dupHandle.invokeExact(capturedState, fd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public int open(String path, int flags, int mode) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pathSegment = arena.allocateFrom(path);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) openHandle.invokeExact(capturedState, pathSegment, flags, mode);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public int close(int fd) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) closeHandle.invokeExact(capturedState, fd);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public long read(int fd, byte[] buf, long count) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocate(count);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            long result = (long) readHandle.invokeExact(capturedState, fd, nativeBuf, count);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+                return -1;
+            }
+            // Copy data from native buffer to Java array
+            if (result > 0) {
+                MemorySegment.copy(nativeBuf, ValueLayout.JAVA_BYTE, 0, buf, 0, (int) result);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public long write(int fd, byte[] buf, long count) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nativeBuf = arena.allocateFrom(ValueLayout.JAVA_BYTE, buf);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            long result = (long) writeHandle.invokeExact(capturedState, fd, nativeBuf, count);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public long lseek(int fd, long offset, int whence) {
+        ensureInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            long result = (long) lseekHandle.invokeExact(capturedState, fd, offset, whence);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
     // ==================== File Control Functions ====================
     
     @Override
@@ -926,7 +1084,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment pathSegment = arena.allocateFrom(path);
             MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
-            int result = (int) openHandle.invokeExact(capturedState, pathSegment, flags);
+            int result = (int) nativeOpenHandle.invokeExact(capturedState, pathSegment, flags);
             if (result == -1) {
                 int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
                 setErrno(err);

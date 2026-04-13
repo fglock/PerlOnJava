@@ -10,6 +10,7 @@ our $VERSION = '2.21';
 
 use strict;
 use warnings;
+use Carp;
 use Exporter ();
 
 use XSLoader;
@@ -307,6 +308,9 @@ sub rmdir { POSIX::_rmdir(@_) }
 sub getcwd { POSIX::_getcwd() }
 sub chdir { POSIX::_chdir(@_) }
 
+# File control
+sub fcntl { POSIX::_fcntl(@_) }
+
 # Terminal functions
 sub isatty {
     my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
@@ -510,6 +514,8 @@ for my $const (qw(
     SEEK_SET SEEK_CUR SEEK_END
 
     F_OK R_OK W_OK X_OK
+
+    F_DUPFD F_GETFD F_SETFD F_GETFL F_SETFL FD_CLOEXEC
 
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT

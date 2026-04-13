@@ -1213,6 +1213,16 @@ public class EmitVariable {
     static void handleMyOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
+        // Emit runtime "No such class" check for typed declarations (my TYPE $var)
+        String varType = node.getAnnotation("varType") != null ? (String) node.getAnnotation("varType") : null;
+        if (varType != null) {
+            ctx.mv.visitLdcInsn(varType);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "checkClassExists",
+                    "(Ljava/lang/String;)V", false);
+        }
+
         String operator = node.operator;
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("handleMyOperator: operator=" + operator + ", operand type=" + (node.operand != null ? node.operand.getClass().getSimpleName() : "null") + ", contextType=" + ctx.contextType);
         if (node.operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)

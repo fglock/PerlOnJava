@@ -650,6 +650,19 @@ public class GlobalVariable {
     }
 
     /**
+     * Runtime check for typed lexical declarations (my TYPE $var).
+     * Throws a compile-time-like error matching Perl's "No such class TYPE"
+     * if the package is not loaded at the point of execution.
+     *
+     * @param className The type annotation class name
+     */
+    public static void checkClassExists(String className) {
+        if (!isPackageLoaded(className)) {
+            throw new RuntimeException("No such class " + className);
+        }
+    }
+
+    /**
      * Resolves a fully-qualified variable name through stash hash redirections.
      * <p>
      * When {@code *PKG:: = \%OtherPkg::} is executed, accesses to {@code PKG::name}
