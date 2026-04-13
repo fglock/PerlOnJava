@@ -1932,9 +1932,12 @@ public class BytecodeCompiler implements Visitor {
             case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
-            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
-            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
-            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
+            case "&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);              // Bitwise AND (dispatch)
+            case "|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);               // Bitwise OR (dispatch)
+            case "^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);              // Bitwise XOR (dispatch)
+            case "binary&=" -> emit(Opcodes.BINARY_AND_ASSIGN);         // Numeric-only bitwise AND
+            case "binary|=" -> emit(Opcodes.BINARY_OR_ASSIGN);          // Numeric-only bitwise OR
+            case "binary^=" -> emit(Opcodes.BINARY_XOR_ASSIGN);         // Numeric-only bitwise XOR
             case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
             case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
             case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR

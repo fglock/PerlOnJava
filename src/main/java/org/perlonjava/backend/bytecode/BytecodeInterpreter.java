@@ -1333,6 +1333,24 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeStringBitwiseXorAssign(bytecode, pc, registers);
                             }
 
+                            case Opcodes.BINARY_AND_ASSIGN -> {
+                                // Numeric-only bitwise AND assign (use feature "bitwise")
+                                // Format: BINARY_AND_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryAndAssign(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.BINARY_OR_ASSIGN -> {
+                                // Numeric-only bitwise OR assign (use feature "bitwise")
+                                // Format: BINARY_OR_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryOrAssign(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.BINARY_XOR_ASSIGN -> {
+                                // Numeric-only bitwise XOR assign (use feature "bitwise")
+                                // Format: BINARY_XOR_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryXorAssign(bytecode, pc, registers);
+                            }
+
                             case Opcodes.BITWISE_AND_BINARY -> {
                                 // Numeric bitwise AND: rd = rs1 binary& rs2
                                 // Format: BITWISE_AND_BINARY rd rs1 rs2

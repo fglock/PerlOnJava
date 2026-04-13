@@ -1073,4 +1073,58 @@ public class OpcodeHandlerExtended {
         registers[rd] = MathOperators.modulusAssignWarn(s1, s2);
         return pc;
     }
+
+    /**
+     * Execute numeric-only bitwise AND assign (use feature "bitwise").
+     * Format: BINARY_AND_ASSIGN rd rs
+     */
+    public static int executeBinaryAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseAndBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
+        return pc;
+    }
+
+    /**
+     * Execute numeric-only bitwise OR assign (use feature "bitwise").
+     * Format: BINARY_OR_ASSIGN rd rs
+     */
+    public static int executeBinaryOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
+        return pc;
+    }
+
+    /**
+     * Execute numeric-only bitwise XOR assign (use feature "bitwise").
+     * Format: BINARY_XOR_ASSIGN rd rs
+     */
+    public static int executeBinaryXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
+        return pc;
+    }
 }

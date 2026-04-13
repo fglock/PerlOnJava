@@ -415,6 +415,21 @@ public class Disassemble {
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("STRING_BITWISE_XOR_ASSIGN r").append(rd).append(" ^.= r").append(rs).append("\n");
                         break;
+                    case Opcodes.BINARY_AND_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_AND_ASSIGN r").append(rd).append(" binary&= r").append(rs).append("\n");
+                        break;
+                    case Opcodes.BINARY_OR_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_OR_ASSIGN r").append(rd).append(" binary|= r").append(rs).append("\n");
+                        break;
+                    case Opcodes.BINARY_XOR_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_XOR_ASSIGN r").append(rd).append(" binary^= r").append(rs).append("\n");
+                        break;
                     case Opcodes.BITWISE_AND_BINARY:
                         rd = interpretedCode.bytecode[pc++];
                         int andRs1 = interpretedCode.bytecode[pc++];
