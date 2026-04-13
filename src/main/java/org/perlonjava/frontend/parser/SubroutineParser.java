@@ -248,7 +248,7 @@ public class SubroutineParser {
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
             if ((isPackage != null && !isPackage)
-                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
+                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
                         && !(isPackage != null && isPackage))) {
                 parser.tokenIndex = currentIndex2;
