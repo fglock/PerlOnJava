@@ -103,81 +103,20 @@ public class ReferenceOperators {
                 }
                 break;
             case GLOB:
-                // For globs, check what slots are filled
-                // If only one slot is filled, return the type of that slot
-                RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
-                String globName = glob.globName;
-
-                // Special case: stash entries (RuntimeStashEntry) should always return empty string
-                // because they represent stash entries, not regular globs
-                if (runtimeScalar.value instanceof RuntimeStashEntry) {
-                    str = "";
-                    break;
-                }
-
-                // Special case: stash globs (ending with ::) should always return empty string
-                // because they represent the entire package stash, not a single slot
-                if (globName != null && globName.endsWith("::")) {
-                    str = "";
-                    break;
-                }
-
-                // Check various slots
-                // Anonymous globs (null globName) don't have GlobalVariable entries
-                if (globName == null) {
-                    str = "";
-                    break;
-                }
-                boolean hasScalar = GlobalVariable.getGlobalVariable(globName).getDefinedBoolean();
-                boolean hasArray = GlobalVariable.getGlobalArray(globName).size() > 0;
-                boolean hasHash = GlobalVariable.getGlobalHash(globName).size() > 0;
-                boolean hasCode = GlobalVariable.getGlobalCodeRef(globName).getDefinedBoolean();
-                boolean hasFormat = GlobalVariable.getGlobalFormatRef(globName).getDefinedBoolean();
-                boolean hasIO = GlobalVariable.getGlobalIO(globName).getRuntimeIO() != null;
-
-                // Special case: constant subroutine created from scalar should return SCALAR
-                if (hasScalar && hasCode) {
-                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(globName);
-                    if (codeRef.value instanceof RuntimeCode code && code.constantValue != null) {
-                        // This is a constant subroutine created from a scalar reference
-                        // Perl returns SCALAR in this case
-                        str = "SCALAR";
-                        break;
-                    }
-                }
-
-                // Count filled slots
-                int filledSlots = 0;
-                String slotType = "";
-                if (hasScalar) {
-                    filledSlots++;
-                    slotType = "SCALAR";
-                }
-                if (hasArray) {
-                    filledSlots++;
-                    if (slotType.isEmpty()) slotType = "ARRAY";
-                }
-                if (hasHash) {
-                    filledSlots++;
-                    if (slotType.isEmpty()) slotType = "HASH";
-                }
-                if (hasCode) {
-                    filledSlots++;
-                    if (slotType.isEmpty()) slotType = "CODE";
-                }
-                if (hasFormat) {
-                    filledSlots++;
-                    if (slotType.isEmpty()) slotType = "FORMAT";
-                }
-                if (hasIO) {
-                    filledSlots++;
-                    if (slotType.isEmpty()) slotType = "IO";
-                }
-
-                // If exactly one slot is filled, return its type
-                // Otherwise return empty string (standard Perl behavior for multi-slot globs)
-                str = (filledSlots == 1) ? slotType : "";
-                break;
+                // In Perl 5, ref(*glob) always returns "" (empty string) because a
+                // bare glob is NOT a reference — it is a value type like a string or
+                // number.  Only *references to* globs produce non-empty ref():
+                //
+                //   ref(*FH)   → ""       (bare glob — this case)
+                //   ref(\*FH)  → "GLOB"   (handled by case REFERENCE → GLOB)
+                //
+                // Previously this case inspected which glob slots (scalar, array,
+                // hash, code, IO, …) were populated and returned the slot type when
+                // exactly one slot was filled.  That logic was wrong for bare globs
+                // and caused Params::Validate::PP::_get_type() to misclassify globs
+                // (e.g. *HANDLE with a CODE slot was reported as "CODE" instead of
+                // falling through to the UNIVERSAL::isa(\$val,'GLOB') path).
+                return scalarEmptyString;
             case REGEX:
                 if (runtimeScalar.value == null) {
                     str = "Regexp";

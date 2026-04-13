@@ -1964,11 +1964,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
-    // Return a reference to this
+    // Return a reference to this scalar.
+    //
+    // Special case for GLOB-typed scalars: when a glob passes through @_,
+    // array storage, or other copy operations, the RuntimeGlob is wrapped
+    // inside a RuntimeScalar (type=GLOB, value=RuntimeGlob).  Java virtual
+    // dispatch then calls THIS method instead of RuntimeGlob.createReference().
+    //
+    // In Perl 5, \*glob always produces a glob reference:
+    //   ref(\*FH)                      → "GLOB"
+    //   UNIVERSAL::isa(\*FH, 'GLOB')   → 1
+    //
+    // Without this check, \$scalar_holding_a_glob would produce a plain
+    // REFERENCE (not GLOBREFERENCE), causing isa(\$val, 'GLOB') to return
+    // false.  This broke Params::Validate::PP::_get_type() which relies on
+    //   UNIVERSAL::isa(\$_[0], 'GLOB')
+    // to detect glob-typed parameters.
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
-        result.type = RuntimeScalarType.REFERENCE;
-        result.value = this;
+        if (this.type == RuntimeScalarType.GLOB && this.value instanceof RuntimeGlob) {
+            result.type = RuntimeScalarType.GLOBREFERENCE;
+            result.value = this.value;   // point to the RuntimeGlob directly
+        } else {
+            result.type = RuntimeScalarType.REFERENCE;
+            result.value = this;
+        }
         return result;
     }
 
