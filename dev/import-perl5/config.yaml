@@ -42,6 +42,14 @@ imports:
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
+  # Memoize - Function return value caching (pure Perl, core since 5.8)
+  - source: perl5/cpan/Memoize/Memoize.pm
+    target: src/main/perl/lib/Memoize.pm
+
+  - source: perl5/cpan/Memoize/Memoize
+    target: src/main/perl/lib/Memoize
+    type: directory
+
   # Net::Ping - Network ping module (required by CPAN::Mirrors)
   - source: perl5/dist/Net-Ping/lib/Net/Ping.pm
     target: src/main/perl/lib/Net/Ping.pm

@@ -239,8 +239,9 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isvstring() method");
         }
-        // Placeholder for isvstring functionality
-        return new RuntimeScalar(false).getList();
+        RuntimeScalar s = args.get(0);
+        if (s.type == READONLY_SCALAR) s = (RuntimeScalar) s.value;
+        return new RuntimeScalar(s.type == VSTRING).getList();
     }
 
     /**

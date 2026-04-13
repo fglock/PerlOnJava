@@ -76,6 +76,14 @@ public class ListUtil extends PerlModuleBase {
             listUtil.registerMethod("pairmap", "pairmap", "&@");
             listUtil.registerMethod("pairgrep", "pairgrep", "&@");
             listUtil.registerMethod("pairfirst", "pairfirst", "&@");
+
+            // Zip/mesh functions (take arrayrefs, no prototype)
+            listUtil.registerMethod("zip", "zip", null);
+            listUtil.registerMethod("zip_shortest", "zip_shortest", null);
+            listUtil.registerMethod("zip_longest", "zip", null);       // alias for zip
+            listUtil.registerMethod("mesh", "mesh", null);
+            listUtil.registerMethod("mesh_shortest", "mesh_shortest", null);
+            listUtil.registerMethod("mesh_longest", "mesh", null);     // alias for mesh
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing List::Util method: " + e.getMessage());
         }
@@ -755,5 +763,115 @@ public class ListUtil extends PerlModuleBase {
         }
 
         return ctx == RuntimeContextType.SCALAR ? scalarFalse.getList() : new RuntimeList();
+    }
+
+    /**
+     * Zip arrayrefs into a list of arrayrefs (tuples).
+     * Pads shorter inputs with undef to the length of the longest input.
+     * zip(\@a, \@b, ...) returns ([a0,b0,...], [a1,b1,...], ...)
+     */
+    public static RuntimeList zip(RuntimeArray args, int ctx) {
+        return zipImpl(args, ctx, false);
+    }
+
+    /**
+     * Zip arrayrefs, stopping at the shortest input.
+     */
+    public static RuntimeList zip_shortest(RuntimeArray args, int ctx) {
+        return zipImpl(args, ctx, true);
+    }
+
+    /**
+     * Shared implementation for zip and zip_shortest.
+     */
+    private static RuntimeList zipImpl(RuntimeArray args, int ctx, boolean shortest) {
+        if (args.isEmpty()) {
+            return new RuntimeList();
+        }
+
+        // Collect input arrays and find min/max lengths
+        RuntimeArray[] arrays = new RuntimeArray[args.size()];
+        int maxLen = 0;
+        int minLen = Integer.MAX_VALUE;
+        for (int i = 0; i < args.size(); i++) {
+            RuntimeScalar ref = args.get(i);
+            if (ref.type != RuntimeScalarType.ARRAYREFERENCE) {
+                throw new RuntimeException("Not an ARRAY reference");
+            }
+            arrays[i] = (RuntimeArray) ref.value;
+            maxLen = Math.max(maxLen, arrays[i].size());
+            minLen = Math.min(minLen, arrays[i].size());
+        }
+
+        int len = shortest ? minLen : maxLen;
+        RuntimeArray result = new RuntimeArray();
+
+        for (int row = 0; row < len; row++) {
+            RuntimeArray tuple = new RuntimeArray();
+            for (RuntimeArray array : arrays) {
+                if (row < array.size()) {
+                    tuple.push(array.get(row));
+                } else {
+                    tuple.push(RuntimeScalarCache.scalarUndef);
+                }
+            }
+            result.push(tuple.createReference());
+        }
+
+        return result.getList();
+    }
+
+    /**
+     * Mesh (interleave) arrayrefs into a flat list.
+     * Pads shorter inputs with undef to the length of the longest input.
+     * mesh(\@a, \@b, ...) returns (a0, b0, ..., a1, b1, ...)
+     */
+    public static RuntimeList mesh(RuntimeArray args, int ctx) {
+        return meshImpl(args, ctx, false);
+    }
+
+    /**
+     * Mesh arrayrefs, stopping at the shortest input.
+     */
+    public static RuntimeList mesh_shortest(RuntimeArray args, int ctx) {
+        return meshImpl(args, ctx, true);
+    }
+
+    /**
+     * Shared implementation for mesh and mesh_shortest.
+     */
+    private static RuntimeList meshImpl(RuntimeArray args, int ctx, boolean shortest) {
+        if (args.isEmpty()) {
+            return new RuntimeList();
+        }
+
+        // Collect input arrays and find min/max lengths
+        RuntimeArray[] arrays = new RuntimeArray[args.size()];
+        int maxLen = 0;
+        int minLen = Integer.MAX_VALUE;
+        for (int i = 0; i < args.size(); i++) {
+            RuntimeScalar ref = args.get(i);
+            if (ref.type != RuntimeScalarType.ARRAYREFERENCE) {
+                throw new RuntimeException("Not an ARRAY reference");
+            }
+            arrays[i] = (RuntimeArray) ref.value;
+            maxLen = Math.max(maxLen, arrays[i].size());
+            minLen = Math.min(minLen, arrays[i].size());
+        }
+
+        int len = shortest ? minLen : maxLen;
+        RuntimeArray result = new RuntimeArray();
+
+        for (int row = 0; row < len; row++) {
+            for (RuntimeArray array : arrays) {
+                if (row < array.size()) {
+                    result.push(array.get(row));
+                } else {
+                    result.push(RuntimeScalarCache.scalarUndef);
+                }
+            }
+        }
+
+        return result.getList();
     }
 }

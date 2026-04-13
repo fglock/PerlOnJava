@@ -119,7 +119,7 @@ These are loaded automatically or via `use`:
 | `Storable` | Java + Perl | `freeze`, `thaw`, `dclone` |
 | `Clone` | Java + Perl | Deep copy |
 | `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |
-| `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, etc. |
+| `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, `mesh`/`zip`, etc. |
 | `Hash::Util` | Java | `lock_keys`, `lock_hash`, etc. |
 
 ### File & I/O
