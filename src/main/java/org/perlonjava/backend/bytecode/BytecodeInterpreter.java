@@ -139,6 +139,14 @@ public class BytecodeInterpreter {
         // First my-variable register index (skip reserved + captured vars).
         int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
 
+        // Track closures created by CREATE_CLOSURE in this frame.
+        // At frame exit, we release captures for closures that were never stored
+        // via set() (refCount stayed at 0). This handles eval STRING map/grep
+        // block closures that over-capture all visible variables but are temporary.
+        // This matches the JVM-compiled path where scopeExitCleanup releases
+        // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
+        java.util.List<RuntimeCode> createdClosures = null;
+
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
         // Outer try/finally — cleanup only, no catch.
@@ -582,7 +590,23 @@ public class BytecodeInterpreter {
                             case Opcodes.CREATE_CLOSURE -> {
                                 // Create closure with captured variables
                                 // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
+                                int closureRd = bytecode[pc]; // peek at destination register
                                 pc = OpcodeHandlerExtended.executeCreateClosure(bytecode, pc, registers, code);
+                                // Track closure for frame-exit capture release.
+                                // The interpreter's BytecodeCompiler captures ALL visible
+                                // variables for closures (for eval STRING compatibility),
+                                // inflating captureCount on variables the closure doesn't
+                                // actually use. When the closure is temporary (map/grep
+                                // block), releaseCaptures must fire to decrement captureCount.
+                                RuntimeBase closureVal = registers[closureRd];
+                                if (closureVal instanceof RuntimeScalar crs
+                                        && crs.value instanceof RuntimeCode ic
+                                        && ic.capturedScalars != null) {
+                                    if (createdClosures == null) {
+                                        createdClosures = new java.util.ArrayList<>();
+                                    }
+                                    createdClosures.add(ic);
+                                }
                             }
 
                             case Opcodes.SET_SCALAR -> {
@@ -2251,6 +2275,24 @@ public class BytecodeInterpreter {
                 }
             } // end outer while (eval/die retry loop)
         } finally {
+            // Release captures for interpreter closures created in this frame
+            // that were never stored via set() (refCount stayed at 0).
+            // This handles eval STRING map/grep block closures that over-capture
+            // all visible variables but are temporary and should release captures.
+            // Closures stored via set() have refCount > 0 and are skipped.
+            // This matches the JVM-compiled path where scopeExitCleanup releases
+            // captures for CODE refs with refCount=0 (see RuntimeScalar.java
+            // scopeExitCleanup special case for CODE refs).
+            if (createdClosures != null) {
+                for (RuntimeCode closure : createdClosures) {
+                    if (closure.capturedScalars != null
+                            && closure.refCount == 0
+                            && closure.stashRefCount <= 0) {
+                        closure.releaseCaptures();
+                    }
+                }
+            }
+
             // Scope-exit cleanup for my-variables when an exception propagates out
             // of this subroutine frame without being caught by an eval.
             // This ensures DESTROY fires for blessed objects going out of scope

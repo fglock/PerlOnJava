@@ -1550,6 +1550,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeBase[] args,
                                    int callContext) {
+        // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
+        // (triggering FETCH) before method dispatch
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            runtimeScalar = runtimeScalar.tiedFetch();
+        }
         // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
         // Note: `this` (runtimeScalar) will be inserted by the RuntimeArray version
         RuntimeArray a = new RuntimeArray();
@@ -1602,6 +1607,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
+        // (triggering FETCH) before method dispatch
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            runtimeScalar = runtimeScalar.tiedFetch();
+        }
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
             // Unwrap READONLY_SCALAR for blessId check (same as in call())
@@ -1726,6 +1736,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        // Handle tied scalars: in Perl 5, $tied->method() evaluates $tied
+        // (triggering FETCH) before method dispatch
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            runtimeScalar = runtimeScalar.tiedFetch();
+        }
         // insert `this` into the parameter list
         args.elements.addFirst(runtimeScalar);
 

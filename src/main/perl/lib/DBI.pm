@@ -369,6 +369,38 @@ sub clone {
     return bless \%new_dbh, ref($dbh);
 }
 
+sub quote {
+    my ($dbh, $str, $data_type) = @_;
+    return "NULL" unless defined $str;
+    # For numeric SQL data types, return the value unquoted
+    if (defined $data_type) {
+        if ($data_type == SQL_INTEGER  || $data_type == SQL_SMALLINT ||
+            $data_type == SQL_DECIMAL  || $data_type == SQL_NUMERIC  ||
+            $data_type == SQL_FLOAT    || $data_type == SQL_REAL     ||
+            $data_type == SQL_DOUBLE   || $data_type == SQL_BIGINT   ||
+            $data_type == SQL_TINYINT  || $data_type == SQL_BIT      ||
+            $data_type == SQL_BOOLEAN) {
+            return $str;
+        }
+    }
+    # Default: escape single quotes and wrap in single quotes
+    $str =~ s/'/''/g;
+    return "'$str'";
+}
+
+sub quote_identifier {
+    my ($dbh, @id) = @_;
+    # Simple implementation: quote with double quotes, escaping embedded double quotes
+    my $quote_char = '"';
+    my @quoted;
+    for my $part (@id) {
+        next unless defined $part;
+        $part =~ s/"/""/g;
+        push @quoted, qq{$quote_char${part}$quote_char};
+    }
+    return join('.', @quoted);
+}
+
 sub err {
     my ($handle) = @_;
     return $handle->{err};
