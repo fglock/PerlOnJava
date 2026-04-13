@@ -224,11 +224,17 @@ public class ScopedSymbolTable {
     public java.util.List<Integer> getMyVariableIndicesInScope(int scopeIndex) {
         java.util.List<Integer> indices = new java.util.ArrayList<>();
         for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            // Collect entries for this scope level in declaration order,
+            // then reverse to get LIFO (reverse declaration) order.
+            // Perl 5 destroys variables in reverse declaration order.
+            java.util.List<Integer> scopeIndices = new java.util.ArrayList<>();
             for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
                 if ("my".equals(entry.decl())) {
-                    indices.add(entry.index());
+                    scopeIndices.add(entry.index());
                 }
             }
+            java.util.Collections.reverse(scopeIndices);
+            indices.addAll(scopeIndices);
         }
         return indices;
     }
@@ -241,11 +247,14 @@ public class ScopedSymbolTable {
     public java.util.List<Integer> getMyHashIndicesInScope(int scopeIndex) {
         java.util.List<Integer> indices = new java.util.ArrayList<>();
         for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            java.util.List<Integer> scopeIndices = new java.util.ArrayList<>();
             for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
                 if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("%")) {
-                    indices.add(entry.index());
+                    scopeIndices.add(entry.index());
                 }
             }
+            java.util.Collections.reverse(scopeIndices);
+            indices.addAll(scopeIndices);
         }
         return indices;
     }
@@ -258,11 +267,14 @@ public class ScopedSymbolTable {
     public java.util.List<Integer> getMyArrayIndicesInScope(int scopeIndex) {
         java.util.List<Integer> indices = new java.util.ArrayList<>();
         for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            java.util.List<Integer> scopeIndices = new java.util.ArrayList<>();
             for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
                 if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("@")) {
-                    indices.add(entry.index());
+                    scopeIndices.add(entry.index());
                 }
             }
+            java.util.Collections.reverse(scopeIndices);
+            indices.addAll(scopeIndices);
         }
         return indices;
     }
@@ -279,11 +291,14 @@ public class ScopedSymbolTable {
     public java.util.List<Integer> getMyScalarIndicesInScope(int scopeIndex) {
         java.util.List<Integer> indices = new java.util.ArrayList<>();
         for (int i = symbolTableStack.size() - 1; i >= scopeIndex; i--) {
+            java.util.List<Integer> scopeIndices = new java.util.ArrayList<>();
             for (SymbolTable.SymbolEntry entry : symbolTableStack.get(i).variableIndex.values()) {
                 if ("my".equals(entry.decl()) && entry.name() != null && entry.name().startsWith("$")) {
-                    indices.add(entry.index());
+                    scopeIndices.add(entry.index());
                 }
             }
+            java.util.Collections.reverse(scopeIndices);
+            indices.addAll(scopeIndices);
         }
         return indices;
     }
