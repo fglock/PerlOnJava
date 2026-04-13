@@ -43,8 +43,16 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_strerror", "strerror", null);
             module.registerMethod("_access", "access", null);
             module.registerMethod("_dup2", "dup2", null);
-            module.registerMethod("_dup", "dup", null);
+            
+            // Low-level FD operations
+            module.registerMethod("_pipe", "posix_pipe", null);
+            module.registerMethod("_dup", "posix_dup", null);
+            module.registerMethod("_open", "posix_open", null);
             module.registerMethod("_close", "posix_close", null);
+            module.registerMethod("_read", "posix_read", null);
+            module.registerMethod("_write", "posix_write", null);
+            module.registerMethod("_lseek", "posix_lseek", null);
+            module.registerMethod("_fcntl", "posix_fcntl", null);
             module.registerMethod("_isatty", "posix_isatty", null);
             module.registerMethod("_setsid", "posix_setsid", null);
             module.registerMethod("_ttyname", "posix_ttyname", null);
@@ -100,6 +108,15 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_VSUSP", "const_VSUSP", null);
             module.registerMethod("_const_VTIME", "const_VTIME", null);
 
+            // Fcntl constants
+            module.registerMethod("_const_F_DUPFD", "const_F_DUPFD", null);
+            module.registerMethod("_const_F_GETFD", "const_F_GETFD", null);
+            module.registerMethod("_const_F_SETFD", "const_F_SETFD", null);
+            module.registerMethod("_const_F_GETFL", "const_F_GETFL", null);
+            module.registerMethod("_const_F_SETFL", "const_F_SETFL", null);
+            module.registerMethod("_const_FD_CLOEXEC", "const_FD_CLOEXEC", null);
+            module.registerMethod("_const_O_NONBLOCK", "const_O_NONBLOCK", null);
+            
             // Access constants
             module.registerMethod("_const_F_OK", "const_F_OK", null);
             module.registerMethod("_const_R_OK", "const_R_OK", null);
@@ -934,6 +951,194 @@ public class POSIX extends PerlModuleBase {
         return new RuntimeScalar("0 but true").getList();
     }
 
+    // ==================== Low-level FD Operations ====================
+
+    /**
+     * POSIX::pipe() - create a pipe.
+     * Returns (read_fd, write_fd) on success, empty list on failure.
+     */
+    public static RuntimeList posix_pipe(RuntimeArray args, int ctx) {
+        try {
+            var posix = FFMPosix.get();
+            int[] fds = new int[2];
+            int result = posix.pipe(fds);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return new RuntimeList();
+            }
+            RuntimeList list = new RuntimeList();
+            list.add(new RuntimeScalar(fds[0]));
+            list.add(new RuntimeScalar(fds[1]));
+            return list;
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeList();
+        }
+    }
+
+    /**
+     * POSIX::dup(fd) - duplicate a file descriptor.
+     * Returns new fd on success, undef on failure.
+     */
+    public static RuntimeList posix_dup(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        try {
+            var posix = FFMPosix.get();
+            int result = posix.dup(fd);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::open(path, flags [, mode]) - open a file using native OS call.
+     * Returns fd on success, undef on failure.
+     */
+    public static RuntimeList posix_open(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        String path = args.get(0).toString();
+        int flags = args.size() > 1 ? args.get(1).getInt() : 0; // O_RDONLY
+        int mode = args.size() > 2 ? args.get(2).getInt() : 0666;
+        try {
+            var posix = FFMPosix.get();
+            int result = posix.open(path, flags, mode);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(result == 0 ? "0 but true" : (Object) result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::read(fd, buf, nbytes) - read from a file descriptor.
+     * Reads into the second argument (buffer scalar).
+     * Returns number of bytes read, 0 at EOF, undef on error.
+     */
+    public static RuntimeList posix_read(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        int nbytes = args.get(2).getInt();
+        try {
+            var posix = FFMPosix.get();
+            byte[] buf = new byte[nbytes];
+            long result = posix.read(fd, buf, nbytes);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            // Set the buffer (args[1]) to the data read
+            if (result > 0) {
+                args.get(1).set(new String(buf, 0, (int) result));
+            } else {
+                args.get(1).set("");
+            }
+            return new RuntimeScalar(result == 0 ? "0 but true" : (Object) result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::write(fd, buf, nbytes) - write to a file descriptor.
+     * Returns number of bytes written, undef on error.
+     */
+    public static RuntimeList posix_write(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        String data = args.get(1).toString();
+        int nbytes = args.get(2).getInt();
+        try {
+            var posix = FFMPosix.get();
+            byte[] buf = data.getBytes();
+            int writeLen = Math.min(nbytes, buf.length);
+            long result = posix.write(fd, buf, writeLen);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(result == 0 ? "0 but true" : (Object) result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::lseek(fd, offset, whence) - seek on a file descriptor.
+     * Returns resulting offset, undef on error.
+     */
+    public static RuntimeList posix_lseek(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        long offset = args.get(1).getLong();
+        int whence = args.get(2).getInt();
+        try {
+            var posix = FFMPosix.get();
+            long result = posix.lseek(fd, offset, whence);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(result == 0 ? "0 but true" : (Object) result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::fcntl(fd, cmd, arg) - file control.
+     * Returns result, undef on error.
+     */
+    public static RuntimeList posix_fcntl(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        int cmd = args.get(1).getInt();
+        int arg = args.size() > 2 ? args.get(2).getInt() : 0;
+        try {
+            var posix = FFMPosix.get();
+            int result = posix.fcntl(fd, cmd, arg);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(result == 0 ? "0 but true" : (Object) result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
     /**
      * POSIX dup2(oldfd, newfd) - duplicate a file descriptor onto a specific fd.
      * Used by IO::Socket::IP to replace a socket's underlying fd.
@@ -1054,6 +1259,17 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList const_SEEK_END(RuntimeArray args, int ctx) {
         return new RuntimeScalar(2).getList();
+    }
+
+    // Fcntl constants
+    public static RuntimeList const_F_DUPFD(RuntimeArray a, int c) { return new RuntimeScalar(0).getList(); }
+    public static RuntimeList const_F_GETFD(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_F_SETFD(RuntimeArray a, int c) { return new RuntimeScalar(2).getList(); }
+    public static RuntimeList const_F_GETFL(RuntimeArray a, int c) { return new RuntimeScalar(3).getList(); }
+    public static RuntimeList const_F_SETFL(RuntimeArray a, int c) { return new RuntimeScalar(4).getList(); }
+    public static RuntimeList const_FD_CLOEXEC(RuntimeArray a, int c) { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_O_NONBLOCK(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 0 : 2048).getList(); // 04000 on Unix
     }
 
     // POSIX wait status macros

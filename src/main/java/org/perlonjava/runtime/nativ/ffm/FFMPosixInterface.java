@@ -269,6 +269,65 @@ public interface FFMPosixInterface {
      */
     int nativeDup(int fd);
     
+    // ==================== Low-level File Descriptor Functions ====================
+    
+    /**
+     * Create a pipe.
+     * @param fds Array of at least 2 ints: fds[0] = read end, fds[1] = write end
+     * @return 0 on success, -1 on error (check errno)
+     */
+    int pipe(int[] fds);
+    
+    /**
+     * Duplicate a file descriptor.
+     * @param fd File descriptor to duplicate
+     * @return New file descriptor, or -1 on error (check errno)
+     */
+    int dup(int fd);
+    
+    /**
+     * Open a file.
+     * @param path File path
+     * @param flags Open flags (O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, etc.)
+     * @param mode Permission mode (used with O_CREAT)
+     * @return File descriptor, or -1 on error (check errno)
+     */
+    int open(String path, int flags, int mode);
+    
+    /**
+     * Close a file descriptor.
+     * @param fd File descriptor to close
+     * @return 0 on success, -1 on error (check errno)
+     */
+    int close(int fd);
+    
+    /**
+     * Read from a file descriptor.
+     * @param fd File descriptor
+     * @param buf Buffer to read into
+     * @param count Maximum number of bytes to read
+     * @return Number of bytes read, 0 at EOF, -1 on error (check errno)
+     */
+    long read(int fd, byte[] buf, long count);
+    
+    /**
+     * Write to a file descriptor.
+     * @param fd File descriptor
+     * @param buf Buffer to write from
+     * @param count Number of bytes to write
+     * @return Number of bytes written, -1 on error (check errno)
+     */
+    long write(int fd, byte[] buf, long count);
+    
+    /**
+     * Reposition read/write file offset.
+     * @param fd File descriptor
+     * @param offset Offset in bytes
+     * @param whence SEEK_SET (0), SEEK_CUR (1), or SEEK_END (2)
+     * @return Resulting offset from beginning of file, -1 on error
+     */
+    long lseek(int fd, long offset, int whence);
+    
     // ==================== File Control Functions ====================
     
     /**
