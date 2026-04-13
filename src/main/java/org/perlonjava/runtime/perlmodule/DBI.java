@@ -521,9 +521,27 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
-                // Convert each column value to string and add to row array
+                // Convert each column value to string and add to row array.
+                // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
+                // (no UTF-8 flag). JDBC returns Java Strings which map to STRING type.
+                // To match Perl 5 behavior, downgrade STRING to BYTE_STRING when all
+                // characters are in the byte range (0x00-0xFF). Strings with chars > 0xFF
+                // (from actual Unicode data) stay as STRING.
                 for (int i = 1; i <= colCount; i++) {
-                    RuntimeArray.push(row, RuntimeScalar.newScalarOrString(rs.getObject(i)));
+                    RuntimeScalar val = RuntimeScalar.newScalarOrString(rs.getObject(i));
+                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        boolean allBytes = true;
+                        for (int j = 0; j < s.length(); j++) {
+                            if (s.charAt(j) > 0xFF) {
+                                allBytes = false;
+                                break;
+                            }
+                        }
+                        if (allBytes) {
+                            val.type = RuntimeScalarType.BYTE_STRING;
+                        }
+                    }
+                    RuntimeArray.push(row, val);
                 }
 
                 // Update bound columns if any (for bind_columns + fetch pattern)
@@ -590,11 +608,25 @@ public class DBI extends PerlModuleBase {
                 }
                 RuntimeArray columnNames = sth.get(nameStyle).arrayDeref();
 
-                // For each column, add column name -> value pair to hash
+                // For each column, add column name -> value pair to hash.
+                // See fetchrow_arrayref for rationale on BYTE_STRING downgrade.
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
-                    row.put(columnName, RuntimeScalar.newScalarOrString(value));
+                    RuntimeScalar val = RuntimeScalar.newScalarOrString(value);
+                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        boolean allBytes = true;
+                        for (int j = 0; j < s.length(); j++) {
+                            if (s.charAt(j) > 0xFF) {
+                                allBytes = false;
+                                break;
+                            }
+                        }
+                        if (allBytes) {
+                            val.type = RuntimeScalarType.BYTE_STRING;
+                        }
+                    }
+                    row.put(columnName, val);
                 }
 
                 // Create reference for hash

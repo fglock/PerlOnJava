@@ -57,21 +57,21 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-11, post Fix 7: stash delete + B::REFCNT)
+## Current Test Results (2026-04-11, post Fix 8: DBI BYTE_STRING + utf8::decode)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
-| Total assertions | **12,351 OK / 12 not-ok** (excl TODO) | **99.90% pass rate** |
+| Total assertions | **12,357 OK / 6 not-ok** (excl TODO) | **99.95% pass rate** |
 | GC-only failures | **0 files** | Eliminated by clearAllBlessedWeakRefs + exit path fix |
 | TODO failures | **35 assertions** | Upstream expected failures |
-| Real PerlOnJava failures | **12 assertions** in 4 files | See breakdown below |
+| Real PerlOnJava failures | **6 assertions** in 4 files + 1 crash | See breakdown below |
 
 ### Real (Non-GC, Non-TODO) Failures
 
 | File | Failures | Root Cause | Fix |
 |------|----------|------------|-----|
-| t/85utf8.t | 8 | DBI returns STRING, utf8::decode always sets STRING | DBI BYTE_STRING + conditional utf8 flag — see analysis below |
+| t/85utf8.t | 1 + crash | JDBC Unicode bind params (upstream create() bug) | Won't fix — systemic JDBC/DBI difference |
 | t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | DESTROY timing — see analysis below |
 | t/60core.t | 1 | Cached statement still Active | DESTROY timing for method-chain temporaries |
 | t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Non-debug mode, low priority |
@@ -289,29 +289,58 @@ and `CascadeActions`, causing `next::method` chains to skip critical intermediat
 
 **Files changed**: `RuntimeStash.java`, `B.pm`
 
+### Fix 8: DBI BYTE_STRING + utf8::decode conditional UTF-8 flag — COMPLETED
+
+**Commit**: `0a9ae9f0c`
+
+**Impact**: Fixed **6 assertions** in t/85utf8.t (8 → 2 failures + 1 crash).
+Pass rate improved from 99.90% to **99.95%**.
+
+**Two changes**:
+
+1. **DBI.java: Return BYTE_STRING for byte-representable strings** — In `fetchrow_arrayref`
+   and `fetchrow_hashref`, after creating a RuntimeScalar from a JDBC String value, check
+   if all characters are ≤ 0xFF. If so, downgrade the type from STRING to BYTE_STRING.
+   This matches Perl 5's DBD::SQLite (without `sqlite_unicode`) which returns byte strings.
+   Strings with chars > 0xFF (actual Unicode data) stay as STRING.
+
+2. **Utf8.java: Conditional UTF-8 flag in utf8::decode** — Per Perl 5 docs, `utf8::decode`
+   only sets the UTF-8 flag if the decoded string contains a multi-byte character (char > 0x7F).
+   For pure ASCII input, the flag stays off even though decoding succeeded. Previously,
+   PerlOnJava unconditionally set STRING type after decode.
+
+**Files changed**: `DBI.java`, `Utf8.java`
+
 ---
 
-### Detailed Analysis of Remaining 12 Failures
+### Detailed Analysis of Remaining 6 Failures
 
-#### t/85utf8.t (8 failures) — DBI STRING / utf8::decode Issues
+#### t/85utf8.t (1 failure + 1 crash) — JDBC Unicode Bind Parameters
 
 PerlOnJava DOES have UTF-8 flag emulation via STRING vs BYTE_STRING types.
-The failures are caused by two specific, fixable issues:
+Fix 8 resolved 6 of 8 original failures. The remaining issues are:
 
-**Root Cause #1: DBI fetch returns STRING instead of BYTE_STRING (6 tests)**
-JDBC returns Java Strings → RuntimeScalar STRING type. Perl 5's DBD::SQLite
-(without `sqlite_unicode`) returns byte strings. Tests 17,18,19,22,23,28 fail
-because UTF8Columns's `get_column` skips `utf8::decode` on STRING values.
-- Fix: In DBI.java `fetchrow_arrayref`, check if all chars ≤ 0xFF → BYTE_STRING.
+**Test 11 (line 124)**: `INSERT: raw bytes retrieved from database`. The upstream
+DBIC `create()` bug (known since 2006, test 10 is TODO'd) sends the original Unicode
+string to the database instead of the `store_column`-processed byte stream. In Perl 5,
+the DBI driver layer accidentally encodes the UTF-8-flagged string to bytes before sending
+to SQLite, masking the bug. In PerlOnJava, JDBC preserves the Unicode characters, so the
+database contains Unicode data. When fetched back, the Unicode characters have code points
+> 0xFF, so the DBI BYTE_STRING downgrade doesn't apply.
 
-**Root Cause #2: utf8::decode always sets STRING (1 test)**
-Perl 5 only sets UTF-8 flag if string contains multi-byte characters. PerlOnJava's
-`Utf8.java:257` always sets STRING. Test 20 fails for ASCII-only 'nonunicode'.
-- Fix: In Utf8.java, after decode, check if decoded string has chars > 0x7F.
+**Test 17 (line 131)**: `in-object reloaded title without utf8`. After `discard_changes`,
+`_column_data{title}` is fetched from the DB. Because the DB contains Unicode data (from
+the create() bug above), the fetched string has chars > 0xFF and stays as STRING. This is
+correct behavior given the DB content — it's a downstream consequence of test 11.
 
-**Root Cause #3: Known upstream DBIC create() bug (1 test)**
-Test 11 is a known DBIC bug since 2006 — `create()` sends original values to DB
-instead of `store_column`-processed values. Perl 5 masks this via DBI driver encoding.
+**Crash at line 182**: `find({title => $utf8_title})` returns undef because JDBC sends the
+Unicode search parameter to SQLite, which does a Unicode comparison against the UTF-8 bytes
+stored by the UPDATE at line 175. No match → undef → crash on `->get_column`. This is inside
+a `local $TODO` block, but `$TODO` only makes test failures non-fatal, not exceptions. The
+crash prevents `done_testing()` from running.
+
+All three issues stem from the same root cause: JDBC sends Unicode bind parameters while
+Perl 5's DBI accidentally sends raw bytes. This is a systemic JDBC/DBI behavioral difference.
 
 #### t/cdbi/02-Film.t tests 70-71 (2 failures) — DESTROY Timing
 - **Test 70**: Creates Film object with dirty columns, scope exit should trigger DESTROY
@@ -358,6 +387,7 @@ instead of `store_column`-processed values. Perl 5 masks this via DBI driver enc
 | 2026-04-13 | DBI RootClass + clearAllBlessedWeakRefs + exit path fix | `7df81dc46` |
 | 2026-04-11 | Fix 6: next::method always uses C3 linearization | `beebccd69` |
 | 2026-04-11 | Fix 7: Stash delete weak ref clearing + B::REFCNT inflation fix | `d6dd158da` |
+| 2026-04-11 | Fix 8: DBI BYTE_STRING + utf8::decode conditional UTF-8 flag | `0a9ae9f0c` |
 
 ## Architecture Reference
 
