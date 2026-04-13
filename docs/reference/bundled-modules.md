@@ -245,6 +245,9 @@ These are loaded automatically or via `use`:
 | `Term::ReadLine` | Java | |
 | `Term::ANSIColor` | Perl | |
 | `Term::Table` | Perl | |
+| `IO::Tty` | Java + Perl | PTY allocation, terminal constants, winsize ops via FFM |
+| `IO::Pty` | Perl | Pseudo-terminal pairs; depends on IO::Tty |
+| `IO::Tty::Constant` | Java + Perl | Terminal ioctl constants (TIOCGWINSZ, etc.) |
 
 ### OOP & Introspection
 

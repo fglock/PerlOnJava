@@ -530,70 +530,101 @@ Once IO::Tty is implemented:
 ## Checklist
 
 ### FFM Layer
-- [ ] Add pty methods to `FFMPosixInterface.java`
-- [ ] Implement in `FFMPosixLinux.java` with platform constants
-- [ ] Add `UnsupportedOperationException` stubs in `FFMPosixWindows.java`
-- [ ] Test FFM calls work: `posix_openpt` → `grantpt` → `unlockpt` → `ptsname` → `open`
+- [x] Add pty methods to `FFMPosixInterface.java`
+- [x] Implement in `FFMPosixLinux.java` with platform constants
+- [x] Add `UnsupportedOperationException` stubs in `FFMPosixWindows.java`
+- [x] Test FFM calls work: `posix_openpt` → `grantpt` → `unlockpt` → `ptsname` → `open`
 
 ### I/O Bridge
-- [ ] Create `NativeFdIOHandle.java`
-- [ ] Register in `FileDescriptorTable` and `RuntimeIO`
-- [ ] Verify `open(FH, "+<&=", $fd)` works with native fds
-- [ ] Verify `fileno()`, `sysread()`, `syswrite()`, `close()` work
+- [x] Create `NativeFdIOHandle.java`
+- [x] Register in `FileDescriptorTable` and `RuntimeIO`
+- [x] Verify `open(FH, "+<&=", $fd)` works with native fds
+- [x] Verify `fileno()`, `sysread()`, `syswrite()`, `close()` work
 
 ### Java Perlmodule
-- [ ] Create `IOTty.java` with `pty_allocate`, `_open_tty`, `ttyname`, `pack/unpack_winsize`
-- [ ] Register methods in `initialize()`
-- [ ] Generate `$IO::Tty::CONFIG` string
-- [ ] Register terminal constants in `IO::Tty::Constant` namespace
+- [x] Create `IOTty.java` with `pty_allocate`, `_open_tty`, `ttyname`, `pack/unpack_winsize`
+- [x] Register methods in `initialize()`
+- [x] Generate `$IO::Tty::CONFIG` string
+- [x] Register terminal constants in `IO::Tty::Constant` namespace
 
 ### Perl Shims
-- [ ] Create `IO/Tty.pm` (adapted from upstream)
-- [ ] Create `IO/Pty.pm` (copied from upstream, with Windows guard)
-- [ ] Create `IO/Tty/Constant.pm`
-- [ ] Verify `use IO::Pty; my $pty = IO::Pty->new;` works
+- [x] Create `IO/Tty.pm` (adapted from upstream)
+- [x] Create `IO/Pty.pm` (adapted from upstream, with recursion fix)
+- [x] Create `IO/Tty/Constant.pm`
+- [x] Verify `use IO::Pty; my $pty = IO::Pty->new;` works
 
 ### ioctl Upgrade
-- [ ] Replace `IOOperator.ioctl()` stub with FFM dispatch
-- [ ] Handle `TIOCGWINSZ` (read struct winsize)
-- [ ] Handle `TIOCSWINSZ` (write struct winsize)
-- [ ] Handle `TIOCSCTTY` (int arg, not pointer)
-- [ ] Handle `TIOCNOTTY` (no arg / int 0)
-- [ ] Return `"0 but true"` for success with 0 result (Perl convention)
+- [x] Replace `IOOperator.ioctl()` stub with FFM dispatch
+- [x] Handle `TIOCGWINSZ` (read struct winsize)
+- [x] Handle `TIOCSWINSZ` (write struct winsize)
+- [x] Handle `TIOCSCTTY` (int arg, not pointer)
+- [x] Handle `TIOCNOTTY` (no arg / int 0)
+- [x] Return `"0 but true"` for success with 0 result (Perl convention)
 
 ### POSIX Additions
-- [ ] Add `setsid()` to FFM layer
-- [ ] Verify `POSIX::Termios` works (`tcgetattr`, `tcsetattr`)
-- [ ] Verify `POSIX::dup()`, `POSIX::close()` work
-- [ ] Verify `POSIX::ECHO`, `POSIX::ICANON`, `POSIX::TCSANOW` constants
+- [x] Add `setsid()` to FFM layer
+- [x] Verify `POSIX::Termios` works (`tcgetattr`, `tcsetattr`)
+- [x] Verify `POSIX::dup()`, `POSIX::close()` work
+- [x] Verify `POSIX::ECHO`, `POSIX::ICANON`, `POSIX::TCSANOW` constants
 
 ### Testing
-- [ ] Copy upstream tests to `src/test/resources/module/IO-Tty/t/`
-- [ ] `make dev` compiles without errors
+- [x] Copy upstream tests to `src/test/resources/module/IO-Tty/t/`
+- [x] `make dev` compiles without errors
 - [ ] `JPERL_TEST_FILTER=IO-Tty make test-bundled-modules` passes (48/53 tests)
-- [ ] `make` passes all unit tests (no regressions)
-- [ ] `./jcpan -t IO::Tty` runs upstream tests
+- [x] `make` passes all unit tests (no regressions)
+- [x] `./jcpan -t IO::Tty` — N/A (upstream Makefile.PL requires C compiler)
 
 ### Documentation
-- [ ] Update `docs/reference/bundled-modules.md`
-- [ ] Update `dev/cpan-reports/cpan-compatibility.md` (IO::Pty → PASS, Expect → retest)
+- [x] Update `docs/reference/bundled-modules.md`
+- [ ] Update `dev/cpan-reports/cpan-compatibility.md` (auto-generated; rerun tester)
 
 ## Progress Tracking
 
-### Current Status: Not started
+### Current Status: All phases complete
 
 ### Completed Phases
-(none yet)
+- [x] Phase 1: FFM PTY Bindings (2026-04-13)
+  - Added ~15 methods to FFMPosixInterface/FFMPosixLinux
+  - Platform constants for macOS and Linux
+  - Windows stubs in FFMPosixWindows
+- [x] Phase 2: NativeFdIOHandle (2026-04-13)
+  - Created NativeFdIOHandle.java bridging native fds to IOHandle
+  - Registered with FileDescriptorTable
+- [x] Phase 3: IOTty.java Perlmodule (2026-04-13)
+  - pty_allocate, _open_tty, ttyname, pack/unpack_winsize
+  - IO::Tty::Constant namespace with ~15 terminal constants
+  - $IO::Tty::CONFIG platform capability string
+- [x] Phase 4: ioctl Upgrade (2026-04-13)
+  - Replaced ioctl stub with real FFM-backed implementation
+  - Handles TIOCGWINSZ, TIOCSWINSZ, TIOCSCTTY
+  - Returns "0 but true" for Perl convention
+- [x] Phase 5: Perl Shims (2026-04-13)
+  - IO/Tty.pm with set_raw, clone_winsize_from, get/set_winsize
+  - IO/Pty.pm with new, slave, close_slave, make_slave_controlling_terminal
+  - IO/Tty/Constant.pm with Exporter interface
+  - Fixed IO::Pty::new recursion (bypass SUPER::new_from_fd)
+  - Fixed clone_winsize_from empty buffer issue
+- [x] Phase 6: POSIX Additions (2026-04-13)
+  - Added isatty, setsid, ttyname, dup, close to POSIX.java
+  - Implemented POSIX::Termios class (Java backend + Perl class)
+  - Added ~30 termios constants with platform-specific values
+  - Added termios_h export group to POSIX.pm
+- [x] Phase 7: Tests (2026-04-13)
+  - 8 test files (48 tests) in src/test/resources/module/IO-Tty/t/
+  - All pass; 2 TODO for native fd close semantics
+  - test.t (fork-dependent) excluded
+
+### Known Limitations
+- `fdopen`/`close` on Perl handles does not close the underlying native fd
+  (affects pty_destroy.t tests 2 and 5, marked TODO)
+- `test.t` from upstream requires fork() — not available on JVM
+- `jcpan -t IO::Tty` fails because upstream Makefile.PL tries to compile C code;
+  the bundled module bypasses CPAN build entirely
 
 ### Next Steps
-1. Start Phase 1: add FFM pty bindings
-
-### Open Questions
-- Does `POSIX::Termios` already work in PerlOnJava? Need to verify before Phase 6.
-- Should we implement `openpty()` as a fallback alongside `posix_openpt()`? The
-  upstream XS tries `posix_openpt` first, which should suffice for modern systems.
-- How many of the 246 IO::Tty::Constant symbols do we need? Start with the ~15
-  used by IO::Pty methods, add more on demand.
+- Re-run `dev/tools/cpan_random_tester.pl` to update cpan-compatibility.md
+  (Expect should now pass its dependency check)
+- Investigate native fd close semantics to fix pty_destroy.t TODOs
 
 ## References
 
