@@ -57,21 +57,20 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-11, post Fix 8: DBI BYTE_STRING + utf8::decode)
+## Current Test Results (2026-04-13, post Fix 9: DBI UTF-8 round-trip + ClosedIOHandle)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
-| Total assertions | **12,357 OK / 6 not-ok** (excl TODO) | **99.95% pass rate** |
+| Total assertions | **12,361 OK / 3 not-ok** (excl TODO) | **99.98% pass rate** |
 | GC-only failures | **0 files** | Eliminated by clearAllBlessedWeakRefs + exit path fix |
-| TODO failures | **35 assertions** | Upstream expected failures |
-| Real PerlOnJava failures | **6 assertions** in 4 files + 1 crash | See breakdown below |
+| TODO failures | **37 assertions** | Upstream expected failures |
+| Real PerlOnJava failures | **3 assertions** in 3 files | See breakdown below |
 
 ### Real (Non-GC, Non-TODO) Failures
 
 | File | Failures | Root Cause | Fix |
 |------|----------|------------|-----|
-| t/85utf8.t | 1 + crash | JDBC Unicode bind params (upstream create() bug) | Won't fix — systemic JDBC/DBI difference |
 | t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | DESTROY timing — see analysis below |
 | t/60core.t | 1 | Cached statement still Active | DESTROY timing for method-chain temporaries |
 | t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Non-debug mode, low priority |
@@ -311,36 +310,49 @@ Pass rate improved from 99.90% to **99.95%**.
 
 **Files changed**: `DBI.java`, `Utf8.java`
 
+### Fix 9: DBI UTF-8 round-trip + filehandle dup of closed handles — COMPLETED
+
+**Commit**: `c65974e16`
+
+**Impact**: Fixed **3 assertions + 1 crash** in t/85utf8.t AND all **12 assertions** in t/debug/core.t.
+Pass rate improved from 99.95% to **99.98%**.
+
+**Four changes**:
+
+1. **DBI.java fetchrow: UTF-8 encode JDBC strings** — Instead of just checking if chars
+   are ≤ 0xFF (Fix 8 approach), now properly UTF-8 encodes the JDBC Unicode string to get
+   raw bytes, then wraps as BYTE_STRING. This handles wide characters (> 0xFF) correctly:
+   ```
+   JDBC String "ș" (U+0219) → UTF-8 bytes [0xC8, 0x99] → BYTE_STRING "\xC8\x99"
+   ```
+   Matches Perl 5's DBD::SQLite (sqlite_unicode=0) behavior.
+
+2. **DBI.java toJdbcValue: UTF-8 decode BYTE_STRING** — When binding a BYTE_STRING
+   parameter, try to UTF-8 decode the bytes to recover the actual characters before
+   passing to JDBC. This creates a correct round-trip:
+   ```
+   INSERT: bytes → UTF-8 decode → chars → JDBC → SQLite
+   SELECT: SQLite → JDBC → chars → UTF-8 encode → bytes (same)
+   ```
+   Falls back to passing raw chars for non-UTF-8 byte strings (e.g., Latin-1).
+
+3. **DBI.java bind_param: Preserve BYTE_STRING type** — `bind_param()` was extracting the
+   raw `Object value = args.get(2).value` and creating `new RuntimeScalar(value)`, which
+   always set `type=STRING` for String values. This lost the BYTE_STRING type information
+   needed by `toJdbcValue()` for correct UTF-8 round-tripping. Now uses `set()` to copy
+   both type and value.
+
+4. **IOOperator.java: ClosedIOHandle check in filehandle dup** — `open($fh, '>&STDERR')`
+   on a closed STDERR now correctly returns undef with `$!="Bad file descriptor"`. Added
+   `instanceof ClosedIOHandle` checks to both `duplicateFileHandle()` and
+   `createBorrowedHandle()`. Without this, ClosedIOHandle was wrapped in DupIOHandle and
+   the open succeeded, breaking the "or die(...)" pattern.
+
+**Files changed**: `DBI.java`, `IOOperator.java`
+
 ---
 
-### Detailed Analysis of Remaining 6 Failures
-
-#### t/85utf8.t (1 failure + 1 crash) — JDBC Unicode Bind Parameters
-
-PerlOnJava DOES have UTF-8 flag emulation via STRING vs BYTE_STRING types.
-Fix 8 resolved 6 of 8 original failures. The remaining issues are:
-
-**Test 11 (line 124)**: `INSERT: raw bytes retrieved from database`. The upstream
-DBIC `create()` bug (known since 2006, test 10 is TODO'd) sends the original Unicode
-string to the database instead of the `store_column`-processed byte stream. In Perl 5,
-the DBI driver layer accidentally encodes the UTF-8-flagged string to bytes before sending
-to SQLite, masking the bug. In PerlOnJava, JDBC preserves the Unicode characters, so the
-database contains Unicode data. When fetched back, the Unicode characters have code points
-> 0xFF, so the DBI BYTE_STRING downgrade doesn't apply.
-
-**Test 17 (line 131)**: `in-object reloaded title without utf8`. After `discard_changes`,
-`_column_data{title}` is fetched from the DB. Because the DB contains Unicode data (from
-the create() bug above), the fetched string has chars > 0xFF and stays as STRING. This is
-correct behavior given the DB content — it's a downstream consequence of test 11.
-
-**Crash at line 182**: `find({title => $utf8_title})` returns undef because JDBC sends the
-Unicode search parameter to SQLite, which does a Unicode comparison against the UTF-8 bytes
-stored by the UPDATE at line 175. No match → undef → crash on `->get_column`. This is inside
-a `local $TODO` block, but `$TODO` only makes test failures non-fatal, not exceptions. The
-crash prevents `done_testing()` from running.
-
-All three issues stem from the same root cause: JDBC sends Unicode bind parameters while
-Perl 5's DBI accidentally sends raw bytes. This is a systemic JDBC/DBI behavioral difference.
+### Detailed Analysis of Remaining 3 Failures
 
 #### t/cdbi/02-Film.t tests 70-71 (2 failures) — DESTROY Timing
 - **Test 70**: Creates Film object with dirty columns, scope exit should trigger DESTROY
@@ -388,6 +400,7 @@ Perl 5's DBI accidentally sends raw bytes. This is a systemic JDBC/DBI behaviora
 | 2026-04-11 | Fix 6: next::method always uses C3 linearization | `beebccd69` |
 | 2026-04-11 | Fix 7: Stash delete weak ref clearing + B::REFCNT inflation fix | `d6dd158da` |
 | 2026-04-11 | Fix 8: DBI BYTE_STRING + utf8::decode conditional UTF-8 flag | `0a9ae9f0c` |
+| 2026-04-13 | Fix 9: DBI UTF-8 round-trip + filehandle dup of closed handles | `c65974e16` |
 
 ## Architecture Reference
 
