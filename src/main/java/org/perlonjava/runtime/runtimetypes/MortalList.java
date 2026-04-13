@@ -90,6 +90,18 @@ public class MortalList {
         // decrements have been processed, and BEFORE END blocks run so that
         // DBIC's assert_empty_weakregistry sees the weak refs as undef.
         DestroyDispatch.clearRescuedWeakRefs();
+
+        // Final sweep: clear weak refs for ALL remaining blessed objects.
+        // At this point the main script has returned and all lexical scopes
+        // have exited. Some objects may still have inflated cooperative
+        // refCounts (due to JVM temporaries, method-call copies, interpreter
+        // captures) that prevent DESTROY from firing. Their weak refs would
+        // remain defined forever, causing DBIC's leak tracer to report false
+        // leaks. Clearing weak refs here is safe because:
+        // 1. Only weak refs are cleared — the Java objects remain alive
+        // 2. CODE refs are excluded (they may still be called from stashes)
+        // 3. END blocks (where leak checks run) execute AFTER this point
+        WeakRefRegistry.clearAllBlessedWeakRefs();
     }
 
     /**

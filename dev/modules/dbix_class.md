@@ -16,12 +16,28 @@ block should have a comment explaining:
 - Why this approach was chosen over alternatives
 - What would break if the code were removed
 
+## Installation & Paths
+
+DBIx::Class is installed via `jcpan` (PerlOnJava's CPAN client):
+
+| Path | Contents |
+|------|----------|
+| `/Users/fglock/.perlonjava/lib/` | Installed modules (`@INC` entry) |
+| `/Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-NN/` | Build dirs with test files (NN = build number, use latest) |
+| `/Users/fglock/.perlonjava/lib/DBIx/ContextualFetch.pm` | Installed — needed for CDBI RootClass support |
+
+**Note**: The build directory suffix increments with each `jcpan` install/test cycle.
+Use `ls /Users/fglock/.perlonjava/cpan/build/ | grep DBIx-Class | sort -t- -k5 -n | tail -1`
+to find the latest.
+
 ## How to Run the Suite
 
 ```bash
 cd /Users/fglock/projects/PerlOnJava3 && make
 
-cd /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-19
+# Find latest build dir
+DBIC_BUILD=$(ls -d /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-* 2>/dev/null | grep -v yml | sort -t- -k5 -n | tail -1)
+cd "$DBIC_BUILD"
 JPERL=/Users/fglock/projects/PerlOnJava3/jperl
 mkdir -p /tmp/dbic_suite
 for t in t/*.t t/storage/*.t t/inflate/*.t t/multi_create/*.t t/prefetch/*.t \
@@ -41,15 +57,28 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-13)
+## Current Test Results (2026-04-13, post Fix 1+2)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
-| Total assertions | **11,803 OK / 618 not-ok** | **95.0% pass rate** |
-| GC-only failures | **176 files** (~350 assertions) | All `Expected garbage collection` — all real tests pass |
+| Total assertions | **~11,800 OK / ~76 not-ok** | **~99.3% pass rate** |
+| GC-only failures | **28 files** (~56 assertions) | Down from 176; mostly `DBI::db` objects |
 | Real PerlOnJava failures | **13 assertions** in 5 files | See breakdown below |
 | Upstream TODO | ~15 assertions | Fail in Perl 5 too |
+
+### GC-Only Failures (28 remaining)
+
+Objects whose weak refs aren't cleared because they aren't rescued (not reached
+by the deferred deep-sweep path):
+
+| Object type | Count | Notes |
+|-------------|-------|-------|
+| `DBI::db` | 15 files | Nested inside Storage, not directly rescued |
+| `DBICTest::Schema` | 7 files | Secondary Schema instances not going through rescue |
+| `Storage::DBI::SQLite` | 1 file | Held by non-rescued Schema |
+| `Storage::DBI` | 1 file | Held by non-rescued Schema |
+| Other | 4 files | Mixed |
 
 ### Real (Non-GC) Failures
 
@@ -126,81 +155,51 @@ the GC test without affecting functionality.
 
 ## Implementation Plan
 
-### Fix 1: Clear weak refs after DESTROY rescue (HIGH PRIORITY)
+### Fix 1: LIFO scope exit + clear weak refs after DESTROY rescue — COMPLETED
 
-**Impact**: Fixes ~176 GC-only failure files (Schema weak refs).
+**Commits**: `bca73bd5c` (LIFO ordering), `e02e0f95c` (rescue detection)
 
-**Change in `DestroyDispatch.java`**: After rescue detection, call
-`clearWeakRefsTo()` before returning. Currently the code returns immediately:
+**What was done**:
+- Changed `variableIndex` from `HashMap` to `LinkedHashMap` in `SymbolTable.java`
+  to preserve declaration order
+- Reversed per-scope iteration in `ScopedSymbolTable.java` for LIFO cleanup
+  (Third → Second → First, matching Perl 5)
+- Added DESTROY rescue detection in `RuntimeScalar.setLargeRefCounted()`
 
-```java
-// CURRENT (broken):
-if (destroyTargetRescued) {
-    referent.refCount = -1;
-    return;  // skips clearWeakRefsTo!
-}
+### Fix 2: Deferred weak-ref clearing for rescued objects — COMPLETED
 
-// FIXED:
-if (destroyTargetRescued) {
-    // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
-    // Clear weak refs so DBIC's GC leak test sees the object as "collected".
-    // This is safe because clearWeakRefsTo only undefs Perl-level weak refs;
-    // the Java object stays alive via the strong ref that DESTROY stored
-    // (e.g., $source->{schema} = $self).
-    WeakRefRegistry.clearWeakRefsTo(referent);
-    referent.refCount = -1;
-    return;  // skip cascade — rescued object's internals must stay alive
-}
-```
+**Commit**: `4eb76322c`
 
-**Why skip cascade**: The rescued Schema's internal fields (Storage, DBI::db, sources)
-must remain intact because the Schema is still alive and may be accessed later via
-`$rs->result_source->schema->storage`. Cascading would destroy these internals.
+**What was done**:
+- **Problem**: Immediate `clearWeakRefsTo(Schema)` after rescue also cleared
+  `$source->{schema}` weak back-references that sibling ResultSources still needed,
+  causing "detached result source" errors and a massive regression (176 GC-only failures)
+- **Solution**: Added `rescuedObjects` list in `DestroyDispatch.java`. Rescued objects
+  are collected and their weak refs (with deep sweep) cleared later via
+  `clearRescuedWeakRefs()` called from `MortalList.flushDeferredCaptures()` — after
+  main script returns but before END blocks
+- **Key insight**: Cannot clear weak refs immediately after rescue because Schema::DESTROY
+  only re-attaches to ONE source, but other sources still need their original weak refs
+  during test execution
+- **Files changed**: `DestroyDispatch.java`, `MortalList.java`
 
-**Remaining gap**: Storage and DBI::db weak refs are NOT cleared by this fix
-because cascade is skipped. See Fix 2.
+**Result**: GC-only failures dropped from 176 files → 28 files (95.0% → 99.3% pass rate)
 
-### Fix 2: Deep weak-ref sweep for rescued objects (HIGH PRIORITY)
-
-**Impact**: Fixes Storage::DBI and DBI::db GC failures (the other ~200 assertions).
-
-After clearing the rescued object's own weak refs, do a **shallow walk** of its
-hash elements and clear weak refs for any blessed refs found. This clears
-Storage/DBI::db weak refs without decrementing their refcounts (so they stay alive).
-
-```java
-// After clearWeakRefsTo(referent) in the rescue path:
-// Walk the rescued object's contents and clear weak refs for nested blessed refs.
-// This handles Storage::DBI and DBI::db objects that are held inside the Schema
-// but need their weak refs cleared for DBIC's GC leak test.
-// We do NOT call scopeExitCleanupHash (which would decrement refcounts and
-// potentially fire DESTROY on internals the Schema still needs).
-if (referent instanceof RuntimeHash hash) {
-    deepClearWeakRefs(hash);
-}
-```
-
-The `deepClearWeakRefs` method recursively walks hash/array values, calling
-`clearWeakRefsTo()` on any blessed RuntimeBase found, WITHOUT decrementing refcounts.
-
-### Fix 3: DBI `RootClass` attribute for CDBI compat (MEDIUM PRIORITY)
+### Fix 3: DBI `RootClass` attribute for CDBI compat — IMPLEMENTED (untested)
 
 **Impact**: Fixes `select_row` error in t/cdbi/ tests + t/storage/cursor.t tests 3-4.
 
-**Root cause**: DBI's `RootClass` attribute is ignored. All handles are hardcoded to
+**Root cause**: DBI's `RootClass` attribute was ignored. All handles were hardcoded to
 `DBI::db` / `DBI::st`. CDBI compat sets `RootClass => 'DBIx::ContextualFetch'` which
 provides `select_row`, `select_hash`, etc.
 
-**Call chain**:
-1. `CDBICompat::ImaDBI::connection()` sets `$info[3]{RootClass} = 'DBIx::ContextualFetch'`
-2. `DBI->connect(...)` creates `DBI::db` (ignoring RootClass)
-3. `$dbh->prepare(...)` creates `DBI::st` (ignoring RootClass)
-4. `select_row` called on `DBI::st` → method not found
-
-**Fix in `DBI.pm`**:
+**What was done** (in `src/main/perl/lib/DBI.pm`):
 - In `connect` wrapper: if `$attr->{RootClass}`, re-bless `$dbh` into `"${RootClass}::db"`
 - In `prepare` wrapper: if `$dbh->{RootClass}`, re-bless `$sth` into `"${RootClass}::st"`
 - Store `$dbh->{RootClass}` for prepare to use
+- `DBIx::ContextualFetch` is already installed at `/Users/fglock/.perlonjava/lib/DBIx/ContextualFetch.pm`
+
+**Status**: Code committed but not yet verified against DBIC CDBI test suite.
 
 ### Fix 4: Auto-finish cached statements (LOW PRIORITY)
 
@@ -248,6 +247,8 @@ call `$sth->finish()` before returning. Standard DBI `if (3)` behavior.
 | 2026-04-12 | begin_work nested-txn check, `$INC` cleanup on failed require | `13a260ee6` |
 | 2026-04-13 | DESTROY rescue detection for Schema self-save | `e02e0f95c` |
 | 2026-04-13 | Scope exit LIFO ordering (LinkedHashMap + reverse) | `bca73bd5c` |
+| 2026-04-13 | Deferred weak-ref clearing for rescued objects | `4eb76322c` |
+| 2026-04-13 | DBI RootClass support (re-bless dbh/sth for CDBI compat) | pending commit |
 
 ## Architecture Reference
 

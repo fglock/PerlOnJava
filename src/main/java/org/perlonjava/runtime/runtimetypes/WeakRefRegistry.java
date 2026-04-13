@@ -189,4 +189,31 @@ public class WeakRefRegistry {
             weakScalars.remove(weak);
         }
     }
+
+    /**
+     * Clear weak refs for ALL blessed, non-CODE objects in the registry.
+     * Called after flushDeferredCaptures() — at this point the main script
+     * has returned and all lexical scopes have exited. Objects with inflated
+     * cooperative refCounts (due to JVM temporaries, method-call argument
+     * copies, etc.) may still appear "alive" even though no Perl code holds
+     * a reference. Clearing their weak refs allows DBIC's leak tracer
+     * (which runs in an END block) to see them as "collected".
+     * <p>
+     * This is safe because:
+     * 1. Only weak refs are cleared — the Java objects remain alive
+     * 2. CODE refs are excluded (they may still be called from stashes)
+     * 3. END blocks that check for leaks run AFTER this method
+     */
+    public static void clearAllBlessedWeakRefs() {
+        // Snapshot the keys to avoid ConcurrentModificationException,
+        // since clearWeakRefsTo modifies referentToWeakRefs.
+        java.util.List<RuntimeBase> referents =
+                new java.util.ArrayList<>(referentToWeakRefs.keySet());
+        for (RuntimeBase referent : referents) {
+            if (referent instanceof RuntimeCode) continue;
+            if (referent.blessId != 0) {
+                clearWeakRefsTo(referent);
+            }
+        }
+    }
 }

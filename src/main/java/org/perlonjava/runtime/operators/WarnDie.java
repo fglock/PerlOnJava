@@ -482,6 +482,11 @@ public class WarnDie {
         getGlobalVariable("main::?").set(exitCode);
         // Flush file-scoped lexical cleanup before END blocks
         MortalList.flush();
+        // Process deferred captures (captured blessed refs whose scope has exited).
+        // This must happen before END blocks so that DBIC's leak tracer sees
+        // objects as properly collected. Without this, exit() via plan skip_all
+        // skips the normal cleanup path in PerlLanguageProvider.
+        MortalList.flushDeferredCaptures();
         try {
             runEndBlocks(false);  // Don't reset $? - we just set it to the exit code
         } catch (Throwable t) {

@@ -42,6 +42,14 @@ XSLoader::load( 'DBI' );
             # In Perl 5's XS-based DBI, child→parent references are weak.
             $result->{Database} = $dbh;
             Scalar::Util::weaken($result->{Database});
+            # RootClass support: re-bless the statement handle into the ::st
+            # subclass if the parent dbh has a RootClass attribute.
+            if (my $root = $dbh->{RootClass}) {
+                my $st_class = "${root}::st";
+                if (UNIVERSAL::isa($st_class, 'DBI::st')) {
+                    bless $result, $st_class;
+                }
+            }
         }
         return $result;
     };
@@ -244,6 +252,23 @@ use constant {
             $dbh->{Statement} = '';
             # Set Name to DSN rest (after driver:), not the JDBC URL
             $dbh->{Name} = $dsn_rest if defined $dsn_rest;
+        }
+        # RootClass support: re-bless the database handle into the subclass
+        # specified by the RootClass attribute. This is used by CDBI compat
+        # (via Ima::DBI) which sets RootClass => 'DBIx::ContextualFetch'.
+        # The RootClass module provides ::db and ::st subclasses that add
+        # methods like select_row, select_hash, etc. to statement handles.
+        # Without this, handles are always DBI::db/DBI::st and those methods
+        # are unavailable, breaking t/cdbi/ tests with:
+        #   "Can't locate object method select_row via package DBI::st"
+        if ($dbh && $attr->{RootClass}) {
+            my $root = $attr->{RootClass};
+            eval "require $root" unless $root->isa('DBI');
+            my $db_class = "${root}::db";
+            if ($db_class->isa('DBI::db') || eval { require $root; $db_class->isa('DBI::db') }) {
+                bless $dbh, $db_class;
+            }
+            $dbh->{RootClass} = $root;
         }
         return $dbh;
     };
