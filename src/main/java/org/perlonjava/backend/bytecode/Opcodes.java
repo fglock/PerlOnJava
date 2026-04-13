@@ -2242,6 +2242,24 @@ public class Opcodes {
      */
     public static final short SCOPE_EXIT_CLEANUP_ARRAY = 467;
 
+    /**
+     * Numeric-only bitwise AND assign (use feature "bitwise"): rd &= rs (always numeric).
+     * Format: BINARY_AND_ASSIGN rd rs
+     */
+    public static final short BINARY_AND_ASSIGN = 468;
+
+    /**
+     * Numeric-only bitwise OR assign (use feature "bitwise"): rd |= rs (always numeric).
+     * Format: BINARY_OR_ASSIGN rd rs
+     */
+    public static final short BINARY_OR_ASSIGN = 469;
+
+    /**
+     * Numeric-only bitwise XOR assign (use feature "bitwise"): rd ^= rs (always numeric).
+     * Format: BINARY_XOR_ASSIGN rd rs
+     */
+    public static final short BINARY_XOR_ASSIGN = 470;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
