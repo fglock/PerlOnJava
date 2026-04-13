@@ -14,9 +14,11 @@ pass on PerlOnJava.
 
 ### Build Notes
 
-- `jcpan -t Params::Validate` fails because `Module::Build` tries to compile XS code.
-- Manual build with `--pp` flag works: `jperl Build.PL --pp && jperl Build`
-- Must set `PARAMS_VALIDATE_IMPLEMENTATION=PP` at runtime.
+- PerlOnJava cannot compile XS C code, so a pure-Perl build is required.
+- CPAN distroprefs automatically pass `--pp` to `Build.PL` and set
+  `PARAMS_VALIDATE_IMPLEMENTATION=PP`.
+- `jcpan -t Params::Validate` works out of the box (no manual flags needed).
+- Distroprefs file: `src/main/perl/lib/CPAN/prefs/Params-Validate.yml`
 
 ### Results History
 
@@ -139,6 +141,7 @@ into mutable `RuntimeScalar` objects which use the correct `getBooleanLarge()` p
 - [x] Fix 4: `RuntimeScalarReadOnly` — string `"0"` boolean is now false (2026-04-13)
 - [x] `make` passes (all existing unit tests green)
 - [x] Params::Validate PP test suite: **35/35 ok, 3 skipped, 2515/2515 subtests pass**
+- [x] CPAN distroprefs added — `jcpan -t Params::Validate` works out of the box (2026-04-13)
 
 ---
 
