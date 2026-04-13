@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Enumeration;
 import java.util.Properties;
@@ -523,23 +524,21 @@ public class DBI extends PerlModuleBase {
                 int colCount = metaData.getColumnCount();
                 // Convert each column value to string and add to row array.
                 // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
-                // (no UTF-8 flag). JDBC returns Java Strings which map to STRING type.
-                // To match Perl 5 behavior, downgrade STRING to BYTE_STRING when all
-                // characters are in the byte range (0x00-0xFF). Strings with chars > 0xFF
-                // (from actual Unicode data) stay as STRING.
+                // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
+                // To match Perl 5 behavior, we must UTF-8 encode the JDBC string and
+                // return it as BYTE_STRING. This is equivalent to sqlite_unicode=0.
+                //
+                // Why: In Perl 5, DBD::SQLite works at the byte level — strings go in
+                // as raw bytes (UTF-8 encoded for STRING, raw for BYTE_STRING) and come
+                // back as raw bytes without the UTF-8 flag. JDBC works at the character
+                // level — it always decodes UTF-8 on fetch. Re-encoding to UTF-8 bytes
+                // here restores the byte-level behavior that Perl code expects.
                 for (int i = 1; i <= colCount; i++) {
                     RuntimeScalar val = RuntimeScalar.newScalarOrString(rs.getObject(i));
                     if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        boolean allBytes = true;
-                        for (int j = 0; j < s.length(); j++) {
-                            if (s.charAt(j) > 0xFF) {
-                                allBytes = false;
-                                break;
-                            }
-                        }
-                        if (allBytes) {
-                            val.type = RuntimeScalarType.BYTE_STRING;
-                        }
+                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                        val.type = RuntimeScalarType.BYTE_STRING;
                     }
                     RuntimeArray.push(row, val);
                 }
@@ -609,22 +608,15 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray columnNames = sth.get(nameStyle).arrayDeref();
 
                 // For each column, add column name -> value pair to hash.
-                // See fetchrow_arrayref for rationale on BYTE_STRING downgrade.
+                // See fetchrow_arrayref for rationale on UTF-8 encode to BYTE_STRING.
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
                     RuntimeScalar val = RuntimeScalar.newScalarOrString(value);
                     if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        boolean allBytes = true;
-                        for (int j = 0; j < s.length(); j++) {
-                            if (s.charAt(j) > 0xFF) {
-                                allBytes = false;
-                                break;
-                            }
-                        }
-                        if (allBytes) {
-                            val.type = RuntimeScalarType.BYTE_STRING;
-                        }
+                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                        val.type = RuntimeScalarType.BYTE_STRING;
                     }
                     row.put(columnName, val);
                 }
@@ -772,7 +764,31 @@ public class DBI extends PerlModuleBase {
                 yield scalar.value;
             }
             case RuntimeScalarType.UNDEF -> null;
-            case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING -> scalar.value;
+            case RuntimeScalarType.STRING -> scalar.value;
+            case RuntimeScalarType.BYTE_STRING -> {
+                // BYTE_STRING values may contain UTF-8 encoded data (from utf8::encode,
+                // e.g., via DBIx::Class::UTF8Columns::store_column). In Perl 5, these
+                // raw bytes go to DBD::SQLite which stores them as-is. JDBC works at the
+                // character level, so we need to UTF-8 decode the bytes to get the actual
+                // characters before passing to JDBC. This ensures that on fetch (where we
+                // UTF-8 encode the result), the original bytes are recovered:
+                //   INSERT: bytes → UTF-8 decode → chars → JDBC → SQLite
+                //   SELECT: SQLite → JDBC → chars → UTF-8 encode → bytes (same)
+                //
+                // If the bytes are not valid UTF-8 (e.g., raw Latin-1 like "\xE9"), we
+                // fall back to passing the char values as-is. This preserves the current
+                // behavior for non-UTF-8 byte strings.
+                String s = (String) scalar.value;
+                byte[] rawBytes = s.getBytes(StandardCharsets.ISO_8859_1);
+                String decoded = new String(rawBytes, StandardCharsets.UTF_8);
+                // Check if decoding introduced replacement characters (U+FFFD),
+                // which indicates the bytes were not valid UTF-8
+                if (decoded.indexOf('\uFFFD') < 0) {
+                    yield decoded;
+                } else {
+                    yield s;
+                }
+            }
             default -> scalar.toString(); // Triggers overload "" for blessed refs
         };
     }
@@ -864,12 +880,16 @@ public class DBI extends PerlModuleBase {
             }
 
             int paramIndex = args.get(1).getInt();
-            Object value = args.get(2).value;
+            RuntimeScalar paramValue = args.get(2);
 
             // Store bound parameters for later use (applied during execute())
+            // Use set() to copy both type and value, preserving BYTE_STRING type
+            // which is needed for correct UTF-8 round-tripping in toJdbcValue().
             RuntimeHash boundParams = sth.get("bound_params") != null ?
                     sth.get("bound_params").hashDeref() : new RuntimeHash();
-            boundParams.put(String.valueOf(paramIndex), new RuntimeScalar(value));
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.set(paramValue);
+            boundParams.put(String.valueOf(paramIndex), copy);
             sth.put("bound_params", boundParams.createReference());
 
             // Store bind attributes if provided (4th arg is attrs hashref or type int)

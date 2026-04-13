@@ -2740,6 +2740,11 @@ public class IOOperator {
      * resource when closed — only flushes. Both handles report the same fileno.
      */
     private static RuntimeIO createBorrowedHandle(RuntimeIO source) {
+        if (source == null || source.ioHandle == null || source.ioHandle instanceof ClosedIOHandle) {
+            // Same as duplicateFileHandle — reject closed handles for &= mode too.
+            RuntimeIO.handleIOError("Bad file descriptor");
+            return null;
+        }
         RuntimeIO borrowed = new RuntimeIO();
         borrowed.ioHandle = new BorrowedIOHandle(source.ioHandle);
         borrowed.currentLineNumber = source.currentLineNumber;
@@ -2754,7 +2759,12 @@ public class IOOperator {
     }
 
     private static RuntimeIO duplicateFileHandle(RuntimeIO original) {
-        if (original == null || original.ioHandle == null) {
+        if (original == null || original.ioHandle == null || original.ioHandle instanceof ClosedIOHandle) {
+            // Reject closed handles — in Perl 5, dup of a closed fd fails with EBADF.
+            // Without this check, ClosedIOHandle gets wrapped in DupIOHandle and
+            // open($fh, '>&STDERR') succeeds when STDERR is closed (bug: returns true
+            // instead of false, preventing the "or die(...)" pattern).
+            RuntimeIO.handleIOError("Bad file descriptor");
             return null;
         }
 
