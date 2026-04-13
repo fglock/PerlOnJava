@@ -663,7 +663,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
   - ✅ Implemented: `qr`.
   - ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=`.
-  - ❌ Missing: `++`, `--`, `=`, `<>`.
+  - ✅ Implemented: `<>`.
+  - ❌ Missing: `++`, `--`, `=`.
   - ❌ Missing: `&`, `|`, `^`, `~`, `<<`, `>>`, `&.`, `|.`, `^.`, `~.`, `x`, `.`.
   - ❌ Missing: `**=`, `<<=`, `>>=`, `x=`, `.=`, `&=`, `|=`, `^=`, `&.=`, `|.=`, `^.=`.
   - ❌ Missing: `-X`.

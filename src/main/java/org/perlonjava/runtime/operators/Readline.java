@@ -20,6 +20,18 @@ public class Readline {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh == null) {
+            // Check for <> overload before warning about unopened filehandle
+            int blessId = RuntimeScalarType.blessedId(fileHandle);
+            if (blessId < 0) {
+                OverloadContext overloadCtx = OverloadContext.prepare(blessId);
+                if (overloadCtx != null) {
+                    RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
+                    if (result != null) {
+                        return result;
+                    }
+                }
+            }
+
             // Perl warns and returns undef for unopened filehandle, doesn't die
             WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
