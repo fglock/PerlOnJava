@@ -4,6 +4,7 @@ import org.perlonjava.runtime.io.DupIOHandle;
 import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
+import org.perlonjava.runtime.nativ.ffm.FFMPosixInterface;
 import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -42,7 +43,63 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_strerror", "strerror", null);
             module.registerMethod("_access", "access", null);
             module.registerMethod("_dup2", "dup2", null);
-            
+            module.registerMethod("_dup", "dup", null);
+            module.registerMethod("_close", "posix_close", null);
+            module.registerMethod("_isatty", "posix_isatty", null);
+            module.registerMethod("_setsid", "posix_setsid", null);
+            module.registerMethod("_ttyname", "posix_ttyname", null);
+
+            // POSIX::Termios methods (registered in POSIX::Termios namespace)
+            module.registerMethod("POSIX::Termios::_new", "termios_new", null);
+            module.registerMethod("POSIX::Termios::_getattr", "termios_getattr", null);
+            module.registerMethod("POSIX::Termios::_setattr", "termios_setattr", null);
+            module.registerMethod("POSIX::Termios::_getiflag", "termios_getiflag", null);
+            module.registerMethod("POSIX::Termios::_getoflag", "termios_getoflag", null);
+            module.registerMethod("POSIX::Termios::_getcflag", "termios_getcflag", null);
+            module.registerMethod("POSIX::Termios::_getlflag", "termios_getlflag", null);
+            module.registerMethod("POSIX::Termios::_getcc", "termios_getcc", null);
+            module.registerMethod("POSIX::Termios::_setiflag", "termios_setiflag", null);
+            module.registerMethod("POSIX::Termios::_setoflag", "termios_setoflag", null);
+            module.registerMethod("POSIX::Termios::_setcflag", "termios_setcflag", null);
+            module.registerMethod("POSIX::Termios::_setlflag", "termios_setlflag", null);
+            module.registerMethod("POSIX::Termios::_setcc", "termios_setcc", null);
+            module.registerMethod("POSIX::Termios::_getispeed", "termios_getispeed", null);
+            module.registerMethod("POSIX::Termios::_getospeed", "termios_getospeed", null);
+            module.registerMethod("POSIX::Termios::_setispeed", "termios_setispeed", null);
+            module.registerMethod("POSIX::Termios::_setospeed", "termios_setospeed", null);
+
+            // Termios constants
+            module.registerMethod("_const_TCSANOW", "const_TCSANOW", null);
+            module.registerMethod("_const_TCSADRAIN", "const_TCSADRAIN", null);
+            module.registerMethod("_const_TCSAFLUSH", "const_TCSAFLUSH", null);
+            module.registerMethod("_const_ECHO", "const_ECHO", null);
+            module.registerMethod("_const_ECHOE", "const_ECHOE", null);
+            module.registerMethod("_const_ECHOK", "const_ECHOK", null);
+            module.registerMethod("_const_ECHONL", "const_ECHONL", null);
+            module.registerMethod("_const_ICANON", "const_ICANON", null);
+            module.registerMethod("_const_IEXTEN", "const_IEXTEN", null);
+            module.registerMethod("_const_ISIG", "const_ISIG", null);
+            module.registerMethod("_const_BRKINT", "const_BRKINT", null);
+            module.registerMethod("_const_ICRNL", "const_ICRNL", null);
+            module.registerMethod("_const_INPCK", "const_INPCK", null);
+            module.registerMethod("_const_ISTRIP", "const_ISTRIP", null);
+            module.registerMethod("_const_IXON", "const_IXON", null);
+            module.registerMethod("_const_OPOST", "const_OPOST", null);
+            module.registerMethod("_const_CS8", "const_CS8", null);
+            module.registerMethod("_const_CSIZE", "const_CSIZE", null);
+            module.registerMethod("_const_PARENB", "const_PARENB", null);
+            module.registerMethod("_const_VEOF", "const_VEOF", null);
+            module.registerMethod("_const_VEOL", "const_VEOL", null);
+            module.registerMethod("_const_VERASE", "const_VERASE", null);
+            module.registerMethod("_const_VINTR", "const_VINTR", null);
+            module.registerMethod("_const_VKILL", "const_VKILL", null);
+            module.registerMethod("_const_VMIN", "const_VMIN", null);
+            module.registerMethod("_const_VQUIT", "const_VQUIT", null);
+            module.registerMethod("_const_VSTART", "const_VSTART", null);
+            module.registerMethod("_const_VSTOP", "const_VSTOP", null);
+            module.registerMethod("_const_VSUSP", "const_VSUSP", null);
+            module.registerMethod("_const_VTIME", "const_VTIME", null);
+
             // Access constants
             module.registerMethod("_const_F_OK", "const_F_OK", null);
             module.registerMethod("_const_R_OK", "const_R_OK", null);
@@ -408,6 +465,439 @@ public class POSIX extends PerlModuleBase {
         }
         return new RuntimeScalar(msg).getList();
     }
+
+    /**
+     * POSIX::isatty($fd) - test whether a file descriptor refers to a terminal.
+     * Returns 1 if fd is a tty, 0 otherwise.
+     */
+    public static RuntimeList posix_isatty(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        int fd;
+        RuntimeScalar arg = args.get(0);
+        // Accept either a fd number or a filehandle (RuntimeIO)
+        if (arg.type == RuntimeScalarType.GLOB) {
+            RuntimeIO io = (RuntimeIO) arg.value;
+            fd = io.fileno().getInt();
+        } else {
+            fd = arg.getInt();
+        }
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int result = posix.isatty(fd);
+            return new RuntimeScalar(result != 0 ? 1 : 0).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    /**
+     * POSIX::setsid() - create a new session.
+     * Returns the new session ID on success, -1 on failure (sets $!).
+     */
+    public static RuntimeList posix_setsid(RuntimeArray args, int ctx) {
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int result = posix.setsid();
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set("Operation not permitted");
+                return new RuntimeScalar(-1).getList();
+            }
+            return new RuntimeScalar(result).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return new RuntimeScalar(-1).getList();
+        }
+    }
+
+    /**
+     * POSIX::ttyname($fd) - get terminal device name.
+     * Returns the device name string, or undef on failure.
+     */
+    public static RuntimeList posix_ttyname(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd;
+        RuntimeScalar arg = args.get(0);
+        if (arg.type == RuntimeScalarType.GLOB) {
+            RuntimeIO io = (RuntimeIO) arg.value;
+            fd = io.fileno().getInt();
+        } else {
+            fd = arg.getInt();
+        }
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            String name = posix.ttyname(fd);
+            if (name == null || name.isEmpty()) {
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(name).getList();
+        } catch (Exception e) {
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::dup($fd) - duplicate a file descriptor.
+     * Returns the new fd on success, undef on failure (sets $!).
+     */
+    public static RuntimeList dup(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int newFd = posix.nativeDup(fd);
+            if (newFd == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar(newFd == 0 ? "0 but true" : (Object) newFd).getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::close($fd) - close a file descriptor.
+     * Returns 1 on success, undef on failure (sets $!).
+     */
+    public static RuntimeList posix_close(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        int fd = args.get(0).getInt();
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int result = posix.nativeClose(fd);
+            if (result == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar("0 but true").getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // POSIX::Termios backend methods
+    // ---------------------------------------------------------------
+    // The termios state is stored as a byte[] in the Perl blessed hashref's
+    // "_data" key.  The byte array has TERMIOS_SIZE bytes matching the native
+    // struct termios layout for the current platform.
+
+    private static final boolean IS_MACOS_TERMIOS;
+    private static final int TERMIOS_SIZE;
+    // struct termios field offsets and sizes differ between macOS and Linux.
+    // macOS: fields are unsigned long (8 bytes); Linux: tcflag_t (4 bytes).
+    private static final int IFLAG_OFF;
+    private static final int OFLAG_OFF;
+    private static final int CFLAG_OFF;
+    private static final int LFLAG_OFF;
+    private static final int CC_OFF;
+    private static final int CC_LEN;
+    private static final int ISPEED_OFF; // macOS only
+    private static final int OSPEED_OFF; // macOS only
+    private static final int FLAG_SIZE;  // bytes per flag field (8 macOS, 4 Linux)
+
+    static {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        IS_MACOS_TERMIOS = os.contains("mac") || os.contains("darwin");
+        if (IS_MACOS_TERMIOS) {
+            TERMIOS_SIZE = 72;
+            IFLAG_OFF = 0;
+            OFLAG_OFF = 8;
+            CFLAG_OFF = 16;
+            LFLAG_OFF = 24;
+            CC_OFF = 32;
+            CC_LEN = 20;
+            ISPEED_OFF = 52;
+            OSPEED_OFF = 60;
+            FLAG_SIZE = 8;
+        } else {
+            TERMIOS_SIZE = 60;
+            IFLAG_OFF = 0;
+            OFLAG_OFF = 4;
+            CFLAG_OFF = 8;
+            LFLAG_OFF = 12;
+            CC_OFF = 17; // c_line is at 16 (1 byte), c_cc starts at 17
+            CC_LEN = 32;
+            ISPEED_OFF = -1; // not separate on Linux — stored in cflag
+            OSPEED_OFF = -1;
+            FLAG_SIZE = 4;
+        }
+    }
+
+    /**
+     * POSIX::Termios::_new() — allocate a zeroed termios buffer and return it
+     * as a string (byte buffer packed in a scalar).
+     */
+    public static RuntimeList termios_new(RuntimeArray args, int ctx) {
+        byte[] buf = new byte[TERMIOS_SIZE];
+        return new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)).getList();
+    }
+
+    /**
+     * POSIX::Termios::_getattr($self, $fd) — call tcgetattr and fill the buffer.
+     * $self is the byte-string scalar stored in the blessed hash.
+     */
+    public static RuntimeList termios_getattr(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        String datStr = args.get(0).toString();
+        int fd = args.get(1).getInt();
+        byte[] buf = datStr.length() >= TERMIOS_SIZE
+                ? datStr.substring(0, TERMIOS_SIZE).getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)
+                : new byte[TERMIOS_SIZE];
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int rc = posix.tcgetattr(fd, buf);
+            if (rc == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set("Not a typewriter");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            // Return the updated buffer as a byte string + "0 but true"
+            RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+            result.add(new RuntimeScalar("0 but true"));
+            return result;
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    /**
+     * POSIX::Termios::_setattr($self, $fd, $action) — call tcsetattr.
+     */
+    public static RuntimeList termios_setattr(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad file descriptor");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        String datStr = args.get(0).toString();
+        int fd = args.get(1).getInt();
+        int action = args.get(2).getInt();
+        byte[] buf = datStr.length() >= TERMIOS_SIZE
+                ? datStr.substring(0, TERMIOS_SIZE).getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)
+                : new byte[TERMIOS_SIZE];
+        try {
+            FFMPosixInterface posix = FFMPosix.get();
+            int rc = posix.tcsetattr(fd, action, buf);
+            if (rc == -1) {
+                GlobalVariable.getGlobalVariable("main::!").set("Not a typewriter");
+                return RuntimeScalarCache.scalarUndef.getList();
+            }
+            return new RuntimeScalar("0 but true").getList();
+        } catch (Exception e) {
+            GlobalVariable.getGlobalVariable("main::!").set(e.getMessage());
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+    }
+
+    // Helper: read a flag field from the byte buffer
+    private static long getFlag(byte[] buf, int offset) {
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+        if (FLAG_SIZE == 8) {
+            return bb.getLong(offset);
+        } else {
+            return Integer.toUnsignedLong(bb.getInt(offset));
+        }
+    }
+
+    // Helper: write a flag field to the byte buffer
+    private static void setFlag(byte[] buf, int offset, long value) {
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+        if (FLAG_SIZE == 8) {
+            bb.putLong(offset, value);
+        } else {
+            bb.putInt(offset, (int) value);
+        }
+    }
+
+    public static RuntimeList termios_getiflag(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        return new RuntimeScalar(getFlag(buf, IFLAG_OFF)).getList();
+    }
+
+    public static RuntimeList termios_getoflag(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        return new RuntimeScalar(getFlag(buf, OFLAG_OFF)).getList();
+    }
+
+    public static RuntimeList termios_getcflag(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        return new RuntimeScalar(getFlag(buf, CFLAG_OFF)).getList();
+    }
+
+    public static RuntimeList termios_getlflag(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        return new RuntimeScalar(getFlag(buf, LFLAG_OFF)).getList();
+    }
+
+    public static RuntimeList termios_getcc(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        int idx = args.get(1).getInt();
+        if (idx < 0 || idx >= CC_LEN) return RuntimeScalarCache.scalarUndef.getList();
+        return new RuntimeScalar(buf[CC_OFF + idx] & 0xFF).getList();
+    }
+
+    public static RuntimeList termios_setiflag(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        setFlag(buf, IFLAG_OFF, args.get(1).getLong());
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_setoflag(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        setFlag(buf, OFLAG_OFF, args.get(1).getLong());
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_setcflag(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        setFlag(buf, CFLAG_OFF, args.get(1).getLong());
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_setlflag(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        setFlag(buf, LFLAG_OFF, args.get(1).getLong());
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_setcc(RuntimeArray args, int ctx) {
+        if (args.size() < 3) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        int idx = args.get(1).getInt();
+        int val = args.get(2).getInt();
+        if (idx < 0 || idx >= CC_LEN) return RuntimeScalarCache.scalarUndef.getList();
+        buf[CC_OFF + idx] = (byte) val;
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_getispeed(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        if (IS_MACOS_TERMIOS) {
+            java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+            return new RuntimeScalar(bb.getLong(ISPEED_OFF)).getList();
+        }
+        // Linux: speed is encoded in cflag — extract with cfgetispeed equivalent
+        // For simplicity, return cflag & CBAUD mask
+        return new RuntimeScalar(getFlag(buf, CFLAG_OFF) & 0x100F).getList();
+    }
+
+    public static RuntimeList termios_getospeed(RuntimeArray args, int ctx) {
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        if (IS_MACOS_TERMIOS) {
+            java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+            return new RuntimeScalar(bb.getLong(OSPEED_OFF)).getList();
+        }
+        return new RuntimeScalar(getFlag(buf, CFLAG_OFF) & 0x100F).getList();
+    }
+
+    public static RuntimeList termios_setispeed(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        long speed = args.get(1).getLong();
+        if (IS_MACOS_TERMIOS) {
+            java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+            bb.putLong(ISPEED_OFF, speed);
+        }
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    public static RuntimeList termios_setospeed(RuntimeArray args, int ctx) {
+        if (args.size() < 2) return RuntimeScalarCache.scalarUndef.getList();
+        byte[] buf = args.get(0).toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        long speed = args.get(1).getLong();
+        if (IS_MACOS_TERMIOS) {
+            java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.nativeOrder());
+            bb.putLong(OSPEED_OFF, speed);
+        }
+        RuntimeList result = new RuntimeList();
+        result.add(new RuntimeScalar(new String(buf, java.nio.charset.StandardCharsets.ISO_8859_1)));
+        result.add(new RuntimeScalar("0 but true"));
+        return result;
+    }
+
+    // ---------------------------------------------------------------
+    // Termios constants (platform-specific)
+    // ---------------------------------------------------------------
+
+    public static RuntimeList const_TCSANOW(RuntimeArray a, int c)   { return new RuntimeScalar(0).getList(); }
+    public static RuntimeList const_TCSADRAIN(RuntimeArray a, int c)  { return new RuntimeScalar(1).getList(); }
+    public static RuntimeList const_TCSAFLUSH(RuntimeArray a, int c)  { return new RuntimeScalar(2).getList(); }
+
+    // c_lflag bits
+    public static RuntimeList const_ECHO(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000008L : 0x00000008L).getList(); }
+    public static RuntimeList const_ECHOE(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000002L : 0x00000010L).getList(); }
+    public static RuntimeList const_ECHOK(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000004L : 0x00000020L).getList(); }
+    public static RuntimeList const_ECHONL(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000010L : 0x00000040L).getList(); }
+    public static RuntimeList const_ICANON(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000100L : 0x00000002L).getList(); }
+    public static RuntimeList const_IEXTEN(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000400L : 0x00008000L).getList(); }
+    public static RuntimeList const_ISIG(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000080L : 0x00000001L).getList(); }
+
+    // c_iflag bits
+    public static RuntimeList const_BRKINT(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000002L : 0x00000002L).getList(); }
+    public static RuntimeList const_ICRNL(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000100L : 0x00000100L).getList(); }
+    public static RuntimeList const_INPCK(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000010L : 0x00000010L).getList(); }
+    public static RuntimeList const_ISTRIP(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000020L : 0x00000020L).getList(); }
+    public static RuntimeList const_IXON(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000200L : 0x00000400L).getList(); }
+
+    // c_oflag bits
+    public static RuntimeList const_OPOST(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000001L : 0x00000001L).getList(); }
+
+    // c_cflag bits
+    public static RuntimeList const_CS8(RuntimeArray a, int c)     { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000300L : 0x00000030L).getList(); }
+    public static RuntimeList const_CSIZE(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00000300L : 0x00000030L).getList(); }
+    public static RuntimeList const_PARENB(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0x00001000L : 0x00000100L).getList(); }
+
+    // c_cc indices
+    public static RuntimeList const_VEOF(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 0 : 4).getList(); }
+    public static RuntimeList const_VEOL(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 1 : 11).getList(); }
+    public static RuntimeList const_VERASE(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 3 : 2).getList(); }
+    public static RuntimeList const_VINTR(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 8 : 0).getList(); }
+    public static RuntimeList const_VKILL(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 5 : 3).getList(); }
+    public static RuntimeList const_VMIN(RuntimeArray a, int c)    { return new RuntimeScalar(IS_MACOS_TERMIOS ? 16 : 6).getList(); }
+    public static RuntimeList const_VQUIT(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 9 : 1).getList(); }
+    public static RuntimeList const_VSTART(RuntimeArray a, int c)  { return new RuntimeScalar(IS_MACOS_TERMIOS ? 12 : 8).getList(); }
+    public static RuntimeList const_VSTOP(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 13 : 9).getList(); }
+    public static RuntimeList const_VSUSP(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 10 : 10).getList(); }
+    public static RuntimeList const_VTIME(RuntimeArray a, int c)   { return new RuntimeScalar(IS_MACOS_TERMIOS ? 17 : 5).getList(); }
 
     /**
      * POSIX access() - check file accessibility.
