@@ -70,8 +70,15 @@ package B::SV {
         # This enables DBIC's Schema::DESTROY self-save mechanism (checks
         # refcount > 1 to detect if someone else still holds a reference)
         # and the leak tracer (checks if objects have been properly released).
+        #
+        # Subtract 1 for tracked objects (rc > 1) because this B::SV object's
+        # {ref} hash slot holds a cooperative reference that inflates the
+        # referent's refcount by 1. In Perl 5, B::SV holds a raw C pointer
+        # without incrementing REFCNT. For untracked objects (rc <= 1) the
+        # count is a hardcoded default that isn't inflated, so return as-is.
         my $self = shift;
-        return Internals::SvREFCNT($self->{ref});
+        my $rc = Internals::SvREFCNT($self->{ref});
+        return $rc > 1 ? $rc - 1 : $rc;
     }
 
     sub RV {

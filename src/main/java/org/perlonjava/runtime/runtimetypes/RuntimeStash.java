@@ -198,6 +198,29 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalIORefs.remove(fullKey);
         GlobalVariable.globalFormatRefs.remove(fullKey);
 
+        // Clear weak refs when a reference-holding scalar is deleted from the stash.
+        // In Perl 5, removing a global variable drops the strong reference to its referent.
+        // If the referent's only strong ref was the global, its refcount reaches 0, the
+        // referent is freed, and all weak refs to it become undef. In PerlOnJava, the
+        // JVM keeps the referent alive, so we must manually clear weak refs.
+        // This is critical for Class::Unload + DBIC AccessorGroup reload pattern.
+        if (savedScalar != null && (savedScalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && savedScalar.value instanceof RuntimeBase base) {
+            if (base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+                // Unblessed object with weak refs: clear all weak refs to it.
+                // Safe because unblessed objects have no DESTROY side effects.
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            } else if (base.refCount > 0 && savedScalar.refCountOwned) {
+                // Tracked object: decrement refCount (the stash was holding a strong ref).
+                savedScalar.refCountOwned = false;
+                if (--base.refCount == 0) {
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
+            }
+        }
+
         // Removing symbols from a stash can affect method lookup.
         InheritanceResolver.invalidateCache();
 
