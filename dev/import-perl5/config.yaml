@@ -788,6 +788,13 @@ imports:
       - perlvos.pod
       - perlwin32.pod
 
+  # diagnostics - Verbose warning/error diagnostics using perldiag
+  # Required by Math::Base::Convert t/overload.t and other CPAN test suites
+  # Protected: has PerlOnJava-specific patch to search @INC for perldiag.pod
+  - source: perl5/lib/diagnostics.pm
+    target: src/main/perl/lib/diagnostics.pm
+    protected: true
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm
