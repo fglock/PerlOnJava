@@ -31,6 +31,16 @@ public class DestroyDispatch {
     static volatile RuntimeBase currentDestroyTarget = null;
     static volatile boolean destroyTargetRescued = false;
 
+    // Rescued objects whose weak refs need deferred clearing.
+    // We cannot clear weak refs immediately after rescue because that would also
+    // clear back-references from sibling objects (e.g., $source->{schema}) that
+    // are still needed during the test. Instead, we collect rescued objects here
+    // and clear their weak refs (with a deep sweep into nested blessed objects)
+    // just before END blocks run, when all test code has finished and the
+    // back-references are no longer needed.
+    private static final java.util.List<RuntimeBase> rescuedObjects =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
     /**
      * Check whether the class identified by blessId defines DESTROY (or AUTOLOAD).
      * Result is cached in the destroyClasses BitSet.
@@ -193,15 +203,33 @@ public class DestroyDispatch {
 
             // Check if DESTROY rescued the object by storing $self somewhere.
             // If destroyTargetRescued was set during DESTROY (detected by
-            // RuntimeScalar.set), the object should survive — skip cascade.
+            // RuntimeScalar.setLargeRefCounted when the old value was a weak ref
+            // to currentDestroyTarget being overwritten by a strong ref to the
+            // same target), the object should survive — skip cascade cleanup.
+            //
+            // Example: Schema::DESTROY re-attaches itself to a ResultSource via
+            //   $source->{schema} = $self
+            // This triggers rescue detection because the old value ($source->{schema},
+            // a weak ref to Schema) is being replaced by a strong ref to Schema.
             if (destroyTargetRescued) {
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
-                // Mark as untracked (-1) so cooperative refcounting won't trigger
-                // DESTROY again. The JVM GC will handle final cleanup.
-                // Setting to 1 instead would cause infinite DESTROY loops because
-                // the temporary reference that triggered DESTROY is already gone,
-                // so refCount would immediately drop back to 0.
+                //
+                // We CANNOT call clearWeakRefsTo() here because it would also clear
+                // back-references from other sources ($source->{schema}) that are
+                // still needed. Schema::DESTROY only re-attaches to ONE source;
+                // the others still have their original weak refs to Schema.
+                // Clearing those causes "detached result source" errors.
+                //
+                // Instead, add to rescuedObjects list for deferred clearing.
+                // clearRescuedWeakRefs() will clear weak refs (with deep sweep)
+                // before END blocks run, when the back-references are no longer needed.
+                rescuedObjects.add(referent);
                 referent.refCount = -1;
+
+                // Skip cascade — the rescued object's internal fields (Storage,
+                // DBI::db, ResultSources) must remain intact because the object
+                // is still alive and may be accessed later via
+                // $rs->result_source->schema->storage.
                 return;
             }
 
@@ -242,6 +270,85 @@ public class DestroyDispatch {
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;
             dollarAt.value = savedDollarAt.value;
+        }
+    }
+
+    /**
+     * Clear weak refs for all objects that were rescued by DESTROY.
+     * Called by MortalList.flushDeferredCaptures() before END blocks run.
+     * <p>
+     * This deferred approach is necessary because clearing weak refs immediately
+     * after rescue would destroy back-references from sibling objects that are
+     * still needed (e.g., other ResultSources' $source->{schema} weak refs).
+     * By deferring until just before END blocks, all test code has finished
+     * executing and the back-references are no longer needed.
+     * <p>
+     * For each rescued object:
+     * 1. Clear its own weak refs (for DBIC's leak tracer registry)
+     * 2. Deep-sweep its hash contents for nested blessed objects (Storage, DBI::db)
+     *    and clear their weak refs too
+     */
+    public static void clearRescuedWeakRefs() {
+        if (rescuedObjects.isEmpty()) return;
+        java.util.List<RuntimeBase> snapshot;
+        synchronized (rescuedObjects) {
+            snapshot = new java.util.ArrayList<>(rescuedObjects);
+            rescuedObjects.clear();
+        }
+        for (RuntimeBase rescued : snapshot) {
+            WeakRefRegistry.clearWeakRefsTo(rescued);
+            if (rescued instanceof RuntimeHash hash) {
+                deepClearWeakRefs(hash);
+            }
+        }
+    }
+
+    /**
+     * Recursively walk a hash's values and clear weak refs for any blessed
+     * objects found, including nested hashes and arrays. This is used after
+     * DESTROY rescue to clear weak refs for objects contained inside the
+     * rescued object (e.g., Storage::DBI and DBI::db inside a Schema hash).
+     * <p>
+     * Unlike {@link MortalList#scopeExitCleanupHash}, this method does NOT
+     * decrement refcounts or trigger DESTROY on the found objects. It only
+     * clears weak refs. This is critical because the rescued object is still
+     * alive and its internals must remain intact for future use.
+     * <p>
+     * Uses a depth limit to avoid infinite recursion on circular references
+     * (which are common in DBIC — Schema → Storage → DBI::db → Schema).
+     *
+     * @param hash The hash to walk
+     */
+    private static void deepClearWeakRefs(RuntimeHash hash) {
+        deepClearWeakRefsImpl(hash, 5);
+    }
+
+    /**
+     * Implementation of deep weak-ref clearing with depth limit.
+     *
+     * @param hash     The hash to walk
+     * @param maxDepth Maximum recursion depth (prevents infinite loops on circular refs)
+     */
+    private static void deepClearWeakRefsImpl(RuntimeHash hash, int maxDepth) {
+        if (maxDepth <= 0) return;
+        for (RuntimeScalar val : hash.elements.values()) {
+            // Check for any reference type (REFERENCE, HASHREFERENCE, ARRAYREFERENCE, etc.)
+            // using the REFERENCE_BIT flag. A blessed hash stored as $schema->{storage}
+            // may have type HASHREFERENCE rather than plain REFERENCE.
+            if ((val.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && val.value instanceof RuntimeBase base) {
+                // Clear weak refs for this blessed object (e.g., Storage::DBI, DBI::db).
+                // Only clear if the object is blessed (blessId != 0) to avoid clearing
+                // weak refs for plain unblessed containers that might be shared.
+                if (base.blessId != 0) {
+                    WeakRefRegistry.clearWeakRefsTo(base);
+                }
+                // Recurse into nested hashes to find deeper blessed objects
+                // (e.g., Schema → {storage} → Storage → {_dbh} → DBI::db)
+                if (base instanceof RuntimeHash nestedHash) {
+                    deepClearWeakRefsImpl(nestedHash, maxDepth - 1);
+                }
+            }
         }
     }
 }

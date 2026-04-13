@@ -83,6 +83,13 @@ public class MortalList {
         }
         deferredCaptures.clear();
         flush();
+
+        // After flushing deferred captures, clear weak refs for objects that
+        // were rescued by DESTROY (e.g., Schema::DESTROY self-save pattern).
+        // This must happen AFTER the flush above so that all pending refCount
+        // decrements have been processed, and BEFORE END blocks run so that
+        // DBIC's assert_empty_weakregistry sees the weak refs as undef.
+        DestroyDispatch.clearRescuedWeakRefs();
     }
 
     /**
