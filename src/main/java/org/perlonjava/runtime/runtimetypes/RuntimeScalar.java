@@ -1828,6 +1828,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1839,6 +1845,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
+                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
+                    // actual global glob so that operations like tie *{select()}, 'Class'
+                    // affect the real handle, not a temporary copy.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1881,6 +1896,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1892,6 +1913,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
+                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
+                    // actual global glob so that operations like tie *{select()}, 'Class'
+                    // affect the real handle, not a temporary copy.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
