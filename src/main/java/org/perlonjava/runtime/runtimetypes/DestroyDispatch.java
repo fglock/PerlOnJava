@@ -82,11 +82,13 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
-        // Perl 5 semantics: if DESTROY was already called for this object (it was
-        // resurrected/rescued and its refCount reached 0 again), do NOT call DESTROY
-        // a second time. Just clear weak refs and cascade into elements.
-        // This matches Perl 5's SvDESTROYED flag behavior and prevents infinite
-        // DESTROY cycles from self-referential patterns like Schema::DESTROY.
+        // Perl 5 semantics: DESTROY CAN be called multiple times for resurrected
+        // objects. However, in PerlOnJava, cooperative refCount inflation means
+        // rescue detection fires more broadly than in Perl 5, so we keep
+        // destroyFired=true after rescue to prevent infinite loops.
+        // The destroyFired flag acts as a one-shot guard: once DESTROY has fired,
+        // subsequent callDestroy invocations just do cleanup (weak ref clearing +
+        // cascade) without re-calling the Perl DESTROY method.
         if (referent.destroyFired) {
             WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
@@ -140,8 +142,11 @@ public class DestroyDispatch {
      * Perform the actual DESTROY method call.
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
-        // Mark as destroyed before running DESTROY. Perl 5 semantics:
-        // DESTROY is never called twice for the same object (SvDESTROYED flag).
+        // Mark as destroyed before running DESTROY — one-shot guard.
+        // Prevents re-entrant DESTROY if cascading cleanup brings this
+        // object's refCount to 0 again within the same call stack.
+        // Also prevents infinite DESTROY loops for rescued objects
+        // (destroyFired stays true after rescue — see note in rescue path).
         referent.destroyFired = true;
 
         // Use cached method if available
@@ -238,10 +243,17 @@ public class DestroyDispatch {
                 // refCount has been properly set by setLargeRefCounted during
                 // rescue detection (MIN_VALUE → 1). The rescuing scalar has
                 // refCountOwned=true, so when the rescuing reference is eventually
-                // released (e.g., source goes out of scope at end of DESTROY),
-                // cascading cleanup will bring refCount back to 0. At that point,
-                // callDestroy fires again but destroyFired=true prevents re-running
-                // DESTROY; just weak ref clearing + cascade happens.
+                // released, cascading cleanup will bring refCount back to 0.
+                //
+                // NOTE: We do NOT reset destroyFired here. In Perl 5, DESTROY
+                // can fire multiple times for resurrected objects. However, in
+                // PerlOnJava, cooperative refCount inflation means rescue detection
+                // fires even when no external reference exists (refcount() returns
+                // inflated values). Resetting destroyFired would cause an infinite
+                // DESTROY loop: Schema::DESTROY always sees refcount($source) > 1
+                // (inflated), always rescues, and DESTROY fires again endlessly.
+                // Keeping destroyFired=true ensures DESTROY fires exactly once.
+                // The clearAllBlessedWeakRefs sweep at exit handles final cleanup.
                 //
                 // Don't clear weak refs here — the rescued object is still alive,
                 // and other sources may still have weak refs to it that need to
