@@ -390,6 +390,48 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Retrieves a value by key, always returning a RuntimeHashProxyEntry.
+     * Used by {@code local $hash{key}} to ensure the save/restore mechanism
+     * can survive hash reassignment ({@code %hash = (...)}), which clears
+     * {@code elements} and creates new RuntimeScalar objects. The proxy
+     * holds parent + key references so {@code dynamicRestoreState()} can
+     * write back to the hash by key instead of through a stale lvalue pointer.
+     *
+     * @param key The string key for the hash entry.
+     * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
+     */
+    public RuntimeScalar getForLocal(String key) {
+        RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key);
+        RuntimeScalar existing = elements.get(key);
+        if (existing != null) {
+            proxy.initLvalue(existing);
+        }
+        return proxy;
+    }
+
+    /**
+     * Retrieves a value by key, always returning a RuntimeHashProxyEntry.
+     * Used by {@code local $hash{key}} to ensure the save/restore mechanism
+     * can survive hash reassignment ({@code %hash = (...)}), which clears
+     * {@code elements} and creates new RuntimeScalar objects. The proxy
+     * holds parent + key references so {@code dynamicRestoreState()} can
+     * write back to the hash by key instead of through a stale lvalue pointer.
+     *
+     * @param keyScalar The RuntimeScalar representing the key for the hash entry.
+     * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
+     */
+    public RuntimeScalar getForLocal(RuntimeScalar keyScalar) {
+        String key = keyScalar.toString();
+        boolean isByteKey = keyScalar.type == BYTE_STRING;
+        RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key, isByteKey);
+        RuntimeScalar existing = elements.get(key);
+        if (existing != null) {
+            proxy.initLvalue(existing);
+        }
+        return proxy;
+    }
+
+    /**
      * Retrieves a value by key.
      *
      * @param keyScalar The RuntimeScalar representing the key for the hash entry.

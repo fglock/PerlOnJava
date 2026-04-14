@@ -3935,6 +3935,10 @@ public class BytecodeCompiler implements Visitor {
             // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
             if (node.operand instanceof BinaryOperatorNode binOp) {
                 compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                // Patch HASH_GET → HASH_GET_FOR_LOCAL so that local $hash{key}
+                // always gets a RuntimeHashProxyEntry (not a bare scalar).
+                // This ensures the save/restore mechanism can survive hash reassignment.
+                patchLastHashGetForLocal();
                 int elemReg = lastResultReg;
                 emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 emitReg(elemReg);
@@ -4650,6 +4654,35 @@ public class BytecodeCompiler implements Visitor {
 
     void emit(int value) {
         bytecode.add(value);
+    }
+
+    /**
+     * Scan backwards through emitted bytecode and patch the last HASH_GET
+     * to HASH_GET_FOR_LOCAL. Called after compiling hash element access
+     * in 'local' context so that the result is always a RuntimeHashProxyEntry.
+     * Safe to call even if no HASH_GET was emitted (e.g., for local $array[i]).
+     */
+    void patchLastHashGetForLocal() {
+        // HASH_GET format: HASH_GET rd hashReg keyReg (4 slots total)
+        // Scan backwards looking for a HASH_GET opcode
+        for (int i = bytecode.size() - 1; i >= 0; i--) {
+            int val = bytecode.get(i);
+            if (val == Opcodes.HASH_GET) {
+                bytecode.set(i, (int) Opcodes.HASH_GET_FOR_LOCAL);
+                return;
+            }
+            // Also patch superoperators for arrow hash dereference ($ref->{key})
+            if (val == Opcodes.HASH_DEREF_FETCH) {
+                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_FOR_LOCAL);
+                return;
+            }
+            if (val == Opcodes.HASH_DEREF_FETCH_NONSTRICT) {
+                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL);
+                return;
+            }
+            // Don't scan too far back — the HASH_GET should be very recent
+            if (bytecode.size() - i > 20) return;
+        }
     }
 
     void emitInt(int value) {

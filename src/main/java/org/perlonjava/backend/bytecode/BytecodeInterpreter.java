@@ -907,6 +907,18 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_GET_FOR_LOCAL -> {
+                                // Like HASH_GET but always returns a RuntimeHashProxyEntry.
+                                // Used by local $hash{key} so the proxy can re-resolve
+                                // the key in the parent hash on restore (survives %hash = (...)).
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyReg = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                                registers[rd] = hash.getForLocal(key);
+                            }
+
                             case Opcodes.HASH_SET -> {
                                 pc = InlineOpcodeHandler.executeHashSet(bytecode, pc, registers);
                             }
@@ -2066,6 +2078,47 @@ public class BytecodeInterpreter {
                                 // Get the element using string key from pool
                                 String key = code.stringPool[keyIdx];
                                 registers[rd] = hash.get(key);
+                            }
+
+                            case Opcodes.HASH_DEREF_FETCH_FOR_LOCAL -> {
+                                // Like HASH_DEREF_FETCH but returns a RuntimeHashProxyEntry for local() context.
+                                // Format: HASH_DEREF_FETCH_FOR_LOCAL rd hashref_reg key_string_idx
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDeref();
+                                }
+
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.getForLocal(key);
+                            }
+
+                            case Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL -> {
+                                // Like HASH_DEREF_FETCH_NONSTRICT but returns a RuntimeHashProxyEntry for local() context.
+                                // Format: HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL rd hashref_reg key_string_idx pkg_string_idx
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+                                int pkgIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDerefNonStrict(code.stringPool[pkgIdx]);
+                                }
+
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.getForLocal(key);
                             }
 
                             case Opcodes.ARRAY_DEREF_FETCH_NONSTRICT -> {

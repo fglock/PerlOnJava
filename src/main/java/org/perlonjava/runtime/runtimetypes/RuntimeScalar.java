@@ -1314,6 +1314,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return this.hashDerefNonStrict(packageName).get(index);
     }
 
+    // Method to implement `local $v->{key}` - returns a proxy that survives hash reassignment
+    public RuntimeScalar hashDerefGetForLocal(RuntimeScalar index) {
+        return this.hashDeref().getForLocal(index);
+    }
+
+    // Method to implement `local $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefGetForLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).getForLocal(index);
+    }
+
     // Method to implement `delete $v->{key}`
     public RuntimeScalar hashDerefDelete(RuntimeScalar index) {
         return this.hashDeref().delete(index);

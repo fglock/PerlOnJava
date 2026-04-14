@@ -2342,11 +2342,13 @@ public class Disassemble {
                     // SUPEROPERATORS
                     // =================================================================
 
-                    case Opcodes.HASH_DEREF_FETCH: {
+                    case Opcodes.HASH_DEREF_FETCH: 
+                    case Opcodes.HASH_DEREF_FETCH_FOR_LOCAL: {
                         rd = interpretedCode.bytecode[pc++];
                         int hashrefReg = interpretedCode.bytecode[pc++];
                         int keyIdx = interpretedCode.bytecode[pc++];
-                        sb.append("HASH_DEREF_FETCH r").append(rd)
+                        sb.append(opcode == Opcodes.HASH_DEREF_FETCH ? "HASH_DEREF_FETCH" : "HASH_DEREF_FETCH_FOR_LOCAL");
+                        sb.append(" r").append(rd)
                                 .append(" = r").append(hashrefReg).append("->{\"");
                         if (interpretedCode.stringPool != null && keyIdx < interpretedCode.stringPool.length) {
                             sb.append(interpretedCode.stringPool[keyIdx]);
@@ -2365,12 +2367,14 @@ public class Disassemble {
                         break;
                     }
 
-                    case Opcodes.HASH_DEREF_FETCH_NONSTRICT: {
+                    case Opcodes.HASH_DEREF_FETCH_NONSTRICT:
+                    case Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL: {
                         rd = interpretedCode.bytecode[pc++];
                         int hashrefReg = interpretedCode.bytecode[pc++];
                         int keyIdx = interpretedCode.bytecode[pc++];
                         int pkgIdxH = interpretedCode.bytecode[pc++];
-                        sb.append("HASH_DEREF_FETCH_NONSTRICT r").append(rd)
+                        sb.append(opcode == Opcodes.HASH_DEREF_FETCH_NONSTRICT ? "HASH_DEREF_FETCH_NONSTRICT" : "HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL");
+                        sb.append(" r").append(rd)
                                 .append(" = r").append(hashrefReg).append("->{\"");
                         if (interpretedCode.stringPool != null && keyIdx < interpretedCode.stringPool.length) {
                             sb.append(interpretedCode.stringPool[keyIdx]);
