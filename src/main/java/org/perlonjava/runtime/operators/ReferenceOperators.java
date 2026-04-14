@@ -63,6 +63,28 @@ public class ReferenceOperators {
                 // Always activate tracking for blessed objects. Even without
                 // DESTROY, we need cascading cleanup of hash/array elements
                 // (e.g., Moo objects like BlockRunner that hold strong refs).
+
+                // Retroactively count references stored in existing elements.
+                // When the hash/array was created (e.g., bless { key => $ref }),
+                // elements were stored while the container was untracked
+                // (refCount == -1). Those stores did NOT increment referents'
+                // refCounts. Now that we're transitioning to tracked, we must
+                // count these as strong references so scopeExitCleanupHash
+                // correctly decrements them when the container is destroyed.
+                // Without this, references stored before bless are invisible to
+                // cooperative refcounting, causing premature destruction of
+                // objects held only by this container (e.g., DBIC ResultSource
+                // held by a ResultSet's {result_source} hash element).
+                if (referent instanceof RuntimeHash hash) {
+                    for (RuntimeScalar elem : hash.elements.values()) {
+                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                    }
+                } else if (referent instanceof RuntimeArray arr) {
+                    for (RuntimeScalar elem : arr.elements) {
+                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                    }
+                }
+
                 if (wasAlreadyBlessed) {
                     // Re-bless from untracked class: the scalar being blessed
                     // already holds a reference that was never counted (because

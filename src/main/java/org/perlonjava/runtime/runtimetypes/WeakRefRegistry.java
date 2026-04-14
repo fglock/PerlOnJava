@@ -69,8 +69,16 @@ public class WeakRefRegistry {
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
 
-        if (base.refCount > 0) {
-            // Tracked object: decrement strong count (weak ref doesn't count).
+        if (base.refCount > 0 && ref.refCountOwned) {
+            // Tracked object with a properly-counted reference:
+            // decrement strong count (weak ref doesn't count).
+            // Only decrement if refCountOwned=true, meaning the hash element
+            // or variable's creation incremented the referent's refCount via
+            // setLargeRefCounted or incrementRefCountForContainerStore.
+            // If refCountOwned=false (e.g., element in an untracked anonymous
+            // hash like `{ weakref => $target }`), the store never incremented
+            // refCount, so weaken must not decrement either — otherwise we
+            // get a double-decrement that causes premature destruction.
             // Clear refCountOwned because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;

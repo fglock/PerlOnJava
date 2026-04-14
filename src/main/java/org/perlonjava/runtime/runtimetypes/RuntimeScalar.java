@@ -1030,6 +1030,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // back to 0 and triggers weak ref clearing. Without this, the rescued
             // object stays untracked (-1) and weak refs are never cleared, causing
             // leak detection failures (DBIC t/52leaks.t tests 12-20).
+            //
+            // Set to 1: the rescue container's single counted reference.
+            // When the rescue source dies and DESTROY weakens source->{schema},
+            // refCount goes 1→0→callDestroy. That callDestroy is intercepted by
+            // the rescuedObjects check in callDestroy's destroyFired path (no
+            // clearWeakRefsTo or cascade), keeping Schema's internals intact.
+            // Proper cleanup happens at END time via clearRescuedWeakRefs.
             if (base.refCount == Integer.MIN_VALUE) {
                 base.refCount = 1;
             } else if (base.refCount >= 0) {

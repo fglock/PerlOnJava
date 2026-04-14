@@ -62,21 +62,29 @@ package B::SV {
 
     sub REFCNT {
         # Return the cooperative refcount via Internals::SvREFCNT.
-        # This enables DBIC's Schema::DESTROY self-save mechanism (checks
-        # refcount > 1 to detect if someone else still holds a reference)
-        # and the leak tracer (checks if objects have been properly released).
         #
-        # We return the raw cooperative refcount WITHOUT subtracting the
-        # B::SV {ref} hash slot's contribution (+1). In Perl 5, B::SV holds
-        # a raw C pointer that doesn't inflate REFCNT. In PerlOnJava, the
-        # hash slot does inflate cooperative refcount by +1. However, this
-        # inflation serves as a useful bias: PerlOnJava's cooperative refcount
-        # is systematically lower than Perl 5's SV refcount because it doesn't
-        # count return-value temporaries, JVM stack copies, or @_ aliases.
-        # The B::SV hash slot's +1 partially compensates for these missing
-        # counts, making refcount-based decisions (like DESTROY rescue)
-        # behave more like Perl 5.
-        return Internals::SvREFCNT($_[0]->{ref});
+        # In PerlOnJava, B::SV stores the reference in $self->{ref} which is
+        # a tracked (blessed) hash element. This inflates the referent's
+        # cooperative refCount by +1 via setLargeRefCounted.
+        #
+        # In Perl 5, B::svref_2object() stores the SV pointer directly (a C
+        # pointer), so it does NOT inflate the referent's refcnt. However,
+        # Perl 5 has higher refcounts overall because ALL references count
+        # (hash elements, stack temporaries, mortal slots). PerlOnJava's
+        # cooperative refCount is lower because:
+        #   1. Stack/JVM temporaries don't contribute
+        #   2. Method call argument copies don't contribute
+        #
+        # The B::SV inflation (+1) roughly compensates for these deficits,
+        # so we return the raw cooperative refCount WITHOUT subtracting 1.
+        #
+        # For Schema::DESTROY's `refcount($source) > 1` check:
+        #   - Source with 1 cooperative ref (e.g., source_registrations only):
+        #     B::SV inflation → 2, REFCNT = 2 → > 1 → rescue ✓
+        #     (In Perl 5 this source also shows > 1 because stack temps add refs)
+        #   - Source with 0 cooperative refs (untracked):
+        #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
+        Internals::SvREFCNT($_[0]->{ref});
     }
 
     sub RV {

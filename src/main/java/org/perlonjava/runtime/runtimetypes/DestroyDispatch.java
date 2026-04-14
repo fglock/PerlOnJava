@@ -90,6 +90,14 @@ public class DestroyDispatch {
         // subsequent callDestroy invocations just do cleanup (weak ref clearing +
         // cascade) without re-calling the Perl DESTROY method.
         if (referent.destroyFired) {
+            // If this object was rescued by DESTROY (e.g., Schema::DESTROY self-save)
+            // and is still in the rescuedObjects list, skip cleanup entirely. The weak
+            // refs and internal fields must remain intact because the phantom chain
+            // (or other code) may still access the object through its weak refs.
+            // Proper cleanup happens at END time via clearRescuedWeakRefs.
+            if (rescuedObjects.contains(referent)) {
+                return;
+            }
             WeakRefRegistry.clearWeakRefsTo(referent);
             if (referent instanceof RuntimeHash hash) {
                 MortalList.scopeExitCleanupHash(hash);
@@ -240,20 +248,17 @@ public class DestroyDispatch {
             if (destroyTargetRescued) {
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
                 //
-                // refCount has been properly set by setLargeRefCounted during
-                // rescue detection (MIN_VALUE → 1). The rescuing scalar has
-                // refCountOwned=true, so when the rescuing reference is eventually
-                // released, cascading cleanup will bring refCount back to 0.
+                // refCount has been set to 1 by setLargeRefCounted during rescue
+                // detection (MIN_VALUE → 1). This represents the rescue container's
+                // single counted reference (e.g., $source->{schema} = $self).
                 //
-                // NOTE: We do NOT reset destroyFired here. In Perl 5, DESTROY
-                // can fire multiple times for resurrected objects. However, in
-                // PerlOnJava, cooperative refCount inflation means rescue detection
-                // fires even when no external reference exists (refcount() returns
-                // inflated values). Resetting destroyFired would cause an infinite
-                // DESTROY loop: Schema::DESTROY always sees refcount($source) > 1
-                // (inflated), always rescues, and DESTROY fires again endlessly.
-                // Keeping destroyFired=true ensures DESTROY fires exactly once.
-                // The clearAllBlessedWeakRefs sweep at exit handles final cleanup.
+                // When the rescue source eventually dies and its DESTROY weakens
+                // source->{schema}, refCount goes 1→0→callDestroy. That callDestroy
+                // is intercepted by the rescuedObjects check (skip cleanup), keeping
+                // Schema's internals intact during the phantom chain. Proper cleanup
+                // happens later via processRescuedObjects at block scope exit.
+                //
+                // Keep destroyFired=true to prevent infinite DESTROY loops.
                 //
                 // Don't clear weak refs here — the rescued object is still alive,
                 // and other sources may still have weak refs to it that need to
@@ -262,6 +267,10 @@ public class DestroyDispatch {
                 // Don't cascade — the rescued object's internal fields (Storage,
                 // DBI::db, ResultSources) must remain intact because the object
                 // is still alive.
+                //
+                // Track rescued objects so clearRescuedWeakRefs can clean up
+                // at END time.
+                rescuedObjects.add(referent);
                 return;
             }
 
@@ -302,6 +311,51 @@ public class DestroyDispatch {
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;
             dollarAt.value = savedDollarAt.value;
+        }
+    }
+
+    /**
+     * Process rescued objects at block scope exit (called from {@link MortalList#popAndFlush}).
+     * <p>
+     * Rescued objects are kept alive during the scope where they were rescued (e.g., during
+     * the DBIC phantom chain). At block scope exit, we check if they are ready for cleanup:
+     * <ul>
+     *   <li>refCount == 1: The rescue container's counted reference is the only one left.
+     *       No code path holds a live reference to the object.</li>
+     *   <li>refCount == MIN_VALUE: The weaken cascade already brought refCount to 0, and
+     *       callDestroy was called but skipped because the object was in rescuedObjects.
+     *       The object is definitely dead and needs cleanup.</li>
+     * </ul>
+     * <p>
+     * For each such object, we remove it from rescuedObjects and call callDestroy, which
+     * (now that the object is no longer in rescuedObjects) will clear weak refs and cascade
+     * into elements. This ensures DBIC's leak tracer sees the weak refs as undef.
+     */
+    public static void processRescuedObjects() {
+        if (rescuedObjects.isEmpty()) return;
+        // Snapshot and clear to avoid ConcurrentModificationException
+        java.util.List<RuntimeBase> snapshot;
+        synchronized (rescuedObjects) {
+            snapshot = new java.util.ArrayList<>(rescuedObjects);
+            rescuedObjects.clear();
+        }
+        boolean anyProcessed = false;
+        for (RuntimeBase obj : snapshot) {
+            if (obj.destroyFired && (obj.refCount == 1 || obj.refCount == Integer.MIN_VALUE)) {
+                // Object is dead — either the rescue container was the only reference
+                // (refCount == 1), or the weaken cascade already triggered callDestroy
+                // which was skipped (refCount == MIN_VALUE). Clean up now.
+                obj.refCount = Integer.MIN_VALUE;
+                callDestroy(obj);  // destroyFired=true, NOT in rescuedObjects → clearWeakRefsTo + cascade
+                anyProcessed = true;
+            } else {
+                // Object still has external references or unexpected state.
+                // Keep tracking it for later processing.
+                rescuedObjects.add(obj);
+            }
+        }
+        if (anyProcessed) {
+            MortalList.flush();
         }
     }
 
