@@ -2,40 +2,32 @@
 
 ## Overview
 
-**Module**: DBIx::Class 0.082844
+**Module**: DBIx::Class 0.082844 (installed via `jcpan`)
 **Branch**: `feature/dbix-class-destroy-weaken`
 **PR**: https://github.com/fglock/PerlOnJava/pull/485
 
 ## IMPORTANT: Documentation Policy
 
 **Every code change MUST be documented with detailed comments explaining WHY the code
-exists.** This is a long-running project with many interacting subsystems. Future debuggers
-(including the original author) will forget the reasoning behind changes. Every non-trivial
-block should have a comment explaining:
-- What problem it solves
-- Why this approach was chosen over alternatives
-- What would break if the code were removed
+exists.** Every non-trivial block should explain: what problem it solves, why this
+approach was chosen, what would break if removed.
 
 ## Installation & Paths
-
-DBIx::Class is installed via `jcpan` (PerlOnJava's CPAN client):
 
 | Path | Contents |
 |------|----------|
 | `/Users/fglock/.perlonjava/lib/` | Installed modules (`@INC` entry) |
-| `/Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-NN/` | Build dirs with test files (NN = build number, use latest) |
-| `/Users/fglock/.perlonjava/lib/DBIx/ContextualFetch.pm` | Installed — needed for CDBI RootClass support |
+| `/Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-NN/` | Build dirs with test files (use latest NN) |
 
-**Note**: The build directory suffix increments with each `jcpan` install/test cycle.
-Use `ls /Users/fglock/.perlonjava/cpan/build/ | grep DBIx-Class | sort -t- -k5 -n | tail -1`
-to find the latest.
+Find latest build dir:
+```bash
+DBIC_BUILD=$(ls -d /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-* 2>/dev/null | grep -v yml | sort -t- -k5 -n | tail -1)
+```
 
 ## How to Run the Suite
 
 ```bash
 cd /Users/fglock/projects/PerlOnJava3 && make
-
-# Find latest build dir
 DBIC_BUILD=$(ls -d /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-* 2>/dev/null | grep -v yml | sort -t- -k5 -n | tail -1)
 cd "$DBIC_BUILD"
 JPERL=/Users/fglock/projects/PerlOnJava3/jperl
@@ -46,7 +38,6 @@ for t in t/*.t t/storage/*.t t/inflate/*.t t/multi_create/*.t t/prefetch/*.t \
     [ -f "$t" ] || continue
     timeout 120 "$JPERL" -Iblib/lib -Iblib/arch "$t" > /tmp/dbic_suite/$(echo "$t" | tr '/' '_' | sed 's/\.t$//').txt 2>&1
 done
-
 # Summary
 for f in /tmp/dbic_suite/*.txt; do
     ok=$(grep -c "^ok " "$f" 2>/dev/null); ok=${ok:-0}
@@ -57,316 +48,39 @@ done | sort
 
 ---
 
-## Current Test Results (2026-04-13, post Fix 9: DBI UTF-8 round-trip + ClosedIOHandle)
+## Current Test Results (2026-04-13)
 
 | Category | Count | Notes |
 |----------|-------|-------|
 | Total test files | **281** | |
 | Total assertions | **12,361 OK / 3 not-ok** (excl TODO) | **99.98% pass rate** |
-| GC-only failures | **0 files** | Eliminated by clearAllBlessedWeakRefs + exit path fix |
+| GC-only failures | **0 files** | Fixed by Fixes 1-4 |
 | TODO failures | **37 assertions** | Upstream expected failures |
-| Real PerlOnJava failures | **3 assertions** in 3 files | See breakdown below |
+| Real failures | **3 assertions** in 3 files | See below |
 
-### Real (Non-GC, Non-TODO) Failures
+### Remaining 3 Non-GC Failures
 
-| File | Failures | Root Cause | Fix |
-|------|----------|------------|-----|
-| t/cdbi/02-Film.t | 2 | DESTROY warning for dirty objects | DESTROY timing — see analysis below |
-| t/60core.t | 1 | Cached statement still Active | DESTROY timing for method-chain temporaries |
-| t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated | Non-debug mode, low priority |
-
----
-
-## Root Cause Analysis: GC Failures (176 files)
-
-### The Problem Chain
-
-DBIC's leak tracer registers every blessed object via `weaken()` in a "weak registry".
-At END time, `assert_empty_weakregistry` checks if weak refs are undef (object collected).
-In PerlOnJava, weak refs are strong Java references manually cleared by `clearWeakRefsTo()`.
-Three object types fail: `DBICTest::Schema`, `Storage::DBI::SQLite`, `DBI::db`.
-
-**Step-by-step failure path for Schema objects:**
-
-1. Schema created, blessed → cooperative refcount tracking starts (refCount >= 0)
-2. Scope exits → refCount reaches 0 → `callDestroy()` fires → `refCount = MIN_VALUE`
-3. Schema::DESTROY runs (Schema.pm:1428-1458):
-   ```perl
-   # "find first source not about to be GCed (someone else holds a ref)"
-   if (refcount($srcs->{$source_name}) > 1) {
-       $srcs->{$source_name}->schema($self);  # re-attach
-       weaken $srcs->{$source_name};
-       last;
-   }
-   ```
-4. **BUG**: `refcount()` calls `B::svref_2object($src)->REFCNT` → `Internals::SvREFCNT`
-   → returns **inflated** cooperative refcount (e.g., 4 instead of Perl 5's 1).
-   - Verified: Perl 5 shows `refcount = 1`, PerlOnJava shows `refcount = 4`
-   - Inflation comes from JVM temporaries, method-call argument copies, hash-element
-     tracking that increment cooperative refCount but aren't always decremented
-5. `4 > 1` → rescue triggers → Schema stores `$self` in source
-6. Rescue detected by `RuntimeScalar.setLargeRefCounted()` (checks if old value was
-   a ref to `currentDestroyTarget` being overwritten by strong ref to same target)
-7. Post-DESTROY: `refCount = -1` (untracked), `clearWeakRefsTo()` **skipped**,
-   cascade cleanup **skipped**
-8. Weak refs to Schema remain defined forever → GC test fails
-
-**For Storage and DBI::db objects:** Since Schema cascade was skipped (step 7),
-these objects' refcounts are never decremented. They stay alive with inflated
-refcounts. Their DESTROY never fires. Their weak refs are never cleared.
-
-### Why Rescue Detection Exists
-
-Without rescue detection, this pattern breaks:
-```perl
-my $rs = DBICTest->init_schema->resultset('FourKeys');
-# Schema is temporary — refcount drops to 0 — DESTROY fires
-# Schema::DESTROY re-attaches to a source so $rs can still work
-# Without rescue: clearWeakRefsTo + cascade destroys Schema internals
-# $rs then sees "detached result source" error
-```
-
-The rescue keeps Schema alive for temporary-Schema patterns. But by skipping
-`clearWeakRefsTo()`, it breaks GC tests.
-
-### The Fix: Clear Weak Refs After Rescue + Deep Sweep
-
-**Key insight**: `clearWeakRefsTo()` only sets Perl-level weak refs to undef.
-It does NOT free the Java object. The rescued Schema stays alive in JVM memory
-(held by the source's strong ref). So clearing weak refs is safe — it satisfies
-the GC test without affecting functionality.
+| File | Failures | Root Cause |
+|------|----------|------------|
+| t/cdbi/02-Film.t | 2 | DESTROY timing — dirty object warning doesn't fire at scope exit |
+| t/60core.t | 1 | Cached statement Active — cursor DESTROY doesn't fire for method-chain temporaries |
+| t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated in non-debug mode (low priority) |
 
 ---
 
-## Implementation Plan
+## Completed Fixes (1-9)
 
-### Fix 1: LIFO scope exit + clear weak refs after DESTROY rescue — COMPLETED
-
-**Commits**: `bca73bd5c` (LIFO ordering), `e02e0f95c` (rescue detection)
-
-**What was done**:
-- Changed `variableIndex` from `HashMap` to `LinkedHashMap` in `SymbolTable.java`
-  to preserve declaration order
-- Reversed per-scope iteration in `ScopedSymbolTable.java` for LIFO cleanup
-  (Third → Second → First, matching Perl 5)
-- Added DESTROY rescue detection in `RuntimeScalar.setLargeRefCounted()`
-
-### Fix 2: Deferred weak-ref clearing for rescued objects — COMPLETED
-
-**Commit**: `4eb76322c`
-
-**What was done**:
-- **Problem**: Immediate `clearWeakRefsTo(Schema)` after rescue also cleared
-  `$source->{schema}` weak back-references that sibling ResultSources still needed,
-  causing "detached result source" errors and a massive regression (176 GC-only failures)
-- **Solution**: Added `rescuedObjects` list in `DestroyDispatch.java`. Rescued objects
-  are collected and their weak refs (with deep sweep) cleared later via
-  `clearRescuedWeakRefs()` called from `MortalList.flushDeferredCaptures()` — after
-  main script returns but before END blocks
-- **Key insight**: Cannot clear weak refs immediately after rescue because Schema::DESTROY
-  only re-attaches to ONE source, but other sources still need their original weak refs
-  during test execution
-- **Files changed**: `DestroyDispatch.java`, `MortalList.java`
-
-**Result**: GC-only failures dropped from 176 files → 28 files (95.0% → 99.3% pass rate)
-
-### Fix 3: DBI `RootClass` attribute for CDBI compat — COMPLETED
-
-**Commit**: `7df81dc46`
-
-**Impact**: Fixed `select_row` error in t/cdbi/ tests (24-meta_info now passes).
-
-**Root cause**: DBI's `RootClass` attribute was ignored. All handles were hardcoded to
-`DBI::db` / `DBI::st`. CDBI compat sets `RootClass => 'DBIx::ContextualFetch'` which
-provides `select_row`, `select_hash`, etc.
-
-**What was done** (in `src/main/perl/lib/DBI.pm`):
-- In `connect` wrapper: if `$attr->{RootClass}`, re-bless `$dbh` into `"${RootClass}::db"`
-- In `prepare` wrapper: if `$dbh->{RootClass}`, re-bless `$sth` into `"${RootClass}::st"`
-- Store `$dbh->{RootClass}` for prepare to use
-- `DBIx::ContextualFetch` is installed at `/Users/fglock/.perlonjava/lib/DBIx/ContextualFetch.pm`
-
-### Fix 4: Clear ALL weak refs after script ends + exit path — COMPLETED
-
-**Commit**: `7df81dc46`
-
-**Impact**: Eliminated ALL remaining GC-only failures (from 28 → 0).
-
-**Two changes**:
-
-1. **`WeakRefRegistry.clearAllBlessedWeakRefs()`** — After `flushDeferredCaptures`, sweep
-   the entire weak ref registry and clear refs for all blessed non-CODE objects. At this
-   point the main script has returned. Objects with inflated cooperative refCounts (due to
-   JVM temporaries, method-call copies) may never reach refCount=0, so their DESTROY never
-   fires and weak refs persist. Clearing them is safe because only weak refs are cleared,
-   not the Java objects.
-
-2. **`MortalList.flushDeferredCaptures()` in `WarnDie.exit()`** — Tests using `plan skip_all`
-   call `exit(0)` which bypasses the normal cleanup in PerlLanguageProvider. Adding
-   flushDeferredCaptures to the exit path ensures deferred captures and the weak ref sweep
-   run for skipped tests too.
-
-**Files changed**: `WeakRefRegistry.java`, `MortalList.java`, `WarnDie.java`
-
-**Result**: 0 GC-only failures, 99.77% pass rate
-
-### Fix 5: Auto-finish cached statements (LOW PRIORITY)
-
-**Impact**: Fixes t/60core.t test 82 (1 failure).
-
-**Root cause**: Cursor DESTROY doesn't fire deterministically on JVM, so cached
-statement handles remain Active. Test checks `CachedKids` and fails for Active handles.
-
-**Fix**: In DBI.pm's `prepare_cached`, when reusing a cached sth that is Active,
-call `$sth->finish()` before returning. Standard DBI `if (3)` behavior.
-
-### Fix 6: next::method always uses C3 linearization — COMPLETED
-
-**Commit**: `beebccd69`
-
-**Impact**: Fixed **13 assertions** across **4 test files** that were previously failing.
-Pass rate improved from 99.77% to **99.88%**.
-
-**Fixed test files**:
-- `t/cdbi/23-cascade.t` — 2 → 0 failures (cascade delete now works)
-- `t/cdbi/09-has_many.t` — 1 → 0 failures (cascade delete)
-- `t/cdbi/14-might_have.t` — 1 → 0 failures (cascade delete)
-- `t/cdbi/columns_as_hashes.t` — 9 → 0 failures (tied hash column access works)
-
-**Root cause**: In Perl 5, `next::method` **always uses C3 linearization** regardless of
-the class's MRO setting (dfs or c3). PerlOnJava was using the class's configured MRO.
-
-This matters because CDBI test classes (`Film`, `Director`) use `use base 'DBIC::Test::SQLite'`
-which does NOT set c3 MRO (only `inject_base` does). So these classes have DFS MRO.
-With DFS, `ColumnGroups → Row` pulls `Row` into the linearization before `ColumnsAsHash`
-and `CascadeActions`, causing `next::method` chains to skip critical intermediate methods:
-
-- `Triggers::delete → CascadeActions::delete → Row::delete` — CascadeActions was skipped
-- `ColumnsAsHash::new` (which calls `_make_columns_as_hash`) — was never reached
-
-**What was done**:
-1. Added `InheritanceResolver.linearizeC3Always(className)` — always uses C3 regardless
-   of the class's per-package MRO setting, with separate cache key (`::__C3__`)
-2. Changed `NextMethod.java` to use `linearizeC3Always` instead of `linearizeHierarchy`
-
-**Files changed**: `InheritanceResolver.java`, `NextMethod.java`
-
-**Diagnostic proof** (Perl 5 vs PerlOnJava behavior confirmed identical):
-```perl
-# Film has DFS MRO, ColumnGroups ISA Row creates diamond
-# DFS: Triggers[4] → Row[5] → ColumnsAsHash[7] → CascadeActions[10]
-# C3:  Triggers[4] → ColumnsAsHash[5] → CascadeActions[8] → Row[9]
-# Perl 5 next::method always uses C3: Triggers->ColHash->Cascade->Row ✓
-```
-
-### Fix 7: Clear weak refs on stash delete + fix B::REFCNT inflation — COMPLETED
-
-**Commit**: `d6dd158da`
-
-**Impact**: Fixed **3 assertions** across **2 test files**. Pass rate improved from
-99.88% to **99.90%**.
-
-**Fixed test files**:
-- `t/storage/cursor.t` — 2 → 0 failures (Class::Unload reload works)
-- `t/storage/error.t` — 1 → 0 failures (weak ref cleared after schema freed)
-
-**Two changes**:
-
-1. **RuntimeStash.deleteGlob(): Clear weak refs on stash delete** — When a reference-
-   holding scalar is deleted from a stash, trigger weak ref clearing on the referent
-   if the stash was the only strong reference. This implements the Perl 5 behavior where
-   deleting a stash entry drops the strong reference to its referent, causing the referent
-   to be freed if no other strong refs exist, which in turn clears all weak refs to it.
-   Critical for the Class::Unload + DBIC AccessorGroup sentinel pattern.
-
-2. **B::SV::REFCNT: Subtract 1 for tracked objects** — PerlOnJava's B::SV stores the
-   reference in a hash slot (`$self->{ref}`), which inflates the cooperative refcount by 1
-   via `setLargeRefCounted`. In Perl 5, B::SV holds a raw C pointer without incrementing
-   REFCNT. Without this fix, `refcount()` in Schema::DESTROY sees sources with refcount=2
-   (instead of correct 1), incorrectly triggers the rescue path, and skips cascade cleanup.
-   This prevented Storage weak refs from being cleared when the schema was freed.
-
-**Files changed**: `RuntimeStash.java`, `B.pm`
-
-### Fix 8: DBI BYTE_STRING + utf8::decode conditional UTF-8 flag — COMPLETED
-
-**Commit**: `0a9ae9f0c`
-
-**Impact**: Fixed **6 assertions** in t/85utf8.t (8 → 2 failures + 1 crash).
-Pass rate improved from 99.90% to **99.95%**.
-
-**Two changes**:
-
-1. **DBI.java: Return BYTE_STRING for byte-representable strings** — In `fetchrow_arrayref`
-   and `fetchrow_hashref`, after creating a RuntimeScalar from a JDBC String value, check
-   if all characters are ≤ 0xFF. If so, downgrade the type from STRING to BYTE_STRING.
-   This matches Perl 5's DBD::SQLite (without `sqlite_unicode`) which returns byte strings.
-   Strings with chars > 0xFF (actual Unicode data) stay as STRING.
-
-2. **Utf8.java: Conditional UTF-8 flag in utf8::decode** — Per Perl 5 docs, `utf8::decode`
-   only sets the UTF-8 flag if the decoded string contains a multi-byte character (char > 0x7F).
-   For pure ASCII input, the flag stays off even though decoding succeeded. Previously,
-   PerlOnJava unconditionally set STRING type after decode.
-
-**Files changed**: `DBI.java`, `Utf8.java`
-
-### Fix 9: DBI UTF-8 round-trip + filehandle dup of closed handles — COMPLETED
-
-**Commit**: `c65974e16`
-
-**Impact**: Fixed **3 assertions + 1 crash** in t/85utf8.t AND all **12 assertions** in t/debug/core.t.
-Pass rate improved from 99.95% to **99.98%**.
-
-**Four changes**:
-
-1. **DBI.java fetchrow: UTF-8 encode JDBC strings** — Instead of just checking if chars
-   are ≤ 0xFF (Fix 8 approach), now properly UTF-8 encodes the JDBC Unicode string to get
-   raw bytes, then wraps as BYTE_STRING. This handles wide characters (> 0xFF) correctly:
-   ```
-   JDBC String "ș" (U+0219) → UTF-8 bytes [0xC8, 0x99] → BYTE_STRING "\xC8\x99"
-   ```
-   Matches Perl 5's DBD::SQLite (sqlite_unicode=0) behavior.
-
-2. **DBI.java toJdbcValue: UTF-8 decode BYTE_STRING** — When binding a BYTE_STRING
-   parameter, try to UTF-8 decode the bytes to recover the actual characters before
-   passing to JDBC. This creates a correct round-trip:
-   ```
-   INSERT: bytes → UTF-8 decode → chars → JDBC → SQLite
-   SELECT: SQLite → JDBC → chars → UTF-8 encode → bytes (same)
-   ```
-   Falls back to passing raw chars for non-UTF-8 byte strings (e.g., Latin-1).
-
-3. **DBI.java bind_param: Preserve BYTE_STRING type** — `bind_param()` was extracting the
-   raw `Object value = args.get(2).value` and creating `new RuntimeScalar(value)`, which
-   always set `type=STRING` for String values. This lost the BYTE_STRING type information
-   needed by `toJdbcValue()` for correct UTF-8 round-tripping. Now uses `set()` to copy
-   both type and value.
-
-4. **IOOperator.java: ClosedIOHandle check in filehandle dup** — `open($fh, '>&STDERR')`
-   on a closed STDERR now correctly returns undef with `$!="Bad file descriptor"`. Added
-   `instanceof ClosedIOHandle` checks to both `duplicateFileHandle()` and
-   `createBorrowedHandle()`. Without this, ClosedIOHandle was wrapped in DupIOHandle and
-   the open succeeded, breaking the "or die(...)" pattern.
-
-**Files changed**: `DBI.java`, `IOOperator.java`
-
----
-
-### Detailed Analysis of Remaining 3 Failures
-
-#### t/cdbi/02-Film.t tests 70-71 (2 failures) — DESTROY Timing
-- **Test 70**: Creates Film object with dirty columns, scope exit should trigger DESTROY
-  which warns about unsaved changes. But DESTROY doesn't fire at scope exit due to
-  inflated cooperative refCount from MRO method chain.
-- **Test 71**: Cascading failure — stale dirty object stays in LiveObjectIndex cache.
-
-#### t/60core.t test 82 (1 failure) — Cached Statement Active
-- After `$rs->next->cdid`, the temporary cursor's DESTROY doesn't fire because the
-  cursor is a method-chain temporary with no lexical storage.
-
-#### t/storage/txn_scope_guard.t test 18 (1 failure) — @DB::args
-- `@DB::args` not populated in non-debug mode. Expected warning about "Preventing
-  *MULTIPLE* DESTROY()" never appears.
+| Fix | What | Key Insight |
+|-----|------|-------------|
+| 1 | LIFO scope exit + rescue detection | `LinkedHashMap` for declaration order; detect `$self` rescue in DESTROY |
+| 2 | Deferred weak-ref clearing for rescued objects | Can't clear immediately — sibling ResultSources still need weak back-refs |
+| 3 | DBI `RootClass` attribute for CDBI compat | Re-bless handles into `${RootClass}::db/st` |
+| 4 | `clearAllBlessedWeakRefs` + exit path | END-time sweep for all blessed objects; also run on `exit()` |
+| 5 | Auto-finish cached statements (LOW PRIORITY) | `prepare_cached` should `finish()` Active reused sth |
+| 6 | `next::method` always uses C3 | Perl 5 always uses C3 regardless of class MRO setting |
+| 7 | Stash delete weak ref clearing + B::REFCNT fix | `deleteGlob()` triggers clearWeakRefs; B::SV subtract 1 for hash slot inflation |
+| 8 | DBI BYTE_STRING + utf8::decode conditional | Match Perl 5 DBD::SQLite byte-string semantics |
+| 9 | DBI UTF-8 round-trip + ClosedIOHandle | Proper UTF-8 encode/decode for JDBC; dup of closed handle returns undef |
 
 ---
 
@@ -378,29 +92,226 @@ Pass rate improved from 99.95% to **99.98%**.
 | `releaseCaptures()` on ALL unblessed containers | Cooperative refCount falsely reaches 0 via stash refs; caused Moo infinite recursion |
 | Decrement refCount for captured blessed refs at inner scope exit | Breaks `destroy_collections.t` test 20 — closures in outer scopes legitimately keep objects alive |
 | `git stash` for testing alternatives | **Lost completed work** — never use git stash |
-| Setting rescued object `refCount = 1` instead of `-1` | Causes infinite DESTROY loops: inflated refcounts mean rescue ALWAYS triggers, so refCount drops back to 0 immediately, firing DESTROY again |
+| Setting rescued object `refCount = 1` instead of `-1` | Causes infinite DESTROY loops: inflated refcounts mean rescue ALWAYS triggers |
 | Cascading cleanup after rescue | Destroys Schema internals (Storage, DBI::db) that the rescued Schema still needs |
+| Call `clearAllBlessedWeakRefs` earlier | Can't call during test execution without knowing which scope exits are "significant" |
+| Use `WEAKLY_TRACKED` for birth-tracked objects | Birth-tracked objects (refCount >= 0) don't enter the WEAKLY_TRACKED path in `weaken()` |
+| Decrement refCount for WEAKLY_TRACKED in `setLargeRefCounted` | WEAKLY_TRACKED objects have inaccurate refCounts; false-zero triggers |
+| Hook into `assert_empty_weakregistry` via Perl code | Can't modify CPAN test code per project rules |
+| `deepClearAllWeakRefs` in unblessed callDestroy path | Too aggressive — clears weak refs for objects inside dying containers even when those objects are still alive via other strong references. Failed `destroy_anon_containers.t` test 15 |
 
 ---
 
-## Completed Work
+## Fix 10: Leak detection for t/52leaks.t tests 12-18 — IN PROGRESS
 
-| Date | What | Commits |
-|------|------|---------|
-| 2025-03-31 | Phases 1-4: Makefile.PL, deps, DBI/DBD::SQLite JDBC shim | — |
-| 2026-03-31 — 04-02 | Phase 5: 58 runtime fixes, 15→96.7% pass rate | — |
-| 2026-04-10 — 04-11 | Phases 9-13: DESTROY/weaken, DBI env vars, HandleError | — |
-| 2026-04-12 | Phase 14: stashRefCount for Moo/namespace::clean | `db846e687`, `ef424f783` |
-| 2026-04-12 | B.pm two-step construction, deferred-capture cleanup | `d32de1dba` |
-| 2026-04-12 | begin_work nested-txn check, `$INC` cleanup on failed require | `13a260ee6` |
-| 2026-04-13 | DESTROY rescue detection for Schema self-save | `e02e0f95c` |
-| 2026-04-13 | Scope exit LIFO ordering (LinkedHashMap + reverse) | `bca73bd5c` |
-| 2026-04-13 | Deferred weak-ref clearing for rescued objects | `4eb76322c` |
-| 2026-04-13 | DBI RootClass + clearAllBlessedWeakRefs + exit path fix | `7df81dc46` |
-| 2026-04-11 | Fix 6: next::method always uses C3 linearization | `beebccd69` |
-| 2026-04-11 | Fix 7: Stash delete weak ref clearing + B::REFCNT inflation fix | `d6dd158da` |
-| 2026-04-11 | Fix 8: DBI BYTE_STRING + utf8::decode conditional UTF-8 flag | `0a9ae9f0c` |
-| 2026-04-13 | Fix 9: DBI UTF-8 round-trip + filehandle dup of closed handles | `c65974e16` |
+### 10.1 Failure Inventory
+
+| Test | Object | refcnt | Category |
+|------|--------|--------|----------|
+| 12 | `ARRAY \| basic random_results` | 1 | Unblessed, birth-tracked |
+| 13 | `DBICTest::Artist` | 2 | Blessed row object |
+| 14 | `DBICTest::CD` | 2 | Blessed row object |
+| 15 | `DBICTest::CD` | 2 | Blessed row object |
+| 16 | `ResultSource::Table` (artist) | 2 | Blessed ResultSource |
+| 17 | `ResultSource::Table` (artist) | 5 | Blessed ResultSource |
+| 18 | `HASH \| basic rerefrozen` | 0 | Unblessed, birth-tracked |
+
+All 7 fail because their weak refs are still `defined` at line 526.
+
+### 10.2 Test Flow
+
+```
+Line 112: {                              ← block scope opens
+Line 115:   my $schema = DBICTest->init_schema;
+            ...                          ← populate $base_collection hash
+Line 276:   push @{$base_collection->{random_results}}, $fire_resultsets->();
+Line 282:     local $base_collection->{random_results};
+Line 285:     %$base_collection = (..., rerefrozen => dclone(dclone($bc)), ...);
+Line 314:   visit_refs(...)              ← deep-walk: register ALL nested objects
+Line 402:   populate_weakregistry(... "basic $_") for keys %$base_collection;
+Line 404: }                              ← $base_collection goes out of scope
+Line 526: assert_empty_weakregistry($weak_registry);  ← ASSERTION (during execution, NOT END)
+```
+
+**Key timing**: The assertion runs during normal script execution, before END blocks.
+The existing `clearAllBlessedWeakRefs()` runs at END time — too late.
+
+### 10.3 Cooperative Refcounting Internals
+
+#### refCount State Machine
+```
+-1                = Untracked (default for all objects)
+ 0                = Tracked, zero counted containers (fresh from bless or anonymous constructor)
+>0                = Being tracked; N named-variable containers exist
+-2 (WEAKLY_TRACKED) = Has weak refs but strong refs can't be counted accurately
+Integer.MIN_VALUE = DESTROY already called (or in progress)
+```
+
+#### How Tracking Gets Activated
+- `[...]` / `{...}` anonymous constructors → `createReferenceWithTrackedElements` → refCount=0
+- `\@array` / `\%hash` named refs → refCount=0 + localBindingExists=true
+- `bless` → refCount=0 (or retroactive tracking if already tracked)
+- `weaken()` on untracked (refCount==-1) non-CODE → refCount = WEAKLY_TRACKED (-2)
+
+#### Increment/Decrement
+- **Increment**: `setLargeRefCounted()` when assigning a ref to tracked object (refCount>=0), marks scalar `refCountOwned=true`
+- **Decrement**: `setLargeRefCounted()` when overwriting old ref (if `refCountOwned`); or `scopeExitCleanup()` → `deferDecrementIfTracked()` → `flush()`
+- **Fast path**: `set(RuntimeScalar)` skips refcount for non-reference types; `set(int/String/...)` bypasses refcount entirely (scope exit cleanup is safety net)
+- **WEAKLY_TRACKED**: Not decremented by `setLargeRefCounted` or `scopeExitCleanup`; only handled by `undefine()`
+
+#### Scope Exit Flow
+```
+Block scope exits:
+  → SCOPE_EXIT_CLEANUP per scalar → RuntimeScalar.scopeExitCleanup()
+    → if refCountOwned: MortalList.deferDecrementIfTracked(scalar) → pending.add(base)
+  → SCOPE_EXIT_CLEANUP_HASH per hash → MortalList.scopeExitCleanupHash()
+    → hash.localBindingExists = false
+    → if hash.refCount <= 0: walk values, deferDecrementRecursive for blessed refs
+  → Null all JVM slots (makes RuntimeScalar unreachable, NOT set to undef)
+  → MortalList.flush() / popAndFlush()
+    → for each pending: if --refCount == 0 && !localBindingExists → callDestroy(base)
+```
+
+#### END-Time Cleanup Order
+```
+Main script returns
+  → MortalList.flushDeferredCaptures()
+    → deferDecrementIfTracked for deferred captures
+    → flush() (process decrements, fire DESTROY)
+    → DestroyDispatch.clearRescuedWeakRefs() (rescued objects)
+    → WeakRefRegistry.clearAllBlessedWeakRefs() (final sweep, blessed only)
+  → END blocks run (DBIC leak tracer sees clean state)
+```
+
+#### Internals::SvREFCNT
+Returns: `refCount >= 0` → actual value; `refCount < 0` (untracked/WEAKLY_TRACKED) → 1; `MIN_VALUE` → 0.
+
+### 10.4 Root Cause Analysis
+
+**Mode A — Unblessed containers (tests 12, 18):**
+
+Birth-tracked via anonymous constructors. `weaken()` sees refCount >= 0 (already tracked),
+so WEAKLY_TRACKED is NOT set. They participate in normal cooperative refcounting.
+
+- **Test 18 (HASH, refcnt 0)**: refCount reached 0, but `localBindingExists` may be `true`
+  (from `createReferenceWithTrackedElements`), which blocks `callDestroy`. The hash was
+  created by `Storable::dclone` — its internal named hashes get `localBindingExists=true`
+  but never get `scopeExitCleanupHash` (only called for `my %hash`, not anonymous hashes
+  stored in scalars). RefCount stays at 0, `callDestroy` never fires, weak refs persist.
+
+- **Test 12 (ARRAY, refcnt 1)**: One reference not decremented. Could be hash value slot
+  in `$base_collection` or a temporary from `keys %$base_collection` / argument passing.
+
+**Mode B — Blessed objects with inflated refcounts (tests 13-17):**
+
+Cooperative refcounts 2-5 when should be 0. Inflation sources:
+1. Hash value access temporaries
+2. `visit_refs` deep walk (passes objects as function args)
+3. `Storable::dclone` internals
+4. `$fire_resultsets->()` with `map`/`push`
+
+The inflation prevents refCount from reaching 0, so DESTROY never fires and
+`clearWeakRefsTo` is never called before the assertion at line 526.
+
+### 10.5 Proposed Fixes
+
+#### Fix 10a: Clear weak refs when `localBindingExists` blocks callDestroy (LOW RISK)
+
+**Targets**: Test 18 (and potentially 12)
+
+When `flush()` decrements refCount to 0 but `localBindingExists` blocks destruction,
+clear weak refs if the object has any registered:
+
+```java
+// In MortalList.flush(), inside the localBindingExists branch:
+if (base.localBindingExists) {
+    if (WeakRefRegistry.hasWeakRefs(base)) {
+        WeakRefRegistry.clearWeakRefsTo(base);
+    }
+}
+```
+
+**Risk**: Low — only fires for objects at refCount 0 with `localBindingExists` + weak refs.
+
+#### Fix 10b: Scope exit cascade — clear weak refs for hash values (MEDIUM RISK)
+
+**Targets**: Tests 12-17
+
+In `scopeExitCleanupHash`, when the hash is dying (refCount ≤ 1), clear weak refs
+for all values recursively:
+
+```java
+if (hash.refCount <= 1) {
+    for (RuntimeScalar val : hash.elements.values()) {
+        if (val is reference to RuntimeBase with weak refs) {
+            WeakRefRegistry.clearWeakRefsTo(referent);
+            DestroyDispatch.deepClearWeakRefs(referent); // nested blessed objects
+        }
+    }
+}
+```
+
+**Risk**: Medium — could prematurely clear if values are reachable via other paths.
+
+#### Fix 10c: Reduce refCount inflation at the source (HIGH IMPACT, COMPLEX)
+
+**Targets**: Tests 13-17
+
+Investigate specific inflation sources (function arg temporaries, hash value access,
+map/grep temporaries) and fix the most impactful ones. Requires tracing with
+`setLargeRefCounted` logging.
+
+#### Fix 10d: Extend clearAllBlessedWeakRefs to ALL objects (SAFETY NET)
+
+Remove `blessId != 0` check so END-time sweep clears unblessed containers too.
+Doesn't fix the timing issue alone but catches anything else missed.
+
+### 10.6 Implementation Order
+
+1. Run diagnostics (§10.4 investigation) — confirm `localBindingExists` and inflation ✅ Done
+2. Fix 10a — low risk, quick, fixes test 18 ✅ Done (commit 9dfe71f)
+3. Fix 10d — safety net for unblessed objects ✅ Done (commit 9dfe71f)
+4. Fix 10b — scope exit cascade for all tests — **BLOCKED**: see §10.8
+5. Fix 10c — reduce inflation (if still needed after 10a+10b)
+
+### 10.8 Key Finding: Parent Container Inflation (2026-04-11)
+
+The root cause of tests 12-18 is that `$base_collection` (the parent anonymous hash)
+itself has an inflated refCount from JVM temporaries created by `visit_refs()`,
+`populate_weakregistry()`, and hash access operations. When the scope exits, the
+scalar's reference is released (decrement by 1), but the hash's refCount remains > 0.
+This means `callDestroy` never fires for the parent hash, and consequently
+`scopeExitCleanupHash` never walks its elements.
+
+**Implication**: Fixes 10a and 10b cannot help tests 12-17 because the parent container
+never dies. The elements' refCounts are never decremented, and the cascade never starts.
+
+**Fix 10a** was implemented but only helps objects that reach refCount 0 in flush() with
+`localBindingExists=true`. Test 18 (HASH rerefrozen, refcnt 0) should benefit, but
+testing shows it still fails — likely because the parent container's inflation prevents
+the rerefrozen hash from ever entering the mortal list.
+
+**Next approach needed**: Fix 10c (reduce refCount inflation) or a new mechanism to
+detect "orphaned" containers at scope exit — i.e., containers whose only references
+come from JVM temporaries (not live Perl variables). This requires changes to how
+`setLargeRefCounted` tracks reference origins.
+
+### 10.7 Key Code Locations
+
+| File | Method | Relevance |
+|------|--------|-----------|
+| `RuntimeScalar.java:908` | `setLargeRefCounted()` | RefCount increment/decrement |
+| `RuntimeScalar.java:2160` | `scopeExitCleanup()` | Lexical cleanup at scope exit |
+| `MortalList.java:145` | `deferDecrementIfTracked()` | Defers decrement to flush() |
+| `MortalList.java:237` | `scopeExitCleanupHash()` | Hash value cascade at scope exit |
+| `MortalList.java:482` | `flush()` | Processes pending decrements |
+| `DestroyDispatch.java:82` | `callDestroy()` | Fires DESTROY / clears weak refs |
+| `WeakRefRegistry.java:107` | `weaken()` | WEAKLY_TRACKED transition |
+| `WeakRefRegistry.java:215` | `clearAllBlessedWeakRefs()` | END-time sweep (all objects, not just blessed) |
+| `RuntimeBase.java:24` | `refCount` | -1=untracked, 0+=tracked, -2=WEAKLY_TRACKED |
+| `Internals.java:79` | `svRefcount()` | Internals::SvREFCNT impl |
+
+---
 
 ## Architecture Reference
 

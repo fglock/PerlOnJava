@@ -219,9 +219,13 @@ public class WeakRefRegistry {
                 new java.util.ArrayList<>(referentToWeakRefs.keySet());
         for (RuntimeBase referent : referents) {
             if (referent instanceof RuntimeCode) continue;
-            if (referent.blessId != 0) {
-                clearWeakRefsTo(referent);
-            }
+            // Clear weak refs for ALL objects — both blessed and unblessed.
+            // Unblessed containers (ARRAY, HASH from Storable::dclone, etc.)
+            // may have weak refs registered by DBIC's leak tracer but never
+            // reach refCount 0 due to cooperative refCount inflation. Clearing
+            // them here at END time is safe because the main script has returned
+            // and these objects are logically dead.
+            clearWeakRefsTo(referent);
         }
     }
 }
