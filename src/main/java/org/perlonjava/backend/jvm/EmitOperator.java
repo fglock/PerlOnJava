@@ -1108,6 +1108,18 @@ public class EmitOperator {
 
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
+
+        // Update the runtime current-package for caller() correctness.
+        // Without this, caller() from package DB cannot detect it's in DB
+        // (InterpreterState.currentPackage stays stale for JVM-compiled code).
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        mv.visitLdcInsn(name);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/backend/bytecode/InterpreterState",
+                "setCurrentPackage",
+                "(Ljava/lang/String;)V",
+                false);
+
         // Set debug information for the file name.
         ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {

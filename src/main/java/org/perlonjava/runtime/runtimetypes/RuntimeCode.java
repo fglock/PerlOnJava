@@ -1957,15 +1957,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Skip the first frame for JVM-compiled code, where the first frame represents
         // the sub's own location (not the call site). For interpreter code, the first
         // frame from CallerStack already IS the call site, so no skip is needed.
+        int argsFrame = frame; // Save pre-skip frame for argsStack indexing
         if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()) {
             frame++;
         }
 
-        // Check if caller() is being called from package DB (for @DB::args support)
+        // Check if caller() is being called from package DB (for @DB::args support).
+        // In Perl 5, @DB::args is populated whenever caller() is invoked from within
+        // package DB, regardless of debugger mode.
+        // Two sources: (1) __SUB__.packageName for subs defined in package DB (JVM path),
+        // (2) InterpreterState.currentPackage for `package DB;` inside sub body (both paths).
         boolean calledFromDB = false;
-        if (stackTraceSize > 0) {
-            String callerPackage = stackTrace.getFirst().getFirst();
-            calledFromDB = "DB".equals(callerPackage);
+        if (currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
+            RuntimeCode code = (RuntimeCode) currentSub.value;
+            calledFromDB = "DB".equals(code.packageName);
+        }
+        if (!calledFromDB) {
+            calledFromDB = "DB".equals(InterpreterState.currentPackage.get().toString());
         }
 
         if (frame >= 0 && frame < stackTraceSize) {
@@ -2033,10 +2041,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             dbArgs.setFromList(new RuntimeList());
                         }
                     } else {
-                        // Not in debug mode - set to empty array
-                        // This tells Carp we don't have args but prevents the
-                        // "Incomplete caller override detected" message
-                        dbArgs.setFromList(new RuntimeList());
+                        // Not in debug mode - use RuntimeCode.argsStack to get args.
+                        // argsStack is ALWAYS populated (unlike DebugState.argsStack
+                        // which is only populated when debugMode is true).
+                        // Perl 5 always populates @DB::args when caller() is invoked
+                        // from package DB, regardless of debugger state.
+                        // Use argsFrame (pre-skip) since argsStack doesn't have the extra
+                        // JVM "sub own location" frame that the call stack has.
+                        Deque<RuntimeArray> stack = argsStack.get();
+                        if (argsFrame >= 0 && argsFrame < stack.size()) {
+                            RuntimeArray[] stackArray = stack.toArray(new RuntimeArray[0]);
+                            RuntimeArray frameArgs = stackArray[argsFrame];
+                            if (frameArgs != null) {
+                                dbArgs.setFromList(frameArgs.getList());
+                            } else {
+                                dbArgs.setFromList(new RuntimeList());
+                            }
+                        } else {
+                            dbArgs.setFromList(new RuntimeList());
+                        }
                     }
                 }
 

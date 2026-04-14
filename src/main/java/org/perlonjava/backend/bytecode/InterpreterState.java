@@ -45,6 +45,16 @@ public class InterpreterState {
      */
     public static final ThreadLocal<RuntimeScalar> currentPackage =
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
+
+    /**
+     * Set the runtime current package name.
+     * Called from both interpreter (SET_PACKAGE opcode) and JVM backend
+     * (package declarations) so that caller() sees the correct package.
+     */
+    public static void setCurrentPackage(String name) {
+        currentPackage.get().set(name);
+    }
+
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
     // Use ArrayList of mutable int holders for O(1) PC updates (no pop/push overhead)
