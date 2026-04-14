@@ -1,5 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
+import java.util.BitSet;
+
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
@@ -2298,8 +2300,13 @@ public class BytecodeInterpreter {
             // This ensures DESTROY fires for blessed objects going out of scope
             // during die unwinding (e.g. TxnScopeGuard in a sub called from eval).
             if (propagatingException != null) {
+                // Only clean up registers that are actual "my" variables.
+                // Temporary registers may alias hash/array elements (via HASH_GET,
+                // HASH_DEREF_FETCH, etc.) and calling scopeExitCleanup on them
+                // would incorrectly decrement refCounts, causing premature DESTROY.
+                BitSet myVars = code.myVarRegisters;
                 boolean needsFlush = false;
-                for (int i = firstMyVarReg; i < registers.length; i++) {
+                for (int i = myVars.nextSetBit(firstMyVarReg); i >= 0; i = myVars.nextSetBit(i + 1)) {
                     RuntimeBase reg = registers[i];
                     if (reg == null) continue;
                     if (reg instanceof RuntimeScalar rs) {

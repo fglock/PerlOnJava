@@ -13,6 +13,10 @@ XSLoader::load( 'DBI' );
 @DBI::db::ISA = ('DBI');
 @DBI::st::ISA = ('DBI');
 
+# Return a hash of loaded driver name => driver handle.
+# In PerlOnJava, JDBC manages drivers internally so we return empty.
+sub installed_drivers { return () }
+
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
 # Since our Java methods just die with RaiseError, we wrap them in Perl
@@ -27,8 +31,15 @@ XSLoader::load( 'DBI' );
     no warnings 'redefine';
 
     *DBI::prepare = sub {
+        if ($ENV{DBI_TRACE_DESTROY}) {
+            my $sql_preview = substr($_[1] // '', 0, 60);
+            warn "DBI::prepare on dbh=" . ($_[0]+0) . " Active=" . ($_[0]->{Active}//0) . " SQL: $sql_preview\n";
+        }
         my $result = eval { $orig_prepare->(@_) };
         if ($@) {
+            if ($ENV{DBI_TRACE_DESTROY}) {
+                warn "DBI::prepare FAILED on dbh=" . ($_[0]+0) . ": $@\n";
+            }
             return _handle_error($_[0], $@);
         }
         if ($result) {
@@ -101,6 +112,15 @@ XSLoader::load( 'DBI' );
 
     *DBI::disconnect = sub {
         my $dbh = $_[0];
+        if ($ENV{DBI_TRACE_DESTROY}) {
+            my @trace;
+            for my $i (0..5) {
+                my @c = caller($i);
+                last unless @c;
+                push @trace, "$c[0]:$c[2]";
+            }
+            warn "DBI::disconnect on dbh=" . ($dbh+0) . " from: " . join(" <- ", @trace) . "\n";
+        }
         $dbh->{Active} = 0;
         return $orig_disconnect->(@_);
     };
@@ -122,8 +142,37 @@ sub DBI::db::DESTROY {
     my $dbh = $_[0];
     return unless $dbh && ref($dbh);
     if ($dbh->{Active}) {
+        if ($ENV{DBI_TRACE_DESTROY}) {
+            warn "DBI::db::DESTROY calling disconnect() on dbh=" . ($dbh+0) . " Active=" . ($dbh->{Active}//0) . "\n";
+        }
         eval { $dbh->disconnect() };
     }
+}
+
+# Prevent Storable::dclone from sharing JDBC Connection objects.
+# In Perl 5's XS-based DBI, handles are tied hashes with C-level
+# connection state that Storable can't clone. In PerlOnJava, handles
+# are regular blessed hashes, so without these hooks, dclone copies
+# the Java Connection reference — and when the clone is destroyed,
+# it closes the shared connection, breaking the original handle.
+sub DBI::db::STORABLE_freeze {
+    my ($self, $cloning) = @_;
+    return ('disconnected_clone', );
+}
+
+sub DBI::db::STORABLE_thaw {
+    my ($self, $cloning, $serialized) = @_;
+    $self->{Active} = 0;
+}
+
+sub DBI::st::STORABLE_freeze {
+    my ($self, $cloning) = @_;
+    return ('disconnected_clone', );
+}
+
+sub DBI::st::STORABLE_thaw {
+    my ($self, $cloning, $serialized) = @_;
+    $self->{Active} = 0;
 }
 
 sub _handle_error {

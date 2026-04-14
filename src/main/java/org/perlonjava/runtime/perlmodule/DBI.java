@@ -162,6 +162,9 @@ public class DBI extends PerlModuleBase {
             // which prevents DESTROY from firing via MortalList.flush(). Anonymous hashes
             // created in Java have no Perl lexical variable, so localBindingExists must be false.
             RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::db"));
+            if (System.getenv("DBI_TRACE_DESTROY") != null) {
+                System.err.println("DBI::connect created dbh=" + System.identityHashCode(dbh) + " url=" + jdbcUrl);
+            }
             return dbhRef.getList();
         }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
