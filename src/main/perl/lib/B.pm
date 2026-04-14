@@ -49,36 +49,34 @@ use constant {
 # Stub classes for B objects
 package B::SV {
     sub new {
-        my ($class, $ref) = @_;
-        # Two-step construction avoids a cooperative refcount leak:
-        # A single-expression `bless { ref => $ref }` creates a hash literal
-        # via createReferenceWithTrackedElements(), which bumps the referent's
-        # cooperative refcount. But B::SV objects are typically method-chain
-        # temporaries (e.g., svref_2object($ref)->REFCNT) that never enter
-        # cooperative refcounting — the bump is never reversed, permanently
-        # inflating the referent's refcount. By storing in `my $self` first,
-        # the hash enters cooperative refcounting (refCount 0→1 via
-        # setLargeRefCounted), and scope-exit cleanup cascades into elements,
-        # properly reversing the bump.
-        my $self = bless {}, $class;
-        $self->{ref} = $ref;
+        # IMPORTANT: Avoid `my ($class, $ref) = @_` or `shift` — each local
+        # variable assignment that holds a reference inflates the referent's
+        # cooperative refcount by 1 (via setLargeRefCounted). Instead, use
+        # $_[0]/$_[1] (aliases into @_) which don't increment refcount.
+        # This keeps the only inflation to the `$self->{ref}` hash slot,
+        # which REFCNT compensates for with its -1 adjustment.
+        my $self = bless {}, $_[0];
+        $self->{ref} = $_[1];
         return $self;
     }
 
     sub REFCNT {
-        # Return the actual cooperative refcount via Internals::SvREFCNT.
+        # Return the cooperative refcount via Internals::SvREFCNT.
         # This enables DBIC's Schema::DESTROY self-save mechanism (checks
         # refcount > 1 to detect if someone else still holds a reference)
         # and the leak tracer (checks if objects have been properly released).
         #
-        # Subtract 1 for tracked objects (rc > 1) because this B::SV object's
-        # {ref} hash slot holds a cooperative reference that inflates the
-        # referent's refcount by 1. In Perl 5, B::SV holds a raw C pointer
-        # without incrementing REFCNT. For untracked objects (rc <= 1) the
-        # count is a hardcoded default that isn't inflated, so return as-is.
-        my $self = shift;
-        my $rc = Internals::SvREFCNT($self->{ref});
-        return $rc > 1 ? $rc - 1 : $rc;
+        # We return the raw cooperative refcount WITHOUT subtracting the
+        # B::SV {ref} hash slot's contribution (+1). In Perl 5, B::SV holds
+        # a raw C pointer that doesn't inflate REFCNT. In PerlOnJava, the
+        # hash slot does inflate cooperative refcount by +1. However, this
+        # inflation serves as a useful bias: PerlOnJava's cooperative refcount
+        # is systematically lower than Perl 5's SV refcount because it doesn't
+        # count return-value temporaries, JVM stack copies, or @_ aliases.
+        # The B::SV hash slot's +1 partially compensates for these missing
+        # counts, making refcount-based decisions (like DESTROY rescue)
+        # behave more like Perl 5.
+        return Internals::SvREFCNT($_[0]->{ref});
     }
 
     sub RV {
@@ -346,37 +344,42 @@ sub class {
 
 # Main introspection function
 sub svref_2object {
-    my $ref = shift;
-    my $type = ref($ref);
+    # IMPORTANT: Do NOT do `my $ref = shift` — that creates a local variable
+    # holding a reference, which inflates the referent's cooperative refcount
+    # by 1 (via setLargeRefCounted). Use $_[0] (an alias into @_) instead,
+    # which doesn't increment refcount. This is critical for DBIC's
+    # refcount() function which calls B::svref_2object($_[0])->REFCNT
+    # and expects the refcount to not be inflated by the call chain.
+    my $type = ref($_[0]);
 
     # A plain CODE scalar (e.g. from \&f in interpreter mode) has ref() eq 'CODE'.
     # A CODE-typed scalar passed directly (not wrapped in REFERENCE) also needs
     # to be treated as a CV — detect it via Scalar::Util::reftype as well.
     if ($type eq 'CODE') {
-        return B::CV->new($ref);
+        return B::CV->new($_[0]);
     }
 
     # Scalar::Util::reftype sees through blessing; use it as a fallback
     # for cases where ref() returns a package name (blessed code ref).
     require Scalar::Util;
-    my $rtype = Scalar::Util::reftype($ref) // '';
+    my $rtype = Scalar::Util::reftype($_[0]) // '';
     if ($rtype eq 'CODE') {
-        return B::CV->new($ref);
+        return B::CV->new($_[0]);
     }
 
     if ($rtype eq 'GLOB') {
-        my $name = *{$ref}{NAME} // '';
-        my $pkg  = *{$ref}{PACKAGE} // 'main';
+        my $name = *{$_[0]}{NAME} // '';
+        my $pkg  = *{$_[0]}{PACKAGE} // 'main';
         my $gv = B::GV->new($name, $pkg);
-        $gv->{ref} = $ref;  # store glob ref for SV method access
+        $gv->{ref} = $_[0];  # store glob ref for SV method access
         return $gv;
     }
 
     if ($type eq 'SCALAR') {
-        return B::PVIV->new($ref);
+        return B::PVIV->new($_[0]);
     }
 
-    return B::SV->new($ref);
+    return B::SV->new($_[0]);
 }
 
 # Export CVf_ANON as a function

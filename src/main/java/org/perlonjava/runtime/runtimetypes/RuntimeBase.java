@@ -38,6 +38,16 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean localBindingExists = false;
 
     /**
+     * True once DESTROY has been called for this object. Perl 5 semantics:
+     * if an object is resurrected by DESTROY (stored somewhere during DESTROY),
+     * and its refCount later reaches 0 again, DESTROY is NOT called a second time.
+     * The object is simply freed with weak ref clearing and cascading cleanup.
+     * This prevents infinite DESTROY cycles from self-referential patterns like
+     * Schema::DESTROY re-attaching to a ResultSource.
+     */
+    public boolean destroyFired = false;
+
+    /**
      * Global flag: true once any object has been blessed (blessId set to non-zero).
      * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
      * walks when no blessed objects have ever been created in this JVM instance.

@@ -557,6 +557,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                     yield this.hashSlot.createReference();
                 }
+                // For stash globs (name ends with ::), return the package stash.
+                // The glob for a stash entry like $::{"UNIVERSAL::"} has globName
+                // "main::UNIVERSAL::" but the stash is stored with key "UNIVERSAL::".
+                // Strip the "main::" prefix for top-level packages; for nested packages
+                // like $Foo::{"Bar::"}, globName "Foo::Bar::" IS the stash key.
+                if (this.globName.endsWith("::")) {
+                    String stashKey = this.globName.startsWith("main::")
+                            ? this.globName.substring(6)
+                            : this.globName;
+                    yield GlobalVariable.getGlobalHash(stashKey).createReference();
+                }
                 // Only return reference if hash exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalHash(this.globName)) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
@@ -588,6 +599,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (this.globName == null) {
             this.hashSlot = new RuntimeHash();
             return this.hashSlot;
+        }
+        // For stash globs (name ends with ::), resolve to the correct package stash.
+        // The glob for $::{"UNIVERSAL::"} has globName "main::UNIVERSAL::" but the
+        // stash is stored with key "UNIVERSAL::". Strip "main::" for top-level packages.
+        if (this.globName.endsWith("::")) {
+            String stashKey = this.globName.startsWith("main::")
+                    ? this.globName.substring(6)
+                    : this.globName;
+            return GlobalVariable.getGlobalHash(stashKey);
         }
         return GlobalVariable.getGlobalHash(this.globName);
     }

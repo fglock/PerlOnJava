@@ -1024,6 +1024,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && this.value instanceof RuntimeBase base
                 && base == DestroyDispatch.currentDestroyTarget) {
             DestroyDispatch.destroyTargetRescued = true;
+            // Transition from destroyed (MIN_VALUE) to tracked so that when the
+            // rescuing reference is eventually released (e.g., source goes out of
+            // scope at the end of DESTROY), cascading cleanup brings the refCount
+            // back to 0 and triggers weak ref clearing. Without this, the rescued
+            // object stays untracked (-1) and weak refs are never cleared, causing
+            // leak detection failures (DBIC t/52leaks.t tests 12-20).
+            if (base.refCount == Integer.MIN_VALUE) {
+                base.refCount = 1;
+            } else if (base.refCount >= 0) {
+                base.refCount++;
+            }
+            newOwned = true;
         }
 
         // Decrement old value's refCount AFTER assignment (skip for weak refs

@@ -61,6 +61,38 @@ public class MortalList {
     }
 
     /**
+     * Process deferred captures whose captureCount has already reached 0.
+     * Called from {@link #popAndFlush()} at block scope exit, AFTER the
+     * mortal list has been processed (which may trigger callDestroy →
+     * releaseCaptures → captureCount decrements on captured variables).
+     * <p>
+     * This bridges the gap between deferred capture registration (at scope
+     * exit when captureCount > 0) and flushDeferredCaptures (after the main
+     * script returns). Without this, objects whose captures are fully
+     * released at block exit still appear "alive" to leak tracers like
+     * DBIC's assert_empty_weakregistry, which runs inside the main script.
+     * <p>
+     * Only processes entries where captureCount == 0 AND scopeExited == true,
+     * leaving others for later processing (either a subsequent block exit
+     * or flushDeferredCaptures at script end).
+     */
+    private static void processReadyDeferredCaptures() {
+        if (deferredCaptures.isEmpty()) return;
+        boolean found = false;
+        for (int i = deferredCaptures.size() - 1; i >= 0; i--) {
+            RuntimeScalar scalar = deferredCaptures.get(i);
+            if (scalar.captureCount == 0 && scalar.scopeExited) {
+                deferDecrementIfTracked(scalar);
+                deferredCaptures.remove(i);
+                found = true;
+            }
+        }
+        if (found) {
+            flush();
+        }
+    }
+
+    /**
      * Process all deferred captured scalars.
      * For each scalar, schedule a refCount decrement via
      * {@link #deferDecrementIfTracked}, then flush the pending list.
@@ -545,7 +577,13 @@ public class MortalList {
     public static void popAndFlush() {
         if (!active || marks.isEmpty()) return;
         int mark = marks.removeLast();
-        if (pending.size() <= mark) return;
+        if (pending.size() <= mark) {
+            // Even if no mortal entries to process, check deferred captures
+            // that may have become ready (captureCount reached 0) during
+            // scope cleanup.
+            processReadyDeferredCaptures();
+            return;
+        }
         // Process entries from mark onwards (DESTROY may add new entries)
         for (int i = mark; i < pending.size(); i++) {
             RuntimeBase base = pending.get(i);
@@ -562,5 +600,8 @@ public class MortalList {
         while (pending.size() > mark) {
             pending.removeLast();
         }
+        // After processing mortals (which may have triggered releaseCaptures
+        // via callDestroy), check if any deferred captures are now ready.
+        processReadyDeferredCaptures();
     }
 }

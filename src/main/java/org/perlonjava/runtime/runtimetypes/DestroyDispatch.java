@@ -82,6 +82,23 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
+        // Perl 5 semantics: if DESTROY was already called for this object (it was
+        // resurrected/rescued and its refCount reached 0 again), do NOT call DESTROY
+        // a second time. Just clear weak refs and cascade into elements.
+        // This matches Perl 5's SvDESTROYED flag behavior and prevents infinite
+        // DESTROY cycles from self-referential patterns like Schema::DESTROY.
+        if (referent.destroyFired) {
+            WeakRefRegistry.clearWeakRefsTo(referent);
+            if (referent instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeArray arr) {
+                MortalList.scopeExitCleanupArray(arr);
+                MortalList.flush();
+            }
+            return;
+        }
+
         // Release closure captures when a CODE ref's refCount hits 0.
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
@@ -123,6 +140,10 @@ public class DestroyDispatch {
      * Perform the actual DESTROY method call.
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
+        // Mark as destroyed before running DESTROY. Perl 5 semantics:
+        // DESTROY is never called twice for the same object (SvDESTROYED flag).
+        referent.destroyFired = true;
+
         // Use cached method if available
         RuntimeScalar destroyMethod = destroyMethodCache.get(referent.blessId);
         if (destroyMethod == null) {
@@ -214,22 +235,21 @@ public class DestroyDispatch {
             if (destroyTargetRescued) {
                 // Object was rescued by DESTROY (e.g., Schema::DESTROY self-save).
                 //
-                // We CANNOT call clearWeakRefsTo() here because it would also clear
-                // back-references from other sources ($source->{schema}) that are
-                // still needed. Schema::DESTROY only re-attaches to ONE source;
-                // the others still have their original weak refs to Schema.
-                // Clearing those causes "detached result source" errors.
+                // refCount has been properly set by setLargeRefCounted during
+                // rescue detection (MIN_VALUE → 1). The rescuing scalar has
+                // refCountOwned=true, so when the rescuing reference is eventually
+                // released (e.g., source goes out of scope at end of DESTROY),
+                // cascading cleanup will bring refCount back to 0. At that point,
+                // callDestroy fires again but destroyFired=true prevents re-running
+                // DESTROY; just weak ref clearing + cascade happens.
                 //
-                // Instead, add to rescuedObjects list for deferred clearing.
-                // clearRescuedWeakRefs() will clear weak refs (with deep sweep)
-                // before END blocks run, when the back-references are no longer needed.
-                rescuedObjects.add(referent);
-                referent.refCount = -1;
-
-                // Skip cascade — the rescued object's internal fields (Storage,
+                // Don't clear weak refs here — the rescued object is still alive,
+                // and other sources may still have weak refs to it that need to
+                // remain defined until the object truly dies.
+                //
+                // Don't cascade — the rescued object's internal fields (Storage,
                 // DBI::db, ResultSources) must remain intact because the object
-                // is still alive and may be accessed later via
-                // $rs->result_source->schema->storage.
+                // is still alive.
                 return;
             }
 
