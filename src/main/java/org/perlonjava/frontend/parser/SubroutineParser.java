@@ -1315,6 +1315,37 @@ public class SubroutineParser {
                     placeholder.subroutine = interpretedCode;
                     placeholder.codeObject = interpretedCode;
                 }
+            } catch (VerifyError ve) {
+                // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
+                // This happens when JVM verification fails for the compiled class during deferred
+                // instantiation (constructor.newInstance()). The class was accepted by defineClass()
+                // but the verifier rejected it at link time due to StackMapTable inconsistencies
+                // (e.g., local variable slot type conflicts in complex methods).
+                // Fall back to interpreter for this subroutine.
+                boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+                if (showFallback) {
+                    System.err.println("Note: JVM VerifyError during subroutine instantiation, recompiling with interpreter.");
+                }
+                InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(block, newCtx, false);
+
+                // Set captured variables if there are any
+                if (!paramList.isEmpty()) {
+                    Object[] parameters = paramList.toArray();
+                    RuntimeBase[] capturedVars = new RuntimeBase[parameters.length];
+                    for (int i = 0; i < parameters.length; i++) {
+                        capturedVars[i] = (RuntimeBase) parameters[i];
+                    }
+                    interpretedCode = interpretedCode.withCapturedVars(capturedVars);
+                }
+
+                // Copy metadata from the placeholder
+                interpretedCode.prototype = placeholder.prototype;
+                interpretedCode.attributes = placeholder.attributes;
+                interpretedCode.subName = placeholder.subName;
+                interpretedCode.packageName = placeholder.packageName;
+                interpretedCode.__SUB__ = codeRef;
+                placeholder.subroutine = interpretedCode;
+                placeholder.codeObject = interpretedCode;
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());

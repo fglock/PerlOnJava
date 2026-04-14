@@ -574,7 +574,7 @@ public class EmitterMethodCreator implements Opcodes {
             TempLocalCountVisitor tempCountVisitor =
                     new TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 64;  // Optimized: removed min-128 baseline
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 256;  // Buffer for uncounted allocations
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
@@ -1676,6 +1676,11 @@ public class EmitterMethodCreator implements Opcodes {
                 return new CompiledCode(null, null, null, generatedClass, ctx);
             }
 
+        } catch (VerifyError ve) {
+            // VerifyError at this point means deferred verification failed during
+            // constructor.newInstance() for classes with no captured variables.
+            // Propagate as-is so createRuntimeCode() catch at line 1583 can handle it.
+            throw ve;
         } catch (Exception e) {
             throw new PerlCompilerException(
                     "Failed to wrap compiled class: " + e.getMessage());
@@ -1695,7 +1700,7 @@ public class EmitterMethodCreator implements Opcodes {
      */
     private static boolean needsInterpreterFallback(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof ClassFormatError) {
+            if (t instanceof ClassFormatError || t instanceof VerifyError) {
                 return true;
             }
             String msg = t.getMessage();
@@ -1718,7 +1723,7 @@ public class EmitterMethodCreator implements Opcodes {
         return msg != null ? msg.split("\n")[0] : e.getClass().getSimpleName();
     }
 
-    private static InterpretedCode compileToInterpreter(
+    public static InterpretedCode compileToInterpreter(
             Node ast, EmitterContext ctx, boolean useTryCatch) {
 
         // Create bytecode compiler
