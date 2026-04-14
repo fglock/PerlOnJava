@@ -42,7 +42,11 @@ public class IOOperator {
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
-            // select (returns current filehandle)
+            // select() with no args returns the currently selected filehandle.
+            // In Perl 5 this returns a string name like "main::STDOUT".
+            // We return the RuntimeIO wrapped as a GLOB scalar, which stringifies
+            // to the glob name. This preserves the round-trip: select(select())
+            // correctly restores the previous handle for tied handles too.
             return new RuntimeScalar(RuntimeIO.selectedHandle);
         }
         if (runtimeList.size() == 4) {
@@ -533,7 +537,41 @@ public class IOOperator {
         // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
         RuntimeScalar fileHandle = (RuntimeScalar) args[0];
         if (args.length < 2) {
-            throw new PerlJavaUnimplementedException("1 argument open is not implemented");
+            // 1-argument open: open FILEHANDLE
+            // Uses $_ as the filename (with embedded mode prefix parsed from it)
+            String fileName = getGlobalVariable("main::_").toString();
+            RuntimeIO oneFh = RuntimeIO.open(fileName);
+            if (oneFh == null) {
+                return scalarUndef;
+            }
+            // Assign the IO handle to the filehandle glob (reuse the existing assignment logic below)
+            RuntimeGlob targetGlob = null;
+            if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING) && fileHandle.value instanceof String name) {
+                if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                    String fullName = name.contains("::") ? name : ("main::" + name);
+                    targetGlob = GlobalVariable.getGlobalIO(fullName);
+                    RuntimeScalar newGlob = new RuntimeScalar();
+                    newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                    newGlob.value = targetGlob;
+                    fileHandle.set(newGlob);
+                }
+            }
+            if (targetGlob != null) {
+                targetGlob.setIO(oneFh);
+            } else {
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(oneFh);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, oneFh);
+                fileHandle.set(newGlob);
+                fileHandle.ioOwner = true;
+            }
+            long pid = oneFh.getPid();
+            if (pid > 0) return new RuntimeScalar(pid);
+            return scalarTrue;
         }
         String mode = args[1].toString();
         RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
@@ -1152,16 +1190,9 @@ public class IOOperator {
         RuntimeScalar fileHandle = args[0].scalar();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
-        // Check if fh is null (invalid filehandle)
-        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
-            WarnDie.warn(
-                    new RuntimeScalar("syswrite() on closed filehandle"),
-                    new RuntimeScalar("\n")
-            );
-            return new RuntimeScalar(); // undef
-        }
-
+        // Check TieHandle FIRST (before closed handle check), matching sysread/print pattern.
+        // TieHandle extends RuntimeIO which initializes ioHandle as ClosedIOHandle,
+        // so the closed-handle check would incorrectly catch tied handles.
         if (fh instanceof TieHandle tieHandle) {
             RuntimeScalar data = args[1].scalar();
             int dataLen = data.toString().length();
@@ -1173,16 +1204,15 @@ public class IOOperator {
             }
         }
 
-//        // Check for closed handle - but based on the debug output,
-//        // closed handles still have their original ioHandle, not ClosedIOHandle
-//        if (fh.ioHandle == null) {
-//            getGlobalVariable("main::!").set("Bad file descriptor");
-//            WarnDie.warn(
-//                    new RuntimeScalar("syswrite() on closed filehandle"),
-//                    new RuntimeScalar("\n")
-//            );
-//            return new RuntimeScalar(); // undef
-//        }
+        // Check if fh is null or closed (after TieHandle check)
+        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("syswrite() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {

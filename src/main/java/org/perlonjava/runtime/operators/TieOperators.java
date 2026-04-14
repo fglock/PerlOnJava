@@ -97,6 +97,11 @@ public class TieOperators {
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
                 glob.IO.type = TIED_SCALAR;
                 TieHandle tieHandle = new TieHandle(className, previousValue, self);
+                // Propagate the glob name so select() returns the correct name
+                // (e.g., "main::STDOUT") even when the handle is tied.
+                if (previousValue != null) {
+                    tieHandle.globName = previousValue.globName;
+                }
                 glob.IO.value = tieHandle;
                 // Update selectedHandle so that `print` without explicit filehandle
                 // goes through the tied handle (e.g., Test2::Plugin::IOEvents)
