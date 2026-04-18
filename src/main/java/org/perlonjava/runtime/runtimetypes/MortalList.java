@@ -241,8 +241,11 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         hash.localBindingExists = false;
-        // If no object has ever been blessed in this JVM, container walks are pointless
-        if (!RuntimeBase.blessedObjectExists) return;
+        // Skip container walks only when there are NO blessed objects AND NO
+        // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
+        // data), we must still cascade decrements so their weak-ref entries
+        // can be cleared when the referent's refCount reaches 0.
+        if (!RuntimeBase.blessedObjectExists && !WeakRefRegistry.weakRefsExist) return;
         // If the hash has outstanding references (e.g., from \%hash stored elsewhere),
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
@@ -294,8 +297,9 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
-        // If no object has ever been blessed in this JVM, container walks are pointless
-        if (!RuntimeBase.blessedObjectExists) return;
+        // Skip container walks only when there are NO blessed objects AND NO
+        // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
+        if (!RuntimeBase.blessedObjectExists && !WeakRefRegistry.weakRefsExist) return;
         // If the array has outstanding references (e.g., from \@array stored elsewhere),
         // do NOT clean up elements — the array is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last

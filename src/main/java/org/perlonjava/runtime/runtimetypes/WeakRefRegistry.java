@@ -22,6 +22,18 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
+     * Fast-path flag: has {@code weaken()} ever been called in this JVM?
+     * Once true, stays true (conservative but safe).
+     * <p>
+     * Used by {@link MortalList#scopeExitCleanupHash} /
+     * {@link MortalList#scopeExitCleanupArray} to decide whether the
+     * "no blessed objects" fast-exit is safe. Even without blessed objects,
+     * unblessed containers may have weak refs that need clearing on scope
+     * exit, so those sites must walk elements when weak refs exist.
+     */
+    public static volatile boolean weakRefsExist = false;
+
+    /**
      * Special refCount value for objects that have weak refs but whose strong
      * refs can't be counted accurately. Used in two cases:
      * <p>
@@ -68,6 +80,10 @@ public class WeakRefRegistry {
         referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
+        // Flip the fast-path flag so scopeExit cascades don't bail out
+        // via the !blessedObjectExists shortcut when unblessed data has
+        // weak refs that need clearing.
+        weakRefsExist = true;
 
         if (base.refCount > 0 && ref.refCountOwned) {
             // Tracked object with a properly-counted reference:
