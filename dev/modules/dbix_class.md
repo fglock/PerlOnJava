@@ -77,6 +77,7 @@ done | sort
 | 10a | Clear weak refs when `localBindingExists` blocks callDestroy | In `flush()` at refCount 0 with weak refs — satisfies leak tracer |
 | 10d | `clearAllBlessedWeakRefs` clears ALL objects | END-time safety net no longer restricted to blessed |
 | 10e | `createAnonymousReference()` for Storable/deserializers | Storable::dclone / deserializers produced hashes with `localBindingExists=true` (like named `\%h`). Fixed to use new anonymous-ref helper. Doesn't close 52leaks gap but is semantically correct |
+| 10f | Cascade scope-exit cleanup when weak refs exist | `scopeExitCleanupHash/Array` skipped walks when `!blessedObjectExists` — missed unblessed-data-with-weak-refs case. Added `WeakRefRegistry.weakRefsExist` fast-path flag so cascade runs whenever weak refs exist |
 
 ---
 
@@ -148,18 +149,21 @@ Reproducer: `/tmp/dbic_like.pl` — 4 leaks in jperl vs 0 in Perl.
 
 ### Next Steps
 
-1. **Fix 10c (in progress)**: Reduce refCount inflation at the source
-   - Locate JVM temporaries that fail to decrement, esp. in `visit_refs`-style deep walks and `populate_weakregistry`-style hash-slot weakening
-   - Check whether sub call / hash-slot access / flat-list construction paths properly decrement
-   - Minimal failing reproducer: `/tmp/dbic_like.pl` (leaks `bar`, `inner`, `refrozen`, `rerefrozen`)
+1. **Remaining DBIC 52leaks tests 12-18** — Our minimal reproducers no longer leak, even with blessed objects + circular refs + Storable. Yet tests 12-18 still fail. The gap must be in DBIC-specific patterns not yet captured:
+   - `visit_refs` in `DBICTest::Util::LeakTracer` — deep walk that may inflate refcounts
+   - DBIC ResultSource's complex back-reference chain (Schema ↔ Storage ↔ DBI ↔ Source)
+   - `BlockRunner` objects with Moo-generated accessors
+   - `$fire_resultsets->()` closures that capture result rows
+
+   Approach: Add temporary diagnostic logging that dumps `refCount` + `localBindingExists` + `weakRefs.size()` for each leaked object at assertion time, to see which cleanup path should have fired.
 
 2. **Audit `createReference()` vs `createAnonymousReference()` call sites**
    - Fixed: Storable (dclone + deserializer + YAML)
-   - To audit: JSON deserializer, XML parser, DBI bind/fetch, other CPAN-facing deserializers that return anonymous data. Check any `new RuntimeHash().createReference()` or `new RuntimeArray().createReference()` pattern.
+   - To audit: JSON deserializer, XML parser, DBI bind/fetch, other CPAN-facing deserializers that return anonymous data
 
-3. **Alternative — hash merge inflation**: `%$base = (%$base, foo => dclone($base))` shows refCount weirdness (see `/tmp/merge_inflation.pl`). The temporary list and re-assignment paths may over/under-decrement. Investigate `HashOperators.setFromList` / flat-list building.
+3. **Hash merge inflation investigation**: `%$base = (%$base, foo => dclone($base))` showed weirdness earlier. Re-verify now that Fix 10e/10f are in place. If still an issue, investigate `HashOperators.setFromList` / flat-list building.
 
-4. **Consider a "scope-exit cascade from top-level-scope-exit"** approach: after the main block in 52leaks.t closes, detect that `$base_collection`'s refCount is elevated but there are no live named variables holding it, and force decrement to 0. Hard to do safely.
+4. **Refcount inflation audit**: The conceptual root cause for tests 12-18 is still that the parent `$base_collection` hash's refCount is inflated by JVM temporaries. Identify specific inflation sources (function args, map/grep temporaries) and fix — but only if we can do so without destabilizing real Perl semantics.
 
 ### Cooperative Refcounting Internals (reference)
 
