@@ -621,6 +621,33 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         return result;
     }
 
+    /**
+     * Creates a reference to a fresh anonymous hash (no backing named variable).
+     * Unlike {@link #createReference()}, this does NOT set localBindingExists=true,
+     * so callDestroy will fire when refCount reaches 0.
+     * <p>
+     * Used by Storable::dclone, deserializers, and other places that produce a
+     * brand-new anonymous hash whose only references come from the returned
+     * scalar (and eventually from whatever variable/slot stores it). Using the
+     * plain {@link #createReference()} on these would spuriously mark them as
+     * named-bound, suppressing DESTROY / weak-ref clearing. See DBIC
+     * t/52leaks.t test 18 (Storable::dclone of $base_collection).
+     *
+     * @return A RuntimeScalar representing the hash reference.
+     */
+    public RuntimeScalar createAnonymousReference() {
+        // Birth-track the anonymous hash (same as {...} constructor path).
+        // refCount=0 means tracked with zero counted containers; setLargeRefCounted
+        // will bump to 1 when this reference is assigned to a variable.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = HASHREFERENCE;
+        result.value = this;
+        return result;
+    }
+
     @Override
     public RuntimeScalar createReferenceWithTrackedElements() {
         // Birth-track anonymous hashes: set refCount=0 so setLarge() can

@@ -765,6 +765,27 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Creates a reference to a fresh anonymous array (no backing named variable).
+     * Unlike {@link #createReference()}, this does NOT set localBindingExists=true,
+     * so callDestroy will fire when refCount reaches 0.
+     * <p>
+     * Used by Storable::dclone, deserializers, and other places that produce a
+     * brand-new anonymous array. See {@link RuntimeHash#createAnonymousReference()}
+     * for details.
+     *
+     * @return A scalar representing the array reference.
+     */
+    public RuntimeScalar createAnonymousReference() {
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.ARRAYREFERENCE;
+        result.value = this;
+        return result;
+    }
+
+    /**
      * Creates a reference to the array and tracks refCounts for all elements.
      * Use this for anonymous array construction ([...]) where elements are copies
      * that need refCount tracking to prevent premature destruction of referents.
