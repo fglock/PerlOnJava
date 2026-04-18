@@ -44,9 +44,10 @@ done | sort
 
 | File | Count | Status |
 |------|-------|--------|
-| `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain |
-| `t/storage/txn.t` | 1 (test 90) | Minor — warning-count assertion in DBICTest::BrokenOverload |
-| `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE) |
+| `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain. Needs refCount-inflation audit; hasn't reproduced in simpler tests |
+| `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE). Tried refCount-reset approach — caused infinite DESTROY loops when __WARN__ handler re-triggers captures. Needs architectural redesign (separate "destroying" state from MIN_VALUE sentinel) |
+
+`t/storage/txn.t` — **FIXED** (90/90 pass) via Fix 10m (eq/ne fallback semantics).
 
 ---
 
@@ -73,6 +74,7 @@ done | sort
 | 10j | DBI stores mutable scalars for user-writable attrs | `new RuntimeScalar(bool)` instead of `scalarTrue` so `$dbh->{AutoCommit} = 0` works |
 | 10k | Overload `""` self-reference falls back to default ref form | Identity check in `toStringLarge` + ThreadLocal depth guard in `Overload.stringify` |
 | 10l | `@DB::args` preserves invocation args after `shift(@_)` | New `originalArgsStack` (snapshot) in RuntimeCode parallel to live `argsStack` |
+| 10m | `eq`/`ne` throw "no method found" when overload fallback not permitted | Match Perl 5: blessed class with `""` overload but no `(eq`/`(ne`/`(cmp` and no `fallback=>1` → throw. Fixes DBIC t/storage/txn.t test 90 |
 
 ---
 
@@ -91,6 +93,7 @@ done | sort
 | Decrement refCount for WEAKLY_TRACKED in `setLargeRefCounted` | WEAKLY_TRACKED refcounts inaccurate; false-zero triggers |
 | Hook into `assert_empty_weakregistry` via Perl code | Can't modify CPAN test code per project rules |
 | `deepClearAllWeakRefs` in unblessed callDestroy | Too aggressive — clears refs for objects still alive elsewhere. Failed `destroy_anon_containers.t` test 15 |
+| DESTROY resurrection via refCount=0 reset + incrementRefCountForContainerStore resurrection branch | Worked for simple cases but caused infinite DESTROY loops for the `warn` inside DESTROY pattern: each DESTROY call triggers the __WARN__ handler which pushes to @DB::args → apparent resurrection → refCount > 0 → eventual decrement → DESTROY fires again → loop. The mechanism needs a separate "being destroyed" state distinct from MIN_VALUE to avoid re-entry |
 
 ---
 
