@@ -89,6 +89,40 @@ public class OverloadContext {
     }
 
     /**
+     * Returns the Perl class name associated with this overload context.
+     * Used by callers that need to produce Perl-style error messages
+     * (e.g., {@code Operation "ne": no method found, left argument in
+     * overloaded package X, ...}).
+     */
+    public String getPerlClassName() {
+        return perlClassName;
+    }
+
+    /**
+     * Whether this overload context permits fallback string/numeric
+     * autogeneration for operations that aren't explicitly overloaded.
+     * <p>
+     * Perl's semantics:
+     * <ul>
+     *   <li>{@code fallback => 1}: autogeneration permitted → returns true</li>
+     *   <li>{@code fallback => 0}: autogeneration denied → returns false</li>
+     *   <li>{@code fallback => undef} (default): conservative, die on
+     *       unable-to-autogen. We treat that as "not permitted" and let
+     *       callers throw "no method found".</li>
+     * </ul>
+     * <p>
+     * Used by binary operators (eq/ne/cmp/lt/gt) to decide whether a
+     * fallback to stringification-based comparison is safe, or whether
+     * the operation should throw "no method found" to match Perl 5.
+     */
+    public boolean allowsFallbackAutogen() {
+        return hasFallbackGlob
+                && fallbackValue != null
+                && fallbackValue.getDefinedBoolean()
+                && fallbackValue.getBoolean();
+    }
+
+    /**
      * Factory method to create overload context if applicable for a given RuntimeScalar.
      * Checks if the scalar is a blessed object and has overloading enabled.
      *

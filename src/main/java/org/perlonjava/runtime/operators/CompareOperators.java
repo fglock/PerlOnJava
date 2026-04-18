@@ -415,6 +415,11 @@ public class CompareOperators {
             if (result != null) {
                 return getScalarBoolean(result.getInt() == 0);
             }
+            // Neither (eq nor (cmp defined. Match Perl 5: if the overloaded
+            // side's fallback attribute is not explicitly truthy, throw
+            // "Operation ...: no method found". Otherwise fall through to
+            // plain stringification compare.
+            throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "eq");
         }
 
         return getScalarBoolean(runtimeScalar.toString().equals(arg2.toString()));
@@ -440,9 +445,49 @@ public class CompareOperators {
             if (result != null) {
                 return getScalarBoolean(result.getInt() != 0);
             }
+            // Neither (ne nor (cmp — match Perl 5's "no method found" error
+            // unless fallback => 1 is set. See eq() above for details.
+            throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "ne");
         }
 
         return getScalarBoolean(!runtimeScalar.toString().equals(arg2.toString()));
+    }
+
+    /**
+     * Throws a Perl-5-style "Operation '<op>': no method found" error when
+     * the overloaded package on either side does not permit fallback
+     * autogeneration (fallback=undef or missing). Called by string- and
+     * numeric-comparison operators after their direct overload lookups
+     * fail.
+     * <p>
+     * If neither argument is overloaded, or the overloaded side(s) allow
+     * autogeneration ({@code fallback => 1}), this method returns silently
+     * and the caller proceeds with its stringification-based default.
+     */
+    private static void throwIfFallbackDenied(
+            RuntimeScalar left, int leftBlessId,
+            RuntimeScalar right, int rightBlessId,
+            String opName) {
+        OverloadContext lctx = leftBlessId < 0
+                ? OverloadContext.prepare(leftBlessId) : null;
+        OverloadContext rctx = rightBlessId < 0
+                ? OverloadContext.prepare(rightBlessId) : null;
+        if (lctx == null && rctx == null) return;
+
+        // If any overloaded side allows fallback autogeneration, we allow
+        // the default stringification path.
+        if (lctx != null && lctx.allowsFallbackAutogen()) return;
+        if (rctx != null && rctx.allowsFallbackAutogen()) return;
+
+        String leftClause = (lctx != null)
+                ? "left argument in overloaded package " + lctx.getPerlClassName()
+                : "left argument has no overloaded magic";
+        String rightClause = (rctx != null)
+                ? "right argument in overloaded package " + rctx.getPerlClassName()
+                : "right argument has no overloaded magic";
+        throw new org.perlonjava.runtime.runtimetypes.PerlCompilerException(
+                "Operation \"" + opName + "\": no method found,\n\t"
+                        + leftClause + ",\n\t" + rightClause);
     }
 
     /**
