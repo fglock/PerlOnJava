@@ -125,9 +125,13 @@ public class DBI extends PerlModuleBase {
             dbh.put("Password", new RuntimeScalar(password));
             RuntimeScalar attr = args.size() > 4 ? args.get(4) : new RuntimeScalar();
 
-            // Set dbh attributes
-            dbh.put("ReadOnly", scalarFalse);
-            dbh.put("AutoCommit", scalarTrue);
+            // Set dbh attributes. Use `new RuntimeScalar(bool)` (mutable) instead
+            // of the shared readonly `scalarTrue`/`scalarFalse`, because user
+            // code frequently does `$dbh->{AutoCommit} = 0` and a hash slot
+            // holding a readonly scalar triggers "Modification of a read-only
+            // value" on direct assignment. Seen in DBIC t/storage/txn.t line 382.
+            dbh.put("ReadOnly", new RuntimeScalar(false));
+            dbh.put("AutoCommit", new RuntimeScalar(true));
 
             // Handle credentials file if specified in attributes
             Properties props = new Properties();
@@ -369,15 +373,15 @@ public class DBI extends PerlModuleBase {
             if (isBegin || isCommit || isRollback) {
                 if (isBegin) {
                     conn.setAutoCommit(false);
-                    dbh.put("AutoCommit", scalarFalse);
+                    dbh.put("AutoCommit", new RuntimeScalar(false));
                 } else if (isCommit) {
                     conn.commit();
                     conn.setAutoCommit(true);
-                    dbh.put("AutoCommit", scalarTrue);
+                    dbh.put("AutoCommit", new RuntimeScalar(true));
                 } else {
                     conn.rollback();
                     conn.setAutoCommit(true);
-                    dbh.put("AutoCommit", scalarTrue);
+                    dbh.put("AutoCommit", new RuntimeScalar(true));
                 }
                 sth.put("Executed", scalarTrue);
                 dbh.put("Executed", scalarTrue);
@@ -844,7 +848,7 @@ public class DBI extends PerlModuleBase {
             }
             Connection conn = (Connection) dbh.get("connection").value;
             conn.setAutoCommit(false);
-            dbh.put("AutoCommit", scalarFalse);
+            dbh.put("AutoCommit", new RuntimeScalar(false));
             return scalarTrue.getList();
         }, dbh, "begin_work");
     }
@@ -856,7 +860,7 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.commit();
             conn.setAutoCommit(true);
-            dbh.put("AutoCommit", scalarTrue);
+            dbh.put("AutoCommit", new RuntimeScalar(true));
             return scalarTrue.getList();
         }, dbh, "commit");
     }
@@ -868,7 +872,7 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.rollback();
             conn.setAutoCommit(true);
-            dbh.put("AutoCommit", scalarTrue);
+            dbh.put("AutoCommit", new RuntimeScalar(true));
             return scalarTrue.getList();
         }, dbh, "rollback");
     }
