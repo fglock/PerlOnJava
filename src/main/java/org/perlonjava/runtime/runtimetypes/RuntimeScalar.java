@@ -1211,7 +1211,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case CODE -> Overload.stringify(this).toString();
             default -> {
                 if (type == REGEX) yield value.toString();
-                yield Overload.stringify(this).toString();
+                // Overload.stringify calls the ("" method. If it returns THIS
+                // exact scalar (or another object whose ("" points back here),
+                // naively calling .toString() on the result would recurse. Perl
+                // falls back to the default reference form in that case; so do
+                // we. Detect by identity first, then by depth via a ThreadLocal
+                // guard inside Overload.stringify (handles the transitive case).
+                RuntimeScalar overloaded = Overload.stringify(this);
+                if (overloaded == this) yield toStringRef();
+                yield overloaded.toString();
             }
         };
     }
