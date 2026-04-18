@@ -59,6 +59,12 @@ done | sort
 | t/60core.t | 1 | Cached statement Active — cursor DESTROY doesn't fire for method-chain temporaries |
 | t/storage/txn_scope_guard.t | 1 | `@DB::args` not populated in non-debug mode (low priority) |
 
+### Non-Bug Warnings (informational)
+
+- **`Mismatch of versions '1.1' and '1.45'`** in `t/00describe_environment.t` for `Params::ValidationCompiler::Exception::Named::Required`: Not a PerlOnJava bug. `Exception::Class` deliberately sets `$INC{$subclass.pm} = __FILE__` (Exception/Class.pm) on every generated subclass, so `MM->parse_version()` reads the wrong file. Same behavior on standard Perl.
+- **`Subroutine is_bool redefined at Cpanel::JSON::XS line 2429`**: Triggered when Cpanel::JSON::XS loads through `@ISA` fallback (after XSLoader fails). Cosmetic warning; module still works.
+- **Hung tests** in user's `prove` run (`t/zzzzzzz_perl_perf_bug.t`, `t/cdbi/columns_as_hashes.t`): Not seen with the suite-runner script (`timeout 120`-wrapped per-test) used in §How to Run the Suite. Root cause likely Test::Warn / Benchmark interaction — investigate separately if needed.
+
 ---
 
 ## Completed Fixes
@@ -78,6 +84,7 @@ done | sort
 | 10d | `clearAllBlessedWeakRefs` clears ALL objects | END-time safety net no longer restricted to blessed |
 | 10e | `createAnonymousReference()` for Storable/deserializers | Storable::dclone / deserializers produced hashes with `localBindingExists=true` (like named `\%h`). Fixed to use new anonymous-ref helper. Doesn't close 52leaks gap but is semantically correct |
 | 10f | Cascade scope-exit cleanup when weak refs exist | `scopeExitCleanupHash/Array` skipped walks when `!blessedObjectExists` — missed unblessed-data-with-weak-refs case. Added `WeakRefRegistry.weakRefsExist` fast-path flag so cascade runs whenever weak refs exist |
+| 10g | `base.pm`: treat `@ISA` / `$VERSION` as "already loaded" | `Base.java.importBase` only checked CODE refs to decide if base class was loaded. Programmatically-built packages (DBIC schema classes, eval-created packages) have `@ISA` populated but no CODE refs, causing spurious `require` attempts for packages that have no `.pm` file. Matches Perl's `base.pm` semantics. Fixes DBIC t/inflate/hri.t (now 193/193). |
 
 ---
 
