@@ -151,6 +151,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Parallel stack of @_ snapshots (shallow copies) taken at sub entry.
+     * Used to populate {@code @DB::args} in {@code caller()}: Perl preserves
+     * the invocation args even after the callee does {@code shift(@_)}.
+     * Without a snapshot, @DB::args would show the modified @_ (empty after
+     * a shift), breaking patterns like DBIC's TxnScopeGuard double-DESTROY
+     * detection that relies on @DB::args to hold a strong reference to the
+     * object being destroyed.
+     * <p>
+     * The snapshot is a cheap {@link RuntimeArray} wrapping a new ArrayList
+     * of the same RuntimeScalar elements. Shifts/modifications of the live
+     * @_ don't affect this snapshot.
+     */
+    private static final ThreadLocal<Deque<RuntimeArray>> originalArgsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
      * Get the current subroutine's @_ array.
      * Used by Java-implemented functions (like List::Util::any) that need to pass
      * the caller's @_ to code blocks.
@@ -189,6 +205,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void pushArgs(RuntimeArray args) {
         argsStack.get().push(args);
+        // Also push a shallow snapshot so @DB::args stays intact after shift/@_
+        // modifications inside the callee. See originalArgsStack javadoc.
+        RuntimeArray snapshot = new RuntimeArray();
+        if (args != null) {
+            snapshot.elements = new java.util.ArrayList<>(args.elements);
+        }
+        originalArgsStack.get().push(snapshot);
     }
 
     /**
@@ -200,6 +223,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             stack.pop();
         }
+        Deque<RuntimeArray> origStack = originalArgsStack.get();
+        if (!origStack.isEmpty()) {
+            origStack.pop();
+        }
+    }
+
+    /**
+     * Return the frame-N snapshot of original invocation args, used by
+     * caller()'s {@code @DB::args} support. Frame 0 is the innermost call.
+     *
+     * @param frame zero-based frame index (0 = current sub)
+     * @return the snapshot RuntimeArray, or null if frame is out of range
+     */
+    public static RuntimeArray getOriginalArgsAt(int frame) {
+        Deque<RuntimeArray> stack = originalArgsStack.get();
+        if (frame < 0 || frame >= stack.size()) return null;
+        int i = 0;
+        for (RuntimeArray a : stack) {
+            if (i++ == frame) return a;
+        }
+        return null;
     }
 
     /**
@@ -2041,22 +2085,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             dbArgs.setFromList(new RuntimeList());
                         }
                     } else {
-                        // Not in debug mode - use RuntimeCode.argsStack to get args.
-                        // argsStack is ALWAYS populated (unlike DebugState.argsStack
-                        // which is only populated when debugMode is true).
-                        // Perl 5 always populates @DB::args when caller() is invoked
-                        // from package DB, regardless of debugger state.
-                        // Use argsFrame (pre-skip) since argsStack doesn't have the extra
-                        // JVM "sub own location" frame that the call stack has.
-                        Deque<RuntimeArray> stack = argsStack.get();
-                        if (argsFrame >= 0 && argsFrame < stack.size()) {
-                            RuntimeArray[] stackArray = stack.toArray(new RuntimeArray[0]);
-                            RuntimeArray frameArgs = stackArray[argsFrame];
-                            if (frameArgs != null) {
-                                dbArgs.setFromList(frameArgs.getList());
-                            } else {
-                                dbArgs.setFromList(new RuntimeList());
-                            }
+                        // Not in debug mode - use the originalArgsStack snapshot
+                        // instead of the live argsStack, so that callees which do
+                        // `shift(@_)` don't clear @DB::args out from under the
+                        // caller. Perl preserves the invocation args here — see
+                        // originalArgsStack javadoc for why this matters (DBIC
+                        // TxnScopeGuard double-DESTROY detection).
+                        RuntimeArray frameArgs = getOriginalArgsAt(argsFrame);
+                        if (frameArgs != null) {
+                            dbArgs.setFromList(frameArgs.getList());
                         } else {
                             dbArgs.setFromList(new RuntimeList());
                         }
