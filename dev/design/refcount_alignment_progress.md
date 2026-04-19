@@ -193,3 +193,30 @@ pass.
 | t/52leaks.t | 9 real fails | **0 real fails** ✅ |
 | Moo 2.005005 | unknown | **71/71 files** ✅ |
 | Sandbox destroy_weaken | 213/213 | **213/213** ✅ |
+
+## Broader CPAN validation (post-plan)
+
+### DBIC 0.082844 full suite
+
+| Category | Files | Pass | Fail |
+|----------|-------|------|------|
+| `t/*.t` + `t/storage/*.t` + `t/inflate/*.t` + `t/multi_create/*.t` + `t/prefetch/*.t` + `t/relationship/*.t` + `t/resultset/*.t` + `t/row/*.t` + `t/search/*.t` + `t/sqlmaker/*.t` + `t/delete/*.t` + `t/cdbi/*.t` | 270 | **269** | 1 |
+
+The single remaining failure (`t/storage/error.t` test 49 "callback works
+after \$schema is gone") was failing on master before this plan — not in
+scope here.
+
+### Other modules
+
+| Module | Version | Result |
+|--------|---------|--------|
+| Moo | 2.005005 | **71/71** test files pass |
+| Role-Tiny | 2.002004 | 17/23 pass (6 fail on master too — unrelated) |
+| Class-Method-Modifiers | 2.15 | 28/29 pass (1 fails on master too) |
+
+### Verdict
+
+This plan fixed the refcount/DESTROY/weaken semantics for everything it
+targeted. No regressions introduced in bundled modules. The remaining
+module-test failures are pre-existing issues tracked separately by
+the interpreter-parity and debug-perlonjava skills.
