@@ -4,12 +4,14 @@
 **Status:** PRODUCTION READY
 - 841/841 Moo subtests (100%)
 - 269/270 DBIC test files pass (1 pre-existing failure, unrelated)
-- DBIC `t/52leaks.t`: **0 real failures** (was 9)
+- DBIC `t/52leaks.t`: with LeakTracer patch: **0 real failures via Phase 4** → **1 real failure after Phase B1** (basic rerefrozen, TODO)
+  *(Phase B1's lexical-aware walker exposed a narrower leak than the previous purely-refcount-based sweep; see §10a.)*
 - DBIC `t/storage/txn.t`: 90/90, `t/storage/txn_scope_guard.t`: 18/18
 - `dev/sandbox/destroy_weaken/*.t`: 213/213
 
-See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md)
-and [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md)
+See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md),
+[dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md),
+and [dev/design/refcount_alignment_52leaks_plan.md](../design/refcount_alignment_52leaks_plan.md)
 for the 2026-04 alignment work that closes the remaining Perl-parity gaps.
 
 ---
@@ -563,7 +565,7 @@ The DBIC `t/storage/txn_scope_guard.t` test 18
 semantics to fire DESTROY twice when a strong ref escapes via `@DB::args`
 and is later released.
 
-### 10. ReachabilityWalker (Phase 4)
+### 10. ReachabilityWalker (Phase 4 + Phase B1)
 
 **Path:** `org.perlonjava.runtime.runtimetypes.ReachabilityWalker`
 
@@ -578,31 +580,58 @@ no path reaches.
 - `DestroyDispatch.rescuedObjects` (only when walker is run standalone;
   `sweepWeakRefs()` drains these up front since explicit `jperl_gc` means
   the caller wants aggressive cleanup)
+- **Phase B1** (`refcount_alignment_52leaks_plan.md`):
+  `ScalarRefRegistry.snapshot()` — every ref-holding RuntimeScalar that
+  survived the last JVM GC cycle. These represent live lexicals whose
+  JVM frame slots still hold the scalar. Without this, the walker
+  misclassifies alive-via-lexical objects as unreachable and would
+  incorrectly clear their weak refs. Scalars with `captureCount > 0`
+  (closure captures) are skipped to avoid over-reaching.
 
 **Not walked (intentionally, to avoid false-positive reachability):**
 - `RuntimeCode.capturedScalars`. Sub::Quote/Moo accessor closures capture
   `$self` instances transitively, which would mark DBIC Schema objects as
-  reachable even after they should be GC'd. Opt-in via
+  reachable even after they should be collected. Opt-in via
   `walker.withCodeCaptures(true)`.
-- Live JVM-call-stack lexicals. These are invisible to the walker. The
-  consequence is the walker is **only safe to run at points where the
-  caller knows those lexicals don't matter** — hence `jperl_gc()` is
-  opt-in rather than automatic.
 
 **Key operations:**
 
 | Method | Purpose |
 |--------|---------|
 | `walk()` | BFS from roots; returns set of reachable `RuntimeBase` instances. |
-| `sweepWeakRefs()` | Drains `rescuedObjects`, then runs `walk()`. For each entry in the weak-ref registry whose referent is not reachable: if blessed + not yet destroyed, fire DESTROY; else clear weak refs and set `MIN_VALUE`. |
-| `findPathTo(target)` | Diagnostic: returns first path string (e.g. `"%DBIx::Class::Schema::{accessors}{schema}"`) found to the target, or null. |
+| `sweepWeakRefs()` | Forces `System.gc()` via `ScalarRefRegistry.forceGcAndSnapshot()` (3 passes with WeakReference sentinels), drains `rescuedObjects`, runs `walk()`, clears weak refs for unreachable referents, fires DESTROY on blessed ones. |
+| `sweepWeakRefs(true)` | Quiet mode: clears weak refs but does NOT fire DESTROY — for use from safe-to-interrupt callers that must not run Perl code mid-operation. Currently only used by future Phase B2 work (none active). |
+| `findPathTo(target)` | Diagnostic: returns first path string (e.g. `"%DBIx::Class::Schema::{accessors}{schema}"` or `"<live-lexical#N>"`) found to the target, or null. |
 
-**When not to run:** Inside code paths where the current Perl frame's
-lexicals hold objects the walker can't see (e.g., mid-test leak-cleanup
-loops). See the DBIC LeakTracer patch in
-`dev/patches/cpan/DBIx-Class-0.082844/` for the "only sweep when registry
-has >5 entries" guard that distinguishes the outer test-wide registry
-from inner per-object registries.
+**When not to run automatically:** Phase B2 (auto-trigger from hot
+paths) was attempted and reverted — see comment in
+`Scalar::Util::isweak()` and `MortalList.flush()`. Even Phase B1's
+lexical-aware sweep can't safely run inside module-init chains
+(e.g. DBICTest::BaseResult's use-chain relies on weak-refed state
+remaining defined). Auto-triggering requires a compiler-emitted
+"outside-of-module-init" marker which jperl doesn't yet have.
+Use `Internals::jperl_gc()` explicitly for leak-tracer integration.
+
+### 10a. ScalarRefRegistry (Phase B1)
+
+**Path:** `org.perlonjava.runtime.runtimetypes.ScalarRefRegistry`
+
+A `WeakHashMap<RuntimeScalar, Boolean>` populated at every
+ref-assignment site (`setLarge`, `setLargeRefCounted`,
+`incrementRefCountForContainerStore`). Because entries are
+weakly keyed, JVM GC prunes scalars no longer held by any strong
+reference — including scalars whose Perl lexical scope has exited
+and whose JVM local slot has been nulled.
+
+Seeding the `ReachabilityWalker` from the surviving entries gives
+it a Perl-compatible view of "which lexicals are still alive",
+which native Perl's refcount implicitly tracks.
+
+`forceGcAndSnapshot()` runs 3 passes of `System.gc()` + WeakReference
+sentinel waits to ensure multi-level cascades complete before the
+walker reads the snapshot.
+
+Opt out for benchmarking: `JPERL_NO_SCALAR_REGISTRY=1`.
 
 ### 11. `Internals::*` Perl-Visible API
 
