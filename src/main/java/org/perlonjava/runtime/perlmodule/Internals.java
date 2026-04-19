@@ -32,6 +32,11 @@ public class Internals extends PerlModuleBase {
             // objects) and clears weak refs for unreachable objects. Returns
             // the number of weak refs cleared.
             internals.registerMethod("jperl_gc", "jperl_gc", "");
+            // Phase 4 diagnostic: trace a reachable path from any Perl root
+            // to the given referent. Returns the first-found path string or
+            // undef if unreachable. Used to debug why an object that should
+            // be GC'd remains reachable from the walker's point of view.
+            internals.registerMethod("jperl_trace_to", "jperl_trace_to", "$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -190,6 +195,21 @@ public class Internals extends PerlModuleBase {
     public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
         int cleared = ReachabilityWalker.sweepWeakRefs();
         return new RuntimeScalar(cleared).getList();
+    }
+
+    /**
+     * Phase 4 diagnostic: find a reachable path from Perl roots to the
+     * given referent. Returns the path as a string ("$some::global{key}[3]")
+     * or undef if unreachable.
+     */
+    public static RuntimeList jperl_trace_to(RuntimeArray args, int ctx) {
+        RuntimeScalar arg = args.get(0);
+        if (!(arg.value instanceof RuntimeBase base)) {
+            return new RuntimeScalar().getList();
+        }
+        java.util.List<String> path = ReachabilityWalker.findPathTo(base);
+        if (path == null) return new RuntimeScalar().getList();
+        return new RuntimeScalar(String.join(" -> ", path)).getList();
     }
 
     /**

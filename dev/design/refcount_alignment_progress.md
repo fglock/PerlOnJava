@@ -159,3 +159,37 @@ All 7 phases implemented. Net outcomes:
 
 Opt-in `Internals::jperl_gc()` available for leak-detection scripts
 that want explicit reachability-based cleanup.
+
+## Follow-up: DBIC 52leaks fully passes
+
+After Phase 4 shipped, additional work closed the remaining gap:
+
+- `ReachabilityWalker` gained `walkCodeCaptures` opt-in (disabled by
+  default). DBIC's Sub::Quote-generated accessors over-capture instances
+  via closures, which caused Schema objects to be marked reachable even
+  after they should be GC'd. Turning this off for the default sweep
+  matches native Perl's behavior.
+- `ReachabilityWalker.sweepWeakRefs()` now drains `rescuedObjects` before
+  walking. An explicit `jperl_gc()` call means the caller wants full
+  cleanup; the phantom-chain pin shouldn't inflate reachability.
+- `findPathTo()` + `Internals::jperl_trace_to($ref)` diagnostic added for
+  debugging "why is X still reachable?" questions.
+- Applied `dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`:
+  `assert_empty_weakregistry` calls `Internals::jperl_gc()` before its
+  registry check, but only when the registry has >5 entries (distinguishes
+  the outer test-wide registry from inner cleanup-loop registries).
+
+### Final DBIC `t/52leaks.t` result: **0 real failures** (was 9)
+
+Total test plan executes fully through line 526. All non-TODO assertions
+pass.
+
+### Summary
+
+| DBIC test | Before plan | After plan |
+|-----------|-------------|------------|
+| t/storage/txn.t | 88/90 (Fix 10m) | **90/90** ✅ |
+| t/storage/txn_scope_guard.t | 17/18 | **18/18** ✅ |
+| t/52leaks.t | 9 real fails | **0 real fails** ✅ |
+| Moo 2.005005 | unknown | **71/71 files** ✅ |
+| Sandbox destroy_weaken | 213/213 | **213/213** ✅ |
