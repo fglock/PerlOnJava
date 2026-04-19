@@ -112,3 +112,50 @@ All 71 test files pass (no real failures).
 - Perl core destroy semantics via sandbox: ✅ 213/213
 - refcount_diff.pl on phase1_verify corpus: ✅ 10/10 match Perl
 - make test-bundled-modules: ✅ no regressions
+
+## Phase 7 — Interpreter backend parity
+
+All runtime-level changes (DestroyDispatch FSM, @DB::args aliasing,
+MortalList drain helper, ReachabilityWalker) live in the shared
+`org.perlonjava.runtime.runtimetypes` package. Both the JVM backend
+and the `--interpreter` backend use these same classes, so Phase 3/4
+improvements apply to both automatically.
+
+### Interpreter smoke test
+
+```
+./jperl --interpreter -e '
+package Thing;
+sub new { bless {id=>$_[1]}, $_[0] }
+sub DESTROY { my $self = shift; $main::count++ }
+package main;
+our $count = 0;
+{ my $obj = Thing->new(1); undef $obj; }
+# + nested DESTROY (Outer holds Inner)
+'
+```
+
+- Simple DESTROY: ✅ fires once per lifecycle
+- Nested DESTROY: ✅ Outer DESTROY + cascades to Inner DESTROY
+
+### Interpreter gaps (pre-existing, unrelated)
+
+The interpreter has pre-existing bugs in hash operations
+(`Index 469 out of bounds for length 70` when `use Scalar::Util`).
+These are not in scope for this refcount alignment plan; they are
+tracked by the interpreter-parity skill.
+
+### Closing the plan
+
+All 7 phases implemented. Net outcomes:
+
+- DBIC t/storage/txn.t: **90/90** (unchanged, passing)
+- DBIC t/storage/txn_scope_guard.t: **18/18** (was 17/18)
+- DBIC t/52leaks.t: 11/20 (9 real fails — deeper work required)
+- Moo 2.005005: **71/71** test files pass
+- Perl destroy_weaken sandbox: **213/213**
+- refcount_diff.pl simple patterns: **10/10** parity with perl
+- make test suite: **no regressions**
+
+Opt-in `Internals::jperl_gc()` available for leak-detection scripts
+that want explicit reachability-based cleanup.
