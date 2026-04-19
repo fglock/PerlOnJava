@@ -156,8 +156,13 @@ public class Internals extends PerlModuleBase {
             if (base.localBindingExists) flags.append('L');
             if (base.destroyFired) flags.append('D');
             if (WeakRefRegistry.hasWeakRefsTo(base)) flags.append('W');
+            // Subtract 1 for the passed-in ref (the argument scalar itself
+            // holds one counted reference). Matches native Perl's
+            // `$sv->REFCNT - 1` convention used in dev/tools/refcount_diff.pl.
+            int reportedRc = base.refCount;
+            if (reportedRc > 0) reportedRc--;
             return new RuntimeScalar(kind + ":" + (cn == null ? "" : cn) + ":"
-                    + base.refCount + ":" + flags).getList();
+                    + reportedRc + ":" + flags).getList();
         }
         return new RuntimeScalar("NOT_REF").getList();
     }

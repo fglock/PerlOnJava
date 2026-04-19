@@ -67,9 +67,18 @@ BEGIN {
                 # counts counted containers (not the raw SV refcount which
                 # includes the passed-in ref itself).
                 my $rc = $sv->REFCNT - 1;
+                # Native perl can't easily report "has weak refs pointing
+                # to this object", so we omit the W flag on this side.
+                # Strip it from jperl side before comparing so we only
+                # compare kind:class:refcount.
                 $state = "$kind:$class_name:$rc:";
             }
         }
+        # Strip jperl-specific W flag for cross-backend parity. L/D flags
+        # stay — jperl reports them; native perl does too via heuristics
+        # (localBindingExists ≈ 0 on native perl since we'd pass the
+        # dereffed value; destroyFired is never set pre-DESTROY).
+        $state =~ s/W//g;
         push @log, {
             checkpoint => $name,
             id         => $id,
