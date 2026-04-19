@@ -22,6 +22,11 @@ public class Internals extends PerlModuleBase {
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
+            // Phase 0 diagnostic: expose PerlOnJava-internal refcount state
+            // (refCount, flags, tracking mode) for differential testing
+            // against native Perl. See dev/design/refcount_alignment_plan.md.
+            internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
+            internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -85,6 +90,76 @@ public class Internals extends PerlModuleBase {
             return new RuntimeScalar(rc).getList();
         }
         return new RuntimeScalar(1).getList();
+    }
+
+    /**
+     * Phase 0 diagnostic: return a hashref describing the full internal
+     * refcount state of the referent. Intended for differential testing
+     * between PerlOnJava and native Perl (see
+     * {@code dev/tools/refcount_diff.pl}). On native Perl, this builtin
+     * doesn't exist; callers are expected to check availability.
+     * <p>
+     * Returned hash keys:
+     * <ul>
+     *   <li>{@code refCount} — raw {@link RuntimeBase#refCount}</li>
+     *   <li>{@code localBindingExists} — true when a named-variable slot still holds the container</li>
+     *   <li>{@code destroyFired} — true once DESTROY has run</li>
+     *   <li>{@code blessId} — bless class id (0 = unblessed)</li>
+     *   <li>{@code class_name} — Perl class name (empty string if unblessed)</li>
+     *   <li>{@code kind} — runtime type: SCALAR / ARRAY / HASH / CODE / GLOB / OTHER</li>
+     *   <li>{@code has_weak_refs} — true if the weak-ref registry has entries pointing here</li>
+     * </ul>
+     */
+    public static RuntimeList jperl_refstate(RuntimeArray args, int ctx) {
+        RuntimeScalar arg = args.get(0);
+        RuntimeHash result = new RuntimeHash();
+        if (arg.value instanceof RuntimeBase base) {
+            result.put("refCount", new RuntimeScalar(base.refCount));
+            result.put("localBindingExists", new RuntimeScalar(base.localBindingExists));
+            result.put("destroyFired", new RuntimeScalar(base.destroyFired));
+            result.put("blessId", new RuntimeScalar(base.blessId));
+            String className = NameNormalizer.getBlessStr(base.blessId);
+            result.put("class_name", new RuntimeScalar(className == null ? "" : className));
+            String kind = "OTHER";
+            if (base instanceof RuntimeGlob) kind = "GLOB";
+            else if (base instanceof RuntimeHash) kind = "HASH";
+            else if (base instanceof RuntimeArray) kind = "ARRAY";
+            else if (base instanceof RuntimeCode) kind = "CODE";
+            else if (base instanceof RuntimeScalar) kind = "SCALAR";
+            result.put("kind", new RuntimeScalar(kind));
+            result.put("has_weak_refs", new RuntimeScalar(WeakRefRegistry.hasWeakRefsTo(base)));
+        } else {
+            result.put("refCount", new RuntimeScalar(-1));
+            result.put("kind", new RuntimeScalar("NOT_REF"));
+        }
+        return result.createReference().getList();
+    }
+
+    /**
+     * Phase 0 diagnostic: return a compact single-line string describing
+     * the internal refcount state of the referent. Shorthand form of
+     * {@link #jperl_refstate(RuntimeArray, int)} suitable for log lines.
+     * Format: {@code kind:class_name:refCount:flags} where flags is a
+     * concatenation of single letters: L=localBindingExists, D=destroyFired, W=has_weak_refs.
+     */
+    public static RuntimeList jperl_refstate_str(RuntimeArray args, int ctx) {
+        RuntimeScalar arg = args.get(0);
+        if (arg.value instanceof RuntimeBase base) {
+            String kind = "OTHER";
+            if (base instanceof RuntimeGlob) kind = "GLOB";
+            else if (base instanceof RuntimeHash) kind = "HASH";
+            else if (base instanceof RuntimeArray) kind = "ARRAY";
+            else if (base instanceof RuntimeCode) kind = "CODE";
+            else if (base instanceof RuntimeScalar) kind = "SCALAR";
+            String cn = NameNormalizer.getBlessStr(base.blessId);
+            StringBuilder flags = new StringBuilder();
+            if (base.localBindingExists) flags.append('L');
+            if (base.destroyFired) flags.append('D');
+            if (WeakRefRegistry.hasWeakRefsTo(base)) flags.append('W');
+            return new RuntimeScalar(kind + ":" + (cn == null ? "" : cn) + ":"
+                    + base.refCount + ":" + flags).getList();
+        }
+        return new RuntimeScalar("NOT_REF").getList();
     }
 
     /**
