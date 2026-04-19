@@ -143,6 +143,23 @@ public class EmitStatement {
         // For anonymous filehandle globs, this makes them unreachable so the
         // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.
         java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
+        // Phase E (refcount_alignment_52leaks_plan.md): deregister each
+        // my-variable from MyVarCleanupStack before nulling the local slot.
+        // Without this, the static stack holds strong references to
+        // block-scoped scalars until the enclosing subroutine returns,
+        // preventing JVM GC and keeping their RuntimeBase targets alive
+        // past their Perl-level scope. The reachability walker would then
+        // treat the scalar as a live lexical and mark its referent as
+        // reachable, causing false-positive leaks (basic rerefrozen in
+        // DBIC's t/52leaks.t).
+        for (int idx : allIndices) {
+            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                    "unregister",
+                    "(Ljava/lang/Object;)V",
+                    false);
+        }
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);

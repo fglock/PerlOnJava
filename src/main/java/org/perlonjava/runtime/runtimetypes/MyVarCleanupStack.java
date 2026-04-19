@@ -56,6 +56,34 @@ public class MyVarCleanupStack {
     }
 
     /**
+     * Called by emitted bytecode at normal block scope exit AFTER
+     * {@code scopeExitCleanup} has run. Removes the most recent entry
+     * matching {@code var} (by object identity) so the static stack no
+     * longer holds the scalar alive. Without this, block-scoped
+     * my-variables stayed registered until the enclosing subroutine
+     * returned, keeping their RuntimeBase targets alive past their
+     * Perl-level scope and causing leaks visible through the
+     * reachability walker.
+     * <p>
+     * Paired with {@link #register(Object)} — every register has a
+     * matching unregister on normal exit, and a matching
+     * {@link #unwindTo(int)} walk on exception exit.
+     *
+     * @param var the RuntimeScalar/Array/Hash previously registered
+     */
+    public static void unregister(Object var) {
+        if (var == null) return;
+        // Block-scoped my-vars pop in reverse declaration order, so
+        // scan from the top of the stack for a fast amortized match.
+        for (int i = stack.size() - 1; i >= 0; i--) {
+            if (stack.get(i) == var) {
+                stack.remove(i);
+                return;
+            }
+        }
+    }
+
+    /**
      * Called on exception in {@code RuntimeCode.apply()}.
      * Runs {@link MortalList#evalExceptionScopeCleanup(Object)} for all
      * registered-but-not-yet-cleaned variables since the mark, in LIFO order.

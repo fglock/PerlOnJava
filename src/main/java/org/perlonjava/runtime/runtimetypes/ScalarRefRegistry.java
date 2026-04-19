@@ -33,6 +33,14 @@ public class ScalarRefRegistry {
     private static final Map<RuntimeScalar, Boolean> scalarRegistry =
             Collections.synchronizedMap(new WeakHashMap<>());
 
+    // Phase E: optional per-scalar registerRef call-site stacks.
+    // Populated only when JPERL_REGISTER_STACKS=1 is set. Uses a
+    // WeakHashMap with the same scalar as key, so entries are pruned
+    // automatically when the scalar is JVM-GC'd. Lookup via
+    // stackFor() is O(1).
+    private static final Map<RuntimeScalar, Throwable> registerStacks =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
     // Phase B1 performance toggle: when set, skip all registry
     // maintenance. Useful for benchmarks; does NOT affect correctness
     // for programs that don't use weaken() (no weak-ref registry =
@@ -41,6 +49,8 @@ public class ScalarRefRegistry {
             System.getenv("JPERL_NO_SCALAR_REGISTRY") != null;
     private static final boolean DEBUG =
             System.getenv("JPERL_GC_DEBUG") != null;
+    private static final boolean RECORD_STACKS =
+            System.getenv("JPERL_REGISTER_STACKS") != null;
 
     /**
      * Register a scalar that now holds a reference. Called from
@@ -58,10 +68,25 @@ public class ScalarRefRegistry {
     public static void registerRef(RuntimeScalar scalar) {
         if (OPT_OUT || scalar == null) return;
         scalarRegistry.put(scalar, Boolean.TRUE);
+        if (RECORD_STACKS) {
+            registerStacks.put(scalar, new Throwable("registerRef"));
+        }
         if (DEBUG) {
             System.err.println("DBG registerRef scalar=" + System.identityHashCode(scalar)
                     + " type=" + scalar.type + " size=" + scalarRegistry.size());
         }
+    }
+
+    /**
+     * Phase E: return the call-site stack recorded at the time
+     * {@link #registerRef} was called for the given scalar. Returns
+     * {@code null} if no stack was recorded (either RECORD_STACKS is
+     * off, the scalar was never registered, or its entry was pruned
+     * by JVM GC).
+     */
+    public static Throwable stackFor(RuntimeScalar sc) {
+        if (!RECORD_STACKS || sc == null) return null;
+        return registerStacks.get(sc);
     }
 
     /**

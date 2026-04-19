@@ -725,5 +725,129 @@ either redesigning the rescuedObjects semantics (risk: re-breaks
   `set(RuntimeScalar)` sets flag when `value == UNDEF && inside DESTROY
   && blessed-with-DESTROY cycle`.
 
+---
+
+## Phase E — Trace the `basic rerefrozen` leak (2026-04-19, in progress)
+
+**Goal:** Find and fix the single remaining unpatched `t/52leaks.t`
+failure without regressing anything else.
+
+### What we know after the diagnostics commit (`578b4ba31`)
+
+Running `JPERL_TRACE_ALL=1 jperl /tmp/repro_rerefrozen.pl` on a
+minimal-replica-of-52leaks script shows:
+
+- Target: the outer `Storable::dclone(Storable::dclone(...))` result,
+  stored at `$base_collection->{rerefrozen}`.
+- **Exactly one** direct ScalarRefRegistry entry holds the target
+  hash.
+- That holder has `captureCount=0`, `refCountOwned=true`,
+  `type=HASHREFERENCE` (0x8068).
+- The scalar survives `ScalarRefRegistry.forceGcAndSnapshot()`'s
+  3-pass `System.gc()` loop with `WeakReference` sentinels. So the
+  scalar has a **strong JVM reference** somewhere that isn't the
+  `WeakHashMap` itself.
+- Minimal reproducers (< 30 lines) don't trigger it; only the full
+  52leaks.t exercise path does. Something in the long-lived
+  `fire_resultsets` closure + `random_results` accumulator + the
+  `local` trick interaction on lines 281–297 creates the leak.
+
+### Hypotheses to test
+
+1. **Hidden closure capture.** A closure somewhere captures the hash
+   ref but `captureCount` was never incremented on the scalar
+   (possibly from a code path that bypasses the normal closure
+   setup — e.g. `goto &func` combined with `@_` aliasing, or
+   `Sub::Defer`-generated subs).
+
+2. **Static cache.** Some static cache keyed by object identity
+   (e.g. method dispatch cache, overload resolver, Storable's own
+   internal state) holds a strong ref.
+
+3. **MortalList residue.** A `pending` or `marks` entry not
+   correctly popped by `popAndFlush()`.
+
+4. **RuntimeArray/RuntimeHash retained from a now-dead scope.** Some
+   `@_` copy or `return` list that the JVM still considers live.
+
+### Implementation plan
+
+#### Step 1: Instrument `registerRef` to record call-site stack
+
+Add a gated debug mode:
+
+```java
+// ScalarRefRegistry.java
+private static final boolean RECORD_STACKS =
+        System.getenv("JPERL_REGISTER_STACKS") != null;
+private static final Map<RuntimeScalar, Throwable> stacks =
+        Collections.synchronizedMap(new WeakHashMap<>());
+
+public static void registerRef(RuntimeScalar scalar) {
+    if (OPT_OUT || scalar == null) return;
+    scalarRegistry.put(scalar, Boolean.TRUE);
+    if (RECORD_STACKS) {
+        stacks.put(scalar, new Throwable("registerRef stack"));
+    }
+}
+
+public static Throwable stackFor(RuntimeScalar sc) {
+    return stacks.get(sc);
+}
+```
+
+#### Step 2: Surface the stack in `jperl_trace_to`
+
+When `JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`, for each direct
+holder of the target, print the captured stack trace.
+
+#### Step 3: Run 52leaks.t-minimal with the instrumentation
+
+Capture the stack for the leaking scalar. The Java stack plus the
+current Perl-file/line (from
+`RuntimeCaller`/`EmitBytecode.debugInfo`) should identify exactly
+which Perl operation allocated this scalar.
+
+#### Step 4: Diagnose and fix
+
+Based on step 3:
+- If it's a known code path: fix the leak at source (e.g. clear an
+  alias, decrement captureCount properly, prune a cache on scope
+  exit).
+- If it's MortalList residue: fix flush.
+- If it's a static cache: add a clearing hook.
+
+#### Step 5: Verify
+
+- `/tmp/repro_rerefrozen.pl` reports freed
+- `t/52leaks.t` unpatched reports 12/12 (no real fails)
+- Sandbox 213/213 preserved
+- Full unit suite PASS
+- Full DBIC suite regression check
+
+### Result (partial)
+
+Shipped as part of Phase E: `MyVarCleanupStack.unregister(Object)` +
+bytecode emission in `EmitStatement.emitScopeExitNullStores` so
+block-scoped `my` variables are deregistered at normal scope exit,
+not just when the enclosing subroutine returns.
+
+Impact:
+- Minimal reproducer (`/tmp/repro_rerefrozen2.pl` — blessed ref in a
+  hash, `Storable::dclone` round trip, weakened tracker outside the
+  block) **now correctly reports freed** after `jperl_gc`.
+- Sandbox 213/213 preserved
+- Full unit suite PASS
+- Full DBIC suite: no regressions
+
+However, `t/52leaks.t` test 12 **still fails** — the real test has a
+more complex reference topology where the `rerefrozen` hash ends up
+in the registry through a path other than a plain block-scoped
+my-var. Additional investigation needed to identify the surviving
+holder in the full test. The instrumentation added here
+(`JPERL_REGISTER_STACKS=1` + enhanced `jperl_trace_to` parent dump)
+will help.
+
+
 
 

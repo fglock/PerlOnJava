@@ -2,6 +2,8 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.util.Map;
+
 /**
  * The Strict class provides functionalities similar to the Perl strict module.
  */
@@ -220,6 +222,11 @@ public class Internals extends PerlModuleBase {
                     + " class=" + base.getClass().getSimpleName());
             int matchIdx = 0;
             int totalLexIdx = 0;
+            // Collect candidate parent hashes (those with any key pointing at base)
+            // when no direct holder exists. Useful for traces like
+            // "<live-lexical#N>{random_results}" where target is reached via
+            // a parent hash rather than directly held.
+            java.util.ArrayList<RuntimeScalar> parentScalars = new java.util.ArrayList<>();
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc == null) continue;
                 if (sc.captureCount > 0) continue;
@@ -232,10 +239,62 @@ public class Internals extends PerlModuleBase {
                             + " type=" + sc.type
                             + " rcO=" + sc.refCountOwned
                             + " captureCount=" + sc.captureCount);
+                    Throwable st = ScalarRefRegistry.stackFor(sc);
+                    if (st != null) {
+                        StackTraceElement[] frames = st.getStackTrace();
+                        int shown = Math.min(frames.length, 40);
+                        for (int fi = 0; fi < shown; fi++) {
+                            System.err.println("      at " + frames[fi]);
+                        }
+                        if (frames.length > shown) {
+                            System.err.println("      ... "
+                                    + (frames.length - shown) + " more");
+                        }
+                    }
+                } else if (sc.value instanceof RuntimeHash h
+                        && h.elements.values().stream().anyMatch(v -> v != null && v.value == base)) {
+                    parentScalars.add(sc);
+                } else if (sc.value instanceof RuntimeArray a
+                        && a.elements.stream().anyMatch(v -> v != null && v.value == base)) {
+                    parentScalars.add(sc);
                 }
             }
             System.err.println("  total direct holders=" + matchIdx
                     + " total lexicals scanned=" + totalLexIdx);
+            if (matchIdx == 0 && !parentScalars.isEmpty()) {
+                System.err.println("  --- parent-holder candidates ("
+                        + parentScalars.size() + ") ---");
+                int pIdx = 0;
+                for (RuntimeScalar ps : parentScalars) {
+                    System.err.println("  parent #" + (pIdx++)
+                            + " scId=" + System.identityHashCode(ps)
+                            + " type=" + ps.type
+                            + " rcO=" + ps.refCountOwned
+                            + " parentClass="
+                            + (ps.value != null ? ps.value.getClass().getSimpleName() : "null"));
+                    if (ps.value instanceof RuntimeHash ph) {
+                        java.util.List<String> keys = new java.util.ArrayList<>();
+                        for (Map.Entry<String, RuntimeScalar> ent : ph.elements.entrySet()) {
+                            if (ent.getValue() != null && ent.getValue().value == base) {
+                                keys.add(ent.getKey());
+                            }
+                        }
+                        System.err.println("    via keys: " + keys);
+                    }
+                    Throwable pst = ScalarRefRegistry.stackFor(ps);
+                    if (pst != null) {
+                        StackTraceElement[] frames = pst.getStackTrace();
+                        int shown = Math.min(frames.length, 30);
+                        for (int fi = 0; fi < shown; fi++) {
+                            System.err.println("      at " + frames[fi]);
+                        }
+                    }
+                    if (pIdx >= 5) {
+                        System.err.println("    ... " + (parentScalars.size() - 5) + " more parents");
+                        break;
+                    }
+                }
+            }
         }
         return new RuntimeScalar(String.join(" -> ", path)).getList();
     }
