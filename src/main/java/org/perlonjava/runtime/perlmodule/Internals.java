@@ -213,6 +213,30 @@ public class Internals extends PerlModuleBase {
         }
         java.util.List<String> path = ReachabilityWalker.findPathTo(base);
         if (path == null) return new RuntimeScalar().getList();
+        // Also dump all direct lexical-holders for debugging deep leaks
+        if (System.getenv("JPERL_TRACE_ALL") != null) {
+            System.err.println("jperl_trace_to target addr="
+                    + System.identityHashCode(base)
+                    + " class=" + base.getClass().getSimpleName());
+            int matchIdx = 0;
+            int totalLexIdx = 0;
+            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+                if (sc == null) continue;
+                if (sc.captureCount > 0) continue;
+                if (WeakRefRegistry.isweak(sc)) continue;
+                if (!RuntimeScalarType.isReference(sc)) continue;
+                totalLexIdx++;
+                if (sc.value == base) {
+                    System.err.println("  direct holder #" + (matchIdx++)
+                            + " scId=" + System.identityHashCode(sc)
+                            + " type=" + sc.type
+                            + " rcO=" + sc.refCountOwned
+                            + " captureCount=" + sc.captureCount);
+                }
+            }
+            System.err.println("  total direct holders=" + matchIdx
+                    + " total lexicals scanned=" + totalLexIdx);
+        }
         return new RuntimeScalar(String.join(" -> ", path)).getList();
     }
 

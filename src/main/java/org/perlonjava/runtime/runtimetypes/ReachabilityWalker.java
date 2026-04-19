@@ -176,7 +176,15 @@ public class ReachabilityWalker {
             if (WeakRefRegistry.isweak(sc)) continue;
             if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && sc.value instanceof RuntimeBase b) {
-                if (howReached.putIfAbsent(b, "<live-lexical#" + (scIdx++) + ">") == null) {
+                // Include scalar identity so users can correlate with
+                // heap dumps / profilers. captureCount=0 here by the
+                // filter above, but including refCountOwned + type
+                // helps narrow down which lexical it is.
+                String label = "<live-lexical#" + (scIdx++)
+                        + " scId=" + System.identityHashCode(sc)
+                        + " type=" + sc.type
+                        + " rcO=" + sc.refCountOwned + ">";
+                if (howReached.putIfAbsent(b, label) == null) {
                     todo.add(b);
                 }
             }
