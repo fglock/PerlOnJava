@@ -42,6 +42,18 @@ public class DestroyDispatch {
             java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
     /**
+     * Phase 4 (refcount_alignment_plan.md): Snapshot the rescued-objects
+     * list for use by {@link ReachabilityWalker}. Rescued objects (the
+     * result of Schema-style DESTROY self-save) are roots of the live
+     * graph even though they've "already fired" DESTROY.
+     */
+    public static java.util.List<RuntimeBase> snapshotRescuedForWalk() {
+        synchronized (rescuedObjects) {
+            return new java.util.ArrayList<>(rescuedObjects);
+        }
+    }
+
+    /**
      * Check whether the class identified by blessId defines DESTROY (or AUTOLOAD).
      * Result is cached in the destroyClasses BitSet.
      *

@@ -27,6 +27,11 @@ public class Internals extends PerlModuleBase {
             // against native Perl. See dev/design/refcount_alignment_plan.md.
             internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
+            // Phase 4 (refcount_alignment_plan.md): On-demand reachability
+            // sweep. Walks Perl-visible roots (globals, stashes, rescued
+            // objects) and clears weak refs for unreachable objects. Returns
+            // the number of weak refs cleared.
+            internals.registerMethod("jperl_gc", "jperl_gc", "");
             internals.registerMethod("initialize_state_variable", "initializeStateVariable", "$$");
             internals.registerMethod("initialize_state_array", "initializeStateArray", "$$");
             internals.registerMethod("initialize_state_hash", "initializeStateHash", "$$");
@@ -165,6 +170,17 @@ public class Internals extends PerlModuleBase {
                     + reportedRc + ":" + flags).getList();
         }
         return new RuntimeScalar("NOT_REF").getList();
+    }
+
+    /**
+     * Phase 4 (refcount_alignment_plan.md): Run a reachability sweep from
+     * Perl roots (globals, rescued objects) and clear weak refs for
+     * unreachable objects. Returns the number of weak refs cleared. This
+     * is jperl-only; under native Perl it should be treated as a no-op.
+     */
+    public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
+        int cleared = ReachabilityWalker.sweepWeakRefs();
+        return new RuntimeScalar(cleared).getList();
     }
 
     /**

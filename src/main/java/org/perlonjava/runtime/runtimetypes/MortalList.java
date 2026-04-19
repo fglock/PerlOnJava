@@ -514,6 +514,13 @@ public class MortalList {
         } finally {
             flushing = false;
         }
+        // Phase 4 (refcount_alignment_plan.md): automatic reachability sweep
+        // here was attempted but caused massive regressions because the
+        // walker cannot see live lexicals stored in JVM call-stack frames.
+        // An objects that are alive via a `my $x = ...` binding currently in
+        // scope would be falsely marked unreachable. The sweep is kept
+        // available as an explicit opt-in via Internals::jperl_gc() and via
+        // Internals::SvREFCNT (guarded) for leak-tracer compatibility.
     }
 
     /**

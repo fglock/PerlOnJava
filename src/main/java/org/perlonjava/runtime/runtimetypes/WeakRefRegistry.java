@@ -228,6 +228,16 @@ public class WeakRefRegistry {
      * 2. CODE refs are excluded (they may still be called from stashes)
      * 3. END blocks that check for leaks run AFTER this method
      */
+    /**
+     * Phase 4 (refcount_alignment_plan.md): snapshot all referents currently
+     * in the weak-ref registry. Used by {@link ReachabilityWalker} to iterate
+     * safely (the registry may be modified by concurrent DESTROY / weak-ref
+     * clearing during the walk).
+     */
+    public static java.util.List<RuntimeBase> snapshotWeakRefReferents() {
+        return new java.util.ArrayList<>(referentToWeakRefs.keySet());
+    }
+
     public static void clearAllBlessedWeakRefs() {
         // Snapshot the keys to avoid ConcurrentModificationException,
         // since clearWeakRefsTo modifies referentToWeakRefs.
