@@ -195,6 +195,24 @@ public class ScalarUtil extends PerlModuleBase {
         return new RuntimeScalar(WeakRefRegistry.isweak(ref)).getList();
     }
 
+    // Phase B2 auto-sweep via isweak() was REVERTED. Triggering sweepWeakRefs
+    // mid-DBIC-test caused stack overflows when sweep's DESTROY cascades
+    // triggered tail-call recursion in DBIC's own cleanup machinery.
+    //
+    // Problem: DBIC's leak tracer state is inconsistent during iteration
+    // (it uses `defined $reg->{$_}{weakref}` + `isweak(...)` in sequence).
+    // Firing a sweep that fires DESTROY on in-flight DBIC objects between
+    // those two reads corrupts DBIC's state.
+    //
+    // Future options for Phase B2:
+    //   (a) Hook at script-end-of-compilation-unit boundaries only
+    //   (b) Defer sweep to MortalList flush (which already runs at
+    //       statement boundaries — no mid-expression firing)
+    //   (c) Keep the DBIC LeakTracer patch; Phase B1's lexical seeds
+    //       already make jperl_gc() safe to call from Perl.
+    //
+    // See dev/design/refcount_alignment_52leaks_plan.md § "Phase B2 notes".
+
     /**
      * Dualvar functionality.
      *

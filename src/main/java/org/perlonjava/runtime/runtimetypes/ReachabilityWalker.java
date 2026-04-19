@@ -44,9 +44,21 @@ public class ReachabilityWalker {
     // because its refcount already tracks the captures accurately.
     private boolean walkCodeCaptures = false;
 
+    // Phase B1: whether to seed the walk from ScalarRefRegistry — the
+    // set of ref-holding RuntimeScalars that survived the last JVM GC
+    // cycle. ON by default for sweepWeakRefs (safe because the
+    // WeakHashMap has already been GC-pruned to live lexicals only).
+    private boolean useLexicalSeeds = true;
+
     /** Enable walking closures' captured scalars. */
     public ReachabilityWalker withCodeCaptures(boolean v) {
         this.walkCodeCaptures = v;
+        return this;
+    }
+
+    /** Disable the ScalarRefRegistry root seed (globals-only walk). */
+    public ReachabilityWalker withLexicalSeeds(boolean v) {
+        this.useLexicalSeeds = v;
         return this;
     }
 
@@ -75,6 +87,24 @@ public class ReachabilityWalker {
         // Roots: rescued objects (destroyed but pinned for DBIC phantom chain)
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
+        }
+
+        // Phase B1 (refcount_alignment_52leaks_plan.md): Roots from
+        // ScalarRefRegistry — ref-holding RuntimeScalars that survived
+        // the last JVM GC cycle. These represent live lexicals whose
+        // JVM frame slots still hold the scalar. Without this seed the
+        // walker mis-classifies alive-via-lexical objects as unreachable.
+        // Opt-in via useLexicalSeeds so existing callers (if any) that
+        // want pure global-roots-only behavior still get it.
+        //
+        // We skip scalars with captureCount > 0. Those are captured by a
+        // closure; walking them as roots would pull in everything the
+        // closure encloses, defeating the walkCodeCaptures=false default.
+        if (useLexicalSeeds) {
+            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+                if (sc.captureCount > 0) continue;
+                visitScalar(sc, todo);
+            }
         }
 
         // BFS
@@ -135,6 +165,20 @@ public class ReachabilityWalker {
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             if (howReached.putIfAbsent(rescued, "<rescued#" + (rescuedIdx++) + ">") == null) {
                 todo.add(rescued);
+            }
+        }
+        // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
+        // trace matches what sweepWeakRefs sees.
+        int scIdx = 0;
+        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+            if (sc == null) continue;
+            if (sc.captureCount > 0) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && sc.value instanceof RuntimeBase b) {
+                if (howReached.putIfAbsent(b, "<live-lexical#" + (scIdx++) + ">") == null) {
+                    todo.add(b);
+                }
             }
         }
         while (!todo.isEmpty()) {
@@ -212,6 +256,11 @@ public class ReachabilityWalker {
      */
     public static int sweepWeakRefs() {
         if (!WeakRefRegistry.weakRefsExist) return 0;
+        // Phase B1: Force a JVM GC cycle so ScalarRefRegistry's
+        // WeakHashMap prunes entries for RuntimeScalars no longer held
+        // by any live JVM frame slot. The walker then uses the pruned
+        // map as its lexical root seed.
+        ScalarRefRegistry.forceGcAndSnapshot();
         // Drain rescued objects first — an explicit jperl_gc() means the
         // caller is OK with collecting phantom-chain pinned Schema-style
         // objects.

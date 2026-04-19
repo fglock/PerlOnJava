@@ -193,8 +193,12 @@ public class Internals extends PerlModuleBase {
      * is jperl-only; under native Perl it should be treated as a no-op.
      */
     public static RuntimeList jperl_gc(RuntimeArray args, int ctx) {
+        // Two passes: the first pass fires DESTROY on unreachable
+        // objects, which may break circular refs and make more objects
+        // unreachable. The second pass catches those cascades.
         int cleared = ReachabilityWalker.sweepWeakRefs();
-        return new RuntimeScalar(cleared).getList();
+        int secondPass = ReachabilityWalker.sweepWeakRefs();
+        return new RuntimeScalar(cleared + secondPass).getList();
     }
 
     /**

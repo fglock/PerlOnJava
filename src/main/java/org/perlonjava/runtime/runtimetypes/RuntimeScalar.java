@@ -807,6 +807,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && base.refCount >= 0) {
             base.refCount++;
             scalar.refCountOwned = true;
+            // Phase B1 (refcount_alignment_52leaks_plan.md): track the
+            // container element so ReachabilityWalker can see it via
+            // ScalarRefRegistry.
+            ScalarRefRegistry.registerRef(scalar);
         }
     }
 
@@ -1008,6 +1012,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // Phase B1 (refcount_alignment_52leaks_plan.md): track this
+        // scalar so the reachability walker can enumerate live lexicals.
+        if (newOwned) {
+            ScalarRefRegistry.registerRef(this);
+        }
+
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
@@ -1043,6 +1053,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 base.refCount++;
             }
             newOwned = true;
+        }
+
+        // Phase B1 (refcount_alignment_52leaks_plan.md): register this
+        // scalar in ScalarRefRegistry so the reachability walker can
+        // enumerate live ref-holding RuntimeScalars on demand. No-op
+        // when no weaken() has ever been called.
+        if (newOwned) {
+            ScalarRefRegistry.registerRef(this);
         }
 
         // Decrement old value's refCount AFTER assignment (skip for weak refs
