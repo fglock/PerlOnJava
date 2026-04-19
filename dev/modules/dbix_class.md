@@ -170,6 +170,8 @@ Either:
 1. **True reachability-based GC** — mark from symbol-table roots on demand, clear weak refs for unreachable objects. Expensive but matches Perl's model exactly.
 2. **Accurate lexical decrement at scope exit** — audit every `my $x = <ref>` path to ensure scope exit fires a matching decrement. Large, risky refactor.
 
+See [`dev/design/refcount_alignment_plan.md`](../design/refcount_alignment_plan.md) for a phased plan that implements both.
+
 Deferred until such architectural work becomes practical.
 
 ### Historical notes (previously attempted)
