@@ -483,6 +483,19 @@ public class MortalList {
         return prev;
     }
 
+    // Phase B2 auto-sweep from flush() was attempted (both normal and
+    // quiet modes) but REVERTED. Even quiet-mode weak-ref clearing
+    // breaks DBIC module initialization — DBICTest::BaseResult.pm's
+    // use chain relies on weak-refed intermediate state during
+    // compilation. Auto-triggering requires a trigger point known to
+    // be outside module initialization (e.g. compiler-emitted
+    // "main-script body" markers), which we don't have yet.
+    //
+    // Current state: Internals::jperl_gc() remains opt-in.
+    // dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch
+    // calls it at assert_empty_weakregistry time, which is safe
+    // because that function runs after all module loading completes.
+
     public static void flush() {
         if (!active || pending.isEmpty() || flushing) return;
         flushing = true;
@@ -514,13 +527,6 @@ public class MortalList {
         } finally {
             flushing = false;
         }
-        // Phase 4 (refcount_alignment_plan.md): automatic reachability sweep
-        // here was attempted but caused massive regressions because the
-        // walker cannot see live lexicals stored in JVM call-stack frames.
-        // An objects that are alive via a `my $x = ...` binding currently in
-        // scope would be falsely marked unreachable. The sweep is kept
-        // available as an explicit opt-in via Internals::jperl_gc() and via
-        // Internals::SvREFCNT (guarded) for leak-tracer compatibility.
     }
 
     /**

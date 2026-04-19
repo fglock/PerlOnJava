@@ -387,3 +387,75 @@ recommended workaround until Option B lands.
 - DBIC `t/52leaks.t` (upstream) — the target test
 - DBIC `t/lib/DBICTest/Util/LeakTracer.pm` — the tracer we're
   trying to satisfy
+
+---
+
+## Progress Log (2026-04-19 implementation session)
+
+### Phase B1 — Lexical-aware reachability walker — LANDED
+
+Instead of the plan's proposed compiler instrumentation, the
+implementation uses a `WeakHashMap<RuntimeScalar, Boolean>`
+(`ScalarRefRegistry`) populated at every `setLarge`/container-store
+site. JVM GC prunes entries for scalars that become unreachable via
+JVM frame liveness; a forced `System.gc()` + multi-pass
+WeakReference-sentinel wait ensures up-to-date pruning before the
+walker seeds from the registry. Capture-count > 0 scalars are
+skipped (closure captures would over-reach).
+
+Result: **DBIC t/52leaks.t with LeakTracer patch: 9 real fails → 1
+real fail** (`basic rerefrozen` remains; reachable via some
+live-lexical scalar the walker's diagnostic traces to
+`<live-lexical#N>` without further chain).
+
+See commit `5813ea658`.
+
+### Phase B2 — Safe auto-trigger — BLOCKED
+
+Three approaches attempted, all reverted:
+
+1. **Auto-trigger on `Scalar::Util::isweak()` calls** — stack overflow
+   from DESTROY cascade → tail-call recursion in DBIC cleanup code.
+2. **Auto-trigger on `MortalList.flush()` (statement boundaries)** —
+   even with throttling and re-entry guard, breaks DBICTest module
+   initialization. The `BaseResult.pm` compilation chain depends on
+   weak-ref intermediate state remaining defined.
+3. **Quiet-mode auto-sweep (no DESTROY)** — same module-init
+   failures. Clearing weak refs alone corrupts Class::C3::Componentised
+   or similar module-construction state.
+
+**Root cause:** auto-trigger requires distinguishing "main script
+body" execution from "module initialization". PerlOnJava's compiler
+doesn't emit such markers today.
+
+Deferred to future work. Options:
+- (a) Compiler-emitted safepoint markers at statement top-level,
+      excluded during `BEGIN`/`require`/`use` compilation.
+- (b) A sentinel global set during `Perl_eval_require_sv` /
+      `use`-loading that inhibits auto-sweep while module code is
+      running.
+- (c) Leave it opt-in forever; document the LeakTracer patch as the
+      recommended integration path.
+
+### Phase B3 — Remove LeakTracer patch — DEFERRED
+
+Blocked on B2. Until auto-trigger is safe, DBIC users on jperl need
+the `dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`
+to get `Internals::jperl_gc()` called at assertion time.
+
+### Remaining `basic rerefrozen` leak (even with patch)
+
+One stubborn failure where a dcloned hash (double-clone of
+`$base_collection`) remains reachable via a ScalarRefRegistry
+entry the walker traces as `<live-lexical#N>` but can't chain
+further (the scalar directly holds the rerefrozen hashref).
+
+Possible causes (Phase A1 audit work):
+- Some JVM-frame-alive scalar in Storable's `dclone` internals
+  retains a ref to the cloned output for longer than expected.
+- A map/grep temp frame scalar whose JVM slot hasn't been nulled
+  yet at assertion time.
+- A closure capture we haven't correctly excluded
+  (`captureCount` check misses some cases).
+
+Not pursued further in this session.
