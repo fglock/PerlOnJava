@@ -1,7 +1,16 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-10
-**Status:** PRODUCTION READY - 841/841 Moo subtests (100%), all unit tests passing
+**Last Updated:** 2026-04-19
+**Status:** PRODUCTION READY
+- 841/841 Moo subtests (100%)
+- 269/270 DBIC test files pass (1 pre-existing failure, unrelated)
+- DBIC `t/52leaks.t`: **0 real failures** (was 9)
+- DBIC `t/storage/txn.t`: 90/90, `t/storage/txn_scope_guard.t`: 18/18
+- `dev/sandbox/destroy_weaken/*.t`: 213/213
+
+See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md)
+and [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md)
+for the 2026-04 alignment work that closes the remaining Perl-parity gaps.
 
 ---
 
@@ -12,23 +21,30 @@ using a **selective reference-counting overlay** on top of the JVM's tracing
 garbage collector. The JVM already handles memory reclamation (including
 circular references), so PerlOnJava does not need full Perl 5-style refcounting.
 Instead, it tracks refcounts only for the small subset of objects that require
-deterministic destruction: those blessed into a class with a `DESTROY` method.
+deterministic destruction: those blessed into a class with a `DESTROY` method,
+plus a few ancillary cases (anonymous containers, closures with captures).
 Everything else is left to the JVM GC with zero bookkeeping overhead. Weak
-references (`weaken()`) are tracked in a separate registry (WeakRefRegistry)
-and are cleared when a tracked object's refcount hits zero.
+references (`weaken()`) are tracked in a separate registry (`WeakRefRegistry`)
+and are cleared when a tracked object's refcount hits zero or when a
+reachability sweep determines the object is unreachable from Perl roots.
 
-The system is designed around two principles:
+The system is designed around three principles:
 
 1. **Low cost when unused.** `MortalList.active` is always `true` (required for
-   balanced refCount tracking on birth-tracked objects like anonymous hashes and
-   closures with captures), but most operations are guarded by cheap checks
-   (`refCount >= 0`, `refCountOwned`, empty pending list) that short-circuit for
-   untracked objects.
+   balanced refCount tracking on birth-tracked objects), but most operations
+   are guarded by cheap checks (`refCount >= 0`, `refCountOwned`, empty
+   pending list) that short-circuit for untracked objects.
 
 2. **Correctness over completeness.** The system tracks only objects that
    *need* tracking (blessed into a DESTROY class), avoiding the full Perl 5
    reference-counting burden. Weak references are registered externally and
    cleared as a side-effect of DESTROY.
+
+3. **Perl-semantics first.** When cooperative refcount drifts from Perl's
+   accurate refcount (due to JVM temporaries, call-stack lexicals the walker
+   can't see, etc.), the reachability walker (`ReachabilityWalker` + opt-in
+   `Internals::jperl_gc()`) fills the gap, matching what Perl's refcount
+   would have concluded.
 
 ---
 
@@ -61,6 +77,29 @@ Every `RuntimeBase` (the superclass of `RuntimeHash`, `RuntimeArray`,
                                               └──► DestroyDispatch.callDestroy()
                                                    WeakRefRegistry.clearWeakRefsTo()
 ```
+
+During `DESTROY` execution (Phase 3 — 2026-04 alignment work), the lifecycle
+temporarily expands:
+
+```
+    MIN_VALUE ─────► 0 (with currentlyDestroying = true)
+                     │
+                     │ DESTROY body runs. Increments/decrements work normally.
+                     │ Re-entry into callDestroy while currentlyDestroying is
+                     │ true resets refCount to 0 and returns (no re-invocation).
+                     │
+                     ▼
+           refCount > 0 after DESTROY body (resurrection):
+                     │    needsReDestroy = true; object stays alive.
+                     │    When the next decrement hits 0, DESTROY fires again.
+                     │
+           refCount == 0 after DESTROY body (normal):
+                     │    refCount = MIN_VALUE; weak refs cleared; cascade
+                     │    cleanup into hash/array contents.
+```
+
+See `RuntimeBase.currentlyDestroying` and `RuntimeBase.needsReDestroy`, and
+`DestroyDispatch.doCallDestroy()`.
 
 **NOTE on WEAKLY_TRACKED (-2):**
 
@@ -131,22 +170,24 @@ variable to trigger destruction.
 
 | File | Role |
 |------|------|
-| `RuntimeBase.java` | Defines `refCount`, `blessId` fields on all referent types |
+| `RuntimeBase.java` | Defines `refCount`, `blessId`, `destroyFired`, `currentlyDestroying`, `needsReDestroy`, `localBindingExists` fields on all referent types |
 | `RuntimeScalar.java` | `setLarge()` (increment/decrement), `scopeExitCleanup()`, `undefine()`, `incrementRefCountForContainerStore()` |
 | `RuntimeList.java` | `setFromList()` -- list destructuring with materialized copy refcount undo |
 | `RuntimeHash.java` | `createReferenceWithTrackedElements()` (birth-tracking for anonymous hashes), `delete()` with deferred decrement |
-| `RuntimeArray.java` | `createReferenceWithTrackedElements()` (element tracking, NOT birth-tracked -- see Limitations) |
-| `WeakRefRegistry.java` | Weak reference tracking: forward set + reverse map |
-| `DestroyDispatch.java` | DESTROY method resolution, caching, invocation |
-| `MortalList.java` | Deferred decrements (FREETMPS equivalent) |
+| `RuntimeArray.java` | `createReferenceWithTrackedElements()` (element tracking), `setFromListAliased()` (Phase 2: `@DB::args` population without refCount inflation) |
+| `WeakRefRegistry.java` | Weak reference tracking: forward set + reverse map; `snapshotWeakRefReferents()` for Phase 4 walker |
+| `DestroyDispatch.java` | DESTROY method resolution, caching, invocation; Phase 3 state machine (`currentlyDestroying` / `needsReDestroy`); `snapshotRescuedForWalk()` for Phase 4 walker |
+| `MortalList.java` | Deferred decrements (FREETMPS equivalent); Phase 3 `pendingSize()` / `drainPendingSince()` for DESTROY body's deferred decrements |
+| `ReachabilityWalker.java` | Phase 4 mark-and-sweep from Perl roots; `sweepWeakRefs()` clears weak refs for unreachable objects; `findPathTo()` diagnostic |
 | `GlobalDestruction.java` | End-of-program stash walking |
 | `ReferenceOperators.java` | `bless()` -- activates tracking |
 | `RuntimeGlob.java` | CODE slot replacement -- optree reaping emulation |
-| `RuntimeCode.java` | `padConstants` registry, `releaseCaptures()`, eval BLOCK capture release in `apply()` |
+| `RuntimeCode.java` | `padConstants` registry, `releaseCaptures()`, eval BLOCK capture release in `apply()`, `caller()` populates `@DB::args` via `setFromListAliased` |
 | `TiedVariableBase.java` | Tie wrapper refCount increment/decrement for DESTROY on `untie` |
 | `RuntimeRegex.java` | `cloneTracked()` for qr// objects; per-callsite caching for m?PAT? |
 | `EmitStatement.java` | Generates scope-exit `MortalList` bytecode (`pushMark`/`popAndFlush`/`scopeExitCleanup`) |
 | `GlobalRuntimeScalar.java` | `dynamicSaveState()`/`dynamicRestoreState()` refCount displacement for `local` on globals |
+| `Internals.java` (perlmodule) | `SvREFCNT`, `jperl_gc`, `jperl_refstate[_str]`, `jperl_trace_to` -- Perl-visible diagnostic and control API |
 
 ---
 
@@ -201,33 +242,57 @@ lookup per class. Called by `bless()` to decide whether to activate tracking.
 
 **`callDestroy(referent)` flow:**
 
-The public `callDestroy()` handles steps 1-4; the private `doCallDestroy()`
-handles steps 5-11.
+`callDestroy()` is the public entry point; `doCallDestroy()` does the actual
+Perl-level DESTROY invocation. The flow is:
 
-1. **Precondition:** Caller has already set `refCount = MIN_VALUE`.
-2. Calls `WeakRefRegistry.clearWeakRefsTo(referent)` -- clears all weak
-   references pointing to this object (skips CODE referents). This fires for
-   both blessed objects (before DESTROY) and WEAKLY_TRACKED objects (unblessed,
-   reached via `undefine()` WEAKLY_TRACKED handling).
-3. If referent is `RuntimeCode`, calls `releaseCaptures()`.
-4. Looks up class name from `blessId`. If unblessed: cascades into container
-   elements via `MortalList.scopeExitCleanupHash/Array()` (so that tracked
-   refs inside unblessed containers get their refCounts decremented), then
-   returns. No DESTROY to call, but weak refs, captures, and container
-   elements have been cleaned up.
-5. Resolves DESTROY method via cache or `InheritanceResolver`.
-6. Handles AUTOLOAD: sets `$AUTOLOAD = "ClassName::DESTROY"`.
-7. Saves/restores `$@` around the call (DESTROY must not clobber `$@`).
-8. Builds a `$self` reference with the correct type (`HASHREFERENCE` for
-   `RuntimeHash`, `ARRAYREFERENCE` for `RuntimeArray`, `GLOBREFERENCE` for
-   `RuntimeGlob`, then `SCALAR`/`CODE`/etc. -- note:
-   `RuntimeGlob` is checked before `RuntimeScalar` because it is a subclass).
-9. Calls `RuntimeCode.apply(destroyMethod, args, VOID)`.
-10. **Cascading destruction:** After DESTROY returns, walks the destroyed
-    object's elements via `MortalList.scopeExitCleanupHash/Array()`, then
-    flushes. This ensures tracked refs inside the destroyed container get
-    their refCounts decremented and may trigger further DESTROY calls.
-11. **Exception handling:** Catches exceptions, converts to
+1. **Re-entry guard (Phase 3).** If `referent.currentlyDestroying` is true,
+   a transient decrement-to-0 landed back here while the outer DESTROY body
+   is still running. Reset `refCount` to 0 (so further stores inside the
+   body keep working) and return without re-invoking the Perl DESTROY.
+2. **Resurrection re-fire (Phase 3).** If `destroyFired && needsReDestroy`,
+   the previous DESTROY left the object with escaping strong refs. Those
+   have now been released (refCount reached 0 again), so re-invoke the Perl
+   DESTROY a second time. Clear `needsReDestroy` first.
+3. **Already-destroyed cleanup.** If `destroyFired` (and no resurrection):
+   just clear weak refs and cascade into container elements; return.
+4. **Unblessed objects.** Clear weak refs, cascade, return — no DESTROY
+   method to call but internal refs still need decrementing.
+5. **Blessed objects.** Fall through to `doCallDestroy()`.
+
+**`doCallDestroy()` body (the Perl DESTROY invocation):**
+
+1. Set `destroyFired = true`; reset `resurrectedAfterDestroy = false` (Phase 3).
+2. Look up DESTROY method via cache or `InheritanceResolver`.
+3. If no DESTROY method: clear weak refs, cascade, return.
+4. Handle AUTOLOAD: set `$AUTOLOAD = "ClassName::DESTROY"`.
+5. Save `$@` (Perl requires `local($@)` around DESTROY).
+6. Enable rescue detection (`currentDestroyTarget`, `destroyTargetRescued`).
+7. **Phase 3:** Enter active-destroying state. `currentlyDestroying = true`;
+   transition `refCount` from `MIN_VALUE` → 0 so increments/decrements work.
+8. Build `$self` reference (type-aware: HASH/ARRAY/GLOB/CODE/SCALAR).
+9. Build `args`, push self, snapshot `MortalList.pendingSize()`.
+10. Call `RuntimeCode.apply(destroyMethod, args, VOID)`.
+11. **Phase 3:** `MortalList.drainPendingSince(snapshot)` — process deferred
+    decrements queued during the DESTROY body (`shift @_` defer, `$self`
+    scope exit defer), regardless of whether an outer flush is active.
+12. **Phase 3:** Balance the `args.push(self)` increment by directly
+    decrementing any still-owned element in `args`. Direct decrement avoids
+    feedback-loop recursion through the MortalList pending queue.
+13. **Phase 3:** Resurrection detection. If `refCount > 0 && !rescued`:
+    a strong ref to `$self` escaped the DESTROY body. Set
+    `needsReDestroy = true` and return without cleanup. When the escaping
+    ref is later released, step 2 of `callDestroy` will re-invoke DESTROY.
+14. **Rescue detection (pre-existing).** If `destroyTargetRescued` (set by
+    `setLargeRefCounted` when `$source->{schema} = $self` pattern fires):
+    add to `rescuedObjects`, return. Cleanup deferred to
+    `clearRescuedWeakRefs()` at END time.
+15. **Cascading destruction.** Clear weak refs, walk the destroyed object's
+    contents via `MortalList.scopeExitCleanupHash/Array`, flush.
+16. **Finally.** Restore `currentDestroyTarget` / `destroyTargetRescued` /
+    `currentlyDestroying`. If `refCount == 0 && !needsReDestroy`: transition
+    to `MIN_VALUE` so future `callDestroy` enters the normal cleanup path.
+    Restore `$@`.
+17. **Exception handling:** Catches exceptions, converts to
     `WarnDie.warn("(in cleanup) ...")` -- matching Perl 5 semantics.
 
 ### 3. MortalList (Deferred Decrements)
@@ -471,6 +536,91 @@ the next GC cycle.
 Flushing happens at statement boundaries via `setLarge()` and scoped
 `popAndFlush()` instead.
 
+### 9. `@DB::args` Aliased Semantics (Phase 2)
+
+**Path:** `RuntimeCode.apply()` → `caller()` block; `RuntimeArray.setFromListAliased()`
+
+In Perl 5, `@DB::args` entries are **aliases** to the caller's `@_` slots,
+not counted strong references. Modifying `$DB::args[0]` modifies the
+caller's first argument; copying `@DB::args` into another array creates
+real counted refs in the destination but leaves the alias slots untouched.
+
+PerlOnJava previously populated `@DB::args` via `setFromList`, which
+incremented each referent's refCount. This inflated refcount under the
+DBIC / Devel::StackTrace pattern where user code captures `@DB::args` into
+a persistent array — the object appeared to have 2+ counted owners when
+Perl 5 only has 1 (the capture target).
+
+`RuntimeArray.setFromListAliased()` clears existing element ownership
+(via `deferDestroyForContainerClear`), copies new elements in WITHOUT
+incrementing referent refCounts, marks each element `refCountOwned=false`,
+and sets `elementsOwned=false` so `shift`/remove paths don't defer a
+spurious decrement. `caller()` uses this path when populating `@DB::args`
+(both the live `argsStack` and the `originalArgsStack` snapshot).
+
+The DBIC `t/storage/txn_scope_guard.t` test 18
+(`detected_reinvoked_destructor`) relies on this + Phase 3 resurrection
+semantics to fire DESTROY twice when a strong ref escapes via `@DB::args`
+and is later released.
+
+### 10. ReachabilityWalker (Phase 4)
+
+**Path:** `org.perlonjava.runtime.runtimetypes.ReachabilityWalker`
+
+Mark-and-sweep reachability walker for when cooperative refcount has
+drifted beyond what `callDestroy` alone can reconcile. Walks the Perl-
+visible object graph from roots and clears weak refs for referents that
+no path reaches.
+
+**Roots walked:**
+- `GlobalVariable.globalVariables` (package scalars)
+- `GlobalVariable.globalArrays` / `globalHashes` / `globalCodeRefs`
+- `DestroyDispatch.rescuedObjects` (only when walker is run standalone;
+  `sweepWeakRefs()` drains these up front since explicit `jperl_gc` means
+  the caller wants aggressive cleanup)
+
+**Not walked (intentionally, to avoid false-positive reachability):**
+- `RuntimeCode.capturedScalars`. Sub::Quote/Moo accessor closures capture
+  `$self` instances transitively, which would mark DBIC Schema objects as
+  reachable even after they should be GC'd. Opt-in via
+  `walker.withCodeCaptures(true)`.
+- Live JVM-call-stack lexicals. These are invisible to the walker. The
+  consequence is the walker is **only safe to run at points where the
+  caller knows those lexicals don't matter** — hence `jperl_gc()` is
+  opt-in rather than automatic.
+
+**Key operations:**
+
+| Method | Purpose |
+|--------|---------|
+| `walk()` | BFS from roots; returns set of reachable `RuntimeBase` instances. |
+| `sweepWeakRefs()` | Drains `rescuedObjects`, then runs `walk()`. For each entry in the weak-ref registry whose referent is not reachable: if blessed + not yet destroyed, fire DESTROY; else clear weak refs and set `MIN_VALUE`. |
+| `findPathTo(target)` | Diagnostic: returns first path string (e.g. `"%DBIx::Class::Schema::{accessors}{schema}"`) found to the target, or null. |
+
+**When not to run:** Inside code paths where the current Perl frame's
+lexicals hold objects the walker can't see (e.g., mid-test leak-cleanup
+loops). See the DBIC LeakTracer patch in
+`dev/patches/cpan/DBIx-Class-0.082844/` for the "only sweep when registry
+has >5 entries" guard that distinguishes the outer test-wide registry
+from inner per-object registries.
+
+### 11. `Internals::*` Perl-Visible API
+
+**Path:** `org.perlonjava.runtime.perlmodule.Internals`
+
+| Perl call | Behavior |
+|-----------|----------|
+| `Internals::SvREFCNT($ref)` | Returns `0` for destroyed (MIN_VALUE), `1` for untracked or tracked-with-0-counted-owners, else raw `refCount`. Used by `B::SV::REFCNT` via `bundled-modules/B.pm`. |
+| `Internals::SvREADONLY($ref [, $flag])` | Query or set readonly status. |
+| `Internals::jperl_gc()` | Phase 4: opt-in reachability sweep. Returns count of weak refs cleared. Drains rescued objects. No-op under native Perl (not defined there). |
+| `Internals::jperl_refstate($ref)` | Phase 0 diagnostic: returns a hashref with `refCount`, `localBindingExists`, `destroyFired`, `blessId`, `class_name`, `kind` (SCALAR/ARRAY/HASH/CODE/GLOB), `has_weak_refs`. |
+| `Internals::jperl_refstate_str($ref)` | Phase 0: compact single-line form `"kind:class:refCount:flags"` where flags is any of `L` (localBindingExists), `D` (destroyFired), `W` (has weak refs). Subtracts 1 for the passed-in alias to match native Perl's REFCNT convention. |
+| `Internals::jperl_trace_to($ref)` | Phase 4 diagnostic: first path from Perl roots to `$ref`, or `undef`. |
+
+See `dev/tools/refcount_diff.pl` for a differential refcount inspector that
+uses these primitives to compare jperl and native-perl refcount trajectories
+at user-marked checkpoints (`Internals::jperl_refcount_checkpoint`).
+
 ---
 
 ## Lifecycle Examples
@@ -546,6 +696,76 @@ my $weak;
 }
 # scopeExitCleanup for $obj: defers decrement (refCount 1 -> 0 -> DESTROY)
 # DESTROY clears $weak via clearWeakRefsTo
+```
+
+### Example 5: DESTROY Resurrection via `@DB::args` (Phase 3)
+
+The `DBIx::Class::_Util::detected_reinvoked_destructor` pattern. A
+`__WARN__` handler inside a `DESTROY` body captures `@DB::args` into
+a persistent array; Perl 5 fires DESTROY a second time when that
+capture is released.
+
+```perl
+package G;
+sub new { bless { id => 1 }, 'G' }
+sub DESTROY {
+    my $self = shift;
+    warn "cleanup\n";   # carp-style; fires __WARN__ handler
+}
+
+my @kept;
+{
+    my $g = G->new;
+    local $SIG{__WARN__} = sub {
+        package DB;
+        my $fr;
+        while (my @f = caller(++$fr)) {
+            push @kept, @DB::args;   # captures $g transitively
+        }
+    };
+    undef $g;
+    # DESTROY fired once. $g's refCount climbed from 0 back to 1+ inside
+    # DESTROY because @kept captured it (Phase 2: @DB::args is aliased, so
+    # push into @kept creates real refs). Phase 3: needsReDestroy=true,
+    # object stays alive.
+}
+# @kept still holds $g's object here.
+@kept = ();
+# Clearing @kept drops the last counted ref. refCount 1 -> 0. callDestroy
+# sees destroyFired && needsReDestroy -> re-invokes Perl DESTROY. Second
+# cleanup warning fires.
+```
+
+### Example 6: Reachability Sweep (Phase 4)
+
+For leak-tracer-style scripts where cooperative refcount inflates beyond
+what `callDestroy` alone resolves.
+
+```perl
+use Scalar::Util 'weaken';
+
+my %registry;
+sub register {
+    my $ref = shift;
+    my $addr = refaddr($ref);
+    weaken( $registry{$addr}{weakref} = $ref );
+}
+
+{
+    my $obj = DBICTest::Artist->new(...);
+    register($obj);
+    # ... lots of DBIC machinery creates JVM temporaries that inflate
+    # $obj's cooperative refCount ...
+}
+
+# At this point $obj's lexical is gone, but refCount > 0 due to inflation.
+# The weak ref in %registry is still defined.
+
+my $cleared = Internals::jperl_gc();
+# Walks globals + rescuedObjects. $obj is not reachable from any root,
+# so jperl_gc clears its weak ref and fires DESTROY.
+
+# Now $registry{$addr}{weakref} is undef as Perl 5 would have it.
 ```
 
 ---
@@ -624,12 +844,15 @@ decrement per reference assignment), but this is by design.
 
 | Aspect | Perl 5 | PerlOnJava |
 |--------|--------|------------|
-| Tracking scope | Every SV has a refcount | Only blessed-into-DESTROY objects and weaken targets |
-| GC model | Deterministic refcounting + cycle collector | JVM tracing GC + cooperative refcounting overlay |
+| Tracking scope | Every SV has a refcount | Only blessed-into-DESTROY objects, anonymous containers, closures with captures, and weaken targets |
+| GC model | Deterministic refcounting + cycle collector | JVM tracing GC + cooperative refcounting overlay + opt-in reachability sweep |
 | Circular references | Leak without weaken | Handled by JVM GC (weaken still needed for DESTROY timing) |
 | `weaken()` on the only ref | Immediate DESTROY | Same behavior |
 | DESTROY timing | Immediate when refcount hits 0 | Same for tracked objects; untracked objects rely on JVM GC |
+| DESTROY resurrection | DESTROY called again when resurrected object is released | Same (Phase 3 `needsReDestroy`) |
+| `@DB::args` / `@_` semantics | Alias entries, no refcount inflation | `@DB::args`: aliased via `setFromListAliased` (Phase 2). `@_` in normal subs: still counted copies (Phase 2 only covers the `caller()` path; wider `@_` aliasing not yet implemented) |
 | Global destruction | Walks all SVs | Walks global stashes (scalars, arrays, hashes) |
+| Leak detection | `Internals::SvREFCNT` accurate | `Internals::SvREFCNT` approximate; use `Internals::jperl_gc()` + `jperl_trace_to()` for precise leak diagnostics |
 | `fork` | Supported | Not supported (JVM limitation) |
 | DESTROY saves/restores | `local($@, $!, $?)` | Only `$@` is saved/restored; `$!` and `$?` are not yet localized around DESTROY calls |
 
@@ -677,25 +900,70 @@ decrement per reference assignment), but this is by design.
    infeasible to change how weak references store their referent without a
    prerequisite refactoring to introduce accessors.
 
+7. **Reachability walker can't see live JVM-call-stack lexicals.** Phase 4's
+   `ReachabilityWalker` walks from globals and `rescuedObjects` but not into
+   per-frame Java locals. Running an auto-triggered sweep is therefore
+   unsafe (it would clear weak refs to objects that are alive in some live
+   lexical). `Internals::jperl_gc()` is opt-in for exactly this reason —
+   the caller is responsible for ensuring the current frame's lexicals
+   aren't holding objects that should survive.
+
+8. **Reachability walker does not follow `RuntimeCode.capturedScalars` by
+   default.** Sub::Quote and Moo generate accessor closures that capture
+   `$self`-ish refs transitively, so walking those edges marks DBIC Schema
+   instances as reachable even when they should be collected. Native Perl
+   doesn't hit this pitfall because its accurate refcount already tracks
+   captures. Opt in via `ReachabilityWalker.withCodeCaptures(true)` if you
+   need the more conservative traversal.
+
+9. **`Internals::SvREFCNT` is approximate.** Cooperative refCount
+   under-counts stack / JVM temporaries vs native Perl. `B::SV::REFCNT`
+   (in `bundled-modules/B.pm`) relies on the +1 inflation from `$self->{ref}`
+   hash storage to compensate for this under-counting; removing either
+   bias would break DBIC's Schema rescue (`refcount > 1` check).
+
 ---
 
 ## Test Coverage
 
-Tests are organized in three tiers:
+Tests are organized in four tiers:
 
-| Directory | Files | Focus |
-|-----------|-------|-------|
-| `src/test/resources/unit/destroy.t` | 1 file, 14 subtests | Basic DESTROY semantics: scope exit, multiple refs, exceptions, inheritance, re-bless, void-context delete, untie DESTROY (immediate and deferred) |
+| Directory / File | Files | Focus |
+|------------------|-------|-------|
+| `src/test/resources/unit/destroy.t` | 1 file, 14 subtests | Basic DESTROY semantics: scope exit, multiple refs, exceptions, inheritance, re-bless, void-context delete, untie DESTROY |
 | `src/test/resources/unit/weaken.t` | 1 file, 4 subtests | Basic weaken: isweak flag, weak ref access, copy semantics, weaken+DESTROY interaction |
 | `src/test/resources/unit/refcount/` | 8 files | Comprehensive: circular refs, self-refs, tree structures, return values, inheritance chains, edge cases (weaken on non-ref, resurrection, closures, deeply nested structures, multiple simultaneous weak refs) |
-| `src/test/resources/unit/refcount/weaken_edge_cases.t` | 34 subtests | Edge cases: nested weak refs, WEAKLY_TRACKED heuristic, multiple strong refs, scope exit clearing |
+| `dev/sandbox/destroy_weaken/*.t` | 10 files, 213 subtests | Broad Perl-parity corpus including `known_broken_patterns.t` for DESTROY resurrection and `@DB::args` capture |
 
-Integration coverage via Moo test suite: **841/841 subtests across 71 test files.**
+### Integration coverage
+
+- **Moo 2.005005:** 841/841 subtests across 71 test files (100%)
+- **DBIx::Class 0.082844:** 269/270 test files pass (1 pre-existing failure
+  `t/storage/error.t`#49 unrelated to this subsystem)
+  - `t/52leaks.t` — 0 real failures (was 9 before Phase 4 + DBIC LeakTracer patch)
+  - `t/storage/txn.t` — 90/90
+  - `t/storage/txn_scope_guard.t` — 18/18 (test 18 relies on Phase 3 resurrection)
+- **Class-Method-Modifiers, Role-Tiny, etc.:** no regressions vs master
+
+### Differential tooling
+
+- `dev/tools/refcount_diff.pl` — runs a script under both `perl` and
+  `./jperl` at user-marked checkpoints
+  (`Internals::jperl_refcount_checkpoint($ref, $name)`) and prints a
+  stream diff of refcount divergences.
+- `dev/tools/destroy_semantics_report.pl` — pass/fail summary across the
+  sandbox corpus.
+- `dev/tools/phase1_verify.pl` — 10 simple scope-exit patterns confirmed
+  byte-identical between jperl and perl.
 
 ---
 
 ## See Also
 
 - [dev/design/destroy_weaken_plan.md](../design/destroy_weaken_plan.md) -- Design document with implementation history, strategy analysis, and evolution of the WEAKLY_TRACKED design
+- [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md) -- 2026-04 plan for aligning cooperative refcount with Perl semantics (phases 0-7)
+- [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md) -- Per-phase progress log
 - [dev/modules/moo.md](../modules/moo.md) -- Moo test tracking and category-by-category fix log
+- [dev/modules/dbix_class.md](../modules/dbix_class.md) -- DBIC test tracking and historical failure analysis
+- [dev/patches/cpan/DBIx-Class-0.082844/](../patches/cpan/DBIx-Class-0.082844/) -- DBIC patches (TxnScopeGuard + LeakTracer `jperl_gc` hook)
 - [dev/architecture/dynamic-scope.md](dynamic-scope.md) -- Dynamic scoping (related: `local` interacts with refCount via `DynamicVariableManager`)
