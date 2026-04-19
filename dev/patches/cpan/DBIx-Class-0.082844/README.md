@@ -1,55 +1,45 @@
 # DBIx::Class 0.082844 Patches for PerlOnJava
 
-## Problem
+## Status: Storage-DBI.pm and ResultSet.pm patches are OBSOLETE (2026-04-19)
 
-DBIx::Class uses `TxnScopeGuard` which relies on `DESTROY` for automatic 
-transaction rollback when a scope guard goes out of scope without being 
-committed. On PerlOnJava (JVM), `DESTROY` does not fire deterministically, 
-so:
+After the refcount alignment work (Phases 1-3, see
+`dev/design/refcount_alignment_plan.md`), the TxnScopeGuard DESTROY
+behavior fires deterministically at scope exit. The original
+`Storage-DBI.pm.patch` and `ResultSet.pm.patch` — which explicitly
+wrapped populate paths in `eval { ... } or do { rollback }` — are no
+longer required.
 
-1. Failed bulk inserts leave `transaction_depth` permanently elevated
-2. Subsequent transactions silently nest instead of creating new top-level transactions
-3. `BEGIN`/`COMMIT` disappear from SQL traces
-4. Failed populates don't roll back (partial data left in DB)
+Verification: `t/100populate.t` is **108/108 unpatched** (previously
+98/108 without the patches).
 
-## Fix
+The obsolete patch files may still be present on disk from earlier
+workflows but are gitignored and no longer referenced.
 
-Wrap `txn_scope_guard`-protected code in `eval { ... } or do { rollback; die }` 
-to ensure explicit rollback on error, instead of relying on guard DESTROY.
+## Remaining opt-in patch: LeakTracer.pm
 
-## Files Patched
+`t-lib-DBICTest-Util-LeakTracer.pm.patch` remains as an opt-in to
+make `t/52leaks.t` pass all 9 non-TODO tests. Without it, Phase B2a
+auto-sweep still closes 4 of the 9 leaks, but 4 Schema/ResultSource
+fails and 1 `basic rerefrozen` fail remain. See
+`LeakTracer-README.md` for details.
 
-### Storage/DBI.pm — `_insert_bulk` method (line ~2415)
-- Wraps bulk insert + query_start/query_end + guard->commit in eval block
-- On error: sets guard inactivated, calls txn_rollback, re-throws
+## Historical context (Storage-DBI.pm / ResultSet.pm, kept for reference)
 
-### ResultSet.pm — `populate` method
-- **List context path** (line ~2239): wraps map-insert loop + guard->commit in eval
-- **Void context with rels path** (line ~2437): wraps _insert_bulk + children rels + guard->commit in eval
+Before refcount alignment, DBIC's `TxnScopeGuard` relied on `DESTROY`
+firing at scope exit for automatic transaction rollback. On the JVM,
+before Phases 1-3 of the refcount plan, DESTROY did not fire
+deterministically, causing:
 
-## Applying Patches
+1. Failed bulk inserts left `transaction_depth` permanently elevated
+2. Subsequent transactions silently nested instead of starting fresh
+3. `BEGIN` / `COMMIT` disappeared from SQL traces
+4. Failed populates didn't roll back (partial data in DB)
 
-Patches must be applied to BOTH locations:
-1. Installed modules: `~/.perlonjava/lib/DBIx/Class/Storage/DBI.pm` and `ResultSet.pm`
-2. CPAN build dir: `~/.cpan/build/DBIx-Class-0.082844-*/lib/DBIx/Class/Storage/DBI.pm` and `ResultSet.pm`
-
-```bash
-# From the PerlOnJava project root:
-cd ~/.perlonjava/lib
-patch -p0 < path/to/dev/patches/cpan/DBIx-Class-0.082844/Storage-DBI.pm.patch
-
-# Also patch the active CPAN build dir (find the latest one):
-BUILDDIR=$(ls -td ~/.cpan/build/DBIx-Class-0.082844-*/lib | head -1)
-cd "$BUILDDIR/.."
-patch -p0 < path/to/dev/patches/cpan/DBIx-Class-0.082844/Storage-DBI.pm.patch
-```
-
-## Tests Fixed
-
-- t/100populate.t: tests 37-42 (void ctx trace BEGIN/COMMIT), 53 (populate is atomic),
-  59 (literal+bind normalization), 104-107 (multicol-PK has_many trace)
-- Result: 108/108 real tests pass (was 98/108), only GC tests 109-112 remain
+The `Storage-DBI.pm.patch` and `ResultSet.pm.patch` previously wrapped
+populate/bulk-insert paths in explicit `eval { ... } or do { rollback; die }`
+to work around the missing DESTROY. As of the refcount alignment work
+these patches are no longer required.
 
 ## Date
 
-2026-04-11
+Updated 2026-04-19.

@@ -2272,6 +2272,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     // Method to apply (execute) a subroutine reference
+    //
+    // Iterative trampoline: all dispatch-chain cases (TIED_SCALAR, READONLY,
+    // GLOB, STRING, overload, AUTOLOAD, TAILCALL from `goto &func`) loop
+    // back to the top of this method instead of recursing, so long chains
+    // of `goto &func` (common in Moo/DBIC/Sub::Defer) stay O(1) in Java
+    // stack depth. Previously the tailcall path recursed into apply() which
+    // grew the stack O(N) in the chain length and overflowed on large
+    // DBIC test runs (t/60core.t, t/96_is_deteministic_value.t,
+    // t/cdbi/68-inflate_has_a.t).
     public static RuntimeList apply(RuntimeScalar runtimeScalar, RuntimeArray a, int callContext) {
         // NOTE: flush() was removed from here. Return values from nested calls
         // (e.g., receiver(coerce => quote_sub(...))) may have pending refCount
@@ -2280,16 +2289,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // weak ref tracking (Sub::Quote/Sub::Defer pattern). DESTROY still fires
         // at the next setLarge() or popAndFlush() — typically inside the callee.
 
+        // Local copies that the trampoline can mutate across iterations.
+        RuntimeScalar curScalar = runtimeScalar;
+        RuntimeArray curArgs = a;
+
+        while (true) {
         // Handle tied scalars - fetch the underlying value first
-        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
-            return apply(runtimeScalar.tiedFetch(), a, callContext);
+        if (curScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            curScalar = curScalar.tiedFetch();
+            continue;
         }
-        if (runtimeScalar.type == READONLY_SCALAR) {
-            return apply((RuntimeScalar) runtimeScalar.value, a, callContext);
+        if (curScalar.type == READONLY_SCALAR) {
+            curScalar = (RuntimeScalar) curScalar.value;
+            continue;
         }
         // Check if the type of this RuntimeScalar is CODE
-        if (runtimeScalar.type == RuntimeScalarType.CODE) {
-            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+        if (curScalar.type == RuntimeScalarType.CODE) {
+            RuntimeCode code = (RuntimeCode) curScalar.value;
 
             // Check for closure prototype — calling one should die
             if (code.isClosurePrototype) {
@@ -2297,13 +2313,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             // CRITICAL: Run compilerSupplier BEFORE checking defined()
-            // The compilerSupplier may replace runtimeScalar.value with InterpretedCode
+            // The compilerSupplier may replace curScalar.value with InterpretedCode
             if (code.compilerSupplier != null) {
                 RuntimeList savedConstantValue = code.constantValue;
                 java.util.List<String> savedAttributes = code.attributes;
                 code.compilerSupplier.get();
-                // Reload code from runtimeScalar.value in case it was replaced
-                code = (RuntimeCode) runtimeScalar.value;
+                // Reload code from curScalar.value in case it was replaced
+                code = (RuntimeCode) curScalar.value;
                 // Transfer fields that were set on the old code (e.g., by :const attribute)
                 if (savedConstantValue != null && code.constantValue == null) {
                     code.constantValue = savedConstantValue;
@@ -2320,8 +2336,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     boolean generated = CoreSubroutineGenerator.generateWrapper(code.subName);
                     if (generated) {
                         // Reload code after wrapper generation
-                        runtimeScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
-                        code = (RuntimeCode) runtimeScalar.value;
+                        curScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
+                        code = (RuntimeCode) curScalar.value;
                         if (code.defined()) {
                             // Fall through to normal execution below
                         }
@@ -2341,8 +2357,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // Set $AUTOLOAD name to the original package function name
                             String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
                             getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
-                            // Call AUTOLOAD from the source package
-                            return apply(sourceAutoload, a, callContext);
+                            // Call AUTOLOAD from the source package (iterative)
+                            curScalar = sourceAutoload;
+                            continue;
                         }
                     }
 
@@ -2352,8 +2369,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (autoload.getDefinedBoolean()) {
                         // Set $AUTOLOAD name
                         getGlobalVariable(autoloadString).set(subroutineName);
-                        // Call AUTOLOAD
-                        return apply(autoload, a, callContext);
+                        // Call AUTOLOAD (iterative)
+                        curScalar = autoload;
+                        continue;
                     }
                 }
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called");
@@ -2377,31 +2395,40 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // the caller (e.g., bless mortal entries for method chain
             // temporaries like Foo->new()->method()).
             MortalList.pushMark();
+            // Holds the tailcall target if the body returns one. Populated
+            // inside the try block; after the finally runs we loop back
+            // to the top of apply() instead of recursing, preventing
+            // Java-stack growth on long `goto &func` chains.
+            RuntimeScalar nextTailCode = null;
+            RuntimeArray nextTailArgs = null;
             try {
                 // Cast the value to RuntimeCode and call apply()
-                RuntimeList result = code.apply(a, callContext);
-                // Handle tail calls (goto &func) — trampoline loop
-                // JVM-generated bytecode has its own trampoline; this handles calls from Java code
-                while (result instanceof RuntimeControlFlowList cfList
+                RuntimeList result = code.apply(curArgs, callContext);
+                // Handle tail calls (goto &func).
+                // JVM-generated bytecode has its own trampoline; this handles calls from Java code.
+                if (result instanceof RuntimeControlFlowList cfList
                         && cfList.getControlFlowType() == ControlFlowType.TAILCALL) {
-                    RuntimeScalar tailCodeRef = cfList.getTailCallCodeRef();
+                    nextTailCode = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
-                    result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
+                    nextTailArgs = tailArgs != null ? tailArgs : curArgs;
+                    // Fall through to finally; outer loop will re-enter apply()
+                    // with the new code ref.
+                } else {
+                    // Mortal-ize blessed refs with refCount==0 in void-context calls.
+                    // These are objects that were created but never stored in a named
+                    // variable (e.g., discarded return values from constructors).
+                    if (callContext == RuntimeContextType.VOID) {
+                        MortalList.mortalizeForVoidDiscard(result);
+                        // Flush deferred DESTROY decrements from the sub's scope exit.
+                        // Sub bodies use flush=false in emitScopeExitNullStores to protect
+                        // return values on the stack, but in void context there is no return
+                        // value to protect. Without this flush, DESTROY fires outside the
+                        // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
+                        // causing Test::Warn to miss warnings from DESTROY.
+                        MortalList.flush();
+                    }
+                    return result;
                 }
-                // Mortal-ize blessed refs with refCount==0 in void-context calls.
-                // These are objects that were created but never stored in a named
-                // variable (e.g., discarded return values from constructors).
-                if (callContext == RuntimeContextType.VOID) {
-                    MortalList.mortalizeForVoidDiscard(result);
-                    // Flush deferred DESTROY decrements from the sub's scope exit.
-                    // Sub bodies use flush=false in emitScopeExitNullStores to protect
-                    // return values on the stack, but in void context there is no return
-                    // value to protect. Without this flush, DESTROY fires outside the
-                    // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
-                    // causing Test::Warn to miss warnings from DESTROY.
-                    MortalList.flush();
-                }
-                return result;
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
                 if (code.isMapGrepBlock || code.isEvalBlock) {
@@ -2443,43 +2470,52 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     code.releaseCaptures();
                 }
             }
+            // If we get here, the body returned a tailcall. Iterate
+            // with the new code ref / args instead of recursing.
+            curScalar = nextTailCode;
+            curArgs = nextTailArgs;
+            continue;
         }
 
         // Handle GLOB type - extract CODE slot from the glob
-        if (runtimeScalar.type == RuntimeScalarType.GLOB) {
-            RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+        if (curScalar.type == RuntimeScalarType.GLOB) {
+            RuntimeGlob glob = (RuntimeGlob) curScalar.value;
             if (glob.globName != null) {
-                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
-                return apply(resolved, a, callContext);
+                curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
+                continue;
             } else if (glob.codeSlot != null) {
-                return apply(glob.codeSlot, a, callContext);
+                curScalar = glob.codeSlot;
+                continue;
             }
         }
 
         // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
-        if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
-                && runtimeScalar.value instanceof RuntimeGlob glob) {
+        if ((curScalar.type == RuntimeScalarType.REFERENCE || curScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                && curScalar.value instanceof RuntimeGlob glob) {
             if (glob.globName != null) {
-                RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
-                return apply(resolved, a, callContext);
+                curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
+                continue;
             } else if (glob.codeSlot != null) {
-                return apply(glob.codeSlot, a, callContext);
+                curScalar = glob.codeSlot;
+                continue;
             }
         }
 
-        if (runtimeScalar.type == STRING || runtimeScalar.type == BYTE_STRING) {
-            String varName = NameNormalizer.normalizeVariableName(runtimeScalar.toString(), "main");
-            RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(varName);
-            return apply(resolved, a, callContext);
+        if (curScalar.type == STRING || curScalar.type == BYTE_STRING) {
+            String varName = NameNormalizer.normalizeVariableName(curScalar.toString(), "main");
+            curScalar = GlobalVariable.getGlobalCodeRef(varName);
+            continue;
         }
 
-        RuntimeScalar overloadedCode = handleCodeOverload(runtimeScalar);
+        RuntimeScalar overloadedCode = handleCodeOverload(curScalar);
         if (overloadedCode != null) {
-            return apply(overloadedCode, a, callContext);
+            curScalar = overloadedCode;
+            continue;
         }
 
         // If the type is not CODE, throw an exception indicating an invalid state
         throw new PerlCompilerException("Not a CODE reference");
+        } // end while(true)
     }
 
     // Method to apply (execute) a subroutine reference for eval/evalbytes.
