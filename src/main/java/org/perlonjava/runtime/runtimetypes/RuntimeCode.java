@@ -2075,14 +2075,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
                 // Populate @DB::args when caller() is called from package DB
                 // Carp.pm relies on this to get function arguments for stack traces
+                //
+                // Phase 2 (refcount_alignment_plan.md): populate with
+                // setFromListAliased so @DB::args entries are aliases (non-counting
+                // references). This matches Perl 5's semantics — @DB::args shares
+                // SV slots with the caller's @_, not counted copies — and allows
+                // user code like `push @kept, @DB::args` to create real counted
+                // refs in @kept while the @DB::args slots remain aliases. Required
+                // for DBIC's Devel::StackTrace-resurrection test (txn_scope_guard
+                // test 18).
                 if (calledFromDB) {
                     RuntimeArray dbArgs = GlobalVariable.getGlobalArray("DB::args");
                     if (DebugState.debugMode) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
-                            dbArgs.setFromList(frameArgs.getList());
+                            dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
-                            dbArgs.setFromList(new RuntimeList());
+                            dbArgs.setFromListAliased(new RuntimeList());
                         }
                     } else {
                         // Not in debug mode - use the originalArgsStack snapshot
@@ -2093,9 +2102,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // TxnScopeGuard double-DESTROY detection).
                         RuntimeArray frameArgs = getOriginalArgsAt(argsFrame);
                         if (frameArgs != null) {
-                            dbArgs.setFromList(frameArgs.getList());
+                            dbArgs.setFromListAliased(frameArgs.getList());
                         } else {
-                            dbArgs.setFromList(new RuntimeList());
+                            dbArgs.setFromListAliased(new RuntimeList());
                         }
                     }
                 }

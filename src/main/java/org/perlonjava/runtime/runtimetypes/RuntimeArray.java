@@ -740,6 +740,46 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Set this array's contents from a list without incrementing the
+     * referents' refCounts — i.e., the stored elements are <em>aliases</em>,
+     * not counted strong references. This matches Perl's semantics for
+     * {@code @_} and {@code @DB::args}, whose entries are aliases to the
+     * caller's args and do not affect the referent's refcount.
+     * <p>
+     * Part of Phase 2 of {@code dev/design/refcount_alignment_plan.md}.
+     * Used by {@link RuntimeCode} when populating {@code @DB::args} from
+     * {@code caller()} so that a user's {@code push @kept, @DB::args}
+     * creates real counted refs in {@code @kept} while the alias slots
+     * in {@code @DB::args} stay non-counting.
+     * <p>
+     * Behavior:
+     * <ol>
+     *   <li>Defer-decrement any existing counted elements (like normal {@code setFromList}).</li>
+     *   <li>Copy new elements in without incrementing their referents' refCounts.</li>
+     *   <li>Mark {@code elementsOwned=false} so {@link #shift(RuntimeArray)}
+     *       and other removal paths don't defer a spurious decrement.</li>
+     * </ol>
+     */
+    public RuntimeArray setFromListAliased(RuntimeList list) {
+        if (type != PLAIN_ARRAY) {
+            // Fallback to normal setFromList for non-plain arrays; the
+            // refcount-inflation risk is lower there.
+            return setFromList(list);
+        }
+        MortalList.deferDestroyForContainerClear(this.elements);
+        this.elements.clear();
+        list.addToArray(this);
+        // Elements are aliases: mark as non-owning. setLarge in later
+        // overwrites will still work correctly because setLarge checks
+        // refCountOwned before decrementing.
+        for (RuntimeScalar elem : this.elements) {
+            if (elem != null) elem.refCountOwned = false;
+        }
+        this.elementsOwned = false;
+        return this;
+    }
+
+    /**
      * Creates a reference to the array.
      *
      * @return A scalar representing the array reference.
