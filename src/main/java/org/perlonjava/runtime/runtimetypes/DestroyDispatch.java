@@ -31,6 +31,20 @@ public class DestroyDispatch {
     static volatile RuntimeBase currentDestroyTarget = null;
     static volatile boolean destroyTargetRescued = false;
 
+    // Phase D: sweep-pending flag. Set by RuntimeScalar.set() when it
+    // releases a blessed-with-DESTROY ref whose refCount stays > 0
+    // (cyclic) *while inside* a DESTROY body. Drained by doCallDestroy's
+    // outermost finally: if set, fire the reachability walker once to
+    // catch any newly-orphaned subgraphs that would otherwise keep weak
+    // refs defined past their owners' lives. Amortizes what would
+    // otherwise be a sweep on every set() — only the outermost DESTROY
+    // pays the cost.
+    static boolean sweepPendingAfterOuterDestroy = false;
+
+    public static boolean isInsideDestroy() {
+        return currentDestroyTarget != null;
+    }
+
     // Rescued objects whose weak refs need deferred clearing.
     // We cannot clear weak refs immediately after rescue because that would also
     // clear back-references from sibling objects (e.g., $source->{schema}) that
@@ -409,6 +423,17 @@ public class DestroyDispatch {
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;
             dollarAt.value = savedDollarAt.value;
+            // Phase D: outermost DESTROY is finishing. If any nested set()
+            // released a cyclic blessed-with-DESTROY ref, fire one walker
+            // sweep to clear any now-orphaned weak refs. This amortizes
+            // the sweep cost to at most one per top-level DESTROY instead
+            // of per-set(). Gated by ModuleInitGuard to avoid tripping
+            // during require/use load.
+            if (savedTarget == null && sweepPendingAfterOuterDestroy
+                    && !ModuleInitGuard.inModuleInit()) {
+                sweepPendingAfterOuterDestroy = false;
+                ReachabilityWalker.sweepWeakRefs(false);
+            }
         }
     }
 

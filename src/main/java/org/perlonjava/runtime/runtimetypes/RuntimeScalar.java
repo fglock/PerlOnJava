@@ -1076,6 +1076,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);
                 }
+            } else if (oldBase.refCount > 0 && value.type == UNDEF
+                    && oldBase.blessId != 0
+                    && DestroyDispatch.isInsideDestroy()
+                    && WeakRefRegistry.weakRefsExist) {
+                // Phase D: inside a DESTROY body, an explicit undef
+                // assignment released our strong ref to another
+                // blessed-with-DESTROY object but cooperative refCount
+                // didn't drop to 0 (cycles). Flag a deferred sweep to
+                // run once at the end of the outermost DESTROY.
+                // Narrow gating (only inside DESTROY, only value==UNDEF,
+                // only blessed) keeps per-set() cost to an int compare
+                // and one BitSet lookup.
+                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                    DestroyDispatch.sweepPendingAfterOuterDestroy = true;
+                }
             }
         }
 
@@ -2077,6 +2093,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = null;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
+        boolean undefOnBlessedWithDestroy = false;
         if (oldBase != null) {
             if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
                 // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
@@ -2095,6 +2112,28 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         oldBase.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(oldBase);
                     }
+                } else if (oldBase.blessId != 0 && oldBase.refCount > 0
+                        && WeakRefRegistry.weakRefsExist) {
+                    // Phase D: cooperative refCount suggests this object still has
+                    // strong references, but those may all be internal cycles
+                    // (e.g. DBIC's Schema <-> source_registrations). Defer to the
+                    // reachability walker if the class has DESTROY — it's the
+                    // canonical decider of liveness once the user has explicitly
+                    // released their lexical handle.
+                    String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                    if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                        undefOnBlessedWithDestroy = true;
+                    }
+                }
+            } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+                // Phase D: no owned-count decrement (refCountOwned was false, or
+                // refCount was already 0 from prior cooperative drift). The
+                // object is blessed — if its class has DESTROY, let the walker
+                // decide whether this undef just released the last live lexical
+                // handle.
+                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                    undefOnBlessedWithDestroy = true;
                 }
             }
         }
@@ -2105,6 +2144,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // appear inflated at the point of `undef $ref`. This matches Perl 5
         // where FREETMPS runs at statement boundaries.
         MortalList.flush();
+
+        // Phase D: undef-of-blessed auto-trigger for the reachability walker.
+        // When the user explicitly undef's a blessed ref with DESTROY but
+        // cooperative refCount stays > 0 (internal cycles), ask the walker
+        // to determine real reachability. Bypasses the MortalList auto-sweep
+        // throttle because this is an explicit release, not an opportunistic
+        // check. Skips when we're in module-init to avoid clearing weak refs
+        // that require/use chains still depend on.
+        if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
+            ReachabilityWalker.sweepWeakRefs(false);
+        }
 
         return this;
     }

@@ -661,4 +661,69 @@ lexical in `ScalarRefRegistry`. Root cause still open.
 
 - **t/52leaks.t `basic rerefrozen`** — see above.
 
+---
+
+## Phase D — undef-of-blessed walker trigger (2026-04-19)
+
+**Status:** Shipped as a safety net. Does not fix storage/error.t
+test 49 (requires different architectural work).
+
+### Design
+
+Two-part cooperative trigger:
+
+1. **RuntimeScalar.undefine()** — when the user explicitly calls
+   `undef $var` on a blessed-with-DESTROY REFERENCE whose cooperative
+   refCount stays > 0 (cycles), fire `ReachabilityWalker.sweepWeakRefs(false)`
+   synchronously. Gated by `ModuleInitGuard` to avoid tripping during
+   `require`/`use`/`eval STRING`/`do FILE`.
+
+2. **RuntimeScalar.set(RuntimeScalar)** — when `value == UNDEF` is
+   assigned to a slot holding a blessed-with-DESTROY ref with
+   residual refCount, AND we're currently inside a DESTROY body
+   (`DestroyDispatch.isInsideDestroy()`), set a flag
+   `sweepPendingAfterOuterDestroy`. The outermost `doCallDestroy`
+   drains this flag in its `finally` and runs the walker once,
+   amortizing per-set() cost to per-outermost-DESTROY cost.
+
+Narrow gating on both paths:
+- weak refs exist in the registry (cheap volatile check)
+- class is blessed and has DESTROY (BitSet lookup)
+- not in module init
+
+### Impact
+
+- Sandbox 213/213 preserved
+- Full unit suite PASS
+- 52leaks.t unpatched: unchanged, 1 real fail (`basic rerefrozen`)
+- storage/error.t test 49: **still fails**
+
+### Why test 49 still fails
+
+Investigation showed that DBIx::Class::Schema::DESTROY does NOT
+explicitly undef its `storage` slot. Instead it uses the "self-save"
+pattern: reattaches `$self` into a source's schema slot and weakens
+it. PerlOnJava registers Schema in `DestroyDispatch.rescuedObjects`
+when this pattern is detected, preventing the reachability walker
+from considering Schema (or its internals like Storage) unreachable.
+
+Test 49 succeeds on real Perl because that runtime's refcount-only
+GC naturally dismantles the self-save pattern as the phantom chain
+collapses. PerlOnJava's cooperative refCount + walker overlay keeps
+rescued objects live until explicit `jperl_gc()` with rescuedObjects
+drain.
+
+Closing this without the LeakTracer-style opt-in would require
+either redesigning the rescuedObjects semantics (risk: re-breaks
+52leaks.t) or DBIC-specific source-code changes.
+
+### Code
+
+- `DestroyDispatch.java`: new `sweepPendingAfterOuterDestroy` flag,
+  `isInsideDestroy()` helper, drain in outermost `finally`.
+- `RuntimeScalar.java`: `undefine()` triggers walker inline;
+  `set(RuntimeScalar)` sets flag when `value == UNDEF && inside DESTROY
+  && blessed-with-DESTROY cycle`.
+
+
 
