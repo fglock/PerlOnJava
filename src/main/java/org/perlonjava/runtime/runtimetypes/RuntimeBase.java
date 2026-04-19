@@ -48,6 +48,29 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean destroyFired = false;
 
     /**
+     * Phase 3 (refcount_alignment_plan.md): True while DESTROY is actively
+     * running on this object. Used as a re-entry guard: when refCount drops
+     * to 0 during the DESTROY body (via deferred decrements from MortalList
+     * flush, closure releases, etc.), the caller transitions refCount to
+     * MIN_VALUE and calls callDestroy. callDestroy detects
+     * {@code currentlyDestroying == true} and restores refCount to 0 (so
+     * subsequent stores can still track refs) then returns without entering
+     * the Perl DESTROY body a second time.
+     */
+    public boolean currentlyDestroying = false;
+
+    /**
+     * Phase 3 (refcount_alignment_plan.md): True when a previous DESTROY
+     * body left the object with a strong reference count > 0 (resurrection
+     * via an escaped strong ref). Matches Perl 5's semantics for
+     * re-invoking DESTROY when the resurrected object is finally released.
+     * Checked in callDestroy to decide whether to invoke Perl DESTROY a
+     * second time. Required for DBIC detected_reinvoked_destructor pattern
+     * (t/storage/txn_scope_guard.t test 18).
+     */
+    public boolean needsReDestroy = false;
+
+    /**
      * Global flag: true once any object has been blessed (blessId set to non-zero).
      * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
      * walks when no blessed objects have ever been created in this JVM instance.

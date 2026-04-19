@@ -82,6 +82,38 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
+        // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
+        // If this object is already inside its own DESTROY body, a transient
+        // decrement-to-0 (local temp release, deferred MortalList flush,
+        // @DB::args replacement across caller() calls) brought us back here.
+        // Restore refCount to 0 so subsequent stores inside the ongoing
+        // DESTROY can still track references, then return. The outer
+        // doCallDestroy will handle final cleanup based on refCount when
+        // its Perl body returns.
+        if (referent.currentlyDestroying) {
+            if (referent.refCount == Integer.MIN_VALUE) {
+                referent.refCount = 0;
+            }
+            return;
+        }
+
+        // Phase 3 (refcount_alignment_plan.md): Resurrection re-fire.
+        // If a prior DESTROY left refCount > 0 (object resurrected by a
+        // strong ref escaping DESTROY), the caller set MIN_VALUE only after
+        // the later decrement brought refCount back to 0. Re-invoke the
+        // Perl DESTROY now that the resurrected ref has been released.
+        // Matches Perl 5's behavior of calling DESTROY multiple times for
+        // resurrected objects (DBIC detected_reinvoked_destructor pattern).
+        if (referent.destroyFired && referent.needsReDestroy) {
+            referent.needsReDestroy = false;
+            String cn = NameNormalizer.getBlessStr(referent.blessId);
+            if (cn != null && !cn.isEmpty()) {
+                doCallDestroy(referent, cn);
+                return;
+            }
+            // Unblessed (rare): fall through to cleanup
+        }
+
         // Perl 5 semantics: DESTROY CAN be called multiple times for resurrected
         // objects. However, in PerlOnJava, cooperative refCount inflation means
         // rescue detection fires more broadly than in Perl 5, so we keep
@@ -204,11 +236,20 @@ public class DestroyDispatch {
         // Schema::DESTROY reattaching to a ResultSource), RuntimeHash.put
         // will detect the referent and set destroyTargetRescued = true.
         // After DESTROY, if rescued, skip cascade to keep internals alive.
-        // Note: refCount stays at MIN_VALUE to prevent re-entrant DESTROY calls.
         RuntimeBase savedTarget = currentDestroyTarget;
         boolean savedRescued = destroyTargetRescued;
         currentDestroyTarget = referent;
         destroyTargetRescued = false;
+
+        // Phase 3 (refcount_alignment_plan.md): Transition from MIN_VALUE
+        // back to 0 so increments/decrements inside DESTROY work normally.
+        // currentlyDestroying guards callDestroy re-entry from transient
+        // decrement-to-0 events (see callDestroy's entry check).
+        boolean savedCurrentlyDestroying = referent.currentlyDestroying;
+        referent.currentlyDestroying = true;
+        if (referent.refCount == Integer.MIN_VALUE) {
+            referent.refCount = 0;
+        }
 
         try {
             // Build $self reference to pass as $_[0]
@@ -233,7 +274,45 @@ public class DestroyDispatch {
 
             RuntimeArray args = new RuntimeArray();
             args.push(self);
+            // Phase 3: Snapshot pending size so we can drain only the entries
+            // added during apply (shift @_, $self scope exit) without
+            // clobbering outer-scope pending entries.
+            int pendingBefore = MortalList.pendingSize();
             RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+
+            // Phase 3: Drain pending entries added during apply, regardless
+            // of whether an outer flush is currently running.
+            MortalList.drainPendingSince(pendingBefore);
+
+            // Phase 3: Balance the args.push(self) increment. If the body
+            // consumed the element via shift, args.elements is empty (nothing
+            // to balance). Otherwise, the args.push bump is still on refCount
+            // and must be undone so we don't falsely detect resurrection.
+            //
+            // Direct decrement (not via MortalList pending) avoids
+            // infinite-loop feedback when this decrement itself would fire
+            // callDestroy recursively.
+            for (RuntimeScalar elem : args.elements) {
+                if (elem != null && elem.refCountOwned
+                        && elem.value instanceof RuntimeBase base
+                        && base.refCount > 0) {
+                    base.refCount--;
+                    elem.refCountOwned = false;
+                }
+            }
+            args.elements.clear();
+            args.elementsOwned = false;
+
+            // Phase 3: Resurrection detection. If refCount > 0 at this point,
+            // a strong ref to the object escaped DESTROY (e.g. Devel::StackTrace-
+            // like @DB::args capture into a persistent array, or Schema-style
+            // self-save). Mark needsReDestroy and let the next decrement-to-0
+            // re-invoke DESTROY. Don't clear weak refs or cascade — the object
+            // is still alive.
+            if (referent.refCount > 0 && !destroyTargetRescued) {
+                referent.needsReDestroy = true;
+                return;
+            }
 
             // Check if DESTROY rescued the object by storing $self somewhere.
             // If destroyTargetRescued was set during DESTROY (detected by
@@ -307,6 +386,13 @@ public class DestroyDispatch {
             // Restore the DESTROY target and rescue flag for nested DESTROY calls
             currentDestroyTarget = savedTarget;
             destroyTargetRescued = savedRescued;
+            // Phase 3: Exit DESTROY state. If refCount is still 0 and we're
+            // not taking the resurrection path, set MIN_VALUE so future
+            // callDestroy enters the normal cleanup path.
+            referent.currentlyDestroying = savedCurrentlyDestroying;
+            if (referent.refCount == 0 && !referent.needsReDestroy) {
+                referent.refCount = Integer.MIN_VALUE;
+            }
             // Restore $@ — must happen whether DESTROY succeeded or threw.
             // Without this, die inside DESTROY would clobber the caller's $@.
             dollarAt.type = savedDollarAt.type;

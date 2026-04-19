@@ -517,6 +517,51 @@ public class MortalList {
     }
 
     /**
+     * Phase 3 (refcount_alignment_plan.md): Return the current pending-queue
+     * size. Used by {@link DestroyDispatch#doCallDestroy} to snapshot the
+     * pending list before invoking the Perl DESTROY body, so that the
+     * entries added during DESTROY can be drained after it returns without
+     * waiting for the outer {@link #flush} to run.
+     */
+    public static int pendingSize() {
+        return pending.size();
+    }
+
+    /**
+     * Phase 3 (refcount_alignment_plan.md): Process pending entries added
+     * after a specific checkpoint, regardless of whether an outer
+     * {@link #flush} is already running. Used by
+     * {@link DestroyDispatch#doCallDestroy} to flush the deferred
+     * decrements queued by a DESTROY body (shift @_, $self scope exit)
+     * so the post-DESTROY refCount accurately reflects resurrection.
+     *
+     * @param startIdx the {@link #pendingSize} captured before apply()
+     */
+    public static void drainPendingSince(int startIdx) {
+        if (!active) return;
+        if (startIdx < 0) startIdx = 0;
+        // Loop because DESTROY may add further entries
+        int i = startIdx;
+        while (i < pending.size()) {
+            RuntimeBase base = pending.get(i);
+            i++;
+            if (base.refCount > 0 && --base.refCount == 0) {
+                if (base.localBindingExists) {
+                    WeakRefRegistry.clearWeakRefsTo(base);
+                } else {
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
+            }
+        }
+        // Truncate the pending list back to startIdx to mark these entries
+        // as processed. Outer flush won't re-process them.
+        while (pending.size() > startIdx) {
+            pending.remove(pending.size() - 1);
+        }
+    }
+
+    /**
      * Push a mark recording the current pending list size.
      * Called before scope-exit cleanup so that popAndFlush() only
      * processes entries added by the cleanup (not earlier entries
