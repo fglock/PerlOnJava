@@ -270,21 +270,11 @@ public class ReachabilityWalker {
      */
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
+        ScalarRefRegistry.forceGcAndSnapshot();
         if (!quiet) {
-            // Phase B1: Force a JVM GC cycle so ScalarRefRegistry's
-            // WeakHashMap prunes entries for RuntimeScalars no longer held
-            // by any live JVM frame slot. The walker then uses the pruned
-            // map as its lexical root seed.
-            ScalarRefRegistry.forceGcAndSnapshot();
-            // Drain rescued objects first — an explicit jperl_gc() means the
-            // caller is OK with collecting phantom-chain pinned Schema-style
-            // objects.
+            // Non-quiet (explicit jperl_gc): drain rescued objects so
+            // phantom-chain pinned Schemas can collect.
             DestroyDispatch.clearRescuedWeakRefs();
-        } else {
-            // Quiet mode still needs GC so ScalarRefRegistry's weak keys
-            // are current, but skips the rescuedObjects drain because
-            // that runs Perl code (DBIC Schema cleanup).
-            ScalarRefRegistry.forceGcAndSnapshot();
         }
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();

@@ -351,6 +351,26 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      */
     private static RuntimeList executeCode(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+        // Phase B2a (refcount_alignment_52leaks_plan.md): mark this
+        // body as module-initialization for the sake of the
+        // reachability-walker auto-sweep, UNLESS it's the main
+        // program body. DBIC's LeakTracer and similar leak-detection
+        // code is sensitive to weak refs being cleared mid-initializer
+        // chain, so auto-sweep inhibits itself while this counter is
+        // positive.
+        boolean guardEntered = false;
+        if (!isMainProgram) {
+            ModuleInitGuard.enter();
+            guardEntered = true;
+        }
+        try {
+            return executeCodeImpl(runtimeCode, ctx, isMainProgram, callerContext);
+        } finally {
+            if (guardEntered) ModuleInitGuard.exit();
+        }
+    }
+
+    private static RuntimeList executeCodeImpl(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks

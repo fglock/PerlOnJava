@@ -483,18 +483,22 @@ public class MortalList {
         return prev;
     }
 
-    // Phase B2 auto-sweep from flush() was attempted (both normal and
-    // quiet modes) but REVERTED. Even quiet-mode weak-ref clearing
-    // breaks DBIC module initialization — DBICTest::BaseResult.pm's
-    // use chain relies on weak-refed intermediate state during
-    // compilation. Auto-triggering requires a trigger point known to
-    // be outside module initialization (e.g. compiler-emitted
-    // "main-script body" markers), which we don't have yet.
-    //
-    // Current state: Internals::jperl_gc() remains opt-in.
-    // dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch
-    // calls it at assert_empty_weakregistry time, which is safe
-    // because that function runs after all module loading completes.
+    // Phase B2a (refcount_alignment_52leaks_plan.md): throttled
+    // auto-sweep of the weak-ref registry, gated by ModuleInitGuard.
+    // Runs at statement boundaries (flush points) but skips while
+    // inside require/use/do/BEGIN/eval-STRING code paths — those
+    // often rely on weak-refed intermediate state that the sweep
+    // would prematurely clear.
+    private static long lastAutoSweepNanos = 0;
+    // Tuned for DBIC-scale tests: 5s throttle. Shorter intervals
+    // (100ms) fire too frequently and each sweep's System.gc() +
+    // weak-ref cascade adds up to a large fraction of wall-clock.
+    // 5s gives the walker time to amortize without letting weak-ref
+    // state drift more than 5s out of date.
+    private static final long AUTO_SWEEP_MIN_INTERVAL_NS = 5_000_000_000L;
+    private static final boolean AUTO_GC_DISABLED =
+            System.getenv("JPERL_NO_AUTO_GC") != null;
+    private static boolean inAutoSweep = false;
 
     public static void flush() {
         if (!active || pending.isEmpty() || flushing) return;
@@ -526,6 +530,35 @@ public class MortalList {
             marks.clear(); // All entries drained; marks are meaningless now
         } finally {
             flushing = false;
+        }
+        // Phase B2a: guarded auto-sweep.
+        maybeAutoSweep();
+    }
+
+    private static void maybeAutoSweep() {
+        if (AUTO_GC_DISABLED) return;
+        if (inAutoSweep) return;
+        if (!WeakRefRegistry.weakRefsExist) return;
+        // Phase B2a: skip while require/use/BEGIN/eval-STRING is running.
+        // Those paths depend on weak-refed intermediate state staying
+        // defined until the init completes.
+        if (ModuleInitGuard.inModuleInit()) return;
+        long now = System.nanoTime();
+        if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
+        lastAutoSweepNanos = now;
+        inAutoSweep = true;
+        try {
+            // Quiet mode: only clear weak refs for unreachable objects,
+            // don't fire DESTROY. DESTROY cascades can re-enter DBIC/
+            // Moo code that isn't prepared for mid-statement cleanup.
+            // Explicit Internals::jperl_gc() still fires DESTROY for
+            // callers that want full cleanup.
+            int cleared = ReachabilityWalker.sweepWeakRefs(true);
+            if (System.getenv("JPERL_GC_DEBUG") != null) {
+                System.err.println("DBG auto-sweep cleared=" + cleared);
+            }
+        } finally {
+            inAutoSweep = false;
         }
     }
 

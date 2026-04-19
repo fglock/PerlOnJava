@@ -459,3 +459,131 @@ Possible causes (Phase A1 audit work):
   (`captureCount` check misses some cases).
 
 Not pursued further in this session.
+
+---
+
+## Phase B2a — Module-init-aware auto-trigger (2026-04-19 plan)
+
+This is the detailed implementation plan for pursuing option (b)
+above: a **sentinel** set while module-initialization code is
+running that inhibits the auto-sweep.
+
+### Why option (b) over (a)
+
+Option (a) — compiler-emitted safepoint markers — is the most
+principled, but requires changes to emitter passes for every statement
+boundary. Option (b) is a much smaller surgical change: just two
+counters wrapping `require` / `use` / `BEGIN` / `eval STRING`
+execution.
+
+### Design
+
+Add a **ThreadLocal counter** `ModuleInitGuard.depth` that is:
+
+- **Incremented** on entry to:
+  - `RuntimeCode.apply()` for any code emitted from a `require` /
+    `use` / `do FILE` load (we already mark these in the compilation
+    stack via `RuntimeCode.isEvalBlock` / module-loading flag)
+  - BEGIN block execution (entered via `SpecialBlock.runBegin()`)
+  - `eval STRING` compilation and initial execution (similar to
+    `applyEval()` path)
+- **Decremented** on exit (try/finally to handle `die`/`croak`).
+
+Auto-sweep callers consult `ModuleInitGuard.depth == 0` before firing.
+When `depth > 0`, the sweep is a no-op.
+
+### Concrete code points
+
+```
+org.perlonjava.runtime.runtimetypes.ModuleInitGuard  (new)
+  - static ThreadLocal<int[]> depth  (box for mutation)
+  - static void enter() / static void exit()
+  - static boolean inModuleInit()
+
+org.perlonjava.runtime.runtimetypes.SpecialBlock.runBegin()
+  - wrap body in ModuleInitGuard.enter/exit
+
+org.perlonjava.runtime.runtimetypes.RuntimeCode.apply()
+  - if code.isEvalBlock && (current frame is require/use loading):
+      wrap in ModuleInitGuard.enter/exit
+  - applyEval() already special-cased for eval STRING; add guard.
+
+org.perlonjava.runtime.operators.RequireOperator (or wherever `require`
+  is implemented)
+  - wrap the evaluated code in ModuleInitGuard.enter/exit
+
+Callers of maybeAutoSweep (MortalList.flush / Scalar::Util::isweak):
+  - check ModuleInitGuard.inModuleInit() before firing
+```
+
+### Risk
+
+Low. The guard is a pure inhibitor — worst case it's too aggressive
+(blocks sweeps we could safely run), which is the current behavior.
+If a place sets the flag but forgets to clear it, we'd lose
+auto-trigger functionality until the process restarts, but not break
+anything.
+
+### Validation
+
+- Sandbox 213/213 preserved
+- DBIC `t/52leaks.t` **unpatched** passes where it failed before
+  (from 9 real fails → 1 or 0)
+- DBICTest module init completes (no `BaseResult.pm did not return a
+  true value`)
+- Moo 71/71 preserved
+
+### Phase B3 follows
+
+Once B2a lands and 52leaks passes unpatched, remove the DBIC
+LeakTracer patch. Verify full DBIC suite remains 269/270.
+
+---
+
+## Phase B2a — RESULT (2026-04-19)
+
+**Status:** Implemented (partial success).
+
+### What shipped
+
+- `ModuleInitGuard.java` — `ThreadLocal<int[]> depth` counter with
+  `enter()`/`exit()`/`inModuleInit()`.
+- `PerlLanguageProvider.executeCode` wraps non-main-program runs
+  (`!isMainProgram`) with `enter/exit`. This covers `require`, `use`,
+  `eval STRING`, and `do FILE`.
+- `MortalList.maybeAutoSweep()` re-added at the end of `flush()`,
+  gated by `!ModuleInitGuard.inModuleInit()`, 5-second throttle.
+- `ReachabilityWalker.sweepWeakRefs(boolean quiet)` — in quiet mode
+  (auto-sweep), skips `DestroyDispatch.clearRescuedWeakRefs()` and
+  skips firing DESTROY; in non-quiet mode (explicit `jperl_gc`), does
+  both.
+
+### Validation
+
+- Sandbox: **213/213** ✅
+- `make` (full unit suite): **PASS** ✅
+- DBIC `txn_scope_guard.t`: **18/18** ✅
+- DBIC `52leaks.t` **unpatched**: went from **9 real fails → 5 real
+  fails** in 15.7s. Remaining failures are Schema/ResultSource objects
+  pinned by `DestroyDispatch.rescuedObjects` (phantom-chain rescue)
+  which quiet mode does NOT drain by design (draining would require
+  firing DBIC Schema DESTROY during unrelated code).
+- DBIC `52leaks.t` **patched** (explicit `jperl_gc()`): **1 real
+  fail** — same as before. The explicit-GC non-quiet path drains
+  `rescuedObjects` and fires DESTROY, clearing the extra 4.
+
+### Decision
+
+Keep the LeakTracer patch as the opt-in path for DBIC users who want
+all 9 extra-tight checks to pass. Unpatched, B2a improves the baseline
+from 9→5 real fails without requiring any user action.
+
+The remaining 4 (Schema/ResultSource) are solvable only by draining
+`rescuedObjects` during auto-sweep, which couples unrelated code
+paths to DBIC DESTROY execution — a risk/reward tradeoff we're
+deferring.
+
+### Phase B3 status
+
+Not pursued — LeakTracer patch remains the documented opt-in.
+
