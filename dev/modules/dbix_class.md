@@ -141,9 +141,42 @@ When scope exits, scalar releases 1 reference but hash stays at refCount > 0. `c
 
 ### Next Steps
 
-1. **visit_refs / LeakTracer instrumentation** — temporarily log refCount + localBindingExists + weak-ref count when each leaked object is seen, to identify which JVM temporary is holding refCount elevated.
-2. **Audit more `createReference()` call sites** — Fixed: Storable. To audit: JSON, XML::Parser, DBI bind/fetch, other deserializers.
-3. **Refcount inflation sources** — function-arg copies, `map`/`grep`/`keys` temporaries. Fix at source if possible without breaking Perl semantics.
+Both remaining failures (t/52leaks.t tests 12-18 and t/storage/txn_scope_guard.t test 18) hit **fundamental limitations** of PerlOnJava's cooperative refCounting that can't be solved without a major architectural change:
+
+#### Why t/52leaks.t tests 12-18 Are Blocked
+
+`$base_collection` (parent anonymous hash) has refCount inflated by JVM temporaries created during `visit_refs`, `populate_weakregistry`, `Storable::dclone`, `$fire_resultsets->()`. When its scope exits, the scalar releases 1 reference but the hash stays at refCount > 0 → `callDestroy` never fires → `scopeExitCleanupHash` never cascades into children → weak refs persist.
+
+Attempted fixes:
+- **Orphan sweep for refCount==0 objects** (Fix 10n attempt #1): No effect because leaked objects have refCount 1-5, not 0.
+- **Deep cascade from parent at scope exit**: Parent itself never triggers scope exit because its refCount > 0.
+- **Reachability-based weak-ref clearing**: Would require true mark-and-sweep from symbol-table roots — a major architectural addition.
+
+The simple reproducers (`/tmp/dbic_like.pl`, `/tmp/blessed_leak.pl`, `/tmp/anon_refcount{2,3,4}.pl`, `/tmp/dbic_like2.pl`) all pass. Only the full DBIC pattern leaks, because real DBIC code paths create JVM temporaries via overloaded comparisons, accessor chains, method resolution, etc.
+
+#### Why t/storage/txn_scope_guard.t test 18 Is Blocked
+
+Test requires DESTROY resurrection semantics: a strong ref to the object escapes DESTROY via `@DB::args` capture in a `$SIG{__WARN__}` handler. When that ref is later released, Perl calls DESTROY a *second* time; DBIC's `detected_reinvoked_destructor` emits `Preventing *MULTIPLE* DESTROY()` warning.
+
+Attempted fix (Fix 10n attempt #2): Set `refCount = 0` during DESTROY body (not MIN_VALUE), track `currentlyDestroying` flag to guard re-entry, detect resurrection by checking `refCount > 0` post-DESTROY.
+
+**Failure mode**: `my $self = shift` inside DESTROY body increments `refCount` to 1 via `setLargeRefCounted` when `$self` is assigned. When DESTROY returns, `$self` is a Java local that goes out of scope without triggering a corresponding decrement (PerlOnJava lexicals don't hook scope-exit decrements for scalar copies). Post-DESTROY `refCount=1` → false resurrection detection → loops indefinitely on File::Temp DESTROY during DBIC test loading.
+
+Root cause: PerlOnJava's cooperative refCount scheme can't accurately track the net delta from a DESTROY body, because lexical assignments increment but lexical destruction doesn't always decrement.
+
+#### What Would Fix Both
+
+Either:
+1. **True reachability-based GC** — mark from symbol-table roots on demand, clear weak refs for unreachable objects. Expensive but matches Perl's model exactly.
+2. **Accurate lexical decrement at scope exit** — audit every `my $x = <ref>` path to ensure scope exit fires a matching decrement. Large, risky refactor.
+
+Deferred until such architectural work becomes practical.
+
+### Historical notes (previously attempted)
+
+1. **visit_refs / LeakTracer instrumentation** — ran diagnostics, identified parent hash refCount inflation as the blocker.
+2. **`createReference()` audit** — Fixed: Storable, DBI. Other deserializers (JSON, XML::Parser) don't appear in the DBIC leak pattern.
+3. **Targeted refcount inflation sources** — function-arg copies tracked via `originalArgsStack` (Fix 10l), @DB::args preservation works; but inflation in `map`/`grep`/`keys` temporaries remains.
 
 ### Cooperative Refcounting Internals (reference)
 
