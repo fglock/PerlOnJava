@@ -587,3 +587,78 @@ deferring.
 
 Not pursued — LeakTracer patch remains the documented opt-in.
 
+---
+
+## Phase C — RuntimeCode.apply iterative trampoline (2026-04-19)
+
+**Status:** Shipped as `da301ca6f`.
+
+### Discovery
+
+A full `jcpan -t DBIx::Class` baseline measurement revealed that most
+of the suite's remaining failures were NOT refcount/leak-related —
+they were symptoms of a **recursive tailcall trampoline** in
+`RuntimeCode.apply` that overflowed the JVM stack on long chains of
+`goto &func`.
+
+Moo/DBIC dispatch (`Class::Accessor::Grouped`, `Sub::Defer`,
+`Class::C3::Componentised`, AUTOLOAD stubs) frequently builds chains
+of 4–10 `goto &$target` per accessor invocation. The previous
+apply() implementation recursed into itself for each tailcall,
+burning one Java frame per hop; moderately long chains would crash
+with `StackOverflowError`.
+
+### Fix
+
+Rewrite the entire `RuntimeCode.apply(RuntimeScalar, RuntimeArray, int)`
+method body as an iterative `while (true) { ... }` loop. All dispatch
+paths that previously recursed now update local variables and
+`continue`:
+- TIED_SCALAR fetch
+- READONLY_SCALAR deref
+- GLOB / REFERENCE-to-GLOB resolution
+- STRING / BYTE_STRING code-ref lookup
+- AUTOLOAD fallback (source package + current package)
+- TAILCALL from `goto &func` (captured inside the try/finally,
+  applied after finally runs all cleanup)
+
+### Impact on 52leaks.t
+
+**Unpatched:** 9 real fails → **1 real fail** (16s runtime).
+
+The trampoline fix closed 8 of the 9 previously-failing leak checks
+because the accessor/method-dispatch chains that populated DBIC's
+phantom-chain rescue no longer run as deeply as they did before —
+many of the cyclic Schema/ResultSource references cleared through
+normal scope exit without needing the rescuedObjects fallback.
+
+Only 1 leak remains unpatched: `HASH(...) | basic rerefrozen` — a
+`Storable::dclone` round-tripped hash that is directly held by some
+lexical in `ScalarRefRegistry`. Root cause still open.
+
+### Impact on full DBIC suite
+
+6 previously-broken tests now pass:
+- `t/60core.t` (crash → 125/125 in 6s)
+- `t/96_is_deteministic_value.t` (crash → 8/8)
+- `t/cdbi/68-inflate_has_a.t` (crash → 6/6)
+- `t/inflate/core.t` (hang → 32/32 in 5s)
+- `t/multi_create/standard.t` (flaky timeout → passes)
+- `t/relationship/custom.t` (flaky timeout → passes)
+
+### Remaining unresolved
+
+- **t/storage/error.t test 49** — "callback works after $schema is
+  gone": expects Schema DESTROY to fire after `undef $schema`, then a
+  weakened `$weak_self` closure variable to read as false. Under
+  jperl, `$schema` has cyclic back-refs (source_registrations) that
+  prevent its cooperative refCount from reaching 0. The reachability
+  walker would clear the weak ref, but the B2a 5s auto-sweep throttle
+  doesn't fire within the test's ~3s wall-clock. Explicit
+  `Internals::jperl_gc()` fixes it. Closing this without opt-in
+  would require either a smarter auto-sweep trigger (e.g. on undef of
+  blessed-with-DESTROY refs) or a targeted DBIC cycle-break.
+
+- **t/52leaks.t `basic rerefrozen`** — see above.
+
+

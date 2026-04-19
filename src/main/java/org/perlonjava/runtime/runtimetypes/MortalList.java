@@ -491,10 +491,14 @@ public class MortalList {
     // would prematurely clear.
     private static long lastAutoSweepNanos = 0;
     // Tuned for DBIC-scale tests: 5s throttle. Shorter intervals
-    // (100ms) fire too frequently and each sweep's System.gc() +
-    // weak-ref cascade adds up to a large fraction of wall-clock.
-    // 5s gives the walker time to amortize without letting weak-ref
-    // state drift more than 5s out of date.
+    // (100ms, 500ms) fire too frequently — 52leaks.t creates thousands
+    // of weaken'd refs and each sweep's System.gc() + weak-ref cascade
+    // can run for tens of seconds. 5s gives the walker time to amortize.
+    //
+    // Trade-off: tests that rely on deterministic DESTROY after `undef`
+    // of a blessed ref (e.g. t/storage/error.t test 49) need explicit
+    // Internals::jperl_gc() to fire the walker within their short
+    // wall-clock.
     private static final long AUTO_SWEEP_MIN_INTERVAL_NS = 5_000_000_000L;
     private static final boolean AUTO_GC_DISABLED =
             System.getenv("JPERL_NO_AUTO_GC") != null;
