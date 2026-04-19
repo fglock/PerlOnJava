@@ -92,6 +92,15 @@ public class Internals extends PerlModuleBase {
             int rc = base.refCount;
             if (rc == Integer.MIN_VALUE) return new RuntimeScalar(0).getList();
             if (rc < 0) return new RuntimeScalar(1).getList(); // untracked
+            // Phase 5 (refcount_alignment_plan.md): For a freshly-created
+            // tracked object with no counted owners (rc == 0), return 1 to
+            // match Perl's convention of "at least one owner" for live SVs.
+            if (rc == 0) return new RuntimeScalar(1).getList();
+            // For rc > 0 we return the raw cooperative refCount. This is
+            // intentionally NOT adjusted by -1: see B::SV::REFCNT in
+            // bundled-modules/B.pm which relies on the +1 inflation from
+            // storing the ref in a tracked hash slot to compensate for
+            // under-counted stack/JVM temporaries elsewhere.
             return new RuntimeScalar(rc).getList();
         }
         return new RuntimeScalar(1).getList();
