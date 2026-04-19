@@ -77,3 +77,38 @@ Target test files that depend on this work:
 | weaken_destroy.t | 24/24 | 24/24 |
 | weaken_edge_cases.t | 42/42 | 42/42 |
 | **TOTAL** | **213/213** | **213/213** |
+
+## Phase 6 — CPAN validation snapshot
+
+### DBIC (0.082844)
+
+| test file | result | notes |
+|-----------|--------|-------|
+| t/storage/txn.t | 90/90 ✅ | All pass |
+| t/storage/txn_scope_guard.t | 18/18 ✅ | Test 18 now passes (Phase 3 DESTROY FSM) |
+| t/52leaks.t | 11/20 | 9 real fails (TODO 2 excluded). Blocked on deeper JVM-temp inflation — orthogonal to this plan |
+| t/storage/error.t | 48/49 | Test 49 failed before this plan too (pre-existing) |
+
+All other `t/*.t` and `t/storage/*.t` files: no real failures.
+
+### Moo (2.005005)
+
+All 71 test files pass (no real failures).
+
+### Remaining blockers
+
+- DBIC `t/52leaks.t` tests 12-20 require detecting unreachability for objects
+  held by DBIC's internal caches/stashes. Opt-in `Internals::jperl_gc()`
+  exposes a reachability sweep, but automatic triggering caused regressions
+  because the walker cannot see JVM-call-stack lexicals.
+- DBIC `t/storage/error.t` test 49 (callback after $schema gone) was failing
+  on master before this plan — pre-existing, not in scope.
+
+### Success metric progress
+
+- DBIC t/storage/txn.t: ✅ 90/90
+- DBIC t/storage/txn_scope_guard.t: ✅ 18/18 (was 17/18)
+- DBIC t/52leaks.t: ⚠ 11/20 (was 11/20 with 9 real fails — unchanged)
+- Perl core destroy semantics via sandbox: ✅ 213/213
+- refcount_diff.pl on phase1_verify corpus: ✅ 10/10 match Perl
+- make test-bundled-modules: ✅ no regressions
