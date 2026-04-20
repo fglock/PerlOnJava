@@ -163,8 +163,17 @@ public class ReachabilityWalker {
      * specified target object. Returns null if unreachable. Used for
      * debugging DBIC 52leaks-style issues where an object that should be
      * collectible is found reachable.
+     * <p>
+     * When {@code skipLexicalSeeds} is true, omits the ScalarRefRegistry
+     * seed loop so the path is forced through Perl-semantic roots
+     * (globals, stashes, rescued objects) — useful for understanding
+     * what data structure keeps an object alive at the Perl level.
      */
     public static java.util.List<String> findPathTo(RuntimeBase target) {
+        return findPathTo(target, false);
+    }
+
+    public static java.util.List<String> findPathTo(RuntimeBase target, boolean skipLexicalSeeds) {
         java.util.IdentityHashMap<RuntimeBase, String> howReached = new java.util.IdentityHashMap<>();
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
         // Seed from roots with labels
@@ -186,28 +195,35 @@ public class ReachabilityWalker {
                 todo.add(rescued);
             }
         }
+        // Phase I: seed from WarningBitsRegistry.callerHintHashStack —
+        // %^H snapshots can preserve scalars from earlier scopes and are
+        // NOT accounted for by Perl-level walker roots.
+        int hhIdx = 0;
+        for (RuntimeScalar sc : org.perlonjava.runtime.WarningBitsRegistry.snapshotHintHashStackScalars()) {
+            seedPath(sc, "<hint-hash#" + (hhIdx++) + ">", howReached, todo);
+        }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.
         // Phase I: force GC before snapshotting so stale
         // (already-Java-unreachable) entries don't produce misleading
         // "live-lexical" paths in diagnostic traces.
+        // skipLexicalSeeds=true omits this — produces a path that goes
+        // through Perl-semantic data (globals/stash/rescued) only.
         int scIdx = 0;
-        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
-            if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && sc.value instanceof RuntimeBase b) {
-                // Include scalar identity so users can correlate with
-                // heap dumps / profilers. captureCount=0 here by the
-                // filter above, but including refCountOwned + type
-                // helps narrow down which lexical it is.
-                String label = "<live-lexical#" + (scIdx++)
-                        + " scId=" + System.identityHashCode(sc)
-                        + " type=" + sc.type
-                        + " rcO=" + sc.refCountOwned + ">";
-                if (howReached.putIfAbsent(b, label) == null) {
-                    todo.add(b);
+        if (!skipLexicalSeeds) {
+            for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+                if (sc == null) continue;
+                if (sc.captureCount > 0) continue;
+                if (WeakRefRegistry.isweak(sc)) continue;
+                if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && sc.value instanceof RuntimeBase b) {
+                    String label = "<live-lexical#" + (scIdx++)
+                            + " scId=" + System.identityHashCode(sc)
+                            + " type=" + sc.type
+                            + " rcO=" + sc.refCountOwned + ">";
+                    if (howReached.putIfAbsent(b, label) == null) {
+                        todo.add(b);
+                    }
                 }
             }
         }
@@ -348,21 +364,23 @@ public class ReachabilityWalker {
         }
         int cleared = 0;
         for (RuntimeBase referent : toClear) {
-            // Fire DESTROY if the object is blessed and hasn't destroyed yet.
-            // This matches Perl's behavior of collecting orphan circular
-            // structures: when they become unreachable, DESTROY fires and
-            // weak refs clear.
-            //
-            // In quiet mode (auto-sweep from hot paths), we skip DESTROY
-            // to avoid running Perl code that could affect module loading
-            // or other in-flight state — we only clear the weak ref.
-            if (!quiet && referent.blessId != 0 && !referent.destroyFired
+            // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
+            // unreachable objects and sets refCount=MIN_VALUE — matching
+            // non-quiet jperl_gc behaviour. Previously quiet mode was
+            // more conservative to avoid mid-module-init DESTROY cascades,
+            // but Phase B2a's ModuleInitGuard already protects against
+            // that, and Phase I's walker seed filters ensure we only
+            // DESTROY genuinely unreachable objects. Without this,
+            // DBICTest::Artist and similar rows held only by
+            // Sub::Quote-generated internal caches never clear their
+            // weak refs between auto-sweeps.
+            if (referent.blessId != 0 && !referent.destroyFired
                     && referent.refCount != Integer.MIN_VALUE) {
                 referent.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(referent);
             } else {
                 WeakRefRegistry.clearWeakRefsTo(referent);
-                if (!quiet && referent.refCount != Integer.MIN_VALUE) {
+                if (referent.refCount != Integer.MIN_VALUE) {
                     referent.refCount = Integer.MIN_VALUE;
                 }
             }

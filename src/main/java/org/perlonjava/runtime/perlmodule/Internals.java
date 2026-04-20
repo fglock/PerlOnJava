@@ -213,7 +213,12 @@ public class Internals extends PerlModuleBase {
         if (!(arg.value instanceof RuntimeBase base)) {
             return new RuntimeScalar().getList();
         }
-        java.util.List<String> path = ReachabilityWalker.findPathTo(base);
+        // Phase I: when JPERL_TRACE_SKIP_LEX=1, omit ScalarRefRegistry seeds
+        // from path discovery — forces the trace through Perl-semantic
+        // roots so diagnostics show which global/stash data structure
+        // keeps the object alive (not just "live-lexical").
+        boolean skipLex = System.getenv("JPERL_TRACE_SKIP_LEX") != null;
+        java.util.List<String> path = ReachabilityWalker.findPathTo(base, skipLex);
         if (path == null) return new RuntimeScalar().getList();
         // Also dump all direct lexical-holders for debugging deep leaks
         if (System.getenv("JPERL_TRACE_ALL") != null) {
