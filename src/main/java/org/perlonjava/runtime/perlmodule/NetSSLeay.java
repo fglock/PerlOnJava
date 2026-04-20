@@ -1506,6 +1506,23 @@ public class NetSSLeay extends PerlModuleBase {
             // (successful close) so AnyEvent::Handle can finalise.
             registerLambda("shutdown", (a, c) -> new RuntimeScalar(1).getList());
 
+            // TLS data-plane stubs: without a real SSLEngine integration we
+            // can't drive a handshake. These return "failure" values that
+            // AnyEvent::Handle interprets as a real TLS error and propagates
+            // via on_error rather than hanging on $cv->recv.
+            registerLambda("read", (a, c) -> {
+                // undef → no data (in scalar context, defined=false)
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("write", (a, c) -> {
+                // <= 0 → error; AnyEvent calls get_error to find out which.
+                return new RuntimeScalar(-1).getList();
+            });
+            registerLambda("get_error", (a, c) -> {
+                // 5 = SSL_ERROR_SYSCALL — treated as a real error by AE::Handle.
+                return new RuntimeScalar(5).getList();
+            });
+
             // X509 stubs for callbacks — return 0 (no error).
             registerLambda("X509_STORE_set_flags", (a, c) -> new RuntimeScalar(1).getList());
             registerLambda("X509_STORE_CTX_get_current_cert", (a, c) ->
