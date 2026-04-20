@@ -958,8 +958,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         .set(codeBlockResult != null ? codeBlockResult : RuntimeScalarCache.scalarUndef);
             }
 
-            // Reset pos() after global match in LIST context (matches Perl behavior)
-            if (regex.regexFlags.isGlobalMatch() && ctx == RuntimeContextType.LIST && posScalar != null) {
+            // Reset pos() after global match in LIST context (matches Perl behavior),
+            // unless /c is set. The /c flag means "keep current position" and
+            // applies to both scalar and list-context /g matches.
+            if (regex.regexFlags.isGlobalMatch()
+                    && ctx == RuntimeContextType.LIST
+                    && !regex.regexFlags.keepCurrentPosition()
+                    && posScalar != null) {
                 posScalar.set(scalarUndef);
             }
             // System.err.println("DEBUG: Match completed, globalMatcher is " + (globalMatcher == null ? "null" : "set"));
