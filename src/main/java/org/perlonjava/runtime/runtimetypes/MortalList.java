@@ -38,6 +38,22 @@ public class MortalList {
     // before END blocks run.
     private static final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
 
+    // Phase I: parallel identity set for O(1) membership check.
+    // Used by ReachabilityWalker to skip scalars that are waiting in
+    // deferredCaptures for final cleanup — they are effectively dead
+    // from Perl's view, only held Java-alive by this static list.
+    private static final java.util.IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new java.util.IdentityHashMap<>();
+
+    /**
+     * Phase I: O(1) check whether the given scalar is in
+     * {@link #deferredCaptures}. Used by the reachability walker to
+     * filter out stale {@link ScalarRefRegistry} seeds.
+     */
+    public static boolean isDeferredCapture(RuntimeScalar scalar) {
+        if (scalar == null) return false;
+        return deferredCapturesSet.containsKey(scalar);
+    }
+
     /**
      * Schedule a deferred refCount decrement for a tracked referent.
      * Called from delete() when removing a tracked blessed reference
@@ -58,6 +74,7 @@ public class MortalList {
      */
     public static void addDeferredCapture(RuntimeScalar scalar) {
         deferredCaptures.add(scalar);
+        deferredCapturesSet.merge(scalar, 1, Integer::sum);
     }
 
     /**
@@ -84,12 +101,20 @@ public class MortalList {
             if (scalar.captureCount == 0 && scalar.scopeExited) {
                 deferDecrementIfTracked(scalar);
                 deferredCaptures.remove(i);
+                removeFromDeferredSet(scalar);
                 found = true;
             }
         }
         if (found) {
             flush();
         }
+    }
+
+    private static void removeFromDeferredSet(RuntimeScalar scalar) {
+        Integer c = deferredCapturesSet.get(scalar);
+        if (c == null) return;
+        if (c <= 1) deferredCapturesSet.remove(scalar);
+        else deferredCapturesSet.put(scalar, c - 1);
     }
 
     /**
@@ -114,6 +139,7 @@ public class MortalList {
             deferDecrementIfTracked(scalar);
         }
         deferredCaptures.clear();
+        deferredCapturesSet.clear();
         flush();
 
         // After flushing deferred captures, clear weak refs for objects that

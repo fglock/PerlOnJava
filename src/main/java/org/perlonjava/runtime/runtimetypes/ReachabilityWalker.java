@@ -110,6 +110,9 @@ public class ReachabilityWalker {
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;
+                // Phase I: skip weak scalars — they don't count as
+                // strong reachability edges.
+                if (WeakRefRegistry.isweak(sc)) continue;
                 // Phase I: a scalar is only a valid "live lexical" seed if
                 // its declaration scope is still registered in
                 // MyVarCleanupStack. Scalars whose scopes have exited may
@@ -117,9 +120,8 @@ public class ReachabilityWalker {
                 // MortalList.pending, or transient container elements)
                 // but they are NOT live Perl lexicals — using them as
                 // walker roots falsely pins their referents and breaks
-                // DBIC's leak tracer. Falls back to scopeExited /
-                // refCountOwned heuristics for scalars not tracked by
-                // MyVarCleanupStack (e.g. interpreter-path scalars).
+                // DBIC's leak tracer.
+                if (MortalList.isDeferredCapture(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc)) {
                     if (sc.scopeExited) continue;
                     if (!sc.refCountOwned) continue;
@@ -186,8 +188,11 @@ public class ReachabilityWalker {
         }
         // Phase B1: seed from ScalarRefRegistry (same as walk()) so the
         // trace matches what sweepWeakRefs sees.
+        // Phase I: force GC before snapshotting so stale
+        // (already-Java-unreachable) entries don't produce misleading
+        // "live-lexical" paths in diagnostic traces.
         int scIdx = 0;
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
             if (sc == null) continue;
             if (sc.captureCount > 0) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
