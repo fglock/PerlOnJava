@@ -525,7 +525,18 @@ public class OperatorParser {
         // Initialize a list to store any attributes the declaration might have.
         List<String> attributes = new ArrayList<>();
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
+        // But only if the ':' is actually introducing an attribute (followed by an
+        // identifier). Otherwise the ':' may belong to an enclosing ternary, e.g.
+        // `my $x = COND ? my $buf : $fallback` — here the ':' after `my $buf` is
+        // the ternary separator, not an attribute introducer.
         while (peek(parser).text.equals(":")) {
+            int saveIdx = parser.tokenIndex;
+            parser.tokenIndex++; // tentatively consume ':'
+            LexerToken afterColon = peek(parser);
+            parser.tokenIndex = saveIdx; // always restore; consumeAttributes consumes ':' itself
+            if (afterColon.type != IDENTIFIER) {
+                break;
+            }
             consumeAttributes(parser, attributes);
         }
 
