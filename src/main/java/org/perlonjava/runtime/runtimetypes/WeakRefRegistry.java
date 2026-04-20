@@ -245,12 +245,18 @@ public class WeakRefRegistry {
                 new java.util.ArrayList<>(referentToWeakRefs.keySet());
         for (RuntimeBase referent : referents) {
             if (referent instanceof RuntimeCode) continue;
-            // Clear weak refs for ALL objects — both blessed and unblessed.
-            // Unblessed containers (ARRAY, HASH from Storable::dclone, etc.)
-            // may have weak refs registered by DBIC's leak tracer but never
-            // reach refCount 0 due to cooperative refCount inflation. Clearing
-            // them here at END time is safe because the main script has returned
-            // and these objects are logically dead.
+            // Phase H (08pager.t END-block hang fix): skip unblessed
+            // containers (ARRAY/HASH). Those are typically internal
+            // bookkeeping — most notably Sub::Defer's $deferred_info
+            // arrays reachable only via closure captures. Clearing
+            // them here makes Sub::Defer's %DEFERRED empty, and the
+            // END block's `assert_empty_weakregistry` loops forever
+            // as every Moo accessor call dispatches through a broken
+            // deferred stub.
+            // DBIC's leak tracer weakens BLESSED referents (Schema,
+            // Source, Row) which still clear here — its END block
+            // sees those as undef as intended.
+            if (referent.blessId == 0) continue;
             clearWeakRefsTo(referent);
         }
     }
