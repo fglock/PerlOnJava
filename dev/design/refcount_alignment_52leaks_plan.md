@@ -848,40 +848,6 @@ holder in the full test. The instrumentation added here
 (`JPERL_REGISTER_STACKS=1` + enhanced `jperl_trace_to` parent dump)
 will help.
 
-### Phase E follow-up diagnosis (2026-04-19)
-
-Running the minimal `populate_weakregistry` simulation **without**
-the `fire_resultsets` closure pattern, the `rerefrozen` leak is now
-**gone**. So Phase E fixes the rerefrozen case when the reference
-topology is just nested hash + dclone round trip.
-
-Adding the DBIC-style `fire_resultsets` closure + `push` into
-`$base_collection->{random_results}` reintroduces a different leak:
-now `random_results` itself is held via a hash ref with
-`rcO=false`, registered via `addToScalar → set → setLarge →
-setLargeRefCounted` during main-script execution. The scalar has no
-direct-holder in lexicals and lives in the registry only because a
-previously-owned refCount was later released (`rcO` flipped to
-false by one of: MortalList scope exit, scope exit cleanup, DESTROY
-args cleanup, or RuntimeList/Array cleanup paths).
-
-The fire_resultsets closure captures `@rsets`, which captures
-blessed ResultSet objects. The subsequent `map { $_->all }` flow
-creates many temporary scalars that end up registered and not
-cleanly released. This is a separate — and deeper — leak than the
-Phase E target.
-
-Still open for future work:
-1. Identify which cleanup path sets `rcO=false` without removing
-   the scalar from ScalarRefRegistry when its value is a reference.
-2. Consider: when scope-exit/mortal-cleanup paths flip `rcO=false`
-   on a scalar that's a registered ref-holder, either unregister
-   it from ScalarRefRegistry OR clear its reference value so the
-   walker doesn't follow it.
-
-Current state: 52leaks.t unpatched stays at 11/12 (1 real fail).
-
-
 
 
 

@@ -100,21 +100,9 @@ public class ReachabilityWalker {
         // We skip scalars with captureCount > 0. Those are captured by a
         // closure; walking them as roots would pull in everything the
         // closure encloses, defeating the walkCodeCaptures=false default.
-        //
-        // Phase E: also skip scalars with refCountOwned=false. Such a
-        // scalar was once a ref-holder but has since been released by a
-        // cleanup path (MortalList scope exit, RuntimeList/Array
-        // teardown, DESTROY args cleanup). The referent's lifetime is
-        // NOT tracked by this scalar anymore, so treating it as a live
-        // root would spuriously keep otherwise-dead subgraphs
-        // reachable — see the 52leaks.t "basic random_results /
-        // rerefrozen" path where fire_resultsets' cleanup leaves a
-        // rcO=false scalar in the registry that pointed at
-        // $base_collection.
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;
-                if (!sc.refCountOwned) continue;
                 visitScalar(sc, todo);
             }
         }
