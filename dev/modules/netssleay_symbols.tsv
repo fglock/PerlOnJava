@@ -119,13 +119,13 @@ CTX_tlsv1_1_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_tlsv1_2_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_tlsv1_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_use_PrivateKey	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_use_PrivateKey_file	method	PARTIAL	2	autoload dispatch
+CTX_use_PrivateKey_file	method	DONE	2	autoload dispatch
 CTX_use_RSAPrivateKey	missing	MISSING	2	SSLEngine-driven handshake / ctx
 CTX_use_RSAPrivateKey_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
 CTX_use_certificate	missing	MISSING	2	SSLEngine-driven handshake / ctx
 CTX_use_certificate_ASN1	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_use_certificate_chain_file	lambda	PARTIAL	2	lambda body, check by hand
-CTX_use_certificate_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate_chain_file	lambda	DONE	2	lambda body, check by hand
+CTX_use_certificate_file	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_v23_new	method	PARTIAL	2	autoload dispatch
 CTX_v2_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_v3_new	lambda	PARTIAL	2	lambda body, check by hand

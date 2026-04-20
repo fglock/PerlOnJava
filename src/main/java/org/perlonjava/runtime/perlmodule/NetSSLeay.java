@@ -610,6 +610,9 @@ public class NetSSLeay extends PerlModuleBase {
         javax.net.ssl.SSLContext sslContext = null;  // Phase 2: cached JDK context
         javax.net.ssl.KeyManager[] keyManagers = null;
         javax.net.ssl.TrustManager[] trustManagers = null;
+        // Phase 2b: PEM-loaded material, consumed at buildSslContext time.
+        java.security.PrivateKey loadedPrivateKey = null;
+        java.util.List<X509Certificate> loadedCertChain = new java.util.ArrayList<>();
 
         SslCtxState(String role) {
             this.role = role;
@@ -1447,12 +1450,45 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("CTX_use_certificate_chain_file", (a, c) -> {
-                // STUB (phase 2+3): we only verify file readability; the
-                // cert is never loaded into the context's KeyManagerFactory.
+                // Phase 2b: parse PEM cert chain, stash on the CTX for
+                // the KeyManagerFactory build.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
-                String file = a.get(1).toString();
-                java.nio.file.Path p = java.nio.file.Paths.get(file);
-                return new RuntimeScalar(java.nio.file.Files.isReadable(p) ? 1 : 0).getList();
+                long h = a.get(0).getLong();
+                SslCtxState st = CTX_HANDLES.get(h);
+                if (st == null) return new RuntimeScalar(0).getList();
+                String fname = a.get(1).toString();
+                try {
+                    java.util.List<X509Certificate> chain = loadCertChainFromPem(fname);
+                    if (chain.isEmpty()) return new RuntimeScalar(0).getList();
+                    st.loadedCertChain = chain;
+                    st.sslContext = null;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+            registerLambda("CTX_use_certificate_file", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                SslCtxState st = CTX_HANDLES.get(h);
+                if (st == null) return new RuntimeScalar(0).getList();
+                String fname = a.get(1).toString();
+                try {
+                    java.util.List<X509Certificate> chain = loadCertChainFromPem(fname);
+                    if (chain.isEmpty()) return new RuntimeScalar(0).getList();
+                    // Preserve any existing intermediates from a previous
+                    // chain_file call; just replace the leaf.
+                    if (st.loadedCertChain == null) st.loadedCertChain = new ArrayList<>();
+                    if (st.loadedCertChain.isEmpty()) {
+                        st.loadedCertChain.addAll(chain);
+                    } else {
+                        st.loadedCertChain.set(0, chain.get(0));
+                    }
+                    st.sslContext = null;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
             });
             registerLambda("CTX_load_verify_locations", (a, c) -> {
                 // STUB (phase 2): ignores cafile/capath; cert validation
@@ -3347,15 +3383,59 @@ public class NetSSLeay extends PerlModuleBase {
         javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance(protocol);
         javax.net.ssl.TrustManager[] tms = ctx.trustManagers;
         if (tms == null) {
-            javax.net.ssl.TrustManagerFactory tmf =
-                    javax.net.ssl.TrustManagerFactory.getInstance(
-                            javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init((java.security.KeyStore) null);
-            tms = tmf.getTrustManagers();
+            if (ctx.verifyMode == 0) {
+                // VERIFY_NONE: accept-all trust manager (client tests,
+                // AnyEvent::TLS "verify => 0" style).
+                tms = new javax.net.ssl.TrustManager[] {
+                        new javax.net.ssl.X509TrustManager() {
+                            public void checkClientTrusted(X509Certificate[] x, String s) {}
+                            public void checkServerTrusted(X509Certificate[] x, String s) {}
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
+                            }
+                        }
+                };
+            } else {
+                javax.net.ssl.TrustManagerFactory tmf =
+                        javax.net.ssl.TrustManagerFactory.getInstance(
+                                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init((java.security.KeyStore) null);
+                tms = tmf.getTrustManagers();
+            }
         }
-        sc.init(ctx.keyManagers, tms, SECURE_RANDOM);
+        javax.net.ssl.KeyManager[] kms = ctx.keyManagers;
+        if (kms == null && ctx.loadedPrivateKey != null
+                && ctx.loadedCertChain != null && !ctx.loadedCertChain.isEmpty()) {
+            // Phase 2b: assemble an in-memory KeyStore holding the
+            // CTX_use_PrivateKey_file key + CTX_use_certificate_*_file chain.
+            java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+            ks.load(null, null);
+            java.security.cert.Certificate[] chain =
+                    ctx.loadedCertChain.toArray(new java.security.cert.Certificate[0]);
+            ks.setKeyEntry("net-ssleay", ctx.loadedPrivateKey, new char[0], chain);
+            javax.net.ssl.KeyManagerFactory kmf =
+                    javax.net.ssl.KeyManagerFactory.getInstance(
+                            javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, new char[0]);
+            kms = kmf.getKeyManagers();
+        }
+        sc.init(kms, tms, SECURE_RANDOM);
         ctx.sslContext = sc;
         return sc;
+    }
+
+    /** Phase 2b: parse a PEM file containing one or more X509 certs. */
+    private static java.util.List<X509Certificate> loadCertChainFromPem(String filename) throws Exception {
+        byte[] data = Files.readAllBytes(RuntimeIO.resolvePath(filename));
+        java.security.cert.CertificateFactory cf =
+                java.security.cert.CertificateFactory.getInstance("X.509");
+        java.util.List<X509Certificate> out = new ArrayList<>();
+        java.util.Collection<? extends java.security.cert.Certificate> certs =
+                cf.generateCertificates(new java.io.ByteArrayInputStream(data));
+        for (java.security.cert.Certificate c : certs) {
+            if (c instanceof X509Certificate) out.add((X509Certificate) c);
+        }
+        return out;
     }
 
     /**
@@ -3481,7 +3561,9 @@ public class NetSSLeay extends PerlModuleBase {
                 }
                 case NEED_UNWRAP:
                 case NEED_UNWRAP_AGAIN: {
-                    if (rbio.pending() <= 0) {
+                    int haveBytes = rbio.pending()
+                            + (ssl.pendingNetIn != null ? ssl.pendingNetIn.length : 0);
+                    if (haveBytes <= 0) {
                         ssl.lastError = SSL_ERROR_WANT_READ;
                         return SSL_ERROR_WANT_READ;
                     }
@@ -3519,6 +3601,8 @@ public class NetSSLeay extends PerlModuleBase {
         } else {
             buf = fromBio;
         }
+        boolean dbg = false; // flip for ad-hoc debugging
+        if (dbg && buf.length > 0) System.err.println("pumpUnwrap: " + buf.length + " bytes");
         java.nio.ByteBuffer netIn = java.nio.ByteBuffer.wrap(buf);
         try {
             while (netIn.hasRemaining()) {
@@ -3554,6 +3638,14 @@ public class NetSSLeay extends PerlModuleBase {
                     while ((t = eng.getDelegatedTask()) != null) t.run();
                 }
                 if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+                    // Need to emit bytes before we can consume more.
+                    // Stash the unconsumed ciphertext so the next pumpUnwrap
+                    // picks it up (otherwise we drop it on the floor).
+                    if (netIn.hasRemaining()) {
+                        byte[] rest = new byte[netIn.remaining()];
+                        netIn.get(rest);
+                        ssl.pendingNetIn = rest;
+                    }
                     // caller's advance loop picks this up on the next pass
                     break;
                 }
@@ -4327,7 +4419,33 @@ public class NetSSLeay extends PerlModuleBase {
         String filename = args.get(1).toString();
         SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
         if (ctxState == null) return new RuntimeScalar(0).getList();
-        return loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
+        RuntimeList r = loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
+        if (r.size() > 0 && r.getFirst().getLong() == 1) {
+            // Load succeeded; parse again into the CTX so the KeyManager
+            // factory has the key at buildSslContext time.
+            try {
+                byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
+                String pem = new String(fileData, StandardCharsets.ISO_8859_1);
+                String pass = null;
+                if (ctxState.passwdCb != null && ctxState.passwdCb.type == RuntimeScalarType.CODE) {
+                    RuntimeArray cbArgs = new RuntimeArray();
+                    cbArgs.push(new RuntimeScalar(0));
+                    cbArgs.push(ctxState.passwdUserdata != null ? ctxState.passwdUserdata
+                            : new RuntimeScalar());
+                    pass = RuntimeCode.apply(ctxState.passwdCb, cbArgs,
+                            RuntimeContextType.SCALAR).getFirst().toString();
+                }
+                byte[] der = parsePemPrivateKey(pem, pass);
+                if (der != null) {
+                    PrivateKey pk = parsePrivateKeyDer(der);
+                    if (pk != null) {
+                        ctxState.loadedPrivateKey = pk;
+                        ctxState.sslContext = null; // force rebuild
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return r;
     }
 
     // SSL-level password callback functions
