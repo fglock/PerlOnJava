@@ -289,6 +289,21 @@ public class ReachabilityWalker {
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             if (!live.contains(referent)) {
+                // Phase H (60core.t parallel-hang fix): In quiet auto-sweep,
+                // don't clear weak refs to unblessed non-code containers.
+                // Those are typically internal data structures — most
+                // notably Sub::Defer's $deferred_info ARRAY which is only
+                // reachable through closure captures that the walker does
+                // not traverse (walkCodeCaptures=false). Clearing its
+                // weak ref in %DEFERRED wipes the dispatch table and
+                // every subsequent Moo-accessor call loops forever in
+                // `goto &$undeferred`. Blessed objects (DBIC Schema/
+                // Source/Row) still clear so 52leaks keeps detecting
+                // real leaks. Explicit jperl_gc (non-quiet) is still
+                // aggressive and clears these too.
+                if (quiet && referent.blessId == 0 && !(referent instanceof RuntimeCode)) {
+                    continue;
+                }
                 toClear.add(referent);
             }
         }
