@@ -309,7 +309,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     public void add(RuntimeScalar value) {
-        elements.add(new RuntimeScalar(value));
+        // Incref immediately on anon-array-literal add so intermediate
+        // MortalList.flush() calls from subsequent expressions (e.g., another
+        // `bless {...}` assignment) do not drop a pending-mortal referent to
+        // refCount=0 before createReferenceWithTrackedElements finalizes the
+        // array. incrementRefCountForContainerStore is idempotent, so the
+        // final pass in createReferenceWithTrackedElements is a no-op for
+        // these. See tt_arr2.pl / TT directive.t repro.
+        RuntimeScalar copy = new RuntimeScalar(value);
+        elements.add(copy);
+        RuntimeScalar.incrementRefCountForContainerStore(copy);
     }
 
     public void add(RuntimeArray value) {

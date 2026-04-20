@@ -515,9 +515,6 @@ public class RuntimeList extends RuntimeBase {
                     return result;
                 } finally {
                     MortalList.suppressFlush(wasFlushing);
-                    if (!wasFlushing) {
-                        MortalList.flush();
-                    }
                 }
             }
         }
