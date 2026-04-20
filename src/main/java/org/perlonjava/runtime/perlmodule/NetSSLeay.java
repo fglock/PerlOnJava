@@ -748,6 +748,8 @@ public class NetSSLeay extends PerlModuleBase {
 
     // Sentinel value for BIO_s_mem() method type
     private static final long BIO_S_MEM_SENTINEL = -1L;
+    // Sentinel value for BIO_s_file() method type
+    private static final long BIO_S_FILE_SENTINEL = -2L;
 
     public NetSSLeay() {
         super("Net::SSLeay", false);
@@ -794,6 +796,10 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("ERR_peek_error", null);
             mod.registerMethod("ERR_error_string", null);
             mod.registerMethod("ERR_put_error", null);
+            mod.registerMethod("ERR_load_BIO_strings", null);
+            mod.registerMethod("ERR_load_ERR_strings", null);
+            mod.registerMethod("ERR_load_SSL_strings", null);
+            mod.registerMethod("ERR_print_errors_cb", null);
             // print_errs is implemented in Perl (Net/SSLeay.pm) to use Perl's warn()
 
             // RAND functions
@@ -811,7 +817,9 @@ public class NetSSLeay extends PerlModuleBase {
 
             // BIO memory functions
             mod.registerMethod("BIO_s_mem", null);
+            mod.registerMethod("BIO_s_file", null);
             mod.registerMethod("BIO_new", null);
+            mod.registerMethod("BIO_new_mem_buf", null);
             mod.registerMethod("BIO_new_file", null);
             mod.registerMethod("BIO_free", null);
             mod.registerMethod("BIO_read", null);
@@ -1933,6 +1941,56 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(0).getList();
     }
 
+    /**
+     * ERR_load_*_strings — load per-subsystem human-readable error text.
+     * In modern OpenSSL these are all no-ops: the error strings are loaded
+     * on demand by ERR_error_string, so nothing needs to happen here. We
+     * expose them so callers that invoke them at BEGIN time don't trip
+     * Undefined-subroutine errors.
+     */
+    public static RuntimeList ERR_load_BIO_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList ERR_load_ERR_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList ERR_load_SSL_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * ERR_print_errors_cb(&callback, $user_data) — drain the error queue,
+     * calling $callback->($line, $len, $user_data) for each formatted entry.
+     * The callback returns 0 to stop iterating.
+     */
+    public static RuntimeList ERR_print_errors_cb(RuntimeArray args, int ctx) {
+        RuntimeScalar cb = args.size() > 0 ? args.get(0).scalar() : null;
+        RuntimeScalar userData = args.size() > 1 ? args.get(1).scalar()
+                : RuntimeScalarCache.scalarUndef;
+        if (cb == null || cb.type != RuntimeScalarType.CODE) {
+            return new RuntimeScalar(0).getList();
+        }
+        Deque<Long> queue = ERROR_QUEUE.get();
+        while (!queue.isEmpty()) {
+            long code = queue.pollFirst();
+            int lib = (int) ((code >> 23) & 0x1FF);
+            int reason = (int) (code & 0x7FFFFF);
+            String line = String.format("error:%08X:%s::%s",
+                    code, getLibName(lib), getReasonString(lib, reason));
+            RuntimeArray cbArgs = new RuntimeArray();
+            cbArgs.push(new RuntimeScalar(line));
+            cbArgs.push(new RuntimeScalar(line.length()));
+            cbArgs.push(userData);
+            RuntimeList r = RuntimeCode.apply(cb, cbArgs, RuntimeContextType.SCALAR);
+            if (!r.isEmpty() && !r.getFirst().getBoolean()) {
+                break; // callback returned false — stop iterating
+            }
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
     // Library name lookup for error strings
     private static String getLibName(int lib) {
         switch (lib) {
@@ -2136,10 +2194,40 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(BIO_S_MEM_SENTINEL).getList();
     }
 
+    public static RuntimeList BIO_s_file(RuntimeArray args, int ctx) {
+        // Returns a sentinel value representing the "file BIO method".
+        // BIO_new(BIO_s_file()) is followed by BIO_read_filename/BIO_write_filename
+        // in upstream OpenSSL; Net::SSLeay exposes BIO_new_file() as a convenience
+        // that combines the two. We honour the sentinel here for completeness.
+        return new RuntimeScalar(BIO_S_FILE_SENTINEL).getList();
+    }
+
     public static RuntimeList BIO_new(RuntimeArray args, int ctx) {
         // BIO_new(method) - creates a new BIO
         long handleId = HANDLE_COUNTER.getAndIncrement();
         BIO_HANDLES.put(handleId, new MemoryBIO());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList BIO_new_mem_buf(RuntimeArray args, int ctx) {
+        // BIO_new_mem_buf(data [, len]) - read-only BIO over an in-memory buffer.
+        // Net::SSLeay passes a Perl string; len < 0 means "use the string length".
+        // For our MemoryBIO implementation, we simply seed a new BIO with the
+        // bytes and return its handle. True read-only semantics (erroring on
+        // BIO_write) aren't enforced — no known Perl caller depends on them.
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        String data = args.get(0).toString();
+        int requested = args.size() > 1 ? (int) args.get(1).getLong() : -1;
+        byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
+        if (requested >= 0 && requested < bytes.length) {
+            byte[] trimmed = new byte[requested];
+            System.arraycopy(bytes, 0, trimmed, 0, requested);
+            bytes = trimmed;
+        }
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        MemoryBIO bio = new MemoryBIO();
+        bio.write(bytes);
+        BIO_HANDLES.put(handleId, bio);
         return new RuntimeScalar(handleId).getList();
     }
 

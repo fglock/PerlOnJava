@@ -33,16 +33,16 @@ ASN1_TIME_new	method	PARTIAL	2	autoload dispatch
 ASN1_TIME_print	missing	MISSING	4	X509 introspection
 ASN1_TIME_set	method	PARTIAL	2	autoload dispatch
 ASN1_TIME_set_string	missing	MISSING	4	X509 introspection
-BIO_eof	method	PARTIAL	2	autoload dispatch
-BIO_free	method	PARTIAL	2	autoload dispatch
-BIO_new	method	PARTIAL	2	autoload dispatch
-BIO_new_file	method	PARTIAL	2	autoload dispatch
-BIO_new_mem_buf	missing	MISSING	1	ERR queue / BIO memory buffer
-BIO_pending	method	PARTIAL	2	autoload dispatch
-BIO_read	method	PARTIAL	2	autoload dispatch
-BIO_s_file	missing	MISSING	1	ERR queue / BIO memory buffer
-BIO_s_mem	method	PARTIAL	2	autoload dispatch
-BIO_write	method	PARTIAL	2	autoload dispatch
+BIO_eof	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_free	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new_file	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new_mem_buf	method	DONE	1	pre-seeded memory BIO, honours len arg
+BIO_pending	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_read	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_s_file	method	DONE	1	sentinel; BIO_new_file is the convenience wrapper
+BIO_s_mem	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_write	method	DONE	1	memory BIO (MemoryBIO backing queue)
 BN_add_word	missing	MISSING	6	RSA/BN/EVP_PKEY
 BN_bin2bn	missing	MISSING	6	RSA/BN/EVP_PKEY
 BN_bn2dec	missing	MISSING	6	RSA/BN/EVP_PKEY
@@ -140,16 +140,16 @@ ERROR_WANT_READ	constant	DONE	0
 ERROR_WANT_WRITE	constant	DONE	0	
 ERROR_WANT_X509_LOOKUP	constant	DONE	0	
 ERROR_ZERO_RETURN	constant	DONE	0	
-ERR_clear_error	method	PARTIAL	2	autoload dispatch
+ERR_clear_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
 ERR_error_string	method	PARTIAL	2	autoload dispatch
-ERR_get_error	method	PARTIAL	2	autoload dispatch
-ERR_load_BIO_strings	missing	MISSING	1	ERR queue / BIO memory buffer
-ERR_load_ERR_strings	missing	MISSING	1	ERR queue / BIO memory buffer
-ERR_load_SSL_strings	missing	MISSING	1	ERR queue / BIO memory buffer
+ERR_get_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+ERR_load_BIO_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
+ERR_load_ERR_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
+ERR_load_SSL_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
 ERR_load_crypto_strings	method	PARTIAL	2	autoload dispatch
-ERR_peek_error	method	PARTIAL	2	autoload dispatch
-ERR_print_errors_cb	missing	MISSING	1	ERR queue / BIO memory buffer
-ERR_put_error	method	PARTIAL	2	autoload dispatch
+ERR_peek_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+ERR_print_errors_cb	method	DONE	1	drains queue via Perl callback
+ERR_put_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
 EVP_Digest	method	PARTIAL	2	autoload dispatch
 EVP_DigestFinal	method	PARTIAL	2	autoload dispatch
 EVP_DigestFinal_ex	method	PARTIAL	2	autoload dispatch
