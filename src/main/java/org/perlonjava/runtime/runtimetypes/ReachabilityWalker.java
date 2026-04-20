@@ -327,6 +327,16 @@ public class ReachabilityWalker {
      */
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
+        // Drain pending mortal decrements before taking a scalar snapshot.
+        // Otherwise, scalars in MortalList.pending (awaiting their
+        // deferred decrement) stay JVM-alive and leak into
+        // ScalarRefRegistry.snapshot() as false-live seeds, pinning
+        // genuinely unreachable objects. This was the missing step
+        // that made the stash-entrySet allocation pressure *incidentally*
+        // make auto-sweep work — the allocations forced young-gen GC
+        // which ran finalization, but we can achieve the same effect
+        // deterministically with an explicit flush.
+        MortalList.flush();
         ScalarRefRegistry.forceGcAndSnapshot();
         // Phase H1: drain rescued objects in BOTH quiet and non-quiet modes.
         // Rescued objects are blessed-with-DESTROY objects that self-saved
