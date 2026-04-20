@@ -219,6 +219,14 @@ public class GlobalContext {
         }
         inc.add(new RuntimeScalar(JAR_PERLLIB));    // internal src/main/perl/lib (lowest priority)
 
+        // Honor PERL_USE_UNSAFE_INC=1 (required by CPAN.pm / Module::Install-based
+        // Makefile.PL scripts that expect `.` in @INC). Perl 5.26 removed `.` from
+        // @INC by default, but CPAN tooling sets PERL_USE_UNSAFE_INC=1 to restore it.
+        String unsafeInc = env.getOrDefault("PERL_USE_UNSAFE_INC", new RuntimeScalar("")).toString();
+        if (!unsafeInc.isEmpty() && !unsafeInc.equals("0")) {
+            inc.add(new RuntimeScalar("."));
+        }
+
         // Initialize %INC
         GlobalVariable.getGlobalHash("main::INC");
 
