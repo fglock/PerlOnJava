@@ -5,6 +5,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
 
+import org.perlonjava.runtime.operators.WarnDie;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
 
@@ -585,6 +587,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The value at the specified index, or a proxy if out of bounds.
      */
     public RuntimeScalar get(RuntimeScalar value) {
+
+        // Perl warns "Use of uninitialized value in array element" whenever an
+        // undef value is used as an array subscript (both read and lvalue/
+        // autoviv use this path). Matches perl's behavior under `use warnings`.
+        if (value != null && value.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in array element"),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "uninitialized");
+        }
 
         if (this.type == TIED_ARRAY) {
             int idx = value.getInt();

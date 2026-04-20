@@ -391,6 +391,15 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The value associated with the key, or a proxy for lazy autovivification if the key does not exist.
      */
     public RuntimeScalar get(RuntimeScalar keyScalar) {
+        // Perl warns "Use of uninitialized value in hash element" whenever an
+        // undef value is used as a hash key (both read and lvalue/autoviv use
+        // this path). Matches perl's behavior under `use warnings`.
+        if (keyScalar != null && keyScalar.type == RuntimeScalarType.UNDEF) {
+            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in hash element"),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "uninitialized");
+        }
         return switch (this.type) {
             case PLAIN_HASH, AUTOVIVIFY_HASH -> {
                 // Note: get() does not autovivify the hash, so we don't call AutovivificationHash.vivify()
