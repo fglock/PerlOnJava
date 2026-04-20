@@ -5,6 +5,30 @@
 **Depends on:** `dev/design/refcount_alignment_plan.md` (completed — Phases 1-7)
 **Goal:** `./jcpan -t DBIx::Class` passes 0 failures, without any DBIC patches.
 
+## Scope — key refcount/DESTROY-dependent modules
+
+The refcount-alignment effort targets the CPAN ecosystem that most
+heavily relies on Perl's refcount semantics and DESTROY timing.
+Regression-gate all three in every Phase step:
+
+| Module | What it depends on | Primary test file |
+|---|---|---|
+| **DBIx::Class** | DESTROY self-save (Schema::DESTROY), weaken for back-refs (source→schema), refcount-triggered cleanup for resultset caches, weaken-based leak tracer. | `t/52leaks.t`, `t/60core.t`, `t/cdbi/sweet/08pager.t`, `t/storage/error.t`. |
+| **Moo** | Sub::Defer's `%DEFERRED` weak hash, Sub::Quote's `%QUOTED` + `$unquoted` slot (weaken on HASH element scalar-ref), closure captures holding deferred-dispatch state through method-call chains. | Exercised transitively via DBIC tests + Moo's own tests in `./jcpan -t Moo`. |
+| **Template::Toolkit** | DESTROY ordering of `$context` → `$stash` → iterator/plugin instances, weaken on self-back-refs in Plugin base classes (e.g. `Template::Plugin::Filter::_DYNAMIC`). | `./jcpan -t Template`. |
+
+**Target:** all three must pass every test with 0 failures for the
+branch to merge. A passing DBIC run without Moo/TT equivalents
+should not be accepted as "done" — they share the same underlying
+weaken/DESTROY surface area and fixing one often exposes issues in
+the others.
+
+Tracking:
+- DBIC: see "Current state" below — 1 residual subtest at this time.
+- Moo: TODO — needs a clean `./jcpan -t Moo` run after Phase I.
+- Template::Toolkit: TODO — needs a clean `./jcpan -t Template` run
+  after Phase I.
+
 ---
 
 ## Current state (2026-04-20, Phase I complete — 1 residual)
