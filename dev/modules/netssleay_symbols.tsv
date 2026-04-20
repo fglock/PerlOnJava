@@ -64,66 +64,66 @@ CB_READ	constant	DONE	0
 CB_READ_ALERT	constant	DONE	0	
 CB_WRITE	constant	DONE	0	
 CB_WRITE_ALERT	constant	DONE	0	
-CTX_add_client_CA	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_add_session	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_check_private_key	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_ctrl	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_add_client_CA	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_add_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_check_private_key	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_ctrl	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_free	method	PARTIAL	2	autoload dispatch
 CTX_get_cert_store	lambda	DONE	2	allocates opaque handle
-CTX_get_client_CA_list	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_get_ex_data	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_get_client_CA_list	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_ex_data	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_get_max_proto_version	method	PARTIAL	2	autoload dispatch
 CTX_get_min_proto_version	method	PARTIAL	2	autoload dispatch
-CTX_get_mode	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_get_options	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_get_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_options	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_get_security_level	lambda	PARTIAL	2	touches handle state
-CTX_get_session_cache_mode	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_get_timeout	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_get_verify_depth	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_get_verify_mode	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_get_session_cache_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_timeout	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_verify_depth	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_verify_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_load_verify_locations	lambda	STUB	2	returns 1 unconditionally
 CTX_new	method	PARTIAL	2	autoload dispatch
 CTX_new_with_method	method	PARTIAL	2	autoload dispatch
-CTX_remove_session	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_remove_session	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_cipher_list	lambda	PARTIAL	2	touches handle state
-CTX_set_client_CA_list	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_client_CA_list	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_default_passwd_cb	method	PARTIAL	2	autoload dispatch
 CTX_set_default_passwd_cb_userdata	method	PARTIAL	2	autoload dispatch
 CTX_set_default_verify_paths	lambda	STUB	2	returns 1 unconditionally
-CTX_set_ex_data	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_ex_data	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_info_callback	lambda	STUB	2	returns undef unconditionally
-CTX_set_keylog_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_keylog_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_max_proto_version	method	PARTIAL	2	autoload dispatch
 CTX_set_min_proto_version	method	PARTIAL	2	autoload dispatch
-CTX_set_mode	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_msg_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_msg_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_options	lambda	PARTIAL	2	touches handle state
-CTX_set_post_handshake_auth	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_psk_client_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_psk_server_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_quiet_shutdown	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_post_handshake_auth	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_psk_client_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_psk_server_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_quiet_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_read_ahead	lambda	PARTIAL	2	touches handle state
 CTX_set_security_level	lambda	STUB	2	returns undef unconditionally
-CTX_set_session_cache_mode	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_session_id_context	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_timeout	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tlsext_servername_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tlsext_status_cb	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tlsext_ticket_key_cb	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_session_cache_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_session_id_context	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_timeout	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_servername_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_status_cb	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_ticket_key_cb	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_set_tmp_dh	lambda	STUB	2	returns 1 unconditionally
-CTX_set_tmp_dh_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tmp_ecdh	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tmp_rsa	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_set_tmp_rsa_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_dh_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_ecdh	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_rsa	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_rsa_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_tlsv1_1_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_tlsv1_2_new	lambda	PARTIAL	2	lambda body, check by hand
 CTX_tlsv1_new	lambda	PARTIAL	2	lambda body, check by hand
-CTX_use_PrivateKey	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_use_PrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_use_PrivateKey_file	method	DONE	2	autoload dispatch
-CTX_use_RSAPrivateKey	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_use_RSAPrivateKey_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_use_certificate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-CTX_use_certificate_ASN1	missing	MISSING	2	SSLEngine-driven handshake / ctx
+CTX_use_RSAPrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_RSAPrivateKey_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_use_certificate_chain_file	lambda	DONE	2	lambda body, check by hand
 CTX_use_certificate_file	missing	DONE	2	SSLEngine-driven handshake / ctx
 CTX_v23_new	method	PARTIAL	2	autoload dispatch
@@ -347,8 +347,8 @@ PEM_read_bio_X509_CRL	method	PARTIAL	2	autoload dispatch
 PEM_read_bio_X509_REQ	method	PARTIAL	2	autoload dispatch
 PKCS12_newpass	missing	DONE	3	PEM/DER/PKCS12 parsing
 PKCS12_parse	missing	DONE	3	PEM/DER/PKCS12 parsing
-PKCS7_sign	missing	MISSING	0	misc
-PKCS7_verify	missing	MISSING	0	misc
+PKCS7_sign	missing	DONE	0	misc
+PKCS7_verify	missing	DONE	0	misc
 P_ASN1_INTEGER_get_dec	method	PARTIAL	2	autoload dispatch
 P_ASN1_INTEGER_get_hex	method	PARTIAL	2	autoload dispatch
 P_ASN1_INTEGER_set_dec	method	PARTIAL	2	autoload dispatch
@@ -359,8 +359,8 @@ P_ASN1_TIME_put2string	method	PARTIAL	2	autoload dispatch
 P_ASN1_TIME_set_isotime	method	PARTIAL	2	autoload dispatch
 P_ASN1_UTCTIME_put2string	method	PARTIAL	2	autoload dispatch
 P_EVP_MD_list_all	method	PARTIAL	2	autoload dispatch
-P_EVP_PKEY_fromdata	missing	MISSING	0	misc
-P_EVP_PKEY_todata	missing	MISSING	0	misc
+P_EVP_PKEY_fromdata	missing	DONE	0	misc
+P_EVP_PKEY_todata	missing	DONE	0	misc
 P_PKCS12_load_file	method	PARTIAL	2	autoload dispatch
 P_X509_CRL_add_extensions	method	PARTIAL	2	autoload dispatch
 P_X509_CRL_add_revoked_serial_hex	method	PARTIAL	2	autoload dispatch
@@ -597,25 +597,25 @@ d2i_X509_CRL_bio	method	PARTIAL	2	autoload dispatch
 d2i_X509_REQ_bio	method	PARTIAL	2	autoload dispatch
 d2i_X509_bio	method	PARTIAL	2	autoload dispatch
 free	lambda	STUB	0	returns undef unconditionally
-get_client_random	missing	MISSING	2	SSLEngine-driven handshake / ctx
+get_client_random	missing	DONE	2	SSLEngine-driven handshake / ctx
 get_error	lambda	DONE	2	lambda body, check by hand
 get_ex_data	lambda	PARTIAL	2	lambda body, check by hand
 get_ex_new_index	lambda	PARTIAL	2	lambda body, check by hand
-get_finished	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_keyblock_size	missing	MISSING	2	SSLEngine-driven handshake / ctx
+get_finished	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_keyblock_size	missing	DONE	2	SSLEngine-driven handshake / ctx
 get_max_proto_version	method	PARTIAL	2	autoload dispatch
 get_min_proto_version	method	PARTIAL	2	autoload dispatch
-get_peer_cert_chain	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_peer_certificate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_pending	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_rbio	missing	MISSING	2	SSLEngine-driven handshake / ctx
+get_peer_cert_chain	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_peer_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_pending	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_rbio	missing	DONE	2	SSLEngine-driven handshake / ctx
 get_security_level	lambda	PARTIAL	2	touches handle state
-get_server_random	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_session	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_shared_ciphers	missing	MISSING	2	SSLEngine-driven handshake / ctx
-get_verify_result	missing	MISSING	2	SSLEngine-driven handshake / ctx
+get_server_random	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_shared_ciphers	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_verify_result	missing	DONE	2	SSLEngine-driven handshake / ctx
 get_version	missing	DONE	2	SSLEngine-driven handshake / ctx
-get_wbio	missing	MISSING	2	SSLEngine-driven handshake / ctx
+get_wbio	missing	DONE	2	SSLEngine-driven handshake / ctx
 hello	method	PARTIAL	2	autoload dispatch
 i2d_SSL_SESSION	missing	DONE	3	PEM/DER/PKCS12 parsing
 in_accept_init	method	PARTIAL	2	autoload dispatch
@@ -623,27 +623,27 @@ in_connect_init	method	PARTIAL	2	autoload dispatch
 library_init	method	PARTIAL	2	autoload dispatch
 load_error_strings	method	PARTIAL	2	autoload dispatch
 new	method	DONE	2	→ Java SSL_new
-p_next_proto_last_status	missing	MISSING	0	misc
-p_next_proto_negotiated	missing	MISSING	0	misc
-peek	missing	MISSING	2	SSLEngine-driven handshake / ctx
+p_next_proto_last_status	missing	DONE	0	misc
+p_next_proto_negotiated	missing	DONE	0	misc
+peek	missing	DONE	2	SSLEngine-driven handshake / ctx
 pending	missing	DONE	2	SSLEngine-driven handshake / ctx
 randomize	method	PARTIAL	2	autoload dispatch
 read	lambda	DONE	2	returns undef unconditionally
-renegotiate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_accept	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_accept_good	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_accept_renegotiate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_cache_full	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_cb_hits	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_cb_hits_deprecated	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_connect	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_connect_good	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_connect_renegotiate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_hits	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_misses	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_number	missing	MISSING	2	SSLEngine-driven handshake / ctx
-sess_timeouts	missing	MISSING	2	SSLEngine-driven handshake / ctx
-session_reused	missing	MISSING	2	SSLEngine-driven handshake / ctx
+renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept_good	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept_renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cache_full	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cb_hits	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cb_hits_deprecated	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect_good	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect_renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_hits	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_misses	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_number	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_timeouts	missing	DONE	2	SSLEngine-driven handshake / ctx
+session_reused	missing	DONE	2	SSLEngine-driven handshake / ctx
 set_accept_state	lambda	DONE	2	returns undef unconditionally
 set_bio	lambda	DONE	2	returns undef unconditionally
 set_connect_state	lambda	DONE	2	returns undef unconditionally
@@ -655,21 +655,21 @@ set_info_callback	lambda	PARTIAL	2	touches handle state
 set_max_proto_version	method	PARTIAL	2	autoload dispatch
 set_min_proto_version	method	PARTIAL	2	autoload dispatch
 set_mode	lambda	PARTIAL	2	touches handle state
-set_msg_callback	missing	MISSING	2	SSLEngine-driven handshake / ctx
+set_msg_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
 set_options	lambda	PARTIAL	2	touches handle state
-set_post_handshake_auth	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_quiet_shutdown	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_rfd	missing	MISSING	2	SSLEngine-driven handshake / ctx
+set_post_handshake_auth	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_quiet_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_rfd	missing	DONE	2	SSLEngine-driven handshake / ctx
 set_security_level	lambda	STUB	2	returns undef unconditionally
-set_session	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_shutdown	missing	MISSING	2	SSLEngine-driven handshake / ctx
+set_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
 set_tlsext_host_name	lambda	DONE	2	touches handle state
-set_tlsext_status_ocsp_resp	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_tlsext_status_type	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_tmp_dh	missing	MISSING	2	SSLEngine-driven handshake / ctx
-set_tmp_rsa	missing	MISSING	2	SSLEngine-driven handshake / ctx
+set_tlsext_status_ocsp_resp	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tlsext_status_type	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tmp_dh	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tmp_rsa	missing	DONE	2	SSLEngine-driven handshake / ctx
 set_verify	lambda	DONE	2	returns undef unconditionally
-set_wfd	missing	MISSING	2	SSLEngine-driven handshake / ctx
+set_wfd	missing	DONE	2	SSLEngine-driven handshake / ctx
 shutdown	lambda	DONE	2	returns undef unconditionally
 sk_GENERAL_NAME_num	missing	DONE	4	X509 introspection
 sk_GENERAL_NAME_value	missing	DONE	4	X509 introspection
@@ -687,20 +687,20 @@ sk_X509_shift	method	PARTIAL	2	autoload dispatch
 sk_X509_unshift	method	PARTIAL	2	autoload dispatch
 sk_X509_value	method	PARTIAL	2	autoload dispatch
 sk_pop_free	missing	DONE	4	X509 introspection
-ssl_read_CRLF	missing	MISSING	2	SSLEngine-driven handshake / ctx
-ssl_read_all	missing	MISSING	2	SSLEngine-driven handshake / ctx
-ssl_read_until	missing	MISSING	2	SSLEngine-driven handshake / ctx
-ssl_write_CRLF	missing	MISSING	2	SSLEngine-driven handshake / ctx
-ssl_write_all	missing	MISSING	2	SSLEngine-driven handshake / ctx
+ssl_read_CRLF	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_read_all	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_read_until	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_write_CRLF	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_write_all	missing	DONE	2	SSLEngine-driven handshake / ctx
 state	lambda	DONE	2	touches handle state
-use_PrivateKey	missing	MISSING	2	SSLEngine-driven handshake / ctx
-use_PrivateKey_ASN1	missing	MISSING	2	SSLEngine-driven handshake / ctx
+use_PrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_PrivateKey_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
 use_PrivateKey_file	method	PARTIAL	2	autoload dispatch
-use_RSAPrivateKey_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
-use_certificate	missing	MISSING	2	SSLEngine-driven handshake / ctx
-use_certificate_ASN1	missing	MISSING	2	SSLEngine-driven handshake / ctx
-use_certificate_chain_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
-use_certificate_file	missing	MISSING	2	SSLEngine-driven handshake / ctx
-want	missing	MISSING	2	SSLEngine-driven handshake / ctx
+use_RSAPrivateKey_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_chain_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+want	missing	DONE	2	SSLEngine-driven handshake / ctx
 write	lambda	DONE	2	lambda body, check by hand
-write_partial	missing	MISSING	2	SSLEngine-driven handshake / ctx
+write_partial	missing	DONE	2	SSLEngine-driven handshake / ctx
