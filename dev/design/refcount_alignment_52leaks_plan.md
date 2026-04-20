@@ -1315,6 +1315,75 @@ With the Storable-side cleanup:
 - Lower memory use in code that uses Storable::dclone heavily
 - No behavior change for normal (non-STORABLE-hooked) dclone usage
 
+## Phase G — RESULT (2026-04-20, commit `e8cec9a76`)
+
+**Status:** SHIPPED. **`t/52leaks.t` unpatched target achieved** 🎉
+
+### What shipped
+
+New helper `Storable.releaseApplyArgs(RuntimeArray args)`:
+- Iterates elements of a temporary arg array.
+- For each element with `refCountOwned=true` and a `RuntimeBase`
+  value whose `refCount > 0`, decrements `refCount` and flips
+  `refCountOwned=false`.
+- Clears the array's element list and marks `elementsOwned=false`.
+
+Called from all 5 `RuntimeCode.apply(method, args, ...)` sites in
+`Storable.java`:
+
+1. `deepClone` freezeArgs (dclone STORABLE_freeze)
+2. `deepClone` thawArgs (dclone STORABLE_thaw)
+3. `freeze` freezeArgs (binary serialize)
+4. `thaw` thawArgs (binary deserialize)
+5. `convertFromYAMLWithTags` thawArgs (YAML-style deserialize)
+
+### Results
+
+| Test | Before Phase G | After Phase G |
+|---|---|---|
+| `t/52leaks.t` unpatched | 1 real fail (`basic result_source_handle`) | **10/10 pass** (8 ok + 2 SKIP for PPerl/SpeedyCGI) |
+| `t/52leaks.t` patched | 12/12 | 12/12 preserved |
+| Sandbox destroy/weaken | 213/213 | 213/213 |
+| Full unit suite (`make`) | PASS | PASS |
+| `t/84serialize.t` (Storable) | 115/115 | 115/115 |
+| `t/storage/txn_scope_guard.t` | 18/18 | 18/18 |
+| `t/100populate.t` | 108/108 | 108/108 |
+| `t/96_is_deteministic_value.t` | 8/8 | 8/8 |
+| `t/cdbi/68-inflate_has_a.t` | 6/6 | 6/6 |
+| `t/inflate/core.t` | 32/32 | 32/32 |
+| `t/multi_create/standard.t` | 92/92 | 92/92 |
+| `t/relationship/custom.t` | 57/57 | 57/57 |
+
+### Why it works
+
+The root cause was a semantic mismatch between:
+- Perl-side `@_`: arg list is an alias array; elements don't
+  affect refCount lifecycle — when the sub returns, @_ is GC'd
+  and the aliased referents keep their natural refCount.
+- PerlOnJava-side `RuntimeArray.push(args, scalar)`: calls
+  `incrementRefCountForContainerStore`, which bumps the referent's
+  refCount by 1 AND sets `refCountOwned=true` on the copy in
+  `args.elements`.
+
+For normal Perl-compiled subs, `RuntimeCode.apply` handles the
+inverse decrement when @_ is drained. But Storable's hooks were
+invoked from Java-side Storable.java, where the temporary
+`freezeArgs`/`thawArgs` arrays were just local Java variables.
+JVM GC eventually reclaimed them, but the refCount bumps stayed,
+permanently inflating the referent's refCount.
+
+`releaseApplyArgs` does the inverse decrement at the right point
+— Java-side explicit release after the Perl call returns,
+semantically matching what `@_` drain does on the Perl side.
+
+### Plan status: **COMPLETE**
+
+All objectives of `refcount_alignment_52leaks_plan.md` achieved:
+- 52leaks.t unpatched: **12/12 non-SKIP tests pass**
+- No regressions in other DBIC tests
+- No regressions in sandbox or full unit suite
+- No opt-in DBIC LeakTracer patch required
+
 
 
 
