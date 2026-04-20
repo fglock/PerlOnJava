@@ -1,1688 +1,520 @@
-# Final Plan: DBIC `t/52leaks.t` Tests 12-20
-
-**Status:** Design / Proposal
-**Date:** 2026-04-19
-**Depends on:** `dev/design/refcount_alignment_plan.md` (completed)
-**Goal:** All 20 non-TODO tests in DBIC's `t/52leaks.t` pass under `jperl`
-without requiring the `dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`
-patch.
-
-## 1. Problem
-
-After the refcount alignment plan's 7 phases landed, the current
-state of `t/52leaks.t` is:
-
-```
-not ok 12 - Expected garbage collection of ARRAY(0x...) | basic random_results (refcnt 1)
-not ok 13 - Expected garbage collection of DBICTest::Artist=HASH(0x...) (refcnt 2)
-not ok 14 - Expected garbage collection of DBICTest::CD=HASH(0x...)     (refcnt 2)
-not ok 15 - Expected garbage collection of DBICTest::CD=HASH(0x...)     (refcnt 2)
-not ok 16 - Expected garbage collection of DBICTest::Schema=HASH(0x...) (refcnt 2)
-not ok 17 - Expected garbage collection of DBICTest::Schema=HASH(0x...) (refcnt 2)
-not ok 18 - Expected garbage collection of DBIx::Class::ResultSource::Table=HASH(0x...) (refcnt 3)
-not ok 19 - Expected garbage collection of DBIx::Class::ResultSource::Table=HASH(0x...) (refcnt 6)
-not ok 20 - Expected garbage collection of HASH(0x...) | basic rerefrozen
-```
-
-Each failure means a weak reference registered in DBIC's leak tracer
-is still `defined` at assertion time, when Perl 5 would have already
-set it to `undef` because the referent became unreachable.
-
-`Internals::jperl_gc()` called from a patched LeakTracer.pm already
-fixes all 9. The remaining work is to make the fix **automatic** — no
-module patching required.
-
-## 2. Root Cause
-
-### The `basic random_results` case (simplest)
-
-```perl
-# t/52leaks.t line 260-296 (abridged)
-my $base_collection = {
-    # ... many resultsets, row objects, etc.
-};
-# ...
-push @{$base_collection->{random_results}}, $fire_resultsets->();
-# ...
-populate_weakregistry ($weak_registry, $base_collection->{$_}, "basic $_")
-    for keys %$base_collection;
-# ... end of block ...
-assert_empty_weakregistry ($weak_registry);   # line 526
-```
-
-At line 526:
-- The enclosing block has long since exited. `$base_collection` and
-  all the objects it held SHOULD be collectible.
-- Native Perl: they ARE collected. Weak refs become `undef`.
-- jperl: the `ARRAY` for `random_results` has `refCount == 1`, not 0.
-  The weak ref stays defined. Test fails.
-
-### Where does the +1 come from?
-
-Our diagnosis during the alignment plan showed:
-- The referent object is NOT reachable from any Perl-level root
-  (`Internals::jperl_trace_to($ref)` returns undef before
-  `jperl_gc` is called).
-- But `refCount > 0` because **cooperative refCount is inflated by
-  JVM-side references** the walker can't see.
-
-Specific inflation sources for the `basic random_results` ARRAY:
-1. `$fire_resultsets` is a closure that captures `@rsets`, which
-   holds the array indirectly. The closure stays alive through
-   module-level state; its `capturedScalars` pins the ARRAY.
-2. `Storable::dclone` internals materialize the entire tree and
-   may leave JVM temporaries that hold references.
-3. `populate_weakregistry` calls pass the ref through argument
-   positions — `@_` in PerlOnJava is still counted-copies
-   (Phase 2 only covered `@DB::args`, not the general `@_`).
-4. Hash accesses like `$base_collection->{$_}` in the `for` loop
-   materialize scalar copies that track as owners briefly.
-
-The walker correctly identifies these objects as unreachable once
-we drain `rescuedObjects` and don't follow closure captures, but
-the walker is never triggered automatically because we cannot see
-JVM-frame lexicals — so auto-triggering risks clearing weak refs
-to objects that ARE still alive via a live local we can't see.
-
-### The core dilemma
-
-```
-Auto-trigger walker → unsafe (walks miss live lexicals)
-Don't auto-trigger  → leak tracer sees false positives
-```
-
-## 3. Four Solution Options
-
-### Option A — Fix every refCount inflation source
-
-Audit each code path that touches `refCount` without a matching
-decrement: `@_` pass-through, hash/array element temporaries, closure
-captures, `Storable`/`JSON`/`dclone` output, overload operator
-callers, method-resolution temporaries, etc.
-
-**Pros:**
-- No new machinery. Keeps the design footprint minimal.
-- Every fix also improves `Internals::SvREFCNT` accuracy for
-  non-DBIC consumers.
-
-**Cons:**
-- Unbounded: each new CPAN module may surface new paths.
-- Risk of regressions — the Phase 3 DESTROY FSM already needed
-  careful balancing of `args.push(self)` to avoid infinite loops.
-- Doesn't address the fundamental mismatch that cooperative
-  refcount is approximate.
-
-**Verdict:** Necessary hygiene but insufficient alone.
-
-### Option B — Lexical-aware ReachabilityWalker
-
-Instrument the compiler to register live ref-typed lexicals with a
-thread-local stack, pop on scope exit. The walker consults this
-stack as additional roots.
-
-**Mechanism:**
-```java
-// At `my $x = <ref_expr>` emission:
-RuntimeScalar x = ...;
-LexicalRegistry.push(x);   // one-liner at declaration
-
-// At scope exit (already emitted by EmitStatement):
-x = null;                   // existing
-LexicalRegistry.popTo(savedDepth);   // new
-```
-
-**Pros:**
-- Makes `jperl_gc()` safe to auto-trigger. Walker has true
-  Perl-root visibility.
-- Matches Perl's semantics: Perl's `padwalker`/`closure`-capture
-  machinery gives it the same view.
-
-**Cons:**
-- Touches the compiler emission path (every `my`-declaration
-  becomes two bytecode ops instead of one).
-- Per-frame overhead for programs that never call `weaken()`.
-  Must gate on `weakRefsExist`.
-- Doesn't handle `local` / `our` / stash-like pad variables
-  without more work.
-
-**Verdict:** The principled fix. Medium-large effort.
-
-### Option C — Let JVM reachability drive weak-ref clearing
-
-For each call to `weaken($x)`, also create a `java.lang.ref.WeakReference`
-to the referent. The JVM's own tracing GC will clear that JWR when the
-referent becomes unreachable (i.e., no strong Java reference exists).
-When the user asks about the weak ref (via `defined`, `isweak`, or
-`assert_empty_weakregistry`), we consult the JWR and clear the scalar
-if the referent is gone.
-
-**Mechanism:**
-```java
-// WeakRefRegistry.weaken($x):
-java.lang.ref.WeakReference<RuntimeBase> jwr =
-    new java.lang.ref.WeakReference<>(referent, refQueue);
-weakRefJwrMap.put(weakScalar, jwr);
-
-// Periodic sweep (cheap):
-while ((jwr = refQueue.poll()) != null) {
-    RuntimeScalar scalar = jwrToScalar.get(jwr);
-    clearWeakRefsTo(scalar.value_at_creation);
-}
-```
-
-To make this work, cooperative refCount must **NOT** hold strong Java
-refs on the JVM-side for things that shouldn't count. Specifically:
-- When `refCount` is bumped for a JVM temporary (arg passing, closure
-  upvar, etc.), the containing slot holds a strong Java ref anyway.
-- When the slot is released (scope exit, reassign), the Java ref
-  goes away and GC can collect.
-
-**Pros:**
-- **Uses the JVM's existing oracle** for unreachability. No need to
-  enumerate roots manually.
-- Automatically correct across every CPAN module's idiosyncratic
-  refcount inflation.
-- Compatible with how JVM already manages everything else.
-
-**Cons:**
-- JVM GC is non-deterministic — may require `System.gc()` hints at
-  leak-assertion time.
-- Interplay with cooperative refCount needs care: a weakened object
-  could be JVM-collected even if our `refCount > 0`, which breaks
-  the "`DESTROY` fires when refCount drops to 0" contract.
-- `ReferenceQueue` poll semantics require a monitor thread or sweep
-  hooks.
-
-**Verdict:** The fundamentally "right" approach, but requires
-separating weak-ref lifetime from the `refCount` counter lifetime.
-Larger than Option B.
-
-### Option D — Full Perl-accurate refcount
-
-Track refcount on every SV, including stack temporaries. Essentially
-rewrite PerlOnJava's GC model to match Perl 5's RC.
-
-**Pros:** Perl-accurate.
-**Cons:** Multi-month refactor. Loses zero-cost opt-out.
-**Verdict:** Not recommended. Too disruptive.
-
-## 4. Recommendation
-
-Pursue Options **A + B in parallel**, deferring Option C.
-
-- **Option A (refcount-inflation audit)** is ongoing hygiene. Each
-  identified leak point reduces the "how much inflation" problem
-  even before Option B ships, and improves `Internals::SvREFCNT`.
-- **Option B (lexical-aware walker)** unlocks the auto-trigger. Once
-  the walker can see lexicals, we can safely run `jperl_gc()` at
-  the right moments without a DBIC patch.
-
-Together, they close the 52leaks gap without architectural upheaval.
-
-Option C stays on the table as a future direction if Option B's
-overhead proves unacceptable, or if more CPAN modules expose
-refcount-inflation edge cases.
-
-## 5. Phased Implementation
-
-### Phase A1 — Audit: identify the top refcount-inflation sources
-
-Instrument `Internals::jperl_refstate` / `jperl_refstate_str`
-(already in place) plus a new `Internals::jperl_refstate_delta` that
-records a baseline and reports delta-since-baseline. Use the DBIC
-52leaks test with targeted checkpoints to enumerate every place a
-leaked object's refCount climbs.
-
-**Deliverable:** `dev/design/refcount_inflation_audit.md` listing the
-top N paths in rank order (e.g., `@_` copies 30%, Storable 20%,
-method temporaries 15%, ...).
-
-**Effort:** 1 week
-
-### Phase A2 — Generalized `@_` aliasing (biggest win from the audit)
-
-Extend Phase 2's `setFromListAliased` pattern to **all** sub-call
-arg marshalling, not just `caller()`.
-
-Mechanism:
-- At sub entry, populate `@_` with aliased copies (no refCount
-  increment on the callee side). The caller keeps ownership; callee
-  reads are aliases.
-- Modifications to `$_[0]` propagate to the caller (Perl semantics).
-- `my $x = shift` → caller's ref count drops when shift consumes
-  @_; the new `$x` binding takes ownership.
-
-Risk: very broad change. Must not regress Moo/DBIC's existing
-patterns. Introduce behind a feature flag `JPERL_ALIASED_AT_UNDERSCORE=1`
-for one release.
-
-**Deliverable:** New code path with flag, `make test-bundled-modules`
-passes with flag on, eventually made default.
-
-**Effort:** 3-4 weeks
-
-### Phase A3 — Other inflation sources
-
-Work through the rest of the audit list (Storable, JSON,
-overload, method-resolution temporaries, ...). Each is a focused
-change. Track progress in `refcount_inflation_audit.md`.
-
-**Effort:** 2-3 weeks
-
-### Phase B1 — LexicalRegistry machinery
-
-Add:
-- `org.perlonjava.runtime.runtimetypes.LexicalRegistry`: thread-local
-  stack of ref-typed RuntimeScalars currently in scope.
-- Two emitter hooks in `EmitVariableDeclaration.java`:
-  - After a `my $var = <ref_expr>` assignment, emit
-    `LexicalRegistry.push(var)` if `weakRefsExist`.
-  - At scope exit, already-emitted `scopeExitCleanup(var)` also
-    pops the registry (1 extra bytecode op).
-- `ReachabilityWalker.walk()` seeds from the registry as additional
-  roots.
-
-Zero-cost when no weak refs exist: the emitter still emits the
-register/deregister calls, but they short-circuit on
-`!weakRefsExist`. Existing cost model preserved for non-weaken
-programs.
-
-**Deliverable:** Walker returns correct reachability for test cases
-like:
-
-```perl
-use Scalar::Util 'weaken';
-my $obj = SomeClass->new;
-my $weak = $obj;
-weaken($weak);
-Internals::jperl_gc();   # $weak should NOT be cleared ($obj still in scope)
-die "walker bug" unless defined $weak;
-```
-
-**Effort:** 2-3 weeks
-
-### Phase B2 — Safe auto-trigger for `jperl_gc`
-
-With B1 shipping, the walker can be safely triggered automatically
-at points known to be helpful:
-- At every N-th `MortalList.flush()` (tunable amortization).
-- At `Internals::SvREFCNT($ref)` queries — ensures leak-tracer
-  consumers see Perl-compatible values.
-- Optionally: at `defined($ref)` on weakened scalars.
-
-Each trigger should be gated by `weakRefsExist` + a throttle (don't
-run more than once per N operations).
-
-**Deliverable:** 52leaks passes WITHOUT the LeakTracer patch.
-
-**Effort:** 1-2 weeks
-
-### Phase B3 — Remove the DBIC patch
-
-Once B2 is in place, revert `dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`
-and its README. The patch should no longer be needed.
-
-Validate: full DBIC suite still 269/270.
-
-**Effort:** 0.5 week
-
-### Total
-
-10-14 weeks, or 5-8 weeks with Phase A1-A3 running in parallel with
-B1-B3.
-
-## 6. Validation
-
-Each phase lands with its own regression gate:
-
-| Gate | Pass criterion |
-|------|----------------|
-| After A2 (aliased `@_`) | `dev/tools/refcount_diff.pl` shows fewer divergences on a standardized corpus; Moo 71/71 preserved |
-| After A3 | `make test-bundled-modules` no regressions |
-| After B1 | New test `dev/sandbox/destroy_weaken/walker_with_lexicals.t` passes (walker correctly sees live lexicals) |
-| After B2 | `t/52leaks.t` passes without patch (9 fewer real failures vs unpatched master) |
-| After B3 | Full DBIC suite 269/270, identical to current state |
-
-Ongoing: `dev/tools/destroy_semantics_report.pl` remains 213/213
-throughout.
-
-## 7. Risk Analysis
-
-| Risk | Mitigation |
-|------|------------|
-| A2 breaks Perl `@_` aliasing semantics | Feature-flag `JPERL_ALIASED_AT_UNDERSCORE=1`; broad test coverage before default-on |
-| B1 leaks lexicals after abnormal unwind (die in eval) | Add try/finally at sub entry to ensure LexicalRegistry unwinds even on exception |
-| B2 clears weak refs too aggressively | Amortized trigger with opt-out `JPERL_NO_AUTO_GC=1`; stack trace logged when a weak ref is auto-cleared for debugging |
-| Performance regression | Bench `life_bitpacked`, closure, method benchmarks before/after each phase; revert if >5% regression without a clear cause |
-
-## 8. What This Plan Does NOT Solve
-
-- Scripts that rely on `Internals::SvREFCNT` returning the
-  bit-identical value as native Perl. Our number will still differ
-  by small amounts in inflation-heavy code. Users consuming SvREFCNT
-  should use `Internals::jperl_gc()` to normalize first.
-- Unblessed arrays that are birth-tracked would need a separate
-  investigation — known `Sub::Quote` regression blocker.
-- Thread-safety of the refcount system is still out of scope (see
-  weaken-destroy.md §5 in Limitations).
-
-## 9. Current opt-in solution (as baseline)
-
-Until Phase B2 ships, DBIC users on PerlOnJava can get 52leaks
-passing by applying
-`dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`,
-which calls `Internals::jperl_gc()` in `assert_empty_weakregistry`.
-
-This is tracked in `dev/modules/dbix_class.md` and remains the
-recommended workaround until Option B lands.
-
-## References
-
-- `dev/design/refcount_alignment_plan.md` — phases 0-7 (landed)
-- `dev/design/refcount_alignment_progress.md` — per-phase progress
-- `dev/architecture/weaken-destroy.md` — current architecture
-- `dev/modules/dbix_class.md` — DBIC test tracking
-- `dev/patches/cpan/DBIx-Class-0.082844/LeakTracer-README.md` — the
-  workaround this plan eventually removes
-- DBIC `t/52leaks.t` (upstream) — the target test
-- DBIC `t/lib/DBICTest/Util/LeakTracer.pm` — the tracer we're
-  trying to satisfy
+# DBIC `./jcpan -t DBIx::Class` — Refcount Alignment Plan
+
+**Status:** Active (Phase H in progress)
+**Branch:** `feature/refcount-alignment` (PR #508)
+**Depends on:** `dev/design/refcount_alignment_plan.md` (completed — Phases 1-7)
+**Goal:** `./jcpan -t DBIx::Class` passes 0 failures, without any DBIC patches.
 
 ---
 
-## Progress Log (2026-04-19 implementation session)
+## Current state (2026-04-20)
 
-### Phase B1 — Lexical-aware reachability walker — LANDED
+`./jcpan -t DBIx::Class` (prove -j, 314 test files, parallel):
+- **13781/13792 subtests pass (99.92%)**
+- 5 files with issues — see [Phase H](#phase-h--close-remaining-jcpan-parallel-run-issues) below.
+- Bonus: **8 DBIC `TODO 'Needs Data::Entangled'` tests now pass unexpectedly** (RT#82942).
 
-Instead of the plan's proposed compiler instrumentation, the
-implementation uses a `WeakHashMap<RuntimeScalar, Boolean>`
-(`ScalarRefRegistry`) populated at every `setLarge`/container-store
-site. JVM GC prunes entries for scalars that become unreachable via
-JVM frame liveness; a forced `System.gc()` + multi-pass
-WeakReference-sentinel wait ensures up-to-date pruning before the
-walker seeds from the registry. Capture-count > 0 scalars are
-skipped (closure captures would over-reach).
-
-Result: **DBIC t/52leaks.t with LeakTracer patch: 9 real fails → 1
-real fail** (`basic rerefrozen` remains; reachable via some
-live-lexical scalar the walker's diagnostic traces to
-`<live-lexical#N>` without further chain).
-
-See commit `5813ea658`.
-
-### Phase B2 — Safe auto-trigger — BLOCKED
-
-Three approaches attempted, all reverted:
-
-1. **Auto-trigger on `Scalar::Util::isweak()` calls** — stack overflow
-   from DESTROY cascade → tail-call recursion in DBIC cleanup code.
-2. **Auto-trigger on `MortalList.flush()` (statement boundaries)** —
-   even with throttling and re-entry guard, breaks DBICTest module
-   initialization. The `BaseResult.pm` compilation chain depends on
-   weak-ref intermediate state remaining defined.
-3. **Quiet-mode auto-sweep (no DESTROY)** — same module-init
-   failures. Clearing weak refs alone corrupts Class::C3::Componentised
-   or similar module-construction state.
-
-**Root cause:** auto-trigger requires distinguishing "main script
-body" execution from "module initialization". PerlOnJava's compiler
-doesn't emit such markers today.
-
-Deferred to future work. Options:
-- (a) Compiler-emitted safepoint markers at statement top-level,
-      excluded during `BEGIN`/`require`/`use` compilation.
-- (b) A sentinel global set during `Perl_eval_require_sv` /
-      `use`-loading that inhibits auto-sweep while module code is
-      running.
-- (c) Leave it opt-in forever; document the LeakTracer patch as the
-      recommended integration path.
-
-### Phase B3 — Remove LeakTracer patch — DEFERRED
-
-Blocked on B2. Until auto-trigger is safe, DBIC users on jperl need
-the `dev/patches/cpan/DBIx-Class-0.082844/t-lib-DBICTest-Util-LeakTracer.pm.patch`
-to get `Internals::jperl_gc()` called at assertion time.
-
-### Remaining `basic rerefrozen` leak (even with patch)
-
-One stubborn failure where a dcloned hash (double-clone of
-`$base_collection`) remains reachable via a ScalarRefRegistry
-entry the walker traces as `<live-lexical#N>` but can't chain
-further (the scalar directly holds the rerefrozen hashref).
-
-Possible causes (Phase A1 audit work):
-- Some JVM-frame-alive scalar in Storable's `dclone` internals
-  retains a ref to the cloned output for longer than expected.
-- A map/grep temp frame scalar whose JVM slot hasn't been nulled
-  yet at assertion time.
-- A closure capture we haven't correctly excluded
-  (`captureCount` check misses some cases).
-
-Not pursued further in this session.
+Standalone individual tests:
+- `t/52leaks.t` 10/10 ✅
+- `t/storage/txn_scope_guard.t` 18/18 ✅
+- `t/100populate.t` 108/108 ✅
+- `t/60core.t` 125/125 in 6s ✅
+- Sandbox `dev/sandbox/destroy_weaken/` 213/213 ✅
+- Full unit suite (`make`) PASS ✅
 
 ---
 
-## Phase B2a — Module-init-aware auto-trigger (2026-04-19 plan)
+## 1. Problem (original framing)
 
-This is the detailed implementation plan for pursuing option (b)
-above: a **sentinel** set while module-initialization code is
-running that inhibits the auto-sweep.
-
-### Why option (b) over (a)
-
-Option (a) — compiler-emitted safepoint markers — is the most
-principled, but requires changes to emitter passes for every statement
-boundary. Option (b) is a much smaller surgical change: just two
-counters wrapping `require` / `use` / `BEGIN` / `eval STRING`
-execution.
-
-### Design
-
-Add a **ThreadLocal counter** `ModuleInitGuard.depth` that is:
-
-- **Incremented** on entry to:
-  - `RuntimeCode.apply()` for any code emitted from a `require` /
-    `use` / `do FILE` load (we already mark these in the compilation
-    stack via `RuntimeCode.isEvalBlock` / module-loading flag)
-  - BEGIN block execution (entered via `SpecialBlock.runBegin()`)
-  - `eval STRING` compilation and initial execution (similar to
-    `applyEval()` path)
-- **Decremented** on exit (try/finally to handle `die`/`croak`).
-
-Auto-sweep callers consult `ModuleInitGuard.depth == 0` before firing.
-When `depth > 0`, the sweep is a no-op.
-
-### Concrete code points
+Before this plan, DBIC's `t/52leaks.t` failed with 9 real leaks:
 
 ```
-org.perlonjava.runtime.runtimetypes.ModuleInitGuard  (new)
-  - static ThreadLocal<int[]> depth  (box for mutation)
-  - static void enter() / static void exit()
-  - static boolean inModuleInit()
-
-org.perlonjava.runtime.runtimetypes.SpecialBlock.runBegin()
-  - wrap body in ModuleInitGuard.enter/exit
-
-org.perlonjava.runtime.runtimetypes.RuntimeCode.apply()
-  - if code.isEvalBlock && (current frame is require/use loading):
-      wrap in ModuleInitGuard.enter/exit
-  - applyEval() already special-cased for eval STRING; add guard.
-
-org.perlonjava.runtime.operators.RequireOperator (or wherever `require`
-  is implemented)
-  - wrap the evaluated code in ModuleInitGuard.enter/exit
-
-Callers of maybeAutoSweep (MortalList.flush / Scalar::Util::isweak):
-  - check ModuleInitGuard.inModuleInit() before firing
+not ok 12 - ARRAY(...) | basic random_results (refcnt 1)
+not ok 13 - DBICTest::Artist=HASH(...) (refcnt 2)
+not ok 14-19 - DBICTest::CD / Schema / ResultSource::Table (refcnt 2-6)
+not ok 20 - HASH(...) | basic rerefrozen
 ```
 
-### Risk
+Each failure meant a weak reference registered in DBIC's leak tracer was still
+`defined` at assertion time, when Perl 5 would have cleared it because the
+referent became unreachable.
 
-Low. The guard is a pure inhibitor — worst case it's too aggressive
-(blocks sweeps we could safely run), which is the current behavior.
-If a place sets the flag but forgets to clear it, we'd lose
-auto-trigger functionality until the process restarts, but not break
-anything.
+## 2. Root causes (identified during implementation)
 
-### Validation
-
-- Sandbox 213/213 preserved
-- DBIC `t/52leaks.t` **unpatched** passes where it failed before
-  (from 9 real fails → 1 or 0)
-- DBICTest module init completes (no `BaseResult.pm did not return a
-  true value`)
-- Moo 71/71 preserved
-
-### Phase B3 follows
-
-Once B2a lands and 52leaks passes unpatched, remove the DBIC
-LeakTracer patch. Verify full DBIC suite remains 269/270.
+1. **Recursive trampoline in `RuntimeCode.apply`** for `goto &func` → O(N)
+   JVM stack on long chains, crashed DBIC tests.
+2. **Interpreter closure over-capture** — captured ALL visible lexicals,
+   inflating `captureCount` and pinning unused variables in
+   `MortalList.deferredCaptures` past scope exit.
+3. **Storable arg-push refcount leak** — `RuntimeArray.push` into Java-side
+   temporary arg arrays (`freezeArgs`/`thawArgs`) for STORABLE_freeze/thaw
+   hooks bumped referents' refCount, but no matching release on Java-local
+   array death.
+4. **Block-scope `my` vars lingered in `MyVarCleanupStack`** (static ArrayList)
+   past Perl-level scope exit, holding their values alive.
+5. **Schema self-save (`rescuedObjects`) cycles** prevented walker from
+   clearing weak refs to cyclically-held blessed objects.
 
 ---
 
-## Phase B2a — RESULT (2026-04-19)
+## 3. Completed phases (summary)
 
-**Status:** Implemented (partial success).
-
-### What shipped
-
-- `ModuleInitGuard.java` — `ThreadLocal<int[]> depth` counter with
-  `enter()`/`exit()`/`inModuleInit()`.
-- `PerlLanguageProvider.executeCode` wraps non-main-program runs
-  (`!isMainProgram`) with `enter/exit`. This covers `require`, `use`,
-  `eval STRING`, and `do FILE`.
-- `MortalList.maybeAutoSweep()` re-added at the end of `flush()`,
-  gated by `!ModuleInitGuard.inModuleInit()`, 5-second throttle.
-- `ReachabilityWalker.sweepWeakRefs(boolean quiet)` — in quiet mode
-  (auto-sweep), skips `DestroyDispatch.clearRescuedWeakRefs()` and
-  skips firing DESTROY; in non-quiet mode (explicit `jperl_gc`), does
-  both.
-
-### Validation
-
-- Sandbox: **213/213** ✅
-- `make` (full unit suite): **PASS** ✅
-- DBIC `txn_scope_guard.t`: **18/18** ✅
-- DBIC `52leaks.t` **unpatched**: went from **9 real fails → 5 real
-  fails** in 15.7s. Remaining failures are Schema/ResultSource objects
-  pinned by `DestroyDispatch.rescuedObjects` (phantom-chain rescue)
-  which quiet mode does NOT drain by design (draining would require
-  firing DBIC Schema DESTROY during unrelated code).
-- DBIC `52leaks.t` **patched** (explicit `jperl_gc()`): **1 real
-  fail** — same as before. The explicit-GC non-quiet path drains
-  `rescuedObjects` and fires DESTROY, clearing the extra 4.
-
-### Decision
-
-Keep the LeakTracer patch as the opt-in path for DBIC users who want
-all 9 extra-tight checks to pass. Unpatched, B2a improves the baseline
-from 9→5 real fails without requiring any user action.
-
-The remaining 4 (Schema/ResultSource) are solvable only by draining
-`rescuedObjects` during auto-sweep, which couples unrelated code
-paths to DBIC DESTROY execution — a risk/reward tradeoff we're
-deferring.
-
-### Phase B3 status
-
-Not pursued — LeakTracer patch remains the documented opt-in.
+| Phase | Commit | What changed | Impact |
+|---|---|---|---|
+| **Phase 0-7** (earlier session) | — | Baseline refcount alignment — see `refcount_alignment_plan.md` | Phases 1-3 DESTROY FSM fixed TxnScopeGuard etc. |
+| **Phase B1** | `5813ea658` | `ScalarRefRegistry` WeakHashMap of ref-holding scalars; walker uses as live-lexical seeds after `forceGcAndSnapshot()` (3-pass `System.gc()` with `WeakReference` sentinels). | Walker sees live lexicals that pure global-root walks miss. |
+| **Phase B2a** | `28bd7363c` | `ModuleInitGuard` (ThreadLocal counter); `MortalList.maybeAutoSweep()` with 5s throttle; `ReachabilityWalker.sweepWeakRefs(boolean quiet)` — quiet mode auto-sweep (no DESTROY, no rescue drain), non-quiet for explicit `jperl_gc`. | Auto-weak-ref cleanup at statement boundaries while safe. |
+| **Phase C** | `da301ca6f` | `RuntimeCode.apply` rewritten as **iterative trampoline** — `while(true)` wraps entire body, all dispatch paths (TIED, READONLY, GLOB, STRING, AUTOLOAD, TAILCALL, overload) update `curScalar`/`curArgs` and `continue`. | Fixed 4 DBIC test crashes (`60core.t`, `96_is_deteministic_value.t`, `cdbi/68-inflate_has_a.t`, `inflate/core.t`). |
+| **Phase D** | `ea39d29a8` | `RuntimeScalar.undefine()` fires walker on blessed-with-DESTROY cycle; `DestroyDispatch.sweepPendingAfterOuterDestroy` flag drained by outermost DESTROY. | Safety net for cyclic undef. |
+| Diag | `578b4ba31` | `JPERL_TRACE_ALL=1`, `JPERL_REGISTER_STACKS=1` — reverse-trace to container holders with registration stacks in `Internals::jperl_trace_to`. | Diagnostic infra — kept. |
+| **Phase E** | `87ed18e00` | `MyVarCleanupStack.unregister(Object)` called at scope-exit bytecode emission (`EmitStatement.emitScopeExitNullStores`). | Block-scoped my-vars no longer lingered past Perl scope. |
+| **Phase F** | `ad7d32972` | `BytecodeCompiler.collectVisiblePerlVariablesNarrowed(Node body)` — ports JVM backend's `EmitSubroutine.java:120-140` capture-narrowing to interpreter. Three call sites (`detectClosureVariables`, `visitNamedSubroutine`, `visitAnonymousSubroutine`) respect `VariableCollectorVisitor.hasEvalString()`. | **Fixed `basic rerefrozen` leak** + test 49 "Self-referential RS conditions" (TODO→pass). |
+| **Phase G** | `e8cec9a76` | `Storable.releaseApplyArgs(RuntimeArray)` helper. Called after each of 5 `RuntimeCode.apply(method, args, ...)` sites in `Storable.java` (dclone freeze/thaw, freeze, thaw, YAML thaw). | **Fixed `basic result_source_handle` leak → 52leaks.t unpatched 10/10 standalone.** |
 
 ---
 
-## Phase C — RuntimeCode.apply iterative trampoline (2026-04-19)
-
-**Status:** Shipped as `da301ca6f`.
-
-### Discovery
-
-A full `jcpan -t DBIx::Class` baseline measurement revealed that most
-of the suite's remaining failures were NOT refcount/leak-related —
-they were symptoms of a **recursive tailcall trampoline** in
-`RuntimeCode.apply` that overflowed the JVM stack on long chains of
-`goto &func`.
-
-Moo/DBIC dispatch (`Class::Accessor::Grouped`, `Sub::Defer`,
-`Class::C3::Componentised`, AUTOLOAD stubs) frequently builds chains
-of 4–10 `goto &$target` per accessor invocation. The previous
-apply() implementation recursed into itself for each tailcall,
-burning one Java frame per hop; moderately long chains would crash
-with `StackOverflowError`.
-
-### Fix
-
-Rewrite the entire `RuntimeCode.apply(RuntimeScalar, RuntimeArray, int)`
-method body as an iterative `while (true) { ... }` loop. All dispatch
-paths that previously recursed now update local variables and
-`continue`:
-- TIED_SCALAR fetch
-- READONLY_SCALAR deref
-- GLOB / REFERENCE-to-GLOB resolution
-- STRING / BYTE_STRING code-ref lookup
-- AUTOLOAD fallback (source package + current package)
-- TAILCALL from `goto &func` (captured inside the try/finally,
-  applied after finally runs all cleanup)
-
-### Impact on 52leaks.t
-
-**Unpatched:** 9 real fails → **1 real fail** (16s runtime).
-
-The trampoline fix closed 8 of the 9 previously-failing leak checks
-because the accessor/method-dispatch chains that populated DBIC's
-phantom-chain rescue no longer run as deeply as they did before —
-many of the cyclic Schema/ResultSource references cleared through
-normal scope exit without needing the rescuedObjects fallback.
-
-Only 1 leak remains unpatched: `HASH(...) | basic rerefrozen` — a
-`Storable::dclone` round-tripped hash that is directly held by some
-lexical in `ScalarRefRegistry`. Root cause still open.
-
-### Impact on full DBIC suite
-
-6 previously-broken tests now pass:
-- `t/60core.t` (crash → 125/125 in 6s)
-- `t/96_is_deteministic_value.t` (crash → 8/8)
-- `t/cdbi/68-inflate_has_a.t` (crash → 6/6)
-- `t/inflate/core.t` (hang → 32/32 in 5s)
-- `t/multi_create/standard.t` (flaky timeout → passes)
-- `t/relationship/custom.t` (flaky timeout → passes)
-
-### Remaining unresolved
-
-- **t/storage/error.t test 49** — "callback works after $schema is
-  gone": expects Schema DESTROY to fire after `undef $schema`, then a
-  weakened `$weak_self` closure variable to read as false. Under
-  jperl, `$schema` has cyclic back-refs (source_registrations) that
-  prevent its cooperative refCount from reaching 0. The reachability
-  walker would clear the weak ref, but the B2a 5s auto-sweep throttle
-  doesn't fire within the test's ~3s wall-clock. Explicit
-  `Internals::jperl_gc()` fixes it. Closing this without opt-in
-  would require either a smarter auto-sweep trigger (e.g. on undef of
-  blessed-with-DESTROY refs) or a targeted DBIC cycle-break.
-
-- **t/52leaks.t `basic rerefrozen`** — see above.
-
----
-
-## Phase D — undef-of-blessed walker trigger (2026-04-19)
-
-**Status:** Shipped as a safety net. Does not fix storage/error.t
-test 49 (requires different architectural work).
-
-### Design
-
-Two-part cooperative trigger:
-
-1. **RuntimeScalar.undefine()** — when the user explicitly calls
-   `undef $var` on a blessed-with-DESTROY REFERENCE whose cooperative
-   refCount stays > 0 (cycles), fire `ReachabilityWalker.sweepWeakRefs(false)`
-   synchronously. Gated by `ModuleInitGuard` to avoid tripping during
-   `require`/`use`/`eval STRING`/`do FILE`.
-
-2. **RuntimeScalar.set(RuntimeScalar)** — when `value == UNDEF` is
-   assigned to a slot holding a blessed-with-DESTROY ref with
-   residual refCount, AND we're currently inside a DESTROY body
-   (`DestroyDispatch.isInsideDestroy()`), set a flag
-   `sweepPendingAfterOuterDestroy`. The outermost `doCallDestroy`
-   drains this flag in its `finally` and runs the walker once,
-   amortizing per-set() cost to per-outermost-DESTROY cost.
-
-Narrow gating on both paths:
-- weak refs exist in the registry (cheap volatile check)
-- class is blessed and has DESTROY (BitSet lookup)
-- not in module init
-
-### Impact
-
-- Sandbox 213/213 preserved
-- Full unit suite PASS
-- 52leaks.t unpatched: unchanged, 1 real fail (`basic rerefrozen`)
-- storage/error.t test 49: **still fails**
-
-### Why test 49 still fails
-
-Investigation showed that DBIx::Class::Schema::DESTROY does NOT
-explicitly undef its `storage` slot. Instead it uses the "self-save"
-pattern: reattaches `$self` into a source's schema slot and weakens
-it. PerlOnJava registers Schema in `DestroyDispatch.rescuedObjects`
-when this pattern is detected, preventing the reachability walker
-from considering Schema (or its internals like Storage) unreachable.
-
-Test 49 succeeds on real Perl because that runtime's refcount-only
-GC naturally dismantles the self-save pattern as the phantom chain
-collapses. PerlOnJava's cooperative refCount + walker overlay keeps
-rescued objects live until explicit `jperl_gc()` with rescuedObjects
-drain.
-
-Closing this without the LeakTracer-style opt-in would require
-either redesigning the rescuedObjects semantics (risk: re-breaks
-52leaks.t) or DBIC-specific source-code changes.
-
-### Code
-
-- `DestroyDispatch.java`: new `sweepPendingAfterOuterDestroy` flag,
-  `isInsideDestroy()` helper, drain in outermost `finally`.
-- `RuntimeScalar.java`: `undefine()` triggers walker inline;
-  `set(RuntimeScalar)` sets flag when `value == UNDEF && inside DESTROY
-  && blessed-with-DESTROY cycle`.
-
----
-
-## Phase E — Trace the `basic rerefrozen` leak (2026-04-19, in progress)
-
-**Goal:** Find and fix the single remaining unpatched `t/52leaks.t`
-failure without regressing anything else.
-
-### What we know after the diagnostics commit (`578b4ba31`)
-
-Running `JPERL_TRACE_ALL=1 jperl /tmp/repro_rerefrozen.pl` on a
-minimal-replica-of-52leaks script shows:
-
-- Target: the outer `Storable::dclone(Storable::dclone(...))` result,
-  stored at `$base_collection->{rerefrozen}`.
-- **Exactly one** direct ScalarRefRegistry entry holds the target
-  hash.
-- That holder has `captureCount=0`, `refCountOwned=true`,
-  `type=HASHREFERENCE` (0x8068).
-- The scalar survives `ScalarRefRegistry.forceGcAndSnapshot()`'s
-  3-pass `System.gc()` loop with `WeakReference` sentinels. So the
-  scalar has a **strong JVM reference** somewhere that isn't the
-  `WeakHashMap` itself.
-- Minimal reproducers (< 30 lines) don't trigger it; only the full
-  52leaks.t exercise path does. Something in the long-lived
-  `fire_resultsets` closure + `random_results` accumulator + the
-  `local` trick interaction on lines 281–297 creates the leak.
-
-### Hypotheses to test
-
-1. **Hidden closure capture.** A closure somewhere captures the hash
-   ref but `captureCount` was never incremented on the scalar
-   (possibly from a code path that bypasses the normal closure
-   setup — e.g. `goto &func` combined with `@_` aliasing, or
-   `Sub::Defer`-generated subs).
-
-2. **Static cache.** Some static cache keyed by object identity
-   (e.g. method dispatch cache, overload resolver, Storable's own
-   internal state) holds a strong ref.
-
-3. **MortalList residue.** A `pending` or `marks` entry not
-   correctly popped by `popAndFlush()`.
-
-4. **RuntimeArray/RuntimeHash retained from a now-dead scope.** Some
-   `@_` copy or `return` list that the JVM still considers live.
-
-### Implementation plan
-
-#### Step 1: Instrument `registerRef` to record call-site stack
-
-Add a gated debug mode:
-
-```java
-// ScalarRefRegistry.java
-private static final boolean RECORD_STACKS =
-        System.getenv("JPERL_REGISTER_STACKS") != null;
-private static final Map<RuntimeScalar, Throwable> stacks =
-        Collections.synchronizedMap(new WeakHashMap<>());
-
-public static void registerRef(RuntimeScalar scalar) {
-    if (OPT_OUT || scalar == null) return;
-    scalarRegistry.put(scalar, Boolean.TRUE);
-    if (RECORD_STACKS) {
-        stacks.put(scalar, new Throwable("registerRef stack"));
-    }
-}
-
-public static Throwable stackFor(RuntimeScalar sc) {
-    return stacks.get(sc);
-}
-```
-
-#### Step 2: Surface the stack in `jperl_trace_to`
-
-When `JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`, for each direct
-holder of the target, print the captured stack trace.
-
-#### Step 3: Run 52leaks.t-minimal with the instrumentation
-
-Capture the stack for the leaking scalar. The Java stack plus the
-current Perl-file/line (from
-`RuntimeCaller`/`EmitBytecode.debugInfo`) should identify exactly
-which Perl operation allocated this scalar.
-
-#### Step 4: Diagnose and fix
-
-Based on step 3:
-- If it's a known code path: fix the leak at source (e.g. clear an
-  alias, decrement captureCount properly, prune a cache on scope
-  exit).
-- If it's MortalList residue: fix flush.
-- If it's a static cache: add a clearing hook.
-
-#### Step 5: Verify
-
-- `/tmp/repro_rerefrozen.pl` reports freed
-- `t/52leaks.t` unpatched reports 12/12 (no real fails)
-- Sandbox 213/213 preserved
-- Full unit suite PASS
-- Full DBIC suite regression check
-
-### Result (partial)
-
-Shipped as part of Phase E: `MyVarCleanupStack.unregister(Object)` +
-bytecode emission in `EmitStatement.emitScopeExitNullStores` so
-block-scoped `my` variables are deregistered at normal scope exit,
-not just when the enclosing subroutine returns.
-
-Impact:
-- Minimal reproducer (`/tmp/repro_rerefrozen2.pl` — blessed ref in a
-  hash, `Storable::dclone` round trip, weakened tracker outside the
-  block) **now correctly reports freed** after `jperl_gc`.
-- Sandbox 213/213 preserved
-- Full unit suite PASS
-- Full DBIC suite: no regressions
-
-However, `t/52leaks.t` test 12 **still fails** — the real test has a
-more complex reference topology where the `rerefrozen` hash ends up
-in the registry through a path other than a plain block-scoped
-my-var. Additional investigation needed to identify the surviving
-holder in the full test. The instrumentation added here
-(`JPERL_REGISTER_STACKS=1` + enhanced `jperl_trace_to` parent dump)
-will help.
-
-### Phase E2 follow-up investigation (2026-04-20)
-
-After further reverse-trace with `jperl_trace_to`'s container-holder
-diagnostic, the true leak path on the real `t/52leaks.t` is:
-
-```
-MortalList.deferredCaptures (strong Java ref, ArrayList)
-  -> container scalar "rev" (captureCount=3, scopeExited=true, rcO=true)
-  -> RuntimeHash = $base_collection
-  -> elements["rerefrozen"] = direct-holder scalar (captureCount=0, rcO=true, isContainerElement=true)
-  -> RuntimeHash = the leaked rerefrozen hash
-```
-
-The container scalar has `captureCount=3` because 3 over-capturing
-closures defined inside the same block reference it via
-`deferredCaptures`. After Perl-level scope exit, these closures
-aren't yet released, so the container can't be cleaned up.
-
-### Attempts explored but reverted
-
-Several surgical walker/filter combinations were tried:
-
-1. **Walker `!sc.refCountOwned` filter** (shipped briefly as
-   `09b438101`, **reverted** in `55b34eacd`): skipped orphaned
-   registry entries as walker seeds. Closed the "basic random_results"
-   path on minimal repros. But broke `t/60core.t`: the filter
-   classifies some legitimate live-lexical scalars as orphaned,
-   causing the walker to consider DBIC Schema/ResultSource back-refs
-   unreachable and prematurely clearing them (detached result source
-   errors).
-
-2. **Walker `scopeExited` filter**: skip scalars whose scope has
-   exited (over-captured via closures). Same problem as (1) — also
-   breaks DBIC's internal schema chains.
-
-3. **`isContainerElement` flag + walker skip**: mark hash/array
-   element scalars during `incrementRefCountForContainerStore`,
-   skip them as walker seeds (rely on BFS traversal through
-   container instead). Breaks DBIC because some elements point
-   at blessed objects whose back-refs need walker visibility for
-   weak-ref preservation.
-
-4. **`addDeferredCapture` proactive unregister**: when a scalar
-   joins `deferredCaptures`, recursively unregister element scalars
-   inside its value. Breaks `t/60core.t` column_info tests: the
-   BFS descends too eagerly into containers that still need walker
+## 4. What we tried and REJECTED (do not repeat)
+
+These approaches were implemented, tested, and **reverted** because they
+broke other tests. Documented here so future attempts don't retry the same
+dead ends.
+
+### 4.1 Walker-filter approaches (all breaks DBIC Schema back-ref chains)
+
+1. **Walker skip `!sc.refCountOwned`** (shipped briefly as `09b438101`,
+   reverted as `55b34eacd`). Skipped orphaned registry entries as walker
+   seeds. Closed some minimal-repro leaks. **Broke `t/60core.t`**: the
+   filter classifies some legitimate live-lexical scalars as orphaned,
+   causing walker to consider DBIC Schema back-refs unreachable and
+   prematurely clearing them → "detached result source" errors.
+
+2. **Walker skip `sc.scopeExited`**. Skip scalars whose Perl-level scope
+   has exited but `captureCount > 0` (over-captured via closures). Same
+   DBIC back-ref breakage as (1).
+
+3. **`isContainerElement` flag + walker skip**. Added a boolean to
+   `RuntimeScalar`; set by `incrementRefCountForContainerStore`; walker
+   skipped as root. Breaks DBIC heavily — some hash/array elements point
+   at blessed objects whose back-refs need walker visibility for weak-ref
+   preservation. **Kept the field** (cheap, may help future diagnostics),
+   but filter is disabled.
+
+### 4.2 Proactive unregister approaches
+
+4. **`MortalList.addDeferredCapture` recursive element unregister**. When
+   a scalar joins `deferredCaptures`, recursively unregister element
+   scalars inside its value. **Breaks `t/60core.t` column_info tests**:
+   BFS descends too eagerly into containers still needing walker
    visibility.
 
-5. **`MortalList.scopeExitCleanupHash` unregister element**: call
-   `ScalarRefRegistry.unregister(s)` when flipping rcO=false during
-   container scope-exit. Doesn't fire for `$base_collection` because
-   its refCount never drops to 0 while in `deferredCaptures`.
+5. **`MortalList.scopeExitCleanupHash` per-element unregister**. Call
+   `ScalarRefRegistry.unregister(s)` when flipping `rcO=false` during
+   container scope-exit. Didn't fire for the target leak because
+   `$base_collection`'s refCount never dropped to 0 while in
+   `deferredCaptures`. No-op net effect.
 
-### Root cause
+### 4.3 Auto-sweep tuning
 
-The interpreter backend (`BytecodeInterpreter`) **over-captures**
-closures — per design note in `RuntimeScalar.scopeExitCleanup`:
+6. **Lower throttle (500ms / 100ms)**. Auto-sweep ran too frequently on
+   52leaks-scale tests, causing minute-scale slowdowns from repeated
+   `System.gc()` + walker traversals. Reverted to **5 s throttle**.
 
-> "The interpreter captures ALL visible lexicals for eval STRING
-> support, inflating captureCount on variables that closures don't
-> actually use."
+7. **Auto-sweep `flushDeferredCaptures` at statement boundaries**. Decrement
+   refCounts for deferred-capture scalars during normal run. Dangerous —
+   those scalars might still be actively used by closures mid-statement.
+   Not attempted; documented as architecturally incorrect.
 
-This over-capture is the fundamental reason `$base_collection`'s
-captureCount stays > 0 after scope exit even though no closure
-actually uses it. Once captureCount>0, it goes into
-`deferredCaptures` which JVM-keeps it (and therefore its elements)
-alive until END time. `assert_empty_weakregistry` runs BEFORE END,
-so the weak refs are still defined.
+### 4.4 Key decisions locked in
 
-### Open work
-
-Fixing this robustly requires one of:
-
-a) **Narrow interpreter over-capture**: change the compiler to only
-   register lexicals that are actually referenced by closure bodies,
-   not all visible ones. This is the correct fix but touches many
-   compiler paths and needs eval-STRING compatibility validation.
-
-b) **Smarter `processReadyDeferredCaptures`**: when called from
-   a broad scope-exit path AND all closures of a deferred scalar
-   have been stored only in stashes (not in lexicals), forcibly
-   process it. Requires tracking closure-lineage, which is complex.
-
-c) **Accept the opt-in**: keep the DBIC `LeakTracer.pm` patch as
-   the documented workaround. This is the current status — the
-   patched test passes, the unpatched test has 1 known fail.
-
-### Current state
-
-- 52leaks.t unpatched: **11/12** (1 real fail, rerefrozen — down
-  from 9 at session start)
-- 52leaks.t patched: **12/12** preserved
-- Sandbox 213/213, full unit suite PASS
-- All other investigated DBIC tests pass
+- **Auto-sweep throttle: 5 seconds.** Any shorter kills DBIC-scale tests.
+- **Quiet mode (auto-sweep) does NOT fire DESTROY or drain `rescuedObjects`.**
+  Only explicit `Internals::jperl_gc()` does both. Mid-run DESTROY risks
+  breaking DBIC/Moo code not prepared for cleanup in unrelated paths.
+- **VariableCollectorVisitor.hasEvalString()** is the gate for narrowing.
+  When true (body contains `eval STRING` / `evalbytes STRING`), skip
+  narrowing and capture all visible lexicals.
 
 ---
 
-## Phase F — Narrow interpreter closure capture (2026-04-20 plan)
+## 5. Core architecture (kept)
 
-**Goal:** Eliminate the root cause of the `basic rerefrozen` leak by
-making the interpreter backend's closure detection capture ONLY
-lexicals that are actually referenced by the closure body, matching
-what the JVM backend already does.
+These pieces of infrastructure were built during the session and are **kept
+in production** because they underpin multiple fixes and diagnostic tooling.
 
-### Background
+### 5.1 Reachability walker (`ReachabilityWalker`)
 
-The JVM backend already solves this — see
-`src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java:120-140`:
+Mark-and-sweep over the Perl heap, seeded from:
+- Globals (`GlobalVariable.globalVariables`, globalArrays, globalHashes,
+  globalCodeRefs).
+- `DestroyDispatch.rescuedObjects` (snapshot).
+- `ScalarRefRegistry.snapshot()` — live ref-holding scalars found via
+  3-pass `System.gc()` + `WeakReference` sentinels
+  (`forceGcAndSnapshot()`).
 
-```java
-// Optimization: Only capture variables actually used in the subroutine body.
-if (!isPackageSub && node.block != null && !visibleVariables.isEmpty()) {
-    Set<String> usedVars = new HashSet<>();
-    VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
-    node.block.accept(collector);
-    if (!collector.hasEvalString()) {
-        // Filter visibleVariables down to only usedVars
-    }
-}
-```
+Skip conditions (walker seeding):
+- `sc.captureCount > 0` (closure-captured — would pull in closure's scope).
+- `WeakRefRegistry.isweak(sc)` (weakened ref).
 
-It uses the existing `VariableCollectorVisitor` which:
-- Walks the subroutine body AST.
-- Collects every `$var`, `@var`, `%var`, `&var` reference.
-- Handles subscripted access: `$h{k}` → `%h`, `$a[i]` → `@a`, `$#arr` → `@arr`.
-- Descends into nested subroutines so transitive captures are preserved.
-- Detects `eval STRING` / `evalbytes STRING`; if present, skips the
-  filter (dynamic runtime references possible).
+Two modes:
+- **Quiet** (`sweepWeakRefs(true)`) — auto-sweep called from
+  `MortalList.flush`. Clears weak refs only, does NOT fire DESTROY, does
+  NOT drain rescuedObjects.
+- **Non-quiet** (`sweepWeakRefs(false)`) — explicit `Internals::jperl_gc()`.
+  Drains `rescuedObjects` first, fires DESTROY on unreachable blessed
+  objects, clears weak refs.
 
-The interpreter backend does NOT do this filtering. In
-`src/main/java/org/perlonjava/backend/bytecode/BytecodeCompiler.java:764`
-(`detectClosureVariables`), it captures ALL visible lexicals from
-the symbol table plus all AST-referenced variables — so the effective
-set is always the superset.
+Diagnostic: `Internals::jperl_trace_to(ref)` returns a path from any
+root. With `JPERL_TRACE_ALL=1` and `JPERL_REGISTER_STACKS=1`, dumps
+direct-holder scalars with registration stacks and reverse-trace to
+container holders.
 
-This inflates `captureCount` on variables closures don't actually
-use, preventing their scope-exit cleanup from completing. The
-downstream effect — visible in `t/52leaks.t` — is that
-`$base_collection` stays pinned by `MortalList.deferredCaptures`
-indefinitely, and so do its hash elements (`rerefrozen`).
+### 5.2 Scalar ref registry (`ScalarRefRegistry`)
 
-### Design
+`WeakHashMap<RuntimeScalar, Boolean>` — tracks all scalars that have been
+assigned a reference via `setLarge*` or `incrementRefCountForContainerStore`.
+Weak keys so JVM GC prunes entries when the scalar is no longer Java-alive.
 
-Port the JVM-backend pattern to
-`BytecodeCompiler.detectClosureVariables`:
+Optional: `JPERL_REGISTER_STACKS=1` records a `Throwable` per
+`registerRef` call in a parallel `WeakHashMap<RuntimeScalar, Throwable>`.
+Used by `jperl_trace_to` to show registration stacks.
 
-1. After constructing the full `visibleVariables` / `outerVars` map,
-   run `VariableCollectorVisitor` over the same AST the compiler is
-   about to emit.
-2. Respect `hasEvalString()` — when `eval STRING` is detected, fall
-   back to the current over-capture behavior.
-3. Filter `outerVarNames`, `outerValues`, and `capturedVarIndices`
-   down to only names that appear in the `usedVars` set.
-4. Preserve existing ordering (TreeMap by register index) to keep
-   the `withCapturedVars(...)` array ordering stable.
-5. DO NOT filter the second stage (AST-referenced variables at lines
-   810-822) — those are already a narrower set and are needed for
-   register-recycling safety.
+### 5.3 Module init guard (`ModuleInitGuard`)
 
-### Code changes
+ThreadLocal counter incremented on entry to `require`/`use`/`eval STRING`/
+`do FILE` (wrapped in `PerlLanguageProvider.executeCode` for
+non-main-program runs). `MortalList.maybeAutoSweep()` and
+`RuntimeScalar.undefine()` walker triggers check this; skip sweeping
+during module init.
 
-```java
-// BytecodeCompiler.java detectClosureVariables
+### 5.4 MyVarCleanupStack unregister
 
-// ... existing code building outerVars from symbolTable ...
+`MyVarCleanupStack.unregister(Object)` — called by emitted bytecode at
+block scope-exit (`EmitStatement.emitScopeExitNullStores`) BEFORE the
+ACONST_NULL/ASTORE that releases the Java local slot. Prevents the
+static ArrayList from holding block-scoped scalars alive past their
+Perl-level scope.
 
-// Phase F: narrow to actually-used variables, matching
-// EmitSubroutine.java's JVM-backend treatment.
-Set<String> usedVars = null;
-if (ast != null) {
-    Set<String> used = new HashSet<>();
-    VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
-    ast.accept(collector);
-    if (!collector.hasEvalString()) {
-        usedVars = used;
-    }
-}
+### 5.5 Storable arg-release
 
-// In the main capture loop, skip variables not in usedVars:
-for (Map.Entry<...> e : outerVars.entrySet()) {
-    // ... existing filters ...
-    if (usedVars != null && !usedVars.contains(name)) continue;  // NEW
-    capturedVarIndices.put(name, reg);
-    // ...
-}
-```
+`Storable.releaseApplyArgs(RuntimeArray args)` — decrements
+`refCountOwned=true` elements' referent refCount, flips
+`refCountOwned=false`, clears the array. Called after every
+`RuntimeCode.apply(method, args, ...)` in Storable.java, semantically
+matching what `@_` drain does Perl-side.
 
-### Validation checklist
+### 5.6 Runtime diagnostic env vars
 
-- **Sandbox:** `prove dev/sandbox/destroy_weaken/` → 213/213
-- **Full unit suite:** `make` → PASS
-- **DBIC regression set:** t/60core.t 125/125, t/storage/txn_scope_guard.t
-  18/18, t/100populate.t 108/108, t/inflate/core.t 32/32,
-  t/96_is_deteministic_value.t 8/8, t/cdbi/68-inflate_has_a.t 6/6
-- **Leak target:** t/52leaks.t unpatched → expect 12/12 (fixing
-  the last known leak)
-- **Eval STRING safety:** Tests that rely on eval STRING capturing
-  outer lexicals should continue to pass (`hasEvalString()` gate
-  guarantees this).
-- **Multi-backend symmetry:** Running the interpreter (`./jperl --int`)
-  and JVM-compiled path through the same tests should yield identical
-  output for capture-sensitive code.
-
-### Risks and mitigations
-
-| Risk | Mitigation |
+| Env var | Effect |
 |---|---|
-| Over-narrow capture breaks variable access in closures. | `VariableCollectorVisitor` already handles subscript, slice, and `$#arr` forms. Port-for-port from JVM backend. |
-| eval STRING in a nested scope not detected. | Visitor descends into every node; `hasEvalString` is set during the AST walk. |
-| Goto labels or other dynamic-reference ops reach variables at runtime. | Check VariableCollectorVisitor for coverage; if incomplete, the `hasEvalString` gate can be extended to include `goto`, `do FILE`, etc. |
-| Moo/DBIC pattern relies on over-capture. | Run full DBIC tests (txn_scope_guard, populate, inflate/core) as regression gates before committing. |
-
-### Expected benefit
-
-With narrowed capture:
-- `$base_collection.captureCount` stays 0 when no closure actually
-  uses it → no entry in `MortalList.deferredCaptures` on scope exit
-  → scopeExitCleanup cleans it → rerefrozen element freed
-  → t/52leaks.t test 12 passes unpatched.
-- Smaller closure capture frames → lower memory use in Moo/DBIC
-  accessor-heavy code.
-- Interpreter matches JVM-backend behavior for closure semantics,
-  reducing backend-divergence surprises.
-
-### Implementation notes
-
-- The fix sits ENTIRELY inside `detectClosureVariables`.
-- No changes to runtime types (`RuntimeScalar`, `MortalList`,
-  `WeakRefRegistry`, walker) needed.
-- The existing `isContainerElement` / `scopeExited` walker flags
-  (landed earlier but unused) can stay — they're cheap and may
-  help future diagnostics.
-- If this fix resolves 52leaks.t fully, Phase B1's
-  `ScalarRefRegistry` + walker is still the correct mechanism for
-  cases that DO involve weakened references held by user lexicals.
-
-## Phase F — RESULT (2026-04-20, commit `ad7d32972`)
-
-**Status:** Shipped. "basic rerefrozen" leak **fixed**.
-
-### What shipped
-
-Three call sites in `BytecodeCompiler` now respect
-`VariableCollectorVisitor.hasEvalString()`:
-
-1. `detectClosureVariables(Node ast, EmitterContext ctx)` — top-level
-   compile entry. Filters `outerVars` by AST-referenced names.
-2. `visitNamedSubroutine(SubroutineNode node)` — filters
-   `closureVarsByReg` via new helper `collectVisiblePerlVariablesNarrowed`.
-3. `visitAnonymousSubroutine(SubroutineNode node)` — same helper.
-
-New helper `collectVisiblePerlVariablesNarrowed(Node body)`:
-- Collects all visible variables (unchanged behavior).
-- Runs `VariableCollectorVisitor` over the body.
-- If `hasEvalString()` returns true, returns the full set
-  (backward-compatible for eval STRING semantics).
-- Otherwise, filters down to only `used` variable names.
-
-### Impact on t/52leaks.t (unpatched)
-
-| State | Before Phase F | After Phase F |
-|---|---|---|
-| Test emits plan line? | **No** (dies mid-run) | **Yes** (`1..10`) |
-| Tests completed | 12 + die | 10 + clean exit |
-| Real fails | 1 (`basic rerefrozen`) | 1 (`basic result_source_handle`) |
-| TODO fails | 2 | 0 |
-
-Key observations:
-- `basic rerefrozen` — **GONE**. Root cause closed at source.
-- `basic Artist=HASH(...)` (previously `not ok 11`, TODO) —
-  now cleanly freed, no longer reported.
-- `basic Self-referential RS conditions` (TODO `not ok 9`) —
-  now passes (was actually a passing TODO, so its removal is
-  expected from leak closure).
-- `basic result_source_handle` — **newly visible** failure.
-  This leak was always present but hidden by the test dying at
-  `rerefrozen` (Data::Dumper cannot serialize detached Schema).
-  assert_empty_weakregistry sorts leaks by display_name; with
-  rerefrozen gone, the next leak in sort order is reported.
-
-### Regression validation
-
-- Sandbox (`dev/sandbox/destroy_weaken/`): **213/213** ✅
-- Full unit suite (`make` → testUnitParallel): **PASS** ✅
-- DBIC key tests (all pass):
-  - `t/storage/txn_scope_guard.t`: 18/18
-  - `t/100populate.t`: 108/108
-  - `t/inflate/core.t`: 32/32
-  - `t/96_is_deteministic_value.t`: 8/8
-  - `t/cdbi/68-inflate_has_a.t`: 6/6
-  - `t/multi_create/standard.t`: 92/92
-  - `t/relationship/custom.t`: 57/57
-  - `t/60core.t`: 108+ ok (hangs later in environment-specific
-    slow run; no fails in completed tests)
-
-### Remaining work
-
-- **`basic result_source_handle` leak**: trace analysis shows 6
-  direct holders of the DBIx::Class::ResultSourceHandle object
-  (1 with `rcO=true`, 5 with `rcO=false`). This is a pre-existing
-  leak in the DBIC `ResultSourceHandle` lifecycle — a different
-  root cause than over-capture. Investigation needs to trace why
-  multiple hash/array elements hold the same handle ref after
-  scope exit. Likely requires Phase G or a DBIC-specific fix.
-
-### Key code changes
-
-```
-BytecodeCompiler.java:
-  +  collectVisiblePerlVariablesNarrowed(Node body)
-  +  Filters collectVisiblePerlVariables() by VariableCollectorVisitor
-     results unless hasEvalString() is true.
-
-  detectClosureVariables:
-  +  Run VariableCollectorVisitor on `ast` at entry.
-  +  Gate by hasEvalString(); skip narrowing if present.
-  +  In the capture loop, skip variables not in usedVars.
-
-  visitNamedSubroutine:
-  -  TreeMap<> closureVarsByReg = collectVisiblePerlVariables();
-  +  TreeMap<> closureVarsByReg = collectVisiblePerlVariablesNarrowed(node.block);
-
-  visitAnonymousSubroutine:
-  -  TreeMap<> closureVarsByReg = collectVisiblePerlVariables();
-  +  TreeMap<> closureVarsByReg = collectVisiblePerlVariablesNarrowed(node.block);
-```
+| `JPERL_GC_DEBUG=1` | Logs `DBG auto-sweep cleared=N` on each auto-sweep |
+| `JPERL_NO_AUTO_GC=1` | Disables auto-sweep entirely |
+| `JPERL_NO_SCALAR_REGISTRY=1` | Disables `ScalarRefRegistry` (benchmark only) |
+| `JPERL_TRACE_ALL=1` | `jperl_trace_to` dumps direct/container holders |
+| `JPERL_REGISTER_STACKS=1` | `ScalarRefRegistry.registerRef` records stacks |
 
 ---
 
-## Phase G — Close `basic result_source_handle` leak (2026-04-20 plan)
+## Phase H — close remaining `./jcpan` parallel-run issues
 
-**Goal:** Fix the last remaining `t/52leaks.t` unpatched failure
-(`basic result_source_handle`) to reach **12/12** without requiring
-the DBIC LeakTracer patch.
+**Target: production readiness.**
 
-### Diagnostic findings
+### Baseline (2026-04-20 full run)
 
-Reverse-trace analysis (`JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`)
-on the leaked `DBIx::Class::ResultSourceHandle` object shows
-**6 direct holders** in `ScalarRefRegistry`:
+```
+Files=314, Tests=13792, Result: FAIL
+Failed 5/314 test programs. 11/13792 subtests failed.
+```
 
-| # | rcO | Registered via (Java stack) | Perl call site |
+| # | File | Failure mode | Priority |
 |---|---|---|---|
-| 0 | **true** | `RuntimeArray.push:207 → incrementRefCountForContainerStore` | `Storable.java:529` (deepClone freezeArgs push) |
-| 1 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:812` (STORABLE_thaw `setFromList`) |
-| 2 | false | `createReferenceWithTrackedElements:662` | `InlineOpcodeHandler.executeCreateHash` |
-| 3 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:442` (setFromList inside `callCached`) |
-| 4 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:442` |
-| 5 | false | `(truncated)` | `(truncated)` |
+| H1 | `t/52leaks.t` | 10 real fails (tests 9-18). Leaks: Artist + 2×Schema + 2×ResultSource::Table, refcnt 2-6 (DBIC phantom-chain). **Standalone: 0 fails.** | HIGH |
+| H2 | `t/60core.t` | **300 s timeout → SIGKILL (exit 137).** All 108 started subtests passed, then hangs. **Standalone: 125/125 in 6s.** | HIGH |
+| H3 | `t/cdbi/sweet/08pager.t` | **300 s timeout → SIGKILL.** All 9 subtests passed, then hangs in END block `assert_empty_weakregistry`. | HIGH |
+| H4 | `t/storage/error.t` | Test 49 "callback works after \$schema is gone" — Schema self-save (`rescuedObjects`) prevents walker cleanup. Known Phase B-deferred. | MED |
+| H5 | `t/zzzzzzz_perl_perf_bug.t` | `Unable to lock _dbictest_global.lock: Resource deadlock avoided`. Cascade from H2/H3 holding DBICTest flock past 15-min timeout. | Resolves via H2+H3 |
 
-The common thread: all 6 holders are created during
-`Storable::dclone($base_collection)` processing of the
-ResultSourceHandle object, which uses DBIC's `STORABLE_freeze` /
-`STORABLE_thaw` hooks.
+### Bonus: 8 TODO passes (DBIC's `TODO 'Needs Data::Entangled'`, RT#82942)
 
-### Root cause hypothesis
+- `t/sqlmaker/limit_dialects/generic_subq.t`: 9, 11, 13, 15, 17
+- `t/storage/txn_scope_guard.t`: 13, 15, 17
 
-`Storable.java:deepClone` uses temporary Java-side `RuntimeArray`
-objects (`freezeArgs`, `thawArgs`) to pass arguments to DBIC's
-Perl-side hook methods via `RuntimeCode.apply`. These Java locals
-go out of scope when `deepClone` returns, and the element scalars
-they hold should be JVM-reclaimed by `WeakHashMap` pruning.
-
-**BUT:** the reachability-walker's `forceGcAndSnapshot()` runs 3
-JVM GC cycles at sweep time and the scalars survive. This implies
-one of:
-
-1. `RuntimeCode.apply` retains a strong reference to the args
-   array after return (possibly via `@DB::args` captures — see
-   Phase 2 — or via a closure `@_` alias that's still live).
-2. The DBIC hook methods (`STORABLE_freeze`, `STORABLE_thaw`) store
-   references to their `@_[0]` (the object) somewhere with JVM-strong
-   reach.
-3. The `incrementRefCountForContainerStore` bump on `push` inflates
-   the referent's refCount — not decremented when the local
-   `RuntimeArray` dies — keeping downstream weak refs alive.
-
-### Plan of attack
-
-#### Step 1: Narrow down which holder is the leak
-
-Holder #0 is the smoking gun (rcO=true, registered during the push
-into freezeArgs). The other 5 have rcO=false which means they're
-not actively owning the refCount — they are COPIES or lent
-references created by the setFromList / hash creation paths.
-
-Start by analyzing the lifecycle of the `freezeArgs` RuntimeArray
-after `RuntimeCode.apply` returns. Check:
-
-- Does `apply` set `args.refCountOwned` or similar field that
-  protects the elements?
-- Does `freezeArgs.elements.clear()` fire anywhere?
-- Does the push-bumped refCount get decremented on apply return?
-
-#### Step 2: Mortalize Storable's temporary arg arrays
-
-Strategy A: register `freezeArgs` and `thawArgs` with `MortalList`
-before `RuntimeCode.apply` returns, so their elements' refCounts
-are properly decremented at statement boundary.
-
-Strategy B: explicitly clear `freezeArgs.elements` and decrement
-refCounts after `apply` returns, before returning from deepClone.
-
-Strategy C: use a "lent" push that does NOT increment refCount
-(similar to `@_` aliasing) — doesn't increment on push, doesn't
-decrement on pop. Appropriate when the array is purely an
-arg-passing vessel.
-
-#### Step 3: Investigate DBIC STORABLE_thaw object retention
-
-Read `blib/lib/DBIx/Class/ResultSourceHandle.pm` lines 442 and 812
-to understand what the thaw hook does with `$_[0]` (the new blessed
-object). If it stashes the ref anywhere that's not a weak ref, the
-clone stays alive even after dclone returns.
-
-If DBIC's code is fine in real Perl but leaks in PerlOnJava, the
-fix belongs in PerlOnJava (likely Step 2 above).
-
-#### Step 4: Verify weak-ref clearing cascade
-
-After the fix:
-- Original handle's refCount should drop to 0 when `$base_collection`
-  is released.
-- `clearWeakRefsTo(handle)` should fire.
-- Test's `weakref` field becomes undef.
-- `assert_empty_weakregistry` passes.
-
-### Implementation order
-
-1. **Read Storable.java:deepClone** carefully, find all local
-   `RuntimeArray` allocations, document each. ✅ (already traced)
-2. **Test hypothesis** by adding explicit `freezeArgs.elements.clear();
-   thawArgs.elements.clear();` at end of deepClone, decrementing
-   refCount for each pushed element. Run 52leaks.t.
-3. **If that fixes** — refactor into a helper method
-   `releaseMortalArgs(RuntimeArray args)` to avoid code duplication.
-4. **If not** — audit `RuntimeCode.apply` args lifecycle next.
-5. **Regression-check** against txn_scope_guard, 100populate,
-   storage/error, inflate/core, sandbox 213/213, unit suite.
-
-### Validation checklist
-
-- `t/52leaks.t` unpatched: **12/12** (or at least the
-  `result_source_handle` entry gone from `assert_empty_weakregistry`)
-- Sandbox: 213/213
-- Full unit suite: PASS
-- DBIC regression set: no new failures
-- Storable integration tests (if any in `src/test/resources/...`):
-  PASS
-
-### Risk and rollback
-
-| Risk | Mitigation |
-|---|---|
-| Clearing arg arrays breaks Storable for primitives (non-blessed) | Keep the clear on blessed-only path (STORABLE_freeze hook flow) |
-| Decrementing too aggressively fires premature DESTROY | Use `MortalList.deferDecrement` to schedule, don't eager-decrement |
-| Breaks t/84serialize.t or other Storable tests | Run full Storable test set before commit |
-
-Rollback is trivial: revert the deepClone cleanup additions.
-
-### Expected benefit
-
-With the Storable-side cleanup:
-- `t/52leaks.t` unpatched → **12/12** (goal achieved)
-- Lower memory use in code that uses Storable::dclone heavily
-- No behavior change for normal (non-STORABLE-hooked) dclone usage
-
-## Phase G — RESULT (2026-04-20, commit `e8cec9a76`)
-
-**Status:** SHIPPED. **`t/52leaks.t` unpatched target achieved** 🎉
-
-### What shipped
-
-New helper `Storable.releaseApplyArgs(RuntimeArray args)`:
-- Iterates elements of a temporary arg array.
-- For each element with `refCountOwned=true` and a `RuntimeBase`
-  value whose `refCount > 0`, decrements `refCount` and flips
-  `refCountOwned=false`.
-- Clears the array's element list and marks `elementsOwned=false`.
-
-Called from all 5 `RuntimeCode.apply(method, args, ...)` sites in
-`Storable.java`:
-
-1. `deepClone` freezeArgs (dclone STORABLE_freeze)
-2. `deepClone` thawArgs (dclone STORABLE_thaw)
-3. `freeze` freezeArgs (binary serialize)
-4. `thaw` thawArgs (binary deserialize)
-5. `convertFromYAMLWithTags` thawArgs (YAML-style deserialize)
-
-### Results
-
-| Test | Before Phase G | After Phase G |
-|---|---|---|
-| `t/52leaks.t` unpatched | 1 real fail (`basic result_source_handle`) | **10/10 pass** (8 ok + 2 SKIP for PPerl/SpeedyCGI) |
-| `t/52leaks.t` patched | 12/12 | 12/12 preserved |
-| Sandbox destroy/weaken | 213/213 | 213/213 |
-| Full unit suite (`make`) | PASS | PASS |
-| `t/84serialize.t` (Storable) | 115/115 | 115/115 |
-| `t/storage/txn_scope_guard.t` | 18/18 | 18/18 |
-| `t/100populate.t` | 108/108 | 108/108 |
-| `t/96_is_deteministic_value.t` | 8/8 | 8/8 |
-| `t/cdbi/68-inflate_has_a.t` | 6/6 | 6/6 |
-| `t/inflate/core.t` | 32/32 | 32/32 |
-| `t/multi_create/standard.t` | 92/92 | 92/92 |
-| `t/relationship/custom.t` | 57/57 | 57/57 |
-
-### Why it works
-
-The root cause was a semantic mismatch between:
-- Perl-side `@_`: arg list is an alias array; elements don't
-  affect refCount lifecycle — when the sub returns, @_ is GC'd
-  and the aliased referents keep their natural refCount.
-- PerlOnJava-side `RuntimeArray.push(args, scalar)`: calls
-  `incrementRefCountForContainerStore`, which bumps the referent's
-  refCount by 1 AND sets `refCountOwned=true` on the copy in
-  `args.elements`.
-
-For normal Perl-compiled subs, `RuntimeCode.apply` handles the
-inverse decrement when @_ is drained. But Storable's hooks were
-invoked from Java-side Storable.java, where the temporary
-`freezeArgs`/`thawArgs` arrays were just local Java variables.
-JVM GC eventually reclaimed them, but the refCount bumps stayed,
-permanently inflating the referent's refCount.
-
-`releaseApplyArgs` does the inverse decrement at the right point
-— Java-side explicit release after the Perl call returns,
-semantically matching what `@_` drain does on the Perl side.
-
-### Plan status: **COMPLETE**
-
-All objectives of `refcount_alignment_52leaks_plan.md` achieved:
-- 52leaks.t unpatched: **12/12 non-SKIP tests pass**
-- No regressions in other DBIC tests
-- No regressions in sandbox or full unit suite
-- No opt-in DBIC LeakTracer patch required
+These confirm Phase F/G materially improved leak tracking beyond what DBIC
+authors believed possible. Preserve these in regression gates.
 
 ---
 
-## Phase H — Fix remaining `./jcpan -t DBIx::Class` parallel-run issues (2026-04-20 plan)
-
-**Goal:** `./jcpan -t DBIx::Class` (prove -j, ~314 test files,
-parallel execution) → **0 failures**. Current result: 5/314 files
-fail, 11/13792 subtests fail (**99.92% pass**).
-
-### Baseline full-suite results
-
-| Test file | Failure mode | Severity |
-|---|---|---|
-| `t/52leaks.t` | 10 real fails (tests 9-18): Artist + 2×Schema + 2×ResultSource::Table all with refcnt 2-6 — phantom-chain leaks. Standalone: 0 fails. | H1 (HIGH) |
-| `t/60core.t` | **timeout at 300s, SIGKILL (exit 137)**. All 108 started subtests passed, then hung. Standalone: 125/125 in 6s. | H2 (HIGH) |
-| `t/cdbi/sweet/08pager.t` | **timeout at 300s, SIGKILL**. All 9 started subtests passed, then hung in END block (Sub::Defer dispatch hot loop). | H3 (HIGH) |
-| `t/storage/error.t` | Test 49 fails: "callback works after $schema is gone" — Schema self-save rescuedObjects issue (known, Phase B-deferred). | H4 (MED) |
-| `t/zzzzzzz_perl_perf_bug.t` | `Unable to lock _dbictest_global.lock: Resource deadlock avoided` — cascade failure from H2/H3 holding the DBICTest global flock. | H5 (secondary — resolved by H2+H3) |
-
-### Bonus wins from Phases C-G
-
-DBIC marks 8 tests as `TODO 'Needs Data::Entangled or somesuch'`
-(RT#82942). Our work made **all 8 pass unexpectedly**:
-- `t/sqlmaker/limit_dialects/generic_subq.t`: TODO→pass 9, 11, 13, 15, 17
-- `t/storage/txn_scope_guard.t`: TODO→pass 13, 15, 17
-
-These aren't failures (they're `TODO passed`, which prove reports as
-such but doesn't fail the run), but they confirm our refcount
-alignment work materially improved DBIC leak tracking beyond what
-the DBIC authors expected possible without external help.
-
----
-
-### H1: t/52leaks.t under parallel — 10 real leaks
+### H1 — t/52leaks.t under parallel (10 phantom-chain leaks)
 
 #### Observations
 
-Each parallel prove worker runs 52leaks.t in its **own JVM process**
-(independent memory/state). Standalone invocation passes 10/10 at
-our current HEAD. Parallel invocation leaks 10 objects.
+Each parallel prove worker runs 52leaks.t in **its own JVM process**
+(independent memory/state). Standalone: 10/10. Parallel: 10 fails.
 
-Leaks are DBIC phantom-chain objects (Schema, Source, Artist) with
-refcount 2-6. These correspond to the classic `source_registrations`
-cycle Phase B1 (ScalarRefRegistry) and the rescuedObjects mechanism
-were designed to break.
+Leak targets: DBIC Schema / Source / Artist with refcount 2-6 — the
+classic `source_registrations` phantom-chain cycle.
 
 #### Hypotheses (ordered by likelihood)
 
 **H1a — JVM memory pressure delays WeakHashMap pruning.**
-`ScalarRefRegistry.forceGcAndSnapshot()` runs 3 `System.gc()` cycles
-with `WeakReference` sentinels. Under parallel load on a small-heap
-JVM, GC may run in Full-GC mode less aggressively, leaving weak-key
-entries unpruned within the sentinel wait window. Walker then over-
-reports reachability.
+`forceGcAndSnapshot()` runs 3 `System.gc()` cycles with `WeakReference`
+sentinels. Under parallel load on a small-heap JVM, Full-GC may run less
+aggressively, leaving weak-key entries unpruned. Walker over-reports
+reachability.
 
-Fix: increase sentinel wait time when `System.gc()` has been called
-but the sentinel probe is still defined — add exponential backoff
-(e.g. 10ms, 20ms, 40ms, 80ms). Or set `-Xmx` explicitly via
-`jperl` wrapper for CPAN builds.
+Fix: increase sentinel wait time with exponential backoff (10/20/40/80 ms),
+or set explicit `-Xmx` via `jperl` wrapper for CPAN builds.
 
-**H1b — DBICTest test-setup timing differences.**
-Under parallel run, `DBICTest::init_schema` takes longer (shared
-file creation, flock wait). The long-running operations hold
-refcount bumps on intermediate objects longer, giving Phase B2a
-auto-sweep more opportunities to mis-classify live-through-deferred
-objects.
+**H1b — DBICTest setup timing.**
+Under parallel run, `DBICTest::init_schema` takes longer (file creation,
+flock wait). Long operations hold refcount bumps on intermediate objects,
+giving Phase B2a auto-sweep more opportunities to mis-classify
+live-through-deferred objects.
 
-Fix: verify with `JPERL_GC_DEBUG=1` under prove. If auto-sweep
-fires mid-setup and clears in-flight weak refs, we need to extend
-the ModuleInitGuard coverage (Phase B2a) to DBICTest's own load
-sequence, not just require/use.
+Fix: verify with `JPERL_GC_DEBUG=1` under prove. If auto-sweep fires
+mid-setup and clears in-flight weak refs, extend `ModuleInitGuard`
+coverage to DBICTest's load sequence.
 
-**H1c — Per-process jperl startup variations.**
-If some paths in compile-time initialization have non-determinism
-(HashMap iteration order, etc.), the first-use dispatch order of
-Sub::Defer accessors may differ between runs. Under certain orders,
-Schema's source_registrations weakening fires before Source's back-
-ref is set up, leaving a non-weak cycle.
+**H1c — Per-process startup non-determinism.**
+HashMap iteration order or similar could cause Sub::Defer accessor
+first-use order to differ between runs. Under certain orders, Schema's
+`source_registrations` weakening fires before Source's back-ref is set
+up, leaving a non-weak cycle.
 
-Fix: audit Schema::DESTROY / source_registrations weaken order;
-ensure Source.schema is weakened in Source's constructor too.
+Fix: audit Schema::DESTROY / source_registrations weaken order; ensure
+Source.schema is weakened in Source's constructor.
 
 #### Investigation plan
 
-1. Reproduce locally: `prove -j8 t/52leaks.t` (run it 10 times —
-   document pass/fail ratio; is it flaky or always-fail under
-   parallel?).
-2. Compare `JPERL_GC_DEBUG=1 JPERL_REGISTER_STACKS=1` output
-   between standalone (pass) and parallel (fail) runs.
-3. Check whether tests 9-18 leak EXACTLY the same 5 objects every
-   run, or varying sets.
-4. If timing-related (H1b), try forcing serial execution for
-   52leaks.t via `NO_PARALLEL_TESTS` env var or a test-specific
-   lock.
-5. If memory-related (H1a), try bumping `-Xmx` in `jperl` and/or
-   `forceGcAndSnapshot` wait times.
+1. Reproduce: `prove -j8 t/52leaks.t` × 10 runs. Is it deterministic or
+   flaky? Same 5 objects every run, or varying?
+2. Compare `JPERL_GC_DEBUG=1 JPERL_REGISTER_STACKS=1` output between
+   standalone (pass) and parallel (fail) runs.
+3. If timing-related, try forcing serial for 52leaks.t via test-specific
+   lock or env var.
+4. If memory-related, try `-Xmx4g` and longer `forceGcAndSnapshot`
+   backoff.
 
 ---
 
-### H2: t/60core.t parallel hang (300s timeout → SIGKILL)
+### H2 — t/60core.t parallel hang
 
 #### Observations
 
-Standalone: 125/125 in 6s. Parallel: all 108 reached tests pass,
-then infinite loop beyond that point (300s timeout).
+**Standalone: 125/125 in 6s. Parallel: passes 108 then hangs.**
 
-JFR-style stack sampling (20 samples at 0.3s intervals) from the
-hung process showed hot path cycling between:
+JFR-style stack sampling (20 samples at 0.3s) shows hot path cycling:
 - `RuntimeCode.call:1954`
 - `BytecodeInterpreter.execute:1170`
 - `RuntimeCode.apply:2390` (hint-hash push — iterative trampoline loop)
 - `RuntimeCode.apply:2406` (code.apply inner call)
 - `Sub/Defer.pm:2382` (Moo accessor deferred dispatch)
 
-This is the same trampoline-heavy dispatch that Phase C fixed from
-crashing (was stack overflow, now iterative). But a pathological
-case exists where the tailcall chain doesn't terminate — likely a
-missed Moo accessor cache invalidation that causes Sub::Defer to
-re-dispatch the same stub forever.
-
-60core.t's failure point is around test 108 (last reached:
-"insert does not encode again") which is followed by multicreate
-tests (Employee with secretkey that has an inflator/deflator).
+Iterative trampoline (Phase C) is O(1) stack but O(N) time. If N is
+unbounded, the trampoline loops forever. Failure point is around
+test 108 — followed by multicreate tests with inflator/deflator
+(`$empl->secretkey->encoded`, a chain of 2 method calls each going
+through Sub::Defer-generated accessors).
 
 #### Hypotheses
 
 **H2a — Inflator/deflator call loop.**
-`$empl->secretkey->encoded` goes through 2 method calls, each with
-an inflator/deflator that uses Sub::Defer-generated accessors. If
-Phase F's closure-capture narrowing dropped a lexical that the
-deflator needs, it would fall back to re-dispatching the stub.
+Phase F's closure-capture narrowing may have dropped a lexical the
+deflator needs, causing fallback to re-dispatching the stub forever.
 
-Fix: isolate which specific lexical the deflator closure needs;
-narrow VariableCollectorVisitor's missed cases (e.g., regex captures,
-slice context, lvalue refs).
+Fix: isolate which lexical; narrow `VariableCollectorVisitor`'s missed
+cases (regex captures `$1`, slice context, lvalue refs, formats).
 
-**H2b — Shared Sub::Defer state across tests in parallel.**
-Sub::Defer caches deferred method codes in `%Sub::Defer::DEFERRED`.
-Different tests running in parallel (different JVMs — NOT shared
-state, but possibly different load orders) could leave Sub::Defer
-in a state where the "undeferred" code is never cached.
+**H2b — Sub::Defer cache miss causing re-dispatch.**
+Sub::Defer caches undeferred code in `%Sub::Defer::DEFERRED`. Some
+invariant could be violated, causing cache miss on every call.
 
-Fix: instrument Sub::Defer's `undefer_sub` to log cache hits/misses;
-find where the re-dispatch loop originates.
+Fix: instrument `Sub::Defer::undefer_sub` with cache hit/miss counters;
+find where re-dispatch originates.
 
-**H2c — Our Phase F `hasEvalString` check missing a case.**
-If 60core.t uses a construct VariableCollectorVisitor treats as not-
-referencing a variable when it actually does (e.g., formats, `do
-FILE`, string eval in a regex), the closure will be called with
-missing state, leading to infinite retry.
+**H2c — VariableCollectorVisitor misses a use-form.**
+If 60core uses a construct the visitor treats as not-referencing a
+variable when it does (regex captures, formats, `do FILE`, eval STRING
+in regex), closure is called with missing state → re-dispatch.
 
-Fix: run 60core.t with `JPERL_PHASE_F_DBG=1` (re-enable the debug
-print) and look at which closures narrow their captures right before
-the hang.
+Fix: re-enable `JPERL_PHASE_F_DBG=1` print in
+`BytecodeCompiler.detectClosureVariables` and
+`collectVisiblePerlVariablesNarrowed`; compare between passing and
+hanging runs.
 
 #### Investigation plan
 
-1. Run 60core.t standalone with `perl_test_runner.pl` to get exact
-   behavior at test 108→109 (where it hangs).
+1. Run 60core.t standalone under `perl_test_runner.pl` with 600 s
+   timeout to verify exact behavior at test 108→109.
 2. If it hangs standalone too, bisect between Phase E (good) and
-   Phase G (hang) commits to find the regressor.
-3. Capture jstack at the hang point; identify which sub is in the
+   Phase G (hang):
+   - `git bisect start feature/refcount-alignment 87ed18e00`
+   - At each, test 60core.t with 30 s timeout; mark pass/fail.
+3. Capture jstack at hang point; identify which Perl sub is in the
    dispatch loop.
-4. Compare `JPERL_PHASE_F_DBG=1` output on passing vs hanging runs.
+4. Re-enable `JPERL_PHASE_F_DBG=1` trace (the debug print was removed
+   in the clean-up commit; re-add temporarily).
 
 ---
 
-### H3: t/cdbi/sweet/08pager.t parallel hang in END block
+### H3 — t/cdbi/sweet/08pager.t END-block hang
 
 #### Observations
 
-Timeout at 300s. All 9 declared subtests passed. Hang is in the
-END block via DBICTest.pm line 371:
+300 s timeout. All 9 subtests passed. Hang is in END block:
 ```perl
 END {
     assert_empty_weakregistry($weak_registry, 'quiet');
 }
 ```
 
-Stack showed `RuntimeCode.callCached` / `anon6766.apply(DBICTest.pm:1693)`
-with hot frame in `Sub/Defer.pm:2378`. The END block iterates every
-weak-registered ref and calls methods on each (for display string
-generation) that go through Sub::Defer → apply → apply (trampoline).
+Stack hot frame in `Sub/Defer.pm:2378` via `DBICTest.pm:1693`. END
+iterates weak_registry entries; each entry's display-string generation
+goes through Sub::Defer → apply → apply (trampoline).
 
 #### Root cause hypothesis
 
-With many hundreds of weak refs registered under parallel test
-conditions (vs fewer standalone), `assert_empty_weakregistry`'s
-inner loop amplifies any per-call slowness. If a single Sub::Defer
-dispatch takes (say) 50ms under contention × 10000 weak refs × 3
-methods each = many minutes.
-
-Option 1: the dispatch itself is slow (unlikely — standalone runs
-the same code).
-
-Option 2: our ScalarRefRegistry grows unboundedly under certain
-patterns (Phase B1's WeakHashMap should prune, but maybe some
-scalars have strong JVM references elsewhere that block pruning).
+With many weak refs registered under parallel test conditions vs fewer
+standalone, the inner loop amplifies any per-call slowness. Likely
+`ScalarRefRegistry` has grown large (possibly tens of thousands of
+entries) because some scalars have strong JVM references elsewhere
+blocking WeakHashMap pruning.
 
 #### Investigation plan
 
-1. Count `ScalarRefRegistry.approximateSize()` at the START of the
-   END block. If it's in the 10000s, that's the scale problem.
-2. If so, find what's strongly holding those scalars — likely a
-   Java-side cache that needs pruning on scope exit.
-3. Consider moving weak_registry population to a lighter-weight
-   tracker that doesn't depend on full walker sweep.
+1. Add `ScalarRefRegistry.approximateSize()` diagnostic at START of
+   END block (via a timer that logs every 5s).
+2. If size is in 10000s, identify what's strongly holding the scalars
+   — likely a Java-side cache needing pruning on scope exit.
+3. Consider: `ScalarRefRegistry` entries hold `Throwable` stacks when
+   `JPERL_REGISTER_STACKS=1`. Even without it, every registered scalar
+   survives as long as something references it. Audit for accidental
+   strong references (static caches, singleton maps).
 
 ---
 
-### H4: t/storage/error.t test 49 (Schema DESTROY cascade)
+### H4 — t/storage/error.t test 49 (Schema DESTROY cascade)
 
-Already documented in Phase D/E as deferred. The specific failure
-pattern was investigated and the fix requires either:
+Known deferred issue (Phase B documented). Test expects:
+```perl
+undef $schema;
+$dbh->do('INSERT INTO nonexistent_table ...');  # should hit branch B
+```
 
-- Redesigning `DestroyDispatch.rescuedObjects` semantics (risk of
-  re-breaking 52leaks.t test 18 which relies on current behavior).
-- A targeted DBIC fix: ensure Schema::DESTROY's source_registrations
-  weakening is idempotent and triggers the walker.
+But `$weak_self` in the HandleError closure is still defined because
+Schema's self-save (`source->{schema} = $self; weaken`) puts Schema in
+`DestroyDispatch.rescuedObjects`, preventing walker from freeing it.
 
-**Proposed approach for Phase H4:**
-Add a Schema-aware hook: when `DestroyDispatch` detects that a
-class is `DBIx::Class::Schema` (or subclass) and `DESTROY` is about
-to fire on it, also call `ReachabilityWalker.sweepWeakRefs(false)`
-synchronously so `clearWeakRefsTo(storage)` fires before the test's
-`$dbh->do(...)` check.
+#### Proposed approach for Phase H4
+
+**Schema-aware DESTROY trigger.** When `DestroyDispatch.doCallDestroy`
+detects the class is `DBIx::Class::Schema` (or inherits from it) and
+DESTROY fires, also invoke `ReachabilityWalker.sweepWeakRefs(false)`
+synchronously BEFORE returning — so `clearWeakRefsTo(storage)` fires
+before the test's `$dbh->do(...)` check.
+
+Alternative: a more general rule — run a walker sweep AT THE END of
+every outermost DESTROY that accessed `rescuedObjects`. Scoped to
+preserve test 18's existing behavior (which relies on phantom-chain
+preserved mid-test).
+
+#### Risk
+
+Changing `rescuedObjects` semantics could re-break 52leaks.t test 18.
+Validate with both tests before committing.
 
 ---
 
-### H5: t/zzzzzzz_perl_perf_bug.t (cascade failure)
+### H5 — t/zzzzzzz_perl_perf_bug.t
 
-Not an independent issue. Error message:
+Not independent. Error:
 ```
 Unable to lock _dbictest_global.lock: Resource deadlock avoided
 ```
 
-This happens because H2 (60core.t) or H3 (08pager.t) holds the
-DBICTest global exclusive lock past the 15-minute timeout of
-`await_flock`, causing the kernel to detect the deadlock.
+H2 (60core.t) or H3 (08pager.t) holds the DBICTest global exclusive
+lock past the 15-min `await_flock` timeout, kernel detects deadlock.
 
-**Fixing H2 and H3 resolves H5 automatically.**
+**Fixing H2 and H3 resolves H5 automatically.** No separate work.
 
 ---
 
-### Implementation priorities
+## Implementation order for Phase H
 
-**Phase H-Priority-1: Fix the hangs (H2, H3).**
-These are the most impactful. If jperl hangs on ANY DBIC test,
-users will see `jcpan` appear stuck. The hangs cascade into H5.
+### H-P1: Fix hangs (H2, H3)
 
-Starting point: reproduce 60core.t and 08pager.t hang STANDALONE
-under timeout. Collect full jstack + JFR. Bisect through the recent
-Phase C-G commits to find the introducing commit.
+Most impactful — users see `jcpan` stuck. H5 resolves automatically.
 
-**Phase H-Priority-2: 52leaks.t parallel (H1).**
-10 leaks under parallel is a regression over standalone. But they
-are the expected-to-leak-without-LeakTracer-patch objects — NOT the
-ones we already fixed (rerefrozen, random_results). This is the
-DBIC phantom-chain pattern that needs reachability walker
-intervention.
+**Start with H2 reproduction:**
+```bash
+cd /Users/fglock/.perlonjava/cpan/build/DBIx-Class-0.082844-9
+# Standalone with long timeout
+time timeout 300s /Users/fglock/projects/PerlOnJava3/jperl -Iblib/lib -Iblib/arch t/60core.t > /tmp/60c.out 2>&1
+# Capture stacks if it hangs
+```
 
-Starting point: reproduce locally with `prove -j8` and confirm
-deterministically. Compare `JPERL_GC_DEBUG=1` output.
+If it hangs standalone, bisect:
+- `git bisect start feature/refcount-alignment 87ed18e00`
+- Test at each commit with 30 s timeout; mark pass/fail.
 
-**Phase H-Priority-3: storage/error.t test 49 (H4).**
-Targeted Schema-DESTROY trigger for walker sweep. Low-risk surgical
-change.
+If it only hangs under parallel, it's a timing/contention issue — try
+H2c (VariableCollectorVisitor coverage) first since Phase F is the
+most likely regressor.
 
-### Success criteria
+### H-P2: t/52leaks.t parallel (H1)
 
-1. `./jcpan -t DBIx::Class` completes without hanging (no 300s
-   timeouts on individual tests).
-2. `t/52leaks.t` passes cleanly under both standalone and parallel
-   prove -j invocation.
-3. `t/storage/error.t` passes all 49 tests.
-4. `t/zzzzzzz_perl_perf_bug.t` runs without flock deadlock
-   (resolved by fixing H2+H3).
-5. Zero regressions in the 309 currently-passing test files.
-6. TODO-passes from Phases C-G preserved (8 bonus passes).
+10 leaks under parallel. Single-test reproduction:
+```bash
+prove -j8 t/52leaks.t  # run 10 times, note pass/fail count
+```
 
-### Non-goals
+Compare with:
+```bash
+JPERL_GC_DEBUG=1 JPERL_REGISTER_STACKS=1 prove t/52leaks.t
+JPERL_GC_DEBUG=1 JPERL_REGISTER_STACKS=1 prove -j8 t/52leaks.t
+```
 
-- Fixing DBIC's own design issues (e.g., source_registrations
-  cycles) — we work around them.
-- Achieving 100% parity with native Perl on all 313 tests
-  (native Perl itself has 8 TODO fails in this suite).
+### H-P3: t/storage/error.t test 49 (H4)
+
+Schema-DESTROY walker trigger in `DestroyDispatch.doCallDestroy`.
+Low-risk surgical change but needs 52leaks.t test 18 regression gate.
+
+---
+
+## Success criteria
+
+1. `./jcpan -t DBIx::Class` completes without any test hanging (no 300 s
+   timeouts).
+2. `t/52leaks.t` passes cleanly under **both** standalone and
+   `prove -j8` parallel.
+3. `t/storage/error.t` passes all 49 subtests.
+4. `t/zzzzzzz_perl_perf_bug.t` runs without flock deadlock.
+5. **Zero regressions** in the 309 currently-passing test files.
+6. **8 bonus TODO-passes preserved** (generic_subq.t 9/11/13/15/17,
+   txn_scope_guard.t 13/15/17).
+7. Sandbox 213/213, `make` PASS — unchanged.
+
+## Non-goals
+
+- Fixing DBIC's own design issues (source_registrations cycles) —
+  we work around them.
+- 100% parity with native Perl on all 313 tests (native Perl itself
+  has 8 TODO fails).
 - Re-enabling any patched-DBIC workflow.
 
-### Stretch goal
+## Stretch goal
 
-Get `./jcpan -t DBIx::Class` passing cleanly with `prove -j1`
-serial execution first, then tackle the parallel case as a
-separate milestone. Serial should be the minimum bar for
-production readiness.
+Pass `./jcpan -t DBIx::Class` cleanly with `prove -j1` serial first
+as the production-readiness floor, then tackle parallel as a separate
+milestone.
 
+---
 
+## References
 
-
-
-
-
-
-
+- `dev/design/refcount_alignment_plan.md` — original refcount plan (Phases 1-7)
+- `dev/architecture/weaken-destroy.md` — weaken/DESTROY architecture
+- `dev/patches/cpan/DBIx-Class-0.082844/` — opt-in LeakTracer patch (now
+  **obsolete** — kept only for comparison / fallback)
+- PR: https://github.com/fglock/PerlOnJava/pull/508
+- Key commits: `da301ca6f` (C), `ea39d29a8` (D), `87ed18e00` (E),
+  `ad7d32972` (F), `e8cec9a76` (G)
