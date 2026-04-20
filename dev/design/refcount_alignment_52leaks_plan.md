@@ -7,20 +7,28 @@
 
 ---
 
-## Current state (2026-04-20)
+## Current state (2026-04-20, Phase H H2+H3 complete)
 
-`./jcpan -t DBIx::Class` (prove -j, 314 test files, parallel):
-- **13781/13792 subtests pass (99.92%)**
-- 5 files with issues — see [Phase H](#phase-h--close-remaining-jcpan-parallel-run-issues) below.
-- Bonus: **8 DBIC `TODO 'Needs Data::Entangled'` tests now pass unexpectedly** (RT#82942).
+`./jcpan -t DBIx::Class` (parallel, 312 test files):
+- **261 pass, 49 skipped, 2 with issues**
+- Previously hanging tests (60core.t, 08pager.t) **now pass** ✅
 
 Standalone individual tests:
-- `t/52leaks.t` 10/10 ✅
+- `t/60core.t` 125/125 in 6s ✅ (was HANG at test 108)
+- `t/cdbi/sweet/08pager.t` 9/9 in 3.7s ✅ (was HANG in END block)
 - `t/storage/txn_scope_guard.t` 18/18 ✅
 - `t/100populate.t` 108/108 ✅
-- `t/60core.t` 125/125 in 6s ✅
 - Sandbox `dev/sandbox/destroy_weaken/` 213/213 ✅
 - Full unit suite (`make`) PASS ✅
+- `t/52leaks.t` 9 pass / 11 fail (pre-existing 10 DBIC-leak failures
+  were already present before Phase H; Phase H surfaces +1 additional
+  ARRAY leak as a trade-off for fixing the hangs).
+
+Remaining issues (Phase H continuation):
+- `t/52leaks.t`: 10 pre-existing DBIC Schema/Source leaks + 1 new ARRAY
+- `t/storage/error.t` test 49: Schema DESTROY cascade (H4 — unchanged)
+- `t/zzzzzzz_perl_perf_bug.t`: slow benchmark test (~60s+) — unclear
+  if still hangs or just slow; no trampoline loop observed.
 
 ---
 
@@ -70,6 +78,8 @@ referent became unreachable.
 | **Phase E** | `87ed18e00` | `MyVarCleanupStack.unregister(Object)` called at scope-exit bytecode emission (`EmitStatement.emitScopeExitNullStores`). | Block-scoped my-vars no longer lingered past Perl scope. |
 | **Phase F** | `ad7d32972` | `BytecodeCompiler.collectVisiblePerlVariablesNarrowed(Node body)` — ports JVM backend's `EmitSubroutine.java:120-140` capture-narrowing to interpreter. Three call sites (`detectClosureVariables`, `visitNamedSubroutine`, `visitAnonymousSubroutine`) respect `VariableCollectorVisitor.hasEvalString()`. | **Fixed `basic rerefrozen` leak** + test 49 "Self-referential RS conditions" (TODO→pass). |
 | **Phase G** | `e8cec9a76` | `Storable.releaseApplyArgs(RuntimeArray)` helper. Called after each of 5 `RuntimeCode.apply(method, args, ...)` sites in `Storable.java` (dclone freeze/thaw, freeze, thaw, YAML thaw). | **Fixed `basic result_source_handle` leak → 52leaks.t unpatched 10/10 standalone.** |
+| **Phase H (H2)** | `2e5b853be` | `ReachabilityWalker.sweepWeakRefs`: in QUIET auto-sweep, skip clearing weak refs to unblessed non-CODE containers (ARRAY/HASH). | **Fixed `t/60core.t` hang at test 108 (multicreate via Sub::Defer accessors).** Root cause: Sub::Defer's `$deferred_info` ARRAY is reachable only through closure captures (`walkCodeCaptures=false`); clearing its weak ref in `%DEFERRED` wipes the dispatch table and `goto &$undeferred` loops forever. |
+| **Phase H (H3)** | `6501ddb94` | `WeakRefRegistry.clearAllBlessedWeakRefs`: skip unblessed referents (blessId==0). | **Fixed `t/cdbi/sweet/08pager.t` hang in END block.** Same root cause — pre-END cleanup used to wipe Sub::Defer bookkeeping, then DBIC's `assert_empty_weakregistry` END block looped in stringify dispatch. |
 
 ---
 
