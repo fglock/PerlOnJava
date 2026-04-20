@@ -848,6 +848,102 @@ holder in the full test. The instrumentation added here
 (`JPERL_REGISTER_STACKS=1` + enhanced `jperl_trace_to` parent dump)
 will help.
 
+### Phase E2 follow-up investigation (2026-04-20)
+
+After further reverse-trace with `jperl_trace_to`'s container-holder
+diagnostic, the true leak path on the real `t/52leaks.t` is:
+
+```
+MortalList.deferredCaptures (strong Java ref, ArrayList)
+  -> container scalar "rev" (captureCount=3, scopeExited=true, rcO=true)
+  -> RuntimeHash = $base_collection
+  -> elements["rerefrozen"] = direct-holder scalar (captureCount=0, rcO=true, isContainerElement=true)
+  -> RuntimeHash = the leaked rerefrozen hash
+```
+
+The container scalar has `captureCount=3` because 3 over-capturing
+closures defined inside the same block reference it via
+`deferredCaptures`. After Perl-level scope exit, these closures
+aren't yet released, so the container can't be cleaned up.
+
+### Attempts explored but reverted
+
+Several surgical walker/filter combinations were tried:
+
+1. **Walker `!sc.refCountOwned` filter** (shipped briefly as
+   `09b438101`, **reverted** in `55b34eacd`): skipped orphaned
+   registry entries as walker seeds. Closed the "basic random_results"
+   path on minimal repros. But broke `t/60core.t`: the filter
+   classifies some legitimate live-lexical scalars as orphaned,
+   causing the walker to consider DBIC Schema/ResultSource back-refs
+   unreachable and prematurely clearing them (detached result source
+   errors).
+
+2. **Walker `scopeExited` filter**: skip scalars whose scope has
+   exited (over-captured via closures). Same problem as (1) — also
+   breaks DBIC's internal schema chains.
+
+3. **`isContainerElement` flag + walker skip**: mark hash/array
+   element scalars during `incrementRefCountForContainerStore`,
+   skip them as walker seeds (rely on BFS traversal through
+   container instead). Breaks DBIC because some elements point
+   at blessed objects whose back-refs need walker visibility for
+   weak-ref preservation.
+
+4. **`addDeferredCapture` proactive unregister**: when a scalar
+   joins `deferredCaptures`, recursively unregister element scalars
+   inside its value. Breaks `t/60core.t` column_info tests: the
+   BFS descends too eagerly into containers that still need walker
+   visibility.
+
+5. **`MortalList.scopeExitCleanupHash` unregister element**: call
+   `ScalarRefRegistry.unregister(s)` when flipping rcO=false during
+   container scope-exit. Doesn't fire for `$base_collection` because
+   its refCount never drops to 0 while in `deferredCaptures`.
+
+### Root cause
+
+The interpreter backend (`BytecodeInterpreter`) **over-captures**
+closures — per design note in `RuntimeScalar.scopeExitCleanup`:
+
+> "The interpreter captures ALL visible lexicals for eval STRING
+> support, inflating captureCount on variables that closures don't
+> actually use."
+
+This over-capture is the fundamental reason `$base_collection`'s
+captureCount stays > 0 after scope exit even though no closure
+actually uses it. Once captureCount>0, it goes into
+`deferredCaptures` which JVM-keeps it (and therefore its elements)
+alive until END time. `assert_empty_weakregistry` runs BEFORE END,
+so the weak refs are still defined.
+
+### Open work
+
+Fixing this robustly requires one of:
+
+a) **Narrow interpreter over-capture**: change the compiler to only
+   register lexicals that are actually referenced by closure bodies,
+   not all visible ones. This is the correct fix but touches many
+   compiler paths and needs eval-STRING compatibility validation.
+
+b) **Smarter `processReadyDeferredCaptures`**: when called from
+   a broad scope-exit path AND all closures of a deferred scalar
+   have been stored only in stashes (not in lexicals), forcibly
+   process it. Requires tracking closure-lineage, which is complex.
+
+c) **Accept the opt-in**: keep the DBIC `LeakTracer.pm` patch as
+   the documented workaround. This is the current status — the
+   patched test passes, the unpatched test has 1 known fail.
+
+### Current state
+
+- 52leaks.t unpatched: **11/12** (1 real fail, rerefrozen — down
+  from 9 at session start)
+- 52leaks.t patched: **12/12** preserved
+- Sandbox 213/213, full unit suite PASS
+- All other investigated DBIC tests pass
+
+
 
 
 
