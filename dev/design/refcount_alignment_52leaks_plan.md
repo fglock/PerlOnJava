@@ -1084,6 +1084,97 @@ With narrowed capture:
   `ScalarRefRegistry` + walker is still the correct mechanism for
   cases that DO involve weakened references held by user lexicals.
 
+## Phase F — RESULT (2026-04-20, commit `ad7d32972`)
+
+**Status:** Shipped. "basic rerefrozen" leak **fixed**.
+
+### What shipped
+
+Three call sites in `BytecodeCompiler` now respect
+`VariableCollectorVisitor.hasEvalString()`:
+
+1. `detectClosureVariables(Node ast, EmitterContext ctx)` — top-level
+   compile entry. Filters `outerVars` by AST-referenced names.
+2. `visitNamedSubroutine(SubroutineNode node)` — filters
+   `closureVarsByReg` via new helper `collectVisiblePerlVariablesNarrowed`.
+3. `visitAnonymousSubroutine(SubroutineNode node)` — same helper.
+
+New helper `collectVisiblePerlVariablesNarrowed(Node body)`:
+- Collects all visible variables (unchanged behavior).
+- Runs `VariableCollectorVisitor` over the body.
+- If `hasEvalString()` returns true, returns the full set
+  (backward-compatible for eval STRING semantics).
+- Otherwise, filters down to only `used` variable names.
+
+### Impact on t/52leaks.t (unpatched)
+
+| State | Before Phase F | After Phase F |
+|---|---|---|
+| Test emits plan line? | **No** (dies mid-run) | **Yes** (`1..10`) |
+| Tests completed | 12 + die | 10 + clean exit |
+| Real fails | 1 (`basic rerefrozen`) | 1 (`basic result_source_handle`) |
+| TODO fails | 2 | 0 |
+
+Key observations:
+- `basic rerefrozen` — **GONE**. Root cause closed at source.
+- `basic Artist=HASH(...)` (previously `not ok 11`, TODO) —
+  now cleanly freed, no longer reported.
+- `basic Self-referential RS conditions` (TODO `not ok 9`) —
+  now passes (was actually a passing TODO, so its removal is
+  expected from leak closure).
+- `basic result_source_handle` — **newly visible** failure.
+  This leak was always present but hidden by the test dying at
+  `rerefrozen` (Data::Dumper cannot serialize detached Schema).
+  assert_empty_weakregistry sorts leaks by display_name; with
+  rerefrozen gone, the next leak in sort order is reported.
+
+### Regression validation
+
+- Sandbox (`dev/sandbox/destroy_weaken/`): **213/213** ✅
+- Full unit suite (`make` → testUnitParallel): **PASS** ✅
+- DBIC key tests (all pass):
+  - `t/storage/txn_scope_guard.t`: 18/18
+  - `t/100populate.t`: 108/108
+  - `t/inflate/core.t`: 32/32
+  - `t/96_is_deteministic_value.t`: 8/8
+  - `t/cdbi/68-inflate_has_a.t`: 6/6
+  - `t/multi_create/standard.t`: 92/92
+  - `t/relationship/custom.t`: 57/57
+  - `t/60core.t`: 108+ ok (hangs later in environment-specific
+    slow run; no fails in completed tests)
+
+### Remaining work
+
+- **`basic result_source_handle` leak**: trace analysis shows 6
+  direct holders of the DBIx::Class::ResultSourceHandle object
+  (1 with `rcO=true`, 5 with `rcO=false`). This is a pre-existing
+  leak in the DBIC `ResultSourceHandle` lifecycle — a different
+  root cause than over-capture. Investigation needs to trace why
+  multiple hash/array elements hold the same handle ref after
+  scope exit. Likely requires Phase G or a DBIC-specific fix.
+
+### Key code changes
+
+```
+BytecodeCompiler.java:
+  +  collectVisiblePerlVariablesNarrowed(Node body)
+  +  Filters collectVisiblePerlVariables() by VariableCollectorVisitor
+     results unless hasEvalString() is true.
+
+  detectClosureVariables:
+  +  Run VariableCollectorVisitor on `ast` at entry.
+  +  Gate by hasEvalString(); skip narrowing if present.
+  +  In the capture loop, skip variables not in usedVars.
+
+  visitNamedSubroutine:
+  -  TreeMap<> closureVarsByReg = collectVisiblePerlVariables();
+  +  TreeMap<> closureVarsByReg = collectVisiblePerlVariablesNarrowed(node.block);
+
+  visitAnonymousSubroutine:
+  -  TreeMap<> closureVarsByReg = collectVisiblePerlVariables();
+  +  TreeMap<> closureVarsByReg = collectVisiblePerlVariablesNarrowed(node.block);
+```
+
 
 
 
