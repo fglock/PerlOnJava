@@ -129,8 +129,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
@@ -306,8 +306,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using provided AST");
@@ -600,8 +600,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         // Tokenize
