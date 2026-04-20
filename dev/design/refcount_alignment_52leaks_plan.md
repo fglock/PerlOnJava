@@ -7,28 +7,31 @@
 
 ---
 
-## Current state (2026-04-20, Phase H H2+H3 complete)
+## Current state (2026-04-20, Phase H H2+H3+H4 complete)
 
-`./jcpan -t DBIx::Class` (parallel, 312 test files):
-- **261 pass, 49 skipped, 2 with issues**
-- Previously hanging tests (60core.t, 08pager.t) **now pass** ✅
+`./jcpan -t DBIx::Class` (parallel, 314 test files, 13813 subtests):
+- **1 file fails** (`t/52leaks.t`), **11/13813 subtests fail** (99.92% pass rate)
+- Previously hanging/failing files (60core.t, 08pager.t, storage/error.t,
+  zzzzzzz_perl_perf_bug.t) **now all pass** ✅
+- Bonus TODO passes preserved: `generic_subq.t` 9,11,13,15,17 and
+  `txn_scope_guard.t` 13,15,17 (RT#82942 Data::Entangled)
 
 Standalone individual tests:
 - `t/60core.t` 125/125 in 6s ✅ (was HANG at test 108)
 - `t/cdbi/sweet/08pager.t` 9/9 in 3.7s ✅ (was HANG in END block)
+- `t/storage/error.t` 49/49 ✅ (was test 49 failing)
 - `t/storage/txn_scope_guard.t` 18/18 ✅
 - `t/100populate.t` 108/108 ✅
 - Sandbox `dev/sandbox/destroy_weaken/` 213/213 ✅
 - Full unit suite (`make`) PASS ✅
-- `t/52leaks.t` 9 pass / 11 fail (pre-existing 10 DBIC-leak failures
-  were already present before Phase H; Phase H surfaces +1 additional
-  ARRAY leak as a trade-off for fixing the hangs).
+- `t/52leaks.t` 9 pass / 11 fail (the 10 pre-existing DBIC-leak failures
+  were present before Phase H; Phase H surfaces +1 ARRAY leak as a
+  trade-off for fixing the hangs).
 
-Remaining issues (Phase H continuation):
-- `t/52leaks.t`: 10 pre-existing DBIC Schema/Source leaks + 1 new ARRAY
-- `t/storage/error.t` test 49: Schema DESTROY cascade (H4 — unchanged)
-- `t/zzzzzzz_perl_perf_bug.t`: slow benchmark test (~60s+) — unclear
-  if still hangs or just slow; no trampoline loop observed.
+Remaining issues:
+- `t/52leaks.t`: 10 pre-existing DBIC Schema/Source/Row leaks that
+  predate Phase H + 1 new ARRAY leak. These require deeper
+  walker-capture analysis to clean up without re-introducing hangs.
 
 ---
 
@@ -80,6 +83,7 @@ referent became unreachable.
 | **Phase G** | `e8cec9a76` | `Storable.releaseApplyArgs(RuntimeArray)` helper. Called after each of 5 `RuntimeCode.apply(method, args, ...)` sites in `Storable.java` (dclone freeze/thaw, freeze, thaw, YAML thaw). | **Fixed `basic result_source_handle` leak → 52leaks.t unpatched 10/10 standalone.** |
 | **Phase H (H2)** | `2e5b853be` | `ReachabilityWalker.sweepWeakRefs`: in QUIET auto-sweep, skip clearing weak refs to unblessed non-CODE containers (ARRAY/HASH). | **Fixed `t/60core.t` hang at test 108 (multicreate via Sub::Defer accessors).** Root cause: Sub::Defer's `$deferred_info` ARRAY is reachable only through closure captures (`walkCodeCaptures=false`); clearing its weak ref in `%DEFERRED` wipes the dispatch table and `goto &$undeferred` loops forever. |
 | **Phase H (H3)** | `6501ddb94` | `WeakRefRegistry.clearAllBlessedWeakRefs`: skip unblessed referents (blessId==0). | **Fixed `t/cdbi/sweet/08pager.t` hang in END block.** Same root cause — pre-END cleanup used to wipe Sub::Defer bookkeeping, then DBIC's `assert_empty_weakregistry` END block looped in stringify dispatch. |
+| **Phase H (H4)** | `58427ab16` | `RuntimeScalar.undefine`: extend `undefOnBlessedWithDestroy` trigger to also fire when `--refCount` reaches 0 and DESTROY runs (self-rescue path). | **Fixed `t/storage/error.t` test 49 "callback works after $schema is gone".** When user `undef $schema` triggers DESTROY → self-save → rescued, the post-DESTROY walker sweep now drains rescuedObjects and clears weak refs in the HandleError closure so the subsequent DBI error falls through to the "unhandled by DBIC" path. Adds `JPERL_PHASE_D_DBG=1` diagnostic. |
 
 ---
 
