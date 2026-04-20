@@ -74,6 +74,10 @@ public class TieArray extends ArrayList<RuntimeScalar> {
      * Helper method to call methods on the tied object.
      */
     private static RuntimeList tieCall(RuntimeArray array, String method, RuntimeBase... args) {
+        return tieCall(array, method, RuntimeContextType.SCALAR, args);
+    }
+
+    private static RuntimeList tieCall(RuntimeArray array, String method, int ctx, RuntimeBase... args) {
         TieArray tieArray = (TieArray) array.elements;
         RuntimeScalar self = tieArray.getSelf();
         String className = tieArray.getTiedPackage();
@@ -84,7 +88,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
                 new RuntimeScalar(method),
                 null,
                 new RuntimeArray(args),
-                RuntimeContextType.SCALAR
+                ctx
         );
     }
 
@@ -166,9 +170,15 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     /**
      * Pushes elements onto the end of a tied array (delegates to PUSH).
+     *
+     * <p>In Perl, the return value of PUSH is ignored by av.c; the new array
+     * size is computed via FETCHSIZE. We follow the same convention so that
+     * tie classes (like Tie::File) whose PUSH returns nothing still produce
+     * the expected new length.
      */
     public static RuntimeScalar tiedPush(RuntimeArray array, RuntimeBase elements) {
-        return tieCall(array, "PUSH", elements).getFirst();
+        tieCall(array, "PUSH", elements);
+        return tiedFetchSize(array);
     }
 
     /**
@@ -187,16 +197,30 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     /**
      * Unshifts elements onto the beginning of a tied array (delegates to UNSHIFT).
+     *
+     * <p>As with PUSH, Perl's av.c ignores the method's return value and
+     * reports the new array size via FETCHSIZE.
      */
     public static RuntimeScalar tiedUnshift(RuntimeArray array, RuntimeBase elements) {
-        return tieCall(array, "UNSHIFT", elements).getFirst();
+        tieCall(array, "UNSHIFT", elements);
+        return tiedFetchSize(array);
     }
 
     /**
      * Performs a splice operation on a tied array (delegates to SPLICE).
+     *
+     * @param ctx caller context - SPLICE is one of the few tie methods whose
+     *            behaviour differs between list and scalar context.
+     */
+    public static RuntimeList tiedSplice(RuntimeArray array, RuntimeList list, int ctx) {
+        return tieCall(array, "SPLICE", ctx, list).getList();
+    }
+
+    /**
+     * Backwards-compat overload assuming list context.
      */
     public static RuntimeList tiedSplice(RuntimeArray array, RuntimeList list) {
-        return tieCall(array, "SPLICE", list).getList();
+        return tiedSplice(array, list, RuntimeContextType.LIST);
     }
 
     /**
@@ -223,6 +247,23 @@ public class TieArray extends ArrayList<RuntimeScalar> {
 
     public String getTiedPackage() {
         return tiedPackage;
+    }
+
+    /**
+     * Returns true when the tied package opts out of negative-index
+     * normalization by setting <code>$Package::NEGATIVE_INDICES</code> to a
+     * true value. In that case the Perl core passes negative subscripts to
+     * FETCH/STORE/EXISTS/DELETE unchanged; the handler is responsible for
+     * translating them itself (see perltie).
+     */
+    public static boolean negativeIndicesAllowed(RuntimeArray array) {
+        if (array.type != RuntimeArray.TIED_ARRAY) return false;
+        TieArray tieArray = (TieArray) array.elements;
+        String pkg = tieArray.getTiedPackage();
+        if (pkg == null) return false;
+        String key = pkg + "::NEGATIVE_INDICES";
+        if (!GlobalVariable.existsGlobalVariable(key)) return false;
+        return GlobalVariable.getGlobalVariable(key).getBoolean();
     }
 
     public int size() {

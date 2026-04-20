@@ -413,6 +413,15 @@ public class Operator {
      * @return a RuntimeList containing the elements that were removed
      */
     public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list) {
+        return splice(runtimeArray, list, RuntimeContextType.LIST);
+    }
+
+    /**
+     * Context-aware splice. Context only matters for tied arrays, where the
+     * user-defined SPLICE method's return value differs between scalar and
+     * list context.
+     */
+    public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list, int ctx) {
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 RuntimeList removedElements = new RuntimeList();
@@ -480,9 +489,9 @@ public class Operator {
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield splice(runtimeArray, list); // Recursive call after vivification
+                yield splice(runtimeArray, list, ctx); // Recursive call after vivification
             }
-            case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
+            case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list, ctx);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
 

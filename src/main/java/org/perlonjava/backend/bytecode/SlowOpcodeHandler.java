@@ -697,11 +697,24 @@ public class SlowOpcodeHandler {
         RuntimeArray array = (RuntimeArray) registers[arrayReg];
         RuntimeList args = (RuntimeList) registers[argsReg];
 
-        RuntimeList result = Operator.splice(array, args);
+        // For tied arrays, the user's SPLICE method returns its own scalar value
+        // when called in scalar context (typically the last removed element,
+        // already unwrapped by the handler). Pass context through so it sees the
+        // right wantarray, and trust its scalar return directly rather than
+        // taking "last element" of a list that was built from a scalar result.
+        boolean isTied = array.type == RuntimeArray.TIED_ARRAY;
 
-        // In scalar context, return last element removed (Perl semantics)
+        RuntimeList result = Operator.splice(array, args, context);
+
+        // In scalar context, return last element removed (Perl semantics).
+        // For tied arrays in scalar context, the handler's scalar return
+        // (wrapped as a one-element RuntimeList) is already the caller's value.
         if (context == RuntimeContextType.SCALAR) {
-            if (result.elements.isEmpty()) {
+            if (isTied) {
+                registers[rd] = result.elements.isEmpty()
+                        ? new RuntimeScalar()
+                        : result.elements.get(0).scalar();
+            } else if (result.elements.isEmpty()) {
                 registers[rd] = new RuntimeScalar();  // undef
             } else {
                 registers[rd] = result.elements.get(result.elements.size() - 1);

@@ -261,14 +261,10 @@ public class Readline {
             }
         }
 
-        // Increment the line number counter if a line was read and contains newlines
+        // Increment the line number counter once per record read.
+        // In Perl, $. counts records (not newlines) regardless of the value of $/.
         if (!line.isEmpty()) {
-            String lineStr = line.toString();
-            for (int i = 0; i < lineStr.length(); i++) {
-                if (lineStr.charAt(i) == '\n') {
-                    runtimeIO.currentLineNumber++;
-                }
-            }
+            runtimeIO.currentLineNumber++;
         }
 
         // Return undef if we've reached EOF and no characters were read
