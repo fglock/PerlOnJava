@@ -166,6 +166,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("LOAD_UNDEF r").append(rd).append("\n");
                         break;
+                    case Opcodes.LOAD_UNDEF_READONLY:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("LOAD_UNDEF_READONLY r").append(rd).append("\n");
+                        break;
                     case Opcodes.MY_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];

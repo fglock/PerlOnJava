@@ -2270,6 +2270,15 @@ public class Opcodes {
      */
     public static final short SOCKETPAIR = 472;
 
+    /**
+     * Load the read-only scalarUndef singleton into a register. Used for the
+     * `undef` placeholder in a list assignment like my (undef, $x) = ...,
+     * where the LHS list-assign code path needs to distinguish a placeholder
+     * (consumes one RHS value without binding) from a regular lvalue. Format:
+     * LOAD_UNDEF_READONLY rd
+     */
+    public static final short LOAD_UNDEF_READONLY = 473;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
