@@ -72,6 +72,39 @@ public class ModuleOperators {
     }
 
     /**
+     * JVM-backend wrapper for `do FILE` that accepts the compile-time
+     * current package. We temporarily override the runtime package tracker
+     * so the loaded file inherits the caller's namespace (Perl 5 semantics).
+     */
+    public static RuntimeBase doFileInPackage(RuntimeScalar runtimeScalar, int ctx, String callerPackage) {
+        String savedPackage = InterpreterState.currentPackage.get().toString();
+        try {
+            if (callerPackage != null && !callerPackage.isEmpty()) {
+                InterpreterState.currentPackage.get().set(callerPackage);
+            }
+            return doFile(runtimeScalar, true, false, ctx);
+        } finally {
+            InterpreterState.currentPackage.get().set(savedPackage);
+        }
+    }
+
+    /**
+     * JVM-backend wrapper for `require FILE` that accepts the compile-time
+     * current package (see doFileInPackage above).
+     */
+    public static RuntimeScalar requireInPackage(RuntimeScalar runtimeScalar, String callerPackage) {
+        String savedPackage = InterpreterState.currentPackage.get().toString();
+        try {
+            if (callerPackage != null && !callerPackage.isEmpty()) {
+                InterpreterState.currentPackage.get().set(callerPackage);
+            }
+            return require(runtimeScalar);
+        } finally {
+            InterpreterState.currentPackage.get().set(savedPackage);
+        }
+    }
+
+    /**
      * Internal implementation of `do` and `require` operators.
      *
      * <p>This method handles the complex dispatch logic for different argument types:
