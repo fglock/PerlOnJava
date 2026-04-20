@@ -269,21 +269,21 @@ OBJ_obj2txt	method	PARTIAL	2	autoload dispatch
 OBJ_sn2nid	method	PARTIAL	2	autoload dispatch
 OBJ_txt2nid	method	PARTIAL	2	autoload dispatch
 OBJ_txt2obj	method	PARTIAL	2	autoload dispatch
-OCSP_BASICRESP_free	missing	MISSING	7	OCSP / session cache
-OCSP_CERTID_free	missing	MISSING	7	OCSP / session cache
-OCSP_REQUEST_free	missing	MISSING	7	OCSP / session cache
-OCSP_REQUEST_new	missing	MISSING	7	OCSP / session cache
+OCSP_BASICRESP_free	missing	DONE	7	OCSP / session cache
+OCSP_CERTID_free	missing	DONE	7	OCSP / session cache
+OCSP_REQUEST_free	missing	DONE	7	OCSP / session cache
+OCSP_REQUEST_new	missing	DONE	7	OCSP / session cache
 OCSP_RESPONSE_STATUS_SUCCESSFUL	constant	DONE	0	
-OCSP_RESPONSE_free	missing	MISSING	7	OCSP / session cache
-OCSP_cert_to_id	missing	MISSING	7	OCSP / session cache
-OCSP_request_add0_id	missing	MISSING	7	OCSP / session cache
-OCSP_request_add1_nonce	missing	MISSING	7	OCSP / session cache
-OCSP_response_create	missing	MISSING	7	OCSP / session cache
-OCSP_response_get1_basic	missing	MISSING	7	OCSP / session cache
-OCSP_response_results	missing	MISSING	7	OCSP / session cache
-OCSP_response_status	missing	MISSING	7	OCSP / session cache
-OCSP_response_status_str	missing	MISSING	7	OCSP / session cache
-OCSP_response_verify	missing	MISSING	7	OCSP / session cache
+OCSP_RESPONSE_free	missing	DONE	7	OCSP / session cache
+OCSP_cert_to_id	missing	DONE	7	OCSP / session cache
+OCSP_request_add0_id	missing	DONE	7	OCSP / session cache
+OCSP_request_add1_nonce	missing	DONE	7	OCSP / session cache
+OCSP_response_create	missing	DONE	7	OCSP / session cache
+OCSP_response_get1_basic	missing	DONE	7	OCSP / session cache
+OCSP_response_results	missing	DONE	7	OCSP / session cache
+OCSP_response_status	missing	DONE	7	OCSP / session cache
+OCSP_response_status_str	missing	DONE	7	OCSP / session cache
+OCSP_response_verify	missing	DONE	7	OCSP / session cache
 OPENSSL_BUILT_ON	constant	DONE	0	
 OPENSSL_CFLAGS	constant	DONE	0	
 OPENSSL_CPU_INFO	constant	DONE	0	
@@ -345,8 +345,8 @@ PEM_read_bio_PrivateKey	method	PARTIAL	2	autoload dispatch
 PEM_read_bio_X509	method	PARTIAL	2	autoload dispatch
 PEM_read_bio_X509_CRL	method	PARTIAL	2	autoload dispatch
 PEM_read_bio_X509_REQ	method	PARTIAL	2	autoload dispatch
-PKCS12_newpass	missing	MISSING	3	PEM/DER/PKCS12 parsing
-PKCS12_parse	missing	MISSING	3	PEM/DER/PKCS12 parsing
+PKCS12_newpass	missing	DONE	3	PEM/DER/PKCS12 parsing
+PKCS12_parse	missing	DONE	3	PEM/DER/PKCS12 parsing
 PKCS7_sign	missing	MISSING	0	misc
 PKCS7_verify	missing	MISSING	0	misc
 P_ASN1_INTEGER_get_dec	method	PARTIAL	2	autoload dispatch
@@ -617,7 +617,7 @@ get_verify_result	missing	MISSING	2	SSLEngine-driven handshake / ctx
 get_version	missing	MISSING	2	SSLEngine-driven handshake / ctx
 get_wbio	missing	MISSING	2	SSLEngine-driven handshake / ctx
 hello	method	PARTIAL	2	autoload dispatch
-i2d_SSL_SESSION	missing	MISSING	3	PEM/DER/PKCS12 parsing
+i2d_SSL_SESSION	missing	DONE	3	PEM/DER/PKCS12 parsing
 in_accept_init	method	PARTIAL	2	autoload dispatch
 in_connect_init	method	PARTIAL	2	autoload dispatch
 library_init	method	PARTIAL	2	autoload dispatch

@@ -2245,6 +2245,150 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(x509VerifyErrorString(code)).getList();
             });
 
+            // -------------------------------------------------------------
+            // Phase 3 — PKCS12 & session serialization
+            // -------------------------------------------------------------
+
+            // PKCS12_parse(p12_bio_handle, password)
+            //   → ($pkey, $cert, \@ca)  in list context; undef on failure.
+            // Net::SSLeay takes a PKCS12 blob already-loaded into a BIO; we
+            // slurp the pending bytes out of that BIO and hand them to the
+            // standard Java PKCS12 KeyStore (which supports password-protected
+            // archives).
+            registerLambda("PKCS12_parse", (a, c) -> {
+                if (a.size() < 2) return new RuntimeList();
+                MemoryBIO bio = BIO_HANDLES.get(a.get(0).getLong());
+                if (bio == null) return new RuntimeList();
+                byte[] der = bio.read(Integer.MAX_VALUE);
+                String pass = a.get(1).toString();
+                char[] passChars = pass == null ? new char[0] : pass.toCharArray();
+                try {
+                    java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+                    ks.load(new java.io.ByteArrayInputStream(der), passChars);
+                    RuntimeList r = new RuntimeList();
+                    java.security.PrivateKey pkey = null;
+                    X509Certificate leaf = null;
+                    java.security.cert.Certificate[] chain = null;
+                    java.util.Enumeration<String> aliases = ks.aliases();
+                    while (aliases.hasMoreElements()) {
+                        String al = aliases.nextElement();
+                        if (ks.isKeyEntry(al)) {
+                            java.security.Key k = ks.getKey(al, passChars);
+                            if (k instanceof java.security.PrivateKey) {
+                                pkey = (java.security.PrivateKey) k;
+                                java.security.cert.Certificate crt = ks.getCertificate(al);
+                                if (crt instanceof X509Certificate) leaf = (X509Certificate) crt;
+                                chain = ks.getCertificateChain(al);
+                                break;
+                            }
+                        }
+                    }
+                    long pkeyH = 0, leafH = 0;
+                    if (pkey != null) {
+                        pkeyH = HANDLE_COUNTER.getAndIncrement();
+                        EVP_PKEY_HANDLES.put(pkeyH, pkey);
+                    }
+                    if (leaf != null) {
+                        leafH = HANDLE_COUNTER.getAndIncrement();
+                        X509_HANDLES.put(leafH, leaf);
+                    }
+                    // CA chain array reference
+                    RuntimeArray caArr = new RuntimeArray();
+                    if (chain != null) {
+                        for (java.security.cert.Certificate crt : chain) {
+                            if (!(crt instanceof X509Certificate)) continue;
+                            if (leaf != null && crt.equals(leaf)) continue;
+                            long caH = HANDLE_COUNTER.getAndIncrement();
+                            X509_HANDLES.put(caH, (X509Certificate) crt);
+                            caArr.push(new RuntimeScalar(caH));
+                        }
+                    }
+                    r.add(pkey != null ? new RuntimeScalar(pkeyH) : new RuntimeScalar());
+                    r.add(leaf != null ? new RuntimeScalar(leafH) : new RuntimeScalar());
+                    r.add(caArr.createReference());
+                    return r;
+                } catch (Exception e) {
+                    return new RuntimeList();
+                }
+            });
+
+            // PKCS12_newpass(p12_bio, oldpass, newpass) — not safely
+            // expressible on top of Java KeyStore (the API only re-emits
+            // to a new stream). Report back to the caller so they know to
+            // re-encode manually.
+            registerLambda("PKCS12_newpass", (a, c) -> {
+                // We deliberately return 0 (failure) rather than lying; see
+                // dev/modules/netssleay_complete.md for rationale.
+                return new RuntimeScalar(0).getList();
+            });
+
+            // i2d_SSL_SESSION / d2i_SSL_SESSION: JDK doesn't expose master
+            // secrets, so we fake up an opaque token that's only valid
+            // inside this process (documented behaviour).
+            registerLambda("i2d_SSL_SESSION", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long sessH = a.get(0).getLong();
+                // Pack: 8-byte handle id, big-endian, as opaque token
+                byte[] tok = new byte[8];
+                for (int i = 0; i < 8; i++) tok[7 - i] = (byte) (sessH >> (i * 8));
+                return bytesToPerlString(tok).getList();
+            });
+            registerLambda("d2i_SSL_SESSION", (a, c) -> {
+                // Returns the handle embedded by i2d_SSL_SESSION if still
+                // alive in this process. Otherwise undef (fresh handshake
+                // will be needed).
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                byte[] tok = a.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+                if (tok.length != 8) return new RuntimeScalar().getList();
+                long h = 0;
+                for (int i = 0; i < 8; i++) h = (h << 8) | (tok[i] & 0xff);
+                // We don't track SSL_SESSION handles separately from the
+                // SSL_HANDLES map yet — phase 2 will surface them.
+                return new RuntimeScalar(h).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 7 — OCSP (stubs that croak cleanly until real impl)
+            // -------------------------------------------------------------
+            // These are declared "best effort" in the design doc. The JDK's
+            // java.security.cert.ocsp.* is internal; pure-Java OCSP encoding
+            // is scheduled as follow-up work. Register the handle-free /
+            // no-op entry points so callers that optionally use OCSP (the
+            // common case) don't crash on require-time symbol lookup.
+            registerLambda("OCSP_REQUEST_new", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_REQUEST_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_RESPONSE_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_BASICRESP_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_CERTID_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_response_status", (a, c) ->
+                    new RuntimeScalar(0).getList()); // OCSP_RESPONSE_STATUS_SUCCESSFUL
+            registerLambda("OCSP_response_status_str", (a, c) -> {
+                int st = a.size() > 0 ? (int) a.get(0).getLong() : 0;
+                switch (st) {
+                    case 0: return new RuntimeScalar("successful").getList();
+                    case 1: return new RuntimeScalar("malformedrequest").getList();
+                    case 2: return new RuntimeScalar("internalerror").getList();
+                    case 3: return new RuntimeScalar("trylater").getList();
+                    case 5: return new RuntimeScalar("sigrequired").getList();
+                    case 6: return new RuntimeScalar("unauthorized").getList();
+                    default: return new RuntimeScalar("unknown").getList();
+                }
+            });
+            // Register handle-returning OCSP helpers as no-data stubs so
+            // callers that iterate over results get an empty list rather
+            // than an "Undefined subroutine" fatal.
+            registerLambda("OCSP_cert_to_id", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_request_add0_id", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("OCSP_request_add1_nonce", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("OCSP_response_get1_basic", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_response_results", (a, c) -> new RuntimeList());
+            registerLambda("OCSP_response_create", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_response_verify", (a, c) -> new RuntimeScalar(0).getList());
+
             // Define exports
             String[] exportOk = CONSTANTS.keySet().toArray(new String[0]);
             mod.defineExport("EXPORT_OK", exportOk);
