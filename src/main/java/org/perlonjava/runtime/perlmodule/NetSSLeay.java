@@ -1358,11 +1358,18 @@ public class NetSSLeay extends PerlModuleBase {
             // plumbed through the Java-side SSLEngine here — functions that
             // would drive bytes (set_bio, read, write, shutdown, handshake
             // state) are stubbed to return success/zero-like values.
+            //
+            // Grep for "// STUB (phase N)" to find every fake success and
+            // the phase of dev/modules/netssleay_complete.md that replaces it
+            // with a real implementation. Do NOT copy this pattern for new
+            // work — call registerNotImplemented(name, phase) instead.
             // -------------------------------------------------------------
 
             // Version-specific CTX constructors: we map them all to the
             // generic CTX_new path since the Java SSLContext choice is
             // handled by min/max proto version.
+            // STUB (phase 2): version constants are currently ignored — we
+            // don't pin the SSLContext protocol based on the factory choice.
             registerLambda("CTX_tlsv1_new", (a, c) -> {
                 RuntimeArray args = new RuntimeArray();
                 return new RuntimeList(CTX_new(args, c).getFirst());
@@ -1385,6 +1392,8 @@ public class NetSSLeay extends PerlModuleBase {
             });
 
             // CTX option/mode setters — bitmask OR, return previous value.
+            // STUB (phase 2): the options are stored on SslCtxState but
+            // are not forwarded to the underlying SSLContext/SSLEngine.
             registerLambda("CTX_set_options", (a, c) -> {
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
@@ -1394,6 +1403,7 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(st.options).getList();
             });
             registerLambda("CTX_set_read_ahead", (a, c) -> {
+                // STUB (phase 2): stored, not plumbed through to SSLEngine.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
                 if (st == null) return new RuntimeScalar(0).getList();
@@ -1401,25 +1411,30 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("CTX_set_tmp_dh", (a, c) -> {
-                // accepts (ctx, dh_handle); we don't support DH params, stub out.
+                // STUB (phase 2+3): DH parameter support needs a real
+                // PEM_read_bio_DHparams plus wiring into SSLParameters.
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("CTX_use_certificate_chain_file", (a, c) -> {
-                // (ctx, filename) — stub: return success if file exists & readable,
-                // else 0 to mimic the Net::SSLeay contract.
+                // STUB (phase 2+3): we only verify file readability; the
+                // cert is never loaded into the context's KeyManagerFactory.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 String file = a.get(1).toString();
                 java.nio.file.Path p = java.nio.file.Paths.get(file);
                 return new RuntimeScalar(java.nio.file.Files.isReadable(p) ? 1 : 0).getList();
             });
             registerLambda("CTX_load_verify_locations", (a, c) -> {
-                // (ctx, cafile, capath) — stub: success if either exists.
+                // STUB (phase 2): ignores cafile/capath; cert validation
+                // still falls back to the JVM default TrustManagerFactory.
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("CTX_set_default_verify_paths", (a, c) -> {
+                // STUB (phase 2): trust store is always the JVM default.
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("CTX_set_cipher_list", (a, c) -> {
+                // STUB (phase 2): stored on SslCtxState; not applied to
+                // SSLEngine.setEnabledCipherSuites yet.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
                 if (st == null) return new RuntimeScalar(0).getList();
@@ -1437,12 +1452,19 @@ public class NetSSLeay extends PerlModuleBase {
             });
 
             // BIO-backed DH params: we don't implement DH, so return a stub handle.
+            // STUB (phase 3): needs a real ASN.1 decoder for the
+            // `BEGIN DH PARAMETERS` PEM block and a javax.crypto.spec.
+            // DHParameterSpec on the returned handle.
             registerLambda("PEM_read_bio_DHparams", (a, c) -> {
                 return new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList();
             });
+            // STUB (phase 3): no DH resource to free yet.
             registerLambda("DH_free", (a, c) -> new RuntimeScalar().getList());
 
             // Per-SSL-handle setters — mostly store state.
+            // STUB (phase 2): the state stored here has no effect on an
+            // actual handshake because there is no SSLEngine bound to
+            // the SSL handle yet.
             registerLambda("set_accept_state", (a, c) -> {
                 if (a.size() < 1) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
@@ -1456,8 +1478,8 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar().getList();
             });
             registerLambda("set_bio", (a, c) -> {
-                // (ssl, read_bio, write_bio) — we don't drive BIO I/O yet;
-                // just remember the handles.
+                // STUB (phase 2): (ssl, read_bio, write_bio) — we don't drive
+                // BIO I/O yet; just remember the handles.
                 if (a.size() < 3) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
@@ -1466,8 +1488,10 @@ public class NetSSLeay extends PerlModuleBase {
                 }
                 return new RuntimeScalar().getList();
             });
+            // STUB (phase 2): info callback is stored but never fired.
             registerLambda("set_info_callback", (a, c) -> new RuntimeScalar().getList());
             registerLambda("set_mode", (a, c) -> {
+                // STUB (phase 2): stored, not applied to the SSLEngine.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st == null) return new RuntimeScalar(0).getList();
@@ -1475,6 +1499,7 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(st.mode).getList();
             });
             registerLambda("set_options", (a, c) -> {
+                // STUB (phase 2): stored, not applied to the SSLEngine.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st == null) return new RuntimeScalar(0).getList();
@@ -1482,12 +1507,15 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(st.options).getList();
             });
             registerLambda("set_tlsext_host_name", (a, c) -> {
+                // STUB (phase 2): SNI stored; not applied to SSLParameters.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) st.hostName = a.get(1).toString();
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("set_verify", (a, c) -> {
+                // STUB (phase 2): verify mode stored; the callback is never
+                // invoked because no real handshake occurs.
                 if (a.size() < 2) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
@@ -1497,33 +1525,35 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar().getList();
             });
             registerLambda("state", (a, c) -> {
+                // STUB (phase 2): always claims "OK" (1) regardless of
+                // actual handshake progress.
                 if (a.size() < 1) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 return new RuntimeScalar(st != null ? st.state : 0).getList();
             });
-            // Net::SSLeay::shutdown is different from Perl's shutdown: it drives
-            // the TLS close-notify. Without a real handshake, return 1
-            // (successful close) so AnyEvent::Handle can finalise.
+            // STUB (phase 2): Net::SSLeay::shutdown drives the TLS close-
+            // notify. Without a real handshake, return 1 (successful close)
+            // so AnyEvent::Handle can finalise.
             registerLambda("shutdown", (a, c) -> new RuntimeScalar(1).getList());
 
             // TLS data-plane stubs: without a real SSLEngine integration we
             // can't drive a handshake. These return "failure" values that
             // AnyEvent::Handle interprets as a real TLS error and propagates
             // via on_error rather than hanging on $cv->recv.
+            // STUB (phase 2): replaced entirely by SSLEngine-backed wrap/unwrap.
             registerLambda("read", (a, c) -> {
-                // undef → no data (in scalar context, defined=false)
-                return new RuntimeScalar().getList();
+                return new RuntimeScalar().getList();  // undef → no data
             });
             registerLambda("write", (a, c) -> {
-                // <= 0 → error; AnyEvent calls get_error to find out which.
-                return new RuntimeScalar(-1).getList();
+                return new RuntimeScalar(-1).getList();  // <= 0 → error
             });
             registerLambda("get_error", (a, c) -> {
-                // 5 = SSL_ERROR_SYSCALL — treated as a real error by AE::Handle.
-                return new RuntimeScalar(5).getList();
+                return new RuntimeScalar(5).getList();   // SSL_ERROR_SYSCALL
             });
 
-            // X509 stubs for callbacks — return 0 (no error).
+            // X509 stubs for the verify callback. STUB (phase 4): real
+            // implementations need to walk the cert chain built by the
+            // Java TrustManager.
             registerLambda("X509_STORE_set_flags", (a, c) -> new RuntimeScalar(1).getList());
             registerLambda("X509_STORE_CTX_get_current_cert", (a, c) ->
                     new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
@@ -1683,6 +1713,26 @@ public class NetSSLeay extends PerlModuleBase {
         code.subName = name;
         String fullName = NameNormalizer.normalizeVariableName(name, "Net::SSLeay");
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
+    }
+
+    /**
+     * Register a Net::SSLeay entry point that is not yet implemented.
+     * Calling it throws a Perl exception of the form:
+     *   Net::SSLeay::FOO is not implemented in PerlOnJava yet
+     *   (tracked in dev/modules/netssleay_complete.md, phase N)
+     * so CPAN code gets a clear, grep-able failure instead of a silent
+     * wrong answer. Use this in preference to returning a hardcoded
+     * success/failure unless we genuinely have implementation state to
+     * record on the handle.
+     */
+    private static void registerNotImplemented(String name, int phase) {
+        registerLambda(name, (a, c) -> {
+            throw new org.perlonjava.runtime.runtimetypes.PerlDieException(
+                    new RuntimeScalar("Net::SSLeay::" + name
+                            + " is not implemented in PerlOnJava yet"
+                            + " (tracked in dev/modules/netssleay_complete.md, phase "
+                            + phase + ")\n"));
+        });
     }
 
     // ---- Constant lookup (prevents AUTOLOAD infinite recursion) ----
