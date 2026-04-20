@@ -22,6 +22,20 @@ public class DynaLoader extends PerlModuleBase {
             dynaLoader.registerMethod("bootstrap", null);
             dynaLoader.registerMethod("boot_DynaLoader", null);
 
+            // PerlOnJava has no shared-library loading support. Some CPAN
+            // Makefile.PL files (e.g. Geo::IP's) probe for native C libraries
+            // via DynaLoader::dl_findfile/dl_load_file/dl_find_symbol to
+            // decide between XS and pure-Perl (PP) code paths. We register
+            // "not found" stubs so those probes succeed (returning empty/undef)
+            // and the modules fall through to their pure-Perl implementations.
+            dynaLoader.registerMethod("dl_findfile", "dl_empty", null);
+            dynaLoader.registerMethod("dl_load_file", "dl_empty", null);
+            dynaLoader.registerMethod("dl_find_symbol", "dl_empty", null);
+            dynaLoader.registerMethod("dl_find_symbol_anywhere", "dl_empty", null);
+            dynaLoader.registerMethod("dl_install_xsub", "dl_empty", null);
+            dynaLoader.registerMethod("dl_undef_symbols", "dl_empty", null);
+            dynaLoader.registerMethod("dl_error", "dl_error", null);
+
             // Set $DynaLoader::VERSION so CPAN dependency checking works
             GlobalVariable.getGlobalVariable("DynaLoader::VERSION").set("1.56");
         } catch (NoSuchMethodException e) {
@@ -51,5 +65,17 @@ public class DynaLoader extends PerlModuleBase {
 
     public static RuntimeList boot_DynaLoader(RuntimeArray args, int ctx) {
         return new RuntimeList();
+    }
+
+    /**
+     * No-op stub used for all DynaLoader dl_* probe functions. Returns an
+     * empty list (undef in scalar context). See initialize() for why.
+     */
+    public static RuntimeList dl_empty(RuntimeArray args, int ctx) {
+        return new RuntimeList();
+    }
+
+    public static RuntimeList dl_error(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("DynaLoader is not supported in PerlOnJava").getList();
     }
 }
