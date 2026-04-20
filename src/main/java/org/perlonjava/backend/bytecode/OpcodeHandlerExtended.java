@@ -141,6 +141,31 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        // Check for overloaded x= (falling back to x via autogeneration)
+        RuntimeBase dVal = registers[rd];
+        if (dVal instanceof RuntimeScalar dScalar) {
+            int blessId = org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId(dScalar);
+            if (blessId < 0) {
+                RuntimeScalar times = (RuntimeScalar) registers[rs];
+                // Try (x= first
+                RuntimeScalar ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentOverloadDirect(dScalar, times, blessId, 0, "(x=");
+                if (ovResult == null) {
+                    // Try autogenerate via (x
+                    ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                            .tryTwoArgumentOverloadDirect(dScalar, times, blessId, 0, "(x");
+                }
+                if (ovResult == null) {
+                    // Try nomethod (may throw if fallback=0)
+                    ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                            .tryTwoArgumentNomethod(dScalar, times, blessId, 0, "x=");
+                }
+                if (ovResult != null) {
+                    ((RuntimeScalar) registers[rd]).set(ovResult);
+                    return pc;
+                }
+            }
+        }
         RuntimeBase result = Operator.repeat(
                 registers[rd],
                 (RuntimeScalar) registers[rs],
