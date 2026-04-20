@@ -524,6 +524,213 @@ milestone.
 
 ---
 
+## Phase I — close the last 2 `t/52leaks.t` failures
+
+**Target: 0 failures in `./jcpan -t DBIx::Class`** (final pre-merge goal,
+before the optimization phase).
+
+### Baseline (2026-04-20 after H1 complete)
+
+```
+./jcpan -t DBIx::Class:
+  Files=314, Tests=13804, Failed 1/314 test programs, 2/13804 subtests failed
+
+t/52leaks.t:
+  not ok 9  - ARRAY(...) | basic random_results      (refcnt 1)
+  not ok 10 - DBICTest::Artist=HASH(...)             (refcnt 2)
+```
+
+All other `t/52leaks.t` subtests pass (9 ok).
+
+### I1 — unblessed ARRAY leak (`basic random_results`)
+
+#### Root cause
+
+Phase H2 introduced a trade-off: in quiet auto-sweep, weak refs to
+unblessed non-CODE containers (ARRAY/HASH) are NOT cleared, because
+Sub::Defer's `$deferred_info` ARRAY is reachable only through closure
+captures that our walker (`walkCodeCaptures=false`) can't see.
+
+The offending ARRAY here is `$base_collection->{random_results}`.
+After the test's enclosing block exits:
+- `$base_collection` HASH's strong ref → 0 → auto-sweep releases it.
+- Its `random_results` key's value was the ARRAY.
+- The ARRAY's only strong ref (the hash element) also goes to 0.
+
+But because the ARRAY is unblessed, quiet auto-sweep skips its weak
+ref. DBIC's leak tracer (`populate_weakregistry`) weakened a
+`$weak_registry->{$addr}{weakref}` scalar to the ARRAY, which
+therefore stays defined.
+
+#### Proposed fix — two-phase walker with stash-code capture walking
+
+Instead of a global "skip unblessed" rule, teach the walker to
+distinguish **captures that actually represent live data paths**
+from **captures that are spurious**.
+
+**Two-phase walk** (already prototyped and rejected earlier because
+it pinned Schema in 52leaks — but that attempt used a flag-based
+swap, not a narrowed set):
+
+1. **Phase 1**: Walk starting from `globalCodeRefs` only, marking all
+   reachable including closure captures. The closures found this way
+   are stash-installed (Sub::Defer deferred subs, Moo accessors).
+2. **Phase 2**: Walk starting from the remaining roots (globals,
+   rescuedObjects, lexical seeds) WITHOUT walking code captures.
+   Anon closures captured by instance hashes remain bounded.
+
+**Why this is safe now but wasn't earlier**:
+- With Phase H1's rescuedObjects-drain-in-quiet, stash-installed
+  accessors that capture class-level state no longer keep rescued
+  Schemas alive indirectly.
+- With Phase F's capture-narrowing in BytecodeCompiler, stash
+  accessors only capture lexicals they actually reference, so
+  Schema instances aren't swept in as spurious captures.
+
+**Alternative (narrower, if two-phase still regresses 52leaks)**:
+Walk captures only for code refs whose `subName` is non-null —
+i.e., NAMED subs. Pure anon closures (captured by hashes) remain
+opaque. Moo/Sub::Defer deferred subs have `subName`, so their
+captures are walked.
+
+#### Implementation steps for I1
+
+1. Revert the H2 skip-unblessed-ARRAY-in-quiet rule in
+   `ReachabilityWalker.sweepWeakRefs`.
+2. Modify `ReachabilityWalker.walk()` to perform two-phase BFS:
+   - Seed globalCodeRefs → BFS with capture-walking (phase 1).
+   - Seed other roots → BFS without capture-walking (phase 2).
+3. Keep `walkCodeCaptures` field but default is set per-phase.
+4. Test:
+   - `t/60core.t` must still pass (Sub::Defer accessors work)
+   - `t/cdbi/sweet/08pager.t` must still pass (END block completes)
+   - `t/52leaks.t` test 9 passes (ARRAY cleared)
+   - `t/52leaks.t` tests 10+ don't regress
+5. If 52leaks tests 10+ regress (Schema pinning returns): narrow
+   phase 1 to **only** code refs where `code.subName != null` AND
+   `code.packageName` is in a known-safe-set (Sub::Defer, or code
+   whose captures contain no blessed RuntimeHash/RuntimeBase
+   references — checkable at capture-assignment time).
+
+### I2 — DBICTest::Artist leak (refcnt 2)
+
+#### Observation
+
+```
+DBICTest::Artist=HASH(0x...) (refcnt 2) => bless( {
+    _column_data => 'HASH(0x...)',
+    _in_storage => 1,
+    _inflated_column => undef,
+    _result_source => 'DBIx::Class::ResultSource::Table=HASH(0x...)',
+    related_resultsets => 'HASH(0x...)',
+}, 'DBICTest::Artist' )
+```
+
+The Artist has `refcnt=2` — two Java-side strong refs. One is the
+DBIC leak tracer's weak registry entry (weak, doesn't count). So
+there are 2 strong refs somewhere.
+
+#### Investigation plan
+
+1. **Get a reachability path** to the leaked Artist using the
+   existing `Internals::jperl_trace_to(ref)` diagnostic. Insert at
+   the start of 52leaks.t's `assert_empty_weakregistry` END block
+   loop a debug call:
+   ```perl
+   for my $addr (keys %$weak_registry) {
+       my $r = $weak_registry->{$addr}{weakref};
+       next unless defined $r;
+       my @path = Internals::jperl_trace_to($r);
+       diag "LEAK: $addr PATH:\n", (join "\n  ", @path);
+   }
+   ```
+2. With `JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`, examine what
+   holds the Artist.
+3. Likely candidates:
+   - **`related_resultsets` HASH cycle**: Artist → resultset →
+     source → cached Artist in source's `_resultset` handle.
+   - **`_result_source` back-edge**: Source → Schema →
+     source_registrations → Source → Artist-producing resultset.
+   - **DBIC class-level cache**: something in `DBICTest::Artist::*`
+     package hashes.
+4. If the path runs through a Source's `_resultset` or similar
+   **class-level cache**, audit DBIC to see if there's a known
+   cache-invalidation point we're missing.
+
+#### Proposed fixes (decision after investigation)
+
+**Option A — walker preserves source_registrations as weak root**.
+If Source is in rescuedObjects (via Schema self-save) and holds
+Artist via `_resultset->result_source`, draining the rescue may
+not cascade into Artist. Make the walker treat Source's `_resultset`
+back-edge as weak for reachability purposes.
+
+**Option B — explicit jperl_gc before assert_empty_weakregistry**.
+Extend `WeakRefRegistry.clearAllBlessedWeakRefs` to walk **all**
+DBIC-like back-edges aggressively. But the assert runs during main
+script execution (line 526), so this doesn't fire. Instead, add an
+auto-sweep trigger when a significantly large lexical hash goes out
+of scope (heuristic).
+
+**Option C — do nothing if this Artist turns out to be held via a
+closure the walker can't see**. If the leak tracer's own
+`CV_TRACING` / `refs_to_scan` machinery captures the Artist in a
+way that creates a real strong ref we can't track, this is a DBIC
+test-harness artifact. Document as known limitation.
+
+### Implementation order
+
+1. **I1 first** (two-phase walker) — addresses test 9 and reveals
+   whether test 10 is independent.
+2. **I2 investigation** — after I1 lands, re-run 52leaks.t. If
+   test 10 still fails, add the trace-to diagnostic and decide
+   Option A/B/C.
+
+### Success criteria
+
+- `t/52leaks.t`: **11/11** pass (skip 20 → 11 from fewer registry
+  entries, all defined-weak tests pass).
+- `./jcpan -t DBIx::Class`: **0 failures**, 0 subtest failures.
+- `t/60core.t` 125/125, `t/cdbi/sweet/08pager.t` 9/9,
+  `t/storage/error.t` 49/49 — no regressions.
+- Sandbox 213/213, `make` PASS.
+
+### Risks
+
+- **Two-phase walker may regress 52leaks tests that currently pass**
+  (Schema/Source back to being pinned). Mitigation: test on a
+  branch before merging into main feature branch; narrow phase 1
+  to `subName != null` codes if needed.
+- **I2 may turn out to be a DBIC test-harness artifact** (Option C).
+  In that case, document and accept 1 residual failure — still
+  above the success bar for Phase I if test 9 lands.
+
+### Non-goals for Phase I
+
+- Fixing `t/52leaks.t` parallel-run flakiness (was in Phase H
+  plan H1 — now resolved).
+- Fixing unimplemented DBIC features not related to leaks.
+
+---
+
+## Phase J — performance optimization (next)
+
+After Phase I lands, the final milestone before merging is to
+profile and optimize hot paths introduced by the Phase B1–H work:
+- `forceGcAndSnapshot()` 3-pass `System.gc()` — can we make this
+  opt-in rather than on every auto-sweep?
+- `ScalarRefRegistry.WeakHashMap` registration on every ref-assign
+  — is there a fast path we can take for non-weaken programs?
+- Walker BFS cost when the reachable set grows large.
+- Any other Phase H additions (rescued-drain, H2 skip-check, H4
+  undef-trigger) whose cost shows up in `make` timing or DBIC
+  hot paths.
+
+Deferred to avoid premature optimization — functional correctness
+first.
+
+---
+
 ## References
 
 - `dev/design/refcount_alignment_plan.md` — original refcount plan (Phases 1-7)
