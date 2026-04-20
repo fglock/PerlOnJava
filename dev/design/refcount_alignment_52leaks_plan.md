@@ -1175,6 +1175,147 @@ BytecodeCompiler.java:
   +  TreeMap<> closureVarsByReg = collectVisiblePerlVariablesNarrowed(node.block);
 ```
 
+---
+
+## Phase G — Close `basic result_source_handle` leak (2026-04-20 plan)
+
+**Goal:** Fix the last remaining `t/52leaks.t` unpatched failure
+(`basic result_source_handle`) to reach **12/12** without requiring
+the DBIC LeakTracer patch.
+
+### Diagnostic findings
+
+Reverse-trace analysis (`JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`)
+on the leaked `DBIx::Class::ResultSourceHandle` object shows
+**6 direct holders** in `ScalarRefRegistry`:
+
+| # | rcO | Registered via (Java stack) | Perl call site |
+|---|---|---|---|
+| 0 | **true** | `RuntimeArray.push:207 → incrementRefCountForContainerStore` | `Storable.java:529` (deepClone freezeArgs push) |
+| 1 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:812` (STORABLE_thaw `setFromList`) |
+| 2 | false | `createReferenceWithTrackedElements:662` | `InlineOpcodeHandler.executeCreateHash` |
+| 3 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:442` (setFromList inside `callCached`) |
+| 4 | false | `setLargeRefCounted:1063` | `ResultSourceHandle.pm:442` |
+| 5 | false | `(truncated)` | `(truncated)` |
+
+The common thread: all 6 holders are created during
+`Storable::dclone($base_collection)` processing of the
+ResultSourceHandle object, which uses DBIC's `STORABLE_freeze` /
+`STORABLE_thaw` hooks.
+
+### Root cause hypothesis
+
+`Storable.java:deepClone` uses temporary Java-side `RuntimeArray`
+objects (`freezeArgs`, `thawArgs`) to pass arguments to DBIC's
+Perl-side hook methods via `RuntimeCode.apply`. These Java locals
+go out of scope when `deepClone` returns, and the element scalars
+they hold should be JVM-reclaimed by `WeakHashMap` pruning.
+
+**BUT:** the reachability-walker's `forceGcAndSnapshot()` runs 3
+JVM GC cycles at sweep time and the scalars survive. This implies
+one of:
+
+1. `RuntimeCode.apply` retains a strong reference to the args
+   array after return (possibly via `@DB::args` captures — see
+   Phase 2 — or via a closure `@_` alias that's still live).
+2. The DBIC hook methods (`STORABLE_freeze`, `STORABLE_thaw`) store
+   references to their `@_[0]` (the object) somewhere with JVM-strong
+   reach.
+3. The `incrementRefCountForContainerStore` bump on `push` inflates
+   the referent's refCount — not decremented when the local
+   `RuntimeArray` dies — keeping downstream weak refs alive.
+
+### Plan of attack
+
+#### Step 1: Narrow down which holder is the leak
+
+Holder #0 is the smoking gun (rcO=true, registered during the push
+into freezeArgs). The other 5 have rcO=false which means they're
+not actively owning the refCount — they are COPIES or lent
+references created by the setFromList / hash creation paths.
+
+Start by analyzing the lifecycle of the `freezeArgs` RuntimeArray
+after `RuntimeCode.apply` returns. Check:
+
+- Does `apply` set `args.refCountOwned` or similar field that
+  protects the elements?
+- Does `freezeArgs.elements.clear()` fire anywhere?
+- Does the push-bumped refCount get decremented on apply return?
+
+#### Step 2: Mortalize Storable's temporary arg arrays
+
+Strategy A: register `freezeArgs` and `thawArgs` with `MortalList`
+before `RuntimeCode.apply` returns, so their elements' refCounts
+are properly decremented at statement boundary.
+
+Strategy B: explicitly clear `freezeArgs.elements` and decrement
+refCounts after `apply` returns, before returning from deepClone.
+
+Strategy C: use a "lent" push that does NOT increment refCount
+(similar to `@_` aliasing) — doesn't increment on push, doesn't
+decrement on pop. Appropriate when the array is purely an
+arg-passing vessel.
+
+#### Step 3: Investigate DBIC STORABLE_thaw object retention
+
+Read `blib/lib/DBIx/Class/ResultSourceHandle.pm` lines 442 and 812
+to understand what the thaw hook does with `$_[0]` (the new blessed
+object). If it stashes the ref anywhere that's not a weak ref, the
+clone stays alive even after dclone returns.
+
+If DBIC's code is fine in real Perl but leaks in PerlOnJava, the
+fix belongs in PerlOnJava (likely Step 2 above).
+
+#### Step 4: Verify weak-ref clearing cascade
+
+After the fix:
+- Original handle's refCount should drop to 0 when `$base_collection`
+  is released.
+- `clearWeakRefsTo(handle)` should fire.
+- Test's `weakref` field becomes undef.
+- `assert_empty_weakregistry` passes.
+
+### Implementation order
+
+1. **Read Storable.java:deepClone** carefully, find all local
+   `RuntimeArray` allocations, document each. ✅ (already traced)
+2. **Test hypothesis** by adding explicit `freezeArgs.elements.clear();
+   thawArgs.elements.clear();` at end of deepClone, decrementing
+   refCount for each pushed element. Run 52leaks.t.
+3. **If that fixes** — refactor into a helper method
+   `releaseMortalArgs(RuntimeArray args)` to avoid code duplication.
+4. **If not** — audit `RuntimeCode.apply` args lifecycle next.
+5. **Regression-check** against txn_scope_guard, 100populate,
+   storage/error, inflate/core, sandbox 213/213, unit suite.
+
+### Validation checklist
+
+- `t/52leaks.t` unpatched: **12/12** (or at least the
+  `result_source_handle` entry gone from `assert_empty_weakregistry`)
+- Sandbox: 213/213
+- Full unit suite: PASS
+- DBIC regression set: no new failures
+- Storable integration tests (if any in `src/test/resources/...`):
+  PASS
+
+### Risk and rollback
+
+| Risk | Mitigation |
+|---|---|
+| Clearing arg arrays breaks Storable for primitives (non-blessed) | Keep the clear on blessed-only path (STORABLE_freeze hook flow) |
+| Decrementing too aggressively fires premature DESTROY | Use `MortalList.deferDecrement` to schedule, don't eager-decrement |
+| Breaks t/84serialize.t or other Storable tests | Run full Storable test set before commit |
+
+Rollback is trivial: revert the deepClone cleanup additions.
+
+### Expected benefit
+
+With the Storable-side cleanup:
+- `t/52leaks.t` unpatched → **12/12** (goal achieved)
+- Lower memory use in code that uses Storable::dclone heavily
+- No behavior change for normal (non-STORABLE-hooked) dclone usage
+
+
 
 
 
