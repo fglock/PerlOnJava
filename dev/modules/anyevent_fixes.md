@@ -12,7 +12,20 @@ including low-priority ones.
 | 2026-04-20 after parser/warnings fixes | 17/83 | 66/83 | 93 | 12 |
 | 2026-04-20 after ternary `:` fix | 14/83 | 69/83 | 103 | 5 |
 | 2026-04-20 after `()` overload marker + `pipe` + delete chain | 13/83 | 70/83 | 157 | 13 |
-| 2026-04-20 after `/gc` in list ctx keeps pos() | **12/83** | **71/83** | **157** | **8** |
+| 2026-04-20 after `/gc` in list ctx keeps pos() | 12/83 | 71/83 | 157 | 8 |
+| 2026-04-20 after further fixes (sysopen O_EXCL, ex_data, my(undef,%h) in eval, require package) | **see below** | | | |
+
+**Note**: `./jcpan -t AnyEvent` stops at `t/02_signals.t` because that
+test outputs `Bail out!` on failure, which aborts the entire harness
+run after only 3 files. The signal failure is downstream of the
+`weaken`/cooperative-refcount limitation documented in `AGENTS.md`
+(timer/io watchers are destroyed immediately because `weaken` too
+eagerly clears the last strong ref). This is being addressed in a
+separate branch. Running tests individually would reveal the per-file
+status, which is broadly unchanged from row 6 above aside from:
+
+- `t/11_io_perl.t`: subtest 6 (aio_open with O_EXCL on existing file)
+  was fixed via sysopen O_EXCL handling.
 
 ## Already Fixed (PR fix/anyevent-cpan-tests)
 
@@ -40,6 +53,29 @@ including low-priority ones.
   resetting pos after any list-context /g match. Now honours `/c`.
   Fixed `AnyEvent::Socket::parse_hostport` IPv6 handling; t/06_socket.t
   now 19/19 (was 14/19).
+- [x] `sysopen` now honours `O_EXCL` — failed to report `$! = "File
+  exists"` when `O_CREAT|O_EXCL` was used on an existing file.
+  Fixes AnyEvent::IO::Perl's `aio_open` tests.
+- [x] `Net::SSLeay::get_ex_new_index` / `set_ex_data` / `get_ex_data`
+  — previously undefined; AnyEvent::TLS's load-time
+  `until $REF_IDX = get_ex_new_index(...)` looped forever. This does
+  NOT make the SSL test suite pass — AnyEvent::TLS uses ~30 further
+  Net::SSLeay functions that remain unimplemented (`CTX_set_options`,
+  `set_accept_state`, etc.) — but the module now loads.
+- [x] `my (undef, %hash) = @_` inside eval STRING — the bytecode
+  interpreter was silently skipping `undef` placeholders on the LHS
+  of a `my` declaration, mis-pairing keys and values in the hash.
+  Added a LOAD_UNDEF_READONLY opcode that emits the shared read-only
+  `scalarUndef` so `RuntimeList.assign` recognises the placeholder.
+  Triggered by AnyEvent's signal-setup `my (undef, %arg) = @_;` inside
+  `eval q{ *signal = ... }`.
+- [x] `require FILE` / `do FILE` now compile the loaded file in the
+  caller's package. Perl 5 semantics: `sub foo { ... }` inside a
+  required .pl lands in the caller's namespace, not in `main::`. The
+  JVM backend's `package Foo;` now also updates the runtime tracker
+  (`InterpreterState.currentPackage`) so downstream tools see the
+  right package. Fixed via new `CompilerOptions.initialPackage` and
+  an INVOKESTATIC hook in `handlePackageOperator`.
 
 ## Remaining Failures (13 test programs)
 
