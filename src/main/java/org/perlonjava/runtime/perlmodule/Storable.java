@@ -54,6 +54,7 @@ public class Storable extends PerlModuleBase {
             storable.registerMethod("retrieve", null);
             storable.registerMethod("nstore", null);
             storable.registerMethod("dclone", null);
+            storable.registerMethod("last_op_in_netorder", null);
 
             storable.defineExport("EXPORT", "store", "retrieve", "nstore", "freeze", "thaw", "nfreeze", "dclone");
 
@@ -82,12 +83,26 @@ public class Storable extends PerlModuleBase {
     // Magic byte to identify binary format (distinguishes from old YAML+GZIP format)
     private static final char BINARY_MAGIC = '\u00FF';
 
+    // Tracks whether the last freeze/store operation used network byte order.
+    // Set true by nfreeze()/nstore(); set false by freeze()/store().
+    // Exposed via Storable::last_op_in_netorder().
+    private static volatile boolean lastOpInNetorder = false;
+
+    /**
+     * Returns 1 if the last freeze/store operation used network byte order
+     * (i.e. was nfreeze or nstore), 0 otherwise.
+     */
+    public static RuntimeList last_op_in_netorder(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(lastOpInNetorder ? 1 : 0).getList();
+    }
+
     /**
      * Freezes data to a binary format matching Perl 5 Storable's sort order.
      * Uses type bytes compatible with Perl 5's Storable so that string comparison
      * of frozen output produces the same ordering as Perl 5.
      */
     public static RuntimeList freeze(RuntimeArray args, int ctx) {
+        lastOpInNetorder = false;
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("freeze: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
@@ -432,13 +447,16 @@ public class Storable extends PerlModuleBase {
      * Network freeze (same as freeze for now).
      */
     public static RuntimeList nfreeze(RuntimeArray args, int ctx) {
-        return freeze(args, ctx);
+        RuntimeList result = freeze(args, ctx);
+        lastOpInNetorder = true;
+        return result;
     }
 
     /**
      * Stores data to file using YAML format.
      */
     public static RuntimeList store(RuntimeArray args, int ctx) {
+        lastOpInNetorder = false;
         if (args.size() < 2) {
             return WarnDie.die(new RuntimeScalar("store: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
@@ -479,7 +497,9 @@ public class Storable extends PerlModuleBase {
      * Network store (same as store).
      */
     public static RuntimeList nstore(RuntimeArray args, int ctx) {
-        return store(args, ctx);
+        RuntimeList result = store(args, ctx);
+        lastOpInNetorder = true;
+        return result;
     }
 
     /**
