@@ -179,6 +179,65 @@ public class OverloadContext {
     }
 
     /**
+     * Tries only the direct overloaded operator without invoking nomethod.
+     * Used when autogeneration may still provide a result (e.g., try (lt first,
+     * then fall back to (cmp before invoking nomethod).
+     *
+     * @return The result of the direct overload, or null if no direct overload is defined.
+     */
+    public static RuntimeScalar tryTwoArgumentOverloadDirect(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String overloadName) {
+        if (blessId < 0) {
+            OverloadContext ctx1 = prepare(blessId);
+            if (ctx1 != null) {
+                RuntimeScalar result = ctx1.tryOverload(overloadName, new RuntimeArray(arg1, arg2, scalarFalse));
+                if (result != null) return result;
+            }
+        }
+        if (blessId2 < 0) {
+            OverloadContext ctx2 = prepare(blessId2);
+            if (ctx2 != null) {
+                RuntimeScalar result = ctx2.tryOverload(overloadName, new RuntimeArray(arg2, arg1, scalarTrue));
+                if (result != null) return result;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Tries nomethod fallback on either blessed argument.
+     * Used as a last resort after direct overload and autogeneration have failed.
+     * Also enforces the fallback=0 restriction, throwing when no method is found
+     * and fallback explicitly forbids autogeneration.
+     *
+     * @return The result of nomethod, or null if no nomethod is defined (and fallback allows autogeneration).
+     */
+    public static RuntimeScalar tryTwoArgumentNomethod(RuntimeScalar arg1, RuntimeScalar arg2, int blessId, int blessId2, String methodName) {
+        OverloadContext ctx1 = blessId < 0 ? prepare(blessId) : null;
+        OverloadContext ctx2 = blessId2 < 0 ? prepare(blessId2) : null;
+
+        if (ctx1 != null) {
+            RuntimeScalar result = ctx1.tryOverload("(nomethod", new RuntimeArray(arg1, arg2, scalarFalse, new RuntimeScalar(methodName)));
+            if (result != null) return result;
+        }
+        if (ctx2 != null) {
+            RuntimeScalar result = ctx2.tryOverload("(nomethod", new RuntimeArray(arg2, arg1, scalarTrue, new RuntimeScalar(methodName)));
+            if (result != null) return result;
+        }
+
+        // Enforce fallback=0 (explicitly deny autogeneration / native op)
+        OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
+        if (activeCtx != null) {
+            if (activeCtx.hasFallbackGlob && activeCtx.fallbackValue != null
+                    && activeCtx.fallbackValue.getDefinedBoolean() && !activeCtx.fallbackValue.getBoolean()) {
+                String className = activeCtx.perlClassName;
+                throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
+                        + "argument in overloaded package " + className);
+            }
+        }
+        return null;
+    }
+
+    /**
      * Tries overloaded binary operator with autogeneration support.
      * @param autogenNames Additional overload names to try as autogeneration candidates (e.g., "(+" for "(+=")
      */

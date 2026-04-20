@@ -84,15 +84,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<", "<");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "lt (<)");
                 return getScalarBoolean(result.getInt() < 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, "<");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -123,15 +127,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=", "<=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "le (<=)");
                 return getScalarBoolean(result.getInt() <= 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, "<=");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -162,15 +170,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(>", ">");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(>");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "gt (>)");
                 return getScalarBoolean(result.getInt() > 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, ">");
+            if (result != null) return result;
         }
 
         // Check for uninitialized values (only when using numeric comparison fallback)
@@ -204,15 +216,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(>=", ">=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(>=");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "ge (>=)");
                 return getScalarBoolean(result.getInt() >= 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, ">=");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -237,15 +253,19 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         if (blessId < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(==", "==");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, new RuntimeScalar(arg2), blessId, 0, "(==");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, new RuntimeScalar(arg2), blessId, 0, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, new RuntimeScalar(arg2), blessId, 0, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "eq (==)");
                 return getScalarBoolean(result.getInt() == 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, new RuntimeScalar(arg2), blessId, 0, "==");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -275,15 +295,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(==", "==");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(==");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "eq (==)");
                 return getScalarBoolean(result.getInt() == 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, "==");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -314,15 +338,19 @@ public class CompareOperators {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(!=", "!=");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(!=");
             if (result != null) return result;
 
-            // Try fallback to spaceship operator
-            result = OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(<=>", "<=>");
+            // Try autogeneration via spaceship operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<=>");
             if (result != null) {
                 checkSpaceshipResult(result, "ne (!=)");
                 return getScalarBoolean(result.getInt() != 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(arg1, arg2, blessId, blessId2, "!=");
+            if (result != null) return result;
         }
 
         // Convert strings to numbers if necessary
@@ -407,14 +435,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(eq", "eq");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(eq");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() == 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "eq");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(runtimeScalar.toString().equals(arg2.toString()));
@@ -432,14 +464,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(ne", "ne");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(ne");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() != 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "ne");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(!runtimeScalar.toString().equals(arg2.toString()));
@@ -457,14 +493,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(lt", "lt");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(lt");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() < 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "lt");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) < 0);
@@ -482,14 +522,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(le", "le");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(le");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() <= 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "le");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) <= 0);
@@ -507,14 +551,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(gt", "gt");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(gt");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() > 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "gt");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) > 0);
@@ -532,14 +580,18 @@ public class CompareOperators {
         int blessId = blessedId(runtimeScalar);
         int blessId2 = blessedId(arg2);
         if (blessId < 0 || blessId2 < 0) {
-            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(ge", "ge");
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(ge");
             if (result != null) return result;
 
-            // Try fallback to cmp operator
-            result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessId, blessId2, "(cmp", "cmp");
+            // Try autogeneration via cmp operator
+            result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, arg2, blessId, blessId2, "(cmp");
             if (result != null) {
                 return getScalarBoolean(result.getInt() >= 0);
             }
+
+            // Try nomethod fallback (may throw if fallback=0)
+            result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "ge");
+            if (result != null) return result;
         }
 
         return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) >= 0);

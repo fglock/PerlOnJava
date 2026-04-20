@@ -645,6 +645,20 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        // Check for overloaded `x` operator (only when left operand is a blessed scalar)
+        if (value instanceof RuntimeScalar valScalar) {
+            int blessId = org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId(valScalar);
+            if (blessId < 0) {
+                RuntimeScalar result = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentOverloadDirect(valScalar, timesScalar, blessId, 0, "(x");
+                if (result != null) return result;
+                // Try nomethod fallback (may throw if fallback=0)
+                result = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentNomethod(valScalar, timesScalar, blessId, 0, "x");
+                if (result != null) return result;
+            }
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {

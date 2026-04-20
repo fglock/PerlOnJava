@@ -359,6 +359,12 @@ public class GlobalVariable {
      * @return The RuntimeHash representing the global hash.
      */
     public static RuntimeHash getGlobalHash(String key) {
+        // Normalize stash lookups: in Perl, all packages are children of main::,
+        // so %{main::F::} and %F:: refer to the same stash.
+        // Strip a leading "main::" from stash keys (but keep "main::" itself).
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            key = key.substring(6);
+        }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
             // Check if this is a package stash (ends with ::)

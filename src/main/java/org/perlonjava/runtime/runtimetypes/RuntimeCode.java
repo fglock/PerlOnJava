@@ -151,6 +151,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
+     * time. Used to populate @DB::args for caller(N) from package DB.
+     * In Perl, @DB::args reflects the args the sub was called with, regardless
+     * of whether the sub later shifted or otherwise mutated @_.
+     */
+    private static final ThreadLocal<Deque<java.util.List<RuntimeScalar>>> pristineArgsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
      * Thread-local stack tracking whether each call frame created a fresh @_ (hasargs).
      * In Perl 5, caller()[4] (hasargs) is 1 when the subroutine was called with explicit
      * arguments (func() or &func()), and false/empty when called via &func (no parens)
@@ -200,6 +209,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void pushArgs(RuntimeArray args) {
         argsStack.get().push(args);
+        // Snapshot the args list so @DB::args stays pristine even if the sub
+        // later shifts/pops from @_.
+        pristineArgsStack.get().push(
+                args != null ? new java.util.ArrayList<>(args.elements) : new java.util.ArrayList<>());
     }
 
     /**
@@ -211,6 +224,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<RuntimeArray> stack = argsStack.get();
         if (!stack.isEmpty()) {
             stack.pop();
+        }
+        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack.get();
+        if (!pStack.isEmpty()) {
+            pStack.pop();
         }
         Deque<Boolean> haStack = hasArgsStack.get();
         if (!haStack.isEmpty()) {
@@ -2009,10 +2026,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             dbArgs.setFromList(new RuntimeList());
                         }
                     } else {
-                        // Not in debug mode - set to empty array
-                        // This tells Carp we don't have args but prevents the
-                        // "Incomplete caller override detected" message
-                        dbArgs.setFromList(new RuntimeList());
+                        // Look up pristine @_ snapshot for the requested frame.
+                        // Pristine snapshots are captured at sub-entry, so shifts/pops
+                        // inside the sub don't affect what @DB::args reports.
+                        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack.get();
+                        int argIdx = frame - 1;
+                        if (argIdx >= 0 && argIdx < stack.size()) {
+                            @SuppressWarnings("unchecked")
+                            java.util.List<RuntimeScalar>[] arr =
+                                    (java.util.List<RuntimeScalar>[]) stack.toArray(new java.util.List[0]);
+                            java.util.List<RuntimeScalar> frameArgs = arr[argIdx];
+                            if (frameArgs != null) {
+                                RuntimeList rl = new RuntimeList();
+                                rl.elements.addAll(frameArgs);
+                                dbArgs.setFromList(rl);
+                            } else {
+                                dbArgs.setFromList(new RuntimeList());
+                            }
+                        } else {
+                            dbArgs.setFromList(new RuntimeList());
+                        }
                     }
                 }
 
