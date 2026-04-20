@@ -770,6 +770,29 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        // Phase F (refcount_alignment_52leaks_plan.md): narrow the
+        // captured set to only lexicals actually referenced by the
+        // closure body. Ports the JVM-backend optimization from
+        // EmitSubroutine.java:120-140 so the interpreter backend
+        // stops over-capturing every visible lexical as a closure
+        // context. Over-capture inflates captureCount on unrelated
+        // lexicals, pinning them (and their container elements) in
+        // MortalList.deferredCaptures past Perl-level scope exit —
+        // the root cause of the t/52leaks.t "basic rerefrozen" leak.
+        //
+        // When `eval STRING` is present, skip the narrowing: the
+        // eval body can reference any visible lexical dynamically at
+        // runtime, so we must still capture everything.
+        Set<String> usedVars = null;
+        if (ast != null) {
+            Set<String> used = new HashSet<>();
+            VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
+            ast.accept(collector);
+            if (!collector.hasEvalString()) {
+                usedVars = used;
+            }
+        }
+
         // Use getAllVisibleVariables() (TreeMap sorted by register index) with the same
         // filtering as SubroutineParser to ensure capturedVars ordering matches exactly.
         Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> outerVars =
@@ -791,6 +814,9 @@ public class BytecodeCompiler implements Visitor {
             if (entry.decl().isEmpty()) continue;
             if (entry.decl().equals("field")) continue;
             if (name.startsWith("&")) continue;
+            // Phase F: skip visible lexicals not actually referenced
+            // by the closure body.
+            if (usedVars != null && !usedVars.contains(name)) continue;
             capturedVarIndices.put(name, reg);
             outerVarNames.add(name);
             outerVarDecls.add(entry.decl());
@@ -4522,6 +4548,36 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Phase F (refcount_alignment_52leaks_plan.md): narrow the visible-
+     * variable set to only names referenced by the given AST (closure
+     * body), matching the JVM-backend optimization from
+     * EmitSubroutine.java:120-140. Prevents interpreter-mode closures
+     * from over-capturing every visible lexical as closure context,
+     * which inflates captureCount on unused lexicals and pins them in
+     * MortalList.deferredCaptures past Perl-level scope exit.
+     * <p>
+     * Returns the full map unchanged when:
+     * - {@code body} is null (caller didn't provide AST)
+     * - the AST contains {@code eval STRING} (runtime may reference
+     *   any visible lexical dynamically)
+     */
+    TreeMap<Integer, String> collectVisiblePerlVariablesNarrowed(Node body) {
+        TreeMap<Integer, String> all = collectVisiblePerlVariables();
+        if (body == null) return all;
+        Set<String> used = new HashSet<>();
+        VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
+        body.accept(collector);
+        if (collector.hasEvalString()) return all;
+        TreeMap<Integer, String> narrowed = new TreeMap<>();
+        for (Map.Entry<Integer, String> e : all.entrySet()) {
+            if (used.contains(e.getValue())) {
+                narrowed.put(e.getKey(), e.getValue());
+            }
+        }
+        return narrowed;
+    }
+
+    /**
      * Get the highest register index currently used by variables (not temporaries).
      * This is used to determine the reset point for register recycling.
      */
@@ -4901,7 +4957,12 @@ public class BytecodeCompiler implements Visitor {
         //
         // Therefore capture all visible Perl variables (scalars/arrays/hashes) from the
         // current scope, not just variables referenced directly in the sub AST.
-        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
+        //
+        // Phase F: narrow to variables actually used by the sub body
+        // (collectVisiblePerlVariablesNarrowed falls back to the full
+        // set if the body contains eval STRING).
+        TreeMap<Integer, String> closureVarsByReg =
+                collectVisiblePerlVariablesNarrowed(node.block);
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
@@ -5042,7 +5103,14 @@ public class BytecodeCompiler implements Visitor {
         // lexicals only inside strings (so they won't appear as IdentifierNodes in the AST).
         // Perl still expects those lexicals to be visible to eval STRING at runtime.
         // Capture all visible Perl variables (scalars/arrays/hashes) from the current scope.
-        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
+        //
+        // Phase F (refcount_alignment_52leaks_plan.md): narrow to
+        // variables actually referenced by the sub body. The helper
+        // detects `eval STRING` in the body and falls back to the
+        // full visible set when present, preserving Perl's dynamic-
+        // reference semantics.
+        TreeMap<Integer, String> closureVarsByReg =
+                collectVisiblePerlVariablesNarrowed(node.block);
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
