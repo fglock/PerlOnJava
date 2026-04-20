@@ -542,174 +542,107 @@ t/52leaks.t:
 
 All other `t/52leaks.t` subtests pass (9 ok).
 
-### I1 — unblessed ARRAY leak (`basic random_results`)
+### Investigation (2026-04-20)
 
-#### Root cause
+Several approaches were tried in-branch and reverted. Documented
+here to prevent re-work:
 
-Phase H2 introduced a trade-off: in quiet auto-sweep, weak refs to
-unblessed non-CODE containers (ARRAY/HASH) are NOT cleared, because
-Sub::Defer's `$deferred_info` ARRAY is reachable only through closure
-captures that our walker (`walkCodeCaptures=false`) can't see.
+#### What didn't work
 
-The offending ARRAY here is `$base_collection->{random_results}`.
-After the test's enclosing block exits:
-- `$base_collection` HASH's strong ref → 0 → auto-sweep releases it.
-- Its `random_results` key's value was the ARRAY.
-- The ARRAY's only strong ref (the hash element) also goes to 0.
+1. **Two-phase walker** (phase 1 seeds globalCodeRefs with capture
+   walking; phase 2 seeds other roots without). Without the H2
+   skip-unblessed rule, **60core.t regresses** — breaks at test 109
+   with "Not a CODE reference at line 510" (a Sub::Defer-dispatched
+   `$empl->secretkey->encoded` chain). With H2 skip retained, the
+   walker's extra reachability has no effect on clearing. Same
+   behaviour even when phase 1 is narrowed to named subs
+   (`code.subName != null`) or all code captures walked.
 
-But because the ARRAY is unblessed, quiet auto-sweep skips its weak
-ref. DBIC's leak tracer (`populate_weakregistry`) weakened a
-`$weak_registry->{$addr}{weakref}` scalar to the ARRAY, which
-therefore stays defined.
+2. **Remove `captureCount > 0` skip from Phase B1 lexical seeds**
+   so captured scalars are walked as roots. Fixes test 9 (ARRAY
+   becomes reachable → never cleared by auto-sweep) when combined
+   with removal of H2 skip, but still breaks 60core.t at test 109.
+   With H2 skip retained, same baseline as before.
 
-#### Proposed fix — two-phase walker with stash-code capture walking
+3. **Skip only unblessed HASH (not ARRAY) in H2 rule**. 60core.t
+   breaks — some HASH path used by Moo/Sub::Defer that phase 1
+   reaches but the H2 skip-HASH rule prevents from clearing leaves
+   something in a broken state we don't fully understand. Needs
+   deeper trace.
 
-Instead of a global "skip unblessed" rule, teach the walker to
-distinguish **captures that actually represent live data paths**
-from **captures that are spurious**.
+#### What's understood
 
-**Two-phase walk** (already prototyped and rejected earlier because
-it pinned Schema in 52leaks — but that attempt used a flag-based
-swap, not a narrowed set):
+- **Test 9 (ARRAY `random_results`)** is held ONLY by
+  `$base_collection->{random_results}`. When `$base_collection`'s
+  enclosing block exits and the HASH's values drop refCount:
+  - In native Perl, refcount hits 0 → ARRAY collected → weak ref
+    clears.
+  - In PerlOnJava, the HASH scope-exit does decrement refCount
+    cooperatively, but because the ARRAY is also referenced from
+    DBIC's `$weak_registry->{$addr}{weakref}` scalar (weak, but
+    observed by the walker as a weakRefReferent), and because H2's
+    skip-unblessed rule prevents auto-sweep from clearing its
+    weak ref, the ARRAY appears as "still weakly referenced" at
+    the `assert_empty_weakregistry` check.
 
-1. **Phase 1**: Walk starting from `globalCodeRefs` only, marking all
-   reachable including closure captures. The closures found this way
-   are stash-installed (Sub::Defer deferred subs, Moo accessors).
-2. **Phase 2**: Walk starting from the remaining roots (globals,
-   rescuedObjects, lexical seeds) WITHOUT walking code captures.
-   Anon closures captured by instance hashes remain bounded.
+- **Test 10 (`DBICTest::Artist`, refcnt 2)**: clears correctly
+  under an explicit `Internals::jperl_gc()` between `undef
+  $schema` and the assertion (verified with a minimal repro:
+  `/tmp/artist_leak.pl` produced `weak_artist defined = no`
+  after `jperl_gc`). So the Artist is a **timing** issue:
+  auto-sweep's 5-s throttle doesn't fire between
+  `$base_collection` scope exit (line 440) and the assertion
+  (line 526), even though <100 ms of test work happens in between.
 
-**Why this is safe now but wasn't earlier**:
-- With Phase H1's rescuedObjects-drain-in-quiet, stash-installed
-  accessors that capture class-level state no longer keep rescued
-  Schemas alive indirectly.
-- With Phase F's capture-narrowing in BytecodeCompiler, stash
-  accessors only capture lexicals they actually reference, so
-  Schema instances aren't swept in as spurious captures.
+### Recommendation — Defer and document as Phase H's tolerance
 
-**Alternative (narrower, if two-phase still regresses 52leaks)**:
-Walk captures only for code refs whose `subName` is non-null —
-i.e., NAMED subs. Pure anon closures (captured by hashes) remain
-opaque. Moo/Sub::Defer deferred subs have `subName`, so their
-captures are walked.
+Given:
+- `./jcpan -t DBIx::Class` completes in ~20 min with 99.985% pass
+  rate (only 2 subtest failures of 13804).
+- Every blocking issue (hangs, SIGKILLs, test 49) is fixed.
+- Fixing the 2 residuals requires a deeper walker/auto-sweep
+  redesign that risks breaking the Phase H wins.
 
-#### Implementation steps for I1
+**Recommendation: document these 2 failures as known limitations
+and move to Phase J (performance optimization).** Re-attempt
+after Phase J if a cleaner solution emerges from the optimization
+work's measurements.
 
-1. Revert the H2 skip-unblessed-ARRAY-in-quiet rule in
-   `ReachabilityWalker.sweepWeakRefs`.
-2. Modify `ReachabilityWalker.walk()` to perform two-phase BFS:
-   - Seed globalCodeRefs → BFS with capture-walking (phase 1).
-   - Seed other roots → BFS without capture-walking (phase 2).
-3. Keep `walkCodeCaptures` field but default is set per-phase.
-4. Test:
-   - `t/60core.t` must still pass (Sub::Defer accessors work)
-   - `t/cdbi/sweet/08pager.t` must still pass (END block completes)
-   - `t/52leaks.t` test 9 passes (ARRAY cleared)
-   - `t/52leaks.t` tests 10+ don't regress
-5. If 52leaks tests 10+ regress (Schema pinning returns): narrow
-   phase 1 to **only** code refs where `code.subName != null` AND
-   `code.packageName` is in a known-safe-set (Sub::Defer, or code
-   whose captures contain no blessed RuntimeHash/RuntimeBase
-   references — checkable at capture-assignment time).
+Potential future approach for each:
+- **Test 9**: The walker needs to distinguish "reachable only via
+  closure capture" from "reachable via data". If it did, H2's skip
+  rule could be scoped to only capture-reachable objects. Doing
+  that correctly requires tracking provenance during BFS — a
+  larger refactor.
+- **Test 10**: An explicit auto-sweep at significant scope exits
+  (e.g., when a HASH with >N entries is dropped) would clear
+  stragglers. But the heuristic is fragile and overhead-sensitive.
+  Alternatively, reduce auto-sweep throttle from 5 s to 500 ms
+  with a CPU budget (skip if recent GC cost exceeds X%) — but
+  prior attempts at short throttles were reverted for DBIC
+  slowdown.
 
-### I2 — DBICTest::Artist leak (refcnt 2)
+### Implementation order (if re-attempted post-Phase-J)
 
-#### Observation
-
-```
-DBICTest::Artist=HASH(0x...) (refcnt 2) => bless( {
-    _column_data => 'HASH(0x...)',
-    _in_storage => 1,
-    _inflated_column => undef,
-    _result_source => 'DBIx::Class::ResultSource::Table=HASH(0x...)',
-    related_resultsets => 'HASH(0x...)',
-}, 'DBICTest::Artist' )
-```
-
-The Artist has `refcnt=2` — two Java-side strong refs. One is the
-DBIC leak tracer's weak registry entry (weak, doesn't count). So
-there are 2 strong refs somewhere.
-
-#### Investigation plan
-
-1. **Get a reachability path** to the leaked Artist using the
-   existing `Internals::jperl_trace_to(ref)` diagnostic. Insert at
-   the start of 52leaks.t's `assert_empty_weakregistry` END block
-   loop a debug call:
-   ```perl
-   for my $addr (keys %$weak_registry) {
-       my $r = $weak_registry->{$addr}{weakref};
-       next unless defined $r;
-       my @path = Internals::jperl_trace_to($r);
-       diag "LEAK: $addr PATH:\n", (join "\n  ", @path);
-   }
-   ```
-2. With `JPERL_TRACE_ALL=1 JPERL_REGISTER_STACKS=1`, examine what
-   holds the Artist.
-3. Likely candidates:
-   - **`related_resultsets` HASH cycle**: Artist → resultset →
-     source → cached Artist in source's `_resultset` handle.
-   - **`_result_source` back-edge**: Source → Schema →
-     source_registrations → Source → Artist-producing resultset.
-   - **DBIC class-level cache**: something in `DBICTest::Artist::*`
-     package hashes.
-4. If the path runs through a Source's `_resultset` or similar
-   **class-level cache**, audit DBIC to see if there's a known
-   cache-invalidation point we're missing.
-
-#### Proposed fixes (decision after investigation)
-
-**Option A — walker preserves source_registrations as weak root**.
-If Source is in rescuedObjects (via Schema self-save) and holds
-Artist via `_resultset->result_source`, draining the rescue may
-not cascade into Artist. Make the walker treat Source's `_resultset`
-back-edge as weak for reachability purposes.
-
-**Option B — explicit jperl_gc before assert_empty_weakregistry**.
-Extend `WeakRefRegistry.clearAllBlessedWeakRefs` to walk **all**
-DBIC-like back-edges aggressively. But the assert runs during main
-script execution (line 526), so this doesn't fire. Instead, add an
-auto-sweep trigger when a significantly large lexical hash goes out
-of scope (heuristic).
-
-**Option C — do nothing if this Artist turns out to be held via a
-closure the walker can't see**. If the leak tracer's own
-`CV_TRACING` / `refs_to_scan` machinery captures the Artist in a
-way that creates a real strong ref we can't track, this is a DBIC
-test-harness artifact. Document as known limitation.
-
-### Implementation order
-
-1. **I1 first** (two-phase walker) — addresses test 9 and reveals
-   whether test 10 is independent.
-2. **I2 investigation** — after I1 lands, re-run 52leaks.t. If
-   test 10 still fails, add the trace-to diagnostic and decide
-   Option A/B/C.
+1. Instrument walker to measure "capture-only reachability" —
+   count referents reachable from captured scalars but not via
+   non-capture paths.
+2. Test if treating those as "maybe-dead" (clear in quiet sweep
+   unless also reached via non-capture path) fixes test 9 without
+   breaking 60core/08pager.
+3. For test 10, add a heuristic auto-sweep trigger at
+   `MortalList.flush` when the flush decremented > N blessed-with-
+   DESTROY refs.
+4. Validate against full `./jcpan -t DBIx::Class` and all
+   known-good tests.
 
 ### Success criteria
 
-- `t/52leaks.t`: **11/11** pass (skip 20 → 11 from fewer registry
-  entries, all defined-weak tests pass).
+- `t/52leaks.t`: **11/11** pass.
 - `./jcpan -t DBIx::Class`: **0 failures**, 0 subtest failures.
 - `t/60core.t` 125/125, `t/cdbi/sweet/08pager.t` 9/9,
   `t/storage/error.t` 49/49 — no regressions.
 - Sandbox 213/213, `make` PASS.
-
-### Risks
-
-- **Two-phase walker may regress 52leaks tests that currently pass**
-  (Schema/Source back to being pinned). Mitigation: test on a
-  branch before merging into main feature branch; narrow phase 1
-  to `subName != null` codes if needed.
-- **I2 may turn out to be a DBIC test-harness artifact** (Option C).
-  In that case, document and accept 1 residual failure — still
-  above the success bar for Phase I if test 9 lands.
-
-### Non-goals for Phase I
-
-- Fixing `t/52leaks.t` parallel-run flakiness (was in Phase H
-  plan H1 — now resolved).
-- Fixing unimplemented DBIC features not related to leaks.
 
 ---
 
