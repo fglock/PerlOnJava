@@ -385,7 +385,12 @@ public class GlobalVariable {
      * @return True if the global hash exists, false otherwise.
      */
     public static boolean existsGlobalHash(String key) {
-        return globalHashes.containsKey(key);
+        if (globalHashes.containsKey(key)) return true;
+        // Normalize stash lookups: %{main::F::} and %F:: refer to the same stash.
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            return globalHashes.containsKey(key.substring(6));
+        }
+        return false;
     }
 
     /**

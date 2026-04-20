@@ -546,6 +546,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                     yield this.hashSlot.createReference();
                 }
+                // Stash entries: *Pkg::{HASH} always returns the package's symbol table,
+                // even if it hasn't been explicitly materialized. This mirrors Perl 5
+                // where the stash is an intrinsic property of the package.
+                if (this.globName.endsWith("::")) {
+                    yield GlobalVariable.getGlobalHash(this.globName).createReference();
+                }
                 // Only return reference if hash exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalHash(this.globName)) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
