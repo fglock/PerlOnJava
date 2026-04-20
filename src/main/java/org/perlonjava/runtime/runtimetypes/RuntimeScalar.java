@@ -1398,12 +1398,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> // 0
-                // For numeric constants (like 1->[0]), return an empty array
-                // This matches Perl's behavior where 1->[0] returns undef without error
-                    new RuntimeArray();
+                // Under strict refs, dereferencing a non-readonly numeric scalar as an ARRAY ref
+                // is a strict-refs violation. (Read-only constants like `1->[0]` take the
+                // RuntimeScalarReadOnly.arrayDerefGet() override instead and stay quiet.)
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case DOUBLE -> // 1
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case STRING -> // 2
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case BYTE_STRING -> // 3
@@ -1501,9 +1501,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> // 0
-                    throw new PerlCompilerException("Not a HASH reference");
+                // Under strict refs, dereferencing a non-readonly numeric scalar as a HASH ref
+                // is a strict-refs violation. (Read-only constants like `1->{a}` take the
+                // RuntimeScalarReadOnly.hashDerefGet() override instead.)
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
             case DOUBLE -> // 1
-                    throw new PerlCompilerException("Not a HASH reference");
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
             case STRING -> // 2
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
