@@ -943,6 +943,149 @@ c) **Accept the opt-in**: keep the DBIC `LeakTracer.pm` patch as
 - Sandbox 213/213, full unit suite PASS
 - All other investigated DBIC tests pass
 
+---
+
+## Phase F — Narrow interpreter closure capture (2026-04-20 plan)
+
+**Goal:** Eliminate the root cause of the `basic rerefrozen` leak by
+making the interpreter backend's closure detection capture ONLY
+lexicals that are actually referenced by the closure body, matching
+what the JVM backend already does.
+
+### Background
+
+The JVM backend already solves this — see
+`src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java:120-140`:
+
+```java
+// Optimization: Only capture variables actually used in the subroutine body.
+if (!isPackageSub && node.block != null && !visibleVariables.isEmpty()) {
+    Set<String> usedVars = new HashSet<>();
+    VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
+    node.block.accept(collector);
+    if (!collector.hasEvalString()) {
+        // Filter visibleVariables down to only usedVars
+    }
+}
+```
+
+It uses the existing `VariableCollectorVisitor` which:
+- Walks the subroutine body AST.
+- Collects every `$var`, `@var`, `%var`, `&var` reference.
+- Handles subscripted access: `$h{k}` → `%h`, `$a[i]` → `@a`, `$#arr` → `@arr`.
+- Descends into nested subroutines so transitive captures are preserved.
+- Detects `eval STRING` / `evalbytes STRING`; if present, skips the
+  filter (dynamic runtime references possible).
+
+The interpreter backend does NOT do this filtering. In
+`src/main/java/org/perlonjava/backend/bytecode/BytecodeCompiler.java:764`
+(`detectClosureVariables`), it captures ALL visible lexicals from
+the symbol table plus all AST-referenced variables — so the effective
+set is always the superset.
+
+This inflates `captureCount` on variables closures don't actually
+use, preventing their scope-exit cleanup from completing. The
+downstream effect — visible in `t/52leaks.t` — is that
+`$base_collection` stays pinned by `MortalList.deferredCaptures`
+indefinitely, and so do its hash elements (`rerefrozen`).
+
+### Design
+
+Port the JVM-backend pattern to
+`BytecodeCompiler.detectClosureVariables`:
+
+1. After constructing the full `visibleVariables` / `outerVars` map,
+   run `VariableCollectorVisitor` over the same AST the compiler is
+   about to emit.
+2. Respect `hasEvalString()` — when `eval STRING` is detected, fall
+   back to the current over-capture behavior.
+3. Filter `outerVarNames`, `outerValues`, and `capturedVarIndices`
+   down to only names that appear in the `usedVars` set.
+4. Preserve existing ordering (TreeMap by register index) to keep
+   the `withCapturedVars(...)` array ordering stable.
+5. DO NOT filter the second stage (AST-referenced variables at lines
+   810-822) — those are already a narrower set and are needed for
+   register-recycling safety.
+
+### Code changes
+
+```java
+// BytecodeCompiler.java detectClosureVariables
+
+// ... existing code building outerVars from symbolTable ...
+
+// Phase F: narrow to actually-used variables, matching
+// EmitSubroutine.java's JVM-backend treatment.
+Set<String> usedVars = null;
+if (ast != null) {
+    Set<String> used = new HashSet<>();
+    VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
+    ast.accept(collector);
+    if (!collector.hasEvalString()) {
+        usedVars = used;
+    }
+}
+
+// In the main capture loop, skip variables not in usedVars:
+for (Map.Entry<...> e : outerVars.entrySet()) {
+    // ... existing filters ...
+    if (usedVars != null && !usedVars.contains(name)) continue;  // NEW
+    capturedVarIndices.put(name, reg);
+    // ...
+}
+```
+
+### Validation checklist
+
+- **Sandbox:** `prove dev/sandbox/destroy_weaken/` → 213/213
+- **Full unit suite:** `make` → PASS
+- **DBIC regression set:** t/60core.t 125/125, t/storage/txn_scope_guard.t
+  18/18, t/100populate.t 108/108, t/inflate/core.t 32/32,
+  t/96_is_deteministic_value.t 8/8, t/cdbi/68-inflate_has_a.t 6/6
+- **Leak target:** t/52leaks.t unpatched → expect 12/12 (fixing
+  the last known leak)
+- **Eval STRING safety:** Tests that rely on eval STRING capturing
+  outer lexicals should continue to pass (`hasEvalString()` gate
+  guarantees this).
+- **Multi-backend symmetry:** Running the interpreter (`./jperl --int`)
+  and JVM-compiled path through the same tests should yield identical
+  output for capture-sensitive code.
+
+### Risks and mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Over-narrow capture breaks variable access in closures. | `VariableCollectorVisitor` already handles subscript, slice, and `$#arr` forms. Port-for-port from JVM backend. |
+| eval STRING in a nested scope not detected. | Visitor descends into every node; `hasEvalString` is set during the AST walk. |
+| Goto labels or other dynamic-reference ops reach variables at runtime. | Check VariableCollectorVisitor for coverage; if incomplete, the `hasEvalString` gate can be extended to include `goto`, `do FILE`, etc. |
+| Moo/DBIC pattern relies on over-capture. | Run full DBIC tests (txn_scope_guard, populate, inflate/core) as regression gates before committing. |
+
+### Expected benefit
+
+With narrowed capture:
+- `$base_collection.captureCount` stays 0 when no closure actually
+  uses it → no entry in `MortalList.deferredCaptures` on scope exit
+  → scopeExitCleanup cleans it → rerefrozen element freed
+  → t/52leaks.t test 12 passes unpatched.
+- Smaller closure capture frames → lower memory use in Moo/DBIC
+  accessor-heavy code.
+- Interpreter matches JVM-backend behavior for closure semantics,
+  reducing backend-divergence surprises.
+
+### Implementation notes
+
+- The fix sits ENTIRELY inside `detectClosureVariables`.
+- No changes to runtime types (`RuntimeScalar`, `MortalList`,
+  `WeakRefRegistry`, walker) needed.
+- The existing `isContainerElement` / `scopeExited` walker flags
+  (landed earlier but unused) can stay — they're cheap and may
+  help future diagnostics.
+- If this fix resolves 52leaks.t fully, Phase B1's
+  `ScalarRefRegistry` + walker is still the correct mechanism for
+  cases that DO involve weakened references held by user lexicals.
+
+
+
 
 
 
