@@ -2111,6 +2111,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     } else {
                         oldBase.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(oldBase);
+                        // Phase H (t/storage/error.t test 49): if the DESTROY self-
+                        // saved the object (rescued), user's explicit undef still
+                        // means their lexical handle is gone — weak refs pointing
+                        // to the rescued object (e.g. HandleError closure's weak
+                        // $schema) must be cleared so callbacks that fire AFTER
+                        // this point can detect "schema is gone".
+                        if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+                            String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                            if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                                undefOnBlessedWithDestroy = true;
+                            }
+                        }
                     }
                 } else if (oldBase.blessId != 0 && oldBase.refCount > 0
                         && WeakRefRegistry.weakRefsExist) {
@@ -2153,6 +2165,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // check. Skips when we're in module-init to avoid clearing weak refs
         // that require/use chains still depend on.
         if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
+            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
+                System.err.println("DBG Phase D undef-of-blessed trigger for " +
+                        (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
+                        " refCount=" + (oldBase != null ? oldBase.refCount : -1));
+            }
             ReachabilityWalker.sweepWeakRefs(false);
         }
 
