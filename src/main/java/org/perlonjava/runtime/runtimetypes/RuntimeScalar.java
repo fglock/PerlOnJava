@@ -759,16 +759,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public void addToArray(RuntimeArray runtimeArray) {
         switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
-                // Incref immediately so intermediate MortalList.flush() calls
-                // from later expressions (during anon-array-literal construction
-                // or arg-list building) don't drop a pending-mortal referent to
-                // refCount=0 before the container finalizes ownership. The
-                // matching incref in createReferenceWithTrackedElements /
-                // incrementRefCountForContainerStore is idempotent (skips
-                // refCountOwned=true), so no double-incref.
-                RuntimeScalar copy = new RuntimeScalar(this);
-                runtimeArray.elements.add(copy);
-                RuntimeScalar.incrementRefCountForContainerStore(copy);
+                runtimeArray.elements.add(new RuntimeScalar(this));
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);

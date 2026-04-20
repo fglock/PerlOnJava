@@ -76,6 +76,22 @@ public class EmitLiteral {
         emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, arrayRef);
         // Stack: []
 
+        // Suppress MortalList.flush() during element evaluation. Without this,
+        // a pending mortal decrement on an earlier-added element (e.g., a
+        // blessed return value from `Foo->new(...)`) can fire during a later
+        // element's interior assignment (`$s->{CHILD} = Bar->new()` inside
+        // another new()), prematurely DESTROY'ing it before
+        // createReferenceWithTrackedElements finalizes ownership. The
+        // wasFlushing flag is stashed in a local so we can restore it at
+        // the end. See dev/sandbox tt_arr2.pl for a minimal repro.
+        JavaClassInfo.SpillRef wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+        // Box boolean to store in Object-typed spill slot
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+
         // Populate the array with elements
         for (Node element : node.elements) {
             // Generate code for the element in LIST context
@@ -100,6 +116,17 @@ public class EmitLiteral {
         // preventing premature destruction of referents stored in anonymous arrays.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+
+        // Restore previous flush-suppression state. Element refCounts have now
+        // been bumped by createReferenceWithTrackedElements, so it is safe for
+        // pending mortal decrements to fire.
+        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
+        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+        mv.visitInsn(Opcodes.POP);  // discard the return value
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
@@ -136,6 +163,16 @@ public class EmitLiteral {
             return;
         }
 
+        // Suppress MortalList.flush() during element evaluation — see
+        // emitArrayLiteral above for rationale (same issue affects hash
+        // literals whose values are blessed temps from method calls).
+        JavaClassInfo.SpillRef wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+
         // Create a RuntimeList from the hash elements
         // This delegates to emitList which handles the LIST context properly
         ListNode listNode = new ListNode(node.elements, node.tokenIndex);
@@ -146,6 +183,16 @@ public class EmitLiteral {
                 "org/perlonjava/runtime/runtimetypes/RuntimeHash",
                 "createHashRef",
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+
+        // Restore previous flush-suppression state.
+        // Stack: [ref]
+        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
+        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+        mv.visitInsn(Opcodes.POP);  // discard the return value; ref remains on stack
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
