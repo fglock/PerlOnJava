@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 
 /**
  * Runtime cleanup stack for my-variables during exception unwinding.
@@ -29,6 +30,25 @@ public class MyVarCleanupStack {
 
     private static final ArrayList<Object> stack = new ArrayList<>();
 
+    // Phase I: parallel identity-counted set for O(1) `isLive(var)` check
+    // from the reachability walker. Maps var -> registration count
+    // (a single var can be registered multiple times if declared in
+    // nested scopes with the same slot reuse).
+    private static final IdentityHashMap<Object, Integer> liveCounts = new IdentityHashMap<>();
+
+    /**
+     * Phase I: O(1) check whether the given object is currently registered
+     * (its declaration scope hasn't exited). Used by the reachability
+     * walker to filter out stale ScalarRefRegistry entries — scalars
+     * whose scopes have exited but whose Java-level lifetime persists
+     * (e.g. via MortalList.deferredCaptures) were falsely marking
+     * their referents as reachable.
+     */
+    public static boolean isLive(Object var) {
+        if (var == null) return false;
+        return liveCounts.containsKey(var);
+    }
+
     /**
      * Called at subroutine entry (in {@code RuntimeCode.apply()}).
      * Returns a mark position for later {@link #popMark(int)} or
@@ -53,6 +73,9 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack.add(var);
+        if (var != null) {
+            liveCounts.merge(var, 1, Integer::sum);
+        }
     }
 
     /**
@@ -78,9 +101,17 @@ public class MyVarCleanupStack {
         for (int i = stack.size() - 1; i >= 0; i--) {
             if (stack.get(i) == var) {
                 stack.remove(i);
+                decLiveCount(var);
                 return;
             }
         }
+    }
+
+    private static void decLiveCount(Object var) {
+        Integer c = liveCounts.get(var);
+        if (c == null) return;
+        if (c <= 1) liveCounts.remove(var);
+        else liveCounts.put(var, c - 1);
     }
 
     /**
@@ -97,6 +128,7 @@ public class MyVarCleanupStack {
         for (int i = stack.size() - 1; i >= mark; i--) {
             Object var = stack.removeLast();
             if (var != null) {
+                decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
             }
         }
@@ -111,7 +143,8 @@ public class MyVarCleanupStack {
      */
     public static void popMark(int mark) {
         while (stack.size() > mark) {
-            stack.removeLast();
+            Object var = stack.removeLast();
+            if (var != null) decLiveCount(var);
         }
     }
 }

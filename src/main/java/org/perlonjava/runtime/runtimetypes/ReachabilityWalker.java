@@ -110,29 +110,20 @@ public class ReachabilityWalker {
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;
-                // Phase I (final Artist leak): skip scalars that have
-                // already exited their Perl scope and aren't captured
-                // by any closure. These are effectively dead — they
-                // live only in MortalList.deferredCaptures awaiting
-                // final cleanup at flushDeferredCaptures, and seeding
-                // the walker from them falsely marks their referents
-                // alive.
-                if (sc.scopeExited) continue;
-                // Phase I (final Artist leak, diagnostic confirmed):
-                // skip scalars whose refCount-ownership has been
-                // released (`refCountOwned=false`). These are scalars
-                // that incremented some referent and were later marked
-                // for deferred decrement (MortalList.pending) — the
-                // referent's cooperative refCount will drop on the
-                // next flush. Seeding the walker from them pins their
-                // referent even though nothing else holds it, causing
-                // DBIC's leak tracer to incorrectly see DBICTest::Artist
-                // and similar row objects as still-defined weak refs.
-                // Rationale: a live lexical always has
-                // refCountOwned=true (either from setLarge or from
-                // incrementRefCountForContainerStore). Once it's false,
-                // the scalar is not a valid Perl "live lexical" root.
-                if (!sc.refCountOwned) continue;
+                // Phase I: a scalar is only a valid "live lexical" seed if
+                // its declaration scope is still registered in
+                // MyVarCleanupStack. Scalars whose scopes have exited may
+                // still be Java-alive (via MortalList.deferredCaptures,
+                // MortalList.pending, or transient container elements)
+                // but they are NOT live Perl lexicals — using them as
+                // walker roots falsely pins their referents and breaks
+                // DBIC's leak tracer. Falls back to scopeExited /
+                // refCountOwned heuristics for scalars not tracked by
+                // MyVarCleanupStack (e.g. interpreter-path scalars).
+                if (!MyVarCleanupStack.isLive(sc)) {
+                    if (sc.scopeExited) continue;
+                    if (!sc.refCountOwned) continue;
+                }
                 visitScalar(sc, todo);
             }
         }
