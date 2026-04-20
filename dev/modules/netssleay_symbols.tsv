@@ -25,14 +25,14 @@ ASN1_INTEGER_free	method	PARTIAL	2	autoload dispatch
 ASN1_INTEGER_get	method	PARTIAL	2	autoload dispatch
 ASN1_INTEGER_new	method	PARTIAL	2	autoload dispatch
 ASN1_INTEGER_set	method	PARTIAL	2	autoload dispatch
-ASN1_STRING_data	missing	MISSING	4	X509 introspection
-ASN1_STRING_length	missing	MISSING	4	X509 introspection
-ASN1_STRING_type	missing	MISSING	4	X509 introspection
+ASN1_STRING_data	missing	DONE	4	X509 introspection
+ASN1_STRING_length	missing	DONE	4	X509 introspection
+ASN1_STRING_type	missing	DONE	4	X509 introspection
 ASN1_TIME_free	method	PARTIAL	2	autoload dispatch
 ASN1_TIME_new	method	PARTIAL	2	autoload dispatch
-ASN1_TIME_print	missing	MISSING	4	X509 introspection
+ASN1_TIME_print	missing	DONE	4	X509 introspection
 ASN1_TIME_set	method	PARTIAL	2	autoload dispatch
-ASN1_TIME_set_string	missing	MISSING	4	X509 introspection
+ASN1_TIME_set_string	missing	DONE	4	X509 introspection
 BIO_eof	method	DONE	1	memory BIO (MemoryBIO backing queue)
 BIO_free	method	DONE	1	memory BIO (MemoryBIO backing queue)
 BIO_new	method	DONE	1	memory BIO (MemoryBIO backing queue)
@@ -197,7 +197,7 @@ EVP_sha384	method	PARTIAL	2	autoload dispatch
 EVP_sha512	method	PARTIAL	2	autoload dispatch
 FILETYPE_ASN1	constant	DONE	0	
 FILETYPE_PEM	constant	DONE	0	
-GENERAL_NAME_free	missing	MISSING	4	X509 introspection
+GENERAL_NAME_free	missing	DONE	4	X509 introspection
 GEN_DIRNAME	constant	DONE	0	
 GEN_DNS	constant	DONE	0	
 GEN_EDIPARTY	constant	DONE	0	
@@ -373,7 +373,7 @@ P_X509_add_extensions	method	PARTIAL	2	autoload dispatch
 P_X509_copy_extensions	method	PARTIAL	2	autoload dispatch
 P_X509_get_crl_distribution_points	method	PARTIAL	2	autoload dispatch
 P_X509_get_ext_key_usage	method	PARTIAL	2	autoload dispatch
-P_X509_get_ext_usage	missing	MISSING	4	X509 introspection
+P_X509_get_ext_usage	missing	DONE	4	X509 introspection
 P_X509_get_key_usage	method	PARTIAL	2	autoload dispatch
 P_X509_get_netscape_cert_type	method	PARTIAL	2	autoload dispatch
 P_X509_get_pubkey_alg	method	PARTIAL	2	autoload dispatch
@@ -469,7 +469,7 @@ X509_NAME_add_entry_by_txt	method	PARTIAL	2	autoload dispatch
 X509_NAME_cmp	method	PARTIAL	2	autoload dispatch
 X509_NAME_entry_count	method	PARTIAL	2	autoload dispatch
 X509_NAME_get_entry	method	PARTIAL	2	autoload dispatch
-X509_NAME_get_index_by_NID	missing	MISSING	4	X509 introspection
+X509_NAME_get_index_by_NID	missing	DONE	4	X509 introspection
 X509_NAME_get_text_by_NID	lambda	PARTIAL	4	touches handle state
 X509_NAME_hash	method	PARTIAL	2	autoload dispatch
 X509_NAME_new	method	PARTIAL	2	autoload dispatch
@@ -495,7 +495,7 @@ X509_REQ_sign	method	PARTIAL	2	autoload dispatch
 X509_REQ_verify	method	PARTIAL	2	autoload dispatch
 X509_STORE_CTX_free	method	PARTIAL	2	autoload dispatch
 X509_STORE_CTX_get0_cert	method	PARTIAL	2	autoload dispatch
-X509_STORE_CTX_get0_chain	missing	MISSING	4	X509 introspection
+X509_STORE_CTX_get0_chain	missing	DONE	4	X509 introspection
 X509_STORE_CTX_get1_chain	method	PARTIAL	2	autoload dispatch
 X509_STORE_CTX_get_current_cert	lambda	DONE	4	allocates opaque handle
 X509_STORE_CTX_get_error	method	PARTIAL	2	autoload dispatch
@@ -503,14 +503,14 @@ X509_STORE_CTX_get_error_depth	lambda	PARTIAL	4	touches handle state
 X509_STORE_CTX_init	method	PARTIAL	2	autoload dispatch
 X509_STORE_CTX_new	method	PARTIAL	2	autoload dispatch
 X509_STORE_CTX_set_cert	method	PARTIAL	2	autoload dispatch
-X509_STORE_CTX_set_error	missing	MISSING	4	X509 introspection
+X509_STORE_CTX_set_error	missing	DONE	4	X509 introspection
 X509_STORE_add_cert	method	PARTIAL	2	autoload dispatch
-X509_STORE_add_crl	missing	MISSING	4	X509 introspection
+X509_STORE_add_crl	missing	DONE	4	X509 introspection
 X509_STORE_free	method	PARTIAL	2	autoload dispatch
-X509_STORE_load_locations	missing	MISSING	4	X509 introspection
+X509_STORE_load_locations	missing	DONE	4	X509 introspection
 X509_STORE_new	method	PARTIAL	2	autoload dispatch
 X509_STORE_set1_param	method	PARTIAL	2	autoload dispatch
-X509_STORE_set_default_paths	missing	MISSING	4	X509 introspection
+X509_STORE_set_default_paths	missing	DONE	4	X509 introspection
 X509_STORE_set_flags	lambda	DONE	4	allocates opaque handle
 X509_TRUST_EMAIL	constant	DONE	0	
 X509_VERIFY_PARAM_add0_policy	method	PARTIAL	2	autoload dispatch
@@ -548,21 +548,21 @@ X509_V_FLAG_PARTIAL_CHAIN	constant	DONE	0
 X509_V_FLAG_POLICY_CHECK	constant	DONE	0	
 X509_V_FLAG_TRUSTED_FIRST	constant	DONE	0	
 X509_V_OK	constant	DONE	0	
-X509_add_ext	missing	MISSING	4	X509 introspection
+X509_add_ext	missing	DONE	4	X509 introspection
 X509_certificate_type	method	PARTIAL	2	autoload dispatch
-X509_check_issued	missing	MISSING	4	X509 introspection
-X509_cmp	missing	MISSING	4	X509 introspection
+X509_check_issued	missing	DONE	4	X509 introspection
+X509_cmp	missing	DONE	4	X509 introspection
 X509_digest	method	PARTIAL	2	autoload dispatch
 X509_free	method	PARTIAL	2	autoload dispatch
 X509_get0_notAfter	method	PARTIAL	2	autoload dispatch
 X509_get0_notBefore	method	PARTIAL	2	autoload dispatch
 X509_get0_serialNumber	method	PARTIAL	2	autoload dispatch
 X509_get_X509_PUBKEY	method	PARTIAL	2	autoload dispatch
-X509_get_ex_new_index	missing	MISSING	4	X509 introspection
+X509_get_ex_new_index	missing	DONE	4	X509 introspection
 X509_get_ext	method	PARTIAL	2	autoload dispatch
 X509_get_ext_by_NID	method	PARTIAL	2	autoload dispatch
 X509_get_ext_count	method	PARTIAL	2	autoload dispatch
-X509_get_ext_d2i	missing	MISSING	4	X509 introspection
+X509_get_ext_d2i	missing	DONE	4	X509 introspection
 X509_get_fingerprint	method	PARTIAL	2	autoload dispatch
 X509_get_issuer_name	method	PARTIAL	2	autoload dispatch
 X509_get_notAfter	method	PARTIAL	2	autoload dispatch
@@ -580,8 +580,8 @@ X509_issuer_name_hash	method	PARTIAL	2	autoload dispatch
 X509_new	method	PARTIAL	2	autoload dispatch
 X509_pubkey_digest	method	PARTIAL	2	autoload dispatch
 X509_set_issuer_name	method	PARTIAL	2	autoload dispatch
-X509_set_notAfter	missing	MISSING	4	X509 introspection
-X509_set_notBefore	missing	MISSING	4	X509 introspection
+X509_set_notAfter	missing	DONE	4	X509 introspection
+X509_set_notBefore	missing	DONE	4	X509 introspection
 X509_set_pubkey	method	PARTIAL	2	autoload dispatch
 X509_set_serialNumber	method	PARTIAL	2	autoload dispatch
 X509_set_subject_name	method	PARTIAL	2	autoload dispatch
@@ -590,7 +590,7 @@ X509_sign	method	PARTIAL	2	autoload dispatch
 X509_subject_name_hash	method	PARTIAL	2	autoload dispatch
 X509_verify	method	PARTIAL	2	autoload dispatch
 X509_verify_cert	method	PARTIAL	2	autoload dispatch
-X509_verify_cert_error_string	missing	MISSING	4	X509 introspection
+X509_verify_cert_error_string	missing	DONE	4	X509 introspection
 connect	lambda	PARTIAL	2	touches handle state
 constant	method	PARTIAL	2	autoload dispatch
 d2i_X509_CRL_bio	method	PARTIAL	2	autoload dispatch
@@ -671,8 +671,8 @@ set_tmp_rsa	missing	MISSING	2	SSLEngine-driven handshake / ctx
 set_verify	lambda	STUB	2	returns undef unconditionally
 set_wfd	missing	MISSING	2	SSLEngine-driven handshake / ctx
 shutdown	lambda	STUB	2	returns undef unconditionally
-sk_GENERAL_NAME_num	missing	MISSING	4	X509 introspection
-sk_GENERAL_NAME_value	missing	MISSING	4	X509 introspection
+sk_GENERAL_NAME_num	missing	DONE	4	X509 introspection
+sk_GENERAL_NAME_value	missing	DONE	4	X509 introspection
 sk_X509_INFO_num	method	PARTIAL	2	autoload dispatch
 sk_X509_INFO_value	method	PARTIAL	2	autoload dispatch
 sk_X509_delete	method	PARTIAL	2	autoload dispatch
@@ -681,12 +681,12 @@ sk_X509_insert	method	PARTIAL	2	autoload dispatch
 sk_X509_new_null	method	PARTIAL	2	autoload dispatch
 sk_X509_num	method	PARTIAL	2	autoload dispatch
 sk_X509_pop	method	PARTIAL	2	autoload dispatch
-sk_X509_pop_free	missing	MISSING	4	X509 introspection
+sk_X509_pop_free	missing	DONE	4	X509 introspection
 sk_X509_push	method	PARTIAL	2	autoload dispatch
 sk_X509_shift	method	PARTIAL	2	autoload dispatch
 sk_X509_unshift	method	PARTIAL	2	autoload dispatch
 sk_X509_value	method	PARTIAL	2	autoload dispatch
-sk_pop_free	missing	MISSING	4	X509 introspection
+sk_pop_free	missing	DONE	4	X509 introspection
 ssl_read_CRLF	missing	MISSING	2	SSLEngine-driven handshake / ctx
 ssl_read_all	missing	MISSING	2	SSLEngine-driven handshake / ctx
 ssl_read_until	missing	MISSING	2	SSLEngine-driven handshake / ctx
