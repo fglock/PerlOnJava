@@ -274,6 +274,47 @@ sub getegid { POSIX::_getegid() }
 sub setuid { POSIX::_setuid(@_) }
 sub setgid { POSIX::_setgid(@_) }
 
+# Locale support (stubbed — PerlOnJava does not switch C library locales,
+# but many modules rely on these existing and being callable).
+sub LC_ALL      () { 0 }
+sub LC_COLLATE  () { 1 }
+sub LC_CTYPE    () { 2 }
+sub LC_MONETARY () { 3 }
+sub LC_NUMERIC  () { 4 }
+sub LC_TIME     () { 5 }
+sub LC_MESSAGES () { 6 }
+
+sub setlocale {
+    my ($category, $locale) = @_;
+    # Returning the requested locale (or the current/default one) is enough
+    # for callers that use setlocale() purely for its return value, e.g.
+    # `setlocale(LC_COLLATE, "C")`.
+    return defined $locale ? $locale : 'C';
+}
+
+sub localeconv {
+    return {
+        decimal_point   => '.',
+        thousands_sep   => '',
+        grouping        => '',
+        int_curr_symbol => '',
+        currency_symbol => '',
+        mon_decimal_point => '',
+        mon_thousands_sep => '',
+        mon_grouping    => '',
+        positive_sign   => '',
+        negative_sign   => '-',
+        int_frac_digits => -1,
+        frac_digits     => -1,
+        p_cs_precedes   => -1,
+        p_sep_by_space  => -1,
+        n_cs_precedes   => -1,
+        n_sep_by_space  => -1,
+        p_sign_posn     => -1,
+        n_sign_posn     => -1,
+    };
+}
+
 # User/Group functions
 sub getpwnam { POSIX::_getpwnam(@_) }
 sub getpwuid { POSIX::_getpwuid(@_) }
