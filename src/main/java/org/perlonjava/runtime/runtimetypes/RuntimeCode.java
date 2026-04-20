@@ -343,6 +343,72 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isMapGrepBlock = false;
     // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
     public boolean isEvalBlock = false;
+
+    // Depth of active recursive calls to this subroutine, used by the
+    // "Deep recursion on subroutine" warning. Incremented on entry and
+    // decremented in a finally-block on exit.
+    public transient int callDepth = 0;
+    // Whether a "Deep recursion" warning has already been emitted for the
+    // currently-active recursion chain. Reset when callDepth returns to 0.
+    public transient boolean deepRecursionWarned = false;
+
+    // Depth threshold for the "Deep recursion on subroutine" warning.
+    // Matches Perl's default PERL_SUB_DEPTH_WARN value.
+    public static final int DEEP_RECURSION_WARN_DEPTH = 100;
+
+    // When the tail-call trampoline in the static apply() re-enters a sub,
+    // we want to skip the "Deep recursion" tracking for that entry.
+    // The goto &sub caller's `no warnings 'recursion'` scope has already
+    // unwound by the time the trampoline runs, so we can't honor it; and
+    // tail calls don't consume real Java stack, so a depth warning for
+    // them is misleading anyway. Nested tail-call trampolines use an int
+    // counter so re-entries only skip tracking for the outermost trampoline.
+    private static final ThreadLocal<Integer> inTailCallTrampoline =
+            ThreadLocal.withInitial(() -> 0);
+
+    /**
+     * Increment the recursion depth counter and, if we've just crossed the
+     * "Deep recursion on subroutine" threshold for the first time in this
+     * recursion chain, emit a warning under the "recursion" warnings category.
+     * Must be matched with a call to exitCall() in a finally-block.
+     *
+     * Map/grep/eval blocks are exempt so that map { ... } and eval { ... }
+     * don't report their dispatch wrapper. Tail-call trampoline re-entries
+     * are also exempt — see inTailCallTrampoline.
+     */
+    private void enterCall() {
+        if (isMapGrepBlock || isEvalBlock || isBuiltin) {
+            return;
+        }
+        if (inTailCallTrampoline.get() > 0) {
+            return;
+        }
+        int depth = ++callDepth;
+        if (depth > DEEP_RECURSION_WARN_DEPTH && !deepRecursionWarned) {
+            deepRecursionWarned = true;
+            String name = (packageName != null && subName != null)
+                    ? packageName + "::" + subName
+                    : (subName != null ? subName : "__ANON__");
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Deep recursion on subroutine \"" + name + "\""),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "recursion");
+        }
+    }
+
+    /** Paired with enterCall() — decrements the recursion counter. */
+    private void exitCall() {
+        if (isMapGrepBlock || isEvalBlock || isBuiltin) {
+            return;
+        }
+        if (inTailCallTrampoline.get() > 0) {
+            return;
+        }
+        if (--callDepth <= 0) {
+            callDepth = 0;
+            deepRecursionWarned = false;
+        }
+    }
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -2330,7 +2396,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && cfList.getControlFlowType() == ControlFlowType.TAILCALL) {
                     RuntimeScalar tailCodeRef = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
-                    result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
+                    // Mark trampoline re-entry so enterCall/exitCall skip depth
+                    // tracking (tail calls don't consume real Java stack, and the
+                    // goto site's lexical `no warnings 'recursion'` scope has
+                    // already unwound — see enterCall() comments).
+                    inTailCallTrampoline.set(inTailCallTrampoline.get() + 1);
+                    try {
+                        result = apply(tailCodeRef, tailArgs != null ? tailArgs : a, callContext);
+                    } finally {
+                        inTailCallTrampoline.set(inTailCallTrampoline.get() - 1);
+                    }
                 }
                 // Mortal-ize blessed refs with refCount==0 in void-context calls.
                 // These are objects that were created but never stored in a named
@@ -2668,6 +2743,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
+
+        // If this is a tail-call trampoline re-entry (emitted by the JVM bytecode
+        // trampoline for `goto &sub`), mark it so enterCall/exitCall skip depth
+        // tracking. See enterCall() / inTailCallTrampoline for the rationale.
+        boolean isTailCall = "tailcall".equals(subroutineName);
+        if (isTailCall) {
+            inTailCallTrampoline.set(inTailCallTrampoline.get() + 1);
+            try {
+                return applyImpl(runtimeScalar, subroutineName, list, callContext);
+            } finally {
+                inTailCallTrampoline.set(inTailCallTrampoline.get() - 1);
+            }
+        }
+        return applyImpl(runtimeScalar, subroutineName, list, callContext);
+    }
+
+    private static RuntimeList applyImpl(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
 
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -3163,6 +3255,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
             hasArgsStack.get().push(false);
 
+            // Check deep recursion BEFORE pushing the callee's warning bits,
+            // so the "Deep recursion on subroutine" warning is gated on the
+            // caller's lexical warning bits (matching Perl's ckWARN at the
+            // call site, not inside the callee).
+            enterCall();
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3183,6 +3280,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
+                exitCall();
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
@@ -3268,6 +3366,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // See also: the 2-arg instance method apply(array, ctx) which pushes false.
             hasArgsStack.get().push(true);
 
+            // Check deep recursion BEFORE pushing the callee's warning bits,
+            // so the "Deep recursion on subroutine" warning is gated on the
+            // caller's lexical warning bits.
+            enterCall();
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3288,6 +3390,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
+                exitCall();
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
