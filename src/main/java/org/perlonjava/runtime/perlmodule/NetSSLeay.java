@@ -264,6 +264,7 @@ public class NetSSLeay extends PerlModuleBase {
     // Maps for opaque handles: handle_id → Java object
     private static final Map<Long, MemoryBIO> BIO_HANDLES = new HashMap<>();
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new HashMap<>();
+    private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new HashMap<>();
     private static final Map<Long, KeyPair> RSA_HANDLES = new HashMap<>();
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new HashMap<>();  // handle → epoch seconds
     private static final Map<Long, SslCtxState> CTX_HANDLES = new HashMap<>();
@@ -310,6 +311,7 @@ public class NetSSLeay extends PerlModuleBase {
         HANDLE_COUNTER.set(1);
         BIO_HANDLES.clear();
         EVP_MD_CTX_HANDLES.clear();
+        HMAC_CTX_HANDLES.clear();
         RSA_HANDLES.clear();
         ASN1_TIME_HANDLES.clear();
         CTX_HANDLES.clear();
@@ -555,6 +557,14 @@ public class NetSSLeay extends PerlModuleBase {
         byte[] toByteArray() {
             return java.util.Arrays.copyOf(data, data.length);
         }
+    }
+
+    // Inner class: HMAC context wrapper (Phase 5)
+    private static class HmacCtx {
+        javax.crypto.Mac mac;
+        String algorithmName; // Java MAC algorithm e.g. "HmacSHA256"
+        int digestNid;
+        byte[] key; // kept so Init_ex can be called with null md/key to re-use
     }
 
     // Inner class: EVP_MD context wrapper
@@ -1666,6 +1676,335 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(1).getList();
             });
 
+            // -------------------------------------------------------------
+            // Phase 5 — HMAC incremental API (java.crypto.Mac-backed)
+            // -------------------------------------------------------------
+            registerLambda("HMAC_CTX_new", (a, c) -> {
+                long h = HANDLE_COUNTER.getAndIncrement();
+                HMAC_CTX_HANDLES.put(h, new HmacCtx());
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("HMAC_CTX_free", (a, c) -> {
+                if (a.size() > 0) HMAC_CTX_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("HMAC_CTX_reset", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null) return new RuntimeScalar(0).getList();
+                h.mac = null; h.algorithmName = null; h.digestNid = 0; h.key = null;
+                return new RuntimeScalar(1).getList();
+            });
+            // HMAC_Init_ex(ctx, key, len, md, engine)
+            // HMAC_Init(ctx, key, len, md)  -- same semantics
+            PerlSubroutine hmacInitEx = (a, c) -> {
+                if (a.size() < 4) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null) return new RuntimeScalar(0).getList();
+                // key may be undef ("" / zero-length) on subsequent calls
+                // to reuse the previous key with a new md (OpenSSL semantics).
+                byte[] key = null;
+                RuntimeScalar keyArg = a.get(1);
+                if (keyArg.type != RuntimeScalarType.UNDEF) {
+                    String ks = keyArg.toString();
+                    int keyLen = (int) a.get(2).getLong();
+                    byte[] raw = ks.getBytes(StandardCharsets.ISO_8859_1);
+                    if (keyLen <= 0 || keyLen > raw.length) keyLen = raw.length;
+                    key = java.util.Arrays.copyOf(raw, keyLen);
+                }
+                int mdNid = (int) a.get(3).getLong();
+                String opensslName = mdNid != 0 ? NID_TO_NAME.get(mdNid) : h.algorithmName;
+                if (opensslName == null) return new RuntimeScalar(0).getList();
+                String javaAlg = resolveJavaAlg(opensslName);
+                if (javaAlg == null) return new RuntimeScalar(0).getList();
+                String macAlg = "Hmac" + javaAlg.replace("-", "").toUpperCase();
+                // Map a few JCE-specific names
+                if (javaAlg.equalsIgnoreCase("SHA-1")) macAlg = "HmacSHA1";
+                else if (javaAlg.equalsIgnoreCase("SHA-224")) macAlg = "HmacSHA224";
+                else if (javaAlg.equalsIgnoreCase("SHA-256")) macAlg = "HmacSHA256";
+                else if (javaAlg.equalsIgnoreCase("SHA-384")) macAlg = "HmacSHA384";
+                else if (javaAlg.equalsIgnoreCase("SHA-512")) macAlg = "HmacSHA512";
+                else if (javaAlg.equalsIgnoreCase("MD5")) macAlg = "HmacMD5";
+                try {
+                    javax.crypto.Mac mac = javax.crypto.Mac.getInstance(macAlg);
+                    byte[] useKey = key != null ? key : h.key;
+                    if (useKey == null) useKey = new byte[0];
+                    mac.init(new javax.crypto.spec.SecretKeySpec(
+                            useKey.length == 0 ? new byte[1] : useKey, macAlg));
+                    h.mac = mac;
+                    h.algorithmName = opensslName;
+                    h.digestNid = mdNid != 0 ? mdNid : h.digestNid;
+                    if (key != null) h.key = key;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            };
+            registerLambda("HMAC_Init_ex", hmacInitEx);
+            registerLambda("HMAC_Init", hmacInitEx);
+            registerLambda("HMAC_Update", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null || h.mac == null) return new RuntimeScalar(0).getList();
+                h.mac.update(a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1));
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("HMAC_Final", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null || h.mac == null) return new RuntimeScalar().getList();
+                return bytesToPerlString(h.mac.doFinal()).getList();
+            });
+            // HMAC(md_nid, key, data) — one-shot
+            registerLambda("HMAC", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                int mdNid = (int) a.get(0).getLong();
+                byte[] key = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                byte[] data = a.get(2).toString().getBytes(StandardCharsets.ISO_8859_1);
+                String opensslName = NID_TO_NAME.get(mdNid);
+                if (opensslName == null) return new RuntimeScalar().getList();
+                String javaAlg = resolveJavaAlg(opensslName);
+                if (javaAlg == null) return new RuntimeScalar().getList();
+                String macAlg;
+                if (javaAlg.equalsIgnoreCase("SHA-1")) macAlg = "HmacSHA1";
+                else if (javaAlg.equalsIgnoreCase("SHA-224")) macAlg = "HmacSHA224";
+                else if (javaAlg.equalsIgnoreCase("SHA-256")) macAlg = "HmacSHA256";
+                else if (javaAlg.equalsIgnoreCase("SHA-384")) macAlg = "HmacSHA384";
+                else if (javaAlg.equalsIgnoreCase("SHA-512")) macAlg = "HmacSHA512";
+                else if (javaAlg.equalsIgnoreCase("MD5")) macAlg = "HmacMD5";
+                else macAlg = "Hmac" + javaAlg.replace("-", "").toUpperCase();
+                try {
+                    javax.crypto.Mac mac = javax.crypto.Mac.getInstance(macAlg);
+                    mac.init(new javax.crypto.spec.SecretKeySpec(
+                            key.length == 0 ? new byte[1] : key, macAlg));
+                    return bytesToPerlString(mac.doFinal(data)).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — BIGNUM (java.math.BigInteger-backed)
+            // -------------------------------------------------------------
+            registerLambda("BN_new", (a, c) -> {
+                long h = HANDLE_COUNTER.getAndIncrement();
+                BIGNUM_HANDLES.put(h, BigInteger.ZERO);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("BN_free", (a, c) -> {
+                if (a.size() > 0) BIGNUM_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("BN_bin2bn", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                byte[] raw = a.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+                // OpenSSL treats the input as big-endian unsigned, so prepend a
+                // zero byte if the top bit is set.
+                BigInteger bn;
+                if (raw.length == 0) bn = BigInteger.ZERO;
+                else if ((raw[0] & 0x80) != 0) {
+                    byte[] padded = new byte[raw.length + 1];
+                    System.arraycopy(raw, 0, padded, 1, raw.length);
+                    bn = new BigInteger(padded);
+                } else {
+                    bn = new BigInteger(raw.length == 0 ? new byte[]{0} : raw);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                BIGNUM_HANDLES.put(h, bn);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("BN_bn2bin", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                byte[] raw = bn.toByteArray();
+                // Strip leading zero that Java adds for sign preservation
+                if (raw.length > 1 && raw[0] == 0) {
+                    raw = java.util.Arrays.copyOfRange(raw, 1, raw.length);
+                }
+                return bytesToPerlString(raw).getList();
+            });
+            registerLambda("BN_bn2dec", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                return new RuntimeScalar(bn.toString(10)).getList();
+            });
+            registerLambda("BN_bn2hex", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                // OpenSSL returns uppercase hex, no "0x", with leading minus for negative
+                String s = bn.abs().toString(16).toUpperCase();
+                if (bn.signum() < 0) s = "-" + s;
+                return new RuntimeScalar(s).getList();
+            });
+            registerLambda("BN_hex2bn", (a, c) -> {
+                // BN_hex2bn(\$bn_handle, $hex) - creates if $bn_handle is undef
+                // PerlOnJava: we return a new handle (one-arg form too).
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                String hex;
+                if (a.size() >= 2) hex = a.get(1).toString();
+                else hex = a.get(0).toString();
+                if (hex == null || hex.isEmpty()) return new RuntimeScalar().getList();
+                try {
+                    BigInteger bn = new BigInteger(hex, 16);
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    BIGNUM_HANDLES.put(h, bn);
+                    return new RuntimeScalar(h).getList();
+                } catch (NumberFormatException e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("BN_dec2bn", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                String dec = a.size() >= 2 ? a.get(1).toString() : a.get(0).toString();
+                try {
+                    BigInteger bn = new BigInteger(dec, 10);
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    BIGNUM_HANDLES.put(h, bn);
+                    return new RuntimeScalar(h).getList();
+                } catch (NumberFormatException e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("BN_add_word", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long handle = a.get(0).getLong();
+                BigInteger bn = BIGNUM_HANDLES.get(handle);
+                if (bn == null) return new RuntimeScalar(0).getList();
+                BIGNUM_HANDLES.put(handle, bn.add(BigInteger.valueOf(a.get(1).getLong())));
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("BN_num_bits", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(bn == null ? 0 : bn.bitLength()).getList();
+            });
+            registerLambda("BN_num_bytes", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar((bn.bitLength() + 7) / 8).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — RSA cryptographic ops (KeyPair-backed)
+            // -------------------------------------------------------------
+            registerLambda("RSA_new", (a, c) -> {
+                // Net::SSLeay::RSA_new() just allocates; keys must be
+                // installed via RSA_generate_key or key-loading APIs.
+                long h = HANDLE_COUNTER.getAndIncrement();
+                RSA_HANDLES.put(h, null); // placeholder
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("RSA_size", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                KeyPair kp = RSA_HANDLES.get(a.get(0).getLong());
+                if (kp == null) return new RuntimeScalar(0).getList();
+                java.security.interfaces.RSAKey rk =
+                        (java.security.interfaces.RSAKey) (kp.getPublic() != null
+                                ? kp.getPublic() : kp.getPrivate());
+                if (rk == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar((rk.getModulus().bitLength() + 7) / 8).getList();
+            });
+            registerLambda("RSA_public_encrypt", (a, c) -> {
+                return rsaCrypt(a, true, true);
+            });
+            registerLambda("RSA_private_decrypt", (a, c) -> {
+                return rsaCrypt(a, false, false);
+            });
+            registerLambda("RSA_private_encrypt", (a, c) -> {
+                return rsaCrypt(a, true, false);
+            });
+            registerLambda("RSA_public_decrypt", (a, c) -> {
+                return rsaCrypt(a, false, true);
+            });
+            registerLambda("RSA_sign", (a, c) -> {
+                // RSA_sign(type, message, rsa) -> signature or undef
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                int nidType = (int) a.get(0).getLong();
+                byte[] msg = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                KeyPair kp = RSA_HANDLES.get(a.get(2).getLong());
+                if (kp == null || kp.getPrivate() == null) return new RuntimeScalar().getList();
+                String digestName = NID_TO_NAME.get(nidType);
+                if (digestName == null) return new RuntimeScalar().getList();
+                String sigAlg = rsaSignatureAlg(digestName);
+                if (sigAlg == null) return new RuntimeScalar().getList();
+                try {
+                    java.security.Signature sig = java.security.Signature.getInstance(sigAlg);
+                    sig.initSign(kp.getPrivate());
+                    sig.update(msg);
+                    return bytesToPerlString(sig.sign()).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("RSA_verify", (a, c) -> {
+                // RSA_verify(type, message, signature, rsa) -> 1/0
+                if (a.size() < 4) return new RuntimeScalar(0).getList();
+                int nidType = (int) a.get(0).getLong();
+                byte[] msg = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                byte[] signature = a.get(2).toString().getBytes(StandardCharsets.ISO_8859_1);
+                KeyPair kp = RSA_HANDLES.get(a.get(3).getLong());
+                if (kp == null || kp.getPublic() == null) return new RuntimeScalar(0).getList();
+                String digestName = NID_TO_NAME.get(nidType);
+                if (digestName == null) return new RuntimeScalar(0).getList();
+                String sigAlg = rsaSignatureAlg(digestName);
+                if (sigAlg == null) return new RuntimeScalar(0).getList();
+                try {
+                    java.security.Signature sig = java.security.Signature.getInstance(sigAlg);
+                    sig.initVerify(kp.getPublic());
+                    sig.update(msg);
+                    return new RuntimeScalar(sig.verify(signature) ? 1 : 0).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — EVP_PKEY_get1_* (extract a typed handle from EVP_PKEY)
+            // -------------------------------------------------------------
+            registerLambda("EVP_PKEY_get1_RSA", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(0).getLong());
+                if (!(k instanceof java.security.interfaces.RSAKey)) {
+                    return new RuntimeScalar().getList();
+                }
+                KeyPair kp;
+                if (k instanceof java.security.PrivateKey) {
+                    kp = new KeyPair(null, (java.security.PrivateKey) k);
+                } else {
+                    kp = new KeyPair((java.security.PublicKey) k, null);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                RSA_HANDLES.put(h, kp);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("EVP_PKEY_get1_DSA", (a, c) -> {
+                // We do not model DSA as a separate handle type — return undef.
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("EVP_PKEY_get1_DH", (a, c) -> {
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("EVP_PKEY_get1_EC_KEY", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(0).getLong());
+                if (k == null || !k.getAlgorithm().equals("EC")) {
+                    return new RuntimeScalar().getList();
+                }
+                KeyPair kp;
+                if (k instanceof java.security.PrivateKey) {
+                    kp = new KeyPair(null, (java.security.PrivateKey) k);
+                } else {
+                    kp = new KeyPair((java.security.PublicKey) k, null);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                EC_KEY_HANDLES.put(h, kp);
+                return new RuntimeScalar(h).getList();
+            });
+
             // Define exports
             String[] exportOk = CONSTANTS.keySet().toArray(new String[0]);
             mod.defineExport("EXPORT_OK", exportOk);
@@ -2387,6 +2726,56 @@ public class NetSSLeay extends PerlModuleBase {
             return MessageDigest.getInstance(javaAlg);
         } catch (NoSuchAlgorithmException e) {
             return null;
+        }
+    }
+
+    // ---- Phase 6: RSA encrypt/decrypt helper ----
+
+    private static RuntimeList rsaCrypt(RuntimeArray args, boolean encrypt, boolean usePublic) {
+        // Form: (from, to_ref, rsa, padding)
+        // PerlOnJava style: we return the transformed bytes as a scalar
+        // directly (callers typically call as: RSA_public_encrypt($in, $out, $rsa, $pad);
+        // where $out is output-by-reference).  The existing codebase uses
+        // the return value form for Perl-side simplicity.
+        if (args.size() < 3) return new RuntimeScalar().getList();
+        byte[] data = args.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+        // args(1) is the output-string scalar; we assign into it and also
+        // return the number of bytes written.
+        RuntimeScalar outTarget = args.get(1);
+        KeyPair kp = RSA_HANDLES.get(args.get(2).getLong());
+        if (kp == null) return new RuntimeScalar(-1).getList();
+        int padding = args.size() >= 4 ? (int) args.get(3).getLong() : 1; // 1 = RSA_PKCS1_PADDING
+        String transform;
+        switch (padding) {
+            case 3:  transform = "RSA/ECB/NoPadding"; break;           // RSA_NO_PADDING
+            case 4:  transform = "RSA/ECB/OAEPWithSHA-1AndMGF1Padding"; break; // RSA_PKCS1_OAEP_PADDING
+            default: transform = "RSA/ECB/PKCS1Padding";               // RSA_PKCS1_PADDING
+        }
+        try {
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance(transform);
+            java.security.Key key = usePublic ? kp.getPublic() : kp.getPrivate();
+            if (key == null) return new RuntimeScalar(-1).getList();
+            cipher.init(encrypt ? javax.crypto.Cipher.ENCRYPT_MODE : javax.crypto.Cipher.DECRYPT_MODE, key);
+            byte[] out = cipher.doFinal(data);
+            outTarget.set(new String(out, StandardCharsets.ISO_8859_1));
+            outTarget.type = RuntimeScalarType.BYTE_STRING;
+            return new RuntimeScalar(out.length).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(-1).getList();
+        }
+    }
+
+    // Helper: OpenSSL digest name → Java RSA Signature algorithm
+    private static String rsaSignatureAlg(String digestName) {
+        if (digestName == null) return null;
+        switch (digestName.toLowerCase()) {
+            case "sha1":   return "SHA1withRSA";
+            case "sha224": return "SHA224withRSA";
+            case "sha256": return "SHA256withRSA";
+            case "sha384": return "SHA384withRSA";
+            case "sha512": return "SHA512withRSA";
+            case "md5":    return "MD5withRSA";
+            default: return null;
         }
     }
 

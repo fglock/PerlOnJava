@@ -43,14 +43,14 @@ BIO_read	method	DONE	1	memory BIO (MemoryBIO backing queue)
 BIO_s_file	method	DONE	1	sentinel; BIO_new_file is the convenience wrapper
 BIO_s_mem	method	DONE	1	memory BIO (MemoryBIO backing queue)
 BIO_write	method	DONE	1	memory BIO (MemoryBIO backing queue)
-BN_add_word	missing	MISSING	6	RSA/BN/EVP_PKEY
-BN_bin2bn	missing	MISSING	6	RSA/BN/EVP_PKEY
-BN_bn2dec	missing	MISSING	6	RSA/BN/EVP_PKEY
-BN_bn2hex	missing	MISSING	6	RSA/BN/EVP_PKEY
+BN_add_word	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bin2bn	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bn2dec	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bn2hex	missing	DONE	6	RSA/BN/EVP_PKEY
 BN_dup	method	PARTIAL	2	autoload dispatch
-BN_free	missing	MISSING	6	RSA/BN/EVP_PKEY
-BN_hex2bn	missing	MISSING	6	RSA/BN/EVP_PKEY
-BN_new	missing	MISSING	6	RSA/BN/EVP_PKEY
+BN_free	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_hex2bn	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_new	missing	DONE	6	RSA/BN/EVP_PKEY
 CB_ACCEPT_EXIT	constant	DONE	0	
 CB_ACCEPT_LOOP	constant	DONE	0	
 CB_ALERT	constant	DONE	0	
@@ -171,10 +171,10 @@ EVP_PKEY_assign_EC_KEY	lambda	PARTIAL	6	touches handle state
 EVP_PKEY_assign_RSA	method	PARTIAL	2	autoload dispatch
 EVP_PKEY_bits	method	PARTIAL	2	autoload dispatch
 EVP_PKEY_free	method	PARTIAL	2	autoload dispatch
-EVP_PKEY_get1_DH	missing	MISSING	6	RSA/BN/EVP_PKEY
-EVP_PKEY_get1_DSA	missing	MISSING	6	RSA/BN/EVP_PKEY
-EVP_PKEY_get1_EC_KEY	missing	MISSING	6	RSA/BN/EVP_PKEY
-EVP_PKEY_get1_RSA	missing	MISSING	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_DH	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_DSA	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_EC_KEY	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_RSA	missing	DONE	6	RSA/BN/EVP_PKEY
 EVP_PKEY_id	method	PARTIAL	2	autoload dispatch
 EVP_PKEY_new	method	PARTIAL	2	autoload dispatch
 EVP_PKEY_security_bits	method	PARTIAL	2	autoload dispatch
@@ -207,13 +207,13 @@ GEN_OTHERNAME	constant	DONE	0
 GEN_RID	constant	DONE	0	
 GEN_URI	constant	DONE	0	
 GEN_X400	constant	DONE	0	
-HMAC	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_CTX_free	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_CTX_new	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_Final	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_Init	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_Init_ex	missing	MISSING	5	digest/HMAC/cipher wrappers
-HMAC_Update	missing	MISSING	5	digest/HMAC/cipher wrappers
+HMAC	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_CTX_free	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_CTX_new	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Final	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Init	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Init_ex	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Update	missing	DONE	5	digest/HMAC/cipher wrappers
 LIBRESSL_VERSION_NUMBER	constant	DONE	0	
 MBSTRING_ASC	constant	DONE	0	
 MBSTRING_BMP	constant	DONE	0	
@@ -394,14 +394,14 @@ RSA_F4	method	PARTIAL	2	autoload dispatch
 RSA_free	method	PARTIAL	2	autoload dispatch
 RSA_generate_key	method	PARTIAL	2	autoload dispatch
 RSA_get_key_parameters	method	PARTIAL	2	autoload dispatch
-RSA_new	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_private_decrypt	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_private_encrypt	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_public_decrypt	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_public_encrypt	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_sign	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_size	missing	MISSING	6	RSA/BN/EVP_PKEY
-RSA_verify	missing	MISSING	6	RSA/BN/EVP_PKEY
+RSA_new	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_private_decrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_private_encrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_public_decrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_public_encrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_sign	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_size	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_verify	missing	DONE	6	RSA/BN/EVP_PKEY
 SESS_CACHE_BOTH	constant	DONE	0	
 SESS_CACHE_CLIENT	constant	DONE	0	
 SESS_CACHE_OFF	constant	DONE	0	
