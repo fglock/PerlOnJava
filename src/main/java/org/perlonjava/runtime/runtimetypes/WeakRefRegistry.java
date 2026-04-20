@@ -245,11 +245,15 @@ public class WeakRefRegistry {
                 new java.util.ArrayList<>(referentToWeakRefs.keySet());
         for (RuntimeBase referent : referents) {
             if (referent instanceof RuntimeCode) continue;
+            // Phase H3: skip unblessed containers (ARRAY/HASH) at pre-END
+            // time. Sub::Defer's $deferred_info and Sub::Quote's
+            // $quoted_info are reachable only via closure captures not
+            // traversed by `clearAllBlessedWeakRefs`. Clearing them
+            // breaks END-block leak-tracer dispatch loops that call
+            // Moo accessors to stringify weak-registry slots.
+            if (referent.blessId == 0 && !(referent instanceof RuntimeScalar)) continue;
             // Phase I: skip clearing weak refs to scalars that hold CODE
-            // refs or are UNDEF. These are commonly Sub::Quote/Sub::Defer
-            // `$unquoted` / `$undeferred` lexical slots used by deferred
-            // dispatch. Even at END-block prep time, these slots may be
-            // accessed as methods via stash-installed subs.
+            // refs or are UNDEF (Sub::Quote/Sub::Defer slot scalars).
             if (referent instanceof RuntimeScalar s) {
                 if (s.type == RuntimeScalarType.UNDEF) continue;
                 if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
