@@ -1384,6 +1384,301 @@ All objectives of `refcount_alignment_52leaks_plan.md` achieved:
 - No regressions in sandbox or full unit suite
 - No opt-in DBIC LeakTracer patch required
 
+---
+
+## Phase H — Fix remaining `./jcpan -t DBIx::Class` parallel-run issues (2026-04-20 plan)
+
+**Goal:** `./jcpan -t DBIx::Class` (prove -j, ~314 test files,
+parallel execution) → **0 failures**. Current result: 5/314 files
+fail, 11/13792 subtests fail (**99.92% pass**).
+
+### Baseline full-suite results
+
+| Test file | Failure mode | Severity |
+|---|---|---|
+| `t/52leaks.t` | 10 real fails (tests 9-18): Artist + 2×Schema + 2×ResultSource::Table all with refcnt 2-6 — phantom-chain leaks. Standalone: 0 fails. | H1 (HIGH) |
+| `t/60core.t` | **timeout at 300s, SIGKILL (exit 137)**. All 108 started subtests passed, then hung. Standalone: 125/125 in 6s. | H2 (HIGH) |
+| `t/cdbi/sweet/08pager.t` | **timeout at 300s, SIGKILL**. All 9 started subtests passed, then hung in END block (Sub::Defer dispatch hot loop). | H3 (HIGH) |
+| `t/storage/error.t` | Test 49 fails: "callback works after $schema is gone" — Schema self-save rescuedObjects issue (known, Phase B-deferred). | H4 (MED) |
+| `t/zzzzzzz_perl_perf_bug.t` | `Unable to lock _dbictest_global.lock: Resource deadlock avoided` — cascade failure from H2/H3 holding the DBICTest global flock. | H5 (secondary — resolved by H2+H3) |
+
+### Bonus wins from Phases C-G
+
+DBIC marks 8 tests as `TODO 'Needs Data::Entangled or somesuch'`
+(RT#82942). Our work made **all 8 pass unexpectedly**:
+- `t/sqlmaker/limit_dialects/generic_subq.t`: TODO→pass 9, 11, 13, 15, 17
+- `t/storage/txn_scope_guard.t`: TODO→pass 13, 15, 17
+
+These aren't failures (they're `TODO passed`, which prove reports as
+such but doesn't fail the run), but they confirm our refcount
+alignment work materially improved DBIC leak tracking beyond what
+the DBIC authors expected possible without external help.
+
+---
+
+### H1: t/52leaks.t under parallel — 10 real leaks
+
+#### Observations
+
+Each parallel prove worker runs 52leaks.t in its **own JVM process**
+(independent memory/state). Standalone invocation passes 10/10 at
+our current HEAD. Parallel invocation leaks 10 objects.
+
+Leaks are DBIC phantom-chain objects (Schema, Source, Artist) with
+refcount 2-6. These correspond to the classic `source_registrations`
+cycle Phase B1 (ScalarRefRegistry) and the rescuedObjects mechanism
+were designed to break.
+
+#### Hypotheses (ordered by likelihood)
+
+**H1a — JVM memory pressure delays WeakHashMap pruning.**
+`ScalarRefRegistry.forceGcAndSnapshot()` runs 3 `System.gc()` cycles
+with `WeakReference` sentinels. Under parallel load on a small-heap
+JVM, GC may run in Full-GC mode less aggressively, leaving weak-key
+entries unpruned within the sentinel wait window. Walker then over-
+reports reachability.
+
+Fix: increase sentinel wait time when `System.gc()` has been called
+but the sentinel probe is still defined — add exponential backoff
+(e.g. 10ms, 20ms, 40ms, 80ms). Or set `-Xmx` explicitly via
+`jperl` wrapper for CPAN builds.
+
+**H1b — DBICTest test-setup timing differences.**
+Under parallel run, `DBICTest::init_schema` takes longer (shared
+file creation, flock wait). The long-running operations hold
+refcount bumps on intermediate objects longer, giving Phase B2a
+auto-sweep more opportunities to mis-classify live-through-deferred
+objects.
+
+Fix: verify with `JPERL_GC_DEBUG=1` under prove. If auto-sweep
+fires mid-setup and clears in-flight weak refs, we need to extend
+the ModuleInitGuard coverage (Phase B2a) to DBICTest's own load
+sequence, not just require/use.
+
+**H1c — Per-process jperl startup variations.**
+If some paths in compile-time initialization have non-determinism
+(HashMap iteration order, etc.), the first-use dispatch order of
+Sub::Defer accessors may differ between runs. Under certain orders,
+Schema's source_registrations weakening fires before Source's back-
+ref is set up, leaving a non-weak cycle.
+
+Fix: audit Schema::DESTROY / source_registrations weaken order;
+ensure Source.schema is weakened in Source's constructor too.
+
+#### Investigation plan
+
+1. Reproduce locally: `prove -j8 t/52leaks.t` (run it 10 times —
+   document pass/fail ratio; is it flaky or always-fail under
+   parallel?).
+2. Compare `JPERL_GC_DEBUG=1 JPERL_REGISTER_STACKS=1` output
+   between standalone (pass) and parallel (fail) runs.
+3. Check whether tests 9-18 leak EXACTLY the same 5 objects every
+   run, or varying sets.
+4. If timing-related (H1b), try forcing serial execution for
+   52leaks.t via `NO_PARALLEL_TESTS` env var or a test-specific
+   lock.
+5. If memory-related (H1a), try bumping `-Xmx` in `jperl` and/or
+   `forceGcAndSnapshot` wait times.
+
+---
+
+### H2: t/60core.t parallel hang (300s timeout → SIGKILL)
+
+#### Observations
+
+Standalone: 125/125 in 6s. Parallel: all 108 reached tests pass,
+then infinite loop beyond that point (300s timeout).
+
+JFR-style stack sampling (20 samples at 0.3s intervals) from the
+hung process showed hot path cycling between:
+- `RuntimeCode.call:1954`
+- `BytecodeInterpreter.execute:1170`
+- `RuntimeCode.apply:2390` (hint-hash push — iterative trampoline loop)
+- `RuntimeCode.apply:2406` (code.apply inner call)
+- `Sub/Defer.pm:2382` (Moo accessor deferred dispatch)
+
+This is the same trampoline-heavy dispatch that Phase C fixed from
+crashing (was stack overflow, now iterative). But a pathological
+case exists where the tailcall chain doesn't terminate — likely a
+missed Moo accessor cache invalidation that causes Sub::Defer to
+re-dispatch the same stub forever.
+
+60core.t's failure point is around test 108 (last reached:
+"insert does not encode again") which is followed by multicreate
+tests (Employee with secretkey that has an inflator/deflator).
+
+#### Hypotheses
+
+**H2a — Inflator/deflator call loop.**
+`$empl->secretkey->encoded` goes through 2 method calls, each with
+an inflator/deflator that uses Sub::Defer-generated accessors. If
+Phase F's closure-capture narrowing dropped a lexical that the
+deflator needs, it would fall back to re-dispatching the stub.
+
+Fix: isolate which specific lexical the deflator closure needs;
+narrow VariableCollectorVisitor's missed cases (e.g., regex captures,
+slice context, lvalue refs).
+
+**H2b — Shared Sub::Defer state across tests in parallel.**
+Sub::Defer caches deferred method codes in `%Sub::Defer::DEFERRED`.
+Different tests running in parallel (different JVMs — NOT shared
+state, but possibly different load orders) could leave Sub::Defer
+in a state where the "undeferred" code is never cached.
+
+Fix: instrument Sub::Defer's `undefer_sub` to log cache hits/misses;
+find where the re-dispatch loop originates.
+
+**H2c — Our Phase F `hasEvalString` check missing a case.**
+If 60core.t uses a construct VariableCollectorVisitor treats as not-
+referencing a variable when it actually does (e.g., formats, `do
+FILE`, string eval in a regex), the closure will be called with
+missing state, leading to infinite retry.
+
+Fix: run 60core.t with `JPERL_PHASE_F_DBG=1` (re-enable the debug
+print) and look at which closures narrow their captures right before
+the hang.
+
+#### Investigation plan
+
+1. Run 60core.t standalone with `perl_test_runner.pl` to get exact
+   behavior at test 108→109 (where it hangs).
+2. If it hangs standalone too, bisect between Phase E (good) and
+   Phase G (hang) commits to find the regressor.
+3. Capture jstack at the hang point; identify which sub is in the
+   dispatch loop.
+4. Compare `JPERL_PHASE_F_DBG=1` output on passing vs hanging runs.
+
+---
+
+### H3: t/cdbi/sweet/08pager.t parallel hang in END block
+
+#### Observations
+
+Timeout at 300s. All 9 declared subtests passed. Hang is in the
+END block via DBICTest.pm line 371:
+```perl
+END {
+    assert_empty_weakregistry($weak_registry, 'quiet');
+}
+```
+
+Stack showed `RuntimeCode.callCached` / `anon6766.apply(DBICTest.pm:1693)`
+with hot frame in `Sub/Defer.pm:2378`. The END block iterates every
+weak-registered ref and calls methods on each (for display string
+generation) that go through Sub::Defer → apply → apply (trampoline).
+
+#### Root cause hypothesis
+
+With many hundreds of weak refs registered under parallel test
+conditions (vs fewer standalone), `assert_empty_weakregistry`'s
+inner loop amplifies any per-call slowness. If a single Sub::Defer
+dispatch takes (say) 50ms under contention × 10000 weak refs × 3
+methods each = many minutes.
+
+Option 1: the dispatch itself is slow (unlikely — standalone runs
+the same code).
+
+Option 2: our ScalarRefRegistry grows unboundedly under certain
+patterns (Phase B1's WeakHashMap should prune, but maybe some
+scalars have strong JVM references elsewhere that block pruning).
+
+#### Investigation plan
+
+1. Count `ScalarRefRegistry.approximateSize()` at the START of the
+   END block. If it's in the 10000s, that's the scale problem.
+2. If so, find what's strongly holding those scalars — likely a
+   Java-side cache that needs pruning on scope exit.
+3. Consider moving weak_registry population to a lighter-weight
+   tracker that doesn't depend on full walker sweep.
+
+---
+
+### H4: t/storage/error.t test 49 (Schema DESTROY cascade)
+
+Already documented in Phase D/E as deferred. The specific failure
+pattern was investigated and the fix requires either:
+
+- Redesigning `DestroyDispatch.rescuedObjects` semantics (risk of
+  re-breaking 52leaks.t test 18 which relies on current behavior).
+- A targeted DBIC fix: ensure Schema::DESTROY's source_registrations
+  weakening is idempotent and triggers the walker.
+
+**Proposed approach for Phase H4:**
+Add a Schema-aware hook: when `DestroyDispatch` detects that a
+class is `DBIx::Class::Schema` (or subclass) and `DESTROY` is about
+to fire on it, also call `ReachabilityWalker.sweepWeakRefs(false)`
+synchronously so `clearWeakRefsTo(storage)` fires before the test's
+`$dbh->do(...)` check.
+
+---
+
+### H5: t/zzzzzzz_perl_perf_bug.t (cascade failure)
+
+Not an independent issue. Error message:
+```
+Unable to lock _dbictest_global.lock: Resource deadlock avoided
+```
+
+This happens because H2 (60core.t) or H3 (08pager.t) holds the
+DBICTest global exclusive lock past the 15-minute timeout of
+`await_flock`, causing the kernel to detect the deadlock.
+
+**Fixing H2 and H3 resolves H5 automatically.**
+
+---
+
+### Implementation priorities
+
+**Phase H-Priority-1: Fix the hangs (H2, H3).**
+These are the most impactful. If jperl hangs on ANY DBIC test,
+users will see `jcpan` appear stuck. The hangs cascade into H5.
+
+Starting point: reproduce 60core.t and 08pager.t hang STANDALONE
+under timeout. Collect full jstack + JFR. Bisect through the recent
+Phase C-G commits to find the introducing commit.
+
+**Phase H-Priority-2: 52leaks.t parallel (H1).**
+10 leaks under parallel is a regression over standalone. But they
+are the expected-to-leak-without-LeakTracer-patch objects — NOT the
+ones we already fixed (rerefrozen, random_results). This is the
+DBIC phantom-chain pattern that needs reachability walker
+intervention.
+
+Starting point: reproduce locally with `prove -j8` and confirm
+deterministically. Compare `JPERL_GC_DEBUG=1` output.
+
+**Phase H-Priority-3: storage/error.t test 49 (H4).**
+Targeted Schema-DESTROY trigger for walker sweep. Low-risk surgical
+change.
+
+### Success criteria
+
+1. `./jcpan -t DBIx::Class` completes without hanging (no 300s
+   timeouts on individual tests).
+2. `t/52leaks.t` passes cleanly under both standalone and parallel
+   prove -j invocation.
+3. `t/storage/error.t` passes all 49 tests.
+4. `t/zzzzzzz_perl_perf_bug.t` runs without flock deadlock
+   (resolved by fixing H2+H3).
+5. Zero regressions in the 309 currently-passing test files.
+6. TODO-passes from Phases C-G preserved (8 bonus passes).
+
+### Non-goals
+
+- Fixing DBIC's own design issues (e.g., source_registrations
+  cycles) — we work around them.
+- Achieving 100% parity with native Perl on all 313 tests
+  (native Perl itself has 8 TODO fails in this suite).
+- Re-enabling any patched-DBIC workflow.
+
+### Stretch goal
+
+Get `./jcpan -t DBIx::Class` passing cleanly with `prove -j1`
+serial execution first, then tackle the parallel case as a
+separate milestone. Serial should be the minimum bar for
+production readiness.
+
+
 
 
 
