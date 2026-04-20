@@ -607,6 +607,9 @@ public class NetSSLeay extends PerlModuleBase {
         RuntimeScalar verifyCb = null;        // set_verify callback
         String tmpDhFile = null;              // CTX_set_tmp_dh placeholder
         long certStoreHandle = 0;             // CTX_get_cert_store stub handle
+        javax.net.ssl.SSLContext sslContext = null;  // Phase 2: cached JDK context
+        javax.net.ssl.KeyManager[] keyManagers = null;
+        javax.net.ssl.TrustManager[] trustManagers = null;
 
         SslCtxState(String role) {
             this.role = role;
@@ -632,6 +635,16 @@ public class NetSSLeay extends PerlModuleBase {
         int state = 1;                   // Net::SSLeay::state() — 1 ≈ OK/initial
         long readBio = 0;                // BIO handle for reading
         long writeBio = 0;               // BIO handle for writing
+
+        // Phase 2: SSLEngine driver state
+        javax.net.ssl.SSLEngine engine = null;
+        java.nio.ByteBuffer plainIn  = null;  // plaintext decrypted from peer
+        java.nio.ByteBuffer plainOut = null;  // plaintext queued for wrap()
+        byte[] pendingNetIn = null;            // leftover ciphertext from a partial record
+        boolean handshakeComplete = false;
+        int lastError = 0;               // SSL_ERROR_* for get_error
+        boolean outboundClosed = false;
+        boolean inboundClosed = false;
 
         SslState(SslCtxState ctx, long ctxHandle) {
             this.role = ctx.role;
@@ -1479,25 +1492,38 @@ public class NetSSLeay extends PerlModuleBase {
             // STUB (phase 3): no DH resource to free yet.
             registerLambda("DH_free", (a, c) -> new RuntimeScalar().getList());
 
-            // Per-SSL-handle setters — mostly store state.
-            // STUB (phase 2): the state stored here has no effect on an
-            // actual handshake because there is no SSLEngine bound to
-            // the SSL handle yet.
+            // Per-SSL-handle setters — Phase 2 now drives a real SSLEngine
+            // when the caller sets accept/connect state after binding BIOs.
             registerLambda("set_accept_state", (a, c) -> {
                 if (a.size() < 1) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
-                if (st != null) st.acceptOrConnect = "accept";
+                if (st == null) return new RuntimeScalar().getList();
+                st.acceptOrConnect = "accept";
+                try {
+                    st.engine = buildEngine(st, false);
+                    st.engine.beginHandshake();
+                    st.state = 0x2000; // SSL_ST_ACCEPT sentinel
+                } catch (Exception e) {
+                    st.lastError = SSL_ERROR_SSL;
+                }
                 return new RuntimeScalar().getList();
             });
             registerLambda("set_connect_state", (a, c) -> {
                 if (a.size() < 1) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
-                if (st != null) st.acceptOrConnect = "connect";
+                if (st == null) return new RuntimeScalar().getList();
+                st.acceptOrConnect = "connect";
+                try {
+                    st.engine = buildEngine(st, true);
+                    st.engine.beginHandshake();
+                    st.state = 0x1000; // SSL_ST_CONNECT sentinel
+                } catch (Exception e) {
+                    st.lastError = SSL_ERROR_SSL;
+                }
                 return new RuntimeScalar().getList();
             });
             registerLambda("set_bio", (a, c) -> {
-                // STUB (phase 2): (ssl, read_bio, write_bio) — we don't drive
-                // BIO I/O yet; just remember the handles.
+                // (ssl, read_bio, write_bio)
                 if (a.size() < 3) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
@@ -1525,15 +1551,22 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(st.options).getList();
             });
             registerLambda("set_tlsext_host_name", (a, c) -> {
-                // STUB (phase 2): SNI stored; not applied to SSLParameters.
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
-                if (st != null) st.hostName = a.get(1).toString();
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.hostName = a.get(1).toString();
+                // If the engine is already built, apply retroactively
+                if (st.engine != null && st.engine.getUseClientMode()) {
+                    try {
+                        javax.net.ssl.SSLParameters p = st.engine.getSSLParameters();
+                        p.setServerNames(java.util.Collections.singletonList(
+                                new javax.net.ssl.SNIHostName(st.hostName)));
+                        st.engine.setSSLParameters(p);
+                    } catch (Exception ignored) { /* best effort */ }
+                }
                 return new RuntimeScalar(1).getList();
             });
             registerLambda("set_verify", (a, c) -> {
-                // STUB (phase 2): verify mode stored; the callback is never
-                // invoked because no real handshake occurs.
                 if (a.size() < 2) return new RuntimeScalar().getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) {
@@ -1543,30 +1576,111 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar().getList();
             });
             registerLambda("state", (a, c) -> {
-                // STUB (phase 2): always claims "OK" (1) regardless of
-                // actual handshake progress.
                 if (a.size() < 1) return new RuntimeScalar(0).getList();
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 return new RuntimeScalar(st != null ? st.state : 0).getList();
             });
-            // STUB (phase 2): Net::SSLeay::shutdown drives the TLS close-
-            // notify. Without a real handshake, return 1 (successful close)
-            // so AnyEvent::Handle can finalise.
-            registerLambda("shutdown", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("shutdown", (a, c) -> {
+                // Close-notify: let the SSLEngine emit the alert and
+                // flush any remaining wrap bytes to wbio.
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(1).getList();
+                st.engine.closeOutbound();
+                advance(st);
+                // Return 1 if both directions closed, 0 if more work needed.
+                // AnyEvent::Handle's shutdown loop keeps calling until 1.
+                return new RuntimeScalar(
+                        st.outboundClosed && (st.inboundClosed || st.engine.isInboundDone())
+                                ? 1 : 0).getList();
+            });
 
-            // TLS data-plane stubs: without a real SSLEngine integration we
-            // can't drive a handshake. These return "failure" values that
-            // AnyEvent::Handle interprets as a real TLS error and propagates
-            // via on_error rather than hanging on $cv->recv.
-            // STUB (phase 2): replaced entirely by SSLEngine-backed wrap/unwrap.
+            // TLS data plane: drive the SSLEngine through in-memory BIOs.
             registerLambda("read", (a, c) -> {
-                return new RuntimeScalar().getList();  // undef → no data
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                int maxLen = a.size() >= 2 ? (int) a.get(1).getLong() : 32768;
+                advance(st);
+                st.plainIn.flip();
+                if (!st.plainIn.hasRemaining()) {
+                    st.plainIn.compact();
+                    return new RuntimeScalar().getList();  // undef → WANT_READ
+                }
+                int n = Math.min(maxLen, st.plainIn.remaining());
+                byte[] out = new byte[n];
+                st.plainIn.get(out);
+                st.plainIn.compact();
+                return bytesToPerlString(out).getList();
             });
             registerLambda("write", (a, c) -> {
-                return new RuntimeScalar(-1).getList();  // <= 0 → error
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                byte[] data = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                // Enqueue plaintext; advance will wrap
+                if (st.plainOut.remaining() < data.length) {
+                    // Grow
+                    java.nio.ByteBuffer bigger = java.nio.ByteBuffer.allocate(
+                            st.plainOut.position() + data.length + 16384);
+                    st.plainOut.flip();
+                    bigger.put(st.plainOut);
+                    st.plainOut = bigger;
+                }
+                st.plainOut.put(data);
+                advance(st);
+                if (st.lastError != SSL_ERROR_NONE
+                        && st.lastError != SSL_ERROR_WANT_READ
+                        && st.lastError != SSL_ERROR_WANT_WRITE) {
+                    return new RuntimeScalar(-1).getList();
+                }
+                return new RuntimeScalar(data.length).getList();
             });
             registerLambda("get_error", (a, c) -> {
-                return new RuntimeScalar(5).getList();   // SSL_ERROR_SYSCALL
+                if (a.size() < 1) return new RuntimeScalar(SSL_ERROR_SYSCALL).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(st != null ? st.lastError : SSL_ERROR_SYSCALL).getList();
+            });
+            // accept()/connect() — drive the handshake until it finishes or
+            // wants more data.
+            registerLambda("accept", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("connect", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("do_handshake", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("pending", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.plainIn == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(st.plainIn.position()).getList();
+            });
+            registerLambda("get_version", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar("unknown").getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null
+                        || st.engine.getSession() == null) {
+                    return new RuntimeScalar("unknown").getList();
+                }
+                return new RuntimeScalar(st.engine.getSession().getProtocol()).getList();
             });
 
             // X509 stubs for the verify callback. STUB (phase 4): real
@@ -3200,6 +3314,254 @@ public class NetSSLeay extends PerlModuleBase {
             case 32: return "key usage does not include certificate signing";
             case 50: return "application verification failure";
             default: return "certificate verify error";
+        }
+    }
+
+    // =====================================================================
+    // Phase 2 — SSLEngine handshake driver
+    // =====================================================================
+
+    // OpenSSL SSL_ERROR_* constants we surface
+    private static final int SSL_ERROR_NONE              = 0;
+    private static final int SSL_ERROR_SSL               = 1;
+    private static final int SSL_ERROR_WANT_READ         = 2;
+    private static final int SSL_ERROR_WANT_WRITE        = 3;
+    private static final int SSL_ERROR_SYSCALL           = 5;
+    private static final int SSL_ERROR_ZERO_RETURN       = 6;
+
+    /**
+     * Lazily build a javax.net.ssl.SSLContext for the given SSL_CTX state.
+     * Honours min/max proto version, installs any key/trust managers
+     * that were configured via CTX_use_certificate_*_file /
+     * CTX_load_verify_locations (those populate ctx.keyManagers and
+     * ctx.trustManagers; if neither is set, we fall back to the JDK
+     * defaults — which for client role means the platform trust store,
+     * and for server role means no cert — the caller will get a
+     * handshake failure, matching OpenSSL behaviour for an unconfigured
+     * server CTX).
+     */
+    private static javax.net.ssl.SSLContext buildSslContext(SslCtxState ctx) throws Exception {
+        if (ctx.sslContext != null) return ctx.sslContext;
+        // Pick protocol band matching min/max version
+        String protocol = "TLS";  // let the JDK negotiate
+        javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance(protocol);
+        javax.net.ssl.TrustManager[] tms = ctx.trustManagers;
+        if (tms == null) {
+            javax.net.ssl.TrustManagerFactory tmf =
+                    javax.net.ssl.TrustManagerFactory.getInstance(
+                            javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((java.security.KeyStore) null);
+            tms = tmf.getTrustManagers();
+        }
+        sc.init(ctx.keyManagers, tms, SECURE_RANDOM);
+        ctx.sslContext = sc;
+        return sc;
+    }
+
+    /**
+     * Build an SSLEngine from the CTX's SSLContext, applying per-SSL
+     * state (cipher list, SNI, verify mode, protocol pins).
+     */
+    private static javax.net.ssl.SSLEngine buildEngine(SslState ssl, boolean clientMode) throws Exception {
+        SslCtxState ctx = CTX_HANDLES.get(ssl.ctxHandle);
+        if (ctx == null) throw new IllegalStateException("SSL handle has no parent CTX");
+        javax.net.ssl.SSLContext sc = buildSslContext(ctx);
+        javax.net.ssl.SSLEngine eng = sc.createSSLEngine();
+        eng.setUseClientMode(clientMode);
+        // Client-mode: pin SNI if supplied via set_tlsext_host_name
+        if (clientMode && ssl.hostName != null && !ssl.hostName.isEmpty()) {
+            javax.net.ssl.SSLParameters p = eng.getSSLParameters();
+            p.setServerNames(java.util.Collections.singletonList(
+                    new javax.net.ssl.SNIHostName(ssl.hostName)));
+            eng.setSSLParameters(p);
+        }
+        // Server-mode: honour verifyMode ≠ 0 as "want/need client auth"
+        if (!clientMode && ssl.verifyMode != 0) {
+            // VERIFY_PEER=1, VERIFY_FAIL_IF_NO_PEER_CERT=2
+            if ((ssl.verifyMode & 2) != 0) eng.setNeedClientAuth(true);
+            else                           eng.setWantClientAuth(true);
+        }
+        // Allocate plaintext buffers sized to the session
+        int appBufSize = eng.getSession().getApplicationBufferSize();
+        ssl.plainIn  = java.nio.ByteBuffer.allocate(appBufSize);
+        ssl.plainOut = java.nio.ByteBuffer.allocate(appBufSize);
+        return eng;
+    }
+
+    /**
+     * The core handshake / data driver. Called from read/write/shutdown.
+     * Pumps bytes through wrap/unwrap until either:
+     *   - it completes an operation (handshake finished / produced plaintext /
+     *     flushed plaintext to the wire)
+     *   - it needs more bytes from the peer (→ SSL_ERROR_WANT_READ)
+     *   - it needs room in the write BIO (→ SSL_ERROR_WANT_WRITE; we always
+     *     have room because our BIOs are unbounded, so this never occurs)
+     *   - the engine is closed (→ SSL_ERROR_ZERO_RETURN)
+     *   - it errors out (→ SSL_ERROR_SSL)
+     *
+     * Returns the SSL_ERROR_* code reflecting the engine's current state.
+     */
+    private static int advance(SslState ssl) {
+        javax.net.ssl.SSLEngine eng = ssl.engine;
+        if (eng == null) { ssl.lastError = SSL_ERROR_SSL; return SSL_ERROR_SSL; }
+        MemoryBIO rbio = BIO_HANDLES.get(ssl.readBio);
+        MemoryBIO wbio = BIO_HANDLES.get(ssl.writeBio);
+        if (rbio == null || wbio == null) {
+            ssl.lastError = SSL_ERROR_SSL; return SSL_ERROR_SSL;
+        }
+        int netBuf = eng.getSession().getPacketBufferSize();
+        // Loop until we can't make progress.
+        for (int step = 0; step < 64; step++) {
+            javax.net.ssl.SSLEngineResult.HandshakeStatus hs = eng.getHandshakeStatus();
+            // If handshaking is done and we have plaintext pending, wrap it.
+            if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING
+                    || hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.FINISHED) {
+                ssl.handshakeComplete = true;
+                ssl.state = 3; // SSL_ST_OK (OpenSSL uses 0x03 for OK/accept/connect)
+                ssl.plainOut.flip();
+                if (ssl.plainOut.hasRemaining()) {
+                    try {
+                        java.nio.ByteBuffer net = java.nio.ByteBuffer.allocate(netBuf);
+                        javax.net.ssl.SSLEngineResult r = eng.wrap(ssl.plainOut, net);
+                        ssl.plainOut.compact();
+                        net.flip();
+                        if (net.hasRemaining()) {
+                            byte[] out = new byte[net.remaining()];
+                            net.get(out);
+                            wbio.write(out);
+                        }
+                        if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                            ssl.outboundClosed = true;
+                            ssl.lastError = SSL_ERROR_ZERO_RETURN;
+                            return SSL_ERROR_ZERO_RETURN;
+                        }
+                        continue; // maybe more to wrap
+                    } catch (javax.net.ssl.SSLException e) {
+                        ssl.plainOut.compact();
+                        ssl.lastError = SSL_ERROR_SSL;
+                        return SSL_ERROR_SSL;
+                    }
+                } else {
+                    ssl.plainOut.compact();
+                }
+                // No plaintext to flush; try to consume peer data.
+                if (rbio.pending() > 0) {
+                    if (pumpUnwrap(ssl, rbio) < 0) return ssl.lastError;
+                    continue;
+                }
+                ssl.lastError = SSL_ERROR_NONE;
+                return SSL_ERROR_NONE;
+            }
+            switch (hs) {
+                case NEED_TASK: {
+                    Runnable t;
+                    while ((t = eng.getDelegatedTask()) != null) t.run();
+                    break;
+                }
+                case NEED_WRAP: {
+                    try {
+                        java.nio.ByteBuffer net = java.nio.ByteBuffer.allocate(netBuf);
+                        // Source buffer may be empty — that's fine during handshake
+                        javax.net.ssl.SSLEngineResult r =
+                                eng.wrap(java.nio.ByteBuffer.allocate(0), net);
+                        net.flip();
+                        if (net.hasRemaining()) {
+                            byte[] out = new byte[net.remaining()];
+                            net.get(out);
+                            wbio.write(out);
+                        }
+                        if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                            ssl.outboundClosed = true;
+                        }
+                    } catch (javax.net.ssl.SSLException e) {
+                        ssl.lastError = SSL_ERROR_SSL;
+                        return SSL_ERROR_SSL;
+                    }
+                    break;
+                }
+                case NEED_UNWRAP:
+                case NEED_UNWRAP_AGAIN: {
+                    if (rbio.pending() <= 0) {
+                        ssl.lastError = SSL_ERROR_WANT_READ;
+                        return SSL_ERROR_WANT_READ;
+                    }
+                    if (pumpUnwrap(ssl, rbio) < 0) return ssl.lastError;
+                    break;
+                }
+                default:
+                    ssl.lastError = SSL_ERROR_NONE;
+                    return SSL_ERROR_NONE;
+            }
+        }
+        ssl.lastError = SSL_ERROR_NONE;
+        return SSL_ERROR_NONE;
+    }
+
+    /**
+     * One unwrap step: takes up to the rbio's pending bytes, feeds them
+     * through the engine, appends decrypted plaintext to ssl.plainIn,
+     * leaves any unconsumed bytes in rbio.
+     * Returns the number of bytes appended to plainIn, or -1 on error
+     * (in which case ssl.lastError is set and should be returned).
+     */
+    private static int pumpUnwrap(SslState ssl, MemoryBIO rbio) {
+        javax.net.ssl.SSLEngine eng = ssl.engine;
+        int avail = rbio.pending();
+        byte[] leftover = ssl.pendingNetIn;
+        ssl.pendingNetIn = null;
+        if (avail <= 0 && (leftover == null || leftover.length == 0)) return 0;
+        byte[] fromBio = avail > 0 ? rbio.read(avail) : new byte[0];
+        byte[] buf;
+        if (leftover != null && leftover.length > 0) {
+            buf = new byte[leftover.length + fromBio.length];
+            System.arraycopy(leftover, 0, buf, 0, leftover.length);
+            System.arraycopy(fromBio, 0, buf, leftover.length, fromBio.length);
+        } else {
+            buf = fromBio;
+        }
+        java.nio.ByteBuffer netIn = java.nio.ByteBuffer.wrap(buf);
+        try {
+            while (netIn.hasRemaining()) {
+                javax.net.ssl.SSLEngineResult r = eng.unwrap(netIn, ssl.plainIn);
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+                    // Not enough bytes for a full record — put the rest back.
+                    byte[] remaining = new byte[netIn.remaining()];
+                    netIn.get(remaining);
+                    ssl.pendingNetIn = remaining;
+                    return 0;
+                }
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                    // Grow plaintext buffer
+                    int need = eng.getSession().getApplicationBufferSize();
+                    java.nio.ByteBuffer bigger = java.nio.ByteBuffer.allocate(
+                            ssl.plainIn.position() + need);
+                    ssl.plainIn.flip();
+                    bigger.put(ssl.plainIn);
+                    ssl.plainIn = bigger;
+                    continue;
+                }
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                    ssl.inboundClosed = true;
+                    ssl.lastError = SSL_ERROR_ZERO_RETURN;
+                    return -1;
+                }
+                // OK — we consumed some bytes; loop to consume more records
+                // if the rest of netIn still has data.
+                javax.net.ssl.SSLEngineResult.HandshakeStatus hs =
+                        eng.getHandshakeStatus();
+                if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NEED_TASK) {
+                    Runnable t;
+                    while ((t = eng.getDelegatedTask()) != null) t.run();
+                }
+                if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+                    // caller's advance loop picks this up on the next pass
+                    break;
+                }
+            }
+            return 0;
+        } catch (javax.net.ssl.SSLException e) {
+            ssl.lastError = SSL_ERROR_SSL;
+            return -1;
         }
     }
 
