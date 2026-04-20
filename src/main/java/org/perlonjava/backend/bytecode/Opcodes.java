@@ -2260,6 +2260,16 @@ public class Opcodes {
      */
     public static final short BINARY_XOR_ASSIGN = 470;
 
+    /**
+     * pipe READHANDLE, WRITEHANDLE: Format: PIPE rd argsReg ctx
+     */
+    public static final short PIPE = 471;
+
+    /**
+     * socketpair SOCK1, SOCK2, DOMAIN, TYPE, PROTOCOL: Format: SOCKETPAIR rd argsReg ctx
+     */
+    public static final short SOCKETPAIR = 472;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
