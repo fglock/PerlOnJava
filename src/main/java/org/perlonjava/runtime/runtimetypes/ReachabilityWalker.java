@@ -64,13 +64,37 @@ public class ReachabilityWalker {
 
     /**
      * Walk from Perl-visible roots and mark reachable objects.
+     * <p>
+     * Phase I (refcount_alignment_52leaks_plan.md): Two-phase walk.
+     * <ol>
+     *   <li>Phase 1: seed from {@code globalCodeRefs}, BFS WITH closure-
+     *       capture walking. Stash-installed closures (Sub::Defer
+     *       deferred subs, Moo/Sub::Quote accessors) capture lexicals
+     *       that represent real live-data paths (e.g.
+     *       {@code $deferred_info} ARRAY, {@code $quoted_info} HASH,
+     *       {@code $unquoted} scalar slot). Following captures here
+     *       ensures Sub::Defer's %DEFERRED / Sub::Quote's %QUOTED
+     *       entries are seen as reachable.</li>
+     *   <li>Phase 2: seed remaining roots (globalVariables,
+     *       globalArrays, globalHashes, rescuedObjects, lexical seeds),
+     *       BFS without capture walking by default. Anon closures held
+     *       by instance hashes (DBIC handler callbacks) stay opaque
+     *       so instances captured only by them can be marked
+     *       unreachable — letting 52leaks detect real Schema leaks.</li>
+     * </ol>
      *
      * @return the set of reachable RuntimeBase instances
      */
     public Set<RuntimeBase> walk() {
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        // Roots: globals
+        // Phase 1: seed globalCodeRefs, walk WITH captures.
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+            visitScalar(e.getValue(), todo);
+        }
+        bfs(todo, /*walkCaptures=*/ true);
+
+        // Phase 2: seed remaining roots.
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
             visitScalar(e.getValue(), todo);
         }
@@ -80,26 +104,9 @@ public class ReachabilityWalker {
         for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
             addReachable(e.getValue(), todo);
         }
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            visitScalar(e.getValue(), todo);
-        }
-
-        // Roots: rescued objects (destroyed but pinned for DBIC phantom chain)
         for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
             addReachable(rescued, todo);
         }
-
-        // Phase B1 (refcount_alignment_52leaks_plan.md): Roots from
-        // ScalarRefRegistry — ref-holding RuntimeScalars that survived
-        // the last JVM GC cycle. These represent live lexicals whose
-        // JVM frame slots still hold the scalar. Without this seed the
-        // walker mis-classifies alive-via-lexical objects as unreachable.
-        // Opt-in via useLexicalSeeds so existing callers (if any) that
-        // want pure global-roots-only behavior still get it.
-        //
-        // We skip scalars with captureCount > 0. Those are captured by a
-        // closure; walking them as roots would pull in everything the
-        // closure encloses, defeating the walkCodeCaptures=false default.
         if (useLexicalSeeds) {
             for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
                 if (sc.captureCount > 0) continue;
@@ -107,7 +114,12 @@ public class ReachabilityWalker {
             }
         }
 
-        // BFS
+        bfs(todo, walkCodeCaptures);
+
+        return reachable;
+    }
+
+    private void bfs(java.util.ArrayDeque<RuntimeBase> todo, boolean walkCaptures) {
         while (!todo.isEmpty()) {
             RuntimeBase cur = todo.removeFirst();
             if (cur instanceof RuntimeHash h) {
@@ -119,14 +131,7 @@ public class ReachabilityWalker {
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                // Walk closure captures only when the opt-in flag is set.
-                // In DBIC-heavy code, Sub::Quote-generated accessors capture
-                // $self instances transitively, causing the walker to mark
-                // Schema objects as reachable even when they should be GC'd.
-                // Native Perl's refcount-based GC doesn't have this issue
-                // because a stash-installed closure's refs to instances are
-                // not tracked the same way.
-                if (walkCodeCaptures && code.capturedScalars != null) {
+                if (walkCaptures && code.capturedScalars != null) {
                     for (RuntimeScalar cap : code.capturedScalars) {
                         visitScalar(cap, todo);
                     }
@@ -135,8 +140,6 @@ public class ReachabilityWalker {
                 visitScalar(s, todo);
             }
         }
-
-        return reachable;
     }
 
     /**
@@ -279,34 +282,36 @@ public class ReachabilityWalker {
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
         ScalarRefRegistry.forceGcAndSnapshot();
-        // Phase H: drain rescued objects in BOTH quiet and non-quiet modes.
+        // Phase H1: drain rescued objects in BOTH quiet and non-quiet modes.
         // Rescued objects are blessed-with-DESTROY objects that self-saved
         // during their DESTROY body. Clearing their weak refs from auto-
         // sweep matches Perl's behavior: once the last user-visible strong
-        // ref goes, weak refs to the self-rescued object clear. DBIC's
-        // leak tracer relies on this to detect Schema/Source/Row objects
-        // as collected. Phase H's H2 fix (skipping unblessed containers)
-        // is independent of this — rescued objects are BLESSED.
+        // ref goes, weak refs to the self-rescued object clear.
         DestroyDispatch.clearRescuedWeakRefs();
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             if (!live.contains(referent)) {
-                // Phase H (60core.t parallel-hang fix): In quiet auto-sweep,
-                // don't clear weak refs to unblessed non-code containers.
-                // Those are typically internal data structures — most
-                // notably Sub::Defer's $deferred_info ARRAY which is only
-                // reachable through closure captures that the walker does
-                // not traverse (walkCodeCaptures=false). Clearing its
-                // weak ref in %DEFERRED wipes the dispatch table and
-                // every subsequent Moo-accessor call loops forever in
-                // `goto &$undeferred`. Blessed objects (DBIC Schema/
-                // Source/Row) still clear so 52leaks keeps detecting
-                // real leaks. Explicit jperl_gc (non-quiet) is still
-                // aggressive and clears these too.
-                if (quiet && referent.blessId == 0 && !(referent instanceof RuntimeCode)) {
-                    continue;
+                // Phase I (52leaks/60core): skip clearing weak refs to
+                // scalars that hold CODE refs, or scalars that are already
+                // UNDEF. These are commonly Sub::Quote/Sub::Defer
+                // `$unquoted` / `$undeferred` lexical slots — empty
+                // scalars to be filled with a compiled sub on first
+                // invocation, OR already holding the compiled sub.
+                // Clearing their weak refs breaks the re-dispatch chain
+                // (`$$_UNQUOTED = sub { ... }` loses its slot, producing
+                // "Not a CODE reference" at later dispatch points).
+                // clearWeakRefsTo(RuntimeCode) is already a no-op for
+                // CODE values themselves, but a weak ref pointing AT a
+                // scalar that holds a CODE is a different target and
+                // needs this explicit skip.
+                if (referent instanceof RuntimeScalar s) {
+                    if (s.type == RuntimeScalarType.UNDEF) continue;
+                    if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && s.value instanceof RuntimeCode) {
+                        continue;
+                    }
                 }
                 toClear.add(referent);
             }
