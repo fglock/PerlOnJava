@@ -1,0 +1,17 @@
+{
+  "git_sha": "6d37287f1",
+  "date":    "2026-04-20T20:06:40Z",
+  "runs":    3,
+  "jperl":   "/Users/fglock/projects/PerlOnJava3/jperl",
+  "benchmarks": {
+    "benchmark_closure": [8.324,9.181,9.147],
+    "benchmark_eval_string": [14.746,14.986,15.144],
+    "benchmark_global": [14.636,14.746,14.610],
+    "benchmark_lexical": [4.168,4.090,4.083],
+    "benchmark_method": [4.744,4.730,4.778],
+    "benchmark_refcount_anon": [2.561,2.599,2.617],
+    "benchmark_refcount_bless": [1.383,1.387,1.396],
+    "benchmark_regex": [2.636,2.625,2.663],
+    "benchmark_string": [3.935,3.982,3.946]
+  }
+}
