@@ -89,6 +89,8 @@ public class Socket extends PerlModuleBase {
             // Register socket functions
             socket.registerMethod("pack_sockaddr_in", null);
             socket.registerMethod("unpack_sockaddr_in", null);
+            socket.registerMethod("pack_sockaddr_in6", null);
+            socket.registerMethod("unpack_sockaddr_in6", null);
             socket.registerMethod("inet_aton", null);
             socket.registerMethod("inet_ntoa", null);
             socket.registerMethod("inet_pton", null);
@@ -260,6 +262,80 @@ public class Socket extends PerlModuleBase {
         } catch (Exception e) {
             throw new RuntimeException("unpack_sockaddr_in failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * pack_sockaddr_in6(PORT, IP6_ADDRESS [, SCOPE_ID [, FLOWINFO]])
+     * Packs a port and 16-byte IPv6 address into a sockaddr_in6 structure.
+     */
+    public static RuntimeList pack_sockaddr_in6(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            throw new IllegalArgumentException("Not enough arguments for pack_sockaddr_in6");
+        }
+        int port = args.get(0).getInt();
+        String addrStr = args.get(1).toString();
+        int scopeId = args.size() > 2 ? args.get(2).getInt() : 0;
+        int flowinfo = args.size() > 3 ? args.get(3).getInt() : 0;
+
+        byte[] addrBytes = addrStr.getBytes(StandardCharsets.ISO_8859_1);
+        if (addrBytes.length != 16) {
+            throw new IllegalArgumentException("pack_sockaddr_in6: address must be 16 bytes, got " + addrBytes.length);
+        }
+
+        // sockaddr_in6: family(2) + port(2) + flowinfo(4) + addr(16) + scope_id(4) = 28 bytes
+        byte[] sockaddr = new byte[28];
+        // Family in native byte order - use big-endian matching pack_sockaddr_in convention
+        sockaddr[0] = 0;
+        sockaddr[1] = (byte) AF_INET6;
+        // Port (network byte order)
+        sockaddr[2] = (byte) ((port >> 8) & 0xFF);
+        sockaddr[3] = (byte) (port & 0xFF);
+        // Flowinfo (network byte order)
+        sockaddr[4] = (byte) ((flowinfo >> 24) & 0xFF);
+        sockaddr[5] = (byte) ((flowinfo >> 16) & 0xFF);
+        sockaddr[6] = (byte) ((flowinfo >> 8) & 0xFF);
+        sockaddr[7] = (byte) (flowinfo & 0xFF);
+        // Address (16 bytes)
+        System.arraycopy(addrBytes, 0, sockaddr, 8, 16);
+        // Scope ID (native byte order — emit as big-endian for round-trip consistency)
+        sockaddr[24] = (byte) ((scopeId >> 24) & 0xFF);
+        sockaddr[25] = (byte) ((scopeId >> 16) & 0xFF);
+        sockaddr[26] = (byte) ((scopeId >> 8) & 0xFF);
+        sockaddr[27] = (byte) (scopeId & 0xFF);
+
+        return new RuntimeScalar(new String(sockaddr, StandardCharsets.ISO_8859_1)).getList();
+    }
+
+    /**
+     * unpack_sockaddr_in6(SOCKADDR)
+     * Returns (port, addr, scope_id, flowinfo) in list context,
+     * or just port in scalar context.
+     */
+    public static RuntimeList unpack_sockaddr_in6(RuntimeArray args, int ctx) {
+        if (args.size() < 1) {
+            throw new IllegalArgumentException("Not enough arguments for unpack_sockaddr_in6");
+        }
+        byte[] sockaddr = args.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+        if (sockaddr.length < 28) {
+            throw new IllegalArgumentException("Invalid sockaddr_in6 structure (length " + sockaddr.length + ")");
+        }
+        int port = ((sockaddr[2] & 0xFF) << 8) | (sockaddr[3] & 0xFF);
+        int flowinfo = ((sockaddr[4] & 0xFF) << 24) | ((sockaddr[5] & 0xFF) << 16)
+                | ((sockaddr[6] & 0xFF) << 8) | (sockaddr[7] & 0xFF);
+        byte[] addrBytes = new byte[16];
+        System.arraycopy(sockaddr, 8, addrBytes, 0, 16);
+        int scopeId = ((sockaddr[24] & 0xFF) << 24) | ((sockaddr[25] & 0xFF) << 16)
+                | ((sockaddr[26] & 0xFF) << 8) | (sockaddr[27] & 0xFF);
+
+        if (ctx == RuntimeContextType.LIST) {
+            RuntimeList result = new RuntimeList();
+            result.add(new RuntimeScalar(port));
+            result.add(new RuntimeScalar(new String(addrBytes, StandardCharsets.ISO_8859_1)));
+            result.add(new RuntimeScalar(scopeId));
+            result.add(new RuntimeScalar(flowinfo));
+            return result;
+        }
+        return new RuntimeScalar(port).getList();
     }
 
     /**

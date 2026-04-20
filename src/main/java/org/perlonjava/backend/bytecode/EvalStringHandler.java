@@ -2,6 +2,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterContext;
+import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
@@ -135,6 +136,109 @@ public class EvalStringHandler {
             symbolTable.addVariable("@_", "our", null);
             symbolTable.addVariable("wantarray", "", null);
 
+            // Seed the symbol table with the caller's visible lexical variables so
+            // that parse-time name resolution inside the eval body can find them.
+            //
+            // Without this, named subs inside the eval that reference outer `my`
+            // variables would fail with "Global symbol requires explicit package
+            // name" (parse-time strict-vars check in Variable.java:285), and if
+            // they got past parse, their JVM-compiled closure would capture the
+            // wrong thing because `SubroutineParser.handleNamedSub` relies on
+            // `parser.ctx.symbolTable` to decide what to capture.
+            //
+            // We use the same "BEGIN package alias" trick that the JVM backend
+            // uses in `RuntimeCode.evalStringHelper` (search for
+            // `PersistentVariable.beginPackage`): each captured `my` variable is
+            // aliased into a fresh package global under
+            // `PerlOnJava::_BEGIN_<id>::<name>`, and seeded into the parser's
+            // symbol table as `our` with that package. When a named sub inside
+            // the eval is later compiled by `SubroutineParser.handleNamedSub`,
+            // it goes through the `decl == "our"` branch (line 1153), resolves
+            // the global by the aliased name, and picks up the real runtime
+            // value shared with the outer scope.
+            //
+            // Parsing flow is unaffected for direct references: the interpreter
+            // (BytecodeCompiler) uses its OWN parentRegistry-populated symbol
+            // table for variable resolution, so direct `$y` in the eval body
+            // still resolves to the captured-register path.
+            //
+            // We compute the capturedVars/adjustedRegistry up-front so the
+            // seeding step sees the final, filtered set of variables.
+            //
+            // See dev/design/nested-eval-string-lexicals.md for full background.
+            RuntimeBase[] capturedVars = new RuntimeBase[0];
+            Map<String, Integer> adjustedRegistry = null;
+            Map<String, Integer> registry = siteRegistry != null ? siteRegistry
+                    : (currentCode != null ? currentCode.variableRegistry : null);
+            if (registry != null && registers != null) {
+                List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(registry.entrySet());
+                sortedVars.sort(Map.Entry.comparingByValue());
+                List<RuntimeBase> capturedList = new ArrayList<>();
+                adjustedRegistry = new HashMap<>();
+                adjustedRegistry.put("this", 0);
+                adjustedRegistry.put("@_", 1);
+                adjustedRegistry.put("wantarray", 2);
+                // Per-eval-invocation unique alias namespace for seeded lexicals.
+                int seedBeginId = EmitterMethodCreator.classCounter++;
+                String seedPkg = PersistentVariable.beginPackage(seedBeginId);
+                int captureIndex = 0;
+                for (Map.Entry<String, Integer> entry : sortedVars) {
+                    String varName = entry.getKey();
+                    int parentRegIndex = entry.getValue();
+                    if (parentRegIndex < 3) continue;
+                    if (parentRegIndex >= registers.length) continue;
+                    RuntimeBase value = registers[parentRegIndex];
+                    // Skip non-Perl values (like Iterator objects from for loops).
+                    if (value == null) {
+                        // Null is fine — capture it.
+                    } else if (value instanceof RuntimeScalar scalar) {
+                        if (scalar.value instanceof java.util.Iterator) continue;
+                    } else if (!(value instanceof RuntimeArray ||
+                            value instanceof RuntimeHash ||
+                            value instanceof RuntimeCode)) {
+                        continue;
+                    }
+                    capturedList.add(value);
+                    int newRegIndex = 3 + captureIndex;
+                    adjustedRegistry.put(varName, newRegIndex);
+                    captureIndex++;
+
+                    // Alias this variable into the seed package's globals AND
+                    // declare it as `our` in the parser's symbol table so named
+                    // subs inside the eval body capture it correctly via the
+                    // JVM subroutine-compilation path.
+                    if (varName.length() < 2) continue;
+                    char sigil = varName.charAt(0);
+                    if (sigil != '$' && sigil != '@' && sigil != '%') continue;
+                    String bareName = varName.substring(1);
+                    String fullName = seedPkg + "::" + bareName;
+                    if (sigil == '$' && value instanceof RuntimeScalar rs) {
+                        GlobalVariable.globalVariables.put(fullName, rs);
+                    } else if (sigil == '@' && value instanceof RuntimeArray ra) {
+                        GlobalVariable.globalArrays.put(fullName, ra);
+                    } else if (sigil == '%' && value instanceof RuntimeHash rh) {
+                        GlobalVariable.globalHashes.put(fullName, rh);
+                    } else {
+                        // Sigil / value-type mismatch (e.g. captured as null).
+                        // Skip the alias but still proceed to the symbol-table
+                        // seeding below — it keeps parse-time checks happy
+                        // even when the runtime capture is missing.
+                    }
+                    if (symbolTable.getSymbolEntry(varName) == null) {
+                        symbolTable.addVariable(varName, "our", seedPkg, null);
+                    }
+                }
+                capturedVars = capturedList.toArray(new RuntimeBase[0]);
+                if (EVAL_TRACE) {
+                    evalTrace("EvalStringHandler varRegistry keys=" + registry.keySet());
+                    evalTrace("EvalStringHandler adjustedRegistry=" + adjustedRegistry);
+                    evalTrace("EvalStringHandler seedPkg=" + seedPkg);
+                    for (int ci = 0; ci < capturedVars.length; ci++) {
+                        evalTrace("EvalStringHandler captured[" + ci + "]=" + (capturedVars[ci] != null ? capturedVars[ci].getClass().getSimpleName() + ":" + capturedVars[ci] : "null"));
+                    }
+                }
+            }
+
             // Inherit lexical pragma flags from parent if available
             if (currentCode != null) {
                 int strictOpts = (siteStrictOptions >= 0) ? siteStrictOptions : currentCode.strictOptions;
@@ -173,77 +277,9 @@ public class EvalStringHandler {
             Parser parser = new Parser(ctx, tokens);
             Node ast = parser.parse();
 
-            // Step 3: Build captured variables and adjusted registry for eval context
-            // Collect all parent scope variables (except reserved registers 0-2)
-            RuntimeBase[] capturedVars = new RuntimeBase[0];
-            Map<String, Integer> adjustedRegistry = null;
-
-            // Use per-eval-site registry if available, otherwise fall back to global registry
-            Map<String, Integer> registry = siteRegistry != null ? siteRegistry
-                    : (currentCode != null ? currentCode.variableRegistry : null);
-
-            if (registry != null && registers != null) {
-
-                List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(
-                        registry.entrySet()
-                );
-                sortedVars.sort(Map.Entry.comparingByValue());
-
-                // Build capturedVars array and adjusted registry
-                // Captured variables will be placed at registers 3+ in eval'd code
-                List<RuntimeBase> capturedList = new ArrayList<>();
-                adjustedRegistry = new HashMap<>();
-
-                // Always include reserved registers in adjusted registry
-                adjustedRegistry.put("this", 0);
-                adjustedRegistry.put("@_", 1);
-                adjustedRegistry.put("wantarray", 2);
-
-                int captureIndex = 0;
-                for (Map.Entry<String, Integer> entry : sortedVars) {
-                    String varName = entry.getKey();
-                    int parentRegIndex = entry.getValue();
-
-                    // Skip reserved registers (they're handled separately in interpreter)
-                    if (parentRegIndex < 3) {
-                        continue;
-                    }
-
-                    if (parentRegIndex < registers.length) {
-                        RuntimeBase value = registers[parentRegIndex];
-
-                        // Skip non-Perl values (like Iterator objects from for loops)
-                        // Only capture actual Perl variables: Scalar, Array, Hash, Code
-                        if (value == null) {
-                            // Null is fine - capture it
-                        } else if (value instanceof RuntimeScalar scalar) {
-                            // Check if the scalar contains an Iterator (used by for loops)
-                            if (scalar.value instanceof java.util.Iterator) {
-                                // Skip - this is a for loop iterator, not a user variable
-                                continue;
-                            }
-                        } else if (!(value instanceof RuntimeArray ||
-                                value instanceof RuntimeHash ||
-                                value instanceof RuntimeCode)) {
-                            // Skip this register - it contains an internal object
-                            continue;
-                        }
-
-                        capturedList.add(value);
-                        // Map to new register index starting at 3
-                        adjustedRegistry.put(varName, 3 + captureIndex);
-                        captureIndex++;
-                    }
-                }
-                capturedVars = capturedList.toArray(new RuntimeBase[0]);
-                if (EVAL_TRACE) {
-                    evalTrace("EvalStringHandler varRegistry keys=" + registry.keySet());
-                    evalTrace("EvalStringHandler adjustedRegistry=" + adjustedRegistry);
-                    for (int ci = 0; ci < capturedVars.length; ci++) {
-                        evalTrace("EvalStringHandler captured[" + ci + "]=" + (capturedVars[ci] != null ? capturedVars[ci].getClass().getSimpleName() + ":" + capturedVars[ci] : "null"));
-                    }
-                }
-            }
+            // (Captured variables and adjustedRegistry were computed above,
+            //  before parsing, so the parser's symbol table could be seeded
+            //  with consistent register indices.)
 
             // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
             // The compile-time package is already propagated via ctx.symbolTable.

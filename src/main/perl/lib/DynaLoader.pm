@@ -30,6 +30,38 @@ BEGIN {
     unless (defined &boot_DynaLoader) {
         *boot_DynaLoader = sub { return };
     }
+
+    # Stubs for CPAN Makefile.PL files that probe for native C libraries
+    # (e.g. Geo::IP's Makefile.PL calls DynaLoader::dl_findfile('GeoIP')).
+    # PerlOnJava has no shared-library support, so these return a "not found"
+    # result, letting modules fall through to their pure-Perl (PP) code paths.
+    unless (defined &dl_findfile) {
+        *dl_findfile = sub { return };
+    }
+    unless (defined &dl_load_file) {
+        *dl_load_file = sub { return };
+    }
+    unless (defined &dl_find_symbol) {
+        *dl_find_symbol = sub { return };
+    }
+    unless (defined &dl_find_symbol_anywhere) {
+        *dl_find_symbol_anywhere = sub { return };
+    }
+    unless (defined &dl_install_xsub) {
+        *dl_install_xsub = sub { return };
+    }
+    unless (defined &dl_error) {
+        *dl_error = sub { return "DynaLoader is not supported in PerlOnJava" };
+    }
+    unless (defined &dl_undef_symbols) {
+        *dl_undef_symbols = sub { return () };
+    }
+    our @dl_library_path = ();
+    our @dl_resolve_using = ();
+    our @dl_require_symbols = ();
+    our @dl_librefs = ();
+    our @dl_modules = ();
+    our @dl_shared_objects = ();
 }
 
 1;
