@@ -187,18 +187,52 @@ All 4492 subtests must pass. Rerun `make` to ensure no unit-test regressions.
 ## Progress tracking
 
 ### Current status
-Planning complete. Starting Step 1.
+
+`./jcpan -t List::MoreUtils` goes from 7 failing subtests (8 test files) on master down to **1 failing subtest (`indexes.t` test 18) in 1 test file**, and that remaining failure is deferred to the parallel weaken branch (see RC6 below).
 
 ### Completed phases
-_none yet_
 
-### Next steps
-1. RC1 — numeric scalar strict refs (Step 1)
-2. RC3 — POSIX stubs (Step 2)
-3. RC2 — my-in-modifier (Step 3)
-4. RC4 — split zero-width alternation (Step 4)
-5. Final verification (Step 5)
+- [x] **RC1** — numeric scalar strict-refs (2026-04-20) — commit `db94a5ae1`
+  - `RuntimeScalar.arrayDeref()` / `hashDeref()` now throw `Can't use string ("N") as an ARRAY|HASH ref while "strict refs" in use` for `INTEGER` / `DOUBLE`.
+  - `RuntimeScalarReadOnly` gains the same behavior for read-only scalars holding numeric values, while keeping `1->[0]` / `1->{a}` silent via new `arrayDerefGet` / `hashDerefGet` overrides.
+  - Fixes: `binsert.t`, `bremove.t`, `mesh.t`, `zip6.t` (4 tests).
+- [x] **RC3** — POSIX stubs (2026-04-20) — commit `a161fa284`
+  - Adds `setlocale`, `localeconv`, `LC_ALL` / `LC_COLLATE` / `LC_CTYPE` / `LC_MONETARY` / `LC_NUMERIC` / `LC_TIME` / `LC_MESSAGES` as Perl stubs in `src/main/perl/lib/POSIX.pm`.
+  - Fixes: `minmaxstr.t`.
+- [x] **RC2** — `my` hoist in statement-modifier loops (2026-04-20) — commit `3bfaffda3`
+  - `StatementResolver.parseStatement` for `for` / `foreach` / `while` / `until` now detects `my DECL = RHS for LIST` / `my DECL = RHS while COND` and emits a bare `my DECL;` in the enclosing scope, wrapping the loop body in a BlockNode for `while`/`until` so the inner `my` shadows the outer on each iteration (matching perl: the outer variable stays empty/undef).
+  - Fixes: compile-time `Global symbol @long_list …` error in `part.t`.
+- [x] **RC4** — split with zero-width vs consuming alternation (2026-04-20) — commit `c9b8e05dd`
+  - `Operator.split` now probes each zero-width match via `Matcher.matches()` on progressively larger regions. When a consuming alternative also matches at the same offset, an extra empty field is emitted between the two separators and the consumed characters are skipped, matching perl's `REG_NOTEMPTY_ATSTART` retry loop.
+  - Fixes: `mode.t` tests 2 and 4.
+- [x] **RC5** — undef-as-subscript warning (2026-04-20) — commit `96c4f92d5`
+  - `RuntimeArray.get` / `RuntimeHash.get` now emit `Use of uninitialized value in array|hash element` (category `uninitialized`) when called with an `UNDEF` index. This was exposed after RC2 unblocked the later leak-free tests in `part.t`.
+  - Fixes: `part.t` tests 12 and 13.
+
+### Deferred
+
+- **RC6 — `Scalar::Util::weaken` on a reference to a temporary** (`indexes.t` test 18). The test does
+  ```perl
+  my $ref = \(indexes(sub { 1 }, 123));
+  Scalar::Util::weaken($ref);
+  is($ref, undef, "weakened away");
+  ```
+  In real perl the temporary returned by `indexes(...)` has a refcount of 1 held by `$ref`; weakening that ref drops the refcount to 0 and the temporary is freed, so `$ref` becomes undef. PerlOnJava's cooperative-refcount overlay (see `dev/architecture/weaken-destroy.md`) only tracks objects blessed into a class with `DESTROY`. For an unblessed numeric scalar like this one, weaken transitions it to `WEAKLY_TRACKED` but does not clear the weak ref at scope exit because we can't distinguish "last strong ref was this one" from "symbol table still holds a ref" without full refcounting. This is a known architectural limitation being addressed on a separate branch; this PR does not touch it.
+
+### Final summary
+
+- `binsert.t` ok
+- `bremove.t` ok
+- `mesh.t` ok
+- `zip6.t` ok
+- `minmaxstr.t` ok
+- `mode.t` ok
+- `part.t` ok
+- `indexes.t` — 1 subtest still fails (RC6, deferred to weaken branch)
+
+Run `./jcpan -t List::MoreUtils` and observe: `Files=61, Tests=4533. Failed 1/61 test programs. 1/4533 subtests failed.` (was 8 / 7 before this branch).
 
 ### Open questions
-- RC3: do we need `POSIX::localeconv` to return locale-sensitive values, or is the stub enough for the Perl distribution tests we care about? Starting with the stub.
-- RC4: is the split bug specific to alternations containing `\b`, or does it also affect `\s` alone at odd positions? Will be answered by the harness.
+- None open for RC1–RC5.
+- RC6 is tracked on the separate weaken branch.
+
