@@ -659,6 +659,14 @@ public class ModuleOperators {
         RuntimeList result;
         FeatureFlags outerFeature = featureManager;
         String savedPackage = InterpreterState.currentPackage.get().toString();
+
+        // Tell the inner compilation to start in the caller's package, rather
+        // than defaulting to `main`. This matches Perl 5's behavior for
+        // `require FILE` / `do FILE`: code in the required file without an
+        // explicit `package` statement runs in the caller's package.
+        // InterpreterState.currentPackage is now updated by `package Foo;`
+        // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
+        parsedArgs.initialPackage = savedPackage;
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
         // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.

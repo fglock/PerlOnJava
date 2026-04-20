@@ -1108,6 +1108,19 @@ public class EmitOperator {
 
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
+        // Also update the runtime current-package tracker so tools like
+        // `require FILE` (which inspects InterpreterState.currentPackage to
+        // compile the required file in the correct namespace) see the right
+        // package after a `package Foo;` declaration in JVM-compiled code.
+        // Without this, the runtime tracker stays at "main" in compiled code,
+        // and `require FILE` incorrectly installs subs in main::.
+        emitterVisitor.ctx.mv.visitLdcInsn(name);
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                org.objectweb.asm.Opcodes.INVOKESTATIC,
+                "org/perlonjava/backend/bytecode/InterpreterState",
+                "setCurrentPackageStatic",
+                "(Ljava/lang/String;)V",
+                false);
         // Set debug information for the file name.
         ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
