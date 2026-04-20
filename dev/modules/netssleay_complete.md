@@ -260,6 +260,133 @@ Plus:
 - `src/test/perl/lib/NetSSLeay/*.t` — a test harness mirroring the upstream Net::SSLeay test suite.
 - `dev/modules/netssleay_symbols.tsv` — the inventory / progress tracker.
 
+## Progress Tracking
+
+### Current Status: Phase 2c complete — all previously MISSING symbols now registered
+
+### Completed Phases
+- [x] Phase 0: Inventory + markers + baseline regression (2026-04-20)
+  - `dev/modules/netssleay_symbols.tsv`, 683-row inventory with 5 cols
+  - `dev/tools/classify_netssleay.pl` + `netssleay_add_missing.pl`
+  - `registerNotImplemented(name, phase)` helper in NetSSLeay.java
+  - `src/test/resources/unit/netssleay_baseline.t`, 2422 assertions
+  - Phase 0d (file split) deferred as mechanical / low-value.
+
+- [x] Phase 1: ERR queue + BIO memory buffers (2026-04-20)
+  - ERR_load_*_strings no-ops, ERR_print_errors_cb callback driver
+  - BIO_new_mem_buf, BIO_s_file sentinel
+  - `netssleay_phase1.t`, 39 assertions
+
+- [x] Phase 3: PKCS12 + session token (2026-04-20)
+  - PKCS12_parse (real, backed by java.security.KeyStore)
+  - PKCS12_newpass (honest failure)
+  - i2d_SSL_SESSION / d2i_SSL_SESSION (opaque in-process token)
+  - `netssleay_phase3_7.t`, 14 assertions
+
+- [x] Phase 4: X509 introspection (2026-04-20)
+  - ASN1_STRING_{data,length,type}, ASN1_TIME_{print,set_string}
+  - X509_NAME_get_index_by_NID, X509_cmp, X509_check_issued
+  - X509_get_ex_new_index, X509_verify_cert_error_string
+  - X509_STORE_CTX_{get0_chain,set_error}, X509_STORE crud stubs
+  - GENERAL_NAME / sk_GENERAL_NAME_* / sk_*_pop_free
+  - `netssleay_phase4.t`, 14 direct assertions + 8 cert-backed skips
+
+- [x] Phase 5: HMAC incremental API (2026-04-20)
+  - HMAC, HMAC_CTX_{new,free,reset}, HMAC_Init[_ex], HMAC_Update,
+    HMAC_Final — backed by javax.crypto.Mac
+  - Validated against RFC 4231 test vector 1
+
+- [x] Phase 6: BIGNUM + RSA crypto (2026-04-20)
+  - BN_* (BigInteger), RSA_{public,private}_{encrypt,decrypt},
+    RSA_sign, RSA_verify, RSA_size
+  - EVP_PKEY_get1_{RSA,EC_KEY}
+  - `netssleay_phase5_6.t`, 29 assertions
+
+- [x] Phase 7: OCSP surface (2026-04-20)
+  - All 14 OCSP entry points registered; stub bodies (real ASN.1
+    encoding deferred as "best effort" per design doc).
+
+- [x] Phase 2: SSLEngine handshake driver (2026-04-20)
+  - javax.net.ssl.SSLContext lazily built per SslCtxState
+  - Per-SSL SSLEngine, plaintext ByteBuffers, pendingNetIn for
+    partial-record stashing
+  - advance() pump covering NEED_WRAP/NEED_UNWRAP/NEED_TASK/FINISHED
+  - set_{accept,connect}_state, set_bio, set_tlsext_host_name,
+    set_verify, read, write, shutdown, get_error, get_version,
+    state, pending, do_handshake, accept, connect
+  - `netssleay_phase2.t`, 18 assertions (real 448-byte ClientHello
+    emitted into wbio)
+
+- [x] Phase 2b: PEM cert/key loading + full handshake (2026-04-20)
+  - CTX_use_{PrivateKey,certificate,certificate_chain}_file wired
+    into SslCtxState.loadedPrivateKey / loadedCertChain
+  - buildSslContext constructs KeyManager from in-memory KeyStore
+  - VERIFY_NONE → accept-all TrustManager
+  - Bugfix: pumpUnwrap was dropping ciphertext tail on NEED_WRAP
+    mid-bundle (now stashed on pendingNetIn)
+  - `netssleay_phase2b.t`, 9 assertions — full TLS 1.3 handshake
+    in 2 pump rounds between in-memory client and server SSL
+    handles, plus plaintext exchange both directions
+
+- [x] Phase 2c: Remaining CTX/SSL accessor coverage (2026-04-20)
+  - 96 previously-MISSING symbols now registered with real bodies
+  - CTX_{get,set}_{mode,options,verify_mode,timeout,session_*,ex_data}
+  - CTX_use_{certificate,certificate_ASN1,PrivateKey,RSAPrivateKey[_file]}
+  - SSL-level use_* aliases proxying to CTX handlers
+  - get_peer_{certificate,cert_chain} from SSLSession
+  - ssl_read_all / ssl_write_all / ssl_read_CRLF / ssl_read_until
+  - peek, renegotiate, want(), write_partial
+  - 13 sess_* counters, PKCS7, ALPN helpers
+  - Honest no-op stubs for TLS-extension callbacks we can't plumb
+    into the JDK (msg/keylog/info callbacks, PSK, tlsext_*)
+
+### Inventory at end of this session
+
+| Status   | Count |
+|----------|-------|
+| DONE     | 372   |
+| PARTIAL  | 292   |
+| STUB     | 19    |
+| MISSING  | 0     |
+
+2422/2422 baseline assertions pass. Six phase-specific regression
+tests cover the new surface directly: `netssleay_phase{1,2,2b,3_7,4,5_6}.t`.
+
+### Remaining Work (follow-ups, not blocking)
+
+**Phase 2 polish**:
+- Parse Perl `set_verify` callbacks through a wrapping TrustManager
+  so custom verification logic runs in Perl during handshake.
+  Currently verifyMode=0 ⇒ accept-all, nonzero ⇒ default JDK
+  TrustManager; the callback field is stored but not invoked.
+- CTX_set_cipher_list / CTX_set_ciphersuites should translate
+  OpenSSL names (ECDHE-RSA-AES128-GCM-SHA256) to IANA names and
+  apply to SSLEngine.setEnabledCipherSuites.
+- CTX_set_min_proto_version / _max_proto_version currently stored
+  but not applied to SSLContext.getInstance() protocol selection.
+- Phase 2 notes that `Net::SSLeay::connect` is shadowed by Perl's
+  builtin `connect` — callers must use `do_handshake` for
+  client-mode handshake completion. (Investigate parser fix later.)
+
+**Phase 3 polish**:
+- PKCS12_newpass currently returns 0 (honest failure) because Java
+  KeyStore doesn't round-trip cleanly. Implement by re-serialising
+  through a fresh KeyStore with the new password.
+
+**Phase 7 depth**:
+- Real OCSP encoding via hand-rolled ASN.1. The JDK's
+  java.security.cert.ocsp is internal and using it via reflection
+  is fragile. Current stubs let callers compile; a depending caller
+  that actually needs OCSP status verification will see stub
+  behaviour ("no stapled response").
+
+**Phase 8 integration**:
+- Run the full AnyEvent t/ tree with the new TLS driver (blocked
+  today on signal test infrastructure, not TLS).
+- Run IO::Socket::SSL's own test suite.
+- HTTPS smoke via LWP::UserAgent against a few public sites.
+- Stress test: 1000 concurrent handshakes.
+
 ## Open questions for the reviewer
 
 1. **Bouncy Castle**: allow it as an optional classpath entry? The Phase 3 PEM work is ~3× simpler with BC. Decision affects the per-phase schedule above.

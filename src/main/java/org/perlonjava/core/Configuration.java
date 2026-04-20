@@ -33,14 +33,14 @@ public final class Configuration {
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitId = "2090a2b9e";
+    public static final String gitCommitId = "5cb2cfddb";
 
     /**
      * Git commit date of the build (ISO format: YYYY-MM-DD).
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitDate = "2026-04-20";
+    public static final String gitCommitDate = "2026-04-21";
 
     /**
      * Build timestamp in Perl 5 "Compiled at" format (e.g., "Apr  7 2026 11:20:00").
@@ -48,7 +48,7 @@ public final class Configuration {
      * Parsed by App::perlbrew and other tools via: perl -V | grep "Compiled at"
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String buildTimestamp = "Apr 20 2026 20:41:21";
+    public static final String buildTimestamp = "Apr 21 2026 10:11:46";
 
     // Prevent instantiation
     private Configuration() {
