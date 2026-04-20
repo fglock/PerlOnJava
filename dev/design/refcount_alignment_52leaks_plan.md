@@ -31,12 +31,11 @@ Tracking:
 
 ---
 
-## Current state (2026-04-20, Phase I complete — 1 residual)
+## Current state (2026-04-20, Phase I COMPLETE — 0 failures)
 
-`./jcpan -t DBIx::Class` (parallel, 314 test files, 13803 subtests):
-- **1/13803 subtests fail** (99.9928% pass rate) —
-  `t/52leaks.t` test 9 (DBICTest::Artist)
-- All previously hanging/failing files pass
+`./jcpan -t DBIx::Class` (parallel, 314 test files, 13804 subtests):
+- **0/13804 subtests fail** — 🎉 **CLEAN RUN**
+- All tests pass including `t/52leaks.t` (11/11)
 - Bonus TODO passes preserved: `generic_subq.t` 9,11,13,15,17 and
   `txn_scope_guard.t` 13,15,17 (RT#82942)
 
@@ -44,46 +43,29 @@ Standalone individual tests:
 - `t/60core.t` 125/125 ✅
 - `t/cdbi/sweet/08pager.t` 9/9 ✅
 - `t/storage/error.t` 49/49 ✅
-- `t/52leaks.t` 9 pass / 1 fail (just Artist)
+- `t/52leaks.t` 11/11 ✅ (5 consecutive runs, stable)
 - Sandbox 213/213 ✅
 - `make` PASS ✅
 
-### Why the Artist is stuck
+### How the final Artist leak was fixed
 
-Thorough diagnostic via `Internals::jperl_trace_to`:
+Root cause: Before Phase I's last step, `sweepWeakRefs(quiet=true)`
+(auto-sweep) only cleared weak refs — it did NOT fire DESTROY or set
+`refCount=MIN_VALUE` on unreachable blessed objects. That was
+conservative to avoid mid-module-init DESTROY cascades.
 
-```
-Artist refcnt 2, 13 direct holders in ScalarRefRegistry.
-Holder #3/#8 are rcO=true (the rest are rcO=false, filtered out).
-Holder stack trace: createHashRef at blib/lib/DBIx/Class/
-ResultSource.pm:19712 → Relationship/Base.pm:6743 (Sub::Quote
-eval-compiled accessor code) → Try/Tiny.pm:1374
-```
+The Artist was held through a cycle: `$row->{related_resultsets}{...}`
+hash → scalar → Artist → same hash. The walker's weak-ref clearing
+alone didn't break this cycle because the hash stayed Java-alive. Only
+DESTROY-firing on the Row breaks the cycle.
 
-The Artist is held by a HASH ELEMENT scalar created inside a
-Sub::Quote-generated Relationship accessor. This is DBIC's
-`related_resultsets` (or similar) cache pattern. The hash is alive
-because it's reachable through the closure captures of
-stash-installed accessors (phase 1 walker correctly follows these).
-
-`Internals::jperl_gc()` clears it (forceGcAndSnapshot prunes the
-WeakHashMap entry). Auto-sweep with the 5-second throttle doesn't
-always fire at the right time. A shorter throttle (500ms, 2s) was
-tried but shows flaky cleanup of mid-test state — DBIC
-Schema-registration chains temporarily weaken intermediate values
-and aggressive sweeps clear them incorrectly.
-
-**Not fixable from the walker side** without DBIC-specific knowledge
-of the `related_resultsets` cache semantics. The walker is
-semantically correct: the object IS reachable through the live
-closure chain.
-
-Fixing this requires either:
-- A DBIC-side patch to explicitly clear the cache before the
-  `assert_empty_weakregistry` call (out of scope)
-- A DBIC-cache-aware walker rule (fragile)
-- Reduced auto-sweep throttle + additional safety for DBIC
-  Schema init (future Phase)
+Fix: make auto-sweep (quiet) also fire DESTROY + set refCount=MIN_VALUE.
+Phase B2a's `ModuleInitGuard` prevents auto-sweep during module init
+(require/use/BEGIN), and Phase I's walker seed filters
+(`MyVarCleanupStack.isLive`, `MortalList.isDeferredCapture`,
+`scopeExited`, `refCountOwned`) ensure only genuinely unreachable
+blessed objects are cleared — so it's safe to DESTROY them
+aggressively during normal test body execution.
 
 ---
 
