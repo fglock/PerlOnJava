@@ -6,12 +6,13 @@ including low-priority ones.
 
 ## Status
 
-| Date | Failed | Passed | Subtests running |
-|------|--------|--------|------------------|
-| 2026-04-20 initial | 82/83 | 1/83 | 24 |
-| 2026-04-20 after parser/warnings fixes | 17/83 | 66/83 | 93 |
-| 2026-04-20 after ternary `:` fix | 14/83 | 69/83 | 103 |
-| 2026-04-20 after `&{}` via `()` marker + `pipe` + delete chain | **13/83** | **70/83** | **157** |
+| Date | Failed | Passed | Subtests running | Subtests failed |
+|------|--------|--------|------------------|-----------------|
+| 2026-04-20 initial | 82/83 | 1/83 | 24 | 12 |
+| 2026-04-20 after parser/warnings fixes | 17/83 | 66/83 | 93 | 12 |
+| 2026-04-20 after ternary `:` fix | 14/83 | 69/83 | 103 | 5 |
+| 2026-04-20 after `()` overload marker + `pipe` + delete chain | 13/83 | 70/83 | 157 | 13 |
+| 2026-04-20 after `/gc` in list ctx keeps pos() | **12/83** | **71/83** | **157** | **8** |
 
 ## Already Fixed (PR fix/anyevent-cpan-tests)
 
@@ -35,6 +36,10 @@ including low-priority ones.
   a scalar-expression left side in `CompileExistsDelete.visitDeleteArray`.
 - [x] `elsif` "masks earlier declaration" — verified real Perl emits
   the same warning, no fix needed (was a red herring).
+- [x] `/gc` in list context now preserves pos() — was unconditionally
+  resetting pos after any list-context /g match. Now honours `/c`.
+  Fixed `AnyEvent::Socket::parse_hostport` IPv6 handling; t/06_socket.t
+  now 19/19 (was 14/19).
 
 ## Remaining Failures (13 test programs)
 
