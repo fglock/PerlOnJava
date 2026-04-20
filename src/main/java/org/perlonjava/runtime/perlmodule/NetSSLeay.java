@@ -252,6 +252,12 @@ public class NetSSLeay extends PerlModuleBase {
     // Counter for generating unique opaque handle IDs
     private static final AtomicLong HANDLE_COUNTER = new AtomicLong(1);
 
+    // ex_data indices — OpenSSL reserves index 0, and AnyEvent::TLS does
+    // `until $REF_IDX;` around get_ex_new_index, so start at 1.
+    private static final AtomicLong EX_INDEX_COUNTER = new AtomicLong(1);
+    private static final Map<Long, Map<Integer, RuntimeScalar>> EX_DATA =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     // Maps for opaque handles: handle_id → Java object
     private static final Map<Long, MemoryBIO> BIO_HANDLES = new HashMap<>();
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new HashMap<>();
@@ -1288,6 +1294,34 @@ public class NetSSLeay extends PerlModuleBase {
                 SslState st = SSL_HANDLES.get(a.get(0).getLong());
                 if (st != null) st.securityLevel = (int) a.get(1).getLong();
                 return new RuntimeScalar().getList();
+            });
+
+            // ex_data API — used by AnyEvent::TLS to associate Perl-side refs
+            // with SSL sessions. The real OpenSSL hands out monotonically
+            // increasing indices; we keep per-handle maps keyed by the returned
+            // index. Index 0 is reserved by OpenSSL (AnyEvent's load-time loop
+            // does `until $REF_IDX;`, so we must never return 0).
+            registerLambda("get_ex_new_index", (a, c) -> {
+                long idx = EX_INDEX_COUNTER.getAndIncrement();
+                return new RuntimeScalar(idx).getList();
+            });
+            registerLambda("set_ex_data", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                long sslHandle = a.get(0).getLong();
+                int idx = (int) a.get(1).getLong();
+                RuntimeScalar val = a.get(2).scalar();
+                EX_DATA.computeIfAbsent(sslHandle, k -> new java.util.concurrent.ConcurrentHashMap<>())
+                        .put(idx, val);
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("get_ex_data", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                long sslHandle = a.get(0).getLong();
+                int idx = (int) a.get(1).getLong();
+                java.util.Map<Integer, RuntimeScalar> m = EX_DATA.get(sslHandle);
+                if (m == null) return new RuntimeScalar().getList();
+                RuntimeScalar v = m.get(idx);
+                return v != null ? v.getList() : new RuntimeScalar().getList();
             });
 
             // Signature algorithm list functions are NOT registered because
