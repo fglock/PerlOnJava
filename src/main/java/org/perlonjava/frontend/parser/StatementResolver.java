@@ -1039,27 +1039,37 @@ public class StatementResolver {
             }
         }
 
-        // Check if expression is an assignment with 'my' on the left side
+        // Check if expression is an assignment with 'my'/'our'/'state' on the left side
         if (expression instanceof BinaryOperatorNode assignNode && assignNode.operator.equals("=")) {
             Node left = assignNode.left;
-            // Check if left side is a 'my' declaration
-            if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
-                // Transform: my $x = EXPR if COND
-                // Into: (my $x, COND && ($x = EXPR))
-                // The comma operator evaluates both in the current scope (no new scope created)
-                // This ensures $x is declared even when condition is false
+            // Check if left side is a 'my'/'our'/'state' declaration
+            if (left instanceof OperatorNode declNode
+                    && (declNode.operator.equals("my")
+                        || declNode.operator.equals("our")
+                        || declNode.operator.equals("state"))) {
+                // Transform: my/our/state $x = EXPR if COND
+                // Into: (my/our/state $x, COND && ($x = EXPR))
+                // For 'unless' (operator="||"):
+                // Into: (my/our/state $x, COND || ($x = EXPR))
+                //
+                // The comma operator evaluates both in the current scope (no new scope created).
+                // This ensures $x is declared even when condition would skip the body.
+                //
+                // Critically: extends to 'our' so that idioms like
+                //   our $DEBUG = 0 unless defined $DEBUG;
+                // parse correctly — the `our $DEBUG` declaration happens
+                // in-scope BEFORE the condition `defined $DEBUG` is evaluated,
+                // avoiding spurious "Global symbol requires explicit package
+                // name" under `use strict`.
+                Node variable = declNode.operand;
 
-                // Extract the variable being declared
-                Node variable = myNode.operand;
-
-                // Create the assignment without 'my': $x = EXPR
+                // Create the assignment without the declaration: $x = EXPR
                 Node plainAssignment = new BinaryOperatorNode("=", variable, assignNode.right, tokenIndex);
 
                 // Create the conditional: COND && ($x = EXPR) or COND || ($x = EXPR)
                 Node conditional = new BinaryOperatorNode(operator, modifierExpression, plainAssignment, tokenIndex);
 
-                // Use comma operator: (my $x, conditional)
-                // ListNode in statement context acts as comma operator
+                // Use comma operator: (my/our/state $x, conditional)
                 return new ListNode(List.of(left, conditional), tokenIndex);
             }
         }
