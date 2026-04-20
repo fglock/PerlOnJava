@@ -279,11 +279,15 @@ public class ReachabilityWalker {
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
         ScalarRefRegistry.forceGcAndSnapshot();
-        if (!quiet) {
-            // Non-quiet (explicit jperl_gc): drain rescued objects so
-            // phantom-chain pinned Schemas can collect.
-            DestroyDispatch.clearRescuedWeakRefs();
-        }
+        // Phase H: drain rescued objects in BOTH quiet and non-quiet modes.
+        // Rescued objects are blessed-with-DESTROY objects that self-saved
+        // during their DESTROY body. Clearing their weak refs from auto-
+        // sweep matches Perl's behavior: once the last user-visible strong
+        // ref goes, weak refs to the self-rescued object clear. DBIC's
+        // leak tracer relies on this to detect Schema/Source/Row objects
+        // as collected. Phase H's H2 fix (skipping unblessed containers)
+        // is independent of this — rescued objects are BLESSED.
+        DestroyDispatch.clearRescuedWeakRefs();
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
