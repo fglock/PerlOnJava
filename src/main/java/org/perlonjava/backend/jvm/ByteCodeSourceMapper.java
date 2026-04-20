@@ -28,6 +28,14 @@ public class ByteCodeSourceMapper {
     private static final ArrayList<String> subroutineNamePool = new ArrayList<>();
     private static final Map<String, Integer> subroutineNameToId = new HashMap<>();
 
+    // J-extra optimization: cache last-seen (fileName -> fileId, info) pair.
+    // Most successive saveSourceLocation calls are for the same compilation
+    // unit, so this avoids two HashMap lookups (fileNameToId + sourceFiles)
+    // per call. Reset in resetAll().
+    private static String lastFileName = null;
+    private static int lastFileId = -1;
+    private static SourceFileInfo lastInfo = null;
+
     public static void resetAll() {
         sourceFiles.clear();
 
@@ -39,6 +47,10 @@ public class ByteCodeSourceMapper {
 
         subroutineNamePool.clear();
         subroutineNameToId.clear();
+
+        lastFileName = null;
+        lastFileId = -1;
+        lastInfo = null;
     }
 
     /**
@@ -129,10 +141,21 @@ public class ByteCodeSourceMapper {
         // Use the ORIGINAL filename (compile-time) for the key, not the #line-adjusted one.
         // This is because JVM stack traces report the original filename from visitSource().
         // The #line-adjusted filename is stored separately in LineInfo for caller() reporting.
-        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
-
-        // Get or create the SourceFileInfo object for the file
-        SourceFileInfo info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+        String fileName = ctx.compilerOptions.fileName;
+        SourceFileInfo info;
+        int fileId;
+        // Cache hit on same compilation unit — identity compare is enough because
+        // ctx.compilerOptions.fileName is interned/reused within a compile.
+        if (fileName == lastFileName && lastInfo != null) {
+            info = lastInfo;
+            fileId = lastFileId;
+        } else {
+            fileId = getOrCreateFileId(fileName);
+            info = sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+            lastFileName = fileName;
+            lastFileId = fileId;
+            lastInfo = info;
+        }
 
         // Get current subroutine name (empty string for main code)
         String subroutineName = ctx.symbolTable.getCurrentSubroutine();
