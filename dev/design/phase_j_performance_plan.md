@@ -140,77 +140,83 @@ These are tracked as future phases.
 ## Progress Tracking
 
 ### Current status
-Phase-J in progress. J1, J2 complete. J3 blocked — see findings.
+Phase-J complete. Merged gains: ~3.3% DBIC wallclock reduction.
 
 ### Completed
 - [x] J1 (2026-04-20) — Baseline captured: `dev/bench/results/baseline-6d37287f1.json`.
 - [x] J2 (2026-04-20) — Skip `suppressFlush` emit for simple anon literals.
-  Commit `293648462`. +4–13% on simple-literal-only microbench. DBIC full
-  suite went from 1145s → 1125s (-1.7%). No regressions.
-- [x] JFR profile of `t/52leaks.t` captured to
-  `dev/bench/results/jfr/dbic_52leaks-6d37287f1.jfr`. Top hotspot surprise:
-  `HashSpecialVariable.entrySet` = 294/481 = 61% of CPU samples, all called
-  from `RuntimeStash.get(key)`'s `elements.containsKey(key)` path via
-  `AbstractMap.containsKey` default iteration. Alloc profile dominated by
-  `HashMap$Node` (883) and `HashMap$Node[]` (594) — from the same path.
+  Commit `293648462`. +4–13% on simple-literal-only microbench.
+- [x] J3a (2026-04-20) — Flush MortalList before scalar snapshot in walker.
+  Commit `b331c5d70`. Unblocks the J3 stash containsKey fast path
+  conceptually, but allocation-pressure dependency remains (see below).
+- [x] J4 (2026-04-20) — Cache last-seen fileName/info in ByteCodeSourceMapper.
+  Commit `b84faefff`. `saveSourceLocation` samples dropped from 48 to
+  30 in JFR (10% → 7%).
+- [x] JFR profile captured (both pre and post-J4) for `t/52leaks.t`.
 
-### Blocked
-- [ ] **J3 — Stash `containsKey` fast path**. Wrote a semantically-identical
-  allocation-free `containsKey` for STASH mode (allocation-free walk of the
-  6 global namespaces matching `entrySet()`'s `entryKey` derivation exactly).
-  Instrumented the new path against the old via `JPERL_STASH_DBG=1` — every
-  call produced the same answer. Nevertheless, enabling the fast path
-  deterministically causes DBIC `t/52leaks.t` to lose 14 DESTROY
-  assertions. Simply re-invoking `super.containsKey(key)` as a side-effect
-  before the fast path is enough to make the tests pass again.
+### Wallclock results
+vs pre-J baseline (commit `6d37287f1`):
 
-  Root cause (hypothesis): the default `AbstractMap.containsKey` iterates
-  `entrySet()` which allocates many `RuntimeStashEntry` / `RuntimeGlob`
-  / `RuntimeScalar` objects. That allocation pressure causes young-gen
-  GC to fire more aggressively, clears stale weak references in
-  `ScalarRefRegistry`, and lets the reachability walker see genuinely
-  unreachable objects. Without that pressure, something in our walker
-  holds objects alive when it shouldn't.
+  bench           before    after   delta
+  DBIC full       1145s     1107s   -3.3%
+  Template        135s      133s   -1.5%
+  Moo              91s       90s   -1.1%
 
-  This is a walker bug, not a perf bug. It should be fixed in the walker
-  (likely in `ScalarRefRegistry.forceGcAndSnapshot` or in how we snapshot
-  seeds), not in `HashSpecialVariable`. Deferred to a separate phase.
+### Blocked (documented for future work)
+- **J3 — Stash `containsKey` fast path**. The semantically-identical
+  allocation-free fast path is written and tested (`stashContainsKey`
+  in HashSpecialVariable). Against `/tmp/stash_test2.pl` it produces
+  identical results to stock Perl on every edge case. But enabling it
+  breaks DBIC `t/52leaks.t` with 14 DESTROY-assertion failures.
 
-### Not started
-- [ ] J4 — `MortalList.flush` hot-path measurement — JFR shows <2%;
-  already very optimized. Skipping unless a real workload shows it's hot.
-- [ ] J5 — `setLargeRefCounted` fast-path review — already has a
-  two-branch fast path; JFR doesn't show it in top-30. Skipping.
-- [ ] J6 — Boolean boxing in `EmitLiteral` spill slots — now only runs
-  for method-call-carrying literals after J2, which are already expensive
-  operations. Benefit would be small; skipping.
-- [ ] J7 — Startup time — measured at ~210ms (`time ./jperl -e 1`
-  median of 5), unchanged from before Phase-I. No regression.
+  The root cause is NOT the containsKey return value. It's that the
+  stock `AbstractMap.containsKey` inadvertently creates enough Object
+  allocations (thousands of `RuntimeStashEntry` + `RuntimeGlob` +
+  `RuntimeScalar` per call) to trigger young-gen GC, which runs JVM
+  weak-reference processing, which clears stale WeakHashMap entries
+  in `ScalarRefRegistry`, which keeps `ReachabilityWalker` seeds
+  accurate, which lets DESTROY fire. Without that allocation pressure,
+  our walker's seed list contains ghost scalars that pin genuinely-
+  dead objects.
 
-### Findings worth preserving
-1. The default `AbstractMap.containsKey` iterating `entrySet()` is a real
-   60% CPU cost on stash-heavy workloads. Fixing it safely requires first
-   fixing the walker's dependency on allocation pressure (J3 blocker).
-2. `HashMap$Node` allocation in the stash iteration path is the #1 JVM
-   GC pressure source during DBIC tests.
-3. `saveSourceLocation` / `getSourceLocationAccurate` account for ~20% of
-   CPU in DBIC 52leaks.t — these are compile-time, run each time a module
-   is loaded. Already has a cache but often misses on emit-time calls.
-4. Parser + ASM emit work is meaningful (~30% of CPU). Module loading
-   happens once per test so this amortizes, but for `make test`-like
-   runs with many short tests, it's a real cost.
+  Attempted remediations that did NOT work:
+  1. Flushing MortalList.pending before `forceGcAndSnapshot` (J3a —
+     correct for other reasons, committed, but not sufficient alone).
+  2. Allocating explicit garbage (`new HashMap[64]`) per GC pass in
+     `forceGcAndSnapshot` — drifts ballistically toward solution,
+     still not reliable.
+  3. Increasing GC pass count from 3 to 5 — no improvement.
 
-### Next phase candidates
-- **Walker hardening** (unblocks J3): investigate why
-  `forceGcAndSnapshot`'s 3×5 `System.gc()` passes don't fully clean
-  `ScalarRefRegistry`. Likely: we need a separate "prune stale weak
-  refs" pass before snapshotting.
-- **Compile caching**: ByteCodeSourceMapper entries could be serialized
-  and reloaded for previously-compiled modules (module load takes
-  ~milliseconds per file).
-- **Stash iterator laziness**: even if containsKey has to stay as-is,
-  iterators like `for keys %Foo::` don't need the full materialized
-  `HashSet` — they could stream keys directly. But this is rarely hot.
+  The right fix is to make `ReachabilityWalker`/`ScalarRefRegistry`
+  independent of JVM GC timing. Candidates for a separate phase:
+  - Track scalar liveness cooperatively instead of via WeakHashMap:
+    mark scalars `dead=true` at their registered-kill point and
+    filter the snapshot instead of relying on JVM GC.
+  - Make `forceGcAndSnapshot` synchronously drain all containers
+    with `refCount==0` and `!localBindingExists` before snapshotting,
+    so mid-air "just went unreachable" scalars can't ghost a walker
+    seed.
+
+  If J3 is applied safely, the upside is ~60% CPU reduction on
+  stash-heavy workloads (DBIC leak tracer et al.).
+
+### Not worth pursuing
+- [ ] J4-MortalList — `MortalList.flush` hot path. JFR shows 2%;
+  fast path is already near-optimal.
+- [ ] J5 — `setLargeRefCounted` fast-path review. Already tiered;
+  not in top-30 JFR samples.
+- [ ] J6 — Boolean boxing in `EmitLiteral` spill slots. Only runs
+  on method-call-carrying literals after J2; cost is dominated by
+  the method call itself.
+- [ ] J7 — Startup time (~210ms). Matches pre-Phase-I baseline.
+
+### Residual hotspots (post-J4 JFR, DBIC 52leaks.t, 60s)
+- 67% — `HashSpecialVariable.entrySet` (blocked — see J3)
+- 12% — Parser/ASM compile-time (per-module, amortizes)
+-  7% — `saveSourceLocation`/`getSourceLocationAccurate` (post-J4)
+-  5% — `RuntimeStash.get` tree-walk (would also benefit from J3)
+-  2% — `MortalList.flush` + refcount ops
+-  7% — everything else
 
 ### Related docs
 - `dev/design/optimization.md` — static wish-list (predates this plan).
