@@ -35,6 +35,74 @@ import static org.perlonjava.runtime.runtimetypes.ScalarUtils.isInteger;
 public class EmitLiteral {
 
     /**
+     * Returns true if the given AST element is "simple" — it cannot allocate
+     * a blessed temporary whose pending mortal decrement could fire DESTROY
+     * mid-literal-construction. Used by emitArrayLiteral / emitHashLiteral to
+     * decide whether the MortalList.suppressFlush() wrapper is needed.
+     * <p>
+     * Conservative: returns false for anything that could call a sub or method
+     * (including the `(` function call, `->` apply, `bless`, etc.), so we err
+     * on the side of correctness. Simple elements include plain literals and
+     * variable accesses with no call in their subtree.
+     */
+    private static boolean canAllocateBlessedTemp(Node node) {
+        if (node == null) return false;
+        if (node instanceof NumberNode) return false;
+        if (node instanceof StringNode) return false;
+        if (node instanceof IdentifierNode) return false;
+        if (node instanceof LabelNode) return false;
+        if (node instanceof ListNode listNode) {
+            for (Node elem : listNode.elements) {
+                if (canAllocateBlessedTemp(elem)) return true;
+            }
+            return false;
+        }
+        if (node instanceof ArrayLiteralNode arr) {
+            for (Node elem : arr.elements) {
+                if (canAllocateBlessedTemp(elem)) return true;
+            }
+            return false;
+        }
+        if (node instanceof HashLiteralNode hash) {
+            for (Node elem : hash.elements) {
+                if (canAllocateBlessedTemp(elem)) return true;
+            }
+            return false;
+        }
+        if (node instanceof OperatorNode op) {
+            // `$var`, `@var`, `%var`, `\x`, `-x`, `+x`, `!x` — sigil/unary-op
+            // on a non-allocating operand are safe. Anything else we assume
+            // unsafe (covers `bless(...)`, `do {...}`, `eval {...}`, etc.).
+            switch (op.operator) {
+                case "$", "@", "%", "&", "*", "\\", "+", "-", "!", "~" ->
+                        { return canAllocateBlessedTemp(op.operand); }
+                default -> { return true; }
+            }
+        }
+        if (node instanceof BinaryOperatorNode bop) {
+            // `(` is a sub call, `->` is arrow (method call / deref-apply).
+            if (bop.operator.equals("(") || bop.operator.equals("->")) return true;
+            // Index operators with literal keys/indices on a non-allocating
+            // container are safe: `$h->{k}` decomposes to `->` above, but
+            // plain `$h{k}`/`$a[0]` does not. Treat other binops conservatively.
+            return canAllocateBlessedTemp(bop.left) || canAllocateBlessedTemp(bop.right);
+        }
+        // Fall-through: be conservative.
+        return true;
+    }
+
+    /**
+     * Returns true if any element of the literal can allocate a blessed temp.
+     * Fast path for the common case of `[1,2,3]` / `{a=>1, b=>2}`.
+     */
+    private static boolean literalNeedsFlushSuppression(java.util.List<Node> elements) {
+        for (Node elem : elements) {
+            if (canAllocateBlessedTemp(elem)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Emits bytecode for a Perl array literal (e.g., [1, 2, 3]).
      *
      * <p>Array literals in Perl always evaluate their elements in LIST context,
@@ -84,13 +152,20 @@ public class EmitLiteral {
         // createReferenceWithTrackedElements finalizes ownership. The
         // wasFlushing flag is stashed in a local so we can restore it at
         // the end. See dev/sandbox tt_arr2.pl for a minimal repro.
-        JavaClassInfo.SpillRef wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
-        mv.visitInsn(Opcodes.ICONST_1);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
-        // Box boolean to store in Object-typed spill slot
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
-        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+        //
+        // J2 optimization: skip the wrap entirely when static analysis proves
+        // no element can allocate a blessed temp (e.g., `[1,2,3]`).
+        boolean needsSuppress = literalNeedsFlushSuppression(node.elements);
+        JavaClassInfo.SpillRef wasFlushingRef = null;
+        if (needsSuppress) {
+            wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+            // Box boolean to store in Object-typed spill slot
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+        }
 
         // Populate the array with elements
         for (Node element : node.elements) {
@@ -120,13 +195,15 @@ public class EmitLiteral {
         // Restore previous flush-suppression state. Element refCounts have now
         // been bumped by createReferenceWithTrackedElements, so it is safe for
         // pending mortal decrements to fire.
-        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
-        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
-        mv.visitInsn(Opcodes.POP);  // discard the return value
+        if (needsSuppress) {
+            emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
+            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+            mv.visitInsn(Opcodes.POP);  // discard the return value
+        }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
@@ -166,12 +243,17 @@ public class EmitLiteral {
         // Suppress MortalList.flush() during element evaluation — see
         // emitArrayLiteral above for rationale (same issue affects hash
         // literals whose values are blessed temps from method calls).
-        JavaClassInfo.SpillRef wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
-        mv.visitInsn(Opcodes.ICONST_1);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
-        emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+        // J2 optimization: skip when no element can allocate a blessed temp.
+        boolean needsSuppress = literalNeedsFlushSuppression(node.elements);
+        JavaClassInfo.SpillRef wasFlushingRef = null;
+        if (needsSuppress) {
+            wasFlushingRef = emitterVisitor.ctx.javaClassInfo.acquireSpillRefOrAllocate(emitterVisitor.ctx.symbolTable);
+            mv.visitInsn(Opcodes.ICONST_1);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+            emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, wasFlushingRef);
+        }
 
         // Create a RuntimeList from the hash elements
         // This delegates to emitList which handles the LIST context properly
@@ -186,13 +268,15 @@ public class EmitLiteral {
 
         // Restore previous flush-suppression state.
         // Stack: [ref]
-        emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
-        emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
-        mv.visitInsn(Opcodes.POP);  // discard the return value; ref remains on stack
+        if (needsSuppress) {
+            emitterVisitor.ctx.javaClassInfo.loadSpillRef(mv, wasFlushingRef);
+            emitterVisitor.ctx.javaClassInfo.releaseSpillRef(wasFlushingRef);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Boolean");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Boolean", "booleanValue", "()Z", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/MortalList", "suppressFlush", "(Z)Z", false);
+            mv.visitInsn(Opcodes.POP);  // discard the return value; ref remains on stack
+        }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(HashLiteralNode) end");
     }
