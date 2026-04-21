@@ -193,13 +193,38 @@ sub _install_pure_perl {
     # Use explicit PM hash if provided
     if ($args->{PM}) {
         %pm = %{$args->{PM}};
-        # Expand Make-style variables like $(INST_LIB) to actual paths
+        # Expand Make-style variables like $(INST_LIB) to actual paths.
+        # Standard MakeMaker derives directory-bearing vars from NAME:
+        #   INST_LIBDIR      = INST_LIB/<parent>    (e.g. blib/lib/Term)
+        #   INST_ARCHLIBDIR  = INST_ARCHLIB/<parent>
+        #   INST_AUTODIR     = INST_LIB/auto/<full>
+        #   INST_ARCHAUTODIR = INST_ARCHLIB/auto/<full>
+        # where <parent> is NAME with the last :: component removed and
+        # <full> is the full NAME with :: replaced by /.
+        my @parts = split /::/, ($name || '');
+        pop @parts;  # drop BASEEXT (last component)
+        my $parent_dir = @parts ? join('/', @parts) : '';
+        (my $full_path = ($name || '')) =~ s{::}{/}g;
+        my $libdir = $parent_dir
+            ? File::Spec->catdir($INSTALL_BASE, $parent_dir)
+            : $INSTALL_BASE;
+        my $autodir = $full_path
+            ? File::Spec->catdir($INSTALL_BASE, 'auto', $full_path)
+            : $INSTALL_BASE;
         for my $key (keys %pm) {
             my $val = $pm{$key};
+            # Directory-bearing variables (must come before the bare LIB/ARCHLIB forms)
+            $val =~ s/\$\(INST_LIBDIR\)/$libdir/g;
+            $val =~ s/\$\(INST_ARCHLIBDIR\)/$libdir/g;  # treat ARCHLIBDIR same as LIBDIR
+            $val =~ s/\$\(INST_AUTODIR\)/$autodir/g;
+            $val =~ s/\$\(INST_ARCHAUTODIR\)/$autodir/g;
+            $val =~ s/\$\{INST_LIBDIR\}/$libdir/g;
+            $val =~ s/\$\{INST_ARCHLIBDIR\}/$libdir/g;
+            # Bare library roots
             $val =~ s/\$\(INST_LIB\)/$INSTALL_BASE/g;
             $val =~ s/\$\(INST_ARCHLIB\)/$INSTALL_BASE/g;  # treat ARCHLIB same as LIB
-            $val =~ s/\$\(INST_LIBDIR\)/$INSTALL_BASE/g;
-            $val =~ s/\$\{INST_LIB\}/$INSTALL_BASE/g;      # also handle ${VAR} form
+            $val =~ s/\$\{INST_LIB\}/$INSTALL_BASE/g;
+            $val =~ s/\$\{INST_ARCHLIB\}/$INSTALL_BASE/g;
             $pm{$key} = $val;
         }
     } else {
@@ -637,12 +662,16 @@ sub _shell_mkdir {
     return "\t\@mkdir -p '$dir'";
 }
 
-# Helper: generate a shell cp command for Makefile
+# Helper: generate a shell cp command for Makefile.
+# Tolerant of missing source files: some distributions generate .pm files
+# from .pm.PL scripts that require XS bootstrap (e.g. Term::ReadKey) and
+# PerlOnJava cannot run them. We skip missing sources with a warning
+# rather than failing the whole install.
 sub _shell_cp {
     my ($src, $dest) = @_;
     $src =~ s/'/'\\''/g;
     $dest =~ s/'/'\\''/g;
-    return "\t\@rm -f '$dest' && cp '$src' '$dest'";
+    return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'; else echo 'PerlOnJava: skipping missing source: $src'; fi";
 }
 
 sub _create_mymeta {

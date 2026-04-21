@@ -107,6 +107,11 @@ public class TieArray extends ArrayList<RuntimeScalar> {
             // Method doesn't exist, return undef
             return RuntimeScalarCache.scalarUndef;
         }
+        // Ignore AUTOLOAD fallback — tie special methods (UNTIE, DESTROY) are
+        // "if exists" only; they should not trigger AUTOLOAD dispatch.
+        if (method.value instanceof RuntimeCode rc && rc.autoloadVariableName != null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
 
         // Method exists, call it
         return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
