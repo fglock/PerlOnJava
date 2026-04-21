@@ -419,6 +419,26 @@ public class IOOperator {
         }
     }
 
+    /**
+     * sysseek returns the new file position, or undef on failure.
+     * A position of zero is returned as the string "0 but true".
+     */
+    public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
+        RuntimeScalar seekResult = seek(fileHandle, runtimeList);
+        if (!seekResult.getBoolean()) {
+            return seekResult;
+        }
+        RuntimeScalar pos = tell(fileHandle);
+        long p = pos.getLong();
+        if (p < 0) {
+            return RuntimeIO.handleIOError("sysseek: could not determine position");
+        }
+        if (p == 0) {
+            return new RuntimeScalar("0 but true");
+        }
+        return pos;
+    }
+
     public static RuntimeScalar getc(int ctx, RuntimeBase... args) {
         RuntimeScalar fileHandle;
         if (args.length < 1) {
@@ -3039,7 +3059,10 @@ public class IOOperator {
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
-        return seek(ctx, args);
+        if (args.length < 3) throw new PerlCompilerException("Not enough arguments for sysseek");
+        RuntimeList list = new RuntimeList();
+        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        return sysseek(args[0].scalar(), list);
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {
