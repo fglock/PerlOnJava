@@ -103,6 +103,27 @@ public class EmitStatement {
             ctx.javaClassInfo.evalCleanupLocals.addAll(arrayIndices);
         }
 
+        // Fast path: when CleanupNeededVisitor proved the sub has no
+        // bless / weaken / local / nested-sub / defer / user-sub-call
+        // activity, the MyVarCleanupStack.unregister emission (Phase E)
+        // is dead code — MyVarCleanupStack is only populated when
+        // WeakRefRegistry.weakRefsExist is true, which only ever
+        // becomes true after a weaken() is called somewhere. If this
+        // sub couldn't have weakened anything (the visitor proved it),
+        // skip the per-variable unregister loop.
+        //
+        // We deliberately DO NOT skip Phase 1 (scopeExitCleanup on
+        // scalars) or Phase 1b (scopeExitCleanupHash/Array): those fire
+        // DESTROY for blessed refs that entered this sub via @_ params
+        // or via return values. Skipping them breaks DBIC txn_scope_guard,
+        // tie_scalar DESTROY-on-untie, and other legitimate patterns
+        // where the sub receives a blessed ref it doesn't know about
+        // statically.
+        //
+        // JPERL_FORCE_CLEANUP=1 forces cleanupNeeded=true at the
+        // EmitterMethodCreator level for correctness debugging.
+        boolean skipMyVarCleanup = !ctx.javaClassInfo.cleanupNeeded;
+
         // Only emit flush when there are variables that need cleanup.
         // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
         // skip the Phase 1/1b cleanup but still flush: pending entries from inner sub
@@ -152,13 +173,20 @@ public class EmitStatement {
         // treat the scalar as a live lexical and mark its referent as
         // reachable, causing false-positive leaks (basic rerefrozen in
         // DBIC's t/52leaks.t).
-        for (int idx : allIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
-                    "unregister",
-                    "(Ljava/lang/Object;)V",
-                    false);
+        //
+        // When skipMyVarCleanup is true (CleanupNeededVisitor proved this
+        // sub never uses bless/weaken/user-sub-calls/etc.), the stack is
+        // guaranteed empty for this sub's lexicals, so the unregister
+        // loop is dead code. Skipping it is the win this fast path buys.
+        if (!skipMyVarCleanup) {
+            for (int idx : allIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                        "unregister",
+                        "(Ljava/lang/Object;)V",
+                        false);
+            }
         }
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);

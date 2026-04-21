@@ -101,6 +101,24 @@ public class JavaClassInfo {
     public int spillTop;
 
     /**
+     * True iff this subroutine's scope exits need the full cleanup
+     * emission (scopeExitCleanup on scalars/hashes/arrays,
+     * MyVarCleanupStack.unregister, MortalList flush).
+     * <p>
+     * Default true (safe). Flipped to false by
+     * {@link org.perlonjava.frontend.analysis.CleanupNeededVisitor} when
+     * the sub body is statically proven to have no bless / weaken /
+     * local / nested-sub / defer activity — in which case scope-exit
+     * emissions can be dropped to just the null-store sequence,
+     * matching the fast path master uses for simple numeric loops.
+     * <p>
+     * {@link EmitStatement#emitScopeExitNullStores} honours this flag.
+     * The env var {@code JPERL_FORCE_CLEANUP=1} forces this to true
+     * globally for debugging suspected correctness regressions.
+     */
+    public boolean cleanupNeeded = true;
+
+    /**
      * JVM local variable indices of my-variables (scalar, hash, array) allocated
      * inside the eval body. Used by the eval catch handler to emit scope-exit
      * cleanup when die unwinds through eval. Populated during compilation by
