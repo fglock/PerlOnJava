@@ -76,11 +76,14 @@ public class Universal extends PerlModuleBase {
     public static void initialize() {
         Universal universal = new Universal();
         try {
-            // Register methods with their respective signatures
-            universal.registerMethod("can", "$$");
-            universal.registerMethod("isa", "$$");
-            universal.registerMethod("DOES", "$$");
-            universal.registerMethod("VERSION", "$");
+            // Register UNIVERSAL methods without prototypes. In real Perl,
+            // UNIVERSAL::isa / can / DOES / VERSION are plain subs with no
+            // prototype; forcing "$$" here rejects valid call patterns like
+            // `UNIVERSAL::isa(@_)` (used e.g. by Math::BigRat).
+            universal.registerMethod("can", null);
+            universal.registerMethod("isa", null);
+            universal.registerMethod("DOES", null);
+            universal.registerMethod("VERSION", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }

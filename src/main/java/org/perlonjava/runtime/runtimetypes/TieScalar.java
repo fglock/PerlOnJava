@@ -24,6 +24,16 @@ public class TieScalar extends TiedVariableBase {
     private final RuntimeScalar previousValue;
 
     /**
+     * Reentrancy guard: true while we are already inside a FETCH/STORE
+     * dispatch for this tied scalar. Matches Perl's "while magic is
+     * running on an SV, further magic is suppressed on that SV" behaviour
+     * — otherwise e.g. `sub STORE { $tied_var = something }` would
+     * infinitely recurse. See Math::BigInt's STORE on $rnd_mode for a
+     * real-world trigger.
+     */
+    private boolean inMagic = false;
+
+    /**
      * Creates a new TieScalar instance.
      *
      * @param tiedPackage   the package name this scalar is tied to
@@ -61,18 +71,40 @@ public class TieScalar extends TiedVariableBase {
      * the last FETCH'd value (matching Perl 5 behavior).
      */
     public RuntimeScalar tiedFetch() {
-        RuntimeScalar result = tieCall("FETCH");
-        // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
-        previousValue.type = result.type;
-        previousValue.value = result.value;
-        return result;
+        if (inMagic) {
+            // Re-entry: return the cached previous value rather than
+            // recursing back into FETCH.
+            return previousValue;
+        }
+        inMagic = true;
+        try {
+            RuntimeScalar result = tieCall("FETCH");
+            // Cache the FETCH result so untie restores it (matches Perl 5 SV caching)
+            previousValue.type = result.type;
+            previousValue.value = result.value;
+            return result;
+        } finally {
+            inMagic = false;
+        }
     }
 
     /**
      * Stores a value into a tied scalar (delegates to STORE).
      */
     public RuntimeScalar tiedStore(RuntimeScalar v) {
-        return tieCall("STORE", v);
+        if (inMagic) {
+            // Re-entry: silently drop the nested assignment, as real Perl
+            // suppresses magic dispatch while magic is already running on
+            // the same SV. This prevents infinite recursion in patterns
+            // like `sub STORE { $tied = $_[1] }`.
+            return v;
+        }
+        inMagic = true;
+        try {
+            return tieCall("STORE", v);
+        } finally {
+            inMagic = false;
+        }
     }
 
     public RuntimeScalar getPreviousValue() {
