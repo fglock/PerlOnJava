@@ -90,14 +90,25 @@ public class NumberParser {
         String varName = "overload::__poj_const_handler_" + id;
         GlobalVariable.getGlobalVariable(varName).set(handler);
 
-        // Build the AST: $overload::__poj_const_handler_N->(origText, literal, category)
+        // Emit  overload::__poj_const_call($handler, $text, $literal, $category)
+        // rather than a direct $handler->($text, $literal, $category) call.
+        // The helper temporarily removes %^H{$category} for the duration of
+        // the handler's execution so that patterns like
+        //     sub { return eval $_[0] }
+        // in `overload::constant float => ...` don't infinite-recurse when
+        // the handler's body reparses the original source text.
         OperatorNode handlerVar = new OperatorNode("$",
                 new IdentifierNode(varName, tokenIndex), tokenIndex);
         ListNode args = new ListNode(tokenIndex);
+        args.elements.add(handlerVar);
         args.elements.add(new StringNode(originalText, tokenIndex));
         args.elements.add(literal);
         args.elements.add(new StringNode(category, tokenIndex));
-        return new BinaryOperatorNode("->", handlerVar, args, tokenIndex);
+        return new BinaryOperatorNode("(",
+                new OperatorNode("&",
+                        new IdentifierNode("overload::__poj_const_call", tokenIndex),
+                        tokenIndex),
+                args, tokenIndex);
     }
 
     /**
