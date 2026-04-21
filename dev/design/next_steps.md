@@ -280,6 +280,24 @@ Each entry: commit + what changed + measured effect.
 | `d071692a3` | **baseline** | 7.75× | 4.55× | 2.57× | PR #526 merge tip |
 | `fa8df8a2a` | RegexState EMPTY singleton (skip alloc when no regex has matched) | — | — | — | Correctness-preserving, modest measured effect. Removed ~250 sampled allocs/run. |
 | `1400475d3` | NameNormalizer two-level cache (drop CacheKey alloc) | **6.63×** | **4.07×** | 2.60× | -14% on bless, -11% on anon. global also improved 1.92→1.33. |
+| `b7d05b77e` | docs: §0.8 progress log | | | | |
+| *(reverted)* | apply()/applySlow fast-path split | 6.56× | 4.08× | **5.38× ❌** | Bytecode size of key apply() overloads dropped from 1150/982/619 bytes to 28/99/105 — small enough for HotSpot to inline (and `-XX:+PrintInlining` confirmed inlining at hot call sites). But life_bitpacked REGRESSED 2×: 2.57× → 5.38×. Hypothesis: HotSpot's inline-budget shifted, pushing the inner compute loop over an internal size boundary. User rule: revert on regression. Finding recorded. |
+
+**Lesson on the apply() split.** Making `apply()` inlinable does not
+automatically help. HotSpot's inliner is greedy: if the caller's
+inlined body grows past the `InlineSmallCode`/budget threshold, later
+calls in the same caller become *non-inlinable*. Shrinking the
+static/instance apply() wrappers from 600-1150 bytes down to 28-105
+bytes made SOME callers faster (closure 1.21×→0.84×, i.e. now faster
+than perl) but regressed life_bitpacked's main compute loop by 2×.
+The overall picture was worse so the split was reverted.
+
+Next time a similar intervention is attempted, it must be measured
+against life_bitpacked specifically (and ideally profiled with
+`-XX:+PrintCompilation -XX:+PrintInlining` to identify the caller
+that flipped).
+
+### 0.9 What we learned
 
 **JFR-profiling findings so far.**
 
