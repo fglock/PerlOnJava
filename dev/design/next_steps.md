@@ -270,6 +270,55 @@ somewhere else — most likely in `bless()` → `MortalList.deferDecrement`
 Once all green, the stretch goal is **every benchmark ≤ 1.0× perl**
 (full parity). We're already there on lexical / string / closure.
 
+### 0.8 Progress log
+
+Per-change log of §0 work since the baseline-d071692a3 snapshot.
+Each entry: commit + what changed + measured effect.
+
+| Commit | Change | refcount_bless | refcount_anon | life_bitpacked | Notes |
+|---|---|---:|---:|---:|---|
+| `d071692a3` | **baseline** | 7.75× | 4.55× | 2.57× | PR #526 merge tip |
+| `fa8df8a2a` | RegexState EMPTY singleton (skip alloc when no regex has matched) | — | — | — | Correctness-preserving, modest measured effect. Removed ~250 sampled allocs/run. |
+| `1400475d3` | NameNormalizer two-level cache (drop CacheKey alloc) | **6.63×** | **4.07×** | 2.60× | -14% on bless, -11% on anon. global also improved 1.92→1.33. |
+
+**JFR-profiling findings so far.**
+
+Running `JPERL_OPTS="-XX:StartFlightRecording=duration=20s,method-profiling=high"`
+on a tight bless/DESTROY loop (`N=50_000_000`) identified, in order
+of allocation weight (all via `jdk.ObjectAllocationSample`):
+
+1. **`RegexState`** (~250 sampled allocs, 765 kB) — `save()` per sub
+   call regardless of regex activity. ✅ fixed in `fa8df8a2a`.
+2. **`NameNormalizer$CacheKey`** (~116 sampled allocs, 4 MB) —
+   per-lookup CacheKey to probe the normalize-variable-name cache.
+   ✅ fixed in `1400475d3`.
+3. Remaining top allocators (still open):
+   - `java.lang.Object[]` (~300 samples) — ArrayList / Deque
+     backing arrays, likely from `pristineArgsStack` and `MortalList`.
+   - `RuntimeScalar` (~249 samples) — per-iteration scalar
+     wrapping of bless class name + argument.
+   - `RuntimeArray` (~216 samples) — @_ per call, can't eliminate.
+   - `ArrayList` (~213 samples) — pristineArgsStack snapshots.
+   - `RuntimeList` (~206 samples) — return values.
+   - `RuntimeHash` (~119 samples) — the `{ id => 1 }` literal.
+   - `RuntimeScalarIterator` (~112 samples) — iterator wrappers
+     for pass-through cases.
+
+**Benchmark.pm overhead caveat.** When I removed Benchmark.pm and
+ran a bare `for (1..N) { WithDestroy->new(1) }` loop, the ratio
+dropped from **7.75× to ~2.3×**. Benchmark.pm itself inflates the
+apparent gap by ~3× — mostly because its eval-generated timing
+wrapper hits extra dispatch. Investigate Benchmark.pm as an
+independent optimization target (it affects all Benchmark-wrapped
+workloads, not just these benches).
+
+**Key insight for future work.** Most remaining allocations look
+inherent to per-call semantics (@_, return RuntimeList, etc.).
+The path to recovering the 2-3× gap is probably structural rather
+than allocation-by-allocation: inline small arg passing, consider
+a "simple-sub" emit path that doesn't build RuntimeArray @_ when
+the callee doesn't reference it, etc. See §0.5 hypotheses.
+
 ---
 
 ## 1. Correctness follow-ups
