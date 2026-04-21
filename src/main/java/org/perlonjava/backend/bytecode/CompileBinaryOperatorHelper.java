@@ -24,45 +24,48 @@ public class CompileBinaryOperatorHelper {
         int rd = bytecodeCompiler.allocateOutputRegister();
 
         // Emit opcode based on operator
+        boolean noOverload = bytecodeCompiler.isNoOverloadingEnabled();
         switch (operator) {
             case "+" -> {
-                bytecodeCompiler.emit(Opcodes.ADD_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.ADD_NO_OVERLOAD : Opcodes.ADD_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "-" -> {
-                bytecodeCompiler.emit(Opcodes.SUB_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.SUB_NO_OVERLOAD : Opcodes.SUB_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "*" -> {
-                bytecodeCompiler.emit(Opcodes.MUL_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.MUL_NO_OVERLOAD : Opcodes.MUL_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "%" -> {
-                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_MOD : Opcodes.MOD_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.MOD_NO_OVERLOAD
+                        : (bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_MOD : Opcodes.MOD_SCALAR));
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "/" -> {
-                bytecodeCompiler.emit(bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.DIV_NO_OVERLOAD
+                        : (bytecodeCompiler.isIntegerEnabled() ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR));
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "**" -> {
-                bytecodeCompiler.emit(Opcodes.POW_SCALAR);
+                bytecodeCompiler.emit(noOverload ? Opcodes.POW_NO_OVERLOAD : Opcodes.POW_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
             case "." -> {
-                bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.CONCAT_NO_OVERLOAD : Opcodes.CONCAT);
+                bytecodeCompiler.emit(noOverload ? Opcodes.CONCAT_NO_OVERLOAD : Opcodes.CONCAT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

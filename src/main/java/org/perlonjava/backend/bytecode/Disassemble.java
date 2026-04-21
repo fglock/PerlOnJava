@@ -302,6 +302,32 @@ public class Disassemble {
                         int rsNeg = interpretedCode.bytecode[pc++];
                         sb.append("NEG_SCALAR r").append(rd).append(" = -r").append(rsNeg).append("\n");
                         break;
+                    case Opcodes.ADD_NO_OVERLOAD:
+                    case Opcodes.SUB_NO_OVERLOAD:
+                    case Opcodes.MUL_NO_OVERLOAD:
+                    case Opcodes.DIV_NO_OVERLOAD:
+                    case Opcodes.MOD_NO_OVERLOAD:
+                    case Opcodes.POW_NO_OVERLOAD: {
+                        rd = interpretedCode.bytecode[pc++];
+                        rs1 = interpretedCode.bytecode[pc++];
+                        rs2 = interpretedCode.bytecode[pc++];
+                        String op = switch (opcode) {
+                            case Opcodes.ADD_NO_OVERLOAD -> "ADD_NO_OVERLOAD";
+                            case Opcodes.SUB_NO_OVERLOAD -> "SUB_NO_OVERLOAD";
+                            case Opcodes.MUL_NO_OVERLOAD -> "MUL_NO_OVERLOAD";
+                            case Opcodes.DIV_NO_OVERLOAD -> "DIV_NO_OVERLOAD";
+                            case Opcodes.MOD_NO_OVERLOAD -> "MOD_NO_OVERLOAD";
+                            default -> "POW_NO_OVERLOAD";
+                        };
+                        sb.append(op).append(" r").append(rd).append(" = r").append(rs1).append(", r").append(rs2).append("\n");
+                        break;
+                    }
+                    case Opcodes.NEG_NO_OVERLOAD: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int rsNegNo = interpretedCode.bytecode[pc++];
+                        sb.append("NEG_NO_OVERLOAD r").append(rd).append(" = -r").append(rsNegNo).append("\n");
+                        break;
+                    }
                     case Opcodes.ADD_SCALAR_INT:
                         rd = interpretedCode.bytecode[pc++];
                         int rs = interpretedCode.bytecode[pc++];

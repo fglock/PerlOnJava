@@ -624,6 +624,29 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeNegScalar(bytecode, pc, registers);
                             }
 
+                            // Arithmetic without overload dispatch (no overloading pragma)
+                            case Opcodes.ADD_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeAddNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.SUB_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeSubNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.MUL_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeMulNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.DIV_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeDivNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.MOD_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeModNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.POW_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executePowNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.NEG_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeNegNoOverload(bytecode, pc, registers);
+                            }
+
                             // Specialized unboxed operations (rare optimizations)
                             case Opcodes.ADD_SCALAR_INT -> {
                                 pc = InlineOpcodeHandler.executeAddScalarInt(bytecode, pc, registers);

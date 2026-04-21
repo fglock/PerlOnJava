@@ -32,12 +32,20 @@ public class EmitOperator {
             throw new PerlCompilerException(node.getIndex(), "Node must be OperatorNode or BinaryOperatorNode", emitterVisitor.ctx.errorUtil);
         }
 
+        // Check if `no overloading` is active - prefer NoOverload variant when available
+        ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+        boolean noOverloading = symbolTable != null &&
+                symbolTable.isStrictOptionEnabled(Strict.HINT_NO_AMAGIC);
+        OperatorHandler operatorHandler = noOverloading ? OperatorHandler.getNoOverload(operator) : null;
+
         // Check if uninitialized warnings are enabled at compile time
         // Use warn variant for zero-overhead when warnings disabled
-        boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
-        OperatorHandler operatorHandler = warnUninit 
-                ? OperatorHandler.getWarn(operator)
-                : OperatorHandler.get(operator);
+        if (operatorHandler == null) {
+            boolean warnUninit = emitterVisitor.ctx.symbolTable.isWarningCategoryEnabled("uninitialized");
+            operatorHandler = warnUninit
+                    ? OperatorHandler.getWarn(operator)
+                    : OperatorHandler.get(operator);
+        }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
         }

@@ -391,6 +391,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Convert to number without triggering overload dispatch.
+     * Used by {@code no overloading} pragma to bypass the {@code 0+} overload.
+     * For blessed references, returns the identity hash code as an integer.
+     */
+    public RuntimeScalar getNumberNoOverload() {
+        return switch (type) {
+            case INTEGER, DOUBLE -> this;
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this);
+            case UNDEF -> scalarZero;
+            case VSTRING -> NumberParser.parseNumber(this);
+            case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
+            case GLOB -> scalarOne;
+            case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
+            case TIED_SCALAR -> this.tiedFetch().getNumberNoOverload();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumberNoOverload();
+            case DUALVAR -> ((DualVar) this.value).numericValue();
+            default -> {
+                // For references (blessed or not), return the identity hash code
+                // of the referent, matching Scalar::Util::refaddr semantics.
+                if (value != null) {
+                    yield new RuntimeScalar(System.identityHashCode(value));
+                }
+                yield scalarZero;
+            }
+        };
+    }
+
+    /**
      * Converts scalar to number with uninitialized value warning.
      * Called when 'use warnings "uninitialized"' is in effect.
      *
