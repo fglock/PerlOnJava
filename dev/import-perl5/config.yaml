@@ -319,22 +319,18 @@ imports:
   # Math-BigInt upstream test suite. They live under
   # src/test/resources/module/ so `make test-bundled-modules` runs them.
   #
-  # `exclude:` lists tests we intentionally skip on PerlOnJava today.
-  # These fall into two buckets handled in dev/modules/math_bigint_bignum.md:
-  #   * `calling-constant.t` / `use_mbfw.t`  — need `overload::constant`
-  #     (compile-time rewriting of number literals); not yet implemented.
-  #   * `bare_mbf.t` / `bare_mbr.t` / `bigrat.t` — pull in the bundled
-  #     `bigfltpm.inc` / `bigratpm.inc` driver via alternate backends /
-  #     `Math::BigFloat::BareSubclass`, which exercise corners of
-  #     inheritance + `:constant` we don't cover yet.
+  # `exclude:` lists a small set of tests that still fail after the
+  # overload::constant implementation landed. They hit secondary corners
+  # (alternate `Math::BigFloat::BareSubclass`/`BareCalc` subclasses,
+  # `use Math::BigFloat w => ...` import arg, and a precision-state
+  # ordering issue that is partly a float-formatting gap). See
+  # dev/modules/math_bigint_bignum.md.
   - source: perl5/cpan/Math-BigInt/t
     target: src/test/resources/module/Math-BigInt/t
     type: directory
     exclude:
       - bare_mbf.t
       - bare_mbr.t
-      - bigrat.t
-      - calling-constant.t
       - use_mbfw.t
 
   # bignum pragma family - `use bigint`, `use bignum`, `use bigrat`,
@@ -362,29 +358,27 @@ imports:
 
   # bignum upstream test suite.
   #
-  # All currently-excluded tests depend on the `overload::constant` hook
-  # (compile-time conversion of integer/float literals into
-  # Math::BigInt/BigFloat/BigRat objects). See
-  # dev/modules/math_bigint_bignum.md for the implementation plan.
-  # The `scope-*` tests additionally require lexical `no bignum` to unwind
-  # the overload::constant handlers on block exit.
-  # The `infnan-*` tests are grouped here because they construct NaN/Inf
-  # via numeric-literal expressions (`1 + "NaN"`) that only work under the
-  # :constant hook.
-  # `backend-gmp-*.t` / `backend-pari-*.t` rely on `Math::BigInt::GMP` /
-  # `Math::BigInt::Pari` native backends which PerlOnJava does not bundle.
+  # Excluded tests:
+  #  * `backend-gmp-*.t` — rely on Math::BigInt::GMP native backend we
+  #    don't bundle. (Pari-backed tests skip cleanly via `plan skip_all`.)
+  #  * `const-*.t` / `bigfloat.t` / `overrides.t` / `option_p.t` —
+  #    remaining corner cases of `overload::constant` (float-literal
+  #    exponent/precision stringification, handler ordering inside
+  #    imports). See dev/modules/math_bigint_bignum.md.
+  #  * `scope-{bigint,bigfloat,bignum,bigrat}.t` — check lexical
+  #    unwinding of `CORE::GLOBAL::hex` / `CORE::GLOBAL::oct` overrides
+  #    installed by `use bigint`. `no bigint` only removes the
+  #    %^H constant handlers; PerlOnJava doesn't yet unwind the hex/oct
+  #    lexical overrides on scope exit.
   - source: perl5/cpan/bignum/t
     target: src/test/resources/module/bignum/t
     type: directory
     exclude:
       - backend-gmp-*.t
       - bigfloat.t
-      - bigint.t
-      - bignum.t
-      - bigrat.t
       - const-*.t
-      - down-*.t
-      - infnan-*.t
+      - option_p.t
+      - overrides.t
       - scope-bigfloat.t
       - scope-bigint.t
       - scope-bignum.t

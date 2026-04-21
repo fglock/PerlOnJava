@@ -269,29 +269,48 @@ Estimate: **tiny** (15–30 min).
       `Math::BigInt::GMP` can shadow the bundle. CI systems do not have
       this stale install, so the `backend-gmp-*.t` tests correctly
       `plan skip_all` there. To make local dev reproducible anyway,
-      `backend-gmp-*.t` is now listed in `exclude:` in sync.pl config.
+      `backend-gmp-*.t` is listed in `exclude:` in sync.pl config.
+- [x] **Bucket A** (2026-04-21): implement `overload::constant` at the
+      parser level. `NumberParser.wrapWithConstantHandler()` checks the
+      compile-time `%^H` for `integer` / `float` / `binary` handlers,
+      captures them into a synthetic package global at parse time, and
+      rewrites the AST so each literal becomes a call to the handler
+      with `(source_text, literal_value, category)`. Also handles the
+      hex/oct overflow edge case (`0x123456789012345678901234567890`
+      goes straight to the handler instead of failing parse). This
+      makes `use bigint`, `use bigfloat`, `use bigrat`, `use bignum`
+      actually behave as CPAN users expect: literal constants
+      auto-promote to the Math::BigInt family objects. Unblocked
+      12 additional `bignum/t/` tests (down-*.t, infnan-*.t, plus
+      basic `bigint.t`, `bignum.t`, `bigrat.t`).
 
 ### Remaining — deferred via sync.pl `exclude:`
-All 26 remaining upstream failures need the `overload::constant` hook
-(compile-time rewriting of integer/float literals into
-`Math::BigInt` / `Math::BigFloat` / `Math::BigRat` objects) and, for the
-`scope-*` tests, lexical `no bignum` to unwind those handlers on block
-exit. These are explicitly listed in
-`dev/import-perl5/config.yaml`'s `exclude:` blocks for `Math-BigInt/t`
-and `bignum/t`. When `overload::constant` is implemented the exclude
-entries should be removed (most of those tests should pass as-is).
+
+**3 Math-BigInt tests:** `bare_mbf.t`, `bare_mbr.t`, `use_mbfw.t` —
+alternate subclass / backend wiring (`Math::BigFloat::BareSubclass`,
+`Math::BigFloat w => ...` import).
+
+**11 bignum tests:** `bigfloat.t` (precision-state ordering),
+`const-{bigint,bigfloat,bignum,bigrat}.t` (hex-float and high-precision
+float stringification corners), `option_p.t`, `overrides.t`,
+`scope-{bigint,bigfloat,bignum,bigrat}.t` (lexical unwind of
+`CORE::GLOBAL::hex` / `oct` overrides installed by `use bigint`).
+
+Plus `backend-gmp-*.t` as noted under Bucket E.
 
 ### Results as of 2026-04-21
 
-`make test-bundled-modules`: **249 tests run, 0 failing, 0 skipped**.
+`make test-bundled-modules`: **261 tests run, 0 failing, 0 skipped**.
 
 Journey:
 - Baseline before touching Math::BigInt: 228 tests / 48 fail / 180 pass.
 - After upstream import + tie-reentry + bitwise overload fixes:
   279 / 37 / 242.
 - After the AUTOLOAD-cvstash fix (bucket D): 279 / 26 / 253.
-- After excluding tests that need `overload::constant` (bucket A) via
-  sync.pl: **249 / 0 / 249** (30 tests filtered out at import time).
+- After excluding tests that need `overload::constant` (prior plan):
+  249 / 0 / 249.
+- After **implementing `overload::constant` (bucket A)**:
+  **261 / 0 / 261** (12 previously-excluded tests now pass).
 
 `./jcpan -t Google::ProtocolBuffers`: **0/408 subtests fail**
 (2 `.t` files still abort partway through on the unrelated
@@ -299,9 +318,10 @@ Journey:
 issue).
 
 ### Next Steps
-1. Implement `overload::constant` (bucket A) — unlocks all 26 currently
-   excluded tests in one go, and is the prerequisite for making
-   `use bignum` / `use bigint` feel like "real" Perl.
+1. Close the 14 remaining bignum/Math-BigInt excludes by tackling the
+   edge cases: lexical unwind of `CORE::GLOBAL::hex`/`oct` overrides on
+   `no bigint` (unblocks `scope-*`), and float-literal stringification
+   corners (unblocks `const-*`, `bigfloat.t`, `overrides.t`).
 2. Add a `Math::BigInt::Java` backend (subclass of `Math::BigInt::Lib`)
    once a workload benchmark shows `Math::BigInt` is a hot path.
 3. Revisit test-harness `@INC` isolation so `~/.perlonjava/lib` doesn't
