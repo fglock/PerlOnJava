@@ -18,6 +18,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.Base64;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -67,16 +68,35 @@ public class YAMLPP extends PerlModuleBase {
         options.setFromList(args.getList());
 
         String schemaName = "Core";
+        List<String> schemaOpts = new ArrayList<>();
         if (options.containsKey("schema")) {
             RuntimeScalar schemaOption = options.get("schema");
             if (schemaOption.type == RuntimeScalarType.ARRAYREFERENCE) {
                 RuntimeArray schemaArray = (RuntimeArray) schemaOption.value;
-                if (!schemaArray.elements.isEmpty()) {
-                    schemaName = schemaArray.elements.getFirst().toString();
+                for (int i = 0; i < schemaArray.elements.size(); i++) {
+                    String s = schemaArray.elements.get(i).toString();
+                    if (i == 0) schemaName = s;
+                    else schemaOpts.add(s);
                 }
             } else {
                 schemaName = schemaOption.toString();
             }
+        }
+
+        // Validate schema-specific options of the form key=value.
+        // Non-key=value entries are treated as additional schema names (currently ignored).
+        for (String opt : schemaOpts) {
+            int eq = opt.indexOf('=');
+            if (eq < 0) continue;
+            String key = opt.substring(0, eq);
+            String val = opt.substring(eq + 1);
+            if ("empty".equals(key)) {
+                if (!val.equals("null") && !val.equals("str")) {
+                    return WarnDie.die(new RuntimeScalar("Invalid option: " + opt),
+                            new RuntimeScalar("\n")).getList();
+                }
+            }
+            // Unknown keys are currently ignored to remain lenient.
         }
 
         Schema schema = switch (schemaName) {
@@ -135,14 +155,39 @@ public class YAMLPP extends PerlModuleBase {
         String yamlString = args.get(1).toString();
 
         Load load = (Load) instance.hashDeref().get("_load").value;
-        Iterable<Object> documents = load.loadAllFromString(yamlString);
-
         RuntimeArray result = new RuntimeArray();
-        for (Object doc : documents) {
-            result.elements.add(convertYamlToRuntimeScalar(
-                    doc,
-                    new IdentityHashMap<Object, RuntimeScalar>(),
-                    instance.hashDeref()));
+        try {
+            Iterable<Object> documents = load.loadAllFromString(yamlString);
+            for (Object doc : documents) {
+                result.elements.add(convertYamlToRuntimeScalar(
+                        doc,
+                        new IdentityHashMap<Object, RuntimeScalar>(),
+                        instance.hashDeref()));
+            }
+        } catch (NumberFormatException e) {
+            return WarnDie.die(new RuntimeScalar("YAML::PP: invalid numeric value: " + e.getMessage()),
+                    new RuntimeScalar("\n")).getList();
+        } catch (org.snakeyaml.engine.v2.exceptions.YamlEngineException e) {
+            String msg = e.getMessage();
+            // SnakeYAML wraps NumberFormatException from Int/Float resolvers
+            if (msg != null && msg.startsWith("java.lang.NumberFormatException")) {
+                msg = "YAML::PP: invalid numeric value: " +
+                        msg.replaceFirst("^java\\.lang\\.NumberFormatException:\\s*", "");
+            }
+            return WarnDie.die(new RuntimeScalar(msg), new RuntimeScalar("\n")).getList();
+        } catch (RuntimeException e) {
+            // Any other runtime exception: unwrap NumberFormatException if present
+            Throwable cause = e.getCause();
+            String msg;
+            if (cause instanceof NumberFormatException) {
+                msg = "YAML::PP: invalid numeric value: " + cause.getMessage();
+            } else if (e.getMessage() != null && e.getMessage().startsWith("java.lang.NumberFormatException")) {
+                msg = "YAML::PP: invalid numeric value: " +
+                        e.getMessage().replaceFirst("^java\\.lang\\.NumberFormatException:\\s*", "");
+            } else {
+                throw e;
+            }
+            return WarnDie.die(new RuntimeScalar(msg), new RuntimeScalar("\n")).getList();
         }
         return result.getList();
     }
@@ -233,9 +278,9 @@ public class YAMLPP extends PerlModuleBase {
             String cyclicBehavior = instance.get("_cyclic_refs").toString();
             return switch (CyclicRefsBehavior.valueOf(cyclicBehavior)) {
                 case FATAL ->
-                        WarnDie.die(new RuntimeScalar("Cyclic reference detected in YAML structure"), new RuntimeScalar("\n")).scalar();
+                        WarnDie.die(new RuntimeScalar("Found cyclic reference in YAML structure"), new RuntimeScalar("\n")).scalar();
                 case WARN -> {
-                    WarnDie.warn(new RuntimeScalar("Cyclic reference detected in YAML structure"), new RuntimeScalar("\n"));
+                    WarnDie.warn(new RuntimeScalar("Found cyclic reference in YAML structure"), new RuntimeScalar("\n"));
                     yield new RuntimeScalar();
                 }
                 case IGNORE -> new RuntimeScalar();
@@ -252,6 +297,16 @@ public class YAMLPP extends PerlModuleBase {
                         hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, instance)));
                 yield hashRef;
             }
+            case Set<?> set -> {
+                // YAML !!set: represent as hash with undef values
+                RuntimeHash hash = new RuntimeHash();
+                RuntimeScalar hashRef = hash.createReference();
+                seen.put(yaml, hashRef);
+                for (Object item : set) {
+                    hash.put(item == null ? "" : item.toString(), new RuntimeScalar());
+                }
+                yield hashRef;
+            }
             case List<?> list -> {
                 RuntimeArray array = new RuntimeArray();
                 RuntimeScalar arrayRef = array.createReference();
@@ -260,6 +315,7 @@ public class YAMLPP extends PerlModuleBase {
                         array.elements.add(convertYamlToRuntimeScalar(item, seen, instance)));
                 yield arrayRef;
             }
+            case byte[] bytes -> new RuntimeScalar(Base64.getEncoder().encodeToString(bytes));
             case String s -> new RuntimeScalar(s);
             case Integer i -> new RuntimeScalar(i);
             case Long l -> new RuntimeScalar(l);
