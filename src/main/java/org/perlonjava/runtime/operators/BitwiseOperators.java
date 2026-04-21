@@ -26,7 +26,7 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) & ((int) arg2.value);
+            int result = ((int) runtimeScalar.value) & ((int) arg2.value);
             return new RuntimeScalar(result);
         }
 
@@ -95,7 +95,7 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) | ((int) arg2.value);
+            int result = ((int) runtimeScalar.value) | ((int) arg2.value);
             return new RuntimeScalar(result);
         }
 
@@ -158,8 +158,9 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER) {
-            long result = ((int) runtimeScalar.value) ^ ((int) arg2.value);
-            return new RuntimeScalar(result);
+            // int ^ int produces int; call RuntimeScalar(int) directly to skip
+            // initializeWithLong's range-check branches (JFR hot path).
+            return new RuntimeScalar(((int) runtimeScalar.value) ^ ((int) arg2.value));
         }
 
         // Check for overloaded '^' operator on blessed objects

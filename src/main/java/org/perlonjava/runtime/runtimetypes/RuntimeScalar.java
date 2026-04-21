@@ -126,7 +126,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar(Long value) {
-        initializeWithLong(value);
+        initializeWithLong(value.longValue());
     }
 
     public RuntimeScalar(int value) {
@@ -319,23 +319,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return t == STRING || t == BYTE_STRING || t == VSTRING;
     }
 
-    private void initializeWithLong(Long value) {
+    private void initializeWithLong(long value) {
         if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {
             // Java double can only exactly represent integers up to 2^53.
             // Beyond that, storing as DOUBLE loses precision and breaks exact pack/unpack
             // semantics for 64-bit formats (q/Q/j/J) and BER compression (w).
-            long lv = value;
             // Note: avoid Math.abs(lv) which overflows for Long.MIN_VALUE
-            if (lv <= 9007199254740992L && lv >= -9007199254740992L) { // within 2^53
+            if (value <= 9007199254740992L && value >= -9007199254740992L) { // within 2^53
                 this.type = DOUBLE;
-                this.value = (double) lv;
+                this.value = (double) value;
             } else {
                 this.type = RuntimeScalarType.STRING;
-                this.value = Long.toString(lv);
+                this.value = Long.toString(value);
             }
         } else {
             this.type = RuntimeScalarType.INTEGER;
-            this.value = value.intValue();
+            this.value = (int) value;
         }
     }
 
