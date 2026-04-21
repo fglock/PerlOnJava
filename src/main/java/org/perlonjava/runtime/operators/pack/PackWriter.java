@@ -572,6 +572,7 @@ public class PackWriter {
         int bitIndex = 0;
         int byteValue = 0;
         int bitsToProcess = Math.min(str.length(), count);
+        int bytesWritten = 0;
 
         for (int i = 0; i < bitsToProcess; i++) {
             char c = str.charAt(i);
@@ -583,12 +584,19 @@ public class PackWriter {
             bitIndex++;
             if (bitIndex == 8) {
                 output.write(byteValue);
+                bytesWritten++;
                 bitIndex = 0;
                 byteValue = 0;
             }
         }
         if (bitIndex > 0) {
             output.write(byteValue);
+            bytesWritten++;
+        }
+        // Zero-pad to fill the requested count (Perl zero-fills to ceil(count/8) bytes)
+        int totalBytes = (count + 7) / 8;
+        for (int i = bytesWritten; i < totalBytes; i++) {
+            output.write(0);
         }
     }
 }

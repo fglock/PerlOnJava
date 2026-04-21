@@ -92,7 +92,9 @@ When these modules are loaded, the Java implementation is used automatically for
 
 ## Available Built-in Modules
 
-PerlOnJava includes these modules without installation:
+PerlOnJava includes 150+ modules without installation. The highlights are
+listed below; for the complete list see
+**[Bundled Modules Reference](../reference/bundled-modules.md)**.
 
 ### Core Modules
 - `strict`, `warnings`, `utf8`, `feature`
@@ -261,6 +263,7 @@ Check the module's documentation for fallback behavior.
 
 ## See Also
 
+- [Bundled Modules Reference](../reference/bundled-modules.md) - Complete list of included modules
 - [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility
 - [Module Porting Guide](module-porting.md) - How to port modules to PerlOnJava
 - [Feature Matrix](../reference/feature-matrix.md) - Perl feature compatibility

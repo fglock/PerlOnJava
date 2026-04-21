@@ -173,6 +173,90 @@ public class InlineOpcodeHandler {
     }
 
     /**
+     * Arithmetic without overload dispatch.
+     * Used when {@code no overloading} is in effect at compile time.
+     * Format: OPCODE rd rs1 rs2
+     */
+    public static int executeAddNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.addNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executeSubNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.subtractNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executeMulNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.multiplyNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executeDivNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.divideNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executeModNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.modulusNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executePowNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs1 = bytecode[pc++];
+        int rs2 = bytecode[pc++];
+        RuntimeBase v1 = registers[rs1];
+        RuntimeBase v2 = registers[rs2];
+        RuntimeScalar s1 = (v1 instanceof RuntimeScalar) ? (RuntimeScalar) v1 : v1.scalar();
+        RuntimeScalar s2 = (v2 instanceof RuntimeScalar) ? (RuntimeScalar) v2 : v2.scalar();
+        registers[rd] = MathOperators.powNoOverload(s1, s2);
+        return pc;
+    }
+
+    public static int executeNegNoOverload(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = MathOperators.unaryMinusNoOverload((RuntimeScalar) registers[rs]);
+        return pc;
+    }
+
+    /**
      * Addition with immediate: rd = rs + immediate
      * Format: ADD_SCALAR_INT rd rs immediate
      */

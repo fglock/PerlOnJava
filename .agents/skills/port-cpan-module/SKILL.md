@@ -467,6 +467,7 @@ public static RuntimeList myMethod(RuntimeArray args, int ctx) {
 ### Documentation
 - [ ] Add POD with AUTHOR and COPYRIGHT sections
 - [ ] Credit original authors
+- [ ] Update `docs/reference/bundled-modules.md` — add the module to the appropriate category table
 - [ ] Update `docs/about/changelog.md` — add module to "Add modules:" list in the current unreleased version
 - [ ] Update `docs/reference/feature-matrix.md` — add entry in the appropriate section (Core modules / Non-core modules) with status icon and description
 - [ ] Update `README.md` if the module is notable enough to mention in the Features list

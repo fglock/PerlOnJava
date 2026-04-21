@@ -253,7 +253,7 @@ public class SubroutineParser {
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
             if ((isPackage != null && !isPackage)
-                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
+                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
                         && !(isPackage != null && isPackage))) {
                 parser.tokenIndex = currentIndex2;
@@ -362,7 +362,18 @@ public class SubroutineParser {
                     || nextTok.text.equals(":"));
             if (!terminator
                     && !infixOp
-                    && nextTok.type != LexerTokenType.IDENTIFIER
+                    && (nextTok.type != LexerTokenType.IDENTIFIER
+                        || (subName.contains("::")
+                            && !nextTok.text.equals("or")
+                            && !nextTok.text.equals("and")
+                            && !nextTok.text.equals("not")
+                            && !nextTok.text.equals("if")
+                            && !nextTok.text.equals("unless")
+                            && !nextTok.text.equals("while")
+                            && !nextTok.text.equals("until")
+                            && !nextTok.text.equals("for")
+                            && !nextTok.text.equals("foreach")
+                            && !nextTok.text.equals("when")))
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
                 // Check if this looks like indirect object syntax: method $object, args

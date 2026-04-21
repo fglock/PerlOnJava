@@ -557,16 +557,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                     yield this.hashSlot.createReference();
                 }
-                // For stash globs (name ends with ::), return the package stash.
-                // The glob for a stash entry like $::{"UNIVERSAL::"} has globName
-                // "main::UNIVERSAL::" but the stash is stored with key "UNIVERSAL::".
-                // Strip the "main::" prefix for top-level packages; for nested packages
-                // like $Foo::{"Bar::"}, globName "Foo::Bar::" IS the stash key.
+                // Stash entries: *Pkg::{HASH} always returns the package's symbol table,
+                // even if it hasn't been explicitly materialized. This mirrors Perl 5
+                // where the stash is an intrinsic property of the package.
+                // GlobalVariable.getGlobalHash itself strips a redundant leading "main::"
+                // from stash keys so that %{*main::F::} and %F:: refer to the same stash.
                 if (this.globName.endsWith("::")) {
-                    String stashKey = this.globName.startsWith("main::")
-                            ? this.globName.substring(6)
-                            : this.globName;
-                    yield GlobalVariable.getGlobalHash(stashKey).createReference();
+                    yield GlobalVariable.getGlobalHash(this.globName).createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalHash(this.globName)) {

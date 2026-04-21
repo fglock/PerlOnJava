@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ListOperators;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.*;
 
@@ -36,7 +37,7 @@ public class ListUtil extends PerlModuleBase {
     public static void initialize() {
         ListUtil listUtil = new ListUtil();
         // Set $VERSION so CPAN.pm can detect our bundled version
-        GlobalVariable.getGlobalVariable("List::Util::VERSION").set(new RuntimeScalar("1.63"));
+        GlobalVariable.getGlobalVariable("List::Util::VERSION").set(new RuntimeScalar("1.70"));
         try {
             // List reduction functions
             listUtil.registerMethod("reduce", "reduce", "&@");
@@ -76,6 +77,14 @@ public class ListUtil extends PerlModuleBase {
             listUtil.registerMethod("pairmap", "pairmap", "&@");
             listUtil.registerMethod("pairgrep", "pairgrep", "&@");
             listUtil.registerMethod("pairfirst", "pairfirst", "&@");
+
+            // Zip/mesh functions (take arrayrefs, no prototype)
+            listUtil.registerMethod("zip", "zip", null);
+            listUtil.registerMethod("zip_shortest", "zip_shortest", null);
+            listUtil.registerMethod("zip_longest", "zip", null);       // alias for zip
+            listUtil.registerMethod("mesh", "mesh", null);
+            listUtil.registerMethod("mesh_shortest", "mesh_shortest", null);
+            listUtil.registerMethod("mesh_longest", "mesh", null);     // alias for mesh
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing List::Util method: " + e.getMessage());
         }
@@ -90,6 +99,62 @@ public class ListUtil extends PerlModuleBase {
             result.add(args.get(i));
         }
         return result;
+    }
+
+    /**
+     * Validates that a scalar is a CODE reference pointing to a defined
+     * subroutine. Used by reduce/first/any/all/none/notall and pair* functions
+     * to produce error messages matching Perl 5's List::Util XS behaviour:
+     *   "Not a subroutine reference"
+     *   "Undefined subroutine in &lt;funcName&gt;"
+     */
+    /**
+     * Check whether a thrown exception represents an "Undefined subroutine ..."
+     * error, possibly wrapped by ListOperators in a plain RuntimeException.
+     */
+    private static boolean isUndefinedSubError(Throwable e) {
+        while (e != null) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Undefined subroutine ")) {
+                return true;
+            }
+            if (e.getCause() == e) break;
+            e = e.getCause();
+        }
+        return false;
+    }
+
+    private static void validateCodeRef(RuntimeScalar codeRef, String funcName) {
+        RuntimeScalar deref = codeRef;
+        if (deref != null && deref.type == RuntimeScalarType.READONLY_SCALAR) {
+            deref = (RuntimeScalar) deref.value;
+        }
+        if (deref == null || deref.type != RuntimeScalarType.CODE
+                || !(deref.value instanceof RuntimeCode)) {
+            throw new PerlCompilerException("Not a subroutine reference");
+        }
+        RuntimeCode code = (RuntimeCode) deref.value;
+        if (!code.getDefinedBoolean()) {
+            throw new PerlCompilerException("Undefined subroutine in " + funcName);
+        }
+    }
+
+    /**
+     * Invokes the code block, translating "Undefined subroutine ... called"
+     * errors thrown from stub subs into the List::Util-specific
+     * "Undefined subroutine in &lt;funcName&gt;" message.
+     */
+    private static RuntimeList applyBlock(RuntimeScalar codeRef, RuntimeArray filterArgs,
+                                          int callContext, String funcName) {
+        try {
+            return RuntimeCode.apply(codeRef, filterArgs, callContext);
+        } catch (PerlCompilerException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("Undefined subroutine ")) {
+                throw new PerlCompilerException("Undefined subroutine in " + funcName);
+            }
+            throw e;
+        }
     }
 
     /**
@@ -119,11 +184,11 @@ public class ListUtil extends PerlModuleBase {
      * Reduces a list by calling a block multiple times.
      */
     public static RuntimeList reduce(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return scalarUndef.getList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "reduce");
         RuntimeList values = createSubList(args, 1);
 
         if (values.size() == 0) {
@@ -150,7 +215,7 @@ public class ListUtil extends PerlModuleBase {
                 varA.set(accumulator);
                 varB.set(values.elements.get(i).scalar());
 
-                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = applyBlock(codeRef, filterArgs, RuntimeContextType.SCALAR, "reduce");
                 accumulator = result.getFirst();
             }
 
@@ -170,11 +235,11 @@ public class ListUtil extends PerlModuleBase {
      * Similar to reduce but returns intermediate values.
      */
     public static RuntimeList reductions(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return new RuntimeList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "reductions");
         RuntimeList values = createSubList(args, 1);
         RuntimeArray results = new RuntimeArray();
 
@@ -200,7 +265,7 @@ public class ListUtil extends PerlModuleBase {
                 varA.set(accumulator);
                 varB.set(values.elements.get(i).scalar());
 
-                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = applyBlock(codeRef, filterArgs, RuntimeContextType.SCALAR, "reductions");
                 accumulator = result.getFirst();
                 results.push(accumulator.clone());
             }
@@ -216,37 +281,61 @@ public class ListUtil extends PerlModuleBase {
      * Returns true if any element makes the block return true.
      */
     public static RuntimeList any(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return scalarFalse.getList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "any");
         RuntimeList values = createSubList(args, 1);
-
-        // Pass the caller's @_ so $-[0], $_[1] etc. are accessible in the block
-        return ListOperators.any(values, codeRef, getCallerArgs(), ctx);
+        try {
+            return ListOperators.any(values, codeRef, getCallerArgs(), ctx);
+        } catch (RuntimeException e) {
+            if (isUndefinedSubError(e)) {
+                throw new PerlCompilerException("Undefined subroutine in any");
+            }
+            throw e;
+        }
     }
 
     /**
      * Returns true if all elements make the block return true.
      */
     public static RuntimeList all(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return scalarTrue.getList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "all");
         RuntimeList values = createSubList(args, 1);
-
-        // Pass the caller's @_ so $_[0], $_[1] etc. are accessible in the block
-        return ListOperators.all(values, codeRef, getCallerArgs(), ctx);
+        try {
+            return ListOperators.all(values, codeRef, getCallerArgs(), ctx);
+        } catch (RuntimeException e) {
+            if (isUndefinedSubError(e)) {
+                throw new PerlCompilerException("Undefined subroutine in all");
+            }
+            throw e;
+        }
     }
 
     /**
      * Returns true if no elements make the block return true.
      */
     public static RuntimeList none(RuntimeArray args, int ctx) {
-        RuntimeList result = any(args, ctx);
+        if (args.size() < 1) {
+            return scalarTrue.getList();
+        }
+        RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "none");
+        RuntimeList values = createSubList(args, 1);
+        RuntimeList result;
+        try {
+            result = ListOperators.any(values, codeRef, getCallerArgs(), ctx);
+        } catch (RuntimeException e) {
+            if (isUndefinedSubError(e)) {
+                throw new PerlCompilerException("Undefined subroutine in none");
+            }
+            throw e;
+        }
         return result.getFirst().getBoolean() ? scalarFalse.getList() : scalarTrue.getList();
     }
 
@@ -254,7 +343,21 @@ public class ListUtil extends PerlModuleBase {
      * Returns true if not all elements make the block return true.
      */
     public static RuntimeList notall(RuntimeArray args, int ctx) {
-        RuntimeList result = all(args, ctx);
+        if (args.size() < 1) {
+            return scalarFalse.getList();
+        }
+        RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "notall");
+        RuntimeList values = createSubList(args, 1);
+        RuntimeList result;
+        try {
+            result = ListOperators.all(values, codeRef, getCallerArgs(), ctx);
+        } catch (RuntimeException e) {
+            if (isUndefinedSubError(e)) {
+                throw new PerlCompilerException("Undefined subroutine in notall");
+            }
+            throw e;
+        }
         return result.getFirst().getBoolean() ? scalarFalse.getList() : scalarTrue.getList();
     }
 
@@ -262,11 +365,11 @@ public class ListUtil extends PerlModuleBase {
      * Returns the first element where the block returns true.
      */
     public static RuntimeList first(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return scalarUndef.getList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "first");
         RuntimeList values = createSubList(args, 1);
         RuntimeScalar saveValue = getGlobalVariable("main::_");
 
@@ -279,7 +382,7 @@ public class ListUtil extends PerlModuleBase {
                 RuntimeScalar scalar = element.scalar();
                 GlobalVariable.aliasGlobalVariable("main::_", scalar);
 
-                RuntimeList result = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
+                RuntimeList result = applyBlock(codeRef, filterArgs, RuntimeContextType.SCALAR, "first");
                 if (result.getFirst().getBoolean()) {
                     return scalar.getList();
                 }
@@ -445,21 +548,48 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Remove duplicate values using string comparison.
+     * Remove duplicate values. The undef value is distinct from the empty
+     * string; multiple undefs are treated as duplicates of each other.
      */
     public static RuntimeList uniq(RuntimeArray args, int ctx) {
-        return uniqstr(args, ctx);
+        Set<String> seen = new LinkedHashSet<>();
+        boolean seenUndef = false;
+        RuntimeArray result = new RuntimeArray();
+        for (RuntimeScalar arg : args.elements) {
+            if (arg == null || arg.type == RuntimeScalarType.UNDEF) {
+                if (!seenUndef) {
+                    seenUndef = true;
+                    result.push(new RuntimeScalar());
+                }
+            } else {
+                String value = arg.toString();
+                if (seen.add(value)) {
+                    result.push(arg);
+                }
+            }
+        }
+        return ctx == RuntimeContextType.SCALAR ?
+                new RuntimeScalar(result.size()).getList() : result.getList();
     }
 
     /**
-     * Remove duplicate values using integer comparison.
+     * Remove duplicate values using integer comparison. Coerces undef to 0
+     * (with uninitialized-value warning) and returns integers.
      */
     public static RuntimeList uniqint(RuntimeArray args, int ctx) {
         Set<Long> seen = new LinkedHashSet<>();
         RuntimeArray result = new RuntimeArray();
 
         for (RuntimeScalar arg : args.elements) {
-            Long value = arg.getLong();
+            long value;
+            if (arg == null || arg.type == RuntimeScalarType.UNDEF) {
+                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in subroutine entry"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+                value = 0L;
+            } else {
+                value = arg.getLong();
+            }
             if (seen.add(value)) {
                 result.push(new RuntimeScalar(value));
             }
@@ -470,14 +600,22 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Remove duplicate values using numerical comparison.
+     * Remove duplicate values using numerical comparison. Warns on undef.
      */
     public static RuntimeList uniqnum(RuntimeArray args, int ctx) {
         Set<Double> seen = new LinkedHashSet<>();
         RuntimeArray result = new RuntimeArray();
 
         for (RuntimeScalar arg : args.elements) {
-            Double value = arg.getDouble();
+            double value;
+            if (arg == null || arg.type == RuntimeScalarType.UNDEF) {
+                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in subroutine entry"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+                value = 0.0;
+            } else {
+                value = arg.getDouble();
+            }
             if (seen.add(value)) {
                 result.push(new RuntimeScalar(value));
             }
@@ -488,14 +626,23 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Remove duplicate values using string comparison.
+     * Remove duplicate values using string comparison. Warns on undef
+     * (coerces undef to empty string for comparison).
      */
     public static RuntimeList uniqstr(RuntimeArray args, int ctx) {
         Set<String> seen = new LinkedHashSet<>();
         RuntimeArray result = new RuntimeArray();
 
         for (RuntimeScalar arg : args.elements) {
-            String value = arg.toString();
+            String value;
+            if (arg == null || arg.type == RuntimeScalarType.UNDEF) {
+                org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in subroutine entry"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+                value = "";
+            } else {
+                value = arg.toString();
+            }
             if (seen.add(value)) {
                 result.push(new RuntimeScalar(value));
             }
@@ -509,8 +656,8 @@ public class ListUtil extends PerlModuleBase {
      * Returns the first elements from a list.
      */
     public static RuntimeList head(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
-            return new RuntimeList();
+        if (args.isEmpty()) {
+            throw new PerlCompilerException("Not enough arguments for List::Util::head");
         }
 
         int size = args.get(0).getInt();
@@ -532,8 +679,8 @@ public class ListUtil extends PerlModuleBase {
      * Returns the last elements from a list.
      */
     public static RuntimeList tail(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
-            return new RuntimeList();
+        if (args.isEmpty()) {
+            throw new PerlCompilerException("Not enough arguments for List::Util::tail");
         }
 
         int size = args.get(0).getInt();
@@ -557,9 +704,12 @@ public class ListUtil extends PerlModuleBase {
 
     /**
      * Returns a list of array references from pairs.
+     * Since List::Util 1.39, pairs are blessed into List::Util::_Pair so
+     * they provide ->key / ->value / ->TO_JSON methods.
      */
     public static RuntimeList pairs(RuntimeArray args, int ctx) {
         RuntimeArray result = new RuntimeArray();
+        RuntimeScalar pairClass = new RuntimeScalar("List::Util::_Pair");
 
         for (int i = 0; i < args.size(); i += 2) {
             RuntimeArray pair = new RuntimeArray();
@@ -569,7 +719,9 @@ public class ListUtil extends PerlModuleBase {
             } else {
                 pair.push(scalarUndef);
             }
-            result.push(pair.createReference());
+            RuntimeScalar pairRef = pair.createReference();
+            org.perlonjava.runtime.operators.ReferenceOperators.bless(pairRef, pairClass);
+            result.push(pairRef);
         }
 
         return result.getList();
@@ -584,8 +736,10 @@ public class ListUtil extends PerlModuleBase {
         for (RuntimeScalar pairRef : args.elements) {
             if (pairRef.type == RuntimeScalarType.ARRAYREFERENCE) {
                 RuntimeArray pair = (RuntimeArray) pairRef.value;
-                if (pair.size() >= 1) result.push(pair.get(0));
-                if (pair.size() >= 2) result.push(pair.get(1));
+                // Always emit exactly two values (key, value), padding with undef
+                // when the input arrayref has fewer than two elements.
+                result.push(pair.size() >= 1 ? pair.get(0) : scalarUndef);
+                result.push(pair.size() >= 2 ? pair.get(1) : scalarUndef);
             }
         }
 
@@ -619,39 +773,49 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Maps over pairs with a block.
+     * Maps over pairs with a block. Aliases $a and $b in the caller's
+     * package to the source elements (matching Perl 5 XS semantics).
      */
     public static RuntimeList pairmap(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return new RuntimeList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "pairmap");
         RuntimeList kvlist = createSubList(args, 1);
 
         String callerPkg = getCodeRefPackage(codeRef);
-        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
-        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
-        RuntimeScalar saveA = varA.clone();
-        RuntimeScalar saveB = varB.clone();
+        String aName = callerPkg + "::a";
+        String bName = callerPkg + "::b";
+        RuntimeScalar saveA = getGlobalVariable(aName);
+        RuntimeScalar saveB = getGlobalVariable(bName);
+
+        // Warn on odd-sized list (matches Perl 5 behaviour)
+        if ((kvlist.size() & 1) == 1) {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                new RuntimeScalar("Odd number of elements in pairmap at "),
+                scalarUndef);
+        }
 
         RuntimeArray result = new RuntimeArray();
 
         try {
-            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
             RuntimeArray outerArgs = getCallerArgs();
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
-            
-            for (int i = 0; i < kvlist.size(); i += 2) {
-                varA.set(kvlist.elements.get(i).scalar());
-                varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.LIST);
+            for (int i = 0; i < kvlist.size(); i += 2) {
+                GlobalVariable.aliasGlobalVariable(aName, kvlist.elements.get(i).scalar());
+                RuntimeScalar bVal = i + 1 < kvlist.size()
+                        ? kvlist.elements.get(i + 1).scalar()
+                        : new RuntimeScalar();
+                GlobalVariable.aliasGlobalVariable(bName, bVal);
+
+                RuntimeList blockResult = applyBlock(codeRef, filterArgs, RuntimeContextType.LIST, "pairmap");
                 blockResult.addToArray(result);
             }
         } finally {
-            varA.set(saveA);
-            varB.set(saveB);
+            GlobalVariable.aliasGlobalVariable(aName, saveA);
+            GlobalVariable.aliasGlobalVariable(bName, saveB);
         }
 
         return ctx == RuntimeContextType.SCALAR ?
@@ -659,48 +823,53 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Filters pairs with a block.
+     * Filters pairs with a block. Aliases $a and $b to the source elements.
      */
     public static RuntimeList pairgrep(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return new RuntimeList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "pairgrep");
         RuntimeList kvlist = createSubList(args, 1);
 
         String callerPkg = getCodeRefPackage(codeRef);
-        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
-        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
-        RuntimeScalar saveA = varA.clone();
-        RuntimeScalar saveB = varB.clone();
+        String aName = callerPkg + "::a";
+        String bName = callerPkg + "::b";
+        RuntimeScalar saveA = getGlobalVariable(aName);
+        RuntimeScalar saveB = getGlobalVariable(bName);
+
+        if ((kvlist.size() & 1) == 1) {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                new RuntimeScalar("Odd number of elements in pairgrep at "),
+                scalarUndef);
+        }
 
         RuntimeArray result = new RuntimeArray();
         int pairs = 0;
 
         try {
-            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
             RuntimeArray outerArgs = getCallerArgs();
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
-            
-            for (int i = 0; i < kvlist.size(); i += 2) {
-                varA.set(kvlist.elements.get(i).scalar());
-                varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
+            for (int i = 0; i < kvlist.size(); i += 2) {
+                RuntimeScalar aVal = kvlist.elements.get(i).scalar();
+                RuntimeScalar bVal = i + 1 < kvlist.size()
+                        ? kvlist.elements.get(i + 1).scalar()
+                        : new RuntimeScalar();
+                GlobalVariable.aliasGlobalVariable(aName, aVal);
+                GlobalVariable.aliasGlobalVariable(bName, bVal);
+
+                RuntimeList blockResult = applyBlock(codeRef, filterArgs, RuntimeContextType.SCALAR, "pairgrep");
                 if (blockResult.getFirst().getBoolean()) {
-                    result.push(kvlist.elements.get(i).scalar());
-                    if (i + 1 < kvlist.size()) {
-                        result.push(kvlist.elements.get(i + 1).scalar());
-                    } else {
-                        result.push(scalarUndef);
-                    }
+                    result.push(aVal);
+                    result.push(bVal);
                     pairs++;
                 }
             }
         } finally {
-            varA.set(saveA);
-            varB.set(saveB);
+            GlobalVariable.aliasGlobalVariable(aName, saveA);
+            GlobalVariable.aliasGlobalVariable(bName, saveB);
         }
 
         return ctx == RuntimeContextType.SCALAR ?
@@ -708,52 +877,161 @@ public class ListUtil extends PerlModuleBase {
     }
 
     /**
-     * Returns the first pair where the block returns true.
+     * Returns the first pair where the block returns true. Aliases $a/$b.
      */
     public static RuntimeList pairfirst(RuntimeArray args, int ctx) {
-        if (args.size() < 2) {
+        if (args.size() < 1) {
             return ctx == RuntimeContextType.SCALAR ? scalarFalse.getList() : new RuntimeList();
         }
-
         RuntimeScalar codeRef = args.get(0);
+        validateCodeRef(codeRef, "pairfirst");
         RuntimeList kvlist = createSubList(args, 1);
 
         String callerPkg = getCodeRefPackage(codeRef);
-        RuntimeScalar varA = getGlobalVariable(callerPkg + "::a");
-        RuntimeScalar varB = getGlobalVariable(callerPkg + "::b");
-        RuntimeScalar saveA = varA.clone();
-        RuntimeScalar saveB = varB.clone();
+        String aName = callerPkg + "::a";
+        String bName = callerPkg + "::b";
+        RuntimeScalar saveA = getGlobalVariable(aName);
+        RuntimeScalar saveB = getGlobalVariable(bName);
 
         try {
-            // Get caller's @_ so $_[0], $_[1] etc. are accessible in the block
             RuntimeArray outerArgs = getCallerArgs();
             RuntimeArray filterArgs = outerArgs != null ? outerArgs : new RuntimeArray();
-            
-            for (int i = 0; i < kvlist.size(); i += 2) {
-                varA.set(kvlist.elements.get(i).scalar());
-                varB.set(i + 1 < kvlist.size() ? kvlist.elements.get(i + 1).scalar() : scalarUndef);
 
-                RuntimeList blockResult = RuntimeCode.apply(codeRef, filterArgs, RuntimeContextType.SCALAR);
+            for (int i = 0; i < kvlist.size(); i += 2) {
+                RuntimeScalar aVal = kvlist.elements.get(i).scalar();
+                RuntimeScalar bVal = i + 1 < kvlist.size()
+                        ? kvlist.elements.get(i + 1).scalar()
+                        : new RuntimeScalar();
+                GlobalVariable.aliasGlobalVariable(aName, aVal);
+                GlobalVariable.aliasGlobalVariable(bName, bVal);
+
+                RuntimeList blockResult = applyBlock(codeRef, filterArgs, RuntimeContextType.SCALAR, "pairfirst");
                 if (blockResult.getFirst().getBoolean()) {
                     if (ctx == RuntimeContextType.SCALAR) {
                         return scalarTrue.getList();
                     } else {
                         RuntimeArray result = new RuntimeArray();
-                        result.push(kvlist.elements.get(i).scalar());
-                        if (i + 1 < kvlist.size()) {
-                            result.push(kvlist.elements.get(i + 1).scalar());
-                        } else {
-                            result.push(scalarUndef);
-                        }
+                        result.push(aVal);
+                        result.push(bVal);
                         return result.getList();
                     }
                 }
             }
         } finally {
-            varA.set(saveA);
-            varB.set(saveB);
+            GlobalVariable.aliasGlobalVariable(aName, saveA);
+            GlobalVariable.aliasGlobalVariable(bName, saveB);
         }
 
         return ctx == RuntimeContextType.SCALAR ? scalarFalse.getList() : new RuntimeList();
+    }
+
+    /**
+     * Zip arrayrefs into a list of arrayrefs (tuples).
+     * Pads shorter inputs with undef to the length of the longest input.
+     * zip(\@a, \@b, ...) returns ([a0,b0,...], [a1,b1,...], ...)
+     */
+    public static RuntimeList zip(RuntimeArray args, int ctx) {
+        return zipImpl(args, ctx, false);
+    }
+
+    /**
+     * Zip arrayrefs, stopping at the shortest input.
+     */
+    public static RuntimeList zip_shortest(RuntimeArray args, int ctx) {
+        return zipImpl(args, ctx, true);
+    }
+
+    /**
+     * Shared implementation for zip and zip_shortest.
+     */
+    private static RuntimeList zipImpl(RuntimeArray args, int ctx, boolean shortest) {
+        if (args.isEmpty()) {
+            return new RuntimeList();
+        }
+
+        // Collect input arrays and find min/max lengths
+        RuntimeArray[] arrays = new RuntimeArray[args.size()];
+        int maxLen = 0;
+        int minLen = Integer.MAX_VALUE;
+        for (int i = 0; i < args.size(); i++) {
+            RuntimeScalar ref = args.get(i);
+            if (ref.type != RuntimeScalarType.ARRAYREFERENCE) {
+                throw new RuntimeException("Not an ARRAY reference");
+            }
+            arrays[i] = (RuntimeArray) ref.value;
+            maxLen = Math.max(maxLen, arrays[i].size());
+            minLen = Math.min(minLen, arrays[i].size());
+        }
+
+        int len = shortest ? minLen : maxLen;
+        RuntimeArray result = new RuntimeArray();
+
+        for (int row = 0; row < len; row++) {
+            RuntimeArray tuple = new RuntimeArray();
+            for (RuntimeArray array : arrays) {
+                if (row < array.size()) {
+                    tuple.push(array.get(row));
+                } else {
+                    tuple.push(RuntimeScalarCache.scalarUndef);
+                }
+            }
+            result.push(tuple.createReference());
+        }
+
+        return result.getList();
+    }
+
+    /**
+     * Mesh (interleave) arrayrefs into a flat list.
+     * Pads shorter inputs with undef to the length of the longest input.
+     * mesh(\@a, \@b, ...) returns (a0, b0, ..., a1, b1, ...)
+     */
+    public static RuntimeList mesh(RuntimeArray args, int ctx) {
+        return meshImpl(args, ctx, false);
+    }
+
+    /**
+     * Mesh arrayrefs, stopping at the shortest input.
+     */
+    public static RuntimeList mesh_shortest(RuntimeArray args, int ctx) {
+        return meshImpl(args, ctx, true);
+    }
+
+    /**
+     * Shared implementation for mesh and mesh_shortest.
+     */
+    private static RuntimeList meshImpl(RuntimeArray args, int ctx, boolean shortest) {
+        if (args.isEmpty()) {
+            return new RuntimeList();
+        }
+
+        // Collect input arrays and find min/max lengths
+        RuntimeArray[] arrays = new RuntimeArray[args.size()];
+        int maxLen = 0;
+        int minLen = Integer.MAX_VALUE;
+        for (int i = 0; i < args.size(); i++) {
+            RuntimeScalar ref = args.get(i);
+            if (ref.type != RuntimeScalarType.ARRAYREFERENCE) {
+                throw new RuntimeException("Not an ARRAY reference");
+            }
+            arrays[i] = (RuntimeArray) ref.value;
+            maxLen = Math.max(maxLen, arrays[i].size());
+            minLen = Math.min(minLen, arrays[i].size());
+        }
+
+        int len = shortest ? minLen : maxLen;
+        RuntimeArray result = new RuntimeArray();
+
+        for (int row = 0; row < len; row++) {
+            for (RuntimeArray array : arrays) {
+                if (row < array.size()) {
+                    result.push(array.get(row));
+                } else {
+                    result.push(RuntimeScalarCache.scalarUndef);
+                }
+            }
+        }
+
+        return result.getList();
     }
 }

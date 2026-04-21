@@ -20,6 +20,18 @@ public class Readline {
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (fh == null) {
+            // Check for <> overload before warning about unopened filehandle
+            int blessId = RuntimeScalarType.blessedId(fileHandle);
+            if (blessId < 0) {
+                OverloadContext overloadCtx = OverloadContext.prepare(blessId);
+                if (overloadCtx != null) {
+                    RuntimeScalar result = overloadCtx.tryOverload("(<>", new RuntimeArray(fileHandle));
+                    if (result != null) {
+                        return result;
+                    }
+                }
+            }
+
             // Perl warns and returns undef for unopened filehandle, doesn't die
             WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
@@ -249,14 +261,10 @@ public class Readline {
             }
         }
 
-        // Increment the line number counter if a line was read and contains newlines
+        // Increment the line number counter once per record read.
+        // In Perl, $. counts records (not newlines) regardless of the value of $/.
         if (!line.isEmpty()) {
-            String lineStr = line.toString();
-            for (int i = 0; i < lineStr.length(); i++) {
-                if (lineStr.charAt(i) == '\n') {
-                    runtimeIO.currentLineNumber++;
-                }
-            }
+            runtimeIO.currentLineNumber++;
         }
 
         // Return undef if we've reached EOF and no characters were read

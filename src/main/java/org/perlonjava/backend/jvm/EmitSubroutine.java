@@ -158,6 +158,10 @@ public class EmitSubroutine {
         // For eval blocks "(eval)", set the subroutine name so caller() reports it correctly
         if ("(eval)".equals(node.name)) {
             newSymbolTable.setCurrentSubroutine("(eval)");
+        } else if (node.name == null || node.name.equals("<anon>")) {
+            // True anonymous sub: caller() should report it as "Package::__ANON__",
+            // NOT as the enclosing named sub. Matches Perl 5 behavior.
+            newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentPackage() + "::__ANON__");
         } else {
             newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
         }

@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
@@ -112,6 +113,18 @@ public class PerlLanguageProvider {
         globalSymbolTable.addVariable("@_", "our", null); // Argument list is local variable 1
         globalSymbolTable.addVariable("wantarray", "", null); // Call context is local variable 2
 
+        // If the caller (e.g. `require FILE` / `do FILE`) requested a specific
+        // starting package, honour it so unqualified sub/var definitions in
+        // the loaded file land in the caller's package. Without this, the
+        // file would compile against the default `main` package regardless
+        // of where it was required from.
+        if (compilerOptions.initialPackage != null
+                && !compilerOptions.initialPackage.isEmpty()
+                && !"main".equals(compilerOptions.initialPackage)) {
+            globalSymbolTable.setCurrentPackage(compilerOptions.initialPackage, false);
+            InterpreterState.currentPackage.get().set(compilerOptions.initialPackage);
+        }
+
         if (compilerOptions.codeHasEncoding) {
             globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
         }
@@ -134,8 +147,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("parse code: " + compilerOptions.code);
@@ -311,8 +324,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using provided AST");
@@ -645,8 +658,8 @@ public class PerlLanguageProvider {
         );
 
         if (!globalInitialized) {
-            GlobalContext.initializeGlobals(compilerOptions);
             globalInitialized = true;
+            GlobalContext.initializeGlobals(compilerOptions);
         }
 
         // Tokenize

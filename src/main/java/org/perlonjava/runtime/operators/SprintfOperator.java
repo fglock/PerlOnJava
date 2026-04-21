@@ -715,7 +715,9 @@ public class SprintfOperator {
                 int digits = args.precision > 0 ? args.precision : 1;
                 String zeros = "0".repeat(digits);
                 if (args.width > zeros.length()) {
-                    zeros = " ".repeat(args.width - zeros.length()) + zeros;
+                    // Respect the '0' flag for zero-padding (e.g., %03d should produce "000", not "  0")
+                    String padChar = spec.flags.contains("0") ? "0" : " ";
+                    zeros = padChar.repeat(args.width - zeros.length()) + zeros;
                 }
                 yield zeros;
             }

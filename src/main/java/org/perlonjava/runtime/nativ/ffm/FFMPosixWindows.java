@@ -1,6 +1,13 @@
 package org.perlonjava.runtime.nativ.ffm;
 
 import java.io.Console;
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -43,6 +50,74 @@ public class FFMPosixWindows implements FFMPosixInterface {
         String computerName = System.getenv("COMPUTERNAME");
         CURRENT_GID = computerName != null ? 
             Math.abs(computerName.hashCode()) % ID_RANGE : DEFAULT_GID;
+    }
+    
+    // Lazy-initialized FFM components for MSVCRT calls
+    private static volatile boolean fdOpsInitialized = false;
+    private static MethodHandle winPipeHandle;
+    private static MethodHandle winDupHandle;
+    private static MethodHandle winOpenHandle;
+    private static MethodHandle winCloseHandle;
+    private static MethodHandle winReadHandle;
+    private static MethodHandle winWriteHandle;
+    private static MethodHandle winLseekHandle;
+    
+    /**
+     * Initialize FFM bindings for MSVCRT low-level FD operations on Windows.
+     */
+    private static synchronized void ensureFdOpsInitialized() {
+        if (fdOpsInitialized) return;
+        
+        try {
+            Linker linker = Linker.nativeLinker();
+            SymbolLookup ucrt = SymbolLookup.libraryLookup("ucrtbase", Arena.global());
+            
+            // int _pipe(int *pfds, unsigned int psize, int textmode)
+            winPipeHandle = linker.downcallHandle(
+                ucrt.find("_pipe").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // int _dup(int fd)
+            winDupHandle = linker.downcallHandle(
+                ucrt.find("_dup").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // int _open(const char *filename, int oflag, int pmode)
+            winOpenHandle = linker.downcallHandle(
+                ucrt.find("_open").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // int _close(int fd)
+            winCloseHandle = linker.downcallHandle(
+                ucrt.find("_close").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            // int _read(int fd, void *buffer, unsigned int count)
+            winReadHandle = linker.downcallHandle(
+                ucrt.find("_read").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+            
+            // int _write(int fd, const void *buffer, unsigned int count)
+            winWriteHandle = linker.downcallHandle(
+                ucrt.find("_write").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT)
+            );
+            
+            // long _lseek(int fd, long offset, int origin)
+            winLseekHandle = linker.downcallHandle(
+                ucrt.find("_lseek").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT)
+            );
+            
+            fdOpsInitialized = true;
+        } catch (Throwable e) {
+            throw new RuntimeException("Failed to initialize Windows FFM MSVCRT bindings", e);
+        }
     }
     
     // ==================== Process Functions ====================
@@ -286,6 +361,214 @@ public class FFMPosixWindows implements FFMPosixInterface {
             return (fd >= 0 && fd <= 2) ? 1 : 0;
         }
         return 0;
+    }
+    
+    // ==================== PTY/Terminal Functions ====================
+    // Pseudo-terminals are not supported on Windows.
+    // The Perl shim checks $^O and dies before reaching these.
+    
+    private static final String PTY_UNSUPPORTED = "Pseudo-terminals are not supported on Windows";
+    
+    @Override
+    public int posix_openpt(int flags) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int grantpt(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int unlockpt(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public String ptsname(int masterFd) {
+        throw new UnsupportedOperationException(PTY_UNSUPPORTED);
+    }
+    
+    @Override
+    public int setsid() {
+        throw new UnsupportedOperationException("setsid is not supported on Windows");
+    }
+    
+    @Override
+    public String ttyname(int fd) {
+        return null;  // No tty device names on Windows
+    }
+    
+    @Override
+    public int nativeOpen(String path, int flags) {
+        throw new UnsupportedOperationException("nativeOpen is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeClose(int fd) {
+        throw new UnsupportedOperationException("nativeClose is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeRead(int fd, byte[] buf, int count) {
+        throw new UnsupportedOperationException("nativeRead is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeWrite(int fd, byte[] buf, int count) {
+        throw new UnsupportedOperationException("nativeWrite is not supported on Windows");
+    }
+    
+    @Override
+    public int nativeDup(int fd) {
+        throw new UnsupportedOperationException("nativeDup is not supported on Windows");
+    }
+    
+    @Override
+    public int fcntlDupFd(int fd, int minFd) {
+        throw new UnsupportedOperationException("fcntlDupFd is not supported on Windows");
+    }
+    
+    @Override
+    public int ioctlWithPointer(int fd, long request, byte[] buf) {
+        throw new UnsupportedOperationException("ioctl is not supported on Windows");
+    }
+    
+    @Override
+    public int ioctlWithInt(int fd, long request, int arg) {
+        throw new UnsupportedOperationException("ioctl is not supported on Windows");
+    }
+    
+    @Override
+    public int tcgetattr(int fd, byte[] termios) {
+        throw new UnsupportedOperationException("tcgetattr is not supported on Windows");
+    }
+    
+    @Override
+    public int tcsetattr(int fd, int optionalActions, byte[] termios) {
+        throw new UnsupportedOperationException("tcsetattr is not supported on Windows");
+    }
+    
+    // ==================== Low-level FD Functions ====================
+    
+    @Override
+    public int pipe(int[] fds) {
+        ensureFdOpsInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pipeBuf = arena.allocate(ValueLayout.JAVA_INT, 2);
+            // _pipe(pfds, 4096, _O_BINARY) - 0x8000 is _O_BINARY on Windows
+            int result = (int) winPipeHandle.invoke(pipeBuf, 4096, 0x8000);
+            if (result == -1) {
+                setErrno(24); // EMFILE
+                return -1;
+            }
+            fds[0] = pipeBuf.getAtIndex(ValueLayout.JAVA_INT, 0);
+            fds[1] = pipeBuf.getAtIndex(ValueLayout.JAVA_INT, 1);
+            return 0;
+        } catch (Throwable e) {
+            setErrno(24); // EMFILE
+            return -1;
+        }
+    }
+    
+    @Override
+    public int dup(int fd) {
+        ensureFdOpsInitialized();
+        try {
+            int result = (int) winDupHandle.invoke(fd);
+            if (result == -1) {
+                setErrno(9); // EBADF
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public int open(String path, int flags, int mode) {
+        ensureFdOpsInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pathSegment = arena.allocateFrom(path);
+            // Add _O_BINARY flag (0x8000) to prevent text-mode translation
+            int result = (int) winOpenHandle.invoke(pathSegment, flags | 0x8000, mode);
+            if (result == -1) {
+                setErrno(2); // ENOENT
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public int close(int fd) {
+        ensureFdOpsInitialized();
+        try {
+            int result = (int) winCloseHandle.invoke(fd);
+            if (result == -1) {
+                setErrno(9); // EBADF
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
+    }
+    
+    @Override
+    public long read(int fd, byte[] buf, long count) {
+        ensureFdOpsInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            int intCount = (int) Math.min(count, Integer.MAX_VALUE);
+            MemorySegment nativeBuf = arena.allocate(intCount);
+            int result = (int) winReadHandle.invoke(fd, nativeBuf, intCount);
+            if (result == -1) {
+                setErrno(5); // EIO
+                return -1;
+            }
+            if (result > 0) {
+                MemorySegment.copy(nativeBuf, ValueLayout.JAVA_BYTE, 0, buf, 0, result);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public long write(int fd, byte[] buf, long count) {
+        ensureFdOpsInitialized();
+        try (Arena arena = Arena.ofConfined()) {
+            int intCount = (int) Math.min(count, Integer.MAX_VALUE);
+            MemorySegment nativeBuf = arena.allocateFrom(ValueLayout.JAVA_BYTE, buf);
+            int result = (int) winWriteHandle.invoke(fd, nativeBuf, intCount);
+            if (result == -1) {
+                setErrno(5); // EIO
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(5); // EIO
+            return -1;
+        }
+    }
+    
+    @Override
+    public long lseek(int fd, long offset, int whence) {
+        ensureFdOpsInitialized();
+        try {
+            int result = (int) winLseekHandle.invoke(fd, (int) offset, whence);
+            if (result == -1) {
+                setErrno(9); // EBADF
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(9); // EBADF
+            return -1;
+        }
     }
     
     // ==================== File Control Functions ====================

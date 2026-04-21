@@ -220,6 +220,11 @@ public class TieHandle extends RuntimeIO {
 
     @Override
     public String toString() {
+        // Return the glob name (e.g., "main::STDOUT") when available, so that
+        // select() returns the correct name even when the handle is tied.
+        if (globName != null) {
+            return globName;
+        }
         return "TIED_HANDLE(" + tiedPackage + ")";
     }
 

@@ -359,6 +359,12 @@ public class GlobalVariable {
      * @return The RuntimeHash representing the global hash.
      */
     public static RuntimeHash getGlobalHash(String key) {
+        // Normalize stash lookups: in Perl, all packages are children of main::,
+        // so %{main::F::} and %F:: refer to the same stash.
+        // Strip a leading "main::" from stash keys (but keep "main::" itself).
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            key = key.substring(6);
+        }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
             // Check if this is a package stash (ends with ::)
@@ -379,7 +385,12 @@ public class GlobalVariable {
      * @return True if the global hash exists, false otherwise.
      */
     public static boolean existsGlobalHash(String key) {
-        return globalHashes.containsKey(key);
+        if (globalHashes.containsKey(key)) return true;
+        // Normalize stash lookups: %{main::F::} and %F:: refer to the same stash.
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            return globalHashes.containsKey(key.substring(6));
+        }
+        return false;
     }
 
     /**
@@ -653,6 +664,19 @@ public class GlobalVariable {
         // Cache the result
         packageExistsCache.put(className, exists);
         return exists;
+    }
+
+    /**
+     * Runtime check for typed lexical declarations (my TYPE $var).
+     * Throws a compile-time-like error matching Perl's "No such class TYPE"
+     * if the package is not loaded at the point of execution.
+     *
+     * @param className The type annotation class name
+     */
+    public static void checkClassExists(String className) {
+        if (!isPackageLoaded(className)) {
+            throw new RuntimeException("No such class " + className);
+        }
     }
 
     /**

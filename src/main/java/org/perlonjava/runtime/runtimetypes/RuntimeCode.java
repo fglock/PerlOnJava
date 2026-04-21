@@ -151,19 +151,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
-     * Parallel stack of @_ snapshots (shallow copies) taken at sub entry.
-     * Used to populate {@code @DB::args} in {@code caller()}: Perl preserves
-     * the invocation args even after the callee does {@code shift(@_)}.
-     * Without a snapshot, @DB::args would show the modified @_ (empty after
-     * a shift), breaking patterns like DBIC's TxnScopeGuard double-DESTROY
-     * detection that relies on @DB::args to hold a strong reference to the
-     * object being destroyed.
+     * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
+     * time. Used to populate {@code @DB::args} for caller(N) from package DB.
+     * In Perl, {@code @DB::args} reflects the args the sub was called with,
+     * regardless of whether the sub later shifted or otherwise mutated @_
+     * — Carp/Devel::StackTrace depend on this, as does DBIC's TxnScopeGuard
+     * double-DESTROY detection that relies on @DB::args to hold a strong
+     * reference to the object being destroyed.
      * <p>
-     * The snapshot is a cheap {@link RuntimeArray} wrapping a new ArrayList
-     * of the same RuntimeScalar elements. Shifts/modifications of the live
-     * @_ don't affect this snapshot.
+     * The snapshot only matters when caller() is invoked from package DB.
+     * For the common case of subs that neither shift @_ nor have a
+     * caller-from-DB on the stack, the allocation was pure overhead — the
+     * pushArgs() empty-args fast path (shared EMPTY_ARGS_SNAPSHOT) cuts the
+     * per-sub-call cost for tight-loop workloads like life_bitpacked.
      */
-    private static final ThreadLocal<Deque<RuntimeArray>> originalArgsStack =
+    private static final ThreadLocal<Deque<java.util.List<RuntimeScalar>>> pristineArgsStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Thread-local stack tracking whether each call frame created a fresh @_ (hasargs).
+     * In Perl 5, caller()[4] (hasargs) is 1 when the subroutine was called with explicit
+     * arguments (func() or &func()), and false/empty when called via &func (no parens)
+     * which inherits the caller's @_.
+     *
+     * Push/pop is handled alongside argsStack in the apply() methods.
+     */
+    private static final ThreadLocal<Deque<Boolean>> hasArgsStack =
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
@@ -205,33 +218,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void pushArgs(RuntimeArray args) {
         argsStack.get().push(args);
-        // Also push a shallow snapshot so @DB::args stays intact after shift/@_
-        // modifications inside the callee. See originalArgsStack javadoc.
-        //
-        // The snapshot only matters when caller() is invoked from package DB
-        // (Carp-style stack traces, debugger). For the common case of subs
-        // that neither shift @_ nor have a caller-from-DB on the stack, this
-        // allocation was pure overhead. Empty-args fast path + shared empty
-        // snapshot cuts the per-sub-call cost significantly for life_bitpacked
-        // and similar tight-loop workloads.
-        RuntimeArray snapshot;
+        // Snapshot the args list so @DB::args stays pristine even if the sub
+        // later shifts/pops from @_. Uses a shared empty-list constant for
+        // zero-arg calls so the common case avoids per-call allocation —
+        // critical for tight-loop workloads (life_bitpacked etc.).
+        java.util.List<RuntimeScalar> snapshot;
         if (args == null || args.elements.isEmpty()) {
             snapshot = EMPTY_ARGS_SNAPSHOT;
         } else {
-            snapshot = new RuntimeArray();
-            snapshot.elements = new java.util.ArrayList<>(args.elements);
+            snapshot = new java.util.ArrayList<>(args.elements);
         }
-        originalArgsStack.get().push(snapshot);
+        pristineArgsStack.get().push(snapshot);
     }
 
     // Singleton empty-args snapshot for pushArgs. Safe to share because
-    // originalArgsStack readers only use .getList() / iteration; they never
-    // mutate the snapshot itself. This avoids a per-empty-call allocation of
-    // a RuntimeArray and an ArrayList wrapper.
-    private static final RuntimeArray EMPTY_ARGS_SNAPSHOT = new RuntimeArray();
+    // pristineArgsStack readers only iterate/read; they never mutate the
+    // snapshot. Avoids a per-empty-call ArrayList allocation.
+    private static final java.util.List<RuntimeScalar> EMPTY_ARGS_SNAPSHOT =
+            java.util.Collections.emptyList();
 
     /**
-     * Pop @_ from the args stack when exiting a subroutine.
+     * Pop @_ and hasargs flag from their respective stacks when exiting a subroutine.
+     * Both stacks are pushed in the instance apply() methods and must be popped together.
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
@@ -239,24 +247,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             stack.pop();
         }
-        Deque<RuntimeArray> origStack = originalArgsStack.get();
-        if (!origStack.isEmpty()) {
-            origStack.pop();
+        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack.get();
+        if (!pStack.isEmpty()) {
+            pStack.pop();
+        }
+        Deque<Boolean> haStack = hasArgsStack.get();
+        if (!haStack.isEmpty()) {
+            haStack.pop();
         }
     }
 
     /**
-     * Return the frame-N snapshot of original invocation args, used by
-     * caller()'s {@code @DB::args} support. Frame 0 is the innermost call.
+     * Get the hasargs flag for a given call depth.
+     * depth=0 is the current (innermost) frame, depth=1 is its caller, etc.
      *
-     * @param frame zero-based frame index (0 = current sub)
-     * @return the snapshot RuntimeArray, or null if frame is out of range
+     * This depth maps directly to the user-supplied argument of caller(N):
+     * caller(0) queries depth 0, caller(1) queries depth 1, etc.
+     * The mapping works because hasArgsStack has one entry per Perl subroutine
+     * call (pushed in the instance apply() methods), and the Deque iteration
+     * order is LIFO (most recent first), matching the call stack order.
+     *
+     * @return true if the frame at that depth created fresh @_, false if it
+     *         inherited @_ (via &amp;func with no parens), null if depth is out of range
      */
-    public static RuntimeArray getOriginalArgsAt(int frame) {
-        Deque<RuntimeArray> stack = originalArgsStack.get();
+    public static Boolean getHasArgsAt(int depth) {
+        Deque<Boolean> stack = hasArgsStack.get();
+        int i = 0;
+        for (Boolean b : stack) {
+            if (i == depth) return b;
+            i++;
+        }
+        return null;
+    }
+
+    /**
+     * Return the frame-N pristine @_ snapshot, used by caller()'s
+     * {@code @DB::args} support. Frame 0 is the innermost call.
+     * Returns null if the frame is out of range.
+     */
+    public static java.util.List<RuntimeScalar> getPristineArgsAt(int frame) {
+        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack.get();
         if (frame < 0 || frame >= stack.size()) return null;
         int i = 0;
-        for (RuntimeArray a : stack) {
+        for (java.util.List<RuntimeScalar> a : stack) {
             if (i++ == frame) return a;
         }
         return null;
@@ -356,6 +389,72 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isMapGrepBlock = false;
     // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
     public boolean isEvalBlock = false;
+
+    // Depth of active recursive calls to this subroutine, used by the
+    // "Deep recursion on subroutine" warning. Incremented on entry and
+    // decremented in a finally-block on exit.
+    public transient int callDepth = 0;
+    // Whether a "Deep recursion" warning has already been emitted for the
+    // currently-active recursion chain. Reset when callDepth returns to 0.
+    public transient boolean deepRecursionWarned = false;
+
+    // Depth threshold for the "Deep recursion on subroutine" warning.
+    // Matches Perl's default PERL_SUB_DEPTH_WARN value.
+    public static final int DEEP_RECURSION_WARN_DEPTH = 100;
+
+    // When the tail-call trampoline in the static apply() re-enters a sub,
+    // we want to skip the "Deep recursion" tracking for that entry.
+    // The goto &sub caller's `no warnings 'recursion'` scope has already
+    // unwound by the time the trampoline runs, so we can't honor it; and
+    // tail calls don't consume real Java stack, so a depth warning for
+    // them is misleading anyway. Nested tail-call trampolines use an int
+    // counter so re-entries only skip tracking for the outermost trampoline.
+    private static final ThreadLocal<Integer> inTailCallTrampoline =
+            ThreadLocal.withInitial(() -> 0);
+
+    /**
+     * Increment the recursion depth counter and, if we've just crossed the
+     * "Deep recursion on subroutine" threshold for the first time in this
+     * recursion chain, emit a warning under the "recursion" warnings category.
+     * Must be matched with a call to exitCall() in a finally-block.
+     *
+     * Map/grep/eval blocks are exempt so that map { ... } and eval { ... }
+     * don't report their dispatch wrapper. Tail-call trampoline re-entries
+     * are also exempt — see inTailCallTrampoline.
+     */
+    private void enterCall() {
+        if (isMapGrepBlock || isEvalBlock || isBuiltin) {
+            return;
+        }
+        if (inTailCallTrampoline.get() > 0) {
+            return;
+        }
+        int depth = ++callDepth;
+        if (depth > DEEP_RECURSION_WARN_DEPTH && !deepRecursionWarned) {
+            deepRecursionWarned = true;
+            String name = (packageName != null && subName != null)
+                    ? packageName + "::" + subName
+                    : (subName != null ? subName : "__ANON__");
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Deep recursion on subroutine \"" + name + "\""),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "recursion");
+        }
+    }
+
+    /** Paired with enterCall() — decrements the recursion counter. */
+    private void exitCall() {
+        if (isMapGrepBlock || isEvalBlock || isBuiltin) {
+            return;
+        }
+        if (inTailCallTrampoline.get() > 0) {
+            return;
+        }
+        if (--callDepth <= 0) {
+            callDepth = 0;
+            deepRecursionWarned = false;
+        }
+    }
     // State variables
     public Map<String, Boolean> stateVariableInitialized = new HashMap<>();
     public Map<String, RuntimeScalar> stateVariable = new HashMap<>();
@@ -2017,6 +2116,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             frame = args.getFirst().getInt();
         }
 
+        // Save the original user-supplied frame before the JVM skip adjustment.
+        // This value maps directly to hasArgsStack depth: caller(0) → depth 0 (current frame),
+        // caller(1) → depth 1 (caller's frame), etc. The hasArgsStack is pushed/popped in the
+        // instance apply() methods, one entry per Perl subroutine call, so the Nth entry from
+        // the top corresponds to the Nth caller() frame.
+        int originalFrame = frame;
+
         Throwable t = new Throwable();
         ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(t);
         ArrayList<ArrayList<String>> stackTrace = result.frames();
@@ -2119,27 +2225,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
                     } else {
-                        // Not in debug mode - use the originalArgsStack snapshot
-                        // instead of the live argsStack, so that callees which do
-                        // `shift(@_)` don't clear @DB::args out from under the
-                        // caller. Perl preserves the invocation args here — see
-                        // originalArgsStack javadoc for why this matters (DBIC
-                        // TxnScopeGuard double-DESTROY detection).
-                        RuntimeArray frameArgs = getOriginalArgsAt(argsFrame);
+                        // Not in debug mode — use the pristine @_ snapshot
+                        // instead of the live argsStack, so that callees which
+                        // do `shift(@_)` don't clear @DB::args out from under
+                        // the caller. Perl preserves the invocation args here
+                        // (DBIC TxnScopeGuard double-DESTROY detection relies
+                        // on this).
+                        //
+                        // We use setFromListAliased (not setFromList) so
+                        // @DB::args shares SV slots with the caller's @_
+                        // rather than counted copies — this matches Perl 5
+                        // semantics and allows `push @kept, @DB::args` to
+                        // produce real counted refs in @kept while the
+                        // @DB::args slots themselves remain aliases. Required
+                        // for DBIC's Devel::StackTrace-resurrection test
+                        // (txn_scope_guard test 18).
+                        java.util.List<RuntimeScalar> frameArgs = getPristineArgsAt(argsFrame);
                         if (frameArgs != null) {
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            RuntimeList rl = new RuntimeList();
+                            rl.elements.addAll(frameArgs);
+                            dbArgs.setFromListAliased(rl);
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
                     }
                 }
 
-                // Add hasargs (element 4): 1 if @_ was populated for this sub
-                // Subroutines always have @_ available, so this is 1 for subs
-                // Check the subroutine name to determine if this is a sub call
-                boolean hasArgs = subName != null && !subName.isEmpty() && 
-                                  !subName.equals("(eval)") && !subName.endsWith("::(eval)");
-                res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                // Add hasargs (element 4): whether @_ was freshly created for this call.
+                // In Perl 5, this is 1 for func(args) and &func(args), but false/empty
+                // for &func (no parens) which inherits the caller's @_.
+                // We consult hasArgsStack which is pushed in the instance apply() methods:
+                //   - apply(RuntimeArray, int) pushes false  (shared args / &func)
+                //   - apply(String, RuntimeArray, int) pushes true  (fresh args / func())
+                // Fall back to the name-based heuristic for frames outside our tracking
+                // (e.g., top-level code, eval frames).
+                Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
+                if (hasArgsFromStack != null) {
+                    res.add(hasArgsFromStack ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                } else {
+                    // Fallback: assume hasargs=true for named subs, false for eval
+                    boolean hasArgs = subName != null && !subName.isEmpty() && 
+                                      !subName.equals("(eval)") && !subName.endsWith("::(eval)");
+                    res.add(hasArgs ? RuntimeScalarCache.scalarTrue : RuntimeScalarCache.scalarUndef);
+                }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list
                 // We don't currently track this per-frame, so return undef
@@ -2317,6 +2445,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Local copies that the trampoline can mutate across iterations.
         RuntimeScalar curScalar = runtimeScalar;
         RuntimeArray curArgs = a;
+        // True when the current loop iteration was entered via a tail call
+        // (goto &func) from the previous iteration. We bump
+        // inTailCallTrampoline for that iteration so enterCall() on the new
+        // code target skips Deep-recursion depth tracking — matching the
+        // recursion-exempt semantics master uses for recursive tail-call
+        // trampolines. Perl's goto &sub does not grow the dynamic scope,
+        // and the `no warnings 'recursion'` lexical scope at the goto site
+        // has already unwound by the time the trampoline re-enters.
+        boolean tailCallReentry = false;
 
         while (true) {
         // Handle tied scalars - fetch the underlying value first
@@ -2426,6 +2563,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Java-stack growth on long `goto &func` chains.
             RuntimeScalar nextTailCode = null;
             RuntimeArray nextTailArgs = null;
+            // Bump tail-call-trampoline counter when this iteration was
+            // triggered by a previous `goto &sub`. enterCall() on the new
+            // code target will then skip the Deep-recursion depth tracking.
+            if (tailCallReentry) {
+                inTailCallTrampoline.set(inTailCallTrampoline.get() + 1);
+            }
             try {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(curArgs, callContext);
@@ -2494,11 +2637,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (code.isEvalBlock) {
                     code.releaseCaptures();
                 }
+                // Decrement the counter we bumped at iteration start. Placing
+                // it in finally guarantees balance on both normal return and
+                // exception paths.
+                if (tailCallReentry) {
+                    inTailCallTrampoline.set(inTailCallTrampoline.get() - 1);
+                }
             }
             // If we get here, the body returned a tailcall. Iterate
             // with the new code ref / args instead of recursing.
             curScalar = nextTailCode;
             curArgs = nextTailArgs;
+            tailCallReentry = true;
             continue;
         }
 
@@ -2830,6 +2980,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
+
+        // If this is a tail-call trampoline re-entry (emitted by the JVM bytecode
+        // trampoline for `goto &sub`), mark it so enterCall/exitCall skip depth
+        // tracking. See enterCall() / inTailCallTrampoline for the rationale.
+        boolean isTailCall = "tailcall".equals(subroutineName);
+        if (isTailCall) {
+            inTailCallTrampoline.set(inTailCallTrampoline.get() + 1);
+            try {
+                return applyImpl(runtimeScalar, subroutineName, list, callContext);
+            } finally {
+                inTailCallTrampoline.set(inTailCallTrampoline.get() - 1);
+            }
+        }
+        return applyImpl(runtimeScalar, subroutineName, list, callContext);
+    }
+
+    private static RuntimeList applyImpl(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
 
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -3333,7 +3500,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
-            
+
+            // hasArgs tracking for caller()[4]:
+            // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
+            // That static method is the "shared args" path — used when Perl code calls &func (no parens),
+            // which inherits the caller's @_ instead of creating a fresh one.
+            // Perl's caller()[4] (hasargs) should be false/empty for these calls.
+            // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
+            hasArgsStack.get().push(false);
+
+            // Check deep recursion BEFORE pushing the callee's warning bits,
+            // so the "Deep recursion on subroutine" warning is gated on the
+            // caller's lexical warning bits (matching Perl's ckWARN at the
+            // call site, not inside the callee).
+            enterCall();
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3354,7 +3534,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
-                popArgs();
+                exitCall();
+                popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
@@ -3430,7 +3611,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
-            
+
+            // hasArgs tracking for caller()[4]:
+            // This is the 3-arg instance method, called from the 4-arg static apply(scalar, name, args[], ctx).
+            // That static method is the "fresh args" path — used for normal func(args) and &func(args) calls,
+            // which create a new @_ from the supplied arguments.
+            // Perl's caller()[4] (hasargs) should be true (1) for these calls.
+            // See also: the 2-arg instance method apply(array, ctx) which pushes false.
+            hasArgsStack.get().push(true);
+
+            // Check deep recursion BEFORE pushing the callee's warning bits,
+            // so the "Deep recursion on subroutine" warning is gated on the
+            // caller's lexical warning bits.
+            enterCall();
             // Push warning bits for FATAL warnings support
             String warningBits = getWarningBitsForCode(this);
             if (warningBits != null) {
@@ -3451,7 +3644,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
-                popArgs();
+                exitCall();
+                popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();

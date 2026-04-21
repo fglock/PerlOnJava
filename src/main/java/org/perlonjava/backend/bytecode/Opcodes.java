@@ -2243,10 +2243,60 @@ public class Opcodes {
     public static final short SCOPE_EXIT_CLEANUP_ARRAY = 467;
 
     /**
+     * Numeric-only bitwise AND assign (use feature "bitwise"): rd &= rs (always numeric).
+     * Format: BINARY_AND_ASSIGN rd rs
+     */
+    public static final short BINARY_AND_ASSIGN = 468;
+
+    /**
+     * Numeric-only bitwise OR assign (use feature "bitwise"): rd |= rs (always numeric).
+     * Format: BINARY_OR_ASSIGN rd rs
+     */
+    public static final short BINARY_OR_ASSIGN = 469;
+
+    /**
+     * Numeric-only bitwise XOR assign (use feature "bitwise"): rd ^= rs (always numeric).
+     * Format: BINARY_XOR_ASSIGN rd rs
+     */
+    public static final short BINARY_XOR_ASSIGN = 470;
+
+    /**
+     * pipe READHANDLE, WRITEHANDLE: Format: PIPE rd argsReg ctx
+     */
+    public static final short PIPE = 471;
+
+    /**
+     * socketpair SOCK1, SOCK2, DOMAIN, TYPE, PROTOCOL: Format: SOCKETPAIR rd argsReg ctx
+     */
+    public static final short SOCKETPAIR = 472;
+
+    /**
+     * Load the read-only scalarUndef singleton into a register. Used for the
+     * `undef` placeholder in a list assignment like my (undef, $x) = ...,
+     * where the LHS list-assign code path needs to distinguish a placeholder
+     * (consumes one RHS value without binding) from a regular lvalue. Format:
+     * LOAD_UNDEF_READONLY rd
+     */
+    public static final short LOAD_UNDEF_READONLY = 473;
+
+    /**
+     * Arithmetic operators without overload dispatch.
+     * Used when {@code no overloading} is in effect at compile time.
+     * Format: OPCODE rd rs1 rs2   (NEG_NO_OVERLOAD: rd rs)
+     */
+    public static final short ADD_NO_OVERLOAD = 474;
+    public static final short SUB_NO_OVERLOAD = 475;
+    public static final short MUL_NO_OVERLOAD = 476;
+    public static final short DIV_NO_OVERLOAD = 477;
+    public static final short MOD_NO_OVERLOAD = 478;
+    public static final short POW_NO_OVERLOAD = 479;
+    public static final short NEG_NO_OVERLOAD = 480;
+
+    /**
      * Perl wait() builtin: rd = wait for any child process.
      * Format: WAIT_OP rd
      */
-    public static final short WAIT_OP = 468;
+    public static final short WAIT_OP = 481;
 
     /**
      * Hash element access for local(): rd = hash_reg.getForLocal(key_reg)
@@ -2255,21 +2305,21 @@ public class Opcodes {
      * because the proxy re-resolves the key in the parent hash on restore.
      * Format: HASH_GET_FOR_LOCAL rd hashReg keyReg
      */
-    public static final short HASH_GET_FOR_LOCAL = 469;
+    public static final short HASH_GET_FOR_LOCAL = 482;
 
     /**
      * Hash dereference + string key + fetch for local() context.
      * Like HASH_DEREF_FETCH but calls hashDerefGetForLocal() to return a RuntimeHashProxyEntry.
      * Format: HASH_DEREF_FETCH_FOR_LOCAL rd hashref_reg key_string_index
      */
-    public static final short HASH_DEREF_FETCH_FOR_LOCAL = 470;
+    public static final short HASH_DEREF_FETCH_FOR_LOCAL = 483;
 
     /**
      * Hash dereference + string key + fetch for local() context (non-strict refs).
      * Like HASH_DEREF_FETCH_NONSTRICT but calls hashDerefGetForLocalNonStrict().
      * Format: HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL rd hashref_reg key_string_index pkg_string_idx
      */
-    public static final short HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL = 471;
+    public static final short HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL = 484;
 
     private Opcodes() {
     } // Utility class - no instantiation

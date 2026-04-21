@@ -395,6 +395,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Convert to number without triggering overload dispatch.
+     * Used by {@code no overloading} pragma to bypass the {@code 0+} overload.
+     * For blessed references, returns the identity hash code as an integer.
+     */
+    public RuntimeScalar getNumberNoOverload() {
+        return switch (type) {
+            case INTEGER, DOUBLE -> this;
+            case STRING, BYTE_STRING -> NumberParser.parseNumber(this);
+            case UNDEF -> scalarZero;
+            case VSTRING -> NumberParser.parseNumber(this);
+            case BOOLEAN -> (boolean) value ? scalarOne : scalarZero;
+            case GLOB -> scalarOne;
+            case JAVAOBJECT -> value != null ? scalarOne : scalarZero;
+            case TIED_SCALAR -> this.tiedFetch().getNumberNoOverload();
+            case READONLY_SCALAR -> ((RuntimeScalar) this.value).getNumberNoOverload();
+            case DUALVAR -> ((DualVar) this.value).numericValue();
+            default -> {
+                // For references (blessed or not), return the identity hash code
+                // of the referent, matching Scalar::Util::refaddr semantics.
+                if (value != null) {
+                    yield new RuntimeScalar(System.identityHashCode(value));
+                }
+                yield scalarZero;
+            }
+        };
+    }
+
+    /**
      * Converts scalar to number with uninitialized value warning.
      * Called when 'use warnings "uninitialized"' is in effect.
      *
@@ -1494,12 +1522,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> // 0
-                // For numeric constants (like 1->[0]), return an empty array
-                // This matches Perl's behavior where 1->[0] returns undef without error
-                    new RuntimeArray();
+                // Under strict refs, dereferencing a non-readonly numeric scalar as an ARRAY ref
+                // is a strict-refs violation. (Read-only constants like `1->[0]` take the
+                // RuntimeScalarReadOnly.arrayDerefGet() override instead and stay quiet.)
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case DOUBLE -> // 1
-                // For numeric constants (like 1->[0]), return an empty array
-                    new RuntimeArray();
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case STRING -> // 2
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
             case BYTE_STRING -> // 3
@@ -1597,9 +1625,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> // 0
-                    throw new PerlCompilerException("Not a HASH reference");
+                // Under strict refs, dereferencing a non-readonly numeric scalar as a HASH ref
+                // is a strict-refs violation. (Read-only constants like `1->{a}` take the
+                // RuntimeScalarReadOnly.hashDerefGet() override instead.)
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
             case DOUBLE -> // 1
-                    throw new PerlCompilerException("Not a HASH reference");
+                    throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
             case STRING -> // 2
                 // Strict refs violation: attempting to use a string as a hash ref
                     throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
@@ -1924,6 +1955,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1935,6 +1972,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
+                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
+                    // actual global glob so that operations like tie *{select()}, 'Class'
+                    // affect the real handle, not a temporary copy.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1977,6 +2023,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOBREFERENCE -> {
                 // Some internal representations store PVIO as GLOBREFERENCE with a RuntimeIO value.
                 if (value instanceof RuntimeIO io) {
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -1988,6 +2040,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Perl allows postfix glob deref (->**) of PVIO by creating a temporary glob
                 // with the IO slot set to that handle.
                 if (value instanceof RuntimeIO io) {
+                    // If the IO has a known glob name (e.g., "main::STDOUT"), look up the
+                    // actual global glob so that operations like tie *{select()}, 'Class'
+                    // affect the real handle, not a temporary copy.
+                    if (io.globName != null) {
+                        RuntimeGlob actual = GlobalVariable.getExistingGlobalIO(io.globName);
+                        if (actual != null) {
+                            yield actual;
+                        }
+                    }
                     RuntimeGlob tmp = new RuntimeGlob("__ANON__::__ANONIO__");
                     tmp.setIO(io);
                     yield tmp;
@@ -2060,7 +2121,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
-    // Return a reference to this
+    // Return a reference to this scalar.
+    //
+    // Special case for GLOB-typed scalars: when a glob passes through @_,
+    // array storage, or other copy operations, the RuntimeGlob is wrapped
+    // inside a RuntimeScalar (type=GLOB, value=RuntimeGlob).  Java virtual
+    // dispatch then calls THIS method instead of RuntimeGlob.createReference().
+    //
+    // In Perl 5, \*glob always produces a glob reference:
+    //   ref(\*FH)                      → "GLOB"
+    //   UNIVERSAL::isa(\*FH, 'GLOB')   → 1
+    //
+    // We return type=REFERENCE with value=this (the RuntimeScalar).
+    // ReferenceOperators.ref() already handles this: when a REFERENCE points
+    // to a RuntimeScalar with type GLOB, it returns "GLOB".
+    // Universal.isa() also handles this for unblessed refs.
+    //
+    // We deliberately do NOT set type=GLOBREFERENCE here because that would
+    // store the RuntimeGlob directly, losing the reference to this container.
+    // Internals::SvREADONLY needs the container to set/get readonly status.
     public RuntimeScalar createReference() {
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.REFERENCE;

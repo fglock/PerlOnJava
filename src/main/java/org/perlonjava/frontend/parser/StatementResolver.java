@@ -755,6 +755,15 @@ public class StatementResolver {
                         }
                     }
 
+                    // Hoist 'my' declarations from the loop-body expression, too.
+                    // "my @long_list = EXPR for LIST" declares @long_list in the
+                    // enclosing scope in perl. Each iteration still gets a fresh
+                    // @long_list (the inner `my` shadows the outer one), so the
+                    // outer value remains empty — we must not transform the body
+                    // itself. Emitting a bare `my @long_list;` before the loop is
+                    // enough to make the name visible in the enclosing scope.
+                    Node bodyHoistedMyDecl = hoistMyFromAssignment(expression);
+
                     // Statement modifier for loop: EXPR for LIST
                     // $_ is global, so needs array-of-alias and local wrapping
                     Node varNode = scalarUnderscore(parser);
@@ -769,14 +778,22 @@ public class StatementResolver {
                                         new OperatorNode("local", varNode, parser.tokenIndex),
                                         forNode
                                 ), parser.tokenIndex);
-                        if (hoistedMyDecl != null) {
-                            yield new ListNode(List.of(hoistedMyDecl, result), parser.tokenIndex);
+                        if (hoistedMyDecl != null || bodyHoistedMyDecl != null) {
+                            java.util.List<Node> hoisted = new java.util.ArrayList<>();
+                            if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);
+                            if (hoistedMyDecl != null) hoisted.add(hoistedMyDecl);
+                            hoisted.add(result);
+                            yield new ListNode(hoisted, parser.tokenIndex);
                         }
                         yield result;
                     }
                     Node result = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
-                    if (hoistedMyDecl != null) {
-                        yield new ListNode(List.of(hoistedMyDecl, result), parser.tokenIndex);
+                    if (hoistedMyDecl != null || bodyHoistedMyDecl != null) {
+                        java.util.List<Node> hoisted = new java.util.ArrayList<>();
+                        if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);
+                        if (hoistedMyDecl != null) hoisted.add(hoistedMyDecl);
+                        hoisted.add(result);
+                        yield new ListNode(hoisted, parser.tokenIndex);
                     }
                     yield result;
                 }
@@ -794,12 +811,28 @@ public class StatementResolver {
                         // Executes the loop at least once
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("do-while " + expression);
                     }
-                    yield new For3Node(null,
+                    // Hoist 'my' from the loop body, same as the for/foreach modifier.
+                    // Skip for do-while: the `my` is inside an explicit BLOCK so its
+                    // scope is already what perl expects.
+                    // If we hoist, wrap the body in a BlockNode so the inner `my`
+                    // shadows the outer hoisted one, matching perl's behavior where
+                    // the outer variable stays untouched while each iteration
+                    // creates a fresh instance.
+                    Node bodyHoistedMyDecl = isDoWhile ? null : hoistMyFromAssignment(expression);
+                    Node body = expression;
+                    if (bodyHoistedMyDecl != null) {
+                        body = new BlockNode(java.util.List.of(expression), parser.tokenIndex);
+                    }
+                    Node result = new For3Node(null,
                             false,
                             null, modifierExpression,
-                            null, expression, null,
+                            null, body, null,
                             isDoWhile, false,
                             parser.tokenIndex);
+                    if (bodyHoistedMyDecl != null) {
+                        yield new ListNode(java.util.List.of(bodyHoistedMyDecl, result), parser.tokenIndex);
+                    }
+                    yield result;
                 }
 
                 default -> {
@@ -1005,8 +1038,30 @@ public class StatementResolver {
     }
 
     /**
-     * Handle statement modifiers (if/unless) with my declarations.
+     * If {@code expression} is an assignment whose left side is a `my`
+     * declaration (e.g. {@code my $x = EXPR} or {@code my @w = LIST}), return
+     * the bare `my` declaration node. Callers use this to hoist the `my` out
+     * of a statement-modifier body so the variable is visible in the enclosing
+     * scope, matching perl's semantics for
+     * {@code my @x = EXPR for LIST} / {@code my $x = EXPR while COND}.
+     *
+     * Returns null if no hoist is applicable. Does not mutate {@code expression}
+     * — the caller is responsible for rewriting it.
+     */
+    private static Node hoistMyFromAssignment(Node expression) {
+        if (expression instanceof BinaryOperatorNode assignNode
+                && assignNode.operator.equals("=")
+                && assignNode.left instanceof OperatorNode myNode
+                && myNode.operator.equals("my")) {
+            return myNode;
+        }
+        return null;
+    }
+
+    /**
+     * Handle statement modifiers (if/unless) with my/our/state declarations.
      * For "my $x = EXPR if COND", the variable must be declared even when condition is false.
+     * For "our $x = EXPR unless COND", the variable must be declared before evaluating COND.
      * Uses comma operator to declare variable in current scope: (my $x, COND && ($x = EXPR))
      * This avoids creating a new scope (which BlockNode would do).
      *

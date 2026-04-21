@@ -253,11 +253,19 @@ public class StringParser {
             // regex close delimiter, the remainder ("=") may need to be merged with the next
             // token to reconstruct a binding operator. Example: qr/x/=~ was tokenized as
             // qr, /, x, /=, ~ — after consuming "/" from "/=", remainder "=" + next "~" = "=~"
+            // Similarly, qr/x/=>'val' needs "=" + ">" merged into "=>" (fat comma).
             if ((remainStr.equals("=") || remainStr.equals("!"))
                     && tokPos + 1 < tokens.size()
                     && tokens.get(tokPos + 1).text.equals("~")) {
                 remainStr = remainStr + "~";
                 // Neutralize the consumed ~ token so it won't be parsed again
+                tokens.get(tokPos + 1).text = " ";
+                tokens.get(tokPos + 1).type = LexerTokenType.WHITESPACE;
+            } else if (remainStr.equals("=")
+                    && tokPos + 1 < tokens.size()
+                    && tokens.get(tokPos + 1).text.equals(">")) {
+                remainStr = "=>";
+                // Neutralize the consumed > token so it won't be parsed again
                 tokens.get(tokPos + 1).text = " ";
                 tokens.get(tokPos + 1).type = LexerTokenType.WHITESPACE;
             }

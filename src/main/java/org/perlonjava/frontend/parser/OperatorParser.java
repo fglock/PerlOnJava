@@ -370,12 +370,22 @@ public class OperatorParser {
                 TokenUtils.consume(parser); // consume __PACKAGE__/__CLASS__
                 varType = parser.ctx.symbolTable.getCurrentPackage();
             } else {
-                // If a package name follows, then it is a type declaration
+                // If a package name follows, then it is a type declaration.
+                // In Perl, `my Foo::Bar $x` is valid when Foo::Bar is loaded.
+                // We accept the type name at parse time when unambiguously followed
+                // by a sigil ($, @, %, \) or opening paren, and defer the "No such class"
+                // check to runtime — matching Perl's behavior while handling the JVM
+                // architectural difference (entire file compiled before execution).
                 int currentIndex2 = parser.tokenIndex;
                 String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
-                boolean packageExists = GlobalVariable.isPackageLoaded(packageName);
-                // System.out.println("maybe type: " + packageName + " " + packageExists);
-                if (packageExists) {
+                LexerToken afterType = peek(parser);
+                boolean followedBySigil = "$".equals(afterType.text) || "@".equals(afterType.text)
+                        || "%".equals(afterType.text) || "\\".equals(afterType.text)
+                        || "(".equals(afterType.text);
+                if (followedBySigil) {
+                    // Unambiguously a type annotation (followed by a variable sigil or paren list)
+                    varType = packageName;
+                } else if (GlobalVariable.isPackageLoaded(packageName)) {
                     varType = packageName;
                 } else {
                     // Backtrack
@@ -513,11 +523,39 @@ public class OperatorParser {
         if (isDeclaredReference) {
             decl.setAnnotation("isDeclaredReference", true);
         }
+        if (varType != null) {
+            decl.setAnnotation("varType", varType);
+        }
 
         // Initialize a list to store any attributes the declaration might have.
         List<String> attributes = new ArrayList<>();
         // While there are attributes (denoted by a colon ':'), we keep parsing them.
+        //
+        // But the ':' may also belong to an enclosing ternary expression — e.g.
+        // `COND ? my $var : $fallback`. We disambiguate by looking past the ':':
+        //   - IDENTIFIER       → attribute name                 → parse
+        //   - `=` `;` `,` `)`  → empty attribute list           → parse (consume ':')
+        //   - anything else    → looks like a ternary alt       → break
+        //
+        // The look-ahead scans the raw tokens array and does not mutate
+        // parser.tokenIndex so the rollback is always exact.
         while (peek(parser).text.equals(":")) {
+            int lookIdx = parser.tokenIndex + 1;
+            while (lookIdx < parser.tokens.size()
+                    && parser.tokens.get(lookIdx).type == WHITESPACE) {
+                lookIdx++;
+            }
+            if (lookIdx >= parser.tokens.size()) break;
+            LexerToken after = parser.tokens.get(lookIdx);
+            boolean looksLikeAttr =
+                    after.type == IDENTIFIER
+                            || after.text.equals("=")
+                            || after.text.equals(";")
+                            || after.text.equals(",")
+                            || after.text.equals(")");
+            if (!looksLikeAttr) {
+                break;
+            }
             consumeAttributes(parser, attributes);
         }
 

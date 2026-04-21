@@ -400,6 +400,15 @@ public class BytecodeInterpreter {
                                 registers[rd] = new RuntimeScalar();
                             }
 
+                            case Opcodes.LOAD_UNDEF_READONLY -> {
+                                // Load the shared read-only undef singleton into rd.
+                                // Used as a placeholder in list assignments like
+                                // my (undef, $x) = (...), where the read-only
+                                // property is what marks the slot as "skip me".
+                                int rd = bytecode[pc++];
+                                registers[rd] = RuntimeScalarCache.scalarUndef;
+                            }
+
                             case Opcodes.UNDEFINE_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
@@ -660,6 +669,29 @@ public class BytecodeInterpreter {
 
                             case Opcodes.NEG_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeNegScalar(bytecode, pc, registers);
+                            }
+
+                            // Arithmetic without overload dispatch (no overloading pragma)
+                            case Opcodes.ADD_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeAddNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.SUB_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeSubNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.MUL_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeMulNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.DIV_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeDivNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.MOD_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeModNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.POW_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executePowNoOverload(bytecode, pc, registers);
+                            }
+                            case Opcodes.NEG_NO_OVERLOAD -> {
+                                pc = InlineOpcodeHandler.executeNegNoOverload(bytecode, pc, registers);
                             }
 
                             // Specialized unboxed operations (rare optimizations)
@@ -1392,6 +1424,24 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executeStringBitwiseXorAssign(bytecode, pc, registers);
                             }
 
+                            case Opcodes.BINARY_AND_ASSIGN -> {
+                                // Numeric-only bitwise AND assign (use feature "bitwise")
+                                // Format: BINARY_AND_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryAndAssign(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.BINARY_OR_ASSIGN -> {
+                                // Numeric-only bitwise OR assign (use feature "bitwise")
+                                // Format: BINARY_OR_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryOrAssign(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.BINARY_XOR_ASSIGN -> {
+                                // Numeric-only bitwise XOR assign (use feature "bitwise")
+                                // Format: BINARY_XOR_ASSIGN rd rs
+                                pc = OpcodeHandlerExtended.executeBinaryXorAssign(bytecode, pc, registers);
+                            }
+
                             case Opcodes.BITWISE_AND_BINARY -> {
                                 // Numeric bitwise AND: rd = rs1 binary& rs2
                                 // Format: BITWISE_AND_BINARY rd rs1 rs2
@@ -1942,7 +1992,8 @@ public class BytecodeInterpreter {
                                  Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.TIMES, Opcodes.CRYPT,
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
-                                 Opcodes.LISTEN, Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
+                                 Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
+                                 Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
                                  Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
                                  Opcodes.SEEKDIR -> {
                                 pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);

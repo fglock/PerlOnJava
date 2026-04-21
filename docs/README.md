@@ -25,6 +25,7 @@ How-to guides for common tasks:
 Technical reference documentation:
 
 - **[Feature Matrix](reference/feature-matrix.md)** - What Perl features are implemented
+- **[Bundled Modules](reference/bundled-modules.md)** - Complete list of included modules
 - **[XS Compatibility](reference/xs-compatibility.md)** - XS modules and Java implementations
 - **[CLI Options](reference/cli-options.md)** - Command-line reference
 - **[Testing](reference/testing.md)** - Test suite information

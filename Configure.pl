@@ -415,7 +415,12 @@ sub search_maven_artifact {
         }
         print "Select number [0-" . $#docs . "]: ";
         my $choice = <STDIN>;
+        unless (defined $choice) {
+            warn "No input received (not running interactively?). Defaulting to [0].\n";
+            $choice = 0;
+        }
         chomp $choice;
+        $choice = 0 unless $choice =~ /^\d+$/ && $choice <= $#docs;
         return $docs[$choice]{id};
     }
 
@@ -510,12 +515,16 @@ sub score_jdbc_relevance {
     my $score = 0;
 
     # Higher score for JDBC indicators
-    $score += 5 if $doc->{g} =~ /jdbc/i;
-    $score += 5 if $doc->{a} =~ /jdbc/i;
-    $score += 3 if $doc->{g} =~ /database|mysql|postgresql|oracle|sqlserver/i;
-    $score += 3 if $doc->{a} =~ /database|mysql|postgresql|oracle|sqlserver/i;
-    $score += 2 if $doc->{latestVersion} =~ /jdbc/i;
-    $score += 4 if $doc->{c} =~ /Driver$/;
+    my $g = $doc->{g} // '';
+    my $a = $doc->{a} // '';
+    my $v = $doc->{latestVersion} // '';
+    my $c = $doc->{c} // '';
+    $score += 5 if $g =~ /jdbc/i;
+    $score += 5 if $a =~ /jdbc/i;
+    $score += 3 if $g =~ /database|mysql|postgresql|oracle|sqlserver/i;
+    $score += 3 if $a =~ /database|mysql|postgresql|oracle|sqlserver/i;
+    $score += 2 if $v =~ /jdbc/i;
+    $score += 4 if $c =~ /Driver$/;
 
     # Boost score based on download count
     $score += log($doc->{downloadCount} || 1);

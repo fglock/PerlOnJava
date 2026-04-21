@@ -570,6 +570,19 @@ public class CompileAssignment {
                         List<Integer> varRegs = new ArrayList<>();
                         for (int i = 0; i < listNode.elements.size(); i++) {
                             Node element = listNode.elements.get(i);
+                            // `undef` placeholder in the my-list: my (undef, $x) = LIST.
+                            // Emit a read-only undef so the LHS RuntimeList recognizes
+                            // the slot as a placeholder that consumes one RHS value but
+                            // binds nothing.
+                            if (element instanceof OperatorNode undefOp
+                                    && undefOp.operator.equals("undef")
+                                    && undefOp.operand == null) {
+                                int placeholderReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF_READONLY);
+                                bytecodeCompiler.emitReg(placeholderReg);
+                                varRegs.add(placeholderReg);
+                                continue;
+                            }
                             if (element instanceof OperatorNode sigilOp) {
                                 String sigil = sigilOp.operator;
 

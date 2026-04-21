@@ -297,8 +297,9 @@ public class ExtendedNativeUtils extends NativeUtils {
             InetAddress addr = InetAddress.getByName(hostname);
 
             RuntimeArray.push(result, new RuntimeScalar(addr.getHostName()));
-            RuntimeArray aliases = new RuntimeArray();
-            RuntimeArray.push(result, aliases);
+            // Aliases field: must be a scalar (empty string), not an empty array
+            // which would flatten to zero elements and shift subsequent fields
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(2));
             RuntimeArray.push(result, new RuntimeScalar(4));
 
@@ -343,7 +344,7 @@ public class ExtendedNativeUtils extends NativeUtils {
 
             RuntimeArray result = new RuntimeArray();
             RuntimeArray.push(result, new RuntimeScalar(inetAddr.getHostName()));
-            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(2));
             RuntimeArray.push(result, new RuntimeScalar(4));
 
@@ -375,7 +376,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         Integer port = commonPorts.get(service.toLowerCase());
         if (port != null) {
             RuntimeArray.push(result, new RuntimeScalar(service));
-            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(port));
             RuntimeArray.push(result, new RuntimeScalar(protocol));
         }
@@ -399,7 +400,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         String service = commonServices.get(port);
         if (service != null) {
             RuntimeArray.push(result, new RuntimeScalar(service));
-            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(port));
             RuntimeArray.push(result, new RuntimeScalar(protocol));
         }
@@ -430,7 +431,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         // List context: return (name, aliases, proto_number)
         RuntimeArray result = new RuntimeArray();
         RuntimeArray.push(result, new RuntimeScalar(protocol));
-        RuntimeArray.push(result, new RuntimeArray());
+        RuntimeArray.push(result, new RuntimeScalar(""));
         RuntimeArray.push(result, new RuntimeScalar(protoNum));
         return result;
     }
@@ -447,7 +448,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         String protocol = protocols.get(protoNum);
         if (protocol != null) {
             RuntimeArray.push(result, new RuntimeScalar(protocol));
-            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(protoNum));
         }
 
@@ -841,7 +842,7 @@ public class ExtendedNativeUtils extends NativeUtils {
 
         RuntimeArray result = new RuntimeArray();
         RuntimeArray.push(result, new RuntimeScalar("loopback"));
-        RuntimeArray.push(result, new RuntimeArray());
+        RuntimeArray.push(result, new RuntimeScalar(""));
         RuntimeArray.push(result, new RuntimeScalar(addrtype));
         RuntimeArray.push(result, new RuntimeScalar("127.0.0.1"));
 
@@ -856,7 +857,7 @@ public class ExtendedNativeUtils extends NativeUtils {
         RuntimeArray result = new RuntimeArray();
         if (name.equals("loopback") || name.equals("localhost")) {
             RuntimeArray.push(result, new RuntimeScalar(name));
-            RuntimeArray.push(result, new RuntimeArray());
+            RuntimeArray.push(result, new RuntimeScalar(""));
             RuntimeArray.push(result, new RuntimeScalar(2));
             RuntimeArray.push(result, new RuntimeScalar("127.0.0.1"));
         }
