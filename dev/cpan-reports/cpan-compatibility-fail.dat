@@ -1113,7 +1113,6 @@ Router::Simple	FAIL	1	0	1/1 subtests failed	2026-04-12
 SGI::FAM	FAIL			Missing: Test/Helper.pm	2026-04-12		
 SMS::Send::CZ::Neogate	FAIL	1	0	4/1 subtests failed	2026-04-21		
 SMS::Send::SMSDiscount	FAIL			Unknown test outcome	2026-04-21		
-SMS::Send::Twilio	FAIL	1	1	Missing: Class/Adapter/Builder.pm	2026-04-21		
 SPVM::Resource::Zlib::V1_2_11	FAIL				2026-04-21		
 SQL::Beautify	FAIL	46	41	5/46 subtests failed	2026-04-21		
 SQL::Interp	FAIL	162	162	Missing: DBI/db.pm	2026-04-21		

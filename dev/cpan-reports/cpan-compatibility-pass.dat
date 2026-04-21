@@ -362,7 +362,6 @@ UUID::Object	PASS	124	124		2026-04-21		73edc8aba
 Unicode::Stringprep	PASS	194	194		2026-04-12		c1942aad0
 Unix::Process	PASS	2	2		2026-04-12		c1942aad0
 WWW::CPANRatings::RSS	PASS	109	109		2026-04-21		73edc8aba
-WWW::Twilio::API	PASS	6	6		2026-04-21		73edc8aba
 X11::GUITest	PASS	1	1		2026-04-21		73edc8aba
 XML::NamespaceSupport	PASS	49	49		2026-04-12		cc5efa220
 XML::SAX::Expat	PASS	2	2		2026-04-12		c1942aad0
