@@ -95,6 +95,29 @@ was supposed to make cheap. Pre-merge HEAD was comparable, so
 some of the same master hot-paths hitting `life_bitpacked` likely
 also hit this. Fix together with 0.2.
 
+**Downstream impact — DBIC user reports:**
+
+1. **`t/zzzzzzz_perl_perf_bug.t`** fails with exit 11. This is
+   DBIC's perl-installation benchmark: it compares
+   blessed-ref operations vs plain array-ref operations and
+   fails if the ratio is `>= 3×`. PerlOnJava currently hits
+   roughly 4× — the same gap as `benchmark_refcount_anon`.
+   Fixing §0.3 will unblock this test automatically. No DBIC
+   feature is broken; it's a perf-ratio diagnostic.
+
+2. **`t/discard_changes_in_DESTROY.t`** intermittently times out
+   under the default `HARNESS_OPTIONS=j` parallel harness (user
+   report: 300s timeout). Standalone the test passes in ~14s, so
+   it's not infinite recursion — it's the same per-call overhead
+   (per-sub-call machinery × 8 parallel jobs × refcount churn)
+   pushing wallclock past the harness timeout. Should resolve
+   naturally when §0.2 / §0.3 close the gap.
+
+   *Safety check:* the test deliberately installs a DESTROY that
+   re-enters DBIC via `discard_changes` and expects no infinite
+   recursion. Confirmed locally that it completes cleanly (exit 0,
+   DESTROY fires once). So the failure is perf, not correctness.
+
 ### 0.4 benchmark_method — 1.7× slower [M]
 
 Method dispatch slower than perl despite the 4096-entry inline
