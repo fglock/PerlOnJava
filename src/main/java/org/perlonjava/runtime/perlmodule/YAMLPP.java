@@ -109,12 +109,17 @@ public class YAMLPP extends PerlModuleBase {
         CyclicRefsBehavior cyclicRefs = CyclicRefsBehavior.FATAL;
         if (options.containsKey("cyclic_refs")) {
             String cyclicRefsOption = options.get("cyclic_refs").toString().toLowerCase();
-            cyclicRefs = switch (cyclicRefsOption) {
-                case "warn" -> CyclicRefsBehavior.WARN;
-                case "ignore" -> CyclicRefsBehavior.IGNORE;
-                case "allow" -> CyclicRefsBehavior.ALLOW;
-                default -> CyclicRefsBehavior.FATAL;
-            };
+            switch (cyclicRefsOption) {
+                case "fatal" -> cyclicRefs = CyclicRefsBehavior.FATAL;
+                case "warn" -> cyclicRefs = CyclicRefsBehavior.WARN;
+                case "ignore" -> cyclicRefs = CyclicRefsBehavior.IGNORE;
+                case "allow" -> cyclicRefs = CyclicRefsBehavior.ALLOW;
+                default -> {
+                    return WarnDie.die(new RuntimeScalar(
+                            "Invalid value for cyclic_refs: '" + cyclicRefsOption + "'"),
+                            new RuntimeScalar("\n")).getList();
+                }
+            }
         }
 
         DumpSettings dumpSettings = DumpSettings.builder()
@@ -173,6 +178,13 @@ public class YAMLPP extends PerlModuleBase {
             if (msg != null && msg.startsWith("java.lang.NumberFormatException")) {
                 msg = "YAML::PP: invalid numeric value: " +
                         msg.replaceFirst("^java\\.lang\\.NumberFormatException:\\s*", "");
+            } else if (msg != null && msg.contains("found duplicate key ")) {
+                // Rewrite to match YAML::PP CPAN error format: Duplicate key 'NAME'
+                java.util.regex.Matcher m =
+                        java.util.regex.Pattern.compile("found duplicate key (\\S+)").matcher(msg);
+                if (m.find()) {
+                    msg = "Duplicate key '" + m.group(1) + "' " + msg;
+                }
             }
             return WarnDie.die(new RuntimeScalar(msg), new RuntimeScalar("\n")).getList();
         } catch (RuntimeException e) {
@@ -270,10 +282,32 @@ public class YAMLPP extends PerlModuleBase {
      */
     @SuppressWarnings("unchecked")
     private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml, IdentityHashMap<Object, RuntimeScalar> seen, RuntimeHash instance) {
+        return convertYamlToRuntimeScalar(yaml, seen, new IdentityHashMap<>(), instance);
+    }
+
+    /**
+     * Converts YAML objects to RuntimeScalar representations.
+     *
+     * `seen` tracks containers that are currently on the traversal stack
+     * (used for cycle detection). `cache` tracks containers we've already
+     * finished converting (used so that shared DAG references are reused
+     * instead of duplicated).
+     */
+    @SuppressWarnings("unchecked")
+    private static RuntimeScalar convertYamlToRuntimeScalar(Object yaml,
+                                                            IdentityHashMap<Object, RuntimeScalar> seen,
+                                                            IdentityHashMap<Object, RuntimeScalar> cache,
+                                                            RuntimeHash instance) {
         if (yaml == null) {
             return new RuntimeScalar();
         }
 
+        // Already-finished container: reuse (supports shared/DAG references).
+        if (cache.containsKey(yaml)) {
+            return cache.get(yaml);
+        }
+
+        // Container currently on the stack: real cycle.
         if (seen.containsKey(yaml)) {
             String cyclicBehavior = instance.get("_cyclic_refs").toString();
             return switch (CyclicRefsBehavior.valueOf(cyclicBehavior)) {
@@ -294,7 +328,9 @@ public class YAMLPP extends PerlModuleBase {
                 RuntimeScalar hashRef = hash.createReference();
                 seen.put(yaml, hashRef);
                 map.forEach((key, value) ->
-                        hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, instance)));
+                        hash.put(key.toString(), convertYamlToRuntimeScalar(value, seen, cache, instance)));
+                seen.remove(yaml);
+                cache.put(yaml, hashRef);
                 yield hashRef;
             }
             case Set<?> set -> {
@@ -305,6 +341,8 @@ public class YAMLPP extends PerlModuleBase {
                 for (Object item : set) {
                     hash.put(item == null ? "" : item.toString(), new RuntimeScalar());
                 }
+                seen.remove(yaml);
+                cache.put(yaml, hashRef);
                 yield hashRef;
             }
             case List<?> list -> {
@@ -312,7 +350,9 @@ public class YAMLPP extends PerlModuleBase {
                 RuntimeScalar arrayRef = array.createReference();
                 seen.put(yaml, arrayRef);
                 list.forEach(item ->
-                        array.elements.add(convertYamlToRuntimeScalar(item, seen, instance)));
+                        array.elements.add(convertYamlToRuntimeScalar(item, seen, cache, instance)));
+                seen.remove(yaml);
+                cache.put(yaml, arrayRef);
                 yield arrayRef;
             }
             case byte[] bytes -> new RuntimeScalar(Base64.getEncoder().encodeToString(bytes));

@@ -25,7 +25,8 @@ backend and therefore die.
 | Date | Programs Failed | Subtests Failed | Total Subtests | Key Fix |
 |------|-----------------|-----------------|----------------|---------|
 | 2026-04-21 (baseline) | 32/44 (suite SIGTERM'd partway through) | 73/2275 (counted before timeout) | 2275 | — |
-| 2026-04-21 (after PR) | 30/44 | 149/2581 | 2581 | Catch NFE, `!!set`/`!!binary`, cyclic-ref msg |
+| 2026-04-21 (after NFE/set/binary/cyclic-msg fix) | 30/44 | 149/2581 | 2581 | Catch NFE, `!!set`/`!!binary`, cyclic-ref msg |
+| 2026-04-21 (after wrapper/DAG/dup-key fix) | 26/44 | 146/2595 | 2595 | Filehandle I/O, scalar-context load, DAG refs, dup-key msg, invalid cyclic_refs |
 
 Higher subtest-failure count after the fix is expected: previously,
 test files that died with uncaught Java exceptions reported only the
@@ -40,21 +41,21 @@ completion, so more *latent* failures surface.
 | t/10.parse-valid.t | PASS | ok | — |
 | t/11.parse-invalid.t | PASS | ok | — |
 | t/12.load-json.t | FAIL | 59/284 | **Bug P1:** snakeyaml-engine parser strictness (tabs, %TAG, flow-mapping colon edge cases, bare doc rules, zero-indented block scalars) |
-| t/13.load-anchor.t | FAIL | 0/0 | **Bug A1:** Perl `YAML::PP::Loader` API not implemented |
+| t/13.load-anchor.t | FAIL | 1/4 | **Bug A1:** Perl `YAML::PP::Loader` API (partial: 3/4 now pass via scalar-context fix) |
 | t/14.load-bool.t | FAIL | 3/14 | **Bug B1:** Boolean scalar type not returned (returns plain 1/0 or strings) |
 | t/15.parse-eol.t | PASS | ok | — |
 | t/16.loader.t | FAIL | 1/1 | **Bug A1:** `YAML::PP::Loader` API |
 | t/17.load-complex-keys.t | FAIL | 0/0 | **Bug K1:** non-string mapping keys (array/hash refs) |
 | t/18.control.t | PASS | ok | — |
-| t/19.file.t | FAIL | 0/0 | **Bug F1:** `load_file($fh)` / `DumpFile($fh)` on open filehandles |
+| t/19.file.t | PASS | ok | — (fixed, filehandle I/O + scalar-context load) |
 | t/20.dump.t | FAIL | 0/0 | **Bug D1:** emitter tag/style preservation mismatch |
 | t/21.emit.t | PASS | ok | — |
 | t/22.dump-bool.t | FAIL | 15/15 | **Bug B2:** dump of Perl/JSON::PP booleans → `!!bool` |
 | t/23-dump-anchor.t | FAIL | 0/0 | **Bug D2:** anchor/alias preservation on dump |
 | t/24.double-escapes.t | FAIL | 7/38 | **Bug E1:** `"\L..\E"`-style escape handling in double-quoted scalars |
-| t/30.legacy.t | FAIL | 2/2 | **Bug L1:** `YAML::PP::Legacy` compat API |
+| t/30.legacy.t | PASS | ok | — (fixed via scalar-context load_string) |
 | t/31.schema.t | FAIL | 46/61 | **Bug B3:** YAML1.1 schema (`yes`/`no`/`on`/`off` booleans, base8/base16 ints); **Bug S1:** `!!float` round-trip dump |
-| t/32.cyclic-refs.t | FAIL | 1/7 | **Bug C1:** dump-side cyclic detection (load side fixed) |
+| t/32.cyclic-refs.t | PASS | ok | — (fixed, DAG refs + invalid-option) |
 | t/34.emit-scalar-styles.t | FAIL | 1/1 | **Bug E2:** `!!null` tag not constructible, scalar-style selection on dump |
 | t/35.highlight.t | PASS | ok | — |
 | t/36.debug.t | PASS | ok | — |
@@ -79,12 +80,11 @@ completion, so more *latent* failures surface.
 | t/54.glob.t | FAIL | 1/1 | **Bug G1:** typeglob dump |
 | t/55.flow.t | PASS | ok | — |
 | t/56.force-flow.t | PASS | ok | — |
-| t/57.dup-keys.t | FAIL | 2/3 | **Bug DK1:** `duplicate_keys` option behavior |
+| t/57.dup-keys.t | PASS | ok | — (fixed, rewritten duplicate-key error) |
 
 ## Recently Fixed (this branch)
 
-Commit `e153feaf7` — *fix(YAML::PP): survive invalid !!int/!!float,
-handle !!set/!!binary, align cyclic-ref message*
+**Commit 1** — *fix(YAML::PP): survive invalid !!int/!!float, handle !!set/!!binary, align cyclic-ref message*
 
 1. **NumberFormatException containment.** `snakeyaml-engine` wraps
    `NumberFormatException` thrown by its Int/Float resolvers inside a
@@ -106,6 +106,28 @@ handle !!set/!!binary, align cyclic-ref message*
    options (`empty=lala`) raise `"Invalid option: …"`. Non-key=value
    list entries are accepted for back-compat with existing tests
    (`schema => ['JSON','Perl']`).
+
+**Commit 2** — *fix(YAML::PP): filehandle I/O, scalar-context load, DAG refs, dup-key msg*
+
+6. **Filehandle input/output** (`t/19.file.t`): the Perl wrapper
+   `YAML::PP.pm` now detects GLOB/IO::Handle arguments to
+   `load_file`/`LoadFile`/`dump_file`/`DumpFile` and slurps or prints
+   via the filehandle; `DumpFile(path)` opens the file itself so it
+   can produce the expected `"Could not open …"` error message.
+7. **`load_string` scalar context**: the wrapper now returns only
+   the first document in scalar context (matches CPAN YAML::PP
+   contract); list context still returns all documents.
+8. **DAG reference handling** (`t/32.cyclic-refs.t`):
+   `convertYamlToRuntimeScalar` now uses separate `seen` (current
+   traversal stack) and `cache` (finished containers) sets. Shared
+   references (like an anchor that's redefined and then aliased to a
+   sibling subtree) are reused rather than misidentified as cycles.
+9. **Duplicate-key error** (`t/57.dup-keys.t`): SnakeYAML's
+   `found duplicate key X` is rewritten to include
+   `Duplicate key 'X'` so the test's regex matches.
+10. **Invalid `cyclic_refs` option** (`t/32.cyclic-refs.t`):
+    `cyclic_refs => 'nonsense'` now dies with `Invalid value for
+    cyclic_refs: '…'` instead of silently defaulting to `fatal`.
 
 ## Outstanding Bugs / Plan
 
