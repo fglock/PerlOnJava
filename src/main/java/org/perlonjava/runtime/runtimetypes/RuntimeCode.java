@@ -207,12 +207,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         argsStack.get().push(args);
         // Also push a shallow snapshot so @DB::args stays intact after shift/@_
         // modifications inside the callee. See originalArgsStack javadoc.
-        RuntimeArray snapshot = new RuntimeArray();
-        if (args != null) {
+        //
+        // The snapshot only matters when caller() is invoked from package DB
+        // (Carp-style stack traces, debugger). For the common case of subs
+        // that neither shift @_ nor have a caller-from-DB on the stack, this
+        // allocation was pure overhead. Empty-args fast path + shared empty
+        // snapshot cuts the per-sub-call cost significantly for life_bitpacked
+        // and similar tight-loop workloads.
+        RuntimeArray snapshot;
+        if (args == null || args.elements.isEmpty()) {
+            snapshot = EMPTY_ARGS_SNAPSHOT;
+        } else {
+            snapshot = new RuntimeArray();
             snapshot.elements = new java.util.ArrayList<>(args.elements);
         }
         originalArgsStack.get().push(snapshot);
     }
+
+    // Singleton empty-args snapshot for pushArgs. Safe to share because
+    // originalArgsStack readers only use .getList() / iteration; they never
+    // mutate the snapshot itself. This avoids a per-empty-call allocation of
+    // a RuntimeArray and an ArrayList wrapper.
+    private static final RuntimeArray EMPTY_ARGS_SNAPSHOT = new RuntimeArray();
 
     /**
      * Pop @_ from the args stack when exiting a subroutine.
@@ -317,6 +333,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String sourcePackage = null;
     // Flag to indicate this is a symbolic reference created by \&{string} that should always be "defined"
     public boolean isSymbolicReference = false;
+    // Cached warning bits string for JVM-compiled code. getWarningBitsForCode
+    // resolves this from the methodHandle's declaring class name via a
+    // HashMap lookup. The result is stable for the lifetime of the RuntimeCode
+    // (the declaring class never changes post-compile), so compute it once
+    // lazily. null-cached-as-sentinel: WARNING_BITS_NOT_COMPUTED means
+    // "not yet cached"; null result gets stored as
+    // WARNING_BITS_EXPLICITLY_NULL.
+    private static final String WARNING_BITS_NOT_COMPUTED = "<uninit>";
+    private String cachedWarningBits = WARNING_BITS_NOT_COMPUTED;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
     // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
@@ -2595,22 +2620,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpCode) {
             return interpCode.warningBitsString;
         }
-        
-        // For JVM-compiled code, look up by class name in the registry
-        // The methodHandle's class is the generated class that has WARNING_BITS field
+
+        // JVM-compiled code: cache the lookup result. The declaring class of
+        // the methodHandle is stable post-compile, so one HashMap lookup is
+        // all we ever need per RuntimeCode instance. Previously this ran on
+        // every sub invocation — a hot-path overhead for scripts with many
+        // small subs (life_bitpacked, method-chain-heavy code).
+        String cached = code.cachedWarningBits;
+        if (cached != WARNING_BITS_NOT_COMPUTED) {
+            return cached;
+        }
         if (code.methodHandle != null) {
-            // Get the declaring class of the method handle
             try {
-                // The type contains the declaring class as the first parameter type for instance methods
-                // For our generated apply methods, we use the class that was loaded
                 String className = code.methodHandle.type().parameterType(0).getName();
-                return WarningBitsRegistry.get(className);
+                String result = WarningBitsRegistry.get(className);
+                code.cachedWarningBits = result;
+                return result;
             } catch (Exception e) {
-                // If we can't get the class name, fall back to null
+                code.cachedWarningBits = null;
                 return null;
             }
         }
-        
+        code.cachedWarningBits = null;
         return null;
     }
 
