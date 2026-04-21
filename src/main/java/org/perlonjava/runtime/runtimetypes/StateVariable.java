@@ -117,10 +117,19 @@ public class StateVariable {
             // Retrieve variable in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeScalar variable = code.stateVariable.get(beginVar);
-            if (variable == null) {
-                variable = new RuntimeScalar();
-                code.stateVariable.put(beginVar, variable);
+            if (variable != null) {
+                return variable;
             }
+            // Fallback: the state variable may have been declared in an
+            // enclosing scope outside any sub (then stored globally with the
+            // same beginVar key). Check the global storage before allocating
+            // a fresh per-sub entry so that a state var shared between the
+            // enclosing scope and an inner sub refers to the same storage.
+            if (GlobalVariable.existsGlobalVariable(beginVar)) {
+                return GlobalVariable.getGlobalVariable(beginVar);
+            }
+            variable = new RuntimeScalar();
+            code.stateVariable.put(beginVar, variable);
             return variable;
         }
     }
@@ -142,10 +151,16 @@ public class StateVariable {
             // Retrieve array in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeArray variable = code.stateArray.get(beginVar);
-            if (variable == null) {
-                variable = new RuntimeArray();
-                code.stateArray.put(beginVar, variable);
+            if (variable != null) {
+                return variable;
             }
+            // Fallback: the state variable may have been declared in an
+            // enclosing scope outside any sub (stored globally).
+            if (GlobalVariable.existsGlobalArray(beginVar)) {
+                return GlobalVariable.getGlobalArray(beginVar);
+            }
+            variable = new RuntimeArray();
+            code.stateArray.put(beginVar, variable);
             return variable;
         }
     }
@@ -167,10 +182,16 @@ public class StateVariable {
             // Retrieve hash in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeHash variable = code.stateHash.get(beginVar);
-            if (variable == null) {
-                variable = new RuntimeHash();
-                code.stateHash.put(beginVar, variable);
+            if (variable != null) {
+                return variable;
             }
+            // Fallback: the state variable may have been declared in an
+            // enclosing scope outside any sub (stored globally).
+            if (GlobalVariable.existsGlobalHash(beginVar)) {
+                return GlobalVariable.getGlobalHash(beginVar);
+            }
+            variable = new RuntimeHash();
+            code.stateHash.put(beginVar, variable);
             return variable;
         }
     }
