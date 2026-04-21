@@ -1157,9 +1157,19 @@ public class SubroutineParser {
                             entry.perlPackage());
                 } else {
                     OperatorNode ast = entry.ast();
-                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
-                            ast,
-                            k -> EmitterMethodCreator.classCounter++);
+                    // For state variables, the persistent-variable id is already
+                    // assigned (see OperatorParser "state" handling). Reuse it so
+                    // that the storage key here matches the key used by the state
+                    // initializer / retrieveStateScalar (which also use ast.id).
+                    int beginId;
+                    if ("state".equals(entry.decl()) && ast != null && ast.id != 0) {
+                        beginId = ast.id;
+                        RuntimeCode.evalBeginIds.putIfAbsent(ast, beginId);
+                    } else {
+                        beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                                ast,
+                                k -> EmitterMethodCreator.classCounter++);
+                    }
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),
                             PersistentVariable.beginPackage(beginId));
