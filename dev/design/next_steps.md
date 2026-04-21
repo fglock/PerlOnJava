@@ -4,10 +4,13 @@
 **Supersedes:** `dev/design/archive/{phase_j_performance_plan, refcount_alignment_plan, refcount_alignment_52leaks_plan, refcount_alignment_progress, pr526_merge_validation}.md`
 **Entry state:** `feature/refcount-perf-combined` (PR #526, commit `c06a554ac`) — master merged + perf stack (Phase-J + walker hardening + refcount) landed. All unit tests pass except one pre-existing failure. DBIx::Class, Template, Moo, Date::Calc, Math::Base::Convert, and Memoize all pass at expected levels.
 
-> ⚠️ **Known shipped regression:** `life_bitpacked` runs at ~53% of
-> pre-merge speed (6.6 vs 12.5 Mcells/s). Correctness was prioritised
-> over perf to unblock the merge. **See §0 — recovering this is the
-> top priority after PR #526 lands.**
+> ⚠️ **Known shipped regressions (perf).** Several `dev/bench/`
+> benchmarks run slower than system `perl` — worst is
+> `benchmark_refcount_anon` at **3.94× perl** and
+> `examples/life_bitpacked.pl` at **3.15× perl** (regressed from
+> ~1.66× pre-merge). Correctness was prioritised for the merge.
+> **See §0 — achieving parity with system perl is the top priority
+> after PR #526 lands.**
 
 ## Why this doc exists
 
@@ -25,138 +28,181 @@ This doc collects the **concrete next steps** surfaced during that work, priorit
 
 ---
 
-## 0. TOP PRIORITY — `life_bitpacked` performance regression [L, critical]
+## 0. TOP PRIORITY — performance: parity with system Perl [L, critical]
 
-**Status.** Open. We are knowingly shipping PR #526 with this
-regression because correctness beats performance, but it MUST be
-recovered before the next perf claim can be made publicly.
+**Goal.** Every benchmark in `dev/bench/` should run at **≤ 1.0× the
+wallclock time of system `perl`** (i.e. PerlOnJava at least as fast
+as CPython… er, as `perl`). We're currently below parity on several
+workloads, and the `life_bitpacked` example regressed sharply after
+the master merge.
+
+**Current measurements (PR #526 tip, 2026-04-21, system perl
+5.42.0).**
+
+| Benchmark | `jperl` | `perl` | ratio (jperl / perl) | parity? |
+|---|---:|---:|---:|---|
+| `benchmark_lexical` | 4.37 s | 10.64 s | **0.41×** | ✅ 2.4× faster |
+| `benchmark_string`  | 4.29 s | 7.04 s  | **0.61×** | ✅ 1.6× faster |
+| `benchmark_closure` | 8.62 s | 7.99 s  | 1.08×     | ≈ parity |
+| `benchmark_method`  | 2.61 s | 1.50 s  | 1.73×     | ❌ 1.7× slower |
+| `benchmark_refcount_anon` | 1.84 s | 0.47 s | **3.94×** | ❌ **worst — 4× slower** |
+| `examples/life_bitpacked.pl` | 6.6 Mcells/s | 20.8 Mcells/s | **3.15×** | ❌ 3× slower (regressed from 12.5 Mcells/s pre-merge) |
+
+Measured with `./jperl … -r none -g 500` for Life and the raw
+benchmark scripts otherwise. See `dev/bench/run_baseline.sh` for the
+harness (`COMPARE=perl dev/bench/run_baseline.sh` was intended to
+emit side-by-side results; currently the script only records `jperl`
+times, so **fixing the harness to emit `perl` times too is the first
+task**).
+
+**Status.** We shipped PR #526 with these numbers knowingly — the
+merge prioritised correctness. Recovering them (especially the
+`life_bitpacked` regression and `refcount_anon`) is the top priority
+after PR #526 lands.
+
+### 0.1 Fix the bench harness first [S]
+
+- Implement the `COMPARE=perl` mode in `dev/bench/run_baseline.sh`
+  so each baseline JSON contains both jperl and system-perl wallclock
+  times plus the ratio. Make the side-by-side table the canonical
+  output so regressions are obvious at review time.
+- Add a baseline for system perl that doesn't change as jperl
+  evolves (record once per major perl version); keep in
+  `dev/bench/results/baseline-perl-<version>.json`.
+- Add `life_bitpacked` (with `-r none -g 500`) to the baseline script
+  so the regression we just flagged is tracked automatically.
+
+### 0.2 life_bitpacked regression (cumulative across master's 143 commits) [L]
 
 **Numbers.**
 
-| State | cell updates / s |
-|---|---|
-| Before master merge (walker-hardening-j3 tip `660aa9e68`) | **~12.5 Mcells/s** (target achieved in PR #523) |
-| Current (PR #526 head) | **~6.6 Mcells/s** |
-| Regression | **~47% slower / running at ~53% of prior perf** |
+| State | Mcells/s | vs perl |
+|---|---:|---:|
+| Pre-master-merge (walker-hardening-j3 tip `660aa9e68`) | ~12.5 | 1.66× slower |
+| Current (PR #526 head) | ~6.6 | 3.15× slower |
+| System perl | ~20.8 | baseline |
 
-Measured with `./jperl examples/life_bitpacked.pl -r none -g 500`.
+**Why bisect doesn't work.** The regression is the cumulative cost of
+~143 master commits. No single commit on PR #526's own history is
+large enough to attribute the delta — `git bisect` on PR-#526 commits
+gives no signal. Rely on profiling and analysis instead (see 0.4).
 
-**Why this matters.** `life_bitpacked` was the workload that drove
-all the walker-gating wins in #523 (`ScalarRefRegistry.registerRef`
-gate, `MyVarCleanupStack.liveCounts` gate, cached `getWarningBitsForCode`,
-shared `EMPTY_ARGS_SNAPSHOT`). A regression here signals the merge
-re-introduced something that defeats those gates, or master added
-a new hot path that we haven't yet gated / cached.
+### 0.3 benchmark_refcount_anon — the worst gap [L]
 
-**Hypotheses to investigate (in order).**
+4× slower than system perl — this is anon-subroutine creation +
+refcount traffic, which our walker and cleanup-stack machinery
+was supposed to make cheap. Pre-merge HEAD was comparable, so
+some of the same master hot-paths hitting `life_bitpacked` likely
+also hit this. Fix together with 0.2.
 
-1. **`pristineArgsStack` adds a per-call ArrayList clone that our
-   `EMPTY_ARGS_SNAPSHOT` fast path only skips for zero-arg calls.**
-   `life_bitpacked` almost certainly calls subs with 1–3 args in
-   its hot loop. For those, master's `new ArrayList<>(args.elements)`
-   runs on every call. Before the merge, HEAD had the same overhead
-   via `originalArgsStack` (with the same fast path), so this alone
-   shouldn't explain the delta — but worth confirming with a profile.
+### 0.4 benchmark_method — 1.7× slower [M]
 
-2. **`hasArgsStack` push/pop** adds two more ThreadLocal.get() calls
-   per sub invocation. Not gated behind any condition. Per-call
-   overhead against a 5000-generation inner loop adds up.
+Method dispatch slower than perl despite the 4096-entry inline
+method cache. Likely cache miss rate is high on this benchmark,
+or the cache probe itself costs more than a bare hash lookup
+compiled by perl. Lower priority than 0.2 / 0.3 but still should
+reach parity.
 
-3. **`inTailCallTrampoline` counter** is now bumped/decremented in
-   the apply() iterative path even when no tail call occurs, via
-   the `tailCallReentry` flag. The flag is initialised false so the
-   bump should never fire in the common case — but double-check
-   the generated bytecode doesn't load/store the ThreadLocal anyway.
+### 0.5 Hypotheses for 0.2 / 0.3
 
-4. **Deep recursion warning tracking** (`callDepth++` in `enterCall`,
-   `callDepth--` in `exitCall`) runs on every sub call post-merge.
-   Pre-merge HEAD didn't have this. This is a write to a per-instance
-   int plus a comparison — cheap individually but in a tight Life
-   loop that calls `count_live_neighbors` millions of times, it
-   compounds.
+Ordered by expected impact on tight-loop sub-call workloads:
 
-5. **Warning bits push/pop** — master's caller()-support machinery
-   pushes `WarningBitsRegistry.pushCallerBits`, `pushCallerHints`,
-   `HintHashRegistry.pushCallerHintHash` on every sub entry. Our
-   pre-merge HEAD may have fewer of these or had them cached.
-   Verify with a diff of the apply() prologue at `660aa9e68` vs
-   current.
+1. **`pristineArgsStack` allocates per call.** The
+   `EMPTY_ARGS_SNAPSHOT` fast path only covers zero-arg calls; any
+   sub called with args allocates a fresh `ArrayList<RuntimeScalar>`
+   even when nobody is in `package DB` to read it.
+2. **`hasArgsStack` push/pop** — two ungated `ThreadLocal.get()` per
+   sub invocation; not gated by "is anyone going to read this?".
+3. **Deep-recursion counter** (`callDepth++`/`--`) runs on every
+   sub call, with an extra compare and (on crossing) a warn-emit
+   check. Not gated.
+4. **Warning bits / hint hash push/pop** — master pushes
+   `WarningBitsRegistry.pushCallerBits`, `pushCallerHints`,
+   `HintHashRegistry.pushCallerHintHash` on every sub entry. Per-
+   call `ThreadLocal.get()` traffic compounds heavily.
+5. **`inTailCallTrampoline` / `tailCallReentry`** in the apply()
+   iterative path — should be a no-op except when `goto &sub` fires,
+   but worth confirming the generated bytecode doesn't force-load
+   the ThreadLocal on the common path.
 
-**Action plan.**
+### 0.6 Action plan (profiling, not bisect)
 
-1. **Profile both baselines and diff.** The regression is spread
-   across master's 143 commits — there is no single commit on
-   PR #526's own history to bisect. Instead, record a profile at
-   pre-merge HEAD `660aa9e68` and at PR #526 tip, then diff.
+1. **Fix the bench harness** (0.1) so every subsequent change is
+   easy to evaluate against both `jperl` and `perl`.
 
-   ```bash
-   # Worktree for pre-merge baseline
-   git worktree add /tmp/bench-pre 660aa9e68
-   (cd /tmp/bench-pre && make dev)
+2. **Profile both baselines and diff.** Compare pre-merge
+   `660aa9e68` vs PR #526 tip on `life_bitpacked` and
+   `benchmark_refcount_anon`:
 
-   # Attach async-profiler to each run (5s warmup + 30s sample)
-   async-profiler -d 30 -f /tmp/life_pre.html -- \
-     /tmp/bench-pre/jperl examples/life_bitpacked.pl -r none -g 500
-   async-profiler -d 30 -f /tmp/life_post.html -- \
-     ./jperl examples/life_bitpacked.pl -r none -g 500
+    ```bash
+    git worktree add /tmp/bench-pre 660aa9e68
+    (cd /tmp/bench-pre && make dev)
 
-   # Diff the flame graphs — anything in post that's > 2% and not
-   # in pre is a candidate.
-   ```
+    async-profiler -d 30 -f /tmp/life_pre.html -- \
+      /tmp/bench-pre/jperl examples/life_bitpacked.pl -r none -g 500
+    async-profiler -d 30 -f /tmp/life_post.html -- \
+      ./jperl examples/life_bitpacked.pl -r none -g 500
+    # Diff flame graphs — anything in post > 2% and not in pre is a
+    # candidate.
+    ```
 
-   Alternatively `-XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining`
-   or JFR (`-XX:StartFlightRecording=duration=30s,filename=…`) +
-   JDK Mission Control.
+   Alternatively JFR (`-XX:StartFlightRecording=duration=30s,filename=…`)
+   + JDK Mission Control.
 
-2. **Static diff of the apply() prologue.** Much of the hot path is
-   in `RuntimeCode.apply()` — the entry sequence before the actual
-   sub body runs. Diff that region at `660aa9e68` vs current and
-   count the number of:
-   - `ThreadLocal.get()` sites
-   - allocations per call (ArrayList, RuntimeScalar, etc.)
-   - static-method dispatch sites (push / pop of call-state)
+3. **Static diff of the `RuntimeCode.apply()` prologue.** Compare
+   the entry sequence before the sub body runs at `660aa9e68` vs
+   current. Count the number of:
+    - `ThreadLocal.get()` sites
+    - allocations per call (ArrayList, RuntimeScalar, etc.)
+    - static-method dispatches (push / pop of call state)
 
-   Every extra item there multiplies against `life_bitpacked`'s
-   millions of sub calls per run.
+   Every extra item there multiplies against millions of sub calls
+   per bench run.
 
-3. **Count-based analysis.** Add temporary counters (gated on an
-   env var) to each suspected hot site:
-   ```java
-   if (JPERL_HOT_COUNTERS) hotCounter.incrementAndGet();
-   ```
-   Run the workload once with counters on, dump the totals. Any
-   counter that fires >> once per outer generation is a candidate
-   for gating.
+4. **Count-based analysis.** Add temporary counters (gated on an
+   env var) at suspected hot sites:
 
-4. **Per-hypothesis fixes.**
-   - For (1): extend the `EMPTY_ARGS_SNAPSHOT` idea — don't
-     snapshot unless a caller-from-DB is currently on the stack
-     (add a gate analogous to `weakRefsExist`).
-   - For (2): introduce `hasArgsStackNeeded` static flag, only
-     flipped on when something that would observe it is on the
-     stack. Same gate pattern as (1).
-   - For (3): verify the generated bytecode for the
-     `if (tailCallReentry)` check doesn't force-load the
-     ThreadLocal; if it does, reorder the check so the ThreadLocal
-     is only read inside the branch that actually bumps it.
-   - For (4): gate `callDepth++/--` behind a per-instance
-     `trackRecursion` bool set only when the sub body actually uses
-     `warn` / has `no warnings 'recursion'` / is deep enough.
-   - For (5): consider caching caller()-metadata lazily — only
-     compute and push when caller() is actually invoked, otherwise
-     leave the stacks alone.
+    ```java
+    if (JPERL_HOT_COUNTERS) hotCounter.incrementAndGet();
+    ```
 
-5. **Iterate.** After each gate/cache lands, re-measure. Don't
-   bundle multiple hypotheses into one commit — each should be
-   attributable so regressions can be caught.
+   Run the workload once with counters on, dump totals. Any counter
+   that fires many times per outer generation is a candidate for
+   gating.
 
-**Acceptance.** `./jperl examples/life_bitpacked.pl -r none -g 500`
-back to **≥ 12 Mcells/s** with `make` still green and DBIC 52leaks
-+ txn_scope_guard still passing.
+5. **Per-hypothesis gating fixes.** Use the `weakRefsExist` pattern
+   from PR #523 (`2fb0bd129`, `a7165f711`) — a static flag that stays
+   false in the common case and skips the expensive path.
+    - (1) `pristineArgsStack`: gate on "is anyone in `package DB`
+      and calling `caller()` right now?" (or on whether `@DB::args`
+      has ever been read).
+    - (2) `hasArgsStack`: gate on "is anyone asking for caller()[4]
+      right now?".
+    - (3) deep-recursion: gate `callDepth++/--` behind a per-instance
+      `trackRecursion` bool flipped on only when the sub body
+      references `warn 'recursion'` or crosses a configurable depth.
+    - (4) caller hints / warning bits: defer push until `caller()`
+      is actually invoked, rather than eagerly per call.
+    - (5) tail-call trampoline: verify the generated bytecode; if
+      the `if (tailCallReentry)` check forces a ThreadLocal load,
+      reorder so the load only happens inside the branch that
+      bumps.
 
-**Do not** accept a partial recovery and move on — this is the
-headline perf number of the PR-#523 work and we should not lose
-it silently.
+6. **Iterate per change.** Don't bundle hypotheses; each gate/cache
+   should be one commit so regressions are attributable.
+
+### 0.7 Acceptance
+
+- `./jperl examples/life_bitpacked.pl -r none -g 500` back to
+  **≥ 12 Mcells/s** (recovers the PR #523 win).
+- `benchmark_refcount_anon` ratio ≤ **1.5× perl** (from 3.94×).
+- `benchmark_method` ratio ≤ **1.2× perl** (from 1.73×).
+- All other benchmarks maintain or improve their current ratios.
+- `make` still green, DBIC 52leaks + txn_scope_guard + `make
+  test-bundled-modules` still passing.
+
+Once all green, the stretch goal is **every benchmark ≤ 1.0× perl**
+(full parity). We're already there on lexical / string / closure.
 
 ---
 
@@ -313,14 +359,18 @@ is the right tradeoff across typical OO workloads.
 | Track | State |
 |---|---|
 | PR #526 merge | Open; clean test suite; ready for review |
-| **§0 life_bitpacked perf recovery** | **OPEN — top priority after merge** |
+| **§0 perf parity with system perl** | **OPEN — top priority after merge; worst: refcount_anon 3.94×, life_bitpacked 3.15×** |
+| 0.1 bench harness COMPARE=perl mode | Pending (prerequisite for §0) |
+| 0.2 life_bitpacked regression | Pending |
+| 0.3 refcount_anon 4× gap | Pending |
+| 0.4 method 1.7× gap | Pending |
 | 1.1 numeric-overload throw | Pending |
 | 1.2 goto + next::can | Pending |
 | 1.3 destroy_eval_die LIFO | Pending (pre-existing) |
 | 1.4 MRO::Compat redefine warn | Pending |
 | 2.1 Class::XSAccessor PP completion | Partial (API covered; test-level gaps remain) |
 | 2.2 Text-CSV runner flake | Pending |
-| 3.x perf next-tier | Blocked on §0 — don't add new perf work until §0 is recovered |
+| 3.x perf next-tier | Blocked on §0 — don't add new perf work until parity is reached |
 
 ### Completed / archived
 
@@ -331,13 +381,17 @@ is the right tradeoff across typical OO workloads.
 
 ### Next action
 
-**§0 first.** The regression is cumulative across master's 143
-commits so `git bisect` on PR #526's own history gives no signal.
-Proceed with profiling + static-diff + counter instrumentation
-(see §0 action plan), apply `weakRefsExist`-style gating to each
-new hot path that shows up, and re-measure per change. Only after
-§0 recovers to ≥ 12 Mcells/s should §1 (correctness) or §3 (new
-perf work) be started; §3 is explicitly blocked.
+**§0 first — specifically §0.1 (fix the bench harness).** Without
+side-by-side `jperl` vs `perl` numbers written to
+`dev/bench/results/<sha>.json`, every subsequent perf change will
+be hard to evaluate. Once that lands, follow the profiling plan
+in §0.6 to tackle §0.2 (life_bitpacked) and §0.3 (refcount_anon)
+together — they likely share root causes in the per-sub-call
+machinery.
+
+Only after parity is reached (or we hit the acceptance bar in §0.7)
+should §1 (correctness) or §3 (new perf work) be started; §3 is
+explicitly blocked.
 
 If a human reviewer wants to pick a small correctness item while
 §0 is in flight, 1.1 (numeric-overload fallback throw) is the
