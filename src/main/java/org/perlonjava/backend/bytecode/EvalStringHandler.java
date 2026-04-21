@@ -283,6 +283,11 @@ public class EvalStringHandler {
 
             // Step 4: Compile AST to interpreter bytecode with adjusted variable registry.
             // The compile-time package is already propagated via ctx.symbolTable.
+            // NOTE: We do NOT propagate 'our' decls from the seeded symbol table here,
+            // because nested evals (this code path) inject captured outer `my` variables
+            // as `our` in a synthetic seed package purely for parser purposes. Those
+            // captured-lexical variables must still live in registers at runtime, so
+            // we keep the default "my" decl in the BytecodeCompiler.
             BytecodeCompiler compiler = new BytecodeCompiler(
                     evalFileName,
                     sourceLine,

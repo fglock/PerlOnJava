@@ -1366,6 +1366,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                 }
 
+                // Build a parallel map of declaration kinds so the BytecodeCompiler can distinguish
+                // 'our' (package) variables from true lexicals. 'our' variables must resolve via
+                // GlobalVariable.getGlobalVariable() on each access so that `local $OurVar` in the
+                // caller is visible inside the eval. Without this hint, captured 'our' vars are
+                // treated as lexical 'my' vars bound to the scalar captured at eval-entry time.
+                Map<String, String> adjustedDecls = new HashMap<>();
+                if (ctx.capturedEnv != null) {
+                    for (int i = 3; i < ctx.capturedEnv.length; i++) {
+                        String varName = ctx.capturedEnv[i];
+                        if (varName == null) continue;
+                        SymbolTable.SymbolEntry entry = capturedSymbolTable.getSymbolEntry(varName);
+                        if (entry != null && !entry.decl().isEmpty()) {
+                            adjustedDecls.put(varName, entry.decl());
+                        }
+                    }
+                }
+
                 // Compile to InterpretedCode with variable registry.
                 //
                 // setCompilePackage() is safe here (unlike EvalStringHandler) because:
@@ -1381,7 +1398,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         evalCompilerOptions.fileName,
                         1,
                         evalCtx.errorUtil,
-                        adjustedRegistry);
+                        adjustedRegistry,
+                        adjustedDecls);
                 compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
                 interpretedCode = compiler.compile(ast, evalCtx);
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +

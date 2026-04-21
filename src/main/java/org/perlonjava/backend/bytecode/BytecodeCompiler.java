@@ -141,6 +141,26 @@ public class BytecodeCompiler implements Visitor {
      */
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
                             Map<String, Integer> parentRegistry) {
+        this(sourceName, sourceLine, errorUtil, parentRegistry, null);
+    }
+
+    /**
+     * Constructor for eval STRING with parent scope variable registry and declaration kinds.
+     * Initializes symbolTable with variables from parent scope, preserving 'our' vs 'my' decls
+     * so that captured 'our' (package) variables are still resolved via GlobalVariable at
+     * runtime instead of being bound to the scalar captured at eval-entry time (which would
+     * make `local $OurVar` in the caller invisible to the eval body).
+     *
+     * @param sourceName     Source name for error messages
+     * @param sourceLine     Source line for error messages
+     * @param errorUtil      Error message utility
+     * @param parentRegistry Variable registry from parent scope (for eval STRING)
+     * @param parentDecls    Optional map of varName -> decl kind ("my"/"our"/"state"). Any name
+     *                       not present defaults to "my".
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                            Map<String, Integer> parentRegistry,
+                            Map<String, String> parentDecls) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -153,12 +173,17 @@ public class BytecodeCompiler implements Visitor {
         this.isEvalString = true;
 
         if (parentRegistry != null) {
-            // Add parent scope variables to symbolTable (for eval STRING variable capture)
+            // Add parent scope variables to symbolTable (for eval STRING variable capture).
+            // Preserve the outer declaration kind: 'our' stays 'our' so the variable is
+            // resolved through GlobalVariable (visible to caller-side local), while 'my'/'state'
+            // use the captured register slot.
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
                 String varName = entry.getKey();
                 int regIndex = entry.getValue();
                 if (regIndex >= 3) {
-                    symbolTable.addVariableWithIndex(varName, regIndex, "my");
+                    String decl = parentDecls != null ? parentDecls.get(varName) : null;
+                    if (decl == null || decl.isEmpty()) decl = "my";
+                    symbolTable.addVariableWithIndex(varName, regIndex, decl);
                 }
             }
 
@@ -1385,9 +1410,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(arrayReg);
             emit(nameIdx);
             emit(currentSubroutineBeginId);
-        } else if (hasVariable(arrayVarName)) {
+        } else if (hasVariable(arrayVarName) && !isOurVariable(arrayVarName)) {
             arrayReg = getVariableRegister(arrayVarName);
         } else {
+            // 'our' arrays (or undeclared globals) must be fetched from the global
+            // registry on every access so callers' `local @OurArr` is visible.
             arrayReg = allocateRegister();
             String globalArrayName = NameNormalizer.normalizeVariableName(
                     varName,
@@ -1615,9 +1642,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(hashReg);
             emit(nameIdx);
             emit(currentSubroutineBeginId);
-        } else if (hasVariable(hashVarName)) {
+        } else if (hasVariable(hashVarName) && !isOurVariable(hashVarName)) {
             hashReg = getVariableRegister(hashVarName);
         } else {
+            // 'our' hashes (or undeclared globals) must be fetched from the global
+            // registry on every access so callers' `local %OurHash` is visible.
             hashReg = allocateRegister();
             String globalHashName = NameNormalizer.normalizeVariableName(
                     varName,
