@@ -46,6 +46,21 @@ public class EmitterMethodCreator implements Opcodes {
             System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
     private static final boolean SHOW_FALLBACK =
             System.getenv("JPERL_SHOW_FALLBACK") != null;
+    // Cache additional compile-time debug env vars. These were previously
+    // read with System.getenv() on every method compilation; the native
+    // lookup is ~200ns per call and added up across thousands of compiled
+    // subs during module load.
+    private static final boolean ASM_DEBUG =
+            System.getenv("JPERL_ASM_DEBUG") != null;
+    private static final String ASM_DEBUG_CLASS_FILTER =
+            System.getenv("JPERL_ASM_DEBUG_CLASS");
+    private static final String BYTECODE_SIZE_DEBUG =
+            System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+    private static final int SPILL_SLOT_COUNT;
+    static {
+        String s = System.getenv("JPERL_SPILL_SLOTS");
+        SPILL_SLOT_COUNT = (s != null) ? Integer.parseInt(s) : 16;
+    }
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
     public static int skipVariables = 3;
     // Counter for generating unique class names
@@ -350,7 +365,7 @@ public class EmitterMethodCreator implements Opcodes {
     }
 
     public static byte[] getBytecode(EmitterContext ctx, Node ast, boolean useTryCatch) {
-        boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
+        boolean asmDebug = ASM_DEBUG;
 
         try {
             return getBytecodeInternal(ctx, ast, useTryCatch, false);
@@ -363,7 +378,7 @@ public class EmitterMethodCreator implements Opcodes {
             // ASM frame computation failed - fall back to interpreter
             // This commonly happens with nested defers and complex control flow
             
-            boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+            boolean showFallback = SHOW_FALLBACK;
             if (showFallback || asmDebug) {
                 frameComputeCrash.printStackTrace();
                 try {
@@ -411,8 +426,8 @@ public class EmitterMethodCreator implements Opcodes {
         String className = ctx.javaClassInfo.javaClassName;
         String methodName = "apply";
         byte[] classData = null;
-        boolean asmDebug = System.getenv("JPERL_ASM_DEBUG") != null;
-        String asmDebugClassFilter = System.getenv("JPERL_ASM_DEBUG_CLASS");
+        boolean asmDebug = ASM_DEBUG;
+        String asmDebugClassFilter = ASM_DEBUG_CLASS_FILTER;
         boolean asmDebugClassMatches = asmDebugClassFilter == null
                 || asmDebugClassFilter.isEmpty()
                 || className.contains(asmDebugClassFilter)
@@ -605,9 +620,7 @@ public class EmitterMethodCreator implements Opcodes {
             mv.visitInsn(Opcodes.ICONST_0);
             mv.visitVarInsn(Opcodes.ISTORE, controlFlowActionSlot);
 
-            int spillSlotCount = System.getenv("JPERL_SPILL_SLOTS") != null
-                    ? Integer.parseInt(System.getenv("JPERL_SPILL_SLOTS"))
-                    : 16;
+            int spillSlotCount = SPILL_SLOT_COUNT;
             ctx.javaClassInfo.spillSlots = new int[spillSlotCount];
             ctx.javaClassInfo.spillTop = 0;
             for (int i = 0; i < spillSlotCount; i++) {
@@ -1114,7 +1127,7 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
-            String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+            String bytecodeSizeDebug = BYTECODE_SIZE_DEBUG;
             if (bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty()) {
                 try {
                     System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);

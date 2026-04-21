@@ -111,6 +111,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean refCountOwned;
 
+    // Cache debug env vars as static final to avoid repeated
+    // native System.getenv() calls in hot paths.
+    private static final boolean PHASE_D_DBG =
+            System.getenv("JPERL_PHASE_D_DBG") != null;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -2165,7 +2170,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // check. Skips when we're in module-init to avoid clearing weak refs
         // that require/use chains still depend on.
         if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
-            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
+            if (PHASE_D_DBG) {
                 System.err.println("DBG Phase D undef-of-blessed trigger for " +
                         (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));

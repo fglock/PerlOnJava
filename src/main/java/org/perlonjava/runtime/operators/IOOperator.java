@@ -40,6 +40,11 @@ public class IOOperator {
     // File descriptor to RuntimeIO mapping for duplication support
     private static final Map<Integer, RuntimeIO> fileDescriptorMap = new ConcurrentHashMap<>();
 
+    // Cache debug flag at class-init to avoid repeated native
+    // System.getenv() calls in hot IO paths (open, close).
+    private static final boolean IO_DEBUG =
+            System.getenv("JPERL_IO_DEBUG") != null;
+
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
             // select (returns current filehandle)
@@ -526,7 +531,7 @@ public class IOOperator {
 //        open FILEHANDLE,EXPR
 //        open FILEHANDLE
 
-        boolean ioDebug = System.getenv("JPERL_IO_DEBUG") != null;
+        boolean ioDebug = IO_DEBUG;
 
         // Get the filehandle - this should be an lvalue RuntimeScalar
         // For array/hash elements like $fh0[0], this is the actual lvalue that can be modified
@@ -2800,7 +2805,7 @@ public class IOOperator {
             duplicate.registerExternalFd(dupFd);
         }
 
-        if (System.getenv("JPERL_IO_DEBUG") != null) {
+        if (IO_DEBUG) {
             String origFileno;
             try {
                 origFileno = original.ioHandle.fileno().toString();

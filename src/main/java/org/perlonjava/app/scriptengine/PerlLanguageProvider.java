@@ -52,6 +52,11 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.*;
  */
 public class PerlLanguageProvider {
 
+    // Cache env var at class-init to avoid repeated native System.getenv()
+    // calls from the compilation fallback hot path.
+    private static final boolean SHOW_FALLBACK =
+            System.getenv("JPERL_SHOW_FALLBACK") != null;
+
     private static boolean globalInitialized = false;
 
     public static void resetAll() {
@@ -538,7 +543,7 @@ public class PerlLanguageProvider {
                 // getBytecode() already compiled interpreter code as fallback
                 // when ASM frame computation failed (e.g., high fan-in to shared labels).
                 // Use the pre-compiled interpreter code directly.
-                boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+                boolean showFallback = SHOW_FALLBACK;
                 if (showFallback) {
                     System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
                 }
@@ -548,7 +553,7 @@ public class PerlLanguageProvider {
                 // Catch Throwable (not just RuntimeException) because ClassFormatError
                 // ("Too many arguments in method signature") extends Error, not Exception
                 if (needsInterpreterFallback(e)) {
-                    boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+                    boolean showFallback = SHOW_FALLBACK;
                     if (showFallback) {
                         System.err.println("Note: Method too large, using interpreter backend.");
                     }

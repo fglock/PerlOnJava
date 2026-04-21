@@ -33,6 +33,11 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
 
 public class SubroutineParser {
 
+    // Cache env var at class-init to avoid repeated native System.getenv()
+    // calls from the subroutine-parse hot path.
+    private static final boolean SHOW_FALLBACK =
+            System.getenv("JPERL_SHOW_FALLBACK") != null;
+
     // Create a static semaphore with 1 permit
     private static final Semaphore semaphore = new Semaphore(1);
 
@@ -1322,7 +1327,7 @@ public class SubroutineParser {
                 // but the verifier rejected it at link time due to StackMapTable inconsistencies
                 // (e.g., local variable slot type conflicts in complex methods).
                 // Fall back to interpreter for this subroutine.
-                boolean showFallback = System.getenv("JPERL_SHOW_FALLBACK") != null;
+                boolean showFallback = SHOW_FALLBACK;
                 if (showFallback) {
                     System.err.println("Note: JVM VerifyError during subroutine instantiation, recompiling with interpreter.");
                 }

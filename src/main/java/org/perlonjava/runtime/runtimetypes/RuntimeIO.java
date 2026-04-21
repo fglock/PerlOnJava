@@ -202,6 +202,11 @@ public class RuntimeIO extends RuntimeScalar {
     private static final ReferenceQueue<RuntimeGlob> globGCQueue = new ReferenceQueue<>();
     private static final ConcurrentHashMap<PhantomReference<RuntimeGlob>, RuntimeIO> phantomToIO = new ConcurrentHashMap<>();
 
+    // Cache debug flag at class-init to avoid repeated native
+    // System.getenv() calls in the hot getRuntimeIO / close paths.
+    private static final boolean IO_DEBUG =
+            System.getenv("JPERL_IO_DEBUG") != null;
+
     /**
      * Registers an anonymous RuntimeGlob for GC-based fd recycling.
      * When the glob becomes unreachable (all variables referencing it are
@@ -1054,7 +1059,7 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public static RuntimeIO getRuntimeIO(RuntimeScalar runtimeScalar) {
         RuntimeIO fh = null;
-        boolean ioDebug = System.getenv("JPERL_IO_DEBUG") != null;
+        boolean ioDebug = IO_DEBUG;
         
         if (ioDebug) {
             System.err.println("[JPERL_IO_DEBUG] getRuntimeIO ENTRY: type=" + runtimeScalar.type +
@@ -1495,7 +1500,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         RuntimeScalar result = ioHandle.write(data);
-        if (System.getenv("JPERL_IO_DEBUG") != null) {
+        if (IO_DEBUG) {
             if (("main::STDOUT".equals(globName) || "main::STDERR".equals(globName)) &&
                     (ioHandle instanceof ClosedIOHandle || !result.getDefinedBoolean())) {
                 System.err.println("[JPERL_IO_DEBUG] write failed: glob=" + globName +
