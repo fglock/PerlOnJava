@@ -105,18 +105,26 @@ also hit this. Fix together with 0.2.
    Fixing §0.3 will unblock this test automatically. No DBIC
    feature is broken; it's a perf-ratio diagnostic.
 
-2. **`t/discard_changes_in_DESTROY.t`** intermittently times out
-   under the default `HARNESS_OPTIONS=j` parallel harness (user
-   report: 300s timeout). Standalone the test passes in ~14s, so
-   it's not infinite recursion — it's the same per-call overhead
-   (per-sub-call machinery × 8 parallel jobs × refcount churn)
-   pushing wallclock past the harness timeout. Should resolve
-   naturally when §0.2 / §0.3 close the gap.
+2. **`t/discard_changes_in_DESTROY.t`** times out under the
+   default parallel harness (user report: 300s timeout). Reproduced
+   locally with `jprove -j4` on DBIC — the batch hangs past 400s.
+   Standalone (single jperl) the test passes cleanly in ~14s, 5
+   consecutive runs, exit 0.
+
+   It's not infinite recursion — the `DESTROY → discard_changes`
+   re-entry path works correctly when run sequentially. Under
+   parallel jprove, 4+ JVMs compete for CPU/RAM and the
+   per-sub-call machinery cost is paid N× concurrently, so either
+   the test itself slows down past the harness timeout or another
+   test on the same harness slot does, starving this one. Either
+   way, resolving §0.2/§0.3 (and thereby shrinking the per-call
+   tax) will close this.
 
    *Safety check:* the test deliberately installs a DESTROY that
    re-enters DBIC via `discard_changes` and expects no infinite
-   recursion. Confirmed locally that it completes cleanly (exit 0,
-   DESTROY fires once). So the failure is perf, not correctness.
+   recursion. Confirmed locally that the semantic works (exit 0,
+   DESTROY fires exactly once). So the failure is perf, not
+   correctness.
 
 ### 0.4 benchmark_method — 1.7× slower [M]
 
