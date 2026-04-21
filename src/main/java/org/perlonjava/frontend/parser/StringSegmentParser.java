@@ -8,6 +8,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.regex.CaptureNameEncoder;
+import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.UnicodeResolver;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -799,7 +800,7 @@ public abstract class StringSegmentParser {
 
                 if (captureName == null) {
                     // Encoding failed (e.g., name too long) - use fallback
-                    segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+                    segments.add(new StringNode(RegexMarkers.CODE_BLOCK, savedTokenIndex));
                 } else {
                     // Encoding succeeded - create capture group
                     StringNode captureNode = new StringNode("(?<" + captureName + ">)", savedTokenIndex);
@@ -809,9 +810,9 @@ public abstract class StringSegmentParser {
         } else {
             // Not a constant - use unimplemented marker
             if (isRecursive) {
-                segments.add(new StringNode("(??{UNIMPLEMENTED_RECURSIVE_PATTERN})", savedTokenIndex));
+                segments.add(new StringNode(RegexMarkers.RECURSIVE_PATTERN, savedTokenIndex));
             } else {
-                segments.add(new StringNode("(?{UNIMPLEMENTED_CODE_BLOCK})", savedTokenIndex));
+                segments.add(new StringNode(RegexMarkers.CODE_BLOCK, savedTokenIndex));
             }
         }
     }

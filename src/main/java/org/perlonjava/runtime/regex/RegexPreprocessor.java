@@ -1025,7 +1025,7 @@ public class RegexPreprocessor {
                 regexUnimplemented(s, offset + 3, "Sequence (?@...) not implemented");
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
-                if (s.startsWith("(?{UNIMPLEMENTED_CODE_BLOCK})", offset)) {
+                if (s.startsWith(RegexMarkers.CODE_BLOCK, offset)) {
                     regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
                 }
                 // Handle (?{ ... }) code blocks - try constant folding
