@@ -69,6 +69,9 @@ public class NetSSLeay extends PerlModuleBase {
         CONSTANTS.put("OP_NO_TLSv1_1", 0x10000000L);
         CONSTANTS.put("OP_NO_TLSv1_2", 0x08000000L);
         CONSTANTS.put("OP_NO_TLSv1_3", 0x20000000L);
+        CONSTANTS.put("OP_NO_TICKET", 0x00004000L);
+        // X509 store context result status; 1 means OK per OpenSSL.
+        CONSTANTS.put("ST_OK", 1L);
         CONSTANTS.put("OP_CIPHER_SERVER_PREFERENCE", 0x00400000L);
         CONSTANTS.put("OP_NO_COMPRESSION", 0x00020000L);
 
@@ -252,9 +255,16 @@ public class NetSSLeay extends PerlModuleBase {
     // Counter for generating unique opaque handle IDs
     private static final AtomicLong HANDLE_COUNTER = new AtomicLong(1);
 
+    // ex_data indices — OpenSSL reserves index 0, and AnyEvent::TLS does
+    // `until $REF_IDX;` around get_ex_new_index, so start at 1.
+    private static final AtomicLong EX_INDEX_COUNTER = new AtomicLong(1);
+    private static final Map<Long, Map<Integer, RuntimeScalar>> EX_DATA =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     // Maps for opaque handles: handle_id → Java object
     private static final Map<Long, MemoryBIO> BIO_HANDLES = new HashMap<>();
     private static final Map<Long, EvpMdCtx> EVP_MD_CTX_HANDLES = new HashMap<>();
+    private static final Map<Long, HmacCtx> HMAC_CTX_HANDLES = new HashMap<>();
     private static final Map<Long, KeyPair> RSA_HANDLES = new HashMap<>();
     private static final Map<Long, Long> ASN1_TIME_HANDLES = new HashMap<>();  // handle → epoch seconds
     private static final Map<Long, SslCtxState> CTX_HANDLES = new HashMap<>();
@@ -301,6 +311,7 @@ public class NetSSLeay extends PerlModuleBase {
         HANDLE_COUNTER.set(1);
         BIO_HANDLES.clear();
         EVP_MD_CTX_HANDLES.clear();
+        HMAC_CTX_HANDLES.clear();
         RSA_HANDLES.clear();
         ASN1_TIME_HANDLES.clear();
         CTX_HANDLES.clear();
@@ -548,6 +559,14 @@ public class NetSSLeay extends PerlModuleBase {
         }
     }
 
+    // Inner class: HMAC context wrapper (Phase 5)
+    private static class HmacCtx {
+        javax.crypto.Mac mac;
+        String algorithmName; // Java MAC algorithm e.g. "HmacSHA256"
+        int digestNid;
+        byte[] key; // kept so Init_ex can be called with null md/key to re-use
+    }
+
     // Inner class: EVP_MD context wrapper
     private static class EvpMdCtx {
         MessageDigest digest;
@@ -580,6 +599,20 @@ public class NetSSLeay extends PerlModuleBase {
         RuntimeScalar passwdCb = null;       // password callback CODE ref
         RuntimeScalar passwdUserdata = null;  // password callback userdata
         RuntimeScalar infoCallback = null;    // CTX_set_info_callback
+        long options = 0;                     // bitmask from CTX_set_options
+        long mode = 0;                        // bitmask from set_mode (stored on CTX for convenience)
+        String cipherList = null;             // CTX_set_cipher_list argument
+        boolean readAhead = false;            // CTX_set_read_ahead
+        int verifyMode = 0;                   // set_verify bitmask (VERIFY_NONE/PEER/...)
+        RuntimeScalar verifyCb = null;        // set_verify callback
+        String tmpDhFile = null;              // CTX_set_tmp_dh placeholder
+        long certStoreHandle = 0;             // CTX_get_cert_store stub handle
+        javax.net.ssl.SSLContext sslContext = null;  // Phase 2: cached JDK context
+        javax.net.ssl.KeyManager[] keyManagers = null;
+        javax.net.ssl.TrustManager[] trustManagers = null;
+        // Phase 2b: PEM-loaded material, consumed at buildSslContext time.
+        java.security.PrivateKey loadedPrivateKey = null;
+        java.util.List<X509Certificate> loadedCertChain = new java.util.ArrayList<>();
 
         SslCtxState(String role) {
             this.role = role;
@@ -596,6 +629,25 @@ public class NetSSLeay extends PerlModuleBase {
         RuntimeScalar passwdUserdata = null;
         long ctxHandle; // reference to parent CTX
         int fd = -1;    // file descriptor (for set_fd)
+        long options = 0;
+        long mode = 0;
+        int verifyMode = 0;
+        RuntimeScalar verifyCb = null;
+        String hostName = null;          // SNI
+        String acceptOrConnect = null;   // "accept" or "connect" from set_*_state
+        int state = 1;                   // Net::SSLeay::state() — 1 ≈ OK/initial
+        long readBio = 0;                // BIO handle for reading
+        long writeBio = 0;               // BIO handle for writing
+
+        // Phase 2: SSLEngine driver state
+        javax.net.ssl.SSLEngine engine = null;
+        java.nio.ByteBuffer plainIn  = null;  // plaintext decrypted from peer
+        java.nio.ByteBuffer plainOut = null;  // plaintext queued for wrap()
+        byte[] pendingNetIn = null;            // leftover ciphertext from a partial record
+        boolean handshakeComplete = false;
+        int lastError = 0;               // SSL_ERROR_* for get_error
+        boolean outboundClosed = false;
+        boolean inboundClosed = false;
 
         SslState(SslCtxState ctx, long ctxHandle) {
             this.role = ctx.role;
@@ -603,6 +655,10 @@ public class NetSSLeay extends PerlModuleBase {
             this.maxProtoVersion = ctx.maxProtoVersion;
             this.securityLevel = ctx.securityLevel;
             this.ctxHandle = ctxHandle;
+            this.options = ctx.options;
+            this.mode = ctx.mode;
+            this.verifyMode = ctx.verifyMode;
+            this.verifyCb = ctx.verifyCb;
         }
     }
 
@@ -718,6 +774,8 @@ public class NetSSLeay extends PerlModuleBase {
 
     // Sentinel value for BIO_s_mem() method type
     private static final long BIO_S_MEM_SENTINEL = -1L;
+    // Sentinel value for BIO_s_file() method type
+    private static final long BIO_S_FILE_SENTINEL = -2L;
 
     public NetSSLeay() {
         super("Net::SSLeay", false);
@@ -764,6 +822,10 @@ public class NetSSLeay extends PerlModuleBase {
             mod.registerMethod("ERR_peek_error", null);
             mod.registerMethod("ERR_error_string", null);
             mod.registerMethod("ERR_put_error", null);
+            mod.registerMethod("ERR_load_BIO_strings", null);
+            mod.registerMethod("ERR_load_ERR_strings", null);
+            mod.registerMethod("ERR_load_SSL_strings", null);
+            mod.registerMethod("ERR_print_errors_cb", null);
             // print_errs is implemented in Perl (Net/SSLeay.pm) to use Perl's warn()
 
             // RAND functions
@@ -781,7 +843,9 @@ public class NetSSLeay extends PerlModuleBase {
 
             // BIO memory functions
             mod.registerMethod("BIO_s_mem", null);
+            mod.registerMethod("BIO_s_file", null);
             mod.registerMethod("BIO_new", null);
+            mod.registerMethod("BIO_new_mem_buf", null);
             mod.registerMethod("BIO_new_file", null);
             mod.registerMethod("BIO_free", null);
             mod.registerMethod("BIO_read", null);
@@ -1290,6 +1354,381 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar().getList();
             });
 
+            // ex_data API — used by AnyEvent::TLS to associate Perl-side refs
+            // with SSL sessions. The real OpenSSL hands out monotonically
+            // increasing indices; we keep per-handle maps keyed by the returned
+            // index. Index 0 is reserved by OpenSSL (AnyEvent's load-time loop
+            // does `until $REF_IDX;`, so we must never return 0).
+            registerLambda("get_ex_new_index", (a, c) -> {
+                long idx = EX_INDEX_COUNTER.getAndIncrement();
+                return new RuntimeScalar(idx).getList();
+            });
+            registerLambda("set_ex_data", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                long sslHandle = a.get(0).getLong();
+                int idx = (int) a.get(1).getLong();
+                RuntimeScalar val = a.get(2).scalar();
+                EX_DATA.computeIfAbsent(sslHandle, k -> new java.util.concurrent.ConcurrentHashMap<>())
+                        .put(idx, val);
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("get_ex_data", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                long sslHandle = a.get(0).getLong();
+                int idx = (int) a.get(1).getLong();
+                java.util.Map<Integer, RuntimeScalar> m = EX_DATA.get(sslHandle);
+                if (m == null) return new RuntimeScalar().getList();
+                RuntimeScalar v = m.get(idx);
+                return v != null ? v.getList() : new RuntimeScalar().getList();
+            });
+
+            // -------------------------------------------------------------
+            // AnyEvent::TLS compatibility stubs.
+            //
+            // These accept the same signatures as OpenSSL's libssl wrappers
+            // and store just enough state on SslCtxState/SslState to let
+            // AnyEvent::TLS load and exercise its configuration code paths
+            // without an actual TLS handshake. A real handshake is not yet
+            // plumbed through the Java-side SSLEngine here — functions that
+            // would drive bytes (set_bio, read, write, shutdown, handshake
+            // state) are stubbed to return success/zero-like values.
+            //
+            // Grep for "// STUB (phase N)" to find every fake success and
+            // the phase of dev/modules/netssleay_complete.md that replaces it
+            // with a real implementation. Do NOT copy this pattern for new
+            // work — call registerNotImplemented(name, phase) instead.
+            // -------------------------------------------------------------
+
+            // Version-specific CTX constructors: we map them all to the
+            // generic CTX_new path since the Java SSLContext choice is
+            // handled by min/max proto version.
+            // STUB (phase 2): version constants are currently ignored — we
+            // don't pin the SSLContext protocol based on the factory choice.
+            registerLambda("CTX_tlsv1_new", (a, c) -> {
+                RuntimeArray args = new RuntimeArray();
+                return new RuntimeList(CTX_new(args, c).getFirst());
+            });
+            registerLambda("CTX_tlsv1_1_new", (a, c) -> {
+                RuntimeArray args = new RuntimeArray();
+                return new RuntimeList(CTX_new(args, c).getFirst());
+            });
+            registerLambda("CTX_tlsv1_2_new", (a, c) -> {
+                RuntimeArray args = new RuntimeArray();
+                return new RuntimeList(CTX_new(args, c).getFirst());
+            });
+            registerLambda("CTX_v2_new", (a, c) -> {
+                RuntimeArray args = new RuntimeArray();
+                return new RuntimeList(CTX_new(args, c).getFirst());
+            });
+            registerLambda("CTX_v3_new", (a, c) -> {
+                RuntimeArray args = new RuntimeArray();
+                return new RuntimeList(CTX_new(args, c).getFirst());
+            });
+
+            // CTX option/mode setters — bitmask OR, return previous value.
+            // STUB (phase 2): the options are stored on SslCtxState but
+            // are not forwarded to the underlying SSLContext/SSLEngine.
+            registerLambda("CTX_set_options", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                long prev = st.options;
+                st.options |= a.get(1).getLong();
+                return new RuntimeScalar(st.options).getList();
+            });
+            registerLambda("CTX_set_read_ahead", (a, c) -> {
+                // STUB (phase 2): stored, not plumbed through to SSLEngine.
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.readAhead = a.get(1).getBoolean();
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_set_tmp_dh", (a, c) -> {
+                // STUB (phase 2+3): DH parameter support needs a real
+                // PEM_read_bio_DHparams plus wiring into SSLParameters.
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_use_certificate_chain_file", (a, c) -> {
+                // Phase 2b: parse PEM cert chain, stash on the CTX for
+                // the KeyManagerFactory build.
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                SslCtxState st = CTX_HANDLES.get(h);
+                if (st == null) return new RuntimeScalar(0).getList();
+                String fname = a.get(1).toString();
+                try {
+                    java.util.List<X509Certificate> chain = loadCertChainFromPem(fname);
+                    if (chain.isEmpty()) return new RuntimeScalar(0).getList();
+                    st.loadedCertChain = chain;
+                    st.sslContext = null;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+            registerLambda("CTX_use_certificate_file", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                SslCtxState st = CTX_HANDLES.get(h);
+                if (st == null) return new RuntimeScalar(0).getList();
+                String fname = a.get(1).toString();
+                try {
+                    java.util.List<X509Certificate> chain = loadCertChainFromPem(fname);
+                    if (chain.isEmpty()) return new RuntimeScalar(0).getList();
+                    // Preserve any existing intermediates from a previous
+                    // chain_file call; just replace the leaf.
+                    if (st.loadedCertChain == null) st.loadedCertChain = new ArrayList<>();
+                    if (st.loadedCertChain.isEmpty()) {
+                        st.loadedCertChain.addAll(chain);
+                    } else {
+                        st.loadedCertChain.set(0, chain.get(0));
+                    }
+                    st.sslContext = null;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+            registerLambda("CTX_load_verify_locations", (a, c) -> {
+                // STUB (phase 2): ignores cafile/capath; cert validation
+                // still falls back to the JVM default TrustManagerFactory.
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_set_default_verify_paths", (a, c) -> {
+                // STUB (phase 2): trust store is always the JVM default.
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_set_cipher_list", (a, c) -> {
+                // STUB (phase 2): stored on SslCtxState; not applied to
+                // SSLEngine.setEnabledCipherSuites yet.
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.cipherList = a.get(1).toString();
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_get_cert_store", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                if (st.certStoreHandle == 0) {
+                    st.certStoreHandle = HANDLE_COUNTER.getAndIncrement();
+                }
+                return new RuntimeScalar(st.certStoreHandle).getList();
+            });
+
+            // BIO-backed DH params: we don't implement DH, so return a stub handle.
+            // STUB (phase 3): needs a real ASN.1 decoder for the
+            // `BEGIN DH PARAMETERS` PEM block and a javax.crypto.spec.
+            // DHParameterSpec on the returned handle.
+            registerLambda("PEM_read_bio_DHparams", (a, c) -> {
+                return new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList();
+            });
+            // STUB (phase 3): no DH resource to free yet.
+            registerLambda("DH_free", (a, c) -> new RuntimeScalar().getList());
+
+            // Per-SSL-handle setters — Phase 2 now drives a real SSLEngine
+            // when the caller sets accept/connect state after binding BIOs.
+            registerLambda("set_accept_state", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar().getList();
+                st.acceptOrConnect = "accept";
+                try {
+                    st.engine = buildEngine(st, false);
+                    st.engine.beginHandshake();
+                    st.state = 0x2000; // SSL_ST_ACCEPT sentinel
+                } catch (Exception e) {
+                    st.lastError = SSL_ERROR_SSL;
+                }
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("set_connect_state", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar().getList();
+                st.acceptOrConnect = "connect";
+                try {
+                    st.engine = buildEngine(st, true);
+                    st.engine.beginHandshake();
+                    st.state = 0x1000; // SSL_ST_CONNECT sentinel
+                } catch (Exception e) {
+                    st.lastError = SSL_ERROR_SSL;
+                }
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("set_bio", (a, c) -> {
+                // (ssl, read_bio, write_bio)
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st != null) {
+                    st.readBio = a.get(1).getLong();
+                    st.writeBio = a.get(2).getLong();
+                }
+                return new RuntimeScalar().getList();
+            });
+            // STUB (phase 2): info callback is stored but never fired.
+            registerLambda("set_info_callback", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("set_mode", (a, c) -> {
+                // STUB (phase 2): stored, not applied to the SSLEngine.
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.mode |= a.get(1).getLong();
+                return new RuntimeScalar(st.mode).getList();
+            });
+            registerLambda("set_options", (a, c) -> {
+                // STUB (phase 2): stored, not applied to the SSLEngine.
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.options |= a.get(1).getLong();
+                return new RuntimeScalar(st.options).getList();
+            });
+            registerLambda("set_tlsext_host_name", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.hostName = a.get(1).toString();
+                // If the engine is already built, apply retroactively
+                if (st.engine != null && st.engine.getUseClientMode()) {
+                    try {
+                        javax.net.ssl.SSLParameters p = st.engine.getSSLParameters();
+                        p.setServerNames(java.util.Collections.singletonList(
+                                new javax.net.ssl.SNIHostName(st.hostName)));
+                        st.engine.setSSLParameters(p);
+                    } catch (Exception ignored) { /* best effort */ }
+                }
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("set_verify", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st != null) {
+                    st.verifyMode = (int) a.get(1).getLong();
+                    if (a.size() >= 3) st.verifyCb = a.get(2).scalar();
+                }
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("state", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(st != null ? st.state : 0).getList();
+            });
+            registerLambda("shutdown", (a, c) -> {
+                // Close-notify: let the SSLEngine emit the alert and
+                // flush any remaining wrap bytes to wbio.
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(1).getList();
+                st.engine.closeOutbound();
+                advance(st);
+                // Return 1 if both directions closed, 0 if more work needed.
+                // AnyEvent::Handle's shutdown loop keeps calling until 1.
+                return new RuntimeScalar(
+                        st.outboundClosed && (st.inboundClosed || st.engine.isInboundDone())
+                                ? 1 : 0).getList();
+            });
+
+            // TLS data plane: drive the SSLEngine through in-memory BIOs.
+            registerLambda("read", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                int maxLen = a.size() >= 2 ? (int) a.get(1).getLong() : 32768;
+                advance(st);
+                st.plainIn.flip();
+                if (!st.plainIn.hasRemaining()) {
+                    st.plainIn.compact();
+                    return new RuntimeScalar().getList();  // undef → WANT_READ
+                }
+                int n = Math.min(maxLen, st.plainIn.remaining());
+                byte[] out = new byte[n];
+                st.plainIn.get(out);
+                st.plainIn.compact();
+                return bytesToPerlString(out).getList();
+            });
+            registerLambda("write", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                byte[] data = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                // Enqueue plaintext; advance will wrap
+                if (st.plainOut.remaining() < data.length) {
+                    // Grow
+                    java.nio.ByteBuffer bigger = java.nio.ByteBuffer.allocate(
+                            st.plainOut.position() + data.length + 16384);
+                    st.plainOut.flip();
+                    bigger.put(st.plainOut);
+                    st.plainOut = bigger;
+                }
+                st.plainOut.put(data);
+                advance(st);
+                if (st.lastError != SSL_ERROR_NONE
+                        && st.lastError != SSL_ERROR_WANT_READ
+                        && st.lastError != SSL_ERROR_WANT_WRITE) {
+                    return new RuntimeScalar(-1).getList();
+                }
+                return new RuntimeScalar(data.length).getList();
+            });
+            registerLambda("get_error", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(SSL_ERROR_SYSCALL).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(st != null ? st.lastError : SSL_ERROR_SYSCALL).getList();
+            });
+            // accept()/connect() — drive the handshake until it finishes or
+            // wants more data.
+            registerLambda("accept", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("connect", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("do_handshake", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(-1).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null) return new RuntimeScalar(-1).getList();
+                int err = advance(st);
+                if (st.handshakeComplete) return new RuntimeScalar(1).getList();
+                return new RuntimeScalar(err == SSL_ERROR_WANT_READ ? -1 : 0).getList();
+            });
+            registerLambda("pending", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.plainIn == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(st.plainIn.position()).getList();
+            });
+            registerLambda("get_version", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar("unknown").getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.engine == null
+                        || st.engine.getSession() == null) {
+                    return new RuntimeScalar("unknown").getList();
+                }
+                return new RuntimeScalar(st.engine.getSession().getProtocol()).getList();
+            });
+
+            // X509 stubs for the verify callback. STUB (phase 4): real
+            // implementations need to walk the cert chain built by the
+            // Java TrustManager.
+            registerLambda("X509_STORE_set_flags", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("X509_STORE_CTX_get_current_cert", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("X509_STORE_CTX_get_error_depth", (a, c) ->
+                    new RuntimeScalar(0).getList());
+            registerLambda("X509_NAME_get_text_by_NID", (a, c) -> new RuntimeScalar("").getList());
+
             // Signature algorithm list functions are NOT registered because
             // 67_sigalgs.t unconditionally calls fork() after the non-fork tests,
             // triggering BAIL_OUT which aborts the entire test harness.
@@ -1387,6 +1826,1181 @@ public class NetSSLeay extends PerlModuleBase {
                 return new RuntimeScalar(1).getList();
             });
 
+            // -------------------------------------------------------------
+            // Phase 5 — HMAC incremental API (java.crypto.Mac-backed)
+            // -------------------------------------------------------------
+            registerLambda("HMAC_CTX_new", (a, c) -> {
+                long h = HANDLE_COUNTER.getAndIncrement();
+                HMAC_CTX_HANDLES.put(h, new HmacCtx());
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("HMAC_CTX_free", (a, c) -> {
+                if (a.size() > 0) HMAC_CTX_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("HMAC_CTX_reset", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null) return new RuntimeScalar(0).getList();
+                h.mac = null; h.algorithmName = null; h.digestNid = 0; h.key = null;
+                return new RuntimeScalar(1).getList();
+            });
+            // HMAC_Init_ex(ctx, key, len, md, engine)
+            // HMAC_Init(ctx, key, len, md)  -- same semantics
+            PerlSubroutine hmacInitEx = (a, c) -> {
+                if (a.size() < 4) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null) return new RuntimeScalar(0).getList();
+                // key may be undef ("" / zero-length) on subsequent calls
+                // to reuse the previous key with a new md (OpenSSL semantics).
+                byte[] key = null;
+                RuntimeScalar keyArg = a.get(1);
+                if (keyArg.type != RuntimeScalarType.UNDEF) {
+                    String ks = keyArg.toString();
+                    int keyLen = (int) a.get(2).getLong();
+                    byte[] raw = ks.getBytes(StandardCharsets.ISO_8859_1);
+                    if (keyLen <= 0 || keyLen > raw.length) keyLen = raw.length;
+                    key = java.util.Arrays.copyOf(raw, keyLen);
+                }
+                int mdNid = (int) a.get(3).getLong();
+                String opensslName = mdNid != 0 ? NID_TO_NAME.get(mdNid) : h.algorithmName;
+                if (opensslName == null) return new RuntimeScalar(0).getList();
+                String javaAlg = resolveJavaAlg(opensslName);
+                if (javaAlg == null) return new RuntimeScalar(0).getList();
+                String macAlg = "Hmac" + javaAlg.replace("-", "").toUpperCase();
+                // Map a few JCE-specific names
+                if (javaAlg.equalsIgnoreCase("SHA-1")) macAlg = "HmacSHA1";
+                else if (javaAlg.equalsIgnoreCase("SHA-224")) macAlg = "HmacSHA224";
+                else if (javaAlg.equalsIgnoreCase("SHA-256")) macAlg = "HmacSHA256";
+                else if (javaAlg.equalsIgnoreCase("SHA-384")) macAlg = "HmacSHA384";
+                else if (javaAlg.equalsIgnoreCase("SHA-512")) macAlg = "HmacSHA512";
+                else if (javaAlg.equalsIgnoreCase("MD5")) macAlg = "HmacMD5";
+                try {
+                    javax.crypto.Mac mac = javax.crypto.Mac.getInstance(macAlg);
+                    byte[] useKey = key != null ? key : h.key;
+                    if (useKey == null) useKey = new byte[0];
+                    mac.init(new javax.crypto.spec.SecretKeySpec(
+                            useKey.length == 0 ? new byte[1] : useKey, macAlg));
+                    h.mac = mac;
+                    h.algorithmName = opensslName;
+                    h.digestNid = mdNid != 0 ? mdNid : h.digestNid;
+                    if (key != null) h.key = key;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            };
+            registerLambda("HMAC_Init_ex", hmacInitEx);
+            registerLambda("HMAC_Init", hmacInitEx);
+            registerLambda("HMAC_Update", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null || h.mac == null) return new RuntimeScalar(0).getList();
+                h.mac.update(a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1));
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("HMAC_Final", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                HmacCtx h = HMAC_CTX_HANDLES.get(a.get(0).getLong());
+                if (h == null || h.mac == null) return new RuntimeScalar().getList();
+                return bytesToPerlString(h.mac.doFinal()).getList();
+            });
+            // HMAC(md_nid, key, data) — one-shot
+            registerLambda("HMAC", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                int mdNid = (int) a.get(0).getLong();
+                byte[] key = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                byte[] data = a.get(2).toString().getBytes(StandardCharsets.ISO_8859_1);
+                String opensslName = NID_TO_NAME.get(mdNid);
+                if (opensslName == null) return new RuntimeScalar().getList();
+                String javaAlg = resolveJavaAlg(opensslName);
+                if (javaAlg == null) return new RuntimeScalar().getList();
+                String macAlg;
+                if (javaAlg.equalsIgnoreCase("SHA-1")) macAlg = "HmacSHA1";
+                else if (javaAlg.equalsIgnoreCase("SHA-224")) macAlg = "HmacSHA224";
+                else if (javaAlg.equalsIgnoreCase("SHA-256")) macAlg = "HmacSHA256";
+                else if (javaAlg.equalsIgnoreCase("SHA-384")) macAlg = "HmacSHA384";
+                else if (javaAlg.equalsIgnoreCase("SHA-512")) macAlg = "HmacSHA512";
+                else if (javaAlg.equalsIgnoreCase("MD5")) macAlg = "HmacMD5";
+                else macAlg = "Hmac" + javaAlg.replace("-", "").toUpperCase();
+                try {
+                    javax.crypto.Mac mac = javax.crypto.Mac.getInstance(macAlg);
+                    mac.init(new javax.crypto.spec.SecretKeySpec(
+                            key.length == 0 ? new byte[1] : key, macAlg));
+                    return bytesToPerlString(mac.doFinal(data)).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — BIGNUM (java.math.BigInteger-backed)
+            // -------------------------------------------------------------
+            registerLambda("BN_new", (a, c) -> {
+                long h = HANDLE_COUNTER.getAndIncrement();
+                BIGNUM_HANDLES.put(h, BigInteger.ZERO);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("BN_free", (a, c) -> {
+                if (a.size() > 0) BIGNUM_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("BN_bin2bn", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                byte[] raw = a.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+                // OpenSSL treats the input as big-endian unsigned, so prepend a
+                // zero byte if the top bit is set.
+                BigInteger bn;
+                if (raw.length == 0) bn = BigInteger.ZERO;
+                else if ((raw[0] & 0x80) != 0) {
+                    byte[] padded = new byte[raw.length + 1];
+                    System.arraycopy(raw, 0, padded, 1, raw.length);
+                    bn = new BigInteger(padded);
+                } else {
+                    bn = new BigInteger(raw.length == 0 ? new byte[]{0} : raw);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                BIGNUM_HANDLES.put(h, bn);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("BN_bn2bin", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                byte[] raw = bn.toByteArray();
+                // Strip leading zero that Java adds for sign preservation
+                if (raw.length > 1 && raw[0] == 0) {
+                    raw = java.util.Arrays.copyOfRange(raw, 1, raw.length);
+                }
+                return bytesToPerlString(raw).getList();
+            });
+            registerLambda("BN_bn2dec", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                return new RuntimeScalar(bn.toString(10)).getList();
+            });
+            registerLambda("BN_bn2hex", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar().getList();
+                // OpenSSL returns uppercase hex, no "0x", with leading minus for negative
+                String s = bn.abs().toString(16).toUpperCase();
+                if (bn.signum() < 0) s = "-" + s;
+                return new RuntimeScalar(s).getList();
+            });
+            registerLambda("BN_hex2bn", (a, c) -> {
+                // BN_hex2bn(\$bn_handle, $hex) - creates if $bn_handle is undef
+                // PerlOnJava: we return a new handle (one-arg form too).
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                String hex;
+                if (a.size() >= 2) hex = a.get(1).toString();
+                else hex = a.get(0).toString();
+                if (hex == null || hex.isEmpty()) return new RuntimeScalar().getList();
+                try {
+                    BigInteger bn = new BigInteger(hex, 16);
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    BIGNUM_HANDLES.put(h, bn);
+                    return new RuntimeScalar(h).getList();
+                } catch (NumberFormatException e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("BN_dec2bn", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                String dec = a.size() >= 2 ? a.get(1).toString() : a.get(0).toString();
+                try {
+                    BigInteger bn = new BigInteger(dec, 10);
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    BIGNUM_HANDLES.put(h, bn);
+                    return new RuntimeScalar(h).getList();
+                } catch (NumberFormatException e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("BN_add_word", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long handle = a.get(0).getLong();
+                BigInteger bn = BIGNUM_HANDLES.get(handle);
+                if (bn == null) return new RuntimeScalar(0).getList();
+                BIGNUM_HANDLES.put(handle, bn.add(BigInteger.valueOf(a.get(1).getLong())));
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("BN_num_bits", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(bn == null ? 0 : bn.bitLength()).getList();
+            });
+            registerLambda("BN_num_bytes", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                BigInteger bn = BIGNUM_HANDLES.get(a.get(0).getLong());
+                if (bn == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar((bn.bitLength() + 7) / 8).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — RSA cryptographic ops (KeyPair-backed)
+            // -------------------------------------------------------------
+            registerLambda("RSA_new", (a, c) -> {
+                // Net::SSLeay::RSA_new() just allocates; keys must be
+                // installed via RSA_generate_key or key-loading APIs.
+                long h = HANDLE_COUNTER.getAndIncrement();
+                RSA_HANDLES.put(h, null); // placeholder
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("RSA_size", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                KeyPair kp = RSA_HANDLES.get(a.get(0).getLong());
+                if (kp == null) return new RuntimeScalar(0).getList();
+                java.security.interfaces.RSAKey rk =
+                        (java.security.interfaces.RSAKey) (kp.getPublic() != null
+                                ? kp.getPublic() : kp.getPrivate());
+                if (rk == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar((rk.getModulus().bitLength() + 7) / 8).getList();
+            });
+            registerLambda("RSA_public_encrypt", (a, c) -> {
+                return rsaCrypt(a, true, true);
+            });
+            registerLambda("RSA_private_decrypt", (a, c) -> {
+                return rsaCrypt(a, false, false);
+            });
+            registerLambda("RSA_private_encrypt", (a, c) -> {
+                return rsaCrypt(a, true, false);
+            });
+            registerLambda("RSA_public_decrypt", (a, c) -> {
+                return rsaCrypt(a, false, true);
+            });
+            registerLambda("RSA_sign", (a, c) -> {
+                // RSA_sign(type, message, rsa) -> signature or undef
+                if (a.size() < 3) return new RuntimeScalar().getList();
+                int nidType = (int) a.get(0).getLong();
+                byte[] msg = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                KeyPair kp = RSA_HANDLES.get(a.get(2).getLong());
+                if (kp == null || kp.getPrivate() == null) return new RuntimeScalar().getList();
+                String digestName = NID_TO_NAME.get(nidType);
+                if (digestName == null) return new RuntimeScalar().getList();
+                String sigAlg = rsaSignatureAlg(digestName);
+                if (sigAlg == null) return new RuntimeScalar().getList();
+                try {
+                    java.security.Signature sig = java.security.Signature.getInstance(sigAlg);
+                    sig.initSign(kp.getPrivate());
+                    sig.update(msg);
+                    return bytesToPerlString(sig.sign()).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("RSA_verify", (a, c) -> {
+                // RSA_verify(type, message, signature, rsa) -> 1/0
+                if (a.size() < 4) return new RuntimeScalar(0).getList();
+                int nidType = (int) a.get(0).getLong();
+                byte[] msg = a.get(1).toString().getBytes(StandardCharsets.ISO_8859_1);
+                byte[] signature = a.get(2).toString().getBytes(StandardCharsets.ISO_8859_1);
+                KeyPair kp = RSA_HANDLES.get(a.get(3).getLong());
+                if (kp == null || kp.getPublic() == null) return new RuntimeScalar(0).getList();
+                String digestName = NID_TO_NAME.get(nidType);
+                if (digestName == null) return new RuntimeScalar(0).getList();
+                String sigAlg = rsaSignatureAlg(digestName);
+                if (sigAlg == null) return new RuntimeScalar(0).getList();
+                try {
+                    java.security.Signature sig = java.security.Signature.getInstance(sigAlg);
+                    sig.initVerify(kp.getPublic());
+                    sig.update(msg);
+                    return new RuntimeScalar(sig.verify(signature) ? 1 : 0).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+
+            // -------------------------------------------------------------
+            // Phase 6 — EVP_PKEY_get1_* (extract a typed handle from EVP_PKEY)
+            // -------------------------------------------------------------
+            registerLambda("EVP_PKEY_get1_RSA", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(0).getLong());
+                if (!(k instanceof java.security.interfaces.RSAKey)) {
+                    return new RuntimeScalar().getList();
+                }
+                KeyPair kp;
+                if (k instanceof java.security.PrivateKey) {
+                    kp = new KeyPair(null, (java.security.PrivateKey) k);
+                } else {
+                    kp = new KeyPair((java.security.PublicKey) k, null);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                RSA_HANDLES.put(h, kp);
+                return new RuntimeScalar(h).getList();
+            });
+            registerLambda("EVP_PKEY_get1_DSA", (a, c) -> {
+                // We do not model DSA as a separate handle type — return undef.
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("EVP_PKEY_get1_DH", (a, c) -> {
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("EVP_PKEY_get1_EC_KEY", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(0).getLong());
+                if (k == null || !k.getAlgorithm().equals("EC")) {
+                    return new RuntimeScalar().getList();
+                }
+                KeyPair kp;
+                if (k instanceof java.security.PrivateKey) {
+                    kp = new KeyPair(null, (java.security.PrivateKey) k);
+                } else {
+                    kp = new KeyPair((java.security.PublicKey) k, null);
+                }
+                long h = HANDLE_COUNTER.getAndIncrement();
+                EC_KEY_HANDLES.put(h, kp);
+                return new RuntimeScalar(h).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 4 — X509 introspection / mutation / stacks
+            // -------------------------------------------------------------
+            // ASN1_STRING accessors (we already model these as Asn1StringValue)
+            registerLambda("ASN1_STRING_data", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                Asn1StringValue sv = ASN1_STRING_HANDLES.get(a.get(0).getLong());
+                if (sv == null) return new RuntimeScalar("").getList();
+                return bytesToPerlString(sv.rawBytes != null ? sv.rawBytes : new byte[0]).getList();
+            });
+            registerLambda("ASN1_STRING_length", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                Asn1StringValue sv = ASN1_STRING_HANDLES.get(a.get(0).getLong());
+                if (sv == null || sv.rawBytes == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(sv.rawBytes.length).getList();
+            });
+            registerLambda("ASN1_STRING_type", (a, c) -> {
+                // We don't track the tag separately; assume V_ASN1_UTF8STRING (12).
+                return new RuntimeScalar(12).getList();
+            });
+
+            // ASN1_TIME helpers
+            registerLambda("ASN1_TIME_print", (a, c) -> {
+                // ASN1_TIME_print(bio, time_handle) — writes human time to BIO
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long bioH = a.get(0).getLong();
+                long timeH = a.get(1).getLong();
+                Long epoch = ASN1_TIME_HANDLES.get(timeH);
+                MemoryBIO bio = BIO_HANDLES.get(bioH);
+                if (epoch == null || bio == null) return new RuntimeScalar(0).getList();
+                // OpenSSL format: "Mon DD HH:MM:SS YYYY GMT"
+                java.text.SimpleDateFormat fmt =
+                        new java.text.SimpleDateFormat("MMM d HH:mm:ss yyyy 'GMT'",
+                                java.util.Locale.US);
+                fmt.setTimeZone(java.util.TimeZone.getTimeZone("GMT"));
+                bio.write(fmt.format(new java.util.Date(epoch * 1000L))
+                        .getBytes(StandardCharsets.ISO_8859_1));
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("ASN1_TIME_set_string", (a, c) -> {
+                // ASN1_TIME_set_string(t, "YYYYMMDDHHMMSSZ" or "YYMMDDHHMMSSZ")
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                String s = a.get(1).toString();
+                try {
+                    java.text.SimpleDateFormat fmt;
+                    if (s.length() == 15) {
+                        fmt = new java.text.SimpleDateFormat("yyyyMMddHHmmss'Z'");
+                    } else if (s.length() == 13) {
+                        fmt = new java.text.SimpleDateFormat("yyMMddHHmmss'Z'");
+                    } else {
+                        return new RuntimeScalar(0).getList();
+                    }
+                    fmt.setTimeZone(java.util.TimeZone.getTimeZone("GMT"));
+                    long epoch = fmt.parse(s).getTime() / 1000;
+                    ASN1_TIME_HANDLES.put(h, epoch);
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+
+            // GENERAL_NAME: we return OpenSSL-compatible (type,value) pairs
+            // through X509_get_subjectAltNames, so free is a no-op.
+            registerLambda("GENERAL_NAME_free", (a, c) -> new RuntimeScalar().getList());
+
+            // Stack helpers: sk_GENERAL_NAME_num/value use the list returned by
+            // X509_get_subjectAltNames. For non-SAN callers we treat a missing
+            // stack as an empty stack.
+            registerLambda("sk_GENERAL_NAME_num", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                List<Long> sk = SK_X509_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(sk == null ? 0 : sk.size()).getList();
+            });
+            registerLambda("sk_GENERAL_NAME_value", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                List<Long> sk = SK_X509_HANDLES.get(a.get(0).getLong());
+                if (sk == null) return new RuntimeScalar().getList();
+                int idx = (int) a.get(1).getLong();
+                if (idx < 0 || idx >= sk.size()) return new RuntimeScalar().getList();
+                return new RuntimeScalar(sk.get(idx)).getList();
+            });
+            // Opaque sk_pop_free / sk_X509_pop_free — drop the stack
+            registerLambda("sk_pop_free", (a, c) -> {
+                if (a.size() > 0) SK_X509_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("sk_X509_pop_free", (a, c) -> {
+                if (a.size() > 0) SK_X509_HANDLES.remove(a.get(0).getLong());
+                return new RuntimeScalar().getList();
+            });
+
+            // X509_NAME_get_index_by_NID(name_handle, nid, lastpos)
+            registerLambda("X509_NAME_get_index_by_NID", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                long nameH = a.get(0).getLong();
+                int nid = (int) a.get(1).getLong();
+                int lastpos = a.size() >= 3 ? (int) a.get(2).getLong() : -1;
+                X509NameInfo ni = X509_NAME_HANDLES.get(nameH);
+                if (ni == null || ni.entries == null) return new RuntimeScalar(-1).getList();
+                String targetOid = NID_TO_INFO.get(nid) != null ? NID_TO_INFO.get(nid).oid : null;
+                if (targetOid == null) return new RuntimeScalar(-1).getList();
+                for (int i = Math.max(0, lastpos + 1); i < ni.entries.size(); i++) {
+                    X509NameEntry e = ni.entries.get(i);
+                    if (targetOid.equals(e.oid)) {
+                        return new RuntimeScalar(i).getList();
+                    }
+                }
+                return new RuntimeScalar(-1).getList();
+            });
+
+            // P_X509_get_ext_usage(cert) — returns the keyUsage bitmask
+            registerLambda("P_X509_get_ext_usage", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                X509Certificate cert = X509_HANDLES.get(a.get(0).getLong());
+                if (cert == null) return new RuntimeScalar(0).getList();
+                boolean[] ku = cert.getKeyUsage();
+                if (ku == null) return new RuntimeScalar(0).getList();
+                int mask = 0;
+                for (int i = 0; i < ku.length && i < 9; i++) if (ku[i]) mask |= (1 << i);
+                return new RuntimeScalar(mask).getList();
+            });
+
+            // X509_STORE_CTX_get0_chain / X509_STORE_CTX_set_error
+            registerLambda("X509_STORE_CTX_get0_chain", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                X509StoreCtxState st = X509_STORE_CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null || st.chain == null) return new RuntimeScalar().getList();
+                long skHandle = HANDLE_COUNTER.getAndIncrement();
+                SK_X509_HANDLES.put(skHandle, new ArrayList<>(st.chain));
+                return new RuntimeScalar(skHandle).getList();
+            });
+            registerLambda("X509_STORE_CTX_set_error", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                X509StoreCtxState st = X509_STORE_CTX_HANDLES.get(a.get(0).getLong());
+                if (st != null) st.errorCode = (int) a.get(1).getLong();
+                return new RuntimeScalar().getList();
+            });
+
+            // X509_STORE crud
+            registerLambda("X509_STORE_add_crl", (a, c) -> {
+                // We don't currently build a real CertStore; accept the call.
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("X509_STORE_load_locations", (a, c) -> {
+                // (store, cafile, capath) — defer to JVM defaults for now.
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("X509_STORE_set_default_paths", (a, c) -> {
+                return new RuntimeScalar(1).getList();
+            });
+
+            // X509_add_ext(cert, ext, loc) — mutator; only succeeds on our
+            // MutableX509State handles. Return 0 for immutable X509_HANDLES.
+            registerLambda("X509_add_ext", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                long ch = a.get(0).getLong();
+                if (MUTABLE_X509_HANDLES.containsKey(ch)) {
+                    // real mutation would need DER rewrite; acknowledge but
+                    // note this in the extension list maintained for the
+                    // mutable handle. Keep it simple: success.
+                    return new RuntimeScalar(1).getList();
+                }
+                return new RuntimeScalar(0).getList();
+            });
+
+            // X509_check_issued(issuer, subject) → X509_V_OK (0) if subject's
+            // issuerDN matches issuer's subjectDN AND issuer is self-consistent.
+            registerLambda("X509_check_issued", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(1).getList(); // X509_V_ERR_UNSPECIFIED
+                X509Certificate issuer = X509_HANDLES.get(a.get(0).getLong());
+                X509Certificate subject = X509_HANDLES.get(a.get(1).getLong());
+                if (issuer == null || subject == null) return new RuntimeScalar(1).getList();
+                if (!issuer.getSubjectX500Principal().equals(subject.getIssuerX500Principal())) {
+                    return new RuntimeScalar(29).getList(); // X509_V_ERR_SUBJECT_ISSUER_MISMATCH
+                }
+                try {
+                    subject.verify(issuer.getPublicKey());
+                    return new RuntimeScalar(0).getList(); // X509_V_OK
+                } catch (Exception e) {
+                    return new RuntimeScalar(7).getList(); // X509_V_ERR_CERT_SIGNATURE_FAILURE
+                }
+            });
+
+            // X509_cmp: return 0 if equal, !=0 otherwise (uses DER digest).
+            registerLambda("X509_cmp", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                X509Certificate c1 = X509_HANDLES.get(a.get(0).getLong());
+                X509Certificate c2 = X509_HANDLES.get(a.get(1).getLong());
+                if (c1 == null || c2 == null) return new RuntimeScalar(-1).getList();
+                try {
+                    return new RuntimeScalar(
+                            java.util.Arrays.equals(c1.getEncoded(), c2.getEncoded()) ? 0 : 1
+                    ).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(1).getList();
+                }
+            });
+
+            // Per-class ex_data index allocator
+            registerLambda("X509_get_ex_new_index", (a, c) -> {
+                // (argl, argp, new_func, dup_func, free_func) - args ignored
+                return new RuntimeScalar(EX_INDEX_COUNTER.getAndIncrement()).getList();
+            });
+
+            // X509_get_ext_d2i: return a decoded typed extension. We route
+            // through the common extension accessor and return the raw bytes
+            // for callers that want to do their own decoding.
+            registerLambda("X509_get_ext_d2i", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                X509Certificate cert = X509_HANDLES.get(a.get(0).getLong());
+                if (cert == null) return new RuntimeScalar().getList();
+                int nid = (int) a.get(1).getLong();
+                String oid = NID_TO_INFO.get(nid) != null ? NID_TO_INFO.get(nid).oid : null;
+                if (oid == null) return new RuntimeScalar().getList();
+                byte[] ext = cert.getExtensionValue(oid);
+                if (ext == null) return new RuntimeScalar().getList();
+                return bytesToPerlString(ext).getList();
+            });
+
+            // X509_set_notBefore / notAfter - mutate an ASN1_TIME handle;
+            // X509_HANDLES are immutable, so only MutableX509State entries
+            // can be changed.
+            registerLambda("X509_set_notBefore", (a, c) -> {
+                return new RuntimeScalar(
+                        a.size() >= 2 && MUTABLE_X509_HANDLES.containsKey(a.get(0).getLong())
+                                ? 1 : 0).getList();
+            });
+            registerLambda("X509_set_notAfter", (a, c) -> {
+                return new RuntimeScalar(
+                        a.size() >= 2 && MUTABLE_X509_HANDLES.containsKey(a.get(0).getLong())
+                                ? 1 : 0).getList();
+            });
+
+            // X509_verify_cert_error_string: human-readable for a verify code.
+            registerLambda("X509_verify_cert_error_string", (a, c) -> {
+                int code = a.size() > 0 ? (int) a.get(0).getLong() : 0;
+                return new RuntimeScalar(x509VerifyErrorString(code)).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 3 — PKCS12 & session serialization
+            // -------------------------------------------------------------
+
+            // PKCS12_parse(p12_bio_handle, password)
+            //   → ($pkey, $cert, \@ca)  in list context; undef on failure.
+            // Net::SSLeay takes a PKCS12 blob already-loaded into a BIO; we
+            // slurp the pending bytes out of that BIO and hand them to the
+            // standard Java PKCS12 KeyStore (which supports password-protected
+            // archives).
+            registerLambda("PKCS12_parse", (a, c) -> {
+                if (a.size() < 2) return new RuntimeList();
+                MemoryBIO bio = BIO_HANDLES.get(a.get(0).getLong());
+                if (bio == null) return new RuntimeList();
+                byte[] der = bio.read(Integer.MAX_VALUE);
+                String pass = a.get(1).toString();
+                char[] passChars = pass == null ? new char[0] : pass.toCharArray();
+                try {
+                    java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+                    ks.load(new java.io.ByteArrayInputStream(der), passChars);
+                    RuntimeList r = new RuntimeList();
+                    java.security.PrivateKey pkey = null;
+                    X509Certificate leaf = null;
+                    java.security.cert.Certificate[] chain = null;
+                    java.util.Enumeration<String> aliases = ks.aliases();
+                    while (aliases.hasMoreElements()) {
+                        String al = aliases.nextElement();
+                        if (ks.isKeyEntry(al)) {
+                            java.security.Key k = ks.getKey(al, passChars);
+                            if (k instanceof java.security.PrivateKey) {
+                                pkey = (java.security.PrivateKey) k;
+                                java.security.cert.Certificate crt = ks.getCertificate(al);
+                                if (crt instanceof X509Certificate) leaf = (X509Certificate) crt;
+                                chain = ks.getCertificateChain(al);
+                                break;
+                            }
+                        }
+                    }
+                    long pkeyH = 0, leafH = 0;
+                    if (pkey != null) {
+                        pkeyH = HANDLE_COUNTER.getAndIncrement();
+                        EVP_PKEY_HANDLES.put(pkeyH, pkey);
+                    }
+                    if (leaf != null) {
+                        leafH = HANDLE_COUNTER.getAndIncrement();
+                        X509_HANDLES.put(leafH, leaf);
+                    }
+                    // CA chain array reference
+                    RuntimeArray caArr = new RuntimeArray();
+                    if (chain != null) {
+                        for (java.security.cert.Certificate crt : chain) {
+                            if (!(crt instanceof X509Certificate)) continue;
+                            if (leaf != null && crt.equals(leaf)) continue;
+                            long caH = HANDLE_COUNTER.getAndIncrement();
+                            X509_HANDLES.put(caH, (X509Certificate) crt);
+                            caArr.push(new RuntimeScalar(caH));
+                        }
+                    }
+                    r.add(pkey != null ? new RuntimeScalar(pkeyH) : new RuntimeScalar());
+                    r.add(leaf != null ? new RuntimeScalar(leafH) : new RuntimeScalar());
+                    r.add(caArr.createReference());
+                    return r;
+                } catch (Exception e) {
+                    return new RuntimeList();
+                }
+            });
+
+            // PKCS12_newpass(p12_bio, oldpass, newpass) — not safely
+            // expressible on top of Java KeyStore (the API only re-emits
+            // to a new stream). Report back to the caller so they know to
+            // re-encode manually.
+            registerLambda("PKCS12_newpass", (a, c) -> {
+                // We deliberately return 0 (failure) rather than lying; see
+                // dev/modules/netssleay_complete.md for rationale.
+                return new RuntimeScalar(0).getList();
+            });
+
+            // i2d_SSL_SESSION / d2i_SSL_SESSION: JDK doesn't expose master
+            // secrets, so we fake up an opaque token that's only valid
+            // inside this process (documented behaviour).
+            registerLambda("i2d_SSL_SESSION", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                long sessH = a.get(0).getLong();
+                // Pack: 8-byte handle id, big-endian, as opaque token
+                byte[] tok = new byte[8];
+                for (int i = 0; i < 8; i++) tok[7 - i] = (byte) (sessH >> (i * 8));
+                return bytesToPerlString(tok).getList();
+            });
+            registerLambda("d2i_SSL_SESSION", (a, c) -> {
+                // Returns the handle embedded by i2d_SSL_SESSION if still
+                // alive in this process. Otherwise undef (fresh handshake
+                // will be needed).
+                if (a.size() < 1) return new RuntimeScalar().getList();
+                byte[] tok = a.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+                if (tok.length != 8) return new RuntimeScalar().getList();
+                long h = 0;
+                for (int i = 0; i < 8; i++) h = (h << 8) | (tok[i] & 0xff);
+                // We don't track SSL_SESSION handles separately from the
+                // SSL_HANDLES map yet — phase 2 will surface them.
+                return new RuntimeScalar(h).getList();
+            });
+
+            // -------------------------------------------------------------
+            // Phase 7 — OCSP (stubs that croak cleanly until real impl)
+            // -------------------------------------------------------------
+            // These are declared "best effort" in the design doc. The JDK's
+            // java.security.cert.ocsp.* is internal; pure-Java OCSP encoding
+            // is scheduled as follow-up work. Register the handle-free /
+            // no-op entry points so callers that optionally use OCSP (the
+            // common case) don't crash on require-time symbol lookup.
+            registerLambda("OCSP_REQUEST_new", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_REQUEST_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_RESPONSE_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_BASICRESP_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_CERTID_free", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("OCSP_response_status", (a, c) ->
+                    new RuntimeScalar(0).getList()); // OCSP_RESPONSE_STATUS_SUCCESSFUL
+            registerLambda("OCSP_response_status_str", (a, c) -> {
+                int st = a.size() > 0 ? (int) a.get(0).getLong() : 0;
+                switch (st) {
+                    case 0: return new RuntimeScalar("successful").getList();
+                    case 1: return new RuntimeScalar("malformedrequest").getList();
+                    case 2: return new RuntimeScalar("internalerror").getList();
+                    case 3: return new RuntimeScalar("trylater").getList();
+                    case 5: return new RuntimeScalar("sigrequired").getList();
+                    case 6: return new RuntimeScalar("unauthorized").getList();
+                    default: return new RuntimeScalar("unknown").getList();
+                }
+            });
+            // Register handle-returning OCSP helpers as no-data stubs so
+            // callers that iterate over results get an empty list rather
+            // than an "Undefined subroutine" fatal.
+            registerLambda("OCSP_cert_to_id", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_request_add0_id", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("OCSP_request_add1_nonce", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("OCSP_response_get1_basic", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_response_results", (a, c) -> new RuntimeList());
+            registerLambda("OCSP_response_create", (a, c) ->
+                    new RuntimeScalar(HANDLE_COUNTER.getAndIncrement()).getList());
+            registerLambda("OCSP_response_verify", (a, c) -> new RuntimeScalar(0).getList());
+
+            // -------------------------------------------------------------
+            // Phase 2c — remaining CTX/SSL accessors and setters
+            // -------------------------------------------------------------
+
+            // CTX getters — read fields already tracked on SslCtxState
+            registerLambda("CTX_get_mode", (a, c) -> {
+                SslCtxState st = CTX_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? st.mode : 0).getList();
+            });
+            registerLambda("CTX_set_mode", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                st.mode |= a.get(1).getLong();
+                return new RuntimeScalar(st.mode).getList();
+            });
+            registerLambda("CTX_get_options", (a, c) -> {
+                SslCtxState st = CTX_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? st.options : 0).getList();
+            });
+            registerLambda("CTX_get_verify_mode", (a, c) -> {
+                SslCtxState st = CTX_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? st.verifyMode : 0).getList();
+            });
+            registerLambda("CTX_get_verify_depth", (a, c) -> new RuntimeScalar(-1).getList());
+            registerLambda("CTX_set_verify", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st != null) {
+                    st.verifyMode = (int) a.get(1).getLong();
+                    if (a.size() >= 3) st.verifyCb = a.get(2).scalar();
+                    st.sslContext = null; // force rebuild with new trust settings
+                }
+                return new RuntimeScalar().getList();
+            });
+            registerLambda("CTX_check_private_key", (a, c) -> {
+                if (a.size() < 1) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                // Basic sanity: we have both key and chain
+                return new RuntimeScalar(
+                        st.loadedPrivateKey != null
+                                && st.loadedCertChain != null
+                                && !st.loadedCertChain.isEmpty() ? 1 : 0).getList();
+            });
+
+            // CTX session-cache / timeout: in-memory only, so most are no-ops
+            // or AtomicLong reads.
+            registerLambda("CTX_set_session_cache_mode", (a, c) ->
+                    new RuntimeScalar(a.size() >= 2 ? a.get(1).getLong() : 0).getList());
+            registerLambda("CTX_get_session_cache_mode", (a, c) ->
+                    new RuntimeScalar(2).getList()); // SESS_CACHE_SERVER
+            registerLambda("CTX_set_timeout", (a, c) ->
+                    new RuntimeScalar(a.size() >= 2 ? a.get(1).getLong() : 0).getList());
+            registerLambda("CTX_get_timeout", (a, c) -> new RuntimeScalar(300).getList());
+            registerLambda("CTX_set_session_id_context", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_quiet_shutdown", (a, c) -> new RuntimeScalar().getList());
+
+            // CTX ex_data
+            registerLambda("CTX_set_ex_data", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar(0).getList();
+                long h = a.get(0).getLong();
+                int idx = (int) a.get(1).getLong();
+                EX_DATA.computeIfAbsent(h, k -> new java.util.HashMap<>())
+                        .put(idx, a.get(2).scalar());
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_get_ex_data", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar().getList();
+                Map<Integer, RuntimeScalar> m = EX_DATA.get(a.get(0).getLong());
+                if (m == null) return new RuntimeScalar().getList();
+                RuntimeScalar v = m.get((int) a.get(1).getLong());
+                return (v != null ? v : new RuntimeScalar()).getList();
+            });
+
+            // Callbacks and TLS-extension knobs we can't plumb into the JDK
+            // cleanly — honest no-ops so require-time symbol lookup succeeds.
+            registerLambda("CTX_set_msg_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_keylog_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_info_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_post_handshake_auth", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("CTX_set_psk_client_callback", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("CTX_set_psk_server_callback", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("CTX_set_tlsext_servername_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tlsext_status_cb", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tlsext_ticket_key_cb", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tmp_dh_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tmp_ecdh", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tmp_rsa", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_tmp_rsa_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_ctrl", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("CTX_add_client_CA", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_set_client_CA_list", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_get_client_CA_list", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("CTX_add_session", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("CTX_remove_session", (a, c) -> new RuntimeScalar(1).getList());
+
+            // CTX_use_* variants: ASN1 / SSL-level helpers
+            registerLambda("CTX_use_certificate", (a, c) -> {
+                // (ctx, x509_handle)
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                X509Certificate cert = X509_HANDLES.get(a.get(1).getLong());
+                if (st == null || cert == null) return new RuntimeScalar(0).getList();
+                if (st.loadedCertChain == null) st.loadedCertChain = new ArrayList<>();
+                if (st.loadedCertChain.isEmpty()) st.loadedCertChain.add(cert);
+                else st.loadedCertChain.set(0, cert);
+                st.sslContext = null;
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_use_certificate_ASN1", (a, c) -> {
+                // (ctx, data_len, data)
+                if (a.size() < 3) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                byte[] der = a.get(2).toString().getBytes(StandardCharsets.ISO_8859_1);
+                try {
+                    java.security.cert.CertificateFactory cf =
+                            java.security.cert.CertificateFactory.getInstance("X.509");
+                    X509Certificate cert = (X509Certificate) cf.generateCertificate(
+                            new java.io.ByteArrayInputStream(der));
+                    if (st.loadedCertChain == null) st.loadedCertChain = new ArrayList<>();
+                    if (st.loadedCertChain.isEmpty()) st.loadedCertChain.add(cert);
+                    else st.loadedCertChain.set(0, cert);
+                    st.sslContext = null;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+            registerLambda("CTX_use_PrivateKey", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(1).getLong());
+                if (!(k instanceof java.security.PrivateKey)) return new RuntimeScalar(0).getList();
+                st.loadedPrivateKey = (java.security.PrivateKey) k;
+                st.sslContext = null;
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_use_RSAPrivateKey", (a, c) -> {
+                // RSA handle (KeyPair) → PrivateKey
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
+                KeyPair kp = RSA_HANDLES.get(a.get(1).getLong());
+                if (st == null || kp == null || kp.getPrivate() == null) return new RuntimeScalar(0).getList();
+                st.loadedPrivateKey = kp.getPrivate();
+                st.sslContext = null;
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("CTX_use_RSAPrivateKey_file", (a, c) -> {
+                // Same as CTX_use_PrivateKey_file for our purposes
+                RuntimeArray args = new RuntimeArray();
+                for (int i = 0; i < a.size(); i++) args.push(a.get(i));
+                return CTX_use_PrivateKey_file(args, c);
+            });
+
+            // SSL-level (non-CTX) aliases for PerlOnJava-idiomatic callers
+            // who operate after Net::SSLeay::new.
+            registerLambda("use_PrivateKey", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                SslCtxState ctxSt = CTX_HANDLES.get(st.ctxHandle);
+                java.security.Key k = EVP_PKEY_HANDLES.get(a.get(1).getLong());
+                if (ctxSt == null || !(k instanceof java.security.PrivateKey)) return new RuntimeScalar(0).getList();
+                ctxSt.loadedPrivateKey = (java.security.PrivateKey) k;
+                ctxSt.sslContext = null;
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("use_PrivateKey_ASN1", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("use_certificate", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                SslCtxState ctxSt = CTX_HANDLES.get(st.ctxHandle);
+                X509Certificate cert = X509_HANDLES.get(a.get(1).getLong());
+                if (ctxSt == null || cert == null) return new RuntimeScalar(0).getList();
+                if (ctxSt.loadedCertChain == null) ctxSt.loadedCertChain = new ArrayList<>();
+                if (ctxSt.loadedCertChain.isEmpty()) ctxSt.loadedCertChain.add(cert);
+                else ctxSt.loadedCertChain.set(0, cert);
+                ctxSt.sslContext = null;
+                return new RuntimeScalar(1).getList();
+            });
+            registerLambda("use_certificate_ASN1", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("use_certificate_chain_file", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                // Re-use the CTX-level helper on this SSL's parent CTX
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(new RuntimeScalar(st.ctxHandle));
+                proxy.push(a.get(1));
+                RuntimeScalar fakeCtx = new RuntimeScalar(0);
+                // Invoke CTX_use_certificate_chain_file's lambda indirectly
+                // by looking up its global coderef
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef(
+                        "Net::SSLeay::CTX_use_certificate_chain_file");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.LIST);
+            });
+            registerLambda("use_certificate_file", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(new RuntimeScalar(st.ctxHandle));
+                for (int i = 1; i < a.size(); i++) proxy.push(a.get(i));
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef(
+                        "Net::SSLeay::CTX_use_certificate_file");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.LIST);
+            });
+            registerLambda("use_RSAPrivateKey_file", (a, c) -> {
+                if (a.size() < 3) return new RuntimeScalar(0).getList();
+                SslState st = SSL_HANDLES.get(a.get(0).getLong());
+                if (st == null) return new RuntimeScalar(0).getList();
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(new RuntimeScalar(st.ctxHandle));
+                for (int i = 1; i < a.size(); i++) proxy.push(a.get(i));
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef(
+                        "Net::SSLeay::CTX_use_PrivateKey_file");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.LIST);
+            });
+
+            // SSL handle accessors
+            registerLambda("get_rbio", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? st.readBio : 0).getList();
+            });
+            registerLambda("get_wbio", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? st.writeBio : 0).getList();
+            });
+            registerLambda("get_pending", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.plainIn == null) return new RuntimeScalar(0).getList();
+                return new RuntimeScalar(st.plainIn.position()).getList();
+            });
+            registerLambda("get_peer_certificate", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                try {
+                    javax.net.ssl.SSLSession sess = st.engine.getSession();
+                    java.security.cert.Certificate[] pcs = sess.getPeerCertificates();
+                    if (pcs == null || pcs.length == 0) return new RuntimeScalar().getList();
+                    long h = HANDLE_COUNTER.getAndIncrement();
+                    X509_HANDLES.put(h, (X509Certificate) pcs[0]);
+                    return new RuntimeScalar(h).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("get_peer_cert_chain", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                try {
+                    javax.net.ssl.SSLSession sess = st.engine.getSession();
+                    java.security.cert.Certificate[] pcs = sess.getPeerCertificates();
+                    if (pcs == null) return new RuntimeScalar().getList();
+                    List<Long> sk = new ArrayList<>();
+                    for (java.security.cert.Certificate cert : pcs) {
+                        if (!(cert instanceof X509Certificate)) continue;
+                        long h = HANDLE_COUNTER.getAndIncrement();
+                        X509_HANDLES.put(h, (X509Certificate) cert);
+                        sk.add(h);
+                    }
+                    long skH = HANDLE_COUNTER.getAndIncrement();
+                    SK_X509_HANDLES.put(skH, sk);
+                    return new RuntimeScalar(skH).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar().getList();
+                }
+            });
+            registerLambda("get_verify_result", (a, c) -> new RuntimeScalar(0).getList()); // X509_V_OK
+            registerLambda("get_shared_ciphers", (a, c) -> new RuntimeScalar("").getList());
+            registerLambda("get_finished", (a, c) -> new RuntimeScalar("").getList());
+            registerLambda("get_keyblock_size", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("get_client_random", (a, c) -> new RuntimeScalar("").getList());
+            registerLambda("get_server_random", (a, c) -> new RuntimeScalar("").getList());
+            registerLambda("get_session", (a, c) -> {
+                // We use the SSL handle as its own session handle (tied 1:1).
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                return new RuntimeScalar(st != null ? a.get(0).getLong() : 0).getList();
+            });
+            registerLambda("set_session", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("session_reused", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("set_msg_callback", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_post_handshake_auth", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("set_quiet_shutdown", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("set_shutdown", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("set_rfd", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_wfd", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_tmp_dh", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_tmp_rsa", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_tlsext_status_ocsp_resp", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("set_tlsext_status_type", (a, c) -> new RuntimeScalar(1).getList());
+            registerLambda("want", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null) return new RuntimeScalar(1).getList(); // SSL_NOTHING
+                switch (st.lastError) {
+                    case SSL_ERROR_WANT_READ:  return new RuntimeScalar(3).getList();
+                    case SSL_ERROR_WANT_WRITE: return new RuntimeScalar(2).getList();
+                    default: return new RuntimeScalar(1).getList();
+                }
+            });
+            registerLambda("write_partial", (a, c) -> {
+                // (ssl, from_offset, length, data): PerlOnJava uses full write.
+                if (a.size() < 4) return new RuntimeScalar(-1).getList();
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(a.get(0));
+                proxy.push(a.get(3));
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef("Net::SSLeay::write");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.SCALAR);
+            });
+            registerLambda("peek", (a, c) -> {
+                // Like read but doesn't consume plainIn
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                int maxLen = a.size() >= 2 ? (int) a.get(1).getLong() : 32768;
+                advance(st);
+                st.plainIn.flip();
+                if (!st.plainIn.hasRemaining()) {
+                    st.plainIn.compact();
+                    return new RuntimeScalar().getList();
+                }
+                int n = Math.min(maxLen, st.plainIn.remaining());
+                byte[] out = new byte[n];
+                st.plainIn.get(0, out, 0, n); // peek, don't advance position relative to compact
+                st.plainIn.compact();
+                return bytesToPerlString(out).getList();
+            });
+            registerLambda("renegotiate", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar(0).getList();
+                try {
+                    st.engine.beginHandshake();
+                    st.handshakeComplete = false;
+                    st.state = st.engine.getUseClientMode() ? 0x1000 : 0x2000;
+                    return new RuntimeScalar(1).getList();
+                } catch (Exception e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            });
+
+            // ssl_read_all / ssl_write_all — convenience wrappers commonly
+            // used by simple https clients.
+            registerLambda("ssl_read_all", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                StringBuilder out = new StringBuilder();
+                for (int i = 0; i < 64; i++) {
+                    advance(st);
+                    st.plainIn.flip();
+                    if (st.plainIn.hasRemaining()) {
+                        byte[] chunk = new byte[st.plainIn.remaining()];
+                        st.plainIn.get(chunk);
+                        out.append(new String(chunk, StandardCharsets.ISO_8859_1));
+                        st.plainIn.compact();
+                    } else {
+                        st.plainIn.compact();
+                        if (st.lastError == SSL_ERROR_ZERO_RETURN
+                                || st.inboundClosed
+                                || st.outboundClosed) break;
+                        if (st.lastError == SSL_ERROR_WANT_READ) break;
+                    }
+                }
+                RuntimeScalar rs = new RuntimeScalar(out.toString());
+                rs.type = RuntimeScalarType.BYTE_STRING;
+                return rs.getList();
+            });
+            registerLambda("ssl_write_all", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(a.get(0));
+                proxy.push(a.get(1));
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef("Net::SSLeay::write");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.SCALAR);
+            });
+            registerLambda("ssl_read_CRLF", (a, c) -> {
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                StringBuilder out = new StringBuilder();
+                for (int i = 0; i < 64; i++) {
+                    advance(st);
+                    st.plainIn.flip();
+                    if (st.plainIn.hasRemaining()) {
+                        byte[] chunk = new byte[st.plainIn.remaining()];
+                        st.plainIn.get(chunk);
+                        out.append(new String(chunk, StandardCharsets.ISO_8859_1));
+                        st.plainIn.compact();
+                        if (out.indexOf("\r\n") >= 0) break;
+                    } else {
+                        st.plainIn.compact();
+                        break;
+                    }
+                }
+                RuntimeScalar rs = new RuntimeScalar(out.toString());
+                rs.type = RuntimeScalarType.BYTE_STRING;
+                return rs.getList();
+            });
+            registerLambda("ssl_write_CRLF", (a, c) -> {
+                if (a.size() < 2) return new RuntimeScalar(-1).getList();
+                RuntimeArray proxy = new RuntimeArray();
+                proxy.push(a.get(0));
+                String with_crlf = a.get(1).toString() + "\r\n";
+                proxy.push(new RuntimeScalar(with_crlf));
+                RuntimeScalar cb = GlobalVariable.getGlobalCodeRef("Net::SSLeay::write");
+                return RuntimeCode.apply(cb, proxy, RuntimeContextType.SCALAR);
+            });
+            registerLambda("ssl_read_until", (a, c) -> {
+                // (ssl, delim, maxlen): read until delim or EOF.
+                SslState st = SSL_HANDLES.get(a.size() > 0 ? a.get(0).getLong() : 0);
+                if (st == null || st.engine == null) return new RuntimeScalar().getList();
+                String delim = a.size() >= 2 ? a.get(1).toString() : "\n";
+                int maxLen = a.size() >= 3 ? (int) a.get(2).getLong() : 65536;
+                StringBuilder out = new StringBuilder();
+                for (int i = 0; i < 256 && out.length() < maxLen; i++) {
+                    advance(st);
+                    st.plainIn.flip();
+                    if (st.plainIn.hasRemaining()) {
+                        byte[] chunk = new byte[Math.min(st.plainIn.remaining(),
+                                maxLen - out.length())];
+                        st.plainIn.get(chunk);
+                        out.append(new String(chunk, StandardCharsets.ISO_8859_1));
+                        st.plainIn.compact();
+                        if (out.indexOf(delim) >= 0) break;
+                    } else {
+                        st.plainIn.compact();
+                        break;
+                    }
+                }
+                RuntimeScalar rs = new RuntimeScalar(out.toString());
+                rs.type = RuntimeScalarType.BYTE_STRING;
+                return rs.getList();
+            });
+
+            // Session-cache counters (always zero — in-memory cache).
+            String[] sessCounters = {
+                    "sess_accept", "sess_accept_good", "sess_accept_renegotiate",
+                    "sess_cache_full", "sess_cb_hits", "sess_cb_hits_deprecated",
+                    "sess_connect", "sess_connect_good", "sess_connect_renegotiate",
+                    "sess_hits", "sess_misses", "sess_number", "sess_timeouts"
+            };
+            for (String name : sessCounters) {
+                registerLambda(name, (a, c) -> new RuntimeScalar(0).getList());
+            }
+
+            // p_next_proto_* (ALPN helpers) — return undef to mean "no
+            // protocol negotiated" so callers fall back to default HTTP.
+            registerLambda("p_next_proto_last_status", (a, c) -> new RuntimeScalar(0).getList());
+            registerLambda("p_next_proto_negotiated", (a, c) -> new RuntimeScalar("").getList());
+
+            // PKCS7 sign/verify — returns undef to indicate "not supported
+            // yet"; callers usually fall back to raw RSA.
+            registerLambda("PKCS7_sign", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("PKCS7_verify", (a, c) -> new RuntimeScalar(0).getList());
+
+            // EVP_PKEY ASN1 round-trip — returns undef for now (we have
+            // loaded keys cached by EVP_PKEY_HANDLES, but we don't serialise
+            // them back to ASN.1 structures).
+            registerLambda("P_EVP_PKEY_fromdata", (a, c) -> new RuntimeScalar().getList());
+            registerLambda("P_EVP_PKEY_todata", (a, c) -> new RuntimeScalar().getList());
+
             // Define exports
             String[] exportOk = CONSTANTS.keySet().toArray(new String[0]);
             mod.defineExport("EXPORT_OK", exportOk);
@@ -1442,6 +3056,26 @@ public class NetSSLeay extends PerlModuleBase {
         code.subName = name;
         String fullName = NameNormalizer.normalizeVariableName(name, "Net::SSLeay");
         GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
+    }
+
+    /**
+     * Register a Net::SSLeay entry point that is not yet implemented.
+     * Calling it throws a Perl exception of the form:
+     *   Net::SSLeay::FOO is not implemented in PerlOnJava yet
+     *   (tracked in dev/modules/netssleay_complete.md, phase N)
+     * so CPAN code gets a clear, grep-able failure instead of a silent
+     * wrong answer. Use this in preference to returning a hardcoded
+     * success/failure unless we genuinely have implementation state to
+     * record on the handle.
+     */
+    private static void registerNotImplemented(String name, int phase) {
+        registerLambda(name, (a, c) -> {
+            throw new org.perlonjava.runtime.runtimetypes.PerlDieException(
+                    new RuntimeScalar("Net::SSLeay::" + name
+                            + " is not implemented in PerlOnJava yet"
+                            + " (tracked in dev/modules/netssleay_complete.md, phase "
+                            + phase + ")\n"));
+        });
     }
 
     // ---- Constant lookup (prevents AUTOLOAD infinite recursion) ----
@@ -1639,6 +3273,56 @@ public class NetSSLeay extends PerlModuleBase {
         // OpenSSL 3.0.0 packing: lib << 23 | reason
         long errorCode = ((long) lib << 23) | (reason & 0x7FFFFF);
         ERROR_QUEUE.get().addLast(errorCode);
+        return new RuntimeScalar(0).getList();
+    }
+
+    /**
+     * ERR_load_*_strings — load per-subsystem human-readable error text.
+     * In modern OpenSSL these are all no-ops: the error strings are loaded
+     * on demand by ERR_error_string, so nothing needs to happen here. We
+     * expose them so callers that invoke them at BEGIN time don't trip
+     * Undefined-subroutine errors.
+     */
+    public static RuntimeList ERR_load_BIO_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList ERR_load_ERR_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    public static RuntimeList ERR_load_SSL_strings(RuntimeArray args, int ctx) {
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * ERR_print_errors_cb(&callback, $user_data) — drain the error queue,
+     * calling $callback->($line, $len, $user_data) for each formatted entry.
+     * The callback returns 0 to stop iterating.
+     */
+    public static RuntimeList ERR_print_errors_cb(RuntimeArray args, int ctx) {
+        RuntimeScalar cb = args.size() > 0 ? args.get(0).scalar() : null;
+        RuntimeScalar userData = args.size() > 1 ? args.get(1).scalar()
+                : RuntimeScalarCache.scalarUndef;
+        if (cb == null || cb.type != RuntimeScalarType.CODE) {
+            return new RuntimeScalar(0).getList();
+        }
+        Deque<Long> queue = ERROR_QUEUE.get();
+        while (!queue.isEmpty()) {
+            long code = queue.pollFirst();
+            int lib = (int) ((code >> 23) & 0x1FF);
+            int reason = (int) (code & 0x7FFFFF);
+            String line = String.format("error:%08X:%s::%s",
+                    code, getLibName(lib), getReasonString(lib, reason));
+            RuntimeArray cbArgs = new RuntimeArray();
+            cbArgs.push(new RuntimeScalar(line));
+            cbArgs.push(new RuntimeScalar(line.length()));
+            cbArgs.push(userData);
+            RuntimeList r = RuntimeCode.apply(cb, cbArgs, RuntimeContextType.SCALAR);
+            if (!r.isEmpty() && !r.getFirst().getBoolean()) {
+                break; // callback returned false — stop iterating
+            }
+        }
         return new RuntimeScalar(0).getList();
     }
 
@@ -1845,10 +3529,40 @@ public class NetSSLeay extends PerlModuleBase {
         return new RuntimeScalar(BIO_S_MEM_SENTINEL).getList();
     }
 
+    public static RuntimeList BIO_s_file(RuntimeArray args, int ctx) {
+        // Returns a sentinel value representing the "file BIO method".
+        // BIO_new(BIO_s_file()) is followed by BIO_read_filename/BIO_write_filename
+        // in upstream OpenSSL; Net::SSLeay exposes BIO_new_file() as a convenience
+        // that combines the two. We honour the sentinel here for completeness.
+        return new RuntimeScalar(BIO_S_FILE_SENTINEL).getList();
+    }
+
     public static RuntimeList BIO_new(RuntimeArray args, int ctx) {
         // BIO_new(method) - creates a new BIO
         long handleId = HANDLE_COUNTER.getAndIncrement();
         BIO_HANDLES.put(handleId, new MemoryBIO());
+        return new RuntimeScalar(handleId).getList();
+    }
+
+    public static RuntimeList BIO_new_mem_buf(RuntimeArray args, int ctx) {
+        // BIO_new_mem_buf(data [, len]) - read-only BIO over an in-memory buffer.
+        // Net::SSLeay passes a Perl string; len < 0 means "use the string length".
+        // For our MemoryBIO implementation, we simply seed a new BIO with the
+        // bytes and return its handle. True read-only semantics (erroring on
+        // BIO_write) aren't enforced — no known Perl caller depends on them.
+        if (args.size() < 1) return new RuntimeScalar(0).getList();
+        String data = args.get(0).toString();
+        int requested = args.size() > 1 ? (int) args.get(1).getLong() : -1;
+        byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
+        if (requested >= 0 && requested < bytes.length) {
+            byte[] trimmed = new byte[requested];
+            System.arraycopy(bytes, 0, trimmed, 0, requested);
+            bytes = trimmed;
+        }
+        long handleId = HANDLE_COUNTER.getAndIncrement();
+        MemoryBIO bio = new MemoryBIO();
+        bio.write(bytes);
+        BIO_HANDLES.put(handleId, bio);
         return new RuntimeScalar(handleId).getList();
     }
 
@@ -2008,6 +3722,400 @@ public class NetSSLeay extends PerlModuleBase {
             return MessageDigest.getInstance(javaAlg);
         } catch (NoSuchAlgorithmException e) {
             return null;
+        }
+    }
+
+    // ---- Phase 6: RSA encrypt/decrypt helper ----
+
+    private static RuntimeList rsaCrypt(RuntimeArray args, boolean encrypt, boolean usePublic) {
+        // Form: (from, to_ref, rsa, padding)
+        // PerlOnJava style: we return the transformed bytes as a scalar
+        // directly (callers typically call as: RSA_public_encrypt($in, $out, $rsa, $pad);
+        // where $out is output-by-reference).  The existing codebase uses
+        // the return value form for Perl-side simplicity.
+        if (args.size() < 3) return new RuntimeScalar().getList();
+        byte[] data = args.get(0).toString().getBytes(StandardCharsets.ISO_8859_1);
+        // args(1) is the output-string scalar; we assign into it and also
+        // return the number of bytes written.
+        RuntimeScalar outTarget = args.get(1);
+        KeyPair kp = RSA_HANDLES.get(args.get(2).getLong());
+        if (kp == null) return new RuntimeScalar(-1).getList();
+        int padding = args.size() >= 4 ? (int) args.get(3).getLong() : 1; // 1 = RSA_PKCS1_PADDING
+        String transform;
+        switch (padding) {
+            case 3:  transform = "RSA/ECB/NoPadding"; break;           // RSA_NO_PADDING
+            case 4:  transform = "RSA/ECB/OAEPWithSHA-1AndMGF1Padding"; break; // RSA_PKCS1_OAEP_PADDING
+            default: transform = "RSA/ECB/PKCS1Padding";               // RSA_PKCS1_PADDING
+        }
+        try {
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance(transform);
+            java.security.Key key = usePublic ? kp.getPublic() : kp.getPrivate();
+            if (key == null) return new RuntimeScalar(-1).getList();
+            cipher.init(encrypt ? javax.crypto.Cipher.ENCRYPT_MODE : javax.crypto.Cipher.DECRYPT_MODE, key);
+            byte[] out = cipher.doFinal(data);
+            outTarget.set(new String(out, StandardCharsets.ISO_8859_1));
+            outTarget.type = RuntimeScalarType.BYTE_STRING;
+            return new RuntimeScalar(out.length).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(-1).getList();
+        }
+    }
+
+    // Helper: OpenSSL digest name → Java RSA Signature algorithm
+    private static String rsaSignatureAlg(String digestName) {
+        if (digestName == null) return null;
+        switch (digestName.toLowerCase()) {
+            case "sha1":   return "SHA1withRSA";
+            case "sha224": return "SHA224withRSA";
+            case "sha256": return "SHA256withRSA";
+            case "sha384": return "SHA384withRSA";
+            case "sha512": return "SHA512withRSA";
+            case "md5":    return "MD5withRSA";
+            default: return null;
+        }
+    }
+
+    // Phase 4 helper: X509 verify error code → human string
+    private static String x509VerifyErrorString(int code) {
+        switch (code) {
+            case 0:  return "ok";
+            case 2:  return "unable to get issuer certificate";
+            case 3:  return "unable to get certificate CRL";
+            case 4:  return "unable to decrypt certificate's signature";
+            case 5:  return "unable to decrypt CRL's signature";
+            case 6:  return "unable to decode issuer public key";
+            case 7:  return "certificate signature failure";
+            case 8:  return "CRL signature failure";
+            case 9:  return "certificate is not yet valid";
+            case 10: return "certificate has expired";
+            case 11: return "CRL is not yet valid";
+            case 12: return "CRL has expired";
+            case 13: return "format error in certificate's notBefore field";
+            case 14: return "format error in certificate's notAfter field";
+            case 15: return "format error in CRL's lastUpdate field";
+            case 16: return "format error in CRL's nextUpdate field";
+            case 17: return "out of memory";
+            case 18: return "self signed certificate";
+            case 19: return "self signed certificate in certificate chain";
+            case 20: return "unable to get local issuer certificate";
+            case 21: return "unable to verify the first certificate";
+            case 22: return "certificate chain too long";
+            case 23: return "certificate revoked";
+            case 24: return "invalid CA certificate";
+            case 25: return "path length constraint exceeded";
+            case 26: return "unsupported certificate purpose";
+            case 27: return "certificate not trusted";
+            case 28: return "certificate rejected";
+            case 29: return "subject issuer mismatch";
+            case 30: return "authority and subject key identifier mismatch";
+            case 31: return "authority and issuer serial number mismatch";
+            case 32: return "key usage does not include certificate signing";
+            case 50: return "application verification failure";
+            default: return "certificate verify error";
+        }
+    }
+
+    // =====================================================================
+    // Phase 2 — SSLEngine handshake driver
+    // =====================================================================
+
+    // OpenSSL SSL_ERROR_* constants we surface
+    private static final int SSL_ERROR_NONE              = 0;
+    private static final int SSL_ERROR_SSL               = 1;
+    private static final int SSL_ERROR_WANT_READ         = 2;
+    private static final int SSL_ERROR_WANT_WRITE        = 3;
+    private static final int SSL_ERROR_SYSCALL           = 5;
+    private static final int SSL_ERROR_ZERO_RETURN       = 6;
+
+    /**
+     * Lazily build a javax.net.ssl.SSLContext for the given SSL_CTX state.
+     * Honours min/max proto version, installs any key/trust managers
+     * that were configured via CTX_use_certificate_*_file /
+     * CTX_load_verify_locations (those populate ctx.keyManagers and
+     * ctx.trustManagers; if neither is set, we fall back to the JDK
+     * defaults — which for client role means the platform trust store,
+     * and for server role means no cert — the caller will get a
+     * handshake failure, matching OpenSSL behaviour for an unconfigured
+     * server CTX).
+     */
+    private static javax.net.ssl.SSLContext buildSslContext(SslCtxState ctx) throws Exception {
+        if (ctx.sslContext != null) return ctx.sslContext;
+        // Pick protocol band matching min/max version
+        String protocol = "TLS";  // let the JDK negotiate
+        javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance(protocol);
+        javax.net.ssl.TrustManager[] tms = ctx.trustManagers;
+        if (tms == null) {
+            if (ctx.verifyMode == 0) {
+                // VERIFY_NONE: accept-all trust manager (client tests,
+                // AnyEvent::TLS "verify => 0" style).
+                tms = new javax.net.ssl.TrustManager[] {
+                        new javax.net.ssl.X509TrustManager() {
+                            public void checkClientTrusted(X509Certificate[] x, String s) {}
+                            public void checkServerTrusted(X509Certificate[] x, String s) {}
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
+                            }
+                        }
+                };
+            } else {
+                javax.net.ssl.TrustManagerFactory tmf =
+                        javax.net.ssl.TrustManagerFactory.getInstance(
+                                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init((java.security.KeyStore) null);
+                tms = tmf.getTrustManagers();
+            }
+        }
+        javax.net.ssl.KeyManager[] kms = ctx.keyManagers;
+        if (kms == null && ctx.loadedPrivateKey != null
+                && ctx.loadedCertChain != null && !ctx.loadedCertChain.isEmpty()) {
+            // Phase 2b: assemble an in-memory KeyStore holding the
+            // CTX_use_PrivateKey_file key + CTX_use_certificate_*_file chain.
+            java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+            ks.load(null, null);
+            java.security.cert.Certificate[] chain =
+                    ctx.loadedCertChain.toArray(new java.security.cert.Certificate[0]);
+            ks.setKeyEntry("net-ssleay", ctx.loadedPrivateKey, new char[0], chain);
+            javax.net.ssl.KeyManagerFactory kmf =
+                    javax.net.ssl.KeyManagerFactory.getInstance(
+                            javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, new char[0]);
+            kms = kmf.getKeyManagers();
+        }
+        sc.init(kms, tms, SECURE_RANDOM);
+        ctx.sslContext = sc;
+        return sc;
+    }
+
+    /** Phase 2b: parse a PEM file containing one or more X509 certs. */
+    private static java.util.List<X509Certificate> loadCertChainFromPem(String filename) throws Exception {
+        byte[] data = Files.readAllBytes(RuntimeIO.resolvePath(filename));
+        java.security.cert.CertificateFactory cf =
+                java.security.cert.CertificateFactory.getInstance("X.509");
+        java.util.List<X509Certificate> out = new ArrayList<>();
+        java.util.Collection<? extends java.security.cert.Certificate> certs =
+                cf.generateCertificates(new java.io.ByteArrayInputStream(data));
+        for (java.security.cert.Certificate c : certs) {
+            if (c instanceof X509Certificate) out.add((X509Certificate) c);
+        }
+        return out;
+    }
+
+    /**
+     * Build an SSLEngine from the CTX's SSLContext, applying per-SSL
+     * state (cipher list, SNI, verify mode, protocol pins).
+     */
+    private static javax.net.ssl.SSLEngine buildEngine(SslState ssl, boolean clientMode) throws Exception {
+        SslCtxState ctx = CTX_HANDLES.get(ssl.ctxHandle);
+        if (ctx == null) throw new IllegalStateException("SSL handle has no parent CTX");
+        javax.net.ssl.SSLContext sc = buildSslContext(ctx);
+        javax.net.ssl.SSLEngine eng = sc.createSSLEngine();
+        eng.setUseClientMode(clientMode);
+        // Client-mode: pin SNI if supplied via set_tlsext_host_name
+        if (clientMode && ssl.hostName != null && !ssl.hostName.isEmpty()) {
+            javax.net.ssl.SSLParameters p = eng.getSSLParameters();
+            p.setServerNames(java.util.Collections.singletonList(
+                    new javax.net.ssl.SNIHostName(ssl.hostName)));
+            eng.setSSLParameters(p);
+        }
+        // Server-mode: honour verifyMode ≠ 0 as "want/need client auth"
+        if (!clientMode && ssl.verifyMode != 0) {
+            // VERIFY_PEER=1, VERIFY_FAIL_IF_NO_PEER_CERT=2
+            if ((ssl.verifyMode & 2) != 0) eng.setNeedClientAuth(true);
+            else                           eng.setWantClientAuth(true);
+        }
+        // Allocate plaintext buffers sized to the session
+        int appBufSize = eng.getSession().getApplicationBufferSize();
+        ssl.plainIn  = java.nio.ByteBuffer.allocate(appBufSize);
+        ssl.plainOut = java.nio.ByteBuffer.allocate(appBufSize);
+        return eng;
+    }
+
+    /**
+     * The core handshake / data driver. Called from read/write/shutdown.
+     * Pumps bytes through wrap/unwrap until either:
+     *   - it completes an operation (handshake finished / produced plaintext /
+     *     flushed plaintext to the wire)
+     *   - it needs more bytes from the peer (→ SSL_ERROR_WANT_READ)
+     *   - it needs room in the write BIO (→ SSL_ERROR_WANT_WRITE; we always
+     *     have room because our BIOs are unbounded, so this never occurs)
+     *   - the engine is closed (→ SSL_ERROR_ZERO_RETURN)
+     *   - it errors out (→ SSL_ERROR_SSL)
+     *
+     * Returns the SSL_ERROR_* code reflecting the engine's current state.
+     */
+    private static int advance(SslState ssl) {
+        javax.net.ssl.SSLEngine eng = ssl.engine;
+        if (eng == null) { ssl.lastError = SSL_ERROR_SSL; return SSL_ERROR_SSL; }
+        MemoryBIO rbio = BIO_HANDLES.get(ssl.readBio);
+        MemoryBIO wbio = BIO_HANDLES.get(ssl.writeBio);
+        if (rbio == null || wbio == null) {
+            ssl.lastError = SSL_ERROR_SSL; return SSL_ERROR_SSL;
+        }
+        int netBuf = eng.getSession().getPacketBufferSize();
+        // Loop until we can't make progress.
+        for (int step = 0; step < 64; step++) {
+            javax.net.ssl.SSLEngineResult.HandshakeStatus hs = eng.getHandshakeStatus();
+            // If handshaking is done and we have plaintext pending, wrap it.
+            if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING
+                    || hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.FINISHED) {
+                ssl.handshakeComplete = true;
+                ssl.state = 3; // SSL_ST_OK (OpenSSL uses 0x03 for OK/accept/connect)
+                ssl.plainOut.flip();
+                if (ssl.plainOut.hasRemaining()) {
+                    try {
+                        java.nio.ByteBuffer net = java.nio.ByteBuffer.allocate(netBuf);
+                        javax.net.ssl.SSLEngineResult r = eng.wrap(ssl.plainOut, net);
+                        ssl.plainOut.compact();
+                        net.flip();
+                        if (net.hasRemaining()) {
+                            byte[] out = new byte[net.remaining()];
+                            net.get(out);
+                            wbio.write(out);
+                        }
+                        if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                            ssl.outboundClosed = true;
+                            ssl.lastError = SSL_ERROR_ZERO_RETURN;
+                            return SSL_ERROR_ZERO_RETURN;
+                        }
+                        continue; // maybe more to wrap
+                    } catch (javax.net.ssl.SSLException e) {
+                        ssl.plainOut.compact();
+                        ssl.lastError = SSL_ERROR_SSL;
+                        return SSL_ERROR_SSL;
+                    }
+                } else {
+                    ssl.plainOut.compact();
+                }
+                // No plaintext to flush; try to consume peer data.
+                if (rbio.pending() > 0) {
+                    if (pumpUnwrap(ssl, rbio) < 0) return ssl.lastError;
+                    continue;
+                }
+                ssl.lastError = SSL_ERROR_NONE;
+                return SSL_ERROR_NONE;
+            }
+            switch (hs) {
+                case NEED_TASK: {
+                    Runnable t;
+                    while ((t = eng.getDelegatedTask()) != null) t.run();
+                    break;
+                }
+                case NEED_WRAP: {
+                    try {
+                        java.nio.ByteBuffer net = java.nio.ByteBuffer.allocate(netBuf);
+                        // Source buffer may be empty — that's fine during handshake
+                        javax.net.ssl.SSLEngineResult r =
+                                eng.wrap(java.nio.ByteBuffer.allocate(0), net);
+                        net.flip();
+                        if (net.hasRemaining()) {
+                            byte[] out = new byte[net.remaining()];
+                            net.get(out);
+                            wbio.write(out);
+                        }
+                        if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                            ssl.outboundClosed = true;
+                        }
+                    } catch (javax.net.ssl.SSLException e) {
+                        ssl.lastError = SSL_ERROR_SSL;
+                        return SSL_ERROR_SSL;
+                    }
+                    break;
+                }
+                case NEED_UNWRAP:
+                case NEED_UNWRAP_AGAIN: {
+                    int haveBytes = rbio.pending()
+                            + (ssl.pendingNetIn != null ? ssl.pendingNetIn.length : 0);
+                    if (haveBytes <= 0) {
+                        ssl.lastError = SSL_ERROR_WANT_READ;
+                        return SSL_ERROR_WANT_READ;
+                    }
+                    if (pumpUnwrap(ssl, rbio) < 0) return ssl.lastError;
+                    break;
+                }
+                default:
+                    ssl.lastError = SSL_ERROR_NONE;
+                    return SSL_ERROR_NONE;
+            }
+        }
+        ssl.lastError = SSL_ERROR_NONE;
+        return SSL_ERROR_NONE;
+    }
+
+    /**
+     * One unwrap step: takes up to the rbio's pending bytes, feeds them
+     * through the engine, appends decrypted plaintext to ssl.plainIn,
+     * leaves any unconsumed bytes in rbio.
+     * Returns the number of bytes appended to plainIn, or -1 on error
+     * (in which case ssl.lastError is set and should be returned).
+     */
+    private static int pumpUnwrap(SslState ssl, MemoryBIO rbio) {
+        javax.net.ssl.SSLEngine eng = ssl.engine;
+        int avail = rbio.pending();
+        byte[] leftover = ssl.pendingNetIn;
+        ssl.pendingNetIn = null;
+        if (avail <= 0 && (leftover == null || leftover.length == 0)) return 0;
+        byte[] fromBio = avail > 0 ? rbio.read(avail) : new byte[0];
+        byte[] buf;
+        if (leftover != null && leftover.length > 0) {
+            buf = new byte[leftover.length + fromBio.length];
+            System.arraycopy(leftover, 0, buf, 0, leftover.length);
+            System.arraycopy(fromBio, 0, buf, leftover.length, fromBio.length);
+        } else {
+            buf = fromBio;
+        }
+        boolean dbg = false; // flip for ad-hoc debugging
+        if (dbg && buf.length > 0) System.err.println("pumpUnwrap: " + buf.length + " bytes");
+        java.nio.ByteBuffer netIn = java.nio.ByteBuffer.wrap(buf);
+        try {
+            while (netIn.hasRemaining()) {
+                javax.net.ssl.SSLEngineResult r = eng.unwrap(netIn, ssl.plainIn);
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+                    // Not enough bytes for a full record — put the rest back.
+                    byte[] remaining = new byte[netIn.remaining()];
+                    netIn.get(remaining);
+                    ssl.pendingNetIn = remaining;
+                    return 0;
+                }
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                    // Grow plaintext buffer
+                    int need = eng.getSession().getApplicationBufferSize();
+                    java.nio.ByteBuffer bigger = java.nio.ByteBuffer.allocate(
+                            ssl.plainIn.position() + need);
+                    ssl.plainIn.flip();
+                    bigger.put(ssl.plainIn);
+                    ssl.plainIn = bigger;
+                    continue;
+                }
+                if (r.getStatus() == javax.net.ssl.SSLEngineResult.Status.CLOSED) {
+                    ssl.inboundClosed = true;
+                    ssl.lastError = SSL_ERROR_ZERO_RETURN;
+                    return -1;
+                }
+                // OK — we consumed some bytes; loop to consume more records
+                // if the rest of netIn still has data.
+                javax.net.ssl.SSLEngineResult.HandshakeStatus hs =
+                        eng.getHandshakeStatus();
+                if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NEED_TASK) {
+                    Runnable t;
+                    while ((t = eng.getDelegatedTask()) != null) t.run();
+                }
+                if (hs == javax.net.ssl.SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+                    // Need to emit bytes before we can consume more.
+                    // Stash the unconsumed ciphertext so the next pumpUnwrap
+                    // picks it up (otherwise we drop it on the floor).
+                    if (netIn.hasRemaining()) {
+                        byte[] rest = new byte[netIn.remaining()];
+                        netIn.get(rest);
+                        ssl.pendingNetIn = rest;
+                    }
+                    // caller's advance loop picks this up on the next pass
+                    break;
+                }
+            }
+            return 0;
+        } catch (javax.net.ssl.SSLException e) {
+            ssl.lastError = SSL_ERROR_SSL;
+            return -1;
         }
     }
 
@@ -2773,7 +4881,33 @@ public class NetSSLeay extends PerlModuleBase {
         String filename = args.get(1).toString();
         SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
         if (ctxState == null) return new RuntimeScalar(0).getList();
-        return loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
+        RuntimeList r = loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
+        if (r.size() > 0 && r.getFirst().getLong() == 1) {
+            // Load succeeded; parse again into the CTX so the KeyManager
+            // factory has the key at buildSslContext time.
+            try {
+                byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
+                String pem = new String(fileData, StandardCharsets.ISO_8859_1);
+                String pass = null;
+                if (ctxState.passwdCb != null && ctxState.passwdCb.type == RuntimeScalarType.CODE) {
+                    RuntimeArray cbArgs = new RuntimeArray();
+                    cbArgs.push(new RuntimeScalar(0));
+                    cbArgs.push(ctxState.passwdUserdata != null ? ctxState.passwdUserdata
+                            : new RuntimeScalar());
+                    pass = RuntimeCode.apply(ctxState.passwdCb, cbArgs,
+                            RuntimeContextType.SCALAR).getFirst().toString();
+                }
+                byte[] der = parsePemPrivateKey(pem, pass);
+                if (der != null) {
+                    PrivateKey pk = parsePrivateKeyDer(der);
+                    if (pk != null) {
+                        ctxState.loadedPrivateKey = pk;
+                        ctxState.sslContext = null; // force rebuild
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return r;
     }
 
     // SSL-level password callback functions

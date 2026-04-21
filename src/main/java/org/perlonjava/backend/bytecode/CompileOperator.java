@@ -728,6 +728,8 @@ public class CompileOperator {
             case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
             case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
             case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
+            case "pipe" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PIPE);
+            case "socketpair" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKETPAIR);
             case "write" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.WRITE);
             case "formline" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FORMLINE);
             case "printf" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PRINTF);

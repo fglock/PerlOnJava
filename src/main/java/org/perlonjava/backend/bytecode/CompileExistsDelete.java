@@ -243,6 +243,28 @@ public class CompileExistsDelete {
             visitDeleteArrayKVSlice(bc, node, arrayAccess, leftOp);
             return;
         }
+        // Perl allows chains like $f->[W][0] where the arrow is elided between
+        // consecutive subscripts. At the parser level that yields an outer "["
+        // whose left is itself a "->" or another "[" (or any scalar expression
+        // producing an array reference). Treat this as a postfix deref: compile
+        // the left as a scalar, deref to an array, then index.
+        boolean leftIsArrayRefExpr =
+                arrayAccess.left instanceof BinaryOperatorNode binLeft
+                        && (binLeft.operator.equals("->") || binLeft.operator.equals("[")
+                                || binLeft.operator.equals("{"));
+        if (leftIsArrayRefExpr) {
+            bc.compileNode(arrayAccess.left, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+            int arrayReg = derefArray(bc, refReg, node.getIndex());
+            int indexReg = compileArrayIndex(bc, arrayAccess);
+            int rd = bc.allocateOutputRegister();
+            bc.emit(Opcodes.ARRAY_DELETE);
+            bc.emitReg(rd);
+            bc.emitReg(arrayReg);
+            bc.emitReg(indexReg);
+            bc.lastResultReg = rd;
+            return;
+        }
         int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
         int indexReg = compileArrayIndex(bc, arrayAccess);
         int rd = bc.allocateOutputRegister();

@@ -369,6 +369,15 @@ public class BytecodeInterpreter {
                                 registers[rd] = new RuntimeScalar();
                             }
 
+                            case Opcodes.LOAD_UNDEF_READONLY -> {
+                                // Load the shared read-only undef singleton into rd.
+                                // Used as a placeholder in list assignments like
+                                // my (undef, $x) = (...), where the read-only
+                                // property is what marks the slot as "skip me".
+                                int rd = bytecode[pc++];
+                                registers[rd] = RuntimeScalarCache.scalarUndef;
+                            }
+
                             case Opcodes.UNDEFINE_SCALAR -> {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
@@ -1887,7 +1896,8 @@ public class BytecodeInterpreter {
                                  Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.TIMES, Opcodes.CRYPT,
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
-                                 Opcodes.LISTEN, Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
+                                 Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
+                                 Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,
                                  Opcodes.SYSSEEK, Opcodes.TRUNCATE, Opcodes.READ, Opcodes.OPENDIR, Opcodes.READDIR,
                                  Opcodes.SEEKDIR -> {
                                 pc = MiscOpcodeHandler.execute(opcode, bytecode, pc, registers);

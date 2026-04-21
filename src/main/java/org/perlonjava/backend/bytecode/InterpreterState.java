@@ -45,6 +45,15 @@ public class InterpreterState {
      */
     public static final ThreadLocal<RuntimeScalar> currentPackage =
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
+
+    /**
+     * Update the runtime current-package tracker. Exposed as a static helper
+     * so JVM-compiled `package Foo;` sites can invoke it cheaply via
+     * INVOKESTATIC.
+     */
+    public static void setCurrentPackageStatic(String name) {
+        currentPackage.get().set(name);
+    }
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
     // Use ArrayList of mutable int holders for O(1) PC updates (no pop/push overhead)

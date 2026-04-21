@@ -184,7 +184,13 @@ public class ListParser {
         if (!looksLikeEmptyList(parser)) {
             // It doesn't look like an empty list
             token = TokenUtils.peek(parser);
-            if (obeyParentheses && token.text.equals("(")) {
+            // obeyParentheses means "if the WHOLE arg list is wrapped in parens,
+            // consume them as delimiters". Only honour this when no args have
+            // been consumed yet (e.g. for split, the regex arg may have been
+            // consumed above; a later `(` mid-stream is grouping, not
+            // whole-list-parens, and we must keep parsing more comma-separated
+            // args after the `)` closes).
+            if (obeyParentheses && expr.elements.isEmpty() && token.text.equals("(")) {
                 // Arguments in parentheses, can be 0 or more arguments: print(), print(10)
                 // Commas are allowed after the arguments: print(10,)
                 TokenUtils.consume(parser);

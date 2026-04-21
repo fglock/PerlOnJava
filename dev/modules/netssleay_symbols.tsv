@@ -1,0 +1,706 @@
+#
+# Net::SSLeay symbol inventory — the source of truth for the complete-
+# implementation project tracked in dev/modules/netssleay_complete.md.
+#
+# Columns:
+#   name   — Perl-visible symbol (sub name or constant)
+#   kind   — constant | method | lambda
+#   impl   — DONE | PARTIAL | STUB | MISSING
+#              DONE    = matches OpenSSL behaviour closely enough that CPAN
+#                        modules depending on it should work
+#              PARTIAL = calls into a real backend, but some corner cases /
+#                        signatures / error codes are still off
+#              STUB    = returns a hardcoded value with no side effect, or
+#                        stores state no other code reads; lies about success
+#              MISSING = not registered; callers croak with
+#                        "Undefined subroutine"
+#   phase  — target phase from netssleay_complete.md (0..8)
+#   notes  — one-liner; expand in the plan doc for anything nontrivial
+#
+# Regenerate with:   perl dev/tools/classify_netssleay.pl > dev/modules/netssleay_symbols.tsv
+# The classifier is an approximation — hand-tune rows as the work progresses.
+#
+name	kind	impl	phase	notes
+ASN1_INTEGER_free	method	PARTIAL	2	autoload dispatch
+ASN1_INTEGER_get	method	PARTIAL	2	autoload dispatch
+ASN1_INTEGER_new	method	PARTIAL	2	autoload dispatch
+ASN1_INTEGER_set	method	PARTIAL	2	autoload dispatch
+ASN1_STRING_data	missing	DONE	4	X509 introspection
+ASN1_STRING_length	missing	DONE	4	X509 introspection
+ASN1_STRING_type	missing	DONE	4	X509 introspection
+ASN1_TIME_free	method	PARTIAL	2	autoload dispatch
+ASN1_TIME_new	method	PARTIAL	2	autoload dispatch
+ASN1_TIME_print	missing	DONE	4	X509 introspection
+ASN1_TIME_set	method	PARTIAL	2	autoload dispatch
+ASN1_TIME_set_string	missing	DONE	4	X509 introspection
+BIO_eof	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_free	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new_file	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_new_mem_buf	method	DONE	1	pre-seeded memory BIO, honours len arg
+BIO_pending	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_read	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_s_file	method	DONE	1	sentinel; BIO_new_file is the convenience wrapper
+BIO_s_mem	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BIO_write	method	DONE	1	memory BIO (MemoryBIO backing queue)
+BN_add_word	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bin2bn	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bn2dec	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_bn2hex	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_dup	method	PARTIAL	2	autoload dispatch
+BN_free	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_hex2bn	missing	DONE	6	RSA/BN/EVP_PKEY
+BN_new	missing	DONE	6	RSA/BN/EVP_PKEY
+CB_ACCEPT_EXIT	constant	DONE	0	
+CB_ACCEPT_LOOP	constant	DONE	0	
+CB_ALERT	constant	DONE	0	
+CB_CONNECT_EXIT	constant	DONE	0	
+CB_CONNECT_LOOP	constant	DONE	0	
+CB_EXIT	constant	DONE	0	
+CB_HANDSHAKE_DONE	constant	DONE	0	
+CB_HANDSHAKE_START	constant	DONE	0	
+CB_LOOP	constant	DONE	0	
+CB_READ	constant	DONE	0	
+CB_READ_ALERT	constant	DONE	0	
+CB_WRITE	constant	DONE	0	
+CB_WRITE_ALERT	constant	DONE	0	
+CTX_add_client_CA	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_add_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_check_private_key	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_ctrl	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_free	method	PARTIAL	2	autoload dispatch
+CTX_get_cert_store	lambda	DONE	2	allocates opaque handle
+CTX_get_client_CA_list	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_ex_data	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_max_proto_version	method	PARTIAL	2	autoload dispatch
+CTX_get_min_proto_version	method	PARTIAL	2	autoload dispatch
+CTX_get_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_options	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_security_level	lambda	PARTIAL	2	touches handle state
+CTX_get_session_cache_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_timeout	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_verify_depth	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_get_verify_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_load_verify_locations	lambda	STUB	2	returns 1 unconditionally
+CTX_new	method	PARTIAL	2	autoload dispatch
+CTX_new_with_method	method	PARTIAL	2	autoload dispatch
+CTX_remove_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_cipher_list	lambda	PARTIAL	2	touches handle state
+CTX_set_client_CA_list	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_default_passwd_cb	method	PARTIAL	2	autoload dispatch
+CTX_set_default_passwd_cb_userdata	method	PARTIAL	2	autoload dispatch
+CTX_set_default_verify_paths	lambda	STUB	2	returns 1 unconditionally
+CTX_set_ex_data	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_info_callback	lambda	STUB	2	returns undef unconditionally
+CTX_set_keylog_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_max_proto_version	method	PARTIAL	2	autoload dispatch
+CTX_set_min_proto_version	method	PARTIAL	2	autoload dispatch
+CTX_set_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_msg_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_options	lambda	PARTIAL	2	touches handle state
+CTX_set_post_handshake_auth	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_psk_client_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_psk_server_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_quiet_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_read_ahead	lambda	PARTIAL	2	touches handle state
+CTX_set_security_level	lambda	STUB	2	returns undef unconditionally
+CTX_set_session_cache_mode	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_session_id_context	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_timeout	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_servername_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_status_cb	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tlsext_ticket_key_cb	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_dh	lambda	STUB	2	returns 1 unconditionally
+CTX_set_tmp_dh_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_ecdh	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_rsa	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_set_tmp_rsa_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_tlsv1_1_new	lambda	PARTIAL	2	lambda body, check by hand
+CTX_tlsv1_2_new	lambda	PARTIAL	2	lambda body, check by hand
+CTX_tlsv1_new	lambda	PARTIAL	2	lambda body, check by hand
+CTX_use_PrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_PrivateKey_file	method	DONE	2	autoload dispatch
+CTX_use_RSAPrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_RSAPrivateKey_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_use_certificate_chain_file	lambda	DONE	2	lambda body, check by hand
+CTX_use_certificate_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+CTX_v23_new	method	PARTIAL	2	autoload dispatch
+CTX_v2_new	lambda	PARTIAL	2	lambda body, check by hand
+CTX_v3_new	lambda	PARTIAL	2	lambda body, check by hand
+DH_free	lambda	STUB	0	returns undef unconditionally
+EC_KEY_generate_key	lambda	STUB	0	returns fresh handle ID but nothing behind it
+ERROR_NONE	constant	DONE	0	
+ERROR_SSL	constant	DONE	0	
+ERROR_SYSCALL	constant	DONE	0	
+ERROR_WANT_ACCEPT	constant	DONE	0	
+ERROR_WANT_CONNECT	constant	DONE	0	
+ERROR_WANT_READ	constant	DONE	0	
+ERROR_WANT_WRITE	constant	DONE	0	
+ERROR_WANT_X509_LOOKUP	constant	DONE	0	
+ERROR_ZERO_RETURN	constant	DONE	0	
+ERR_clear_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+ERR_error_string	method	PARTIAL	2	autoload dispatch
+ERR_get_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+ERR_load_BIO_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
+ERR_load_ERR_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
+ERR_load_SSL_strings	method	DONE	1	no-op in OpenSSL 3.x; registered for compatibility
+ERR_load_crypto_strings	method	PARTIAL	2	autoload dispatch
+ERR_peek_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+ERR_print_errors_cb	method	DONE	1	drains queue via Perl callback
+ERR_put_error	method	DONE	1	ERR queue (thread-local Deque<Long>)
+EVP_Digest	method	PARTIAL	2	autoload dispatch
+EVP_DigestFinal	method	PARTIAL	2	autoload dispatch
+EVP_DigestFinal_ex	method	PARTIAL	2	autoload dispatch
+EVP_DigestInit	method	PARTIAL	2	autoload dispatch
+EVP_DigestInit_ex	method	PARTIAL	2	autoload dispatch
+EVP_DigestUpdate	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_create	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_destroy	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_free	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_md	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_new	method	PARTIAL	2	autoload dispatch
+EVP_MD_CTX_size	method	PARTIAL	2	autoload dispatch
+EVP_MD_get0_description	method	PARTIAL	2	autoload dispatch
+EVP_MD_get0_name	method	PARTIAL	2	autoload dispatch
+EVP_MD_get_type	method	PARTIAL	2	autoload dispatch
+EVP_MD_size	method	PARTIAL	2	autoload dispatch
+EVP_MD_type	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_assign_EC_KEY	lambda	PARTIAL	6	touches handle state
+EVP_PKEY_assign_RSA	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_bits	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_free	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_get1_DH	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_DSA	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_EC_KEY	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_get1_RSA	missing	DONE	6	RSA/BN/EVP_PKEY
+EVP_PKEY_id	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_new	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_security_bits	method	PARTIAL	2	autoload dispatch
+EVP_PKEY_size	method	PARTIAL	2	autoload dispatch
+EVP_PKS_RSA	constant	DONE	0	
+EVP_PKT_ENC	constant	DONE	0	
+EVP_PKT_EXCH	constant	DONE	0	
+EVP_PKT_SIGN	constant	DONE	0	
+EVP_PK_DH	constant	DONE	0	
+EVP_PK_DSA	constant	DONE	0	
+EVP_PK_EC	constant	DONE	0	
+EVP_PK_RSA	constant	DONE	0	
+EVP_get_cipherbyname	method	PARTIAL	2	autoload dispatch
+EVP_get_digestbyname	method	PARTIAL	2	autoload dispatch
+EVP_md5	method	PARTIAL	2	autoload dispatch
+EVP_sha1	method	PARTIAL	2	autoload dispatch
+EVP_sha224	method	PARTIAL	2	autoload dispatch
+EVP_sha256	method	PARTIAL	2	autoload dispatch
+EVP_sha384	method	PARTIAL	2	autoload dispatch
+EVP_sha512	method	PARTIAL	2	autoload dispatch
+FILETYPE_ASN1	constant	DONE	0	
+FILETYPE_PEM	constant	DONE	0	
+GENERAL_NAME_free	missing	DONE	4	X509 introspection
+GEN_DIRNAME	constant	DONE	0	
+GEN_DNS	constant	DONE	0	
+GEN_EDIPARTY	constant	DONE	0	
+GEN_EMAIL	constant	DONE	0	
+GEN_IPADD	constant	DONE	0	
+GEN_OTHERNAME	constant	DONE	0	
+GEN_RID	constant	DONE	0	
+GEN_URI	constant	DONE	0	
+GEN_X400	constant	DONE	0	
+HMAC	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_CTX_free	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_CTX_new	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Final	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Init	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Init_ex	missing	DONE	5	digest/HMAC/cipher wrappers
+HMAC_Update	missing	DONE	5	digest/HMAC/cipher wrappers
+LIBRESSL_VERSION_NUMBER	constant	DONE	0	
+MBSTRING_ASC	constant	DONE	0	
+MBSTRING_BMP	constant	DONE	0	
+MBSTRING_FLAG	constant	DONE	0	
+MBSTRING_UNIV	constant	DONE	0	
+MBSTRING_UTF8	constant	DONE	0	
+MD5	method	PARTIAL	2	autoload dispatch
+MODE_ACCEPT_MOVING_WRITE_BUFFER	constant	DONE	0	
+MODE_AUTO_RETRY	constant	DONE	0	
+MODE_ENABLE_PARTIAL_WRITE	constant	DONE	0	
+NID_authority_key_identifier	constant	DONE	0	
+NID_basic_constraints	constant	DONE	0	
+NID_certificate_policies	constant	DONE	0	
+NID_commonName	constant	DONE	0	
+NID_countryName	constant	DONE	0	
+NID_crl_distribution_points	constant	DONE	0	
+NID_domainComponent	constant	DONE	0	
+NID_ext_key_usage	constant	DONE	0	
+NID_ext_req	constant	DONE	0	
+NID_givenName	constant	DONE	0	
+NID_info_access	constant	DONE	0	
+NID_initials	constant	DONE	0	
+NID_issuer_alt_name	constant	DONE	0	
+NID_key_usage	constant	DONE	0	
+NID_localityName	constant	DONE	0	
+NID_md5	constant	DONE	0	
+NID_netscape_cert_type	constant	DONE	0	
+NID_organizationName	constant	DONE	0	
+NID_organizationalUnitName	constant	DONE	0	
+NID_pkcs9_emailAddress	constant	DONE	0	
+NID_ripemd160	constant	DONE	0	
+NID_rsaEncryption	constant	DONE	0	
+NID_serialNumber	constant	DONE	0	
+NID_sha1	constant	DONE	0	
+NID_sha224	constant	DONE	0	
+NID_sha256	constant	DONE	0	
+NID_sha384	constant	DONE	0	
+NID_sha3_256	constant	DONE	0	
+NID_sha3_512	constant	DONE	0	
+NID_sha512	constant	DONE	0	
+NID_stateOrProvinceName	constant	DONE	0	
+NID_subject_alt_name	constant	DONE	0	
+NID_subject_key_identifier	constant	DONE	0	
+NID_surname	constant	DONE	0	
+NID_title	constant	DONE	0	
+OBJ_cmp	method	PARTIAL	2	autoload dispatch
+OBJ_ln2nid	method	PARTIAL	2	autoload dispatch
+OBJ_nid2ln	method	PARTIAL	2	autoload dispatch
+OBJ_nid2obj	method	PARTIAL	2	autoload dispatch
+OBJ_nid2sn	method	PARTIAL	2	autoload dispatch
+OBJ_obj2nid	method	PARTIAL	2	autoload dispatch
+OBJ_obj2txt	method	PARTIAL	2	autoload dispatch
+OBJ_sn2nid	method	PARTIAL	2	autoload dispatch
+OBJ_txt2nid	method	PARTIAL	2	autoload dispatch
+OBJ_txt2obj	method	PARTIAL	2	autoload dispatch
+OCSP_BASICRESP_free	missing	DONE	7	OCSP / session cache
+OCSP_CERTID_free	missing	DONE	7	OCSP / session cache
+OCSP_REQUEST_free	missing	DONE	7	OCSP / session cache
+OCSP_REQUEST_new	missing	DONE	7	OCSP / session cache
+OCSP_RESPONSE_STATUS_SUCCESSFUL	constant	DONE	0	
+OCSP_RESPONSE_free	missing	DONE	7	OCSP / session cache
+OCSP_cert_to_id	missing	DONE	7	OCSP / session cache
+OCSP_request_add0_id	missing	DONE	7	OCSP / session cache
+OCSP_request_add1_nonce	missing	DONE	7	OCSP / session cache
+OCSP_response_create	missing	DONE	7	OCSP / session cache
+OCSP_response_get1_basic	missing	DONE	7	OCSP / session cache
+OCSP_response_results	missing	DONE	7	OCSP / session cache
+OCSP_response_status	missing	DONE	7	OCSP / session cache
+OCSP_response_status_str	missing	DONE	7	OCSP / session cache
+OCSP_response_verify	missing	DONE	7	OCSP / session cache
+OPENSSL_BUILT_ON	constant	DONE	0	
+OPENSSL_CFLAGS	constant	DONE	0	
+OPENSSL_CPU_INFO	constant	DONE	0	
+OPENSSL_DIR	constant	DONE	0	
+OPENSSL_ENGINES_DIR	constant	DONE	0	
+OPENSSL_FULL_VERSION_STRING	constant	DONE	0	
+OPENSSL_INFO_CONFIG_DIR	constant	DONE	0	
+OPENSSL_INFO_CPU_SETTINGS	constant	DONE	0	
+OPENSSL_INFO_DIR_FILENAME_SEPARATOR	constant	DONE	0	
+OPENSSL_INFO_DSO_EXTENSION	constant	DONE	0	
+OPENSSL_INFO_ENGINES_DIR	constant	DONE	0	
+OPENSSL_INFO_LIST_SEPARATOR	constant	DONE	0	
+OPENSSL_INFO_MODULES_DIR	constant	DONE	0	
+OPENSSL_INFO_SEED_SOURCE	constant	DONE	0	
+OPENSSL_MODULES_DIR	constant	DONE	0	
+OPENSSL_PLATFORM	constant	DONE	0	
+OPENSSL_VERSION	constant	DONE	0	
+OPENSSL_VERSION_MAJOR	constant	DONE	0	
+OPENSSL_VERSION_MINOR	constant	DONE	0	
+OPENSSL_VERSION_NUMBER	constant	DONE	0	
+OPENSSL_VERSION_PATCH	constant	DONE	0	
+OPENSSL_VERSION_STRING	constant	DONE	0	
+OPENSSL_info	method	PARTIAL	2	autoload dispatch
+OPENSSL_version_build_metadata	method	PARTIAL	2	autoload dispatch
+OPENSSL_version_major	method	PARTIAL	2	autoload dispatch
+OPENSSL_version_minor	method	PARTIAL	2	autoload dispatch
+OPENSSL_version_patch	method	PARTIAL	2	autoload dispatch
+OPENSSL_version_pre_release	method	PARTIAL	2	autoload dispatch
+OP_ALL	constant	DONE	0	
+OP_CIPHER_SERVER_PREFERENCE	constant	DONE	0	
+OP_NO_COMPRESSION	constant	DONE	0	
+OP_NO_SSLv2	constant	DONE	0	
+OP_NO_SSLv3	constant	DONE	0	
+OP_NO_TICKET	constant	DONE	0	
+OP_NO_TLSv1	constant	DONE	0	
+OP_NO_TLSv1_1	constant	DONE	0	
+OP_NO_TLSv1_2	constant	DONE	0	
+OP_NO_TLSv1_3	constant	DONE	0	
+OP_SINGLE_DH_USE	constant	DONE	0	
+OP_SINGLE_ECDH_USE	constant	DONE	0	
+OSSL_LIB_CTX_get0_global_default	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_available	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_do_all	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_get0_name	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_load	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_self_test	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_try_load	method	PARTIAL	2	autoload dispatch
+OSSL_PROVIDER_unload	method	PARTIAL	2	autoload dispatch
+OpenSSL_add_all_digests	method	PARTIAL	2	autoload dispatch
+OpenSSL_version	method	PARTIAL	2	autoload dispatch
+OpenSSL_version_num	method	PARTIAL	2	autoload dispatch
+PEM_X509_INFO_read_bio	method	PARTIAL	2	autoload dispatch
+PEM_get_string_PrivateKey	method	PARTIAL	2	autoload dispatch
+PEM_get_string_X509	method	PARTIAL	2	autoload dispatch
+PEM_get_string_X509_CRL	method	PARTIAL	2	autoload dispatch
+PEM_get_string_X509_REQ	method	PARTIAL	2	autoload dispatch
+PEM_read_bio_DHparams	lambda	STUB	3	returns fresh handle ID but nothing behind it
+PEM_read_bio_PrivateKey	method	PARTIAL	2	autoload dispatch
+PEM_read_bio_X509	method	PARTIAL	2	autoload dispatch
+PEM_read_bio_X509_CRL	method	PARTIAL	2	autoload dispatch
+PEM_read_bio_X509_REQ	method	PARTIAL	2	autoload dispatch
+PKCS12_newpass	missing	DONE	3	PEM/DER/PKCS12 parsing
+PKCS12_parse	missing	DONE	3	PEM/DER/PKCS12 parsing
+PKCS7_sign	missing	DONE	0	misc
+PKCS7_verify	missing	DONE	0	misc
+P_ASN1_INTEGER_get_dec	method	PARTIAL	2	autoload dispatch
+P_ASN1_INTEGER_get_hex	method	PARTIAL	2	autoload dispatch
+P_ASN1_INTEGER_set_dec	method	PARTIAL	2	autoload dispatch
+P_ASN1_INTEGER_set_hex	method	PARTIAL	2	autoload dispatch
+P_ASN1_STRING_get	method	PARTIAL	2	autoload dispatch
+P_ASN1_TIME_get_isotime	method	PARTIAL	2	autoload dispatch
+P_ASN1_TIME_put2string	method	PARTIAL	2	autoload dispatch
+P_ASN1_TIME_set_isotime	method	PARTIAL	2	autoload dispatch
+P_ASN1_UTCTIME_put2string	method	PARTIAL	2	autoload dispatch
+P_EVP_MD_list_all	method	PARTIAL	2	autoload dispatch
+P_EVP_PKEY_fromdata	missing	DONE	0	misc
+P_EVP_PKEY_todata	missing	DONE	0	misc
+P_PKCS12_load_file	method	PARTIAL	2	autoload dispatch
+P_X509_CRL_add_extensions	method	PARTIAL	2	autoload dispatch
+P_X509_CRL_add_revoked_serial_hex	method	PARTIAL	2	autoload dispatch
+P_X509_CRL_get_serial	lambda	DONE	0	allocates opaque handle
+P_X509_CRL_set_serial	lambda	STUB	0	returns 1 unconditionally
+P_X509_INFO_get_x509	method	PARTIAL	2	autoload dispatch
+P_X509_REQ_add_extensions	method	PARTIAL	2	autoload dispatch
+P_X509_REQ_get_attr	method	PARTIAL	2	autoload dispatch
+P_X509_add_extensions	method	PARTIAL	2	autoload dispatch
+P_X509_copy_extensions	method	PARTIAL	2	autoload dispatch
+P_X509_get_crl_distribution_points	method	PARTIAL	2	autoload dispatch
+P_X509_get_ext_key_usage	method	PARTIAL	2	autoload dispatch
+P_X509_get_ext_usage	missing	DONE	4	X509 introspection
+P_X509_get_key_usage	method	PARTIAL	2	autoload dispatch
+P_X509_get_netscape_cert_type	method	PARTIAL	2	autoload dispatch
+P_X509_get_pubkey_alg	method	PARTIAL	2	autoload dispatch
+P_X509_get_signature_alg	method	PARTIAL	2	autoload dispatch
+RAND_add	method	PARTIAL	2	autoload dispatch
+RAND_bytes	method	PARTIAL	2	autoload dispatch
+RAND_cleanup	method	PARTIAL	2	autoload dispatch
+RAND_file_name	method	PARTIAL	2	autoload dispatch
+RAND_load_file	method	PARTIAL	2	autoload dispatch
+RAND_poll	method	PARTIAL	2	autoload dispatch
+RAND_priv_bytes	method	PARTIAL	2	autoload dispatch
+RAND_pseudo_bytes	method	PARTIAL	2	autoload dispatch
+RAND_seed	method	PARTIAL	2	autoload dispatch
+RAND_status	method	PARTIAL	2	autoload dispatch
+RAND_write_file	method	PARTIAL	2	autoload dispatch
+RIPEMD160	method	PARTIAL	2	autoload dispatch
+RSA_F4	method	PARTIAL	2	autoload dispatch
+RSA_free	method	PARTIAL	2	autoload dispatch
+RSA_generate_key	method	PARTIAL	2	autoload dispatch
+RSA_get_key_parameters	method	PARTIAL	2	autoload dispatch
+RSA_new	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_private_decrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_private_encrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_public_decrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_public_encrypt	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_sign	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_size	missing	DONE	6	RSA/BN/EVP_PKEY
+RSA_verify	missing	DONE	6	RSA/BN/EVP_PKEY
+SESS_CACHE_BOTH	constant	DONE	0	
+SESS_CACHE_CLIENT	constant	DONE	0	
+SESS_CACHE_OFF	constant	DONE	0	
+SESS_CACHE_SERVER	constant	DONE	0	
+SHA1	method	PARTIAL	2	autoload dispatch
+SHA256	method	PARTIAL	2	autoload dispatch
+SHA512	method	PARTIAL	2	autoload dispatch
+SSL3_VERSION	constant	DONE	0	
+SSLEAY_BUILT_ON	constant	DONE	0	
+SSLEAY_CFLAGS	constant	DONE	0	
+SSLEAY_DIR	constant	DONE	0	
+SSLEAY_PLATFORM	constant	DONE	0	
+SSLEAY_VERSION	constant	DONE	0	
+SSL_RECEIVED_SHUTDOWN	constant	DONE	0	
+SSL_SENT_SHUTDOWN	constant	DONE	0	
+SSL_free	method	PARTIAL	2	autoload dispatch
+SSLeay_add_ssl_algorithms	method	PARTIAL	2	autoload dispatch
+SSLeay_version	method	PARTIAL	2	autoload dispatch
+SSLv23_client_method	method	PARTIAL	2	autoload dispatch
+SSLv23_method	method	PARTIAL	2	autoload dispatch
+SSLv23_server_method	method	PARTIAL	2	autoload dispatch
+ST_OK	constant	DONE	0	
+TLS1_1_VERSION	constant	DONE	0	
+TLS1_2_VERSION	constant	DONE	0	
+TLS1_3_VERSION	constant	DONE	0	
+TLS1_VERSION	constant	DONE	0	
+TLSEXT_STATUSTYPE_ocsp	constant	DONE	0	
+TLS_client_method	method	PARTIAL	2	autoload dispatch
+TLS_method	method	PARTIAL	2	autoload dispatch
+TLS_server_method	method	PARTIAL	2	autoload dispatch
+TLSv1_method	method	PARTIAL	2	autoload dispatch
+VERIFY_CLIENT_ONCE	constant	DONE	0	
+VERIFY_FAIL_IF_NO_PEER_CERT	constant	DONE	0	
+VERIFY_NONE	constant	DONE	0	
+VERIFY_PEER	constant	DONE	0	
+V_OCSP_CERTSTATUS_GOOD	constant	DONE	0	
+X509V3_EXT_print	method	PARTIAL	2	autoload dispatch
+X509_CHECK_FLAG_NO_WILDCARDS	constant	DONE	0	
+X509_CRL_digest	method	PARTIAL	2	autoload dispatch
+X509_CRL_free	lambda	PARTIAL	4	touches handle state
+X509_CRL_get0_lastUpdate	lambda	DONE	4	allocates opaque handle
+X509_CRL_get0_nextUpdate	lambda	DONE	4	allocates opaque handle
+X509_CRL_get_issuer	lambda	DONE	4	allocates opaque handle
+X509_CRL_get_lastUpdate	lambda	DONE	4	allocates opaque handle
+X509_CRL_get_nextUpdate	lambda	DONE	4	allocates opaque handle
+X509_CRL_get_version	lambda	PARTIAL	4	touches handle state
+X509_CRL_new	lambda	DONE	4	allocates opaque handle
+X509_CRL_set1_lastUpdate	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_set1_nextUpdate	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_set_issuer_name	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_set_lastUpdate	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_set_nextUpdate	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_set_version	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_sign	method	PARTIAL	2	autoload dispatch
+X509_CRL_sort	lambda	STUB	4	returns 1 unconditionally
+X509_CRL_verify	method	PARTIAL	2	autoload dispatch
+X509_EXTENSION_get_critical	method	PARTIAL	2	autoload dispatch
+X509_EXTENSION_get_data	method	PARTIAL	2	autoload dispatch
+X509_EXTENSION_get_object	method	PARTIAL	2	autoload dispatch
+X509_NAME_ENTRY_get_data	method	PARTIAL	2	autoload dispatch
+X509_NAME_ENTRY_get_object	method	PARTIAL	2	autoload dispatch
+X509_NAME_add_entry_by_NID	method	PARTIAL	2	autoload dispatch
+X509_NAME_add_entry_by_OBJ	method	PARTIAL	2	autoload dispatch
+X509_NAME_add_entry_by_txt	method	PARTIAL	2	autoload dispatch
+X509_NAME_cmp	method	PARTIAL	2	autoload dispatch
+X509_NAME_entry_count	method	PARTIAL	2	autoload dispatch
+X509_NAME_get_entry	method	PARTIAL	2	autoload dispatch
+X509_NAME_get_index_by_NID	missing	DONE	4	X509 introspection
+X509_NAME_get_text_by_NID	lambda	PARTIAL	4	touches handle state
+X509_NAME_hash	method	PARTIAL	2	autoload dispatch
+X509_NAME_new	method	PARTIAL	2	autoload dispatch
+X509_NAME_oneline	method	PARTIAL	2	autoload dispatch
+X509_NAME_print_ex	method	PARTIAL	2	autoload dispatch
+X509_PURPOSE_SSL_CLIENT	constant	DONE	0	
+X509_PURPOSE_SSL_SERVER	constant	DONE	0	
+X509_REQ_VERSION_1	constant	DONE	0	
+X509_REQ_add1_attr_by_NID	method	PARTIAL	2	autoload dispatch
+X509_REQ_digest	method	PARTIAL	2	autoload dispatch
+X509_REQ_free	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_attr_by_NID	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_attr_by_OBJ	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_attr_count	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_pubkey	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_subject_name	method	PARTIAL	2	autoload dispatch
+X509_REQ_get_version	method	PARTIAL	2	autoload dispatch
+X509_REQ_new	method	PARTIAL	2	autoload dispatch
+X509_REQ_set_pubkey	method	PARTIAL	2	autoload dispatch
+X509_REQ_set_subject_name	method	PARTIAL	2	autoload dispatch
+X509_REQ_set_version	method	PARTIAL	2	autoload dispatch
+X509_REQ_sign	method	PARTIAL	2	autoload dispatch
+X509_REQ_verify	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_free	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_get0_cert	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_get0_chain	missing	DONE	4	X509 introspection
+X509_STORE_CTX_get1_chain	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_get_current_cert	lambda	DONE	4	allocates opaque handle
+X509_STORE_CTX_get_error	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_get_error_depth	lambda	PARTIAL	4	touches handle state
+X509_STORE_CTX_init	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_new	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_set_cert	method	PARTIAL	2	autoload dispatch
+X509_STORE_CTX_set_error	missing	DONE	4	X509 introspection
+X509_STORE_add_cert	method	PARTIAL	2	autoload dispatch
+X509_STORE_add_crl	missing	DONE	4	X509 introspection
+X509_STORE_free	method	PARTIAL	2	autoload dispatch
+X509_STORE_load_locations	missing	DONE	4	X509 introspection
+X509_STORE_new	method	PARTIAL	2	autoload dispatch
+X509_STORE_set1_param	method	PARTIAL	2	autoload dispatch
+X509_STORE_set_default_paths	missing	DONE	4	X509 introspection
+X509_STORE_set_flags	lambda	DONE	4	allocates opaque handle
+X509_TRUST_EMAIL	constant	DONE	0	
+X509_VERIFY_PARAM_add0_policy	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_add1_host	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_clear_flags	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_free	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_get0_peername	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_get_flags	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_inherit	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_new	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1_email	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1_host	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1_ip	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1_ip_asc	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set1_name	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_depth	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_flags	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_hostflags	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_purpose	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_time	method	PARTIAL	2	autoload dispatch
+X509_VERIFY_PARAM_set_trust	method	PARTIAL	2	autoload dispatch
+X509_VERSION_1	constant	DONE	0	
+X509_VERSION_2	constant	DONE	0	
+X509_VERSION_3	constant	DONE	0	
+X509_V_ERR_CERT_UNTRUSTED	constant	DONE	0	
+X509_V_ERR_HOSTNAME_MISMATCH	constant	DONE	0	
+X509_V_ERR_NO_EXPLICIT_POLICY	constant	DONE	0	
+X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY	constant	DONE	0	
+X509_V_FLAG_ALLOW_PROXY_CERTS	constant	DONE	0	
+X509_V_FLAG_CRL_CHECK	constant	DONE	0	
+X509_V_FLAG_EXPLICIT_POLICY	constant	DONE	0	
+X509_V_FLAG_LEGACY_VERIFY	constant	DONE	0	
+X509_V_FLAG_PARTIAL_CHAIN	constant	DONE	0	
+X509_V_FLAG_POLICY_CHECK	constant	DONE	0	
+X509_V_FLAG_TRUSTED_FIRST	constant	DONE	0	
+X509_V_OK	constant	DONE	0	
+X509_add_ext	missing	DONE	4	X509 introspection
+X509_certificate_type	method	PARTIAL	2	autoload dispatch
+X509_check_issued	missing	DONE	4	X509 introspection
+X509_cmp	missing	DONE	4	X509 introspection
+X509_digest	method	PARTIAL	2	autoload dispatch
+X509_free	method	PARTIAL	2	autoload dispatch
+X509_get0_notAfter	method	PARTIAL	2	autoload dispatch
+X509_get0_notBefore	method	PARTIAL	2	autoload dispatch
+X509_get0_serialNumber	method	PARTIAL	2	autoload dispatch
+X509_get_X509_PUBKEY	method	PARTIAL	2	autoload dispatch
+X509_get_ex_new_index	missing	DONE	4	X509 introspection
+X509_get_ext	method	PARTIAL	2	autoload dispatch
+X509_get_ext_by_NID	method	PARTIAL	2	autoload dispatch
+X509_get_ext_count	method	PARTIAL	2	autoload dispatch
+X509_get_ext_d2i	missing	DONE	4	X509 introspection
+X509_get_fingerprint	method	PARTIAL	2	autoload dispatch
+X509_get_issuer_name	method	PARTIAL	2	autoload dispatch
+X509_get_notAfter	method	PARTIAL	2	autoload dispatch
+X509_get_notBefore	method	PARTIAL	2	autoload dispatch
+X509_get_pubkey	method	PARTIAL	2	autoload dispatch
+X509_get_serialNumber	method	PARTIAL	2	autoload dispatch
+X509_get_subjectAltNames	method	PARTIAL	2	autoload dispatch
+X509_get_subject_name	method	PARTIAL	2	autoload dispatch
+X509_get_version	method	PARTIAL	2	autoload dispatch
+X509_getm_notAfter	method	PARTIAL	2	autoload dispatch
+X509_getm_notBefore	method	PARTIAL	2	autoload dispatch
+X509_gmtime_adj	method	PARTIAL	2	autoload dispatch
+X509_issuer_and_serial_hash	method	PARTIAL	2	autoload dispatch
+X509_issuer_name_hash	method	PARTIAL	2	autoload dispatch
+X509_new	method	PARTIAL	2	autoload dispatch
+X509_pubkey_digest	method	PARTIAL	2	autoload dispatch
+X509_set_issuer_name	method	PARTIAL	2	autoload dispatch
+X509_set_notAfter	missing	DONE	4	X509 introspection
+X509_set_notBefore	missing	DONE	4	X509 introspection
+X509_set_pubkey	method	PARTIAL	2	autoload dispatch
+X509_set_serialNumber	method	PARTIAL	2	autoload dispatch
+X509_set_subject_name	method	PARTIAL	2	autoload dispatch
+X509_set_version	method	PARTIAL	2	autoload dispatch
+X509_sign	method	PARTIAL	2	autoload dispatch
+X509_subject_name_hash	method	PARTIAL	2	autoload dispatch
+X509_verify	method	PARTIAL	2	autoload dispatch
+X509_verify_cert	method	PARTIAL	2	autoload dispatch
+X509_verify_cert_error_string	missing	DONE	4	X509 introspection
+connect	lambda	DONE	2	touches handle state
+constant	method	PARTIAL	2	autoload dispatch
+d2i_X509_CRL_bio	method	PARTIAL	2	autoload dispatch
+d2i_X509_REQ_bio	method	PARTIAL	2	autoload dispatch
+d2i_X509_bio	method	PARTIAL	2	autoload dispatch
+free	lambda	STUB	0	returns undef unconditionally
+get_client_random	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_error	lambda	DONE	2	lambda body, check by hand
+get_ex_data	lambda	PARTIAL	2	lambda body, check by hand
+get_ex_new_index	lambda	PARTIAL	2	lambda body, check by hand
+get_finished	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_keyblock_size	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_max_proto_version	method	PARTIAL	2	autoload dispatch
+get_min_proto_version	method	PARTIAL	2	autoload dispatch
+get_peer_cert_chain	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_peer_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_pending	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_rbio	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_security_level	lambda	PARTIAL	2	touches handle state
+get_server_random	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_shared_ciphers	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_verify_result	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_version	missing	DONE	2	SSLEngine-driven handshake / ctx
+get_wbio	missing	DONE	2	SSLEngine-driven handshake / ctx
+hello	method	PARTIAL	2	autoload dispatch
+i2d_SSL_SESSION	missing	DONE	3	PEM/DER/PKCS12 parsing
+in_accept_init	method	PARTIAL	2	autoload dispatch
+in_connect_init	method	PARTIAL	2	autoload dispatch
+library_init	method	PARTIAL	2	autoload dispatch
+load_error_strings	method	PARTIAL	2	autoload dispatch
+new	method	DONE	2	→ Java SSL_new
+p_next_proto_last_status	missing	DONE	0	misc
+p_next_proto_negotiated	missing	DONE	0	misc
+peek	missing	DONE	2	SSLEngine-driven handshake / ctx
+pending	missing	DONE	2	SSLEngine-driven handshake / ctx
+randomize	method	PARTIAL	2	autoload dispatch
+read	lambda	DONE	2	returns undef unconditionally
+renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept_good	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_accept_renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cache_full	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cb_hits	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_cb_hits_deprecated	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect_good	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_connect_renegotiate	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_hits	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_misses	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_number	missing	DONE	2	SSLEngine-driven handshake / ctx
+sess_timeouts	missing	DONE	2	SSLEngine-driven handshake / ctx
+session_reused	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_accept_state	lambda	DONE	2	returns undef unconditionally
+set_bio	lambda	DONE	2	returns undef unconditionally
+set_connect_state	lambda	DONE	2	returns undef unconditionally
+set_default_passwd_cb	method	PARTIAL	2	autoload dispatch
+set_default_passwd_cb_userdata	method	PARTIAL	2	autoload dispatch
+set_ex_data	lambda	STUB	2	returns 1 unconditionally
+set_fd	lambda	PARTIAL	2	touches handle state
+set_info_callback	lambda	PARTIAL	2	touches handle state
+set_max_proto_version	method	PARTIAL	2	autoload dispatch
+set_min_proto_version	method	PARTIAL	2	autoload dispatch
+set_mode	lambda	PARTIAL	2	touches handle state
+set_msg_callback	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_options	lambda	PARTIAL	2	touches handle state
+set_post_handshake_auth	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_quiet_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_rfd	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_security_level	lambda	STUB	2	returns undef unconditionally
+set_session	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_shutdown	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tlsext_host_name	lambda	DONE	2	touches handle state
+set_tlsext_status_ocsp_resp	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tlsext_status_type	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tmp_dh	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_tmp_rsa	missing	DONE	2	SSLEngine-driven handshake / ctx
+set_verify	lambda	DONE	2	returns undef unconditionally
+set_wfd	missing	DONE	2	SSLEngine-driven handshake / ctx
+shutdown	lambda	DONE	2	returns undef unconditionally
+sk_GENERAL_NAME_num	missing	DONE	4	X509 introspection
+sk_GENERAL_NAME_value	missing	DONE	4	X509 introspection
+sk_X509_INFO_num	method	PARTIAL	2	autoload dispatch
+sk_X509_INFO_value	method	PARTIAL	2	autoload dispatch
+sk_X509_delete	method	PARTIAL	2	autoload dispatch
+sk_X509_free	method	PARTIAL	2	autoload dispatch
+sk_X509_insert	method	PARTIAL	2	autoload dispatch
+sk_X509_new_null	method	PARTIAL	2	autoload dispatch
+sk_X509_num	method	PARTIAL	2	autoload dispatch
+sk_X509_pop	method	PARTIAL	2	autoload dispatch
+sk_X509_pop_free	missing	DONE	4	X509 introspection
+sk_X509_push	method	PARTIAL	2	autoload dispatch
+sk_X509_shift	method	PARTIAL	2	autoload dispatch
+sk_X509_unshift	method	PARTIAL	2	autoload dispatch
+sk_X509_value	method	PARTIAL	2	autoload dispatch
+sk_pop_free	missing	DONE	4	X509 introspection
+ssl_read_CRLF	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_read_all	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_read_until	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_write_CRLF	missing	DONE	2	SSLEngine-driven handshake / ctx
+ssl_write_all	missing	DONE	2	SSLEngine-driven handshake / ctx
+state	lambda	DONE	2	touches handle state
+use_PrivateKey	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_PrivateKey_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_PrivateKey_file	method	PARTIAL	2	autoload dispatch
+use_RSAPrivateKey_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_ASN1	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_chain_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+use_certificate_file	missing	DONE	2	SSLEngine-driven handshake / ctx
+want	missing	DONE	2	SSLEngine-driven handshake / ctx
+write	lambda	DONE	2	lambda body, check by hand
+write_partial	missing	DONE	2	SSLEngine-driven handshake / ctx

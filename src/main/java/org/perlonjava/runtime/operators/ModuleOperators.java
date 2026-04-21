@@ -72,6 +72,39 @@ public class ModuleOperators {
     }
 
     /**
+     * JVM-backend wrapper for `do FILE` that accepts the compile-time
+     * current package. We temporarily override the runtime package tracker
+     * so the loaded file inherits the caller's namespace (Perl 5 semantics).
+     */
+    public static RuntimeBase doFileInPackage(RuntimeScalar runtimeScalar, int ctx, String callerPackage) {
+        String savedPackage = InterpreterState.currentPackage.get().toString();
+        try {
+            if (callerPackage != null && !callerPackage.isEmpty()) {
+                InterpreterState.currentPackage.get().set(callerPackage);
+            }
+            return doFile(runtimeScalar, true, false, ctx);
+        } finally {
+            InterpreterState.currentPackage.get().set(savedPackage);
+        }
+    }
+
+    /**
+     * JVM-backend wrapper for `require FILE` that accepts the compile-time
+     * current package (see doFileInPackage above).
+     */
+    public static RuntimeScalar requireInPackage(RuntimeScalar runtimeScalar, String callerPackage) {
+        String savedPackage = InterpreterState.currentPackage.get().toString();
+        try {
+            if (callerPackage != null && !callerPackage.isEmpty()) {
+                InterpreterState.currentPackage.get().set(callerPackage);
+            }
+            return require(runtimeScalar);
+        } finally {
+            InterpreterState.currentPackage.get().set(savedPackage);
+        }
+    }
+
+    /**
      * Internal implementation of `do` and `require` operators.
      *
      * <p>This method handles the complex dispatch logic for different argument types:
@@ -659,6 +692,14 @@ public class ModuleOperators {
         RuntimeList result;
         FeatureFlags outerFeature = featureManager;
         String savedPackage = InterpreterState.currentPackage.get().toString();
+
+        // Tell the inner compilation to start in the caller's package, rather
+        // than defaulting to `main`. This matches Perl 5's behavior for
+        // `require FILE` / `do FILE`: code in the required file without an
+        // explicit `package` statement runs in the caller's package.
+        // InterpreterState.currentPackage is now updated by `package Foo;`
+        // declarations in the JVM backend (see EmitOperator.handlePackageOperator).
+        parsedArgs.initialPackage = savedPackage;
         
         // Save and clear %^H (hints hash) to prevent hint leakage into required modules.
         // In Perl >= 5.11 (which we emulate), hints don't leak into require'd files.

@@ -1108,6 +1108,19 @@ public class EmitOperator {
 
         // Set the current package in the symbol table.
         emitterVisitor.ctx.symbolTable.setCurrentPackage(name, node.getBooleanAnnotation("isClass"));
+        // Also update the runtime current-package tracker so tools like
+        // `require FILE` (which inspects InterpreterState.currentPackage to
+        // compile the required file in the correct namespace) see the right
+        // package after a `package Foo;` declaration in JVM-compiled code.
+        // Without this, the runtime tracker stays at "main" in compiled code,
+        // and `require FILE` incorrectly installs subs in main::.
+        emitterVisitor.ctx.mv.visitLdcInsn(name);
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                org.objectweb.asm.Opcodes.INVOKESTATIC,
+                "org/perlonjava/backend/bytecode/InterpreterState",
+                "setCurrentPackageStatic",
+                "(Ljava/lang/String;)V",
+                false);
         // Set debug information for the file name.
         ByteCodeSourceMapper.setDebugInfoFileName(emitterVisitor.ctx);
         if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
@@ -1251,7 +1264,24 @@ public class EmitOperator {
 
     static void handleRequireOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitOperator(node, emitterVisitor);
+        // Push the compile-time current package so `require FILE` can compile
+        // the loaded file in the correct namespace (Perl 5 semantics: `require
+        // FILE` is evaluated in the caller's package). The JVM backend has
+        // no thread-local "current sub's package" tracker for compiled subs,
+        // so we embed the compile-time package string at every call site.
+        emitterVisitor.pushCurrentPackage();
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                org.objectweb.asm.Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/ModuleOperators",
+                "requireInPackage",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        // Match emitOperator's post-processing for context handling.
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            handleVoidContext(emitterVisitor);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            handleScalarContext(emitterVisitor, node);
+        }
     }
 
     static void handleDoFileOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
@@ -1259,8 +1289,21 @@ public class EmitOperator {
         node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         // Push the context type (handles RUNTIME context properly)
         emitterVisitor.pushCallContext();
-        // Call doFile with context
-        emitOperator(node, emitterVisitor);
+        // Push the compile-time current package so the loaded file compiles
+        // in the caller's namespace (Perl 5 semantics for `do FILE`).
+        emitterVisitor.pushCurrentPackage();
+        emitterVisitor.ctx.mv.visitMethodInsn(
+                org.objectweb.asm.Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/ModuleOperators",
+                "doFileInPackage",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;ILjava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+        // Match emitOperator's post-processing for context handling.
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+            handleVoidContext(emitterVisitor);
+        } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            handleScalarContext(emitterVisitor, node);
+        }
     }
 
     static void handleStatOperator(EmitterVisitor emitterVisitor, OperatorNode node, String operator) {

@@ -1400,13 +1400,20 @@ public class IOOperator {
         // If creating a new file, apply the permissions
         if ((mode & O_CREAT) != 0) {
             File file = RuntimeIO.resolveFile(fileName);
-            if (!file.exists()) {
+            boolean existed = file.exists();
+            // O_EXCL: "error if O_CREAT and the file already exists"
+            if ((mode & O_EXCL) != 0 && existed) {
+                getGlobalVariable("main::!").set("File exists");
+                return scalarFalse;
+            }
+            if (!existed) {
                 try {
                     file.createNewFile();
                     // Apply permissions to the newly created file
                     applyFilePermissions(file.toPath(), perms);
                 } catch (IOException e) {
                     // Failed to create file
+                    getGlobalVariable("main::!").set(e.getMessage());
                     return scalarFalse;
                 }
             }
