@@ -1,7 +1,7 @@
 package Scalar::Util;
 use strict;
 use warnings;
-our $VERSION = '1.63';
+our $VERSION = '1.70';
 
 use XSLoader;
 XSLoader::load('Scalar::Util', $VERSION);
