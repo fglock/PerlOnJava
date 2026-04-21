@@ -4593,44 +4593,39 @@ public class NetSSLeay extends PerlModuleBase {
         return key;
     }
 
-    // Parse DER-encoded private key (PKCS#1 RSA or PKCS#8)
+    // Parse DER-encoded private key (PKCS#1 RSA or PKCS#8 of any algorithm).
+    // Uses Bouncy Castle's PrivateKeyInfo + JcaPEMKeyConverter to auto-detect
+    // the algorithm from the DER AlgorithmIdentifier, replacing a hand-rolled
+    // loop over {RSA, EC, DSA, EdDSA} KeyFactories and a PKCS#1→PKCS#8 wrap.
     private static PrivateKey parsePrivateKeyDer(byte[] der) {
-        // First try PKCS#8 format (works for RSA, EC, and other key types)
-        PKCS8EncodedKeySpec pkcs8Spec = new PKCS8EncodedKeySpec(der);
-        for (String algo : new String[]{"RSA", "EC", "DSA", "EdDSA"}) {
-            try {
-                return KeyFactory.getInstance(algo).generatePrivate(pkcs8Spec);
-            } catch (Exception e) {
-                // try next algorithm
+        // 1) Try PKCS#8 (wraps RSA, EC, DSA, Ed25519, Ed448, …)
+        try {
+            org.bouncycastle.asn1.pkcs.PrivateKeyInfo pki =
+                    org.bouncycastle.asn1.pkcs.PrivateKeyInfo.getInstance(der);
+            if (pki != null) {
+                return new org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter().getPrivateKey(pki);
             }
-        }
-        // Not PKCS#8, try wrapping as PKCS#1 → PKCS#8
-        try {
-            byte[] pkcs8 = wrapPkcs1InPkcs8(der);
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
-            return KeyFactory.getInstance("RSA").generatePrivate(spec);
         } catch (Exception e) {
-            // Also try EC
+            // fall through to PKCS#1
         }
+        // 2) Try traditional PKCS#1 RSA (OpenSSL "BEGIN RSA PRIVATE KEY")
         try {
-            byte[] pkcs8 = wrapPkcs1InPkcs8(der);
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(pkcs8);
-            return KeyFactory.getInstance("EC").generatePrivate(spec);
+            org.bouncycastle.asn1.pkcs.RSAPrivateKey rsa =
+                    org.bouncycastle.asn1.pkcs.RSAPrivateKey.getInstance(der);
+            org.bouncycastle.asn1.x509.AlgorithmIdentifier algId =
+                    new org.bouncycastle.asn1.x509.AlgorithmIdentifier(
+                            org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.rsaEncryption,
+                            org.bouncycastle.asn1.DERNull.INSTANCE);
+            org.bouncycastle.asn1.pkcs.PrivateKeyInfo pki =
+                    new org.bouncycastle.asn1.pkcs.PrivateKeyInfo(algId, rsa);
+            return new org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter().getPrivateKey(pki);
         } catch (Exception e) {
             return null;
         }
     }
 
-    // Wrap PKCS#1 RSA key in PKCS#8 envelope
-    private static byte[] wrapPkcs1InPkcs8(byte[] pkcs1) {
-        // AlgorithmIdentifier for RSA: SEQUENCE { OID 1.2.840.113549.1.1.1, NULL }
-        byte[] rsaOid = {0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86, (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01};
-        byte[] nullTag = {0x05, 0x00};
-        byte[] algId = derSequence(derConcat(rsaOid, nullTag));
-        byte[] version = {0x02, 0x01, 0x00}; // INTEGER 0
-        byte[] octetString = derTag(0x04, pkcs1); // OCTET STRING wrapping PKCS#1
-        return derSequence(derConcat(version, algId, octetString));
-    }
+    // (wrapPkcs1InPkcs8 removed: parsePrivateKeyDer now uses BC's PrivateKeyInfo
+    //  directly, so the manual PKCS#1→PKCS#8 envelope build is no longer needed.)
 
     // DER encoding helpers
     private static byte[] derSequence(byte[] content) {
@@ -4881,33 +4876,10 @@ public class NetSSLeay extends PerlModuleBase {
         String filename = args.get(1).toString();
         SslCtxState ctxState = CTX_HANDLES.get(ctxHandle);
         if (ctxState == null) return new RuntimeScalar(0).getList();
-        RuntimeList r = loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata);
-        if (r.size() > 0 && r.getFirst().getLong() == 1) {
-            // Load succeeded; parse again into the CTX so the KeyManager
-            // factory has the key at buildSslContext time.
-            try {
-                byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
-                String pem = new String(fileData, StandardCharsets.ISO_8859_1);
-                String pass = null;
-                if (ctxState.passwdCb != null && ctxState.passwdCb.type == RuntimeScalarType.CODE) {
-                    RuntimeArray cbArgs = new RuntimeArray();
-                    cbArgs.push(new RuntimeScalar(0));
-                    cbArgs.push(ctxState.passwdUserdata != null ? ctxState.passwdUserdata
-                            : new RuntimeScalar());
-                    pass = RuntimeCode.apply(ctxState.passwdCb, cbArgs,
-                            RuntimeContextType.SCALAR).getFirst().toString();
-                }
-                byte[] der = parsePemPrivateKey(pem, pass);
-                if (der != null) {
-                    PrivateKey pk = parsePrivateKeyDer(der);
-                    if (pk != null) {
-                        ctxState.loadedPrivateKey = pk;
-                        ctxState.sslContext = null; // force rebuild
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-        return r;
+        // Pass ctxState so the successful-parse path populates the KeyManager
+        // state in one pass; avoids re-invoking the password callback, which
+        // broke t/local/05_passwd_cb.t (callback counted an extra call per load).
+        return loadPrivateKeyFile(filename, ctxState.passwdCb, ctxState.passwdUserdata, ctxState);
     }
 
     // SSL-level password callback functions
@@ -4938,23 +4910,30 @@ public class NetSSLeay extends PerlModuleBase {
         // SSL-level callback takes precedence over CTX-level
         RuntimeScalar cb = ssl.passwdCb;
         RuntimeScalar ud = ssl.passwdUserdata;
+        SslCtxState ctxStateForKey = CTX_HANDLES.get(ssl.ctxHandle);
         if (cb == null) {
             // Fall back to CTX-level callback
-            SslCtxState ctxState = CTX_HANDLES.get(ssl.ctxHandle);
-            if (ctxState != null) {
-                cb = ctxState.passwdCb;
-                ud = ctxState.passwdUserdata;
+            if (ctxStateForKey != null) {
+                cb = ctxStateForKey.passwdCb;
+                ud = ctxStateForKey.passwdUserdata;
             }
         }
-        return loadPrivateKeyFile(filename, cb, ud);
+        return loadPrivateKeyFile(filename, cb, ud, ctxStateForKey);
     }
 
-    private static RuntimeList loadPrivateKeyFile(String filename, RuntimeScalar cb, RuntimeScalar ud) {
+    /**
+     * @param ctxStateForKey if non-null and the PEM parses successfully,
+     *        the parsed {@link PrivateKey} is stored on this context so
+     *        {@code buildSslContext} can pick it up without re-invoking
+     *        the password callback.
+     */
+    private static RuntimeList loadPrivateKeyFile(String filename, RuntimeScalar cb, RuntimeScalar ud,
+                                                  SslCtxState ctxStateForKey) {
         try {
             byte[] fileData = Files.readAllBytes(RuntimeIO.resolvePath(filename));
             String pem = new String(fileData, StandardCharsets.ISO_8859_1);
 
-            // Get password via callback
+            // Get password via callback (invoked exactly once per call)
             String password = null;
             if (cb != null && cb.type == RuntimeScalarType.CODE) {
                 RuntimeArray cbArgs = new RuntimeArray();
@@ -4973,6 +4952,11 @@ public class NetSSLeay extends PerlModuleBase {
 
             PrivateKey privKey = parsePrivateKeyDer(derBytes);
             if (privKey == null) return new RuntimeScalar(0).getList();
+
+            if (ctxStateForKey != null) {
+                ctxStateForKey.loadedPrivateKey = privKey;
+                ctxStateForKey.sslContext = null; // force rebuild
+            }
 
             return new RuntimeScalar(1).getList(); // success
         } catch (Exception e) {

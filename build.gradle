@@ -206,6 +206,8 @@ dependencies {
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
+    implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
+    implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
     // JNR-POSIX removed - using Java FFM API for native access (Java 22+)
 
     // Testing dependencies
