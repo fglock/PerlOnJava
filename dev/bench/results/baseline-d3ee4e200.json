@@ -1,0 +1,21 @@
+{
+  "git_sha":      "d3ee4e200",
+  "date":         "2026-04-21T18:28:10Z",
+  "runs":         3,
+  "jperl":        "/Users/fglock/projects/PerlOnJava3/jperl",
+  "perl":         "perl",
+  "perl_version": "5.042000",
+  "benchmarks":   {
+    "benchmark_anon_simple": { "unit": "s", "jperl": [7.078,7.172,7.173], "perl": [1.433,1.399,1.432] },
+    "benchmark_closure": { "unit": "s", "jperl": [9.659,9.708,9.016], "perl": [7.957,8.036,7.976] },
+    "benchmark_eval_string": { "unit": "s", "jperl": [14.142,14.478,14.189], "perl": [3.329,3.282,3.266] },
+    "benchmark_global": { "unit": "s", "jperl": [14.860,15.041,14.602], "perl": [9.644,10.880,9.359] },
+    "benchmark_lexical": { "unit": "s", "jperl": [4.092,3.947,4.014], "perl": [10.505,10.541,10.474] },
+    "benchmark_method": { "unit": "s", "jperl": [2.537,2.533,2.488], "perl": [1.469,1.474,1.495] },
+    "benchmark_refcount_anon": { "unit": "s", "jperl": [1.758,1.775,1.766], "perl": [0.447,0.456,0.448] },
+    "benchmark_refcount_bless": { "unit": "s", "jperl": [1.253,1.262,1.288], "perl": [0.198,0.197,0.198] },
+    "benchmark_regex": { "unit": "s", "jperl": [2.682,2.673,2.703], "perl": [1.977,1.975,1.981] },
+    "benchmark_string": { "unit": "s", "jperl": [3.925,4.036,4.068], "perl": [6.820,6.845,6.846] },
+    "life_bitpacked": { "unit": "Mcells/s", "jperl": [8.23,8.23,8.26], "perl": [21.21,21.38,21.27] }
+  }
+}
