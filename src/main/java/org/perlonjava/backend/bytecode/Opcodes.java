@@ -2279,6 +2279,19 @@ public class Opcodes {
      */
     public static final short LOAD_UNDEF_READONLY = 473;
 
+    /**
+     * Arithmetic operators without overload dispatch.
+     * Used when {@code no overloading} is in effect at compile time.
+     * Format: OPCODE rd rs1 rs2   (NEG_NO_OVERLOAD: rd rs)
+     */
+    public static final short ADD_NO_OVERLOAD = 474;
+    public static final short SUB_NO_OVERLOAD = 475;
+    public static final short MUL_NO_OVERLOAD = 476;
+    public static final short DIV_NO_OVERLOAD = 477;
+    public static final short MOD_NO_OVERLOAD = 478;
+    public static final short POW_NO_OVERLOAD = 479;
+    public static final short NEG_NO_OVERLOAD = 480;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

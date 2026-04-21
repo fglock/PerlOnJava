@@ -1246,4 +1246,64 @@ public class MathOperators {
             default -> getScalarBoolean(!runtimeScalar.getBoolean());
         };
     }
+
+    // =====================================================================
+    // NoOverload variants - used when 'no overloading' pragma is in effect.
+    // These skip overload dispatch entirely and treat blessed references
+    // as if unblessed (using refaddr-style numeric conversion).
+    // =====================================================================
+
+    private static RuntimeScalar arith(RuntimeScalar a, RuntimeScalar b, int op) {
+        a = a.getNumberNoOverload();
+        b = b.getNumberNoOverload();
+        if (a.type == DOUBLE || b.type == DOUBLE) {
+            double x = a.getDouble();
+            double y = b.getDouble();
+            return switch (op) {
+                case 0 -> new RuntimeScalar(x + y);
+                case 1 -> new RuntimeScalar(x - y);
+                case 2 -> new RuntimeScalar(x * y);
+                case 3 -> new RuntimeScalar(x / y);
+                case 4 -> new RuntimeScalar(x % y);
+                case 5 -> new RuntimeScalar(Math.pow(x, y));
+                default -> throw new IllegalStateException();
+            };
+        }
+        long x = a.getLong();
+        long y = b.getLong();
+        try {
+            return switch (op) {
+                case 0 -> getScalarInt(Math.addExact(x, y));
+                case 1 -> getScalarInt(Math.subtractExact(x, y));
+                case 2 -> getScalarInt(Math.multiplyExact(x, y));
+                case 3 -> y != 0 && x % y == 0
+                        ? getScalarInt(x / y)
+                        : new RuntimeScalar((double) x / (double) y);
+                case 4 -> y != 0 ? getScalarInt(x % y)
+                        : new RuntimeScalar((double) x % (double) y);
+                case 5 -> new RuntimeScalar(Math.pow(x, y));
+                default -> throw new IllegalStateException();
+            };
+        } catch (ArithmeticException ignored) {
+            return new RuntimeScalar((double) x + (double) y);
+        }
+    }
+
+    public static RuntimeScalar addNoOverload(RuntimeScalar a, RuntimeScalar b)      { return arith(a, b, 0); }
+    public static RuntimeScalar subtractNoOverload(RuntimeScalar a, RuntimeScalar b) { return arith(a, b, 1); }
+    public static RuntimeScalar multiplyNoOverload(RuntimeScalar a, RuntimeScalar b) { return arith(a, b, 2); }
+    public static RuntimeScalar divideNoOverload(RuntimeScalar a, RuntimeScalar b)   { return arith(a, b, 3); }
+    public static RuntimeScalar modulusNoOverload(RuntimeScalar a, RuntimeScalar b)  { return arith(a, b, 4); }
+    public static RuntimeScalar powNoOverload(RuntimeScalar a, RuntimeScalar b)      { return arith(a, b, 5); }
+
+    public static RuntimeScalar unaryMinusNoOverload(RuntimeScalar a) {
+        RuntimeScalar n = a.getNumberNoOverload();
+        if (n.type == DOUBLE) return new RuntimeScalar(-n.getDouble());
+        long v = n.getLong();
+        try {
+            return getScalarInt(Math.negateExact(v));
+        } catch (ArithmeticException ignored) {
+            return new RuntimeScalar(-(double) v);
+        }
+    }
 }

@@ -1156,7 +1156,7 @@ public class CompileOperator {
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.NEG_SCALAR);
+                bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NEG_NO_OVERLOAD : Opcodes.NEG_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
                 bytecodeCompiler.lastResultReg = rd;

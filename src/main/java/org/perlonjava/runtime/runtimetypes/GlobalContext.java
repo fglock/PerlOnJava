@@ -243,6 +243,18 @@ public class GlobalContext {
         Mro.initialize();  // mro functions available without 'use mro'
         Vars.initialize();
         Subs.initialize();
+        // Register XSLoader first: several modules below (and pragmas loaded during
+        // their .pm compilation such as 'use strict' inside Exporter.pm) call
+        // XSLoader::load at BEGIN time. Defining it up-front avoids an "Undefined
+        // subroutine &XSLoader::load" failure in the interpreter backend, where
+        // require() actually executes the required file's top-level (including
+        // the XSLoader::load call in strict.pm) before XSLoader.initialize() would
+        // otherwise have run.
+        // Note: XSLoader MUST be initialized before DynaLoader.initialize() because
+        // DynaLoader's initializeExporter() triggers require(Exporter.pm), which
+        // does `use strict;`, which (re)compiles strict.pm, which calls XSLoader::load.
+        XSLoader.initialize();
+        DynaLoader.initialize();
         Builtin.initialize();
         Base.initialize();
         Symbol.initialize();
@@ -275,8 +287,6 @@ public class GlobalContext {
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
         Version.initialize();   // Initialize version module for version objects
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
-        DynaLoader.initialize();
-        XSLoader.initialize();  // XSLoader will load other classes on-demand
         // Filter::Util::Call will be loaded via XSLoader when needed
 
         // Reset method cache after initializing UNIVERSAL
