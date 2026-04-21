@@ -86,3 +86,22 @@ Perl 5 with a minimal reproduction.
 - [ ] Text-CSV bundled-runner flake — investigate whether the Gradle
       `testModule` task uses an env setup that causes 55_combi.t to
       report a test 26 failure when it doesn't actually fail.
+- [ ] **`Class::C3` (DBIx::Class dependency)** — 4 pre-existing
+      failures reproduce on `660aa9e68`, so not regressions from this
+      merge, but they should be triaged since `Class::C3` is a
+      transitive dependency of DBIx::Class:
+    - `t/24_more_overload.t` lines 52 & 60 — expected "no method
+      found" message from overloaded `+` with no fallback, got
+      "called plus operator in OT/Bar at …" instead. Likely missing
+      Perl-5-style `no method found` throw path for **numeric**
+      overload ops (only `eq`/`ne` handle this correctly after the
+      1869badd2 fix).
+    - `t/36_next_goto.t` — `proxy next::can via goto` returns undef
+      instead of 242. Related to `goto &func` tail-call resolving
+      `next::can` / `SUPER::`.
+    - `t/37_mro_warn.t` — `loading Class::C3 did not generate
+      warnings` fails because MRO::Compat emits "Subroutine X
+      redefined" warnings on load. Likely a fix-up in our
+      `MRO::Compat` bundling or how we warn on BEGIN-time redefines
+      from within the same load chain.
+
