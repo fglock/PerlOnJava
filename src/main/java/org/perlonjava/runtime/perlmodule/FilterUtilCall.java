@@ -179,11 +179,8 @@ public class FilterUtilCall extends PerlModuleBase {
                         block.append(line);
                         bytesRead += line.length();
                         context.currentLine++;
-
-                        // Check if line ends with newline to stop
-                        if (line.endsWith("\n")) {
-                            break;
-                        }
+                        // In block mode, keep reading until we hit blockSize or EOF.
+                        // Do NOT stop on newlines — that's line mode.
                     } else {
                         // Partial line read
                         int remaining = blockSize - bytesRead;
@@ -332,11 +329,43 @@ public class FilterUtilCall extends PerlModuleBase {
                         GlobalVariable.getGlobalVariable("main::_").set("");
                     }
                 } else {
-                    // Method filter: call the filter() method on the object
-                    // String filterMethod = packageName.toString() + "::filter";
-                    // TODO: Implement method filter calling
-                    // For now, just return the original source
-                    return sourceCode;
+                    // Method filter: call the "filter" method on the blessed filter object
+                    // repeatedly until it returns a non-positive status.
+                    String pkg = packageName.toString();
+                    RuntimeScalar method = org.perlonjava.runtime.mro.InheritanceResolver
+                            .findMethodInHierarchy("filter", pkg, null, 0);
+                    if (method == null || method.type != org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE) {
+                        if (debug) {
+                            System.err.println("[FILTER] No filter() method found in " + pkg
+                                    + "; returning source unchanged");
+                        }
+                        return sourceCode;
+                    }
+                    RuntimeCode code = (RuntimeCode) method.value;
+                    boolean continueFiltering = true;
+                    while (continueFiltering) {
+                        // Call $obj->filter  (pass $self as first arg)
+                        RuntimeArray callArgs = new RuntimeArray();
+                        callArgs.push(filterObj);
+                        RuntimeBase result = code.apply(callArgs, RuntimeContextType.SCALAR);
+
+                        String chunk = GlobalVariable.getGlobalVariable("main::_").toString();
+                        if (!chunk.isEmpty()) {
+                            filteredCode.append(chunk);
+                            if (debug) {
+                                System.err.println("[FILTER] Method filter chunk: " + chunk);
+                            }
+                        }
+
+                        int status = result.scalar().getInt();
+                        if (debug) {
+                            System.err.println("[FILTER] Method filter status: " + status);
+                        }
+                        if (status <= 0) {
+                            continueFiltering = false;
+                        }
+                        GlobalVariable.getGlobalVariable("main::_").set("");
+                    }
                 }
             }
 
