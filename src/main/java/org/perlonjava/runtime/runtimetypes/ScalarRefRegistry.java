@@ -51,22 +51,36 @@ public class ScalarRefRegistry {
             System.getenv("JPERL_GC_DEBUG") != null;
     private static final boolean RECORD_STACKS =
             System.getenv("JPERL_REGISTER_STACKS") != null;
+    // Opt back to unconditional registration for scripts that weaken()
+    // after a long warm-up phase where many scalars were assigned.
+    private static final boolean UNGATED =
+            System.getenv("JPERL_UNGATED_SCALAR_REGISTRY") != null;
 
     /**
      * Register a scalar that now holds a reference. Called from
      * {@link RuntimeScalar#setLarge} paths that assign a ref value.
      * <p>
-     * NOTE: we do NOT gate on {@link WeakRefRegistry#weakRefsExist}
-     * because that flag only flips to true the first time
-     * {@code weaken()} is called. Scripts that assign refs BEFORE the
-     * first {@code weaken()} would otherwise miss those scalars, and
-     * the walker couldn't see them as live-lexical roots when it runs.
-     * The cost of the unconditional {@code WeakHashMap.put} is
-     * amortized by JVM hashing — small but present. Opt out via
-     * {@code JPERL_NO_SCALAR_REGISTRY=1} for benchmarking.
+     * Gated on {@link WeakRefRegistry#weakRefsExist}: this registry
+     * exists solely to feed {@link ReachabilityWalker#sweepWeakRefs}
+     * live-lexical seeds. If no weaken() has ever been called, no
+     * sweep will ever examine the registry, so registering is pure
+     * overhead — and it's a {@code synchronized(WeakHashMap).put}
+     * which is expensive per call. Life_bitpacked.pl profile showed
+     * this put path as the single largest post-compile hotspot.
+     * <p>
+     * Trade-off: if a script holds many scalars-with-refs PRIOR to
+     * the first weaken(), those scalars won't be in the registry
+     * when the walker first runs. However, any subsequent
+     * {@code setLarge} on those scalars will register them, and the
+     * walker's primary seeds (globals, code refs, DESTROY rescued
+     * set) still find reachable structures via the normal BFS.
+     * <p>
+     * Opt back to unconditional registration via
+     * {@code JPERL_UNGATED_SCALAR_REGISTRY=1} if needed.
      */
     public static void registerRef(RuntimeScalar scalar) {
         if (OPT_OUT || scalar == null) return;
+        if (!WeakRefRegistry.weakRefsExist && !UNGATED) return;
         scalarRegistry.put(scalar, Boolean.TRUE);
         if (RECORD_STACKS) {
             registerStacks.put(scalar, new Throwable("registerRef"));
