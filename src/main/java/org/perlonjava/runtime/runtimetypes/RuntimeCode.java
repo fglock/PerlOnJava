@@ -561,6 +561,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Returns the fully-qualified name of the $AUTOLOAD variable that should
+     * receive the name of the method being autoloaded.
+     * <p>
+     * Real Perl sets $AUTOLOAD in the package where the AUTOLOAD sub was
+     * <em>compiled</em> (CvSTASH), not in the package whose glob referenced
+     * it. This matters when the AUTOLOAD is aliased into a child class via
+     * {@code *Child::AUTOLOAD = \&Parent::AUTOLOAD} — Perl sets
+     * {@code $Parent::AUTOLOAD}, not {@code $Child::AUTOLOAD}.
+     * <p>
+     * Falls back to {@code lookupPackage} (the package used to find the CV)
+     * when the CV has no recorded compile-time package, which preserves the
+     * old behaviour for anonymous/stub cases.
+     *
+     * @param autoloadCoderef the AUTOLOAD coderef that was located
+     * @param lookupPackage   the package name used to look it up
+     *                        (e.g. "{@code Child}")
+     * @return fully-qualified name of the dynamic $AUTOLOAD variable
+     */
+    private static String autoloadVarFor(RuntimeScalar autoloadCoderef, String lookupPackage) {
+        if (autoloadCoderef != null && autoloadCoderef.value instanceof RuntimeCode rc
+                && rc.packageName != null && !rc.packageName.isEmpty()) {
+            return rc.packageName + "::AUTOLOAD";
+        }
+        return lookupPackage + "::AUTOLOAD";
+    }
+
+    /**
      * Check if AUTOLOAD exists for a given RuntimeCode's package.
      * Checks source package first (for imported subs), then current package.
      *
@@ -2367,8 +2394,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     String autoloadString = code.packageName + "::AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                     if (autoload.getDefinedBoolean()) {
-                        // Set $AUTOLOAD name
-                        getGlobalVariable(autoloadString).set(subroutineName);
+                        // Set $AUTOLOAD — in the package where the AUTOLOAD sub
+                        // was compiled, not in the package we looked it up from
+                        // (see autoloadVarFor() for details).
+                        getGlobalVariable(autoloadVarFor(autoload, code.packageName)).set(subroutineName);
                         // Call AUTOLOAD
                         return apply(autoload, a, callContext);
                     }
@@ -2696,8 +2725,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
-                    // Set $AUTOLOAD name
-                    getGlobalVariable(autoloadString).set(fullSubName);
+                    // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
+                    // (see autoloadVarFor() for the reasoning).
+                    String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                    getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
                 }
@@ -2874,7 +2905,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                 if (autoload.getDefinedBoolean()) {
-                    getGlobalVariable(autoloadString).set(fullSubName);
+                    // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
+                    // (see autoloadVarFor() for the reasoning).
+                    String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                    getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                     return apply(autoload, a, callContext);
                 }
                 throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
@@ -3228,7 +3262,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                     if (autoload.getDefinedBoolean()) {
-                        getGlobalVariable(autoloadString).set(fullSubName);
+                        // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
+                        // (see autoloadVarFor() for the reasoning).
+                        String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                        getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
                     throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called");
@@ -3334,7 +3371,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                     if (autoload.getDefinedBoolean()) {
-                        getGlobalVariable(autoloadString).set(fullSubName);
+                        // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
+                        // (see autoloadVarFor() for the reasoning).
+                        String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
+                        getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                         return apply(autoload, a, callContext);
                     }
                     throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");

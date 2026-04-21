@@ -297,6 +297,93 @@ imports:
     target: perl5_t/Params-Check
     type: directory
 
+  # Math-BigInt upstream library (pure Perl) - replaces PerlOnJava's
+  # previous thin Java-BigInteger shim. Provides the full Math::BigInt
+  # family: Math::BigInt, Math::BigFloat, Math::BigRat, with Calc as the
+  # pure-Perl default backend implementing the Math::BigInt::Lib API.
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt.pm
+    target: src/main/perl/lib/Math/BigInt.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt/Lib.pm
+    target: src/main/perl/lib/Math/BigInt/Lib.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt/Calc.pm
+    target: src/main/perl/lib/Math/BigInt/Calc.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigFloat.pm
+    target: src/main/perl/lib/Math/BigFloat.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigRat.pm
+    target: src/main/perl/lib/Math/BigRat.pm
+
+  # Math-BigInt upstream test suite. They live under
+  # src/test/resources/module/ so `make test-bundled-modules` runs them.
+  #
+  # `exclude:` lists a small set of tests that still fail after the
+  # overload::constant implementation landed. They hit secondary corners
+  # (alternate `Math::BigFloat::BareSubclass`/`BareCalc` subclasses,
+  # `use Math::BigFloat w => ...` import arg, and a precision-state
+  # ordering issue that is partly a float-formatting gap). See
+  # dev/modules/math_bigint_bignum.md.
+  - source: perl5/cpan/Math-BigInt/t
+    target: src/test/resources/module/Math-BigInt/t
+    type: directory
+    exclude:
+      - bare_mbf.t
+      - bare_mbr.t
+      - use_mbfw.t
+
+  # bignum pragma family - `use bigint`, `use bignum`, `use bigrat`,
+  # `use bigfloat` -- thin pragmas built on top of Math::BigInt et al.
+  - source: perl5/cpan/bignum/lib/bigint.pm
+    target: src/main/perl/lib/bigint.pm
+
+  - source: perl5/cpan/bignum/lib/bignum.pm
+    target: src/main/perl/lib/bignum.pm
+
+  - source: perl5/cpan/bignum/lib/bigfloat.pm
+    target: src/main/perl/lib/bigfloat.pm
+
+  - source: perl5/cpan/bignum/lib/bigrat.pm
+    target: src/main/perl/lib/bigrat.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigInt/Trace.pm
+    target: src/main/perl/lib/Math/BigInt/Trace.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigFloat/Trace.pm
+    target: src/main/perl/lib/Math/BigFloat/Trace.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigRat/Trace.pm
+    target: src/main/perl/lib/Math/BigRat/Trace.pm
+
+  # bignum upstream test suite.
+  #
+  # Excluded tests:
+  #  * `backend-gmp-*.t` — rely on Math::BigInt::GMP native backend we
+  #    don't bundle. (Pari-backed tests skip cleanly via `plan skip_all`.)
+  #  * `const-*.t` / `bigfloat.t` / `overrides.t` / `option_p.t` —
+  #    remaining corner cases of `overload::constant` (float-literal
+  #    exponent/precision stringification, handler ordering inside
+  #    imports). See dev/modules/math_bigint_bignum.md.
+  #  * `scope-{bigint,bigfloat,bignum,bigrat}.t` — check lexical
+  #    unwinding of `CORE::GLOBAL::hex` / `CORE::GLOBAL::oct` overrides
+  #    installed by `use bigint`. `no bigint` only removes the
+  #    %^H constant handlers; PerlOnJava doesn't yet unwind the hex/oct
+  #    lexical overrides on scope exit.
+  - source: perl5/cpan/bignum/t
+    target: src/test/resources/module/bignum/t
+    type: directory
+    exclude:
+      - backend-gmp-*.t
+      - bigfloat.t
+      - const-*.t
+      - option_p.t
+      - overrides.t
+      - scope-bigfloat.t
+      - scope-bigint.t
+      - scope-bignum.t
+      - scope-bigrat.t
+
   # From CPAN distribution
   - source: perl5/cpan/Perl-OSType/lib/Perl/OSType.pm
     target: src/main/perl/lib/Perl/OSType.pm

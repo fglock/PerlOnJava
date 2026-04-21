@@ -242,4 +242,104 @@ subtest 'Pack/unpack integration for test 31 scenario' => sub {
     ok($x_bigint->bcmp($y_bigint) != 0, 'BigInt objects maintain precision difference');
 };
 
+subtest 'Underscore digit separators in numeric strings' => sub {
+    plan tests => 6;
+
+    my $a = Math::BigInt->new("0x1_0000_0000_0000_0000");
+    is($a->bstr(), '18446744073709551616', 'hex literal with underscores parses');
+
+    my $b = Math::BigInt->new("1_000_000");
+    is($b->bstr(), '1000000', 'decimal literal with underscores parses');
+
+    my $c = Math::BigInt->new("0b1_0000_0000");
+    is($c->bstr(), '256', 'binary literal with underscores parses');
+
+    my $d = Math::BigInt->new("0o1_000");
+    is($d->bstr(), '512', 'octal literal with underscores parses');
+
+    my $e = Math::BigInt->new("-0x1_0000");
+    is($e->bstr(), '-65536', 'negative hex with underscores parses');
+
+    # Regression: TWO_IN_64 + (-1) used to produce -1 because the constant
+    # parsed to 0 when underscores were present.
+    my $two_in_64 = Math::BigInt->new("0x1_0000_0000_0000_0000");
+    my $r = $two_in_64 + -1;
+    is($r->bstr(), '18446744073709551615', 'BigInt(2**64) + -1 == 2**64-1');
+};
+
+subtest 'Bitwise and shift operations' => sub {
+    plan tests => 15;
+
+    # Left shift (BigInt << int)
+    my $x = Math::BigInt->new(5);
+    is(($x << 1)->bstr(), '10', 'BigInt(5) << 1 == 10');
+    is(($x << 32)->bstr(), '21474836480', 'BigInt(5) << 32 stays precise (> 32 bits)');
+
+    # Right shift (BigInt >> int) on a value that does NOT fit in 32 bits
+    my $v = Math::BigInt->new("0xFFFFFFFFFFFFFFFF");
+    my $r = $v >> 7;
+    is($r->bstr(), '144115188075855871', '64-bit BigInt >> 7 preserves high bits');
+
+    # >>= assignment form
+    my $w = Math::BigInt->new("0xFFFFFFFFFFFFFFFF");
+    $w >>= 7;
+    is($w->bstr(), '144115188075855871', 'BigInt >>= 7 works in place');
+
+    # <<= assignment form
+    my $u = Math::BigInt->new(1);
+    $u <<= 64;
+    is($u->bstr(), '18446744073709551616', 'BigInt <<= 64 works in place');
+
+    # Shift when the RHS is itself a BigInt (mixed-operand case)
+    my $shift = Math::BigInt->new(28);
+    my $lhs = 0x7F;
+    my $shifted = $lhs << $shift;
+    is($shifted->bstr(), '34091302912', '0x7F << BigInt(28) dispatches to BigInt <<');
+
+    # Bitwise AND / OR / XOR / NOT
+    my $a = Math::BigInt->new("0xFF00");
+    my $b = Math::BigInt->new("0x0FF0");
+    is(($a & $b)->bstr(), '3840',  'BigInt & BigInt (0xF00)');
+    is(($a | $b)->bstr(), '65520', 'BigInt | BigInt (0xFFF0)');
+    is(($a ^ $b)->bstr(), '61680', 'BigInt ^ BigInt (0xF0F0)');
+
+    my $n = Math::BigInt->new(5);
+    is((~$n)->bstr(), '-6', '~BigInt(5) == -6');
+
+    # Modulo (Perl-sign-of-RHS semantics)
+    is((Math::BigInt->new(10) % Math::BigInt->new(3))->bstr(),  '1',  '10 % 3 == 1');
+    is((Math::BigInt->new(-10) % Math::BigInt->new(3))->bstr(), '2',  '-10 % 3 == 2 (sign of RHS)');
+    is((Math::BigInt->new(10) % Math::BigInt->new(-3))->bstr(), '-2', '10 % -3 == -2 (sign of RHS)');
+
+    # neg / abs overloads
+    is((-Math::BigInt->new(42))->bstr(),    '-42', 'unary minus on BigInt');
+    is(abs(Math::BigInt->new(-42))->bstr(), '42',  'abs() on negative BigInt');
+};
+
+subtest 'Varint-style encoding round-trip' => sub {
+    # Regression for Google::ProtocolBuffers: encoding int32 -1 as a 64-bit
+    # unsigned varint (used to break because `0x1_0000...` parsed to 0 and
+    # `>>= 7` truncated to 32 bits).
+    plan tests => 2;
+
+    use constant TWO_IN_64 => Math::BigInt->new("0x1_0000_0000_0000_0000");
+
+    my $encode = sub {
+        my $v = (shift);
+        $v = TWO_IN_64 + $v if $v < 0;
+        my $out = '';
+        my $c = 0;
+        while ($v > 0x7F) {
+            $out .= chr(($v & 0x7F) | 0x80);
+            $v >>= 7;
+            die "Number too long" if ++$c >= 10;
+        }
+        $out .= chr($v & 0x7F);
+        return $out;
+    };
+
+    is(length($encode->(-1)), 10, '-1 encodes to a full 10-byte 64-bit varint');
+    is(length($encode->(1)),  1,  '1 encodes to a single byte');
+};
+
 done_testing();

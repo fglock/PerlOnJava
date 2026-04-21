@@ -432,6 +432,14 @@ public class BitwiseOperators {
             }
         }
 
+        // Check for overloaded '<<' operator on blessed objects
+        int blessIdL = blessedId(runtimeScalar);
+        int blessIdL2 = blessedId(arg2);
+        if (blessIdL < 0 || blessIdL2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessIdL, blessIdL2, "(<<", "<<");
+            if (result != null) return result;
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
@@ -512,6 +520,14 @@ public class BitwiseOperators {
                 long result = unsignedValue >>> shift;
                 return new RuntimeScalar(result);
             }
+        }
+
+        // Check for overloaded '>>' operator on blessed objects
+        int blessIdR = blessedId(runtimeScalar);
+        int blessIdR2 = blessedId(arg2);
+        if (blessIdR < 0 || blessIdR2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessIdR, blessIdR2, "(>>", ">>");
+            if (result != null) return result;
         }
 
         // Check for uninitialized values and generate warnings

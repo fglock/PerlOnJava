@@ -1,16 +1,25 @@
 package org.perlonjava.frontend.parser;
 
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -23,6 +32,102 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarIn
 public class NumberParser {
 
     public static final int MAX_NUMIFICATION_CACHE_SIZE = 1000;
+
+    /**
+     * Counter used to mint unique global-variable names for
+     * {@code overload::constant} handlers that we capture at parse time.
+     */
+    private static final AtomicInteger CONSTANT_HANDLER_COUNTER = new AtomicInteger();
+
+    /**
+     * Wraps a just-parsed numeric literal in a call to the
+     * {@code overload::constant} handler for {@code category}, if one has
+     * been registered for the enclosing lexical scope via {@code %^H}.
+     * <p>
+     * This is Perl's compile-time numeric-literal rewrite: with
+     * <pre>{@code
+     *   BEGIN { $^H{integer} = sub { Math::BigInt->new(shift) }; }
+     *   my $x = 5;
+     * }</pre>
+     * the literal {@code 5} is rewritten as a call to the handler.
+     * <p>
+     * Because {@code %^H} is cleared at runtime, we <em>capture</em> the
+     * handler into a synthetic global ({@code $overload::__poj_const_handler_N})
+     * at parse time and emit an AST that dereferences it at runtime.
+     *
+     * @param literal      the {@link NumberNode} produced by the parser
+     * @param originalText the original source text of the literal
+     *                     (e.g. {@code "5"}, {@code "0xff"}, {@code "3.14"}) —
+     *                     passed as {@code $_[0]} to the handler
+     * @param category     one of {@code "integer"}, {@code "float"},
+     *                     {@code "binary"}
+     * @param tokenIndex   source position for the synthetic nodes
+     * @return {@code literal} unchanged when no handler is active, or a
+     *         {@code $handler->(originalText, literal, category)} call AST
+     */
+    private static Node wrapWithConstantHandler(Node literal, String originalText,
+                                                String category, int tokenIndex) {
+        RuntimeHash hh = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        if (hh == null || hh.elements.isEmpty()) {
+            return literal;
+        }
+        RuntimeScalar handler = hh.elements.get(category);
+        if (handler == null) {
+            return literal;
+        }
+        // Accept both a CODE scalar (rare) and a CODE reference (normal).
+        boolean isCode = handler.type == RuntimeScalarType.CODE
+                || (handler.type == RuntimeScalarType.REFERENCE
+                    && handler.value instanceof RuntimeScalar ref
+                    && ref.type == RuntimeScalarType.CODE);
+        if (!isCode) {
+            return literal;
+        }
+
+        // Stash the handler into a uniquely-named package global so it
+        // remains reachable at runtime (unlike %^H, which is cleared).
+        int id = CONSTANT_HANDLER_COUNTER.incrementAndGet();
+        String varName = "overload::__poj_const_handler_" + id;
+        GlobalVariable.getGlobalVariable(varName).set(handler);
+
+        // Emit  overload::__poj_const_call($handler, $text, $literal, $category)
+        // rather than a direct $handler->($text, $literal, $category) call.
+        // The helper temporarily removes %^H{$category} for the duration of
+        // the handler's execution so that patterns like
+        //     sub { return eval $_[0] }
+        // in `overload::constant float => ...` don't infinite-recurse when
+        // the handler's body reparses the original source text.
+        OperatorNode handlerVar = new OperatorNode("$",
+                new IdentifierNode(varName, tokenIndex), tokenIndex);
+        ListNode args = new ListNode(tokenIndex);
+        args.elements.add(handlerVar);
+        args.elements.add(new StringNode(originalText, tokenIndex));
+        args.elements.add(literal);
+        args.elements.add(new StringNode(category, tokenIndex));
+        return new BinaryOperatorNode("(",
+                new OperatorNode("&",
+                        new IdentifierNode("overload::__poj_const_call", tokenIndex),
+                        tokenIndex),
+                args, tokenIndex);
+    }
+
+    /**
+     * Returns {@code true} if an {@code overload::constant} handler is
+     * currently registered in {@code %^H} for {@code category}. Used to
+     * decide whether a number-literal parse that would otherwise fail
+     * (e.g. an over-long hex literal) can be salvaged by handing the
+     * original source text to the handler.
+     */
+    private static boolean hasConstantHandler(String category) {
+        RuntimeHash hh = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        if (hh == null || hh.elements.isEmpty()) return false;
+        RuntimeScalar handler = hh.elements.get(category);
+        if (handler == null) return false;
+        return handler.type == RuntimeScalarType.CODE
+                || (handler.type == RuntimeScalarType.REFERENCE
+                    && handler.value instanceof RuntimeScalar ref
+                    && ref.type == RuntimeScalarType.CODE);
+    }
 
     public static final Map<String, RuntimeScalar> numificationCache = new LinkedHashMap<String, RuntimeScalar>(MAX_NUMIFICATION_CACHE_SIZE, 0.75f, true) {
         @Override
@@ -89,11 +194,13 @@ public class NumberParser {
         }
 
         // Regular decimal number parsing
+        boolean hasFractional = false;
         if (parser.tokens.get(parser.tokenIndex).text.equals(".")) {
             number.append(TokenUtils.consume(parser).text);
             if (parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
                 number.append(TokenUtils.consume(parser).text);
             }
+            hasFractional = true;
         }
 
         if (parser.tokens.get(parser.tokenIndex).text.equals(".")) {
@@ -104,8 +211,13 @@ public class NumberParser {
             }
         }
 
+        int beforeExponent = number.length();
         checkNumberExponent(parser, number);
-        return new NumberNode(number.toString(), parser.tokenIndex);
+        boolean hasExponent = number.length() > beforeExponent;
+        String originalText = number.toString();
+        NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
+        String category = (hasFractional || hasExponent) ? "float" : "integer";
+        return wrapWithConstantHandler(numberNode, originalText, category, parser.tokenIndex);
     }
 
     /**
@@ -193,6 +305,27 @@ public class NumberParser {
         }
 
         try {
+            // Reconstruct the original source text for the overload::constant
+            // handler's $_[0] argument. numberStr already has "intPart.fracPart"
+            // for hex-float input; we just add the prefix and (if present) the
+            // binary exponent.
+            String prefix;
+            if (format == HEX_FORMAT) {
+                prefix = "0x";
+            } else if (format == BINARY_FORMAT) {
+                prefix = "0b";
+            } else { // OCTAL_FORMAT
+                // Distinguish `0oNNN` (explicit 0o prefix, numberStr has no
+                // leading 0) from traditional `0NNN` (numberStr is the full
+                // "0NNN" text).
+                prefix = numberStr.length() > 0 && numberStr.charAt(0) == '0' ? "" : "0";
+            }
+            StringBuilder originalBuilder = new StringBuilder(prefix).append(numberStr);
+            if (!exponentStr.isEmpty()) {
+                originalBuilder.append('p').append(exponentStr);
+            }
+            String originalText = originalBuilder.toString();
+
             if (hasFractionalPart || !exponentStr.isEmpty()) {
                 // Floating point number
                 int exponent = exponentStr.isEmpty() ? 0 : Integer.parseInt(exponentStr);
@@ -210,11 +343,27 @@ public class NumberParser {
                     value = format.fractionalParser.apply(numberStr + "," + exponent);
                 }
 
-                return new NumberNode(Double.toString(value), parser.tokenIndex);
+                NumberNode numberNode = new NumberNode(Double.toString(value), parser.tokenIndex);
+                return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
             } else {
                 // Integer number
-                long value = format.integerParser.apply(numberStr.toString());
-                return new NumberNode(Long.toString(value), parser.tokenIndex);
+                long value;
+                try {
+                    value = format.integerParser.apply(numberStr.toString());
+                } catch (NumberFormatException overflow) {
+                    // Value doesn't fit in a Perl IV/NV. If a `binary`
+                    // overload::constant handler is active (e.g. `use bigint`),
+                    // it will consume the original source text and produce a
+                    // bignum. Fall through with a 0 placeholder — the handler
+                    // ignores the numeric-form argument in that case.
+                    if (hasConstantHandler("binary")) {
+                        NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
+                        return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                    }
+                    throw overflow;
+                }
+                NumberNode numberNode = new NumberNode(Long.toString(value), parser.tokenIndex);
+                return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
             }
         } catch (NumberFormatException e) {
             parser.throwError("Invalid " + format.name + " number");
@@ -231,7 +380,9 @@ public class NumberParser {
         }
         number.append(token.text);
         checkNumberExponent(parser, number);
-        return new NumberNode(number.toString(), parser.tokenIndex);
+        String originalText = number.toString();
+        NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
+        return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
     }
 
     public static void checkNumberExponent(Parser parser, StringBuilder number) {
