@@ -8,13 +8,18 @@ package org.perlonjava.runtime.regex;
  * {@code (??{ CODE })} recursive/dynamic patterns).
  *
  * <p>The markers are emitted by {@code StringSegmentParser} when a code
- * block can't be constant-folded. {@link RegexPreprocessor} detects the
- * {@link #CODE_BLOCK} marker and reports a clean "not implemented" error
- * (or warning under {@code JPERL_UNIMPLEMENTED=warn}). The
- * {@link #RECURSIVE_PATTERN} marker is handled by the generic
- * {@code (??{ ... })} code path, which for non-constant bodies reduces
- * them to an empty non-capturing group (a deliberate soft-fallback many
- * existing tests and modules rely on).
+ * block can't be constant-folded. {@link RegexPreprocessor} detects them
+ * and reports "not implemented":
+ * <ul>
+ *   <li>{@link #CODE_BLOCK} — a hard error; the surrounding regex can't
+ *       usefully run without the code block.</li>
+ *   <li>{@link #RECURSIVE_PATTERN} — a hard error under default die mode,
+ *       or a warning under {@code JPERL_UNIMPLEMENTED=warn} followed by
+ *       the soft {@code (?:} fallback so the surrounding pattern still
+ *       compiles (many CPAN modules build dynamic patterns that happen
+ *       to work with the empty-group fallback; under warn mode we want
+ *       tests to continue but the user must see a diagnostic).</li>
+ * </ul>
  *
  * <p><b>Why these specific spellings?</b> The preprocessor performs some
  * {@code /i} case-fold expansions (notably for {@code K}↔{@code k}↔

@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.regex;
 
 import com.ibm.icu.lang.UCharacter;
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -1031,6 +1034,15 @@ public class RegexPreprocessor {
                 // Handle (?{ ... }) code blocks - try constant folding
                 offset = handleCodeBlock(s, offset, length, sb, regexFlags);
             } else if (c3 == '?' && c4 == '{') {
+                // Check if this is the unimplemented marker for (??{...}).
+                // Under JPERL_UNIMPLEMENTED=warn, warn and fall through to the
+                // existing non-constant handling (which appends "(?:"); under
+                // die mode, abort with a clean diagnostic. Either way the user
+                // sees the issue — silent substitution would be a lie.
+                if (s.startsWith(RegexMarkers.RECURSIVE_PATTERN, offset)) {
+                    regexUnimplementedSoft(s, offset + 3,
+                            "(??{...}) recursive/dynamic regex patterns not implemented");
+                }
                 // Handle (??{ ... }) recursive/dynamic regex patterns
                 // These insert a regex pattern at runtime based on code execution
 
@@ -1557,6 +1569,43 @@ public class RegexPreprocessor {
 
         throw new PerlJavaUnimplementedException(errMsg + " in regex; marked by <-- HERE in m/" +
                 before + marker + after + "/");
+    }
+
+    /**
+     * Soft variant of {@link #regexUnimplemented}: under
+     * {@code JPERL_UNIMPLEMENTED=warn} the caller emits a best-effort fallback
+     * construct (e.g. an empty non-capturing group) and this method warns so
+     * the user still sees the issue, letting compilation of the surrounding
+     * pattern continue. Under the default die mode it behaves identically to
+     * {@code regexUnimplemented} and throws, aborting the regex compile.
+     *
+     * <p>The intent of {@code JPERL_UNIMPLEMENTED=warn} is to let test runs
+     * keep going past unsupported features, not to silently hide them. Using
+     * this helper (instead of silent fallback) ensures the user always sees a
+     * diagnostic.
+     */
+    static void regexUnimplementedSoft(String s, int offset, String errMsg) {
+        if (!isUnimplementedWarnMode()) {
+            regexUnimplemented(s, offset, errMsg);
+            return;
+        }
+
+        if (offset > s.length()) {
+            offset = s.length();
+        }
+        String before = s.substring(0, offset);
+        String after = s.substring(offset);
+        String marker = after.isEmpty() ? " <-- HERE" : " <-- HERE ";
+
+        String message = errMsg + " in regex; marked by <-- HERE in m/" +
+                before + marker + after + "/\n";
+        WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar());
+    }
+
+    private static boolean isUnimplementedWarnMode() {
+        return "warn".equals(
+                GlobalVariable.getGlobalHash("main::ENV")
+                        .get("JPERL_UNIMPLEMENTED").toString());
     }
 
     /**
