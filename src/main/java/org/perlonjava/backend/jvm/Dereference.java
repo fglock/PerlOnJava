@@ -868,7 +868,13 @@ public class Dereference {
 
             // Convert class to Stringnode if needed:  Class->method()
             if (object instanceof IdentifierNode) {
-                object = new StringNode(((IdentifierNode) object).name, ((IdentifierNode) object).tokenIndex);
+                // Perl strips a trailing `::` from a bareword class name:
+                //   Foo::->bar()  is equivalent to  Foo->bar()
+                String className = ((IdentifierNode) object).name;
+                if (className.length() > 2 && className.endsWith("::")) {
+                    className = className.substring(0, className.length() - 2);
+                }
+                object = new StringNode(className, ((IdentifierNode) object).tokenIndex);
             }
 
             // Convert method to StringNode if needed

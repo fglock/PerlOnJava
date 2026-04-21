@@ -202,7 +202,12 @@ public class CompileBinaryOperator {
 
                     // Convert class name to string if needed: Class->method()
                     if (invocantNode instanceof IdentifierNode) {
+                        // Perl strips a trailing `::` from a bareword class name:
+                        //   Foo::->bar()  is equivalent to  Foo->bar()
                         String className = ((IdentifierNode) invocantNode).name;
+                        if (className.length() > 2 && className.endsWith("::")) {
+                            className = className.substring(0, className.length() - 2);
+                        }
                         invocantNode = new StringNode(className, invocantNode.getIndex());
                     }
 
