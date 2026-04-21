@@ -46,6 +46,29 @@ public class EmitterMethodCreator implements Opcodes {
             System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
     private static final boolean SHOW_FALLBACK =
             System.getenv("JPERL_SHOW_FALLBACK") != null;
+    /**
+     * When true, bypass {@link org.perlonjava.frontend.analysis.CleanupNeededVisitor}
+     * and always emit the full scope-exit cleanup sequence. Escape hatch
+     * for debugging suspected correctness regressions introduced by the
+     * cleanup-skip fast path. Set {@code JPERL_FORCE_CLEANUP=1} to enable.
+     */
+    private static final boolean FORCE_CLEANUP =
+            System.getenv("JPERL_FORCE_CLEANUP") != null;
+    // Cache additional compile-time debug env vars. These were previously
+    // read with System.getenv() on every method compilation; the native
+    // lookup is ~200ns per call and added up across thousands of compiled
+    // subs during module load.
+    private static final boolean ASM_DEBUG =
+            System.getenv("JPERL_ASM_DEBUG") != null;
+    private static final String ASM_DEBUG_CLASS_FILTER =
+            System.getenv("JPERL_ASM_DEBUG_CLASS");
+    private static final String BYTECODE_SIZE_DEBUG =
+            System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+    private static final int SPILL_SLOT_COUNT;
+    static {
+        String s = System.getenv("JPERL_SPILL_SLOTS");
+        SPILL_SLOT_COUNT = (s != null) ? Integer.parseInt(s) : 16;
+    }
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
     public static int skipVariables = 3;
     // Counter for generating unique class names
@@ -578,6 +601,19 @@ public class EmitterMethodCreator implements Opcodes {
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
+            }
+
+            // Determine whether this sub needs full scope-exit cleanup emission
+            // or can use a minimal null-store fast path. See CleanupNeededVisitor
+            // and JavaClassInfo.cleanupNeeded. JPERL_FORCE_CLEANUP=1 bypasses the
+            // analysis (forces cleanupNeeded=true) as an escape hatch.
+            if (FORCE_CLEANUP) {
+                ctx.javaClassInfo.cleanupNeeded = true;
+            } else {
+                org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
+                        new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
+                ast.accept(cleanupVisitor);
+                ctx.javaClassInfo.cleanupNeeded = cleanupVisitor.needsCleanup();
             }
 
             // Manual frames removed - using COMPUTE_FRAMES for automatic frame computation
