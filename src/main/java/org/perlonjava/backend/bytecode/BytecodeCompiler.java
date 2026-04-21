@@ -4446,11 +4446,20 @@ public class BytecodeCompiler implements Visitor {
         CompileOperator.visitOperator(this, node);
     }
 
+    // Sanity cap on register count. The backing storage is fully dynamic —
+    // bytecode is an ArrayList<Integer> during compile, and the runtime register
+    // array is allocated once per call as new RuntimeBase[maxRegisterEverUsed+1].
+    // This cap only exists to catch pathological / runaway allocations; at 16M
+    // registers a single call frame would already need ~128MB for the register
+    // array, which is plenty of headroom for real code (e.g. CPAN CHECKSUMS
+    // files eval'd by Safe->reval, which can legitimately need 200K+ registers).
+    private static final int REGISTER_LIMIT = 16 * 1024 * 1024;
+
     int allocateRegister() {
         int reg = nextRegister++;
-        if (reg > 65535) {
-            throwCompilerException("Too many registers: exceeded 65535 register limit. " +
-                    "Consider breaking this code into smaller subroutines.");
+        if (reg > REGISTER_LIMIT) {
+            throwCompilerException("Too many registers: exceeded " + REGISTER_LIMIT +
+                    " register limit. Consider breaking this code into smaller subroutines.");
         }
         // Track the highest register ever used for array sizing
         if (reg > maxRegisterEverUsed) {
@@ -4665,8 +4674,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Emit a register index as a short value.
-     * Registers are now 16-bit (0-65535) instead of 8-bit (0-255).
+     * Emit a register index. Registers are ints (full 32-bit range, bounded by
+     * REGISTER_LIMIT) stored in one bytecode slot since the stream is int[].
      */
     void emitReg(int register) {
         bytecode.add(register);
