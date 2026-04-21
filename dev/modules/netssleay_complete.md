@@ -189,7 +189,16 @@ Exit criteria: `t/80_ssltest.t` passes 415/415; IO::Socket::SSL core tests pass;
 
 ### Runtime dependencies
 - **JDK ≥ 11**: SSLEngine with TLS 1.3 is standard. Keep this as the floor.
-- **Bouncy Castle (optional)**: would simplify PEM PKCS#1 parsing, DH params, PKCS#12 with non-standard MACs, some EVP cipher modes. Decision at Phase 1: I lean toward **not** requiring it (stay pure JDK) and implementing the minimum ASN.1 ourselves in Phase 3. If we change our mind, the cost is adding one `implementation 'org.bouncycastle:bcprov-jdk18on:1.77'` dependency — which may be controversial given the PerlOnJava "single jar" ethos.
+- **Bouncy Castle**: adopted as a mandatory runtime dependency as of the
+  `feature/digest-sha3-bouncycastle` work (see `dev/modules/digest_sha3.md`).
+  Provides `bcprov-jdk18on` + `bcpkix-jdk18on`. Current uses:
+  - `parsePrivateKeyDer` → `PrivateKeyInfo.getInstance` + `JcaPEMKeyConverter`
+    (replaces trial-and-error KeyFactory loop + hand-rolled PKCS#1→PKCS#8 wrap).
+  - `Digest::SHA3` / `Digest::Keccak` backend (fixed-length SHA-3, SHAKE
+    XOFs, bit-level input).
+  - Available for future refactors: encrypted-PEM write path, DH parameters,
+    PKCS#12 with non-standard MACs, the CSR builder (all still hand-rolled
+    DER today but no longer blocked on a dependency decision).
 
 ### Things that genuinely don't map
 - **Access to TLS keylog / master secret**: blocked by JDK; would need `-Djdk.tls.keyExportState=true` via reflection in newer JDKs or an agent. For `CTX_set_keylog_callback` used by Wireshark integration tests, we'll need to work around.
@@ -389,7 +398,12 @@ tests cover the new surface directly: `netssleay_phase{1,2,2b,3_7,4,5_6}.t`.
 
 ## Open questions for the reviewer
 
-1. **Bouncy Castle**: allow it as an optional classpath entry? The Phase 3 PEM work is ~3× simpler with BC. Decision affects the per-phase schedule above.
+1. **Bouncy Castle**: RESOLVED (2026-04) — adopted as a mandatory dependency
+   via the `feature/digest-sha3-bouncycastle` PR. See
+   `dev/modules/digest_sha3.md`. First use inside NetSSLeay is the
+   `parsePrivateKeyDer` refactor; further BC-backed refactors
+   (encrypted-PEM write, DH params, PKCS#12, CSR builder) are unblocked
+   and can be tackled incrementally.
 2. **Which stretch goals are in scope for "complete"?** Is "AnyEvent::TLS test suite passes" enough, or do we also need to pass the full Net-SSLeay-from-CPAN test suite (which exercises many low-level ASN.1 paths)?
 3. **Backward compatibility**: the existing partial implementation has been shipped. Do we need to preserve the exact behaviour of our current stubs for `CTX_set_options` et al. for users who have (unwisely) depended on them? I propose "no — if you relied on a fake success, that's your bug", but the reviewer may disagree.
 4. **Parallelism**: some of these phases can run in parallel once Phase 1 lands. Should we plan for that (multiple engineers) or assume serial execution?
