@@ -600,43 +600,46 @@ INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
 
-all: pm_to_blib pure_all pl_files config
+all:: pm_to_blib pure_all pl_files config
 \t\@echo "PerlOnJava: $name v$version installed ($file_count files)"
 
 # Copy module and data files to installation directory
-pm_to_blib:
+pm_to_blib::
 $install_cmds_str
 
 # Copy to blib/lib for test compatibility (make test uses PERL5LIB=./blib/lib)
 # Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both)
-pure_all:
+pure_all::
 \t\@mkdir -p blib/arch
 $blib_cmds_str
 
 # Process PL_FILES
-pl_files:
+pl_files::
 $pl_cmds_str
 
 # Install executable scripts
-install_scripts:
+install_scripts::
 $script_cmds_str
 
-# Use double-colon for config to allow postamble to add rules
+# Use double-colon rules throughout so that postambles (e.g.
+# Alien::Build's MY::postamble, File::ShareDir::Install) can add
+# additional rules for the same target. Mixing : and :: is a fatal
+# make error, and real ExtUtils::MakeMaker uses :: for these targets.
 config::
 
-test:
+test::
 \t$test_cmd
 
-install: all install_scripts
+install:: all install_scripts
 \t\@echo "PerlOnJava: $name installed to \$(INSTALLSITELIB)"
 
-clean:
+clean::
 \t\$(RM_RF) blib pm_to_blib
 
-realclean: clean
+realclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-distclean: clean
+distclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
 .PHONY: all pm_to_blib pure_all pl_files config test install clean realclean distclean install_scripts
