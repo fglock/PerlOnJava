@@ -232,7 +232,7 @@ public class PerlLanguageProvider {
             RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
             // Execute (unified path for both backends)
-            return executeCode(runtimeCode, ctx, isTopLevelScript, callerContext);
+            return executeCode(runtimeCode, ast, ctx, isTopLevelScript, callerContext);
         } finally {
             // Restore the caller's scope so require/do doesn't leak its scope to the caller.
             // But do NOT restore for top-level scripts - we want the main script's pragmas to persist.
@@ -337,7 +337,7 @@ public class PerlLanguageProvider {
             // Compile to executable (compiler or interpreter based on flag)
             RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
 
-            return executeCode(runtimeCode, ctx, false, contextType);
+            return executeCode(runtimeCode, ast, ctx, false, contextType);
         } finally {
             // Propagate $^H changes back to the caller's scope so subsequent
             // code in the same lexical block sees the updated hints
@@ -358,12 +358,16 @@ public class PerlLanguageProvider {
      * Works with both interpreter (InterpretedCode) and compiler (CompiledCode).
      *
      * @param runtimeCode   The compiled RuntimeCode instance (InterpretedCode or CompiledCode)
+     * @param ast           The AST used to produce runtimeCode. Retained so we can
+     *                      recompile to the interpreter backend if the JVM-verified
+     *                      class is rejected by the verifier at first invocation
+     *                      (i.e. VerifyError thrown from {@code runtimeCode.apply(...)}).
      * @param ctx           The emitter context.
      * @param isMainProgram Indicates if this is the main program.
      * @param callerContext The calling context (VOID, SCALAR, LIST) or -1 for default
      * @return The result of the Perl code execution.
      */
-    private static RuntimeList executeCode(RuntimeCode runtimeCode, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+    private static RuntimeList executeCode(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
@@ -396,8 +400,36 @@ public class PerlLanguageProvider {
             int executionContext = callerContext >= 0 ? callerContext :
                     (isMainProgram ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
 
-            // Call apply() directly - works for both InterpretedCode and CompiledCode
-            result = runtimeCode.apply(new RuntimeArray(), executionContext);
+            // Call apply() directly - works for both InterpretedCode and CompiledCode.
+            //
+            // If the JVM backend produced a class whose apply() fails bytecode
+            // verification (VerifyError / ClassFormatError on first invocation),
+            // transparently recompile the AST with the interpreter backend and
+            // retry. The compile-time fallback in compileToExecutable only fires
+            // while createClassWithMethod is running, but HotSpot defers verifier
+            // checks to the first call, so we have to catch again here. BEGIN /
+            // CHECK / INIT have already run, and the main body has not, so
+            // re-executing apply() on the interpreted form is safe.
+            try {
+                result = runtimeCode.apply(new RuntimeArray(), executionContext);
+            } catch (Throwable t) {
+                if (runtimeCode instanceof CompiledCode && needsInterpreterFallback(t)) {
+                    if (System.getenv("JPERL_SHOW_FALLBACK") != null) {
+                        System.err.println("Note: Using interpreter fallback (verify error at first call).");
+                    }
+                    if (CompilerOptions.DEBUG_ENABLED) {
+                        ctx.logDebug("Falling back to bytecode interpreter after runtime verify error: " + t);
+                    }
+                    BytecodeCompiler compiler = new BytecodeCompiler(
+                            ctx.compilerOptions.fileName,
+                            1,
+                            ctx.errorUtil);
+                    InterpretedCode interpretedCode = compiler.compile(ast, ctx);
+                    result = interpretedCode.apply(new RuntimeArray(), executionContext);
+                } else {
+                    throw t;
+                }
+            }
 
             try {
                 if (isMainProgram) {
