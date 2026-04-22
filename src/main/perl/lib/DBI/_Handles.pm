@@ -144,9 +144,153 @@ sub installed_drivers { %installed_drh }
 
 sub data_sources {
     my ($class, $driver, $attr) = @_;
+    if (!ref($class)) {
+        # allow `DBI->data_sources("dbi:DRIVER:", $attr)` form
+        if (defined $driver && $driver =~ /^dbi:([^:]+):?/i) {
+            $driver = $1;
+        }
+    }
     my $drh = ref($class) ? $class : $class->install_driver($driver);
     return $drh->data_sources($attr);
 }
+
+# DBI->internal returns the internal DBD::Switch pseudo-driver handle,
+# used by the DBI self-tests to exercise DBI::dr-level attributes. We
+# fake it as a simple DBD::Switch::dr handle that inherits from
+# DBD::_::dr (and therefore isa('DBI::dr')).
+our $_internal_drh;
+sub internal {
+    return $_internal_drh if $_internal_drh;
+    {
+        package DBD::Switch::dr;
+        our @ISA = ('DBD::_::dr');
+        sub DESTROY { }
+    }
+    $_internal_drh = bless {
+        Name => 'Switch',
+        Version => $DBI::VERSION,
+        ImplementorClass => 'DBD::Switch::dr',
+        Kids => 0,
+        ActiveKids => 0,
+    }, 'DBD::Switch::dr';
+    return $_internal_drh;
+}
+
+# DBI->driver_prefix / dbixs_revision stubs. Real DBI uses these
+# for the method-installation registry; we don't need the machinery,
+# we just need the calls to succeed.
+sub driver_prefix {
+    my ($class, $driver) = @_;
+    # Accept either 'DBM' or 'DBD::DBM'.
+    $driver =~ s/^DBD:://;
+    my %map = (
+        DBM => 'dbm_', ExampleP => 'examplep_', File => 'f_',
+        Mem => 'mem_', NullP => 'nullp_', Proxy => 'proxy_',
+        Sponge => 'sponge_', SQLite => 'sqlite_', Gofer => 'go_',
+    );
+    return $map{$driver};
+}
+
+sub dbixs_revision { return 0 }
+
+# DBI->parse_dsn(dsn): parse a DBI DSN into
+# (scheme, driver, attr_string, attr_hash, dsn_rest).
+sub parse_dsn {
+    my ($class, $dsn) = @_;
+    return unless defined $dsn;
+    return unless $dsn =~ /^(dbi):([^:;(]+)(?:\(([^)]*)\))?(?:[:;](.*))?$/si;
+    my ($scheme, $driver, $attr_str, $rest) = ($1, $2, $3, $4);
+    my %attr;
+    if (defined $attr_str && length $attr_str) {
+        for my $pair (split /,/, $attr_str) {
+            $pair =~ s/^\s+//; $pair =~ s/\s+$//;
+            my ($k, $v) = split /\s*=\s*/, $pair, 2;
+            $attr{$k} = $v if defined $k;
+        }
+    }
+    return ($scheme, $driver, $attr_str, \%attr, $rest);
+}
+
+# DBI::_concat_hash_sorted(hashref, kv_sep, pair_sep, neat, sort_type).
+# Serialize a hash deterministically. Used by prepare_cached cache keys
+# and a handful of tests.
+sub _concat_hash_sorted {
+    my ($hash, $kv_sep, $pair_sep, $neat, $sort_type) = @_;
+    return '' unless ref($hash) eq 'HASH';
+    $kv_sep   = '=' unless defined $kv_sep;
+    $pair_sep = ',' unless defined $pair_sep;
+    my @parts;
+    for my $k (sort keys %$hash) {
+        my $v = $hash->{$k};
+        if ($neat) {
+            $v = DBI::neat($v);
+        } else {
+            $v = defined $v ? "'$v'" : 'undef';
+        }
+        push @parts, "'$k'${kv_sep}${v}";
+    }
+    return join $pair_sep, @parts;
+}
+
+# DBI::dbi_profile stubs. Real DBI implements a per-handle profiler
+# (see DBI/Profile.pm). We accept the call so profile tests don't blow
+# up; the real DBI::Profile module, when loaded, handles things itself.
+sub dbi_profile { return; }
+
+sub dbi_profile_merge_nodes {
+    my ($dest, @sources) = @_;
+    return 0 unless ref($dest) eq 'ARRAY';
+    my $total = 0;
+    for my $src (@sources) {
+        next unless ref($src) eq 'ARRAY' && @$src >= 2;
+        $dest->[0] = ($dest->[0] || 0) + ($src->[0] || 0);
+        $dest->[1] = ($dest->[1] || 0) + ($src->[1] || 0);
+        $total += ($src->[0] || 0);
+    }
+    return $total;
+}
+
+sub dbi_profile_merge { goto &dbi_profile_merge_nodes }
+
+# DBI::dbi_time — real DBI returns Time::HiRes::time() here; we
+# delegate to time() for simplicity. (Already defined in DBI/_Utils.pm
+# — this copy would 'redefined' warn — so we omit it here.)
+
+# DBI::hash(string[, type=0]): 31-bit multiplicative hash used by
+# various DBI tests and some XS-based drivers. Ported from
+# DBI::PurePerl.
+sub hash {
+    my ($key, $type) = @_;
+    $type ||= 0;
+    if ($type == 0) {
+        my $hash = 0;
+        for my $char (unpack("c*", $key)) {
+            $hash = $hash * 33 + $char;
+        }
+        $hash &= 0x7FFFFFFF;
+        $hash |= 0x40000000;
+        return -$hash;
+    }
+    Carp::croak("DBI::hash type $type not supported in PerlOnJava");
+}
+
+# DBI->_install_method is used by drivers to register new methods
+# on handle classes. Real DBI builds dispatch tables; our simplified
+# version just installs the method directly so `$h->$method` works.
+sub _install_method {
+    my ($class, $full_name, $attr, $sub) = @_;
+    # $full_name is like "DBI::db::sqlite_foo"
+    no strict 'refs';
+    if (ref $sub eq 'CODE') {
+        *{$full_name} = $sub;
+    }
+    return 1;
+}
+
+# DBI->trace / DBI->trace_msg are already defined as instance
+# methods by DBI.pm (on dbh/sth handles). Tests that call them as
+# class methods (DBI->trace(1)) are uncommon and the existing
+# impls accept that shape; don't redefine here.
 
 sub available_drivers {
     my ($class, $quiet) = @_;
@@ -312,6 +456,34 @@ sub _get_imp_data {
 
     sub private_attribute_info { undef }
 
+    sub dbixs_revision { return 0 }
+
+    sub debug {
+        my ($h, $level) = @_;
+        my $old = ref($h) ? ($h->{TraceLevel} || 0) : ($DBI::dbi_debug || 0);
+        $h->trace($level) if defined $level;
+        return $old;
+    }
+
+    # FETCH_many: fetch multiple attributes in one call, used by
+    # DBI profile code and DBIx::Class.
+    sub FETCH_many {
+        my $h = shift;
+        return map { scalar $h->FETCH($_) } @_;
+    }
+
+    # can() override so installed methods on the implementor class
+    # are findable. Handles inherit through @ISA already; this stub
+    # mostly exists for symmetry with real DBI.
+    sub install_method {
+        my ($class, $method, $attr) = @_;
+        Carp::croak("Class '$class' must begin with DBD:: and end with ::db or ::st")
+            unless $class =~ /^DBD::(\w+)::(dr|db|st)$/;
+        # No-op: drivers define methods directly on their ::<suffix>
+        # packages and MRO picks them up.
+        return 1;
+    }
+
     sub dump_handle {
         my ($h, $msg, $level) = @_;
         $msg = '' unless defined $msg;
@@ -401,6 +573,99 @@ sub _get_imp_data {
         my $drh = $dbh->{Driver} or return ();
         return $drh->data_sources($attr);
     }
+
+    sub do {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        my $rows = $sth->rows;
+        return ($rows == 0) ? "0E0" : $rows;
+    }
+
+    sub prepare_cached {
+        my ($dbh, $statement, $attr, $if_active) = @_;
+        $if_active ||= 0;
+        my $cache = $dbh->{CachedKids} ||= {};
+        my $key = join "\001", $statement,
+            (defined $attr && ref($attr) eq 'HASH')
+                ? map { defined $_ ? $_ : '' } %$attr
+                : '';
+        my $sth = $cache->{$key};
+        if ($sth && $sth->FETCH('Active')) {
+            if ($if_active == 0) {
+                Carp::carp("prepare_cached($statement) statement handle $sth still Active");
+            } elsif ($if_active == 1) {
+                $sth->finish;
+            } elsif ($if_active == 2) {
+                # fall through, reuse
+            } elsif ($if_active == 3) {
+                delete $cache->{$key};
+                $sth = $dbh->prepare($statement, $attr);
+                $cache->{$key} = $sth;
+            }
+        } elsif (!$sth) {
+            $sth = $dbh->prepare($statement, $attr) or return undef;
+            $cache->{$key} = $sth;
+        }
+        return $sth;
+    }
+
+    sub selectrow_array {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return;
+        $sth->execute(@bind) or return;
+        my $row = $sth->fetchrow_arrayref;
+        $sth->finish;
+        return $row ? (wantarray ? @$row : $row->[0]) : ();
+    }
+
+    sub selectrow_arrayref {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        my $row = $sth->fetchrow_arrayref;
+        $sth->finish;
+        return $row ? [@$row] : undef;
+    }
+
+    sub selectall_arrayref {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        my @rows;
+        while (my $row = $sth->fetchrow_arrayref) {
+            push @rows, [@$row];
+        }
+        return \@rows;
+    }
+
+    sub selectcol_arrayref {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        my @col;
+        while (my $row = $sth->fetchrow_arrayref) {
+            push @col, $row->[0];
+        }
+        return \@col;
+    }
+
+    sub selectrow_hashref {
+        my ($dbh, $statement, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        my $row = $sth->fetchrow_hashref;
+        $sth->finish;
+        return $row;
+    }
+
+    sub selectall_hashref {
+        my ($dbh, $statement, $key_field, $attr, @bind) = @_;
+        my $sth = (ref $statement) ? $statement : $dbh->prepare($statement, $attr) or return undef;
+        $sth->execute(@bind) or return undef;
+        return $sth->fetchall_hashref($key_field);
+    }
+
     sub disconnect {
         my $dbh = shift;
         $dbh->STORE(Active => 0);
@@ -424,6 +689,7 @@ sub _get_imp_data {
     sub primary_key_info { return undef }
     sub foreign_key_info { return undef }
     sub type_info_all { return [] }
+    sub type_info     { return () }
     sub get_info      { return undef }
     sub last_insert_id { return undef }
     sub take_imp_data { return undef }
@@ -440,11 +706,97 @@ sub _get_imp_data {
         $sth->STORE(Active => 0);
         return 1;
     }
+
+    # Computed NAME_lc / NAME_uc / NAME_hash / NAME_lc_hash /
+    # NAME_uc_hash attributes derived from NAME.
+    sub FETCH {
+        my ($sth, $key) = @_;
+        return undef unless ref $sth;
+        if ($key eq 'NAME_lc') {
+            return undef unless $sth->{NAME};
+            return [ map { lc } @{ $sth->{NAME} } ];
+        }
+        if ($key eq 'NAME_uc') {
+            return undef unless $sth->{NAME};
+            return [ map { uc } @{ $sth->{NAME} } ];
+        }
+        if ($key eq 'NAME_hash') {
+            return undef unless $sth->{NAME};
+            my %h; @h{ @{ $sth->{NAME} } } = (0 .. $#{ $sth->{NAME} });
+            return \%h;
+        }
+        if ($key eq 'NAME_lc_hash') {
+            return undef unless $sth->{NAME};
+            my %h; @h{ map { lc } @{ $sth->{NAME} } } = (0 .. $#{ $sth->{NAME} });
+            return \%h;
+        }
+        if ($key eq 'NAME_uc_hash') {
+            return undef unless $sth->{NAME};
+            my %h; @h{ map { uc } @{ $sth->{NAME} } } = (0 .. $#{ $sth->{NAME} });
+            return \%h;
+        }
+        return $sth->SUPER::FETCH($key);   # DBD::_::common::FETCH
+    }
+
     sub bind_col      { return 1 }
     sub bind_columns  { return 1 }
     sub bind_param    { return 1 }
     sub bind_param_array  { return 1 }
     sub execute_array { return 0 }
+
+    sub fetchall_arrayref {
+        my ($sth, $slice, $maxrows) = @_;
+        my @rows;
+        my $count = 0;
+        if (!defined $slice || (ref $slice eq 'ARRAY' && !@$slice)) {
+            # plain: each row as arrayref
+            while (my $row = $sth->fetchrow_arrayref) {
+                push @rows, [@$row];
+                last if defined $maxrows && ++$count >= $maxrows;
+            }
+        } elsif (ref $slice eq 'ARRAY') {
+            while (my $row = $sth->fetchrow_arrayref) {
+                push @rows, [ @{$row}[ @$slice ] ];
+                last if defined $maxrows && ++$count >= $maxrows;
+            }
+        } elsif (ref $slice eq 'HASH') {
+            my $names = $sth->{ $sth->{FetchHashKeyName} || 'NAME' };
+            my @keys = keys %$slice;
+            @keys = @$names if !@keys && $names;
+            while (my $row = $sth->fetchrow_arrayref) {
+                my %h;
+                for my $i (0 .. $#$names) {
+                    $h{ $names->[$i] } = $row->[$i];
+                }
+                push @rows, \%h;
+                last if defined $maxrows && ++$count >= $maxrows;
+            }
+        }
+        return \@rows;
+    }
+
+    sub fetchall_hashref {
+        my ($sth, $key_field) = @_;
+        my %result;
+        my $names = $sth->{ $sth->{FetchHashKeyName} || 'NAME' };
+        return {} unless $names;
+        # map field name -> column index
+        my %idx;
+        for my $i (0 .. $#$names) { $idx{ $names->[$i] } = $i; }
+        my @key_fields = ref($key_field) eq 'ARRAY' ? @$key_field : ($key_field);
+        while (my $row = $sth->fetchrow_arrayref) {
+            my %h;
+            for my $i (0 .. $#$names) { $h{ $names->[$i] } = $row->[$i]; }
+            my $target = \%result;
+            for my $i (0 .. $#key_fields - 1) {
+                my $k = $h{ $key_fields[$i] };
+                $target = $target->{$k} ||= {};
+            }
+            $target->{ $h{ $key_fields[-1] } } = \%h;
+        }
+        return \%result;
+    }
+
     sub fetchrow_array {
         my $sth = shift;
         my $ref = $sth->fetchrow_arrayref;
@@ -471,6 +823,15 @@ sub _get_imp_data {
             }
         }
         return $data;
+    }
+
+    # _get_fbav: returns the pre-allocated row buffer for bind_col-style
+    # fetch. Used by DBD::Sponge and a few others. We simply allocate a
+    # fresh array of the expected width.
+    sub _get_fbav {
+        my ($sth) = @_;
+        my $num = $sth->FETCH('NUM_OF_FIELDS') || 0;
+        return [ (undef) x $num ];
     }
 }
 

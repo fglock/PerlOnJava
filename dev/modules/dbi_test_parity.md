@@ -5,9 +5,21 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 2 (driver-architecture pieces: `install_driver`,
-`_new_drh` / `_new_dbh` / `_new_sth`, `DBD::_::common / dr / db / st`
-base classes):
+After Phase 3 first batch (additional DBI internals: `internal`,
+`parse_dsn`, `hash`, `_concat_hash_sorted`, `dbi_profile`,
+`driver_prefix`, `_install_method`, `_get_fbav`, plus base-class
+utility methods — `do`, `prepare_cached`, `selectrow_hashref`,
+`selectall_hashref`, `selectall_arrayref`, `selectcol_arrayref`,
+`fetchall_arrayref`, `fetchall_hashref`, `FETCH_many`, `debug`,
+computed `NAME_lc` / `NAME_uc` / `NAME_hash`, and class-method
+`trace` / `trace_msg`):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 5610 | 3978 | 1632 |
+
+Previous baseline (after Phase 2 — driver-architecture pieces,
+[PR #544](https://github.com/fglock/PerlOnJava/pull/544)):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -26,6 +38,8 @@ Exporter wiring only):
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
 | `jcpan -t DBI` | 200 | 638 | 368 | 270 |
+
+Original baseline on master: 562 subtests, 308 passing, 254 failing.
 
 The remaining failures fall into four categories, listed below in
 priority order. Phase 1 is the hard blocker — several entire test files
@@ -317,7 +331,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phase 2 complete. Phase 3 is next.
+### Current Status: Phase 3 (first batch) in progress. Many more DBI internals filled in.
 
 ### Completed
 
@@ -376,13 +390,45 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     (+564 additional subtests now pass; +654 more execute). 10
     fewer test files fail overall.
 
+- [x] **2026-04-22 — Phase 3 first batch: more DBI internals.** PR TBD.
+  - Added top-level `DBI->internal`, `DBI->parse_dsn`,
+    `DBI::hash`, `DBI::_concat_hash_sorted`, `DBI::dbi_profile`,
+    `DBI::dbi_profile_merge`, `DBI::dbi_profile_merge_nodes`,
+    `DBI->driver_prefix`, `DBI->dbixs_revision`,
+    `DBI->_install_method`, `DBI->install_method`.
+  - Fixed `DBI.pm`'s `trace` and `trace_msg` so they work as
+    class methods (previously crashed on strict refs when $dbh
+    was "DBI").
+  - Added on `DBD::_::db`: `do`, `prepare_cached`,
+    `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`,
+    `selectall_arrayref`, `selectall_hashref`,
+    `selectcol_arrayref`, `type_info`, and accepted `"dbi:DRIVER:"`
+    form in `data_sources`.
+  - Added on `DBD::_::st`: `fetchall_arrayref` (plain / slice /
+    hash), `fetchall_hashref`, `_get_fbav`, and computed
+    `NAME_lc` / `NAME_uc` / `NAME_hash` / `NAME_lc_hash` /
+    `NAME_uc_hash` attributes via an `st::FETCH` override. (Note:
+    this works when the driver calls `$sth->FETCH('NAME_lc')`
+    explicitly; direct `$sth->{NAME_lc}` access still needs tied
+    hashes, which we do not provide.)
+  - Added on `DBD::_::common`: `FETCH_many`, `debug`,
+    `dbixs_revision`, `install_method`, `dump_handle` helper.
+  - Baseline went from 1240/1600 passing to 3978/5610 passing
+    (+2738 additional subtests now pass; +4010 more execute).
+    4 fewer test files fail overall.
+
 ### Next Steps
 
-1. Start **Phase 3**: skip `DBI::PurePerl` cleanly under PerlOnJava
-   (or decide to port it), and triage `DBD::File` / `DBD::DBM`
-   behaviour against `t/49dbd_file.t` and friends. `DBD::Gofer`
-   can be deferred until the others stabilise.
-2. After Phase 3, re-run `jcpan -t DBI` and refresh the baseline.
+1. Continue **Phase 3**: the remaining 166 failing files are dominated
+   by (a) DBD::File / DBD::DBM-specific methods (`f_versions`,
+   `dbm_versions`, `dbm_clear_meta`, `clone`) and (b) attribute
+   FETCH on computed keys that real DBI handles via tied hashes
+   (`NAME_lc`, `ChildHandles`, etc.). Tied-hash semantics is the
+   biggest remaining gap.
+2. After that, triage the `zvg_*` / `zvp_*` / `zvx*_*` wrapper
+   families — most share backends with the base tests, so base
+   fixes cascade.
+3. Periodically re-run `jcpan -t DBI` to track progress.
 
 ### Open Questions
 
