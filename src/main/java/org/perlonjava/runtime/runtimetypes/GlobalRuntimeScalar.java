@@ -46,7 +46,29 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         // Save the current global reference
         var originalVariable = GlobalVariable.globalVariables.get(fullName);
 
-        localizedStack.push(new SavedGlobalState(fullName, originalVariable));
+        // Tied scalars need special handling: the tie magic must stay in
+        // place for the duration of the localized scope, so that an
+        // assignment `local $tied = value` dispatches through STORE (and
+        // restoration on scope exit dispatches STORE with the saved
+        // value). This matches real Perl semantics and is required by
+        // modules like File::chdir whose tied $CWD actually chdir's in
+        // STORE. See dev/modules/git_modules_support.md.
+        if (originalVariable != null
+                && originalVariable.type == RuntimeScalarType.TIED_SCALAR) {
+            RuntimeScalar savedValue = originalVariable.tiedFetch();
+            // Real Perl dispatches STORE(undef) on entry to localize so
+            // the tie handler sees the transition. Modules like
+            // File::chdir explicitly short-circuit on undef
+            // (`return unless defined $_[1];`).
+            originalVariable.tiedStore(RuntimeScalarCache.scalarUndef);
+            localizedStack.push(
+                    new SavedGlobalState(fullName, originalVariable, savedValue));
+            // Do NOT replace the slot — the tied scalar stays in place so
+            // that the subsequent `= value` assignment dispatches STORE.
+            return;
+        }
+
+        localizedStack.push(new SavedGlobalState(fullName, originalVariable, null));
 
         // Create a new variable for the localized scope.
         // For output separator variables, create the matching special type so that
@@ -84,6 +106,16 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
+                // Tied path: the slot was never replaced. Restore the
+                // original value by dispatching STORE on the tied scalar.
+                if (saved.originalVariable != null
+                        && saved.originalVariable.type == RuntimeScalarType.TIED_SCALAR) {
+                    if (saved.savedTiedValue != null) {
+                        saved.originalVariable.tiedStore(saved.savedTiedValue);
+                    }
+                    return;
+                }
+
                 // Decrement refCount of the CURRENT (local) value being displaced.
                 // Do NOT increment the restored value — it already has the correct
                 // refCount from its original counting.
@@ -117,7 +149,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         }
     }
 
-    private record SavedGlobalState(String fullName, RuntimeScalar originalVariable) {
+    private record SavedGlobalState(
+            String fullName,
+            RuntimeScalar originalVariable,
+            RuntimeScalar savedTiedValue) {
     }
 }
 
