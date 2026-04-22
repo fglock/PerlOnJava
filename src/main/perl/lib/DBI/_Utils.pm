@@ -44,6 +44,11 @@ our (@EXPORT, @EXPORT_OK, %EXPORT_TAGS);
     profile => [ qw(
         dbi_profile dbi_profile_merge dbi_profile_merge_nodes dbi_time
     ) ],
+    # :preparse_flags is real DBI's tag for the DBIpp_* SQL-preparser
+    # flags. We don't implement the preparser, but tests that only
+    # `use DBI qw(:preparse_flags)` to check the import succeeds are
+    # happy with an empty tag (nothing gets imported).
+    preparse_flags => [ ],
 );
 Exporter::export_ok_tags(keys %EXPORT_TAGS);
 

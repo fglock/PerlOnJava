@@ -5,7 +5,14 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 5 (HandleError / set_err severity levels, trace-to-file):
+After Phase 6 (`HandleSetErr`, errstr accumulation with priority
+promotion, `Callbacks`, `:preparse_flags`):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 6570 | 4940 | 1630 |
+
+Previous baseline (after Phase 5 — HandleError severity / trace-to-file):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -450,7 +457,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phases 1–5 landed on `fix/dbi-test-parity` (PR #546). HandleError and trace-to-file fixed in Phase 5.
+### Current Status: Phases 1–6 landed on `fix/dbi-test-parity` (PR #546). Callbacks, HandleSetErr, and errstr accumulation landed in Phase 6.
 
 ### Completed
 
@@ -573,6 +580,27 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     +404 more subtests executed). **8 fewer test files fail
     overall (156/200, was 164/200).**
 
+- [x] **2026-04-22 — Phase 6: HandleSetErr, errstr accumulation, Callbacks.**
+  - `set_err` now runs `HandleSetErr` first (returns true to
+    short-circuit, can mutate err/errstr/state in-place).
+  - Errstr accumulates across calls with real DBI's
+    `"[err was X now Y]"` / `"[state was X now Y]"` / `"\n$msg"`
+    annotations, and err is promoted only when the new value is
+    higher-priority (`truthy > "0" > "" > undef`, judged by
+    `length()`).
+  - Added `Callbacks` support in `DBI::_::OuterHandle::AUTOLOAD`:
+    before method dispatch, fire `$h->{Callbacks}{$method}` (or
+    the `"*"` wildcard if the specific method isn't registered).
+    Callback runs in the caller's context; if it returns a
+    defined value the method dispatch is short-circuited.
+  - Added `:preparse_flags` export tag (empty) so
+    `use DBI qw(:preparse_flags)` works in tests that probe the
+    import even when they don't use the preparser itself.
+  - `t/08keeperr.t`: 17 passing → **84 passing** (7 still fail).
+  - `t/70callbacks.t`: 36 passing → **67 passing**.
+  - `t/17handle_error.t` still all 84 passing (no regression).
+  - Baseline 4504/6294 → **4940/6570 passing** (+436 passes).
+
 ### Next Steps
 
 1. **Profile-on-disk internals.** `t/41prof_dump.t` /
@@ -599,6 +627,32 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 - Phase 4's bug: is it purely in the `local` restore path, or
   does method dispatch on a once-`local`-ized tied slot read
   the wrong SV? Minimal repro below will pin it down.
+- **Reuse `DBI::PurePerl` to shrink `DBI/_Handles.pm`?** The
+  upstream `DBI::PurePerl` (~1280 lines) already implements most
+  of what our `DBI/_Handles.pm` (~1210 lines) does: handle
+  factories (`_new_drh` / `_new_dbh` / `_new_sth`), `set_err`,
+  `trace_msg`, the `DBD::_::common` / `dr` / `db` / `st` base
+  packages, and `DBI::db::TIEHASH` / `DBI::dr::TIEHASH` /
+  `DBI::st::TIEHASH` tied-handle dispatch. It's loaded by the
+  upstream XS DBI when `$ENV{DBI_PUREPERL}` is set. A future PR
+  could:
+    1. Teach our `DBI.pm` to `require DBI::PurePerl` unconditionally
+       (we don't have the XS path anyway).
+    2. Keep the JDBC-backed `connect` wrapper on top of whatever
+       PurePerl provides.
+    3. Delete most of `_Handles.pm` (retaining only the shim
+       pieces PurePerl doesn't cover — e.g. `DBI->internal`,
+       the Profile-spec auto-upgrade hook, Kids/ChildHandles
+       bookkeeping).
+  Not done in this PR because it's a significant architectural
+  change and risks regressions in the existing 4500+ passing
+  subtests.
+
+  The rest of upstream DBI's ecosystem is already reused as-is:
+  `DBI::Profile`, `DBI::ProfileData`, `DBI::ProfileDumper`,
+  `DBI::SQL::Nano`, `DBI::DBD::SqlEngine`, `DBI::Gofer::*`,
+  `DBD::File` / `DBD::DBM` / `DBD::Sponge` / `DBD::NullP` /
+  `DBD::ExampleP`, etc.
 
 ---
 

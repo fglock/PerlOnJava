@@ -270,6 +270,34 @@ sub _outer_of {
         my $self = shift;
         Carp::croak("Can't call method \"$method\" on undefined handle")
             unless defined $self && ref $self;
+
+        # Callbacks: real DBI fires $h->{Callbacks}{$method} (or the
+        # "*" wildcard if the specific method isn't present) before
+        # dispatching. The callback gets $self and the args; if it
+        # returns a defined value (scalar context) / list, that's
+        # used as the method result and dispatch is skipped. $_ is
+        # localised to the method name inside the callback.
+        if (my $cbs = $self->{Callbacks}) {
+            my $cb = $cbs->{$method} // $cbs->{'*'};
+            if (ref($cb) eq 'CODE') {
+                local $_ = $method;
+                # Use same call context as the outer method call.
+                my @cb_result;
+                my $want = wantarray;
+                if ($want) {
+                    @cb_result = $cb->($self, @_);
+                } elsif (defined $want) {
+                    $cb_result[0] = $cb->($self, @_);
+                } else {
+                    $cb->($self, @_);
+                }
+                return $want ? @cb_result : $cb_result[0]
+                    if @cb_result && defined $cb_result[0];
+                # If callback returned empty / undef, fall through
+                # to the real method.
+            }
+        }
+
         my @packages = _dispatch_packages($self);
         my $target   = _dispatch_target($self);
         for my $class (@packages) {
@@ -645,10 +673,10 @@ sub _get_imp_data {
     }
 
     # set_err(err, errstr [, state, method, rv]) — standard DBI error
-    # setter. Tries to match real DBI's semantics, which treat the
-    # three kinds of err values distinctly:
+    # setter. Tries to match real DBI's semantics:
     #
-    #   err truthy       — real error. HandleError is always fired;
+    # Severity levels (by $err value):
+    #   err truthy       — real error. HandleError always fires;
     #                      if not suppressed, RaiseError dies and
     #                      PrintError warns.
     #   err 0 / "0"      — warning. HandleError fires only if
@@ -659,40 +687,111 @@ sub _get_imp_data {
     #   err ""           — info. Just stored; no alerts, no handler.
     #   err undef        — clear Err/Errstr/State; no alerts.
     #
-    # The test suite probes each of these combinations, see
-    # t/17handle_error.t.
+    # Behaviour matching real DBI::PurePerl::set_err:
+    #   * HandleSetErr callback (if set) fires FIRST on every call;
+    #     if it returns true, the rest of set_err is short-circuited.
+    #   * HandleSetErr may mutate $_[1], $_[2], $_[3] to override
+    #     err/errstr/state before they're stored.
+    #   * Errstr accumulates (does not overwrite): each call appends
+    #     "\n$msg" with "[err was X now Y]" / "[state was X now Y]"
+    #     annotations when appropriate.
+    #   * Err is only promoted to a higher-priority value:
+    #     err > "0" > "" > undef.
     sub set_err {
         my ($h, $err, $errstr, $state, $method, $rv) = @_;
+
+        # HandleSetErr runs first and can short-circuit or mutate.
+        if (ref $h && ref($h->{HandleSetErr}) eq 'CODE') {
+            my $ret = $h->{HandleSetErr}->($h, $err, $errstr, $state, $method);
+            return if $ret;   # suppressed
+            # $_[1..3] may have been modified; re-read:
+            ($err, $errstr, $state) = ($_[1], $_[2], $_[3]);
+        }
+
+        # Clearing case: set_err(undef, ...).
+        if (!defined $err) {
+            $h->STORE(Err    => undef);
+            $h->STORE(Errstr => undef);
+            $h->STORE(State  => '');
+            $DBI::err    = undef;
+            $DBI::errstr = undef;
+            $DBI::state  = '';
+            return $rv;
+        }
+
         $errstr = $err unless defined $errstr;
-        $h->STORE(Err    => $err);
-        $h->STORE(Errstr => $errstr);
-        $h->STORE(State  => $state) if defined $state;
-        # also update $DBI::err / $DBI::errstr / $DBI::state
-        $DBI::err    = $err;
-        $DBI::errstr = $errstr;
-        $DBI::state  = defined $state ? $state : '';
 
-        # Clearing case: set_err(undef, undef) — no further work.
-        return $rv if !defined $err;
+        # Accumulate errstr on the handle ("\n$msg", plus inline
+        # "[err was X now Y]" / "[state was X now Y]" annotations).
+        my $existing_errstr = $h->{Errstr};
+        $existing_errstr = $$existing_errstr if ref($existing_errstr) eq 'SCALAR';
+        my $existing_err   = $h->{Err};
+        $existing_err = $$existing_err if ref($existing_err) eq 'SCALAR';
+        my $existing_state = $h->{State};
+        $existing_state = $$existing_state if ref($existing_state) eq 'SCALAR';
 
-        # Classify the severity. Real DBI prioritises err > "0" > ""
-        # by length.
-        my $is_error   = $err ? 1 : 0;
-        my $is_warning = !$is_error && defined $err && length($err) > 0;
-        my $is_info    = !$is_error && !$is_warning;
-        return $rv if $is_info;
+        my $new_errstr;
+        if (defined $existing_errstr && length $existing_errstr) {
+            $new_errstr = $existing_errstr;
+            $new_errstr .= sprintf " [err was %s now %s]", $existing_err, $err
+                if $existing_err && $err && $existing_err ne $err;
+            $new_errstr .= sprintf " [state was %s now %s]",
+                           $existing_state, $state
+                if defined $existing_state && length $existing_state
+                && $existing_state ne 'S1000'
+                && defined $state && length $state
+                && $existing_state ne $state;
+            $new_errstr .= "\n$errstr" if $new_errstr ne $errstr;
+        } else {
+            $new_errstr = $errstr;
+        }
 
-        # Build a real-DBI-style formatted message ("impl_class method
-        # failed|warning: errstr") — the test regex keys off this.
+        # Promote err only if the new value is higher-priority
+        # (truthy > "0" > "" > undef, judged by length()).
+        my $promote = 0;
+        if ($err) {
+            $promote = 1;
+        } elsif (!defined $existing_err) {
+            $promote = 1;
+        } elsif (length($err) > length($existing_err)) {
+            $promote = 1;
+        }
+
+        if ($promote) {
+            $h->STORE(Err => $err);
+            $DBI::err    = $err;
+            # state fill-in
+            if ($err && (!defined $state || !length $state)) {
+                $state = 'S1000';
+            }
+            if (defined $state && length $state) {
+                my $s = ($state eq '00000') ? '' : $state;
+                $h->STORE(State => $s);
+                $DBI::state = $s;
+            }
+        }
+
+        $h->STORE(Errstr => $new_errstr);
+        $DBI::errstr = $new_errstr;
+
+        # Severity classification based on the value WE just set (the
+        # promoted one) — alerts fire on the stored severity, not the
+        # caller-supplied one.
+        my $stored_err = $promote ? $err : $existing_err;
+        my $is_error   = $stored_err ? 1 : 0;
+        my $is_warning = !$is_error && defined $stored_err
+                      && length($stored_err) > 0;
+        return $rv if !$is_error && !$is_warning;  # info-level: done.
+
+        # Build the formatted message real DBI's tests regex against.
         my $impl_class = ref($h) || 'DBI';
         my $meth_name  = defined $method ? $method : 'set_err';
         my $kind       = $is_error ? 'failed' : 'warning';
         my $formatted  = "${impl_class} ${meth_name} ${kind}: "
                        . (defined $errstr ? $errstr : '');
 
-        # Decide whether HandleError should fire.
-        #   - Real errors always fire it.
-        #   - Warnings only fire it when RaiseWarn or PrintWarn is set.
+        # HandleError: errors always fire it; warnings only when
+        # RaiseWarn or PrintWarn is set.
         my $may_handle = $is_error
                        || ($is_warning && ($h->{RaiseWarn} || $h->{PrintWarn}));
 
