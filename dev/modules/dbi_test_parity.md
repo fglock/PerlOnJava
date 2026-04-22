@@ -5,8 +5,13 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 3 third batch (Profile parsing on connect, transaction
-state, `DBI->visit_handles`, `AutoCommit` sentinel translation):
+After Phase 4 (tied-hash method-dispatch fix):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 5890 | 4160 | 1730 |
+
+Previous baseline (after Phase 3 third batch):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -58,135 +63,102 @@ the single biggest lever.
 
 ---
 
-## Phase 4 (priority 1, NEW): PerlOnJava bug — `local $h->{k}->{kk}` on tied hashes
+## Phase 4 (priority 1, NEW): PerlOnJava bug — method dispatch on tied hash FETCH
 
-**Status: not started.** Blocks several DBI profile tests and is
-expected to come up in any module that combines `local` with tied
-hash traversal (DBIx::Class, Catalyst, many test frameworks).
+**Status: done (2026-04-22).** Root-cause was narrower than the
+repro suggested: `local` was a red herring. The real bug was that
+`$tied_hash{key}->method(...)` dispatch on the value returned from
+a tied hash FETCH saw only the `TIED_SCALAR` proxy shell, not the
+underlying blessed reference, and fell through to the
+"stringify-as-package-name" error path.
 
-### The bug
+### The bug (refined diagnosis)
 
-Taking `local` on a nested key of a TIED hash reference corrupts
-subsequent reads of the intermediate key. Minimal repro:
+Minimal repro:
 
 ```perl
 package Tie;
 sub TIEHASH { bless \$_[1], $_[0] }
 sub FETCH   { ${$_[0]}->{$_[1]} }
-sub STORE   { ${$_[0]}->{$_[1]} = $_[2] }
 
 package Foo;
 sub meth { print "in meth\n"; }
 
 package main;
-my $obj = bless { Path => [1, 2, 3] }, 'Foo';
-my %storage;
-my $h = \%storage;
-tie %$h, 'Tie', { obj => $obj };
+my $obj = bless {}, 'Foo';
+my %h;
+tie %h, 'Tie', { obj => $obj };
+$h{obj}->meth;     # <-- died
+```
 
-print "h->{obj}=", ref($h->{obj}), "\n";        # -> Foo (correct)
-{
-    local $h->{obj}->{Path} = undef;
-    print "type ", ref($h->{obj}), "\n";        # -> Foo (correct)
-    eval { $h->{obj}->meth; };
-    print "err: $@\n" if $@;
+Output before the fix:
+
+```
+Can't locate object method "meth" via package
+    "Foo=HASH(0x7276c8cd)" (perhaps you forgot to load ...)
+```
+
+`ref($h{obj})` returned `"Foo"` (correct) but direct method
+dispatch used the scalar's stringification as the package name
+(`"Foo=HASH(0x...)"`).
+
+### Why
+
+`RuntimeHash.get()` for a tied hash returns a **`TIED_SCALAR`
+proxy** — lazily backed by `tiedFetch()` — instead of the fetched
+value itself. That's deliberate (so `$h{key} = "x"` can route
+through `STORE` and so lvalue semantics work), but the method-
+dispatch code in `RuntimeCode.callCached` and `RuntimeCode.call`
+only unwrapped `READONLY_SCALAR`, not `TIED_SCALAR`. The latter
+hit `isReference(invocant) -> false` and fell through to
+`perlClassName = invocant.toString()`, which is what Perl's
+default stringification of a blessed hashref looks like —
+`Foo=HASH(0x...)`.
+
+The scalar's stringified class name was then used as the package
+to look up the method in, and naturally no such package exists.
+
+### The fix
+
+`src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java`:
+at the top of both `callCached` and `call`, unwrap `TIED_SCALAR`
+to the fetched value (mirroring the existing handling for
+`apply()` at lines 2378 / 2659 / 2846):
+
+```java
+if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+    return callCached(callsiteId, runtimeScalar.tiedFetch(), ...);
 }
 ```
 
-Expected: `in meth`. Observed on PerlOnJava:
+`tiedFetch()` is an existing `RuntimeScalar` helper that either
+returns the tied handle's `self` (for scalar tie handles) or calls
+`TieHash.tiedFetch` for hash-element proxies.
 
-```
-h->{obj}=Foo
-type Foo
-err: Can't locate object method "meth" via package
-     "Foo=HASH(0x47db50c5)" (perhaps you forgot to load
-     "Foo=HASH(0x47db50c5)"?) at -e line 19.
-```
+### Effect
 
-The method-resolution path treats the blessed-ref's stringification
-(`Foo=HASH(0x...)`) as the package name. Internally this looks like
-the `local` restore hook is leaving the scalar in a state where
-`ref()` still reports the class but the SVOK / invocant dispatch
-sees the stringified form instead of the ref.
+- The minimal repro passes with both `jperl` (JVM backend) and
+  `jperl --interpreter`.
+- `t/41prof_dump.t` runs 9 subtests before hitting an unrelated
+  Profile-on-disk issue (was: died after 7).
+- `t/42prof_data.t` runs 4 subtests (was: 3).
+- Small `jcpan -t DBI` overall delta (+4 passing subtests,
+  5886→5890 executed) because these tests have other
+  Profile-related failures further down.
+- No other regressions in `make` or the DBI suite.
 
-The same bug occurs without the tie — but with a plain hash
-`perl` / `jperl` both behave correctly; the tie is what trips it.
+### Still open
 
-### Impact on DBI
+Not strictly related to the tie fix, but discovered during
+investigation and worth nothing here:
 
-Direct blocker for test flows that do `local $h->{Profile}->{Path}
-= undef` or similar around a `flush_to_disk()` call — that's the
-exact shape of `t/41prof_dump.t`, `t/42prof_data.t`,
-`t/43prof_env.t`, and their `zv*_41*`, `zv*_42*`, `zv*_43*`
-wrappers (~21 test files). Several other Phase 3 improvements
-(Profile inheritance, the tied-handle architecture) set up Profile
-correctly but can't get past this spot.
-
-### Plan
-
-1. **Reproduce in isolation.** Add a minimal test under
-   `src/test/resources/` (or wherever interpreter-level tests
-   live) that boils down to the snippet above and asserts the
-   method call succeeds. It should fail on master and we keep it
-   as a regression test.
-
-2. **Isolate where Perl-on-Java goes wrong.** Candidates:
-
-   - **Tie-aware `local` restore.** When we set up `local` on a
-     lvalue that goes through a tied hash, we need to snapshot
-     the old value via FETCH, then arrange for a STORE with that
-     value at scope exit. Somewhere in this flow the *intermediate*
-     ref that was returned by FETCH gets replaced with a stringified
-     view, so subsequent reads of the same tied slot produce a
-     different SV.
-
-     Likely files: the code that implements `local` in
-     `src/main/java/org/perlonjava/backend/jvm/` (look for
-     `EmitControlFlow` / `LocalVariable*`) and its interpreter
-     counterpart in `backend/bytecode/`. Also anything that
-     handles tie magic in `runtime/`.
-
-   - **Method-dispatch against a ref whose reftype changed.**
-     Alternatively the scalar may still hold the right ref, but
-     method dispatch is looking up the class via stringification
-     rather than `SvSTASH`-equivalent. In that case the fix is in
-     the method-call opcode in `backend/bytecode/CompileOperator`
-     or the JVM-side `EmitOperator`.
-
-3. **Decide on scope of the fix.** The minimal bug is:
-
-    ```perl
-    local $tied_hash->{key}->{subkey} = ...;  # then  $tied_hash->{key}->method
-    ```
-
-    A tight fix is enough. If easy, also cover
-
-    ```perl
-    local $tied_hash->{key} = ...;  # then method call
-    ```
-
-    which may share the same code path.
-
-4. **Validate.** Re-run `jcpan -t DBI` and confirm `t/41prof_dump.t`
-   / `t/42prof_data.t` / `t/43prof_env.t` (and their wrappers)
-   move from "aborts partway with `Can't locate method foo via
-   package Foo=HASH(...)`" to "real TAP results". Expected delta:
-   ~20 test files move from fail to pass (assuming the only thing
-   they were waiting on is this).
-
-5. **Audit other spots.** Grep CPAN-modules and the bundled
-   tests for the pattern `\Qlocal \$\E\S*->\{.*\}->\{` — any
-   module that uses this idiom is likely also broken today. Add
-   a short note on it in `AGENTS.md` / a skill file so it doesn't
-   get rediscovered from scratch.
-
-### Acceptance criteria
-
-- The minimal test from step 1 passes.
-- `./jperl ~/.cpan/build/DBI-1.647-5/t/41prof_dump.t` runs past the
-  `local $dbh->{Profile}->{Path} = undef; $sth->{Profile}->flush_to_disk;`
-  block and either passes the test or fails on something unrelated.
-- `make` and `jcpan -t DBI` still match-or-improve the baseline.
+- `local` + tied hashes may still have edge cases around restore
+  ordering. The specific repro in the previous Phase 4 section
+  now works, but it's worth auditing.
+- `RuntimeHash.get()` on tied hashes always builds a fresh proxy
+  `RuntimeScalar` each call, so repeated `$h{key}` does repeated
+  `FETCH`es on access. The fix triggers one extra FETCH per
+  method dispatch; still correct but not free.
 
 ---
 
@@ -472,7 +444,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phase 1–3 landed on `fix/dbi-test-parity` (PR #546). Phase 4 is the new top priority — it's a PerlOnJava bug, not DBI work, and needs attention before more DBI polish is worth doing.
+### Current Status: Phases 1–4 landed on `fix/dbi-test-parity` (PR #546). Phase 4 fixed a core PerlOnJava bug in method dispatch on tied hash FETCH.
 
 ### Completed
 
@@ -559,20 +531,36 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   - Baseline 4116/5862 → 4156/5878 passing (+40 subtests). 2 more
     test files pass (164/200 failing, was 166/200).
 
+- [x] **2026-04-22 — Phase 4: tied-hash method-dispatch fix.**
+  - `RuntimeCode.callCached` and `RuntimeCode.call` now unwrap
+    `TIED_SCALAR` to the underlying fetched value before
+    checking `isReference` / `blessId`. Without this, method
+    dispatch on `$tied_hash{key}->method(...)` treated the
+    stringified form of the blessed ref as the package name.
+  - Fixes both JVM backend and `--interpreter` path.
+  - Baseline 4156/5878 → 4160/5890 passing. Small overall delta
+    because the profile tests that were blocked on this have
+    other downstream issues.
+  - PerlOnJava bug fix; useful for any CPAN module that does
+    direct method calls through tied hash elements (DBI itself,
+    DBIx::Class, Catalyst-style dispatch tables).
+
 ### Next Steps
 
-1. **Phase 4 (TOP PRIORITY): fix the `local $tied->{k}->{kk}` bug**
-   in the PerlOnJava interpreter/backend. See the Phase 4 section
-   above. Expected to unblock ~20 DBI test files in the profile
-   family plus unknown fallout across other CPAN modules.
-2. After Phase 4 lands, revisit Phase 3 polish — `HandleError`
-   flow (`t/17handle_error.t`), trace file support
-   (`t/09trace.t`, `t/19fhtrace.t`), callback integration
-   (`t/70callbacks.t`), `t/16destroy.t` handle-state-on-destroy.
-3. Phase 3c (DBD::Gofer): likely the next big family of files.
-   Gofer's `null` transport wants the tied-handle work we already
-   have, so this may now be close to free.
-4. Periodically re-run `jcpan -t DBI` to track progress.
+1. **Profile-on-disk internals.** `t/41prof_dump.t` /
+   `t/42prof_data.t` / `t/43prof_env.t` still fail after Phase 4
+   — not blocked by the tie bug anymore, but the
+   ProfileDumper-writes-to-file path is not exercising correctly.
+   Likely `flush_to_disk` path needs more DBI::Profile internals.
+2. **HandleError flow** (`t/17handle_error.t`, `t/08keeperr.t`) —
+   the ordering between RaiseError, PrintError, HandleError, and
+   set_err is subtle and our current implementation cuts some
+   corners.
+3. **Trace file support** (`t/09trace.t`, `t/19fhtrace.t`) —
+   `trace($level, $output)` currently only tracks a level, no
+   output redirection.
+4. **`t/16destroy.t` Active-in-DESTROY semantics.**
+5. Periodically re-run `jcpan -t DBI` to track progress.
 
 ### Open Questions
 
