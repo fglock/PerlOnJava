@@ -886,14 +886,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 
+                                // Only install the alias (and schedule cleanup) if no other
+                                // alias is already in place for this key. See matching comment
+                                // below in the BytecodeInterpreter path.
+                                boolean installed = false;
                                 if (runtimeValue instanceof RuntimeArray) {
-                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                    if (GlobalVariable.globalArrays.putIfAbsent(fullName, (RuntimeArray) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 } else if (runtimeValue instanceof RuntimeHash) {
-                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                    if (GlobalVariable.globalHashes.putIfAbsent(fullName, (RuntimeHash) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                    if (GlobalVariable.globalVariables.putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 }
-                                evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                if (installed) {
+                                    evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                }
                             }
                         }
                     }
@@ -1304,14 +1316,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 String varNameWithoutSigil = entry.name().substring(1);
                                 String fullName = packageName + "::" + varNameWithoutSigil;
 
+                                // Only install the alias (and schedule cleanup) if no other
+                                // alias is already in place for this key. An alias may already
+                                // exist because SubroutineParser.handleNamedSub registered one
+                                // at compile time for a named sub that closes over the same
+                                // outer `my`. That alias must stay alive until the owning
+                                // `my %name = (...)` runs and calls retrieveBeginHash, which
+                                // takes ownership. If we unconditionally put+remove here, we
+                                // delete SubroutineParser's alias in the finally block, and the
+                                // later `my` creates a fresh, unshared object — breaking the
+                                // named sub's closure over that variable.
+                                boolean installed = false;
                                 if (runtimeValue instanceof RuntimeArray) {
-                                    GlobalVariable.globalArrays.put(fullName, (RuntimeArray) runtimeValue);
+                                    if (GlobalVariable.globalArrays.putIfAbsent(fullName, (RuntimeArray) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 } else if (runtimeValue instanceof RuntimeHash) {
-                                    GlobalVariable.globalHashes.put(fullName, (RuntimeHash) runtimeValue);
+                                    if (GlobalVariable.globalHashes.putIfAbsent(fullName, (RuntimeHash) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 } else if (runtimeValue instanceof RuntimeScalar) {
-                                    GlobalVariable.globalVariables.put(fullName, (RuntimeScalar) runtimeValue);
+                                    if (GlobalVariable.globalVariables.putIfAbsent(fullName, (RuntimeScalar) runtimeValue) == null) {
+                                        installed = true;
+                                    }
                                 }
-                                evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                if (installed) {
+                                    evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                }
                             }
                         }
                     }
