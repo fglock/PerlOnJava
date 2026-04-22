@@ -5,7 +5,16 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 1 (runtime interpreter fallback on VerifyError, PR TBD):
+After Phase 2 (driver-architecture pieces: `install_driver`,
+`_new_drh` / `_new_dbh` / `_new_sth`, `DBD::_::common / dr / db / st`
+base classes):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 1600 | 1240 | 360 |
+
+Previous baseline (after Phase 1 — runtime interpreter fallback,
+[PR #542](https://github.com/fglock/PerlOnJava/pull/542)):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -146,6 +155,8 @@ and re-invoke, rather than aborting the process.
 ---
 
 ## Phase 2 (priority 2): missing DBI core internals
+
+**Status: done (2026-04-22). Pure-Perl DBDs now load and connect.**
 
 Several tests die with:
 
@@ -306,7 +317,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete. Phase 2 is next.
+### Current Status: Phase 2 complete. Phase 3 is next.
 
 ### Completed
 
@@ -321,7 +332,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     `src/main/perl/lib/DBI/_Utils.pm`.
   - Baseline went from 308/562 passing to 368/638 passing.
 
-- [x] **2026-04-22 — Phase 1: runtime interpreter fallback.** PR TBD.
+- [x] **2026-04-22 — Phase 1: runtime interpreter fallback.** PR #542.
   - Added a second try/catch at the `runtimeCode.apply(...)` call
     site in `PerlLanguageProvider.executeCode`. The existing
     compile-time fallback path only runs while
@@ -341,15 +352,37 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     still fail — those are Phase 2/3 DBI-level issues that were
     previously hidden behind the verifier crash.
 
+- [x] **2026-04-22 — Phase 2: driver-architecture pieces.** PR TBD.
+  - Added `DBI->install_driver`, `DBI->data_sources`,
+    `DBI->available_drivers`, `DBI->installed_drivers`,
+    `DBI->setup_driver`, `DBI::_new_drh`, `DBI::_new_dbh`,
+    `DBI::_new_sth`, `DBI::_get_imp_data` in the new
+    `src/main/perl/lib/DBI/_Handles.pm`.
+  - Added `DBD::_::common` / `dr` / `db` / `st` base classes with
+    FETCH, STORE, err, errstr, state, set_err, trace, trace_msg,
+    parse_trace_flag(s), func, dump_handle, default connect,
+    connect_cached, quote, data_sources, disconnect, finish,
+    fetchrow_array/hashref, rows, etc. — enough for the bundled
+    pure-Perl DBDs to work (`DBD::NullP`, `DBD::ExampleP`,
+    `DBD::Sponge`, `DBD::Mem`, `DBD::File`, `DBD::DBM`).
+  - Stubbed `DBI::dr` / `DBI::db` / `DBI::st` packages so
+    `isa('DBI::dr')` etc. pass; `DBD::_::<suffix>` inherits from
+    them.
+  - Modified `DBI->connect` in `DBI.pm`: when the DSN's driver
+    (`DBD::$name`) has a `driver()` method but no `_dsn_to_jdbc`
+    (i.e. it's a pure-Perl DBD), route through
+    `install_driver($name)->connect(...)` instead of the JDBC path.
+  - Baseline went from 676/946 passing to 1240/1600 passing
+    (+564 additional subtests now pass; +654 more execute). 10
+    fewer test files fail overall.
+
 ### Next Steps
 
-1. Start **Phase 2**: implement `DBI->install_driver`,
-   `DBI::_new_drh`, `DBI::_new_dbh`, `DBI::_new_sth`, and the
-   `DBD::_::common` / `db` / `st` base classes. This should unblock
-   `t/02dbidrv.t`, `t/07kids.t`, `t/10examp.t`,
-   `t/17handle_error.t`, etc.
-2. After Phase 2, re-run `jcpan -t DBI` and refresh the baseline
-   table in this document.
+1. Start **Phase 3**: skip `DBI::PurePerl` cleanly under PerlOnJava
+   (or decide to port it), and triage `DBD::File` / `DBD::DBM`
+   behaviour against `t/49dbd_file.t` and friends. `DBD::Gofer`
+   can be deferred until the others stabilise.
+2. After Phase 3, re-run `jcpan -t DBI` and refresh the baseline.
 
 ### Open Questions
 
