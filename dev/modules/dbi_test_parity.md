@@ -5,7 +5,13 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 4 (tied-hash method-dispatch fix):
+After Phase 5 (HandleError / set_err severity levels, trace-to-file):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 6294 | 4504 | 1790 |
+
+Previous baseline (after Phase 4 — tied-hash method-dispatch fix):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -444,7 +450,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phases 1–4 landed on `fix/dbi-test-parity` (PR #546). Phase 4 fixed a core PerlOnJava bug in method dispatch on tied hash FETCH.
+### Current Status: Phases 1–5 landed on `fix/dbi-test-parity` (PR #546). HandleError and trace-to-file fixed in Phase 5.
 
 ### Completed
 
@@ -544,6 +550,28 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   - PerlOnJava bug fix; useful for any CPAN module that does
     direct method calls through tied hash elements (DBI itself,
     DBIx::Class, Catalyst-style dispatch tables).
+
+- [x] **2026-04-22 — Phase 5: HandleError / set_err severity, trace-to-file.**
+  - Rewrote `DBD::_::common::set_err` to match real DBI's three
+    severity levels: undef (clear), "" (info, silent),
+    0/"0" (warning — fires HandleError / RaiseWarn / PrintWarn),
+    and truthy (error — fires HandleError unconditionally, plus
+    RaiseError / PrintError). Error messages now follow real DBI's
+    `"IMPL_CLASS METHOD failed|warning: errstr"` format that the
+    self-tests regex against.
+  - Added real trace-file support in DBI.pm: `DBI->trace($level,
+    $file)` opens and installs a process-global `$DBI::tfh`
+    filehandle; `trace(0, undef)` closes it; `dump_handle` and
+    both `trace_msg`s (top-level and DBD::_::common) write to
+    `DBI::_trace_fh()` which returns `$DBI::tfh` if set else
+    STDERR.
+  - `t/17handle_error.t`: 2 passing → **all 84** passing.
+  - `t/09trace.t`: 82 passing → 83 passing (16 still fail;
+    remaining are parse-trace-flag details).
+  - `t/19fhtrace.t`: 11 passing → 19 passing.
+  - Baseline 4160/5890 → **4504/6294 passing** (+344 passes,
+    +404 more subtests executed). **8 fewer test files fail
+    overall (156/200, was 164/200).**
 
 ### Next Steps
 

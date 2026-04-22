@@ -644,6 +644,23 @@ sub _get_imp_data {
         return defined $s ? $s : '';
     }
 
+    # set_err(err, errstr [, state, method, rv]) — standard DBI error
+    # setter. Tries to match real DBI's semantics, which treat the
+    # three kinds of err values distinctly:
+    #
+    #   err truthy       — real error. HandleError is always fired;
+    #                      if not suppressed, RaiseError dies and
+    #                      PrintError warns.
+    #   err 0 / "0"      — warning. HandleError fires only if
+    #                      RaiseWarn or PrintWarn is set; if fired
+    #                      and RaiseWarn, we die; if PrintWarn, we
+    #                      warn. No HandleError/die/warn when no
+    #                      *Warn flag is set.
+    #   err ""           — info. Just stored; no alerts, no handler.
+    #   err undef        — clear Err/Errstr/State; no alerts.
+    #
+    # The test suite probes each of these combinations, see
+    # t/17handle_error.t.
     sub set_err {
         my ($h, $err, $errstr, $state, $method, $rv) = @_;
         $errstr = $err unless defined $errstr;
@@ -654,12 +671,49 @@ sub _get_imp_data {
         $DBI::err    = $err;
         $DBI::errstr = $errstr;
         $DBI::state  = defined $state ? $state : '';
-        if ($h->{PrintError}) {
-            warn "DBI: $errstr\n";
+
+        # Clearing case: set_err(undef, undef) — no further work.
+        return $rv if !defined $err;
+
+        # Classify the severity. Real DBI prioritises err > "0" > ""
+        # by length.
+        my $is_error   = $err ? 1 : 0;
+        my $is_warning = !$is_error && defined $err && length($err) > 0;
+        my $is_info    = !$is_error && !$is_warning;
+        return $rv if $is_info;
+
+        # Build a real-DBI-style formatted message ("impl_class method
+        # failed|warning: errstr") — the test regex keys off this.
+        my $impl_class = ref($h) || 'DBI';
+        my $meth_name  = defined $method ? $method : 'set_err';
+        my $kind       = $is_error ? 'failed' : 'warning';
+        my $formatted  = "${impl_class} ${meth_name} ${kind}: "
+                       . (defined $errstr ? $errstr : '');
+
+        # Decide whether HandleError should fire.
+        #   - Real errors always fire it.
+        #   - Warnings only fire it when RaiseWarn or PrintWarn is set.
+        my $may_handle = $is_error
+                       || ($is_warning && ($h->{RaiseWarn} || $h->{PrintWarn}));
+
+        my $suppressed = 0;
+        if ($may_handle && ref($h->{HandleError}) eq 'CODE') {
+            local $@;
+            my $ret = eval { $h->{HandleError}->($formatted, $h, $rv) };
+            die $@ if $@;
+            $suppressed = 1 if $ret;
         }
-        if ($h->{RaiseError}) {
-            die "$errstr\n";
+
+        unless ($suppressed) {
+            if ($is_error) {
+                die  "$formatted\n" if $h->{RaiseError};
+                warn "$formatted\n" if $h->{PrintError};
+            } elsif ($is_warning) {
+                die  "$formatted\n" if $h->{RaiseWarn};
+                warn "$formatted\n" if $h->{PrintWarn};
+            }
         }
+
         return $rv;   # usually undef
     }
 
@@ -680,7 +734,10 @@ sub _get_imp_data {
         my ($h, $msg, $min_level) = @_;
         $min_level ||= 1;
         my $level = ref($h) ? ($h->{TraceLevel} || 0) : ($DBI::dbi_debug || 0);
-        print STDERR $msg if $level >= $min_level;
+        if ($level >= $min_level) {
+            my $fh = DBI::_trace_fh();
+            print $fh $msg;
+        }
         return 1;
     }
 
@@ -755,12 +812,13 @@ sub _get_imp_data {
         my ($h, $msg, $level) = @_;
         $msg = '' unless defined $msg;
         my $class = ref($h) || $h;
-        print STDERR "$msg $class=HASH\n";
+        my $fh = DBI::_trace_fh();
+        print $fh "$msg $class=HASH\n";
         if (ref $h) {
             for my $k (sort keys %$h) {
                 my $v = $h->{$k};
                 next if ref $v;
-                print STDERR "  $k = ", (defined $v ? $v : 'undef'), "\n";
+                print $fh "  $k = ", (defined $v ? $v : 'undef'), "\n";
             }
         }
         return 1;

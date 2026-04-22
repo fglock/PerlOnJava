@@ -618,33 +618,65 @@ sub bind_columns {
 
 sub trace {
     my ($dbh, $level, $output) = @_;
-    $level ||= 0;
+    my $old_level;
 
     if (ref $dbh) {
-        $dbh->{TraceLevel} = $level;
-        $dbh->{TraceOutput} = $output if defined $output;
+        $old_level = $dbh->{TraceLevel} || 0;
+        $dbh->{TraceLevel} = $level if defined $level;
     } else {
         # class method: DBI->trace(...) sets the process-global level
-        $DBI::dbi_debug = $level;
+        $old_level = $DBI::dbi_debug || 0;
+        $DBI::dbi_debug = $level if defined $level;
     }
 
-    return $level;
+    # If a third argument is passed (even as undef), it controls where
+    # trace output goes. A filename or filehandle opens / installs it
+    # as the process-global trace filehandle (real DBI's $DBI::tfh).
+    # undef closes any installed tracefile and reverts to STDERR.
+    if (@_ >= 3) {
+        if (ref $output && (ref $output eq 'GLOB' || eval { *{$output}{IO} })) {
+            $DBI::tfh = $output;
+        } elsif (defined $output && length $output) {
+            # Close any previously-opened trace file.
+            if ($DBI::tfh_owned) {
+                close $DBI::tfh;
+                $DBI::tfh = undef;
+            }
+            open my $fh, '>>', $output
+                or do { warn "DBI trace($output): $!"; return $old_level };
+            # unbuffer trace output so the test `-s $trace_file` sees it.
+            my $oldfh = select $fh; $| = 1; select $oldfh;
+            $DBI::tfh = $fh;
+            $DBI::tfh_owned = 1;
+        } else {
+            # $output was passed but is undef / empty — restore STDERR.
+            if ($DBI::tfh_owned) {
+                close $DBI::tfh;
+                $DBI::tfh_owned = 0;
+            }
+            $DBI::tfh = undef;
+        }
+    }
+
+    return $old_level;
+}
+
+# _trace_fh() — picks the right filehandle to write a trace message to.
+sub _trace_fh {
+    return $DBI::tfh if defined $DBI::tfh;
+    return \*STDERR;
 }
 
 sub trace_msg {
     my ($dbh, $msg, $level) = @_;
-    $level ||= 0;
+    $level ||= 1;
 
     my $current_level = ref($dbh)
         ? ($dbh->{TraceLevel} || 0)
         : ($DBI::dbi_debug || 0);
     if ($level <= $current_level) {
-        if (ref($dbh) && $dbh->{TraceOutput}) {
-            # TODO: Write to custom output
-            print STDERR $msg;
-        } else {
-            print STDERR $msg;
-        }
+        my $fh = DBI::_trace_fh();
+        print $fh $msg;
     }
     return 1;
 }
