@@ -10,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalHash;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
 
@@ -37,6 +38,23 @@ public class WaitpidOperator {
             return waitpidWindows(pid, flags);
         } else {
             return waitpidPosix(pid, flags);
+        }
+    }
+
+    /**
+     * Returns true if $SIG{CHLD} is currently set to 'IGNORE'. Under
+     * that disposition POSIX mandates the kernel auto-reap children, so
+     * subsequent waitpid() returns -1 with errno=ECHILD (see waitpid(2)
+     * on Linux, and Perl's perlipc documentation). We simulate that so
+     * test suites like System::Command's t/20-zombie.t can observe the
+     * expected "BOGUS exit status" pattern instead of a clean reap.
+     */
+    private static boolean isChldIgnored() {
+        try {
+            RuntimeScalar h = getGlobalHash("main::SIG").get("CHLD");
+            return h != null && "IGNORE".equals(h.toString());
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -71,16 +89,25 @@ public class WaitpidOperator {
 
     private static RuntimeScalar waitpidJavaProcess(int pid, Process process, int flags) {
         boolean nonBlocking = (flags & WNOHANG) != 0;
+        boolean chldIgnore = isChldIgnored();
         if (nonBlocking) {
             if (process.isAlive()) return new RuntimeScalar(0);
             int exitCode = process.exitValue();
             RuntimeIO.removeChildProcess(pid);
+            if (chldIgnore) {
+                // Kernel auto-reap simulation: discard status, signal
+                // ECHILD by returning -1. Do NOT update $?.
+                return new RuntimeScalar(-1);
+            }
             setExitStatus(exitCode << 8);
             return new RuntimeScalar(pid);
         }
         try {
             int exitCode = process.waitFor();
             RuntimeIO.removeChildProcess(pid);
+            if (chldIgnore) {
+                return new RuntimeScalar(-1);
+            }
             setExitStatus(exitCode << 8);
             return new RuntimeScalar(pid);
         } catch (InterruptedException e) {
