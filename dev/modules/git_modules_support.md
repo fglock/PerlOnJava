@@ -196,6 +196,27 @@ the Crypt::OpenSSL Bouncy Castle port. Defer until asked.
     a `$ENV{SHLVL}` mismatch — IPC::Open3 appears to wrap the child in a
     shell, bumping SHLVL. Unrelated to fork, low priority.
 
+- [x] **Phase 2b — open3 exec-failure + waitpid SIG{CHLD}=IGNORE (2026-04-22)**
+  - Real-Perl parity for `IPC::Open3` shell-wrapping: bare single-arg
+    commands now exec directly instead of via `/bin/sh -c`, so exec
+    failures surface as `open3: exec of X failed: Y`. The bundled
+    `System/Command.pm` translates that into the fork-path's
+    `Can't exec( @cmd ): Y` so `eval`-based error tests keep working.
+  - `WaitpidOperator` now honours `$SIG{CHLD} eq 'IGNORE'`: when set,
+    waitpid on a tracked Java child returns -1 (ECHILD simulation)
+    and leaves `$?` untouched, so `System::Command::Reaper` reports
+    the `(-1, -1, -1)` BOGUS triple the POSIX semantics call for.
+  - Also fixed a real `ConcurrentModificationException` in
+    `GlobalDestruction.runGlobalDestruction` uncovered while
+    repro'ing t/30-exit.t: DESTROY callbacks could mutate the global
+    HashMaps mid-iteration. Snapshot before walking.
+  - **`./jcpan -t System::Command`: 230/241 pass (95.4%)**, up from 94%.
+    - t/11-spawn-fail.t  2/2 (was 0/2)
+    - t/20-zombie.t     31/32 (was 27/30)
+    - Remaining 11 are 9 DESTROY-scope tests (tracked on the
+      `weaken/DESTROY` branch) + 1 `-Ilib` test-harness artifact
+      + 1 related zombie-DESTROY assertion.
+
 ### Caveat: install-time precedence
 
 `@INC` lists `~/.perlonjava/lib` before the JAR-bundled lib. If a user
