@@ -30,6 +30,7 @@ package DBI;
 use strict;
 use warnings;
 use Carp ();
+use Scalar::Util ();
 
 our %installed_drh;    # driver_name => $drh (outer)
 
@@ -123,7 +124,13 @@ sub _new_dbh {
 
     $drh_inner->{Kids}++;
     # Track child handles on the parent for visit_child_handles.
+    # Weak refs so children are garbage-collected normally (but see
+    # note below: weak refs in combination with tied outer handles
+    # don't currently survive across scope boundaries on PerlOnJava;
+    # for now we keep strong refs and let `grep { defined }` in tests
+    # be a no-op. Real DBI cleans stale entries in its XS destroy path.)
     push @{ $drh_inner->{ChildHandles} ||= [] }, $outer;
+    # Scalar::Util::weaken($drh_inner->{ChildHandles}[-1]);
 
     return wantarray ? ($outer, $inner) : $outer;
 }
@@ -159,6 +166,7 @@ sub _new_sth {
 
     $dbh_inner->{Kids}++;
     push @{ $dbh_inner->{ChildHandles} ||= [] }, $outer;
+    # Scalar::Util::weaken($dbh_inner->{ChildHandles}[-1]);  # see _new_dbh
 
     return wantarray ? ($outer, $inner) : $outer;
 }
