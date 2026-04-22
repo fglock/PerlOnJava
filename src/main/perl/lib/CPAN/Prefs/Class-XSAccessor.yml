@@ -1,0 +1,25 @@
+---
+comment: |
+  PerlOnJava ships a pure-Perl re-implementation of Class::XSAccessor
+  bundled in the jar (src/main/perl/lib/Class/XSAccessor.pm). The
+  upstream CPAN distribution is XS-only and fails at runtime with
+  "Can't load loadable object for module Class::XSAccessor: no Java XS
+  implementation available" because PerlOnJava has no XS loader.
+
+  Without this distroprefs entry, `jcpan -t SomeModule` can recurse on
+  Class::XSAccessor as a transitive dependency of Moo/DBIC/etc., install
+  the XS version into ~/.perlonjava/lib/, and shadow the bundled shim —
+  breaking every module that imports Class::XSAccessor at runtime.
+
+  Skip the build/test/install steps entirely; the bundled shim is all
+  PerlOnJava needs.
+match:
+  distribution: "^SMUELLER/Class-XSAccessor-"
+pl:
+  commandline: "true"
+make:
+  commandline: "true"
+test:
+  commandline: "true"
+install:
+  commandline: "true"

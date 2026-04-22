@@ -57,6 +57,34 @@ pl:
   env:
     PARAMS_VALIDATE_IMPLEMENTATION: PP
 YAML
+        'Class-XSAccessor.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava ships a pure-Perl re-implementation of Class::XSAccessor
+  bundled in the jar (lib/Class/XSAccessor.pm). The upstream CPAN
+  distribution is XS-only and fails at runtime with "Can't load
+  loadable object for module Class::XSAccessor: no Java XS
+  implementation available" because PerlOnJava has no XS loader.
+
+  Without this distroprefs entry, `jcpan -t <Module>` recurses on
+  Class::XSAccessor as a transitive dependency of Moo / DBIx::Class
+  / Class::Method::Modifiers / ..., installs the XS version into
+  ~/.perlonjava/lib/, and shadows the bundled shim — silently
+  breaking every module that imports Class::XSAccessor at runtime.
+
+  Skip the build/test/install steps entirely; the bundled shim in
+  the jar is all PerlOnJava needs.
+match:
+  distribution: "^SMUELLER/Class-XSAccessor-"
+pl:
+  commandline: "true"
+make:
+  commandline: "true"
+test:
+  commandline: "true"
+install:
+  commandline: "true"
+YAML
     );
 
     # Check if any files need to be written
