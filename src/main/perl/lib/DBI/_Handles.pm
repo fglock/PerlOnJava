@@ -114,6 +114,11 @@ sub _new_dbh {
         Active    => 0,
         Statement => '',
     };
+    # If the caller passed a string Profile spec (e.g. "2/DBI::ProfileDumper/File:x"),
+    # upgrade it to an object now so `$dbh->{Profile}->flush_to_disk` etc. work.
+    if (defined $inner->{Profile} && !ref $inner->{Profile}) {
+        $inner->{Profile} = DBD::_::common::_parse_profile_spec($inner->{Profile});
+    }
     $inner->{_private_data} = $imp_data if defined $imp_data;
     bless $inner, $db_class;
 
@@ -156,6 +161,9 @@ sub _new_sth {
         Database  => $dbh_outer,
         Active    => 0,
     };
+    # Inherit Profile from the parent dbh if not explicitly set.
+    $inner->{Profile} = $dbh_inner->{Profile}
+        if !exists $inner->{Profile} && defined $dbh_inner->{Profile};
     $inner->{_private_data} = $imp_data if defined $imp_data;
     bless $inner, $st_class;
 
@@ -350,6 +358,19 @@ sub setup_driver {
 
 sub installed_drivers { %installed_drh }
 
+# DBI->visit_handles(\&code [, \%info]) — walk all child handles of
+# installed drivers, calling $code->($handle, $info) on each.
+sub visit_handles {
+    my ($class, $code, $info) = @_;
+    $info = {} unless defined $info;
+    for my $name (keys %installed_drh) {
+        my $drh = $installed_drh{$name} or next;
+        my $ci = $code->($drh, $info) or next;
+        $drh->visit_child_handles($code, $ci);
+    }
+    return $info;
+}
+
 sub data_sources {
     my ($class, $driver, $attr) = @_;
     if (!ref($class)) {
@@ -543,17 +564,62 @@ sub _get_imp_data {
         # Err / Errstr / State are stored as scalarref holders so they
         # can be shared with child handles. Dereference on FETCH.
         return $$v if ref($v) eq 'SCALAR' && $key =~ /^(?:Err|Errstr|State)$/;
+        # Drivers may STORE magic sentinel values on AutoCommit
+        # (-900 / -901) to signal that they've handled the attribute
+        # themselves. Translate them back to 0 / 1 for user code.
+        if ($key eq 'AutoCommit' && defined $v && !ref $v) {
+            return 0 if $v eq '-900';
+            return 1 if $v eq '-901';
+        }
         return $v;
     }
 
     sub STORE {
         my ($h, $key, $val) = @_;
+        if ($key eq 'Profile' && defined $val && !ref $val) {
+            # Real DBI parses "LEVEL/CLASS/ARGS" and creates a
+            # DBI::Profile(Dumper) object. Minimal port: try to
+            # require the requested class, call ->new, fall back to
+            # DBI::Profile.
+            $val = _parse_profile_spec($val);
+        }
         if ($key =~ /^(?:Err|Errstr|State)$/ && ref($h->{$key}) eq 'SCALAR') {
             ${ $h->{$key} } = $val;
         } else {
             $h->{$key} = $val;
         }
         return 1;
+    }
+
+    # Very small subset of real DBI's Profile spec parser. Accepts
+    # "LEVEL[/CLASS[/ARGS]]" where ARGS is "Key1:val1:Key2:val2...".
+    sub _parse_profile_spec {
+        my ($spec) = @_;
+        return $spec unless defined $spec;
+        my ($flags, $rest);
+        if ($spec =~ m{^(\d+)(?:/(.*))?$}) {
+            ($flags, $rest) = ($1, $2);
+        } else {
+            ($flags, $rest) = (0, $spec);
+        }
+        my ($class, @arg_parts) = split m{/}, ($rest // ''), 2;
+        $class ||= 'DBI::Profile';
+        my $args_str = $arg_parts[0];
+        my %args;
+        if (defined $args_str && length $args_str) {
+            my @pairs = split /:/, $args_str;
+            while (@pairs) {
+                my $k = shift @pairs;
+                my $v = shift @pairs;
+                $args{$k} = $v if defined $k;
+            }
+        }
+        my $ok = eval "require $class; 1";
+        return $spec unless $ok;
+        my $profile = eval {
+            $class->new(Path => ['!Statement'], %args);
+        };
+        return $profile || $spec;
     }
 
     sub EXISTS   { defined($_[0]->FETCH($_[1])) }
@@ -875,8 +941,22 @@ sub _get_imp_data {
         $dbh->STORE(Active => 0);
         return 1;
     }
-    sub commit   { return 1 }
-    sub rollback { return 1 }
+    sub commit {
+        my $dbh = shift;
+        if ($dbh->{BegunWork}) {
+            $dbh->STORE(AutoCommit => 1);
+            $dbh->{BegunWork} = 0;
+        }
+        return 1;
+    }
+    sub rollback {
+        my $dbh = shift;
+        if ($dbh->{BegunWork}) {
+            $dbh->STORE(AutoCommit => 1);
+            $dbh->{BegunWork} = 0;
+        }
+        return 1;
+    }
 
     sub begin_work {
         my $dbh = shift;

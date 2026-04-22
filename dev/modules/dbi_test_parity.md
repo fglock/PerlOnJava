@@ -5,9 +5,14 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 3 second batch (tied-handle semantics for pure-Perl DBDs,
-plus `begin_work` / `clone` / `fetch` alias, `ChildHandles`
-population, dispatch fallback for JDBC-path handles):
+After Phase 3 third batch (Profile parsing on connect, transaction
+state, `DBI->visit_handles`, `AutoCommit` sentinel translation):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 5878 | 4156 | 1722 |
+
+Previous baseline (after Phase 3 second batch — tied handles):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -392,28 +397,29 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   - (As before.) Baseline 1240/1600 → 3978/5610 passing.
 
 - [x] **2026-04-22 — Phase 3 second batch: tied-handle semantics.**
-  - Rewrote `_new_drh` / `_new_dbh` / `_new_sth` to return an
-    "outer" handle: a blessed reference whose underlying hash is
-    tied (via `DBI::_::Tie`) to the inner storage. The outer is
-    blessed into `DBI::dr` / `DBI::db` / `DBI::st`, matching real
-    DBI's `ref($dbh) eq 'DBI::db'` invariant that many tests and
-    DBIx::Class rely on.
-  - Added `DBI::_::Tie` (thin tie class forwarding `FETCH` /
-    `STORE` / etc. to methods on the inner) and
-    `DBI::_::OuterHandle` (an AUTOLOAD-based method dispatcher
-    that routes through the inner's implementor class, falling
-    back to the Java-registered `DBI::` methods for JDBC-path
-    handles, and finally to `DBD::_::<suffix>` base classes).
-  - Added `_inner_of` / `_outer_of` helpers so driver code that
-    expects real-DBI's outer/inner distinction works.
-  - Populated `ChildHandles` on parents (drh -> dbh, dbh -> sth)
-    as handles are created; `visit_child_handles` now actually
-    walks something.
-  - Added `begin_work` and `clone` stubs on `DBD::_::db` and a
-    default `fetch` alias on `DBD::_::st` that delegates to
-    `fetchrow_arrayref`.
-  - Baseline 3978/5610 → 4116/5862 passing (+138 subtests,
-    +252 more executed).
+  - (As before.) Baseline 3978/5610 → 4116/5862 passing.
+
+- [x] **2026-04-22 — Phase 3 third batch: Profile / transactions / misc.**
+  - Added `DBD::_::common::STORE` magic for the `Profile` attribute:
+    a string like `"2/DBI::ProfileDumper/File:path"` is upgraded to
+    a real `DBI::ProfileDumper` object on assignment (and on
+    `_new_dbh` when passed via the connect attr hash).
+  - `_new_sth` inherits `Profile` from the parent dbh.
+  - Added `DBI->visit_handles` that walks `%installed_drh` and
+    recurses via `visit_child_handles`.
+  - Fixed `begin_work` / `commit` / `rollback` so transactions round-
+    trip `AutoCommit` / `BegunWork` correctly.
+  - Added `AutoCommit` sentinel translation in
+    `DBD::_::common::FETCH`: the `-900` / `-901` values that pure-
+    Perl drivers STORE (to signal "I've handled AutoCommit myself")
+    are translated back to `0` / `1` on FETCH, matching real DBI's
+    XS behaviour.
+  - Made DBI.pm's `connect` wrapper re-apply the user's attr hash
+    on the returned dbh (Profile / RaiseError / PrintError /
+    HandleError) so driver `connect()` implementations that ignore
+    most of the attr hash still get those attributes set.
+  - Baseline 4116/5862 → 4156/5878 passing (+40 subtests). 2 more
+    test files pass (164/200 failing, was 166/200).
 
 ### Next Steps
 
