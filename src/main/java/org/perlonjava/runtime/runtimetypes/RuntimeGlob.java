@@ -371,6 +371,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
+            // Unify the stash-view hash so `\%Dst:: == \%Src::` and `*Dst::{HASH} == *Src::{HASH}`.
+            // Without this, the two RuntimeStash objects remain distinct even though name-level
+            // lookups resolve through stashAliases. Perl 5 semantics make the two package hashes
+            // share the same underlying SV.
+            RuntimeHash srcStash = GlobalVariable.getGlobalHash(value.globName);
+            GlobalVariable.globalHashes.put(this.globName, srcStash);
+            // Migrate any pre-existing IO entries from Dst:: to Src::. Unlike code
+            // and variable slots (where real Perl keeps the CV/SV pinned to its
+            // compile-time package), IO handles are usually transient and the
+            // parser's DATA filehandle placeholder is the common case that
+            // NEEDS to follow the alias — otherwise `<DATA>` in the aliased
+            // package reads an empty handle because the placeholder was set up
+            // at Dst::DATA before this alias declaration ran.
+            GlobalVariable.migrateStashIOEntries(this.globName, value.globName);
             InheritanceResolver.invalidateCache();
             GlobalVariable.clearPackageCache();
             return value.scalar();

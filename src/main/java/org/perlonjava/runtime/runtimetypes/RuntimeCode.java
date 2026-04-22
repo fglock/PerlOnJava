@@ -343,6 +343,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean isMapGrepBlock = false;
     // Flag to indicate this code is an eval BLOCK - non-local return should propagate through it
     public boolean isEvalBlock = false;
+    // Flag to indicate this CV has been explicitly renamed via Sub::Name::subname
+    // (or Sub::Util::set_subname). When set, B::svref_2object($cv)->GV->NAME should
+    // return the assigned name even if the resulting fully-qualified name does not
+    // correspond to an installed stash entry — matching real-Perl XS Sub::Name
+    // behaviour, where the CV's CvGV points to a free-floating GV with the name.
+    public boolean explicitlyRenamed = false;
 
     // Depth of active recursive calls to this subroutine, used by the
     // "Deep recursion on subroutine" warning. Incremented on entry and

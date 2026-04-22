@@ -983,6 +983,12 @@ public class SubroutineParser {
 
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
+        // Apply stash-alias resolution so `*Dst:: = *Src::; sub Dst::foo {}`
+        // installs in Src::foo and reports "Src::foo" from caller(). The
+        // resolution happens here (not in NameNormalizer) to avoid rewriting
+        // compile-time read references that should keep pointing at their
+        // original CvGV — only install-site names are resolved.
+        fullName = GlobalVariable.resolveAliasedFqn(fullName);
         RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
         
@@ -1079,7 +1085,14 @@ public class SubroutineParser {
             placeholder.attributes = attributes;
         }
         // else: preserve existing attributes (e.g., from forward declaration)
-        placeholder.subName = subName;
+
+        // Split fullName into package/name so subName never contains "::".
+        // The raw `subName` parameter may include package qualifiers (e.g. parsing
+        // `sub Dst::foo { }` arrives here with subName="Dst::foo"), and fullName
+        // may have been rewritten by a stash alias — always derive both halves
+        // from fullName so caller()/set_subname see a consistent pair.
+        int lastSep = fullName.lastIndexOf("::");
+        placeholder.subName = lastSep >= 0 ? fullName.substring(lastSep + 2) : subName;
 
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
         // In Perl, this is called at compile time after the sub is defined.
@@ -1095,7 +1108,6 @@ public class SubroutineParser {
 
         // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
         // For `sub X::foo { }` in package main, packageName should be "X", not "main".
-        int lastSep = fullName.lastIndexOf("::");
         placeholder.packageName = lastSep >= 0
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();

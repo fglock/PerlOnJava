@@ -2,6 +2,8 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.*;
 
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
@@ -35,6 +37,8 @@ public class SubName extends PerlModuleBase {
         subName.defineExport("EXPORT_OK", "subname");
         try {
             subName.registerMethod("subname", null);  // No prototype to allow flexible args
+            // Private helper used by B.pm to detect CVs renamed via Sub::Name::subname.
+            subName.registerMethod("_is_renamed", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Sub::Name method: " + e.getMessage());
         }
@@ -81,6 +85,29 @@ public class SubName extends PerlModuleBase {
             }
             code.subName = fullName;
         }
+        // Mark the CV as explicitly renamed so B::svref_2object()->GV->NAME
+        // honors the assigned name even when no matching stash entry exists.
+        code.explicitlyRenamed = true;
         return codeRef.getList();
+    }
+
+    /**
+     * _is_renamed CODEREF
+     *
+     * Private helper for B.pm. Returns a true scalar if the given code
+     * reference has been explicitly renamed via Sub::Name::subname (or
+     * Sub::Util::set_subname), otherwise an empty/false scalar. Non-CODE
+     * arguments yield false.
+     */
+    public static RuntimeList _is_renamed(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            return scalarFalse.getList();
+        }
+        RuntimeScalar ref = args.get(0);
+        if (ref.type != CODE) {
+            return scalarFalse.getList();
+        }
+        RuntimeCode code = (RuntimeCode) ref.value;
+        return (code.explicitlyRenamed ? scalarTrue : scalarFalse).getList();
     }
 }
