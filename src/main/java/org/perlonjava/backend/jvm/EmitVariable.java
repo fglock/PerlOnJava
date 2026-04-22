@@ -1532,7 +1532,13 @@ public class EmitVariable {
                     // if die propagates through this subroutine without eval.
                     // State/our variables are excluded: state persists across calls,
                     // our is global.  register() is a no-op until the first bless().
-                    if (operator.equals("my")) {
+                    //
+                    // Phase R (classic_experiment_finding.md): skip emission when
+                    // CleanupNeededVisitor proved the enclosing sub has no
+                    // bless/weaken/user-sub-calls — no tracked ref can ever land
+                    // in this my-var, so register/unregister pair is dead code.
+                    if (operator.equals("my")
+                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",

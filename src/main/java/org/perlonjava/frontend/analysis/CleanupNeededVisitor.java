@@ -83,6 +83,14 @@ public class CleanupNeededVisitor implements Visitor {
             mark();
             return;
         }
+        // tie/untie invoke user-written TIESCALAR/TIEHASH/TIEARRAY/UNTIE
+        // methods which can do bless etc. — treat as user sub call.
+        // Phase R: without this, tie_scalar.t / tie_array.t regress when
+        // scopeExitCleanup emission is gated on cleanupNeeded.
+        if ("tie".equals(node.operator) || "untie".equals(node.operator)) {
+            mark();
+            return;
+        }
         if (node.operand != null) node.operand.accept(this);
     }
 
