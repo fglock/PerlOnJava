@@ -3,15 +3,20 @@ use strict;
 use warnings;
 use Scalar::Util ();
 use XSLoader;
+use Exporter ();
 
 our $VERSION = '1.643';
 
 XSLoader::load( 'DBI' );
 
 # DBI::db and DBI::st inherit from DBI so method dispatch works
-# when handles are blessed into subclass packages
+# when handles are blessed into subclass packages.
+# DBI also inherits from Exporter so `use DBI qw(:sql_types ...)` works.
+our @ISA = ('Exporter');
 @DBI::db::ISA = ('DBI');
 @DBI::st::ISA = ('DBI');
+
+our $neat_maxlen = 1000;
 
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
@@ -107,7 +112,9 @@ sub _handle_error_with_handler {
 #       src/main/java/org/perlonjava/runtime/perlmodule/DBI.java
 
 # SQL type constants (from DBI spec, java.sql.Types values)
-# Used by DBIx::Class::Storage::DBI::SQLite and others
+# Used by DBIx::Class::Storage::DBI::SQLite and others.
+# Split into multiple blocks to avoid a PerlOnJava bytecode verifier
+# limit with very large `use constant { ... }` hashes.
 use constant {
     SQL_GUID            => -11,
     SQL_WLONGVARCHAR    => -10,
@@ -130,6 +137,9 @@ use constant {
     SQL_FLOAT           => 6,
     SQL_REAL            => 7,
     SQL_DOUBLE          => 8,
+};
+
+use constant {
     SQL_DATETIME        => 9,
     SQL_DATE            => 9,
     SQL_INTERVAL        => 10,
@@ -146,13 +156,47 @@ use constant {
     SQL_CLOB            => 40,
     SQL_CLOB_LOCATOR    => 41,
     SQL_ARRAY           => 50,
+    SQL_ARRAY_LOCATOR   => 51,
     SQL_MULTISET        => 55,
+    SQL_MULTISET_LOCATOR => 56,
     SQL_TYPE_DATE       => 91,
     SQL_TYPE_TIME       => 92,
     SQL_TYPE_TIMESTAMP  => 93,
     SQL_TYPE_TIME_WITH_TIMEZONE      => 94,
     SQL_TYPE_TIMESTAMP_WITH_TIMEZONE => 95,
 };
+
+use constant {
+    SQL_INTERVAL_YEAR                => 101,
+    SQL_INTERVAL_MONTH               => 102,
+    SQL_INTERVAL_DAY                 => 103,
+    SQL_INTERVAL_HOUR                => 104,
+    SQL_INTERVAL_MINUTE              => 105,
+    SQL_INTERVAL_SECOND              => 106,
+    SQL_INTERVAL_YEAR_TO_MONTH       => 107,
+    SQL_INTERVAL_DAY_TO_HOUR         => 108,
+    SQL_INTERVAL_DAY_TO_MINUTE       => 109,
+    SQL_INTERVAL_DAY_TO_SECOND       => 110,
+    SQL_INTERVAL_HOUR_TO_MINUTE      => 111,
+    SQL_INTERVAL_HOUR_TO_SECOND      => 112,
+    SQL_INTERVAL_MINUTE_TO_SECOND    => 113,
+};
+
+use constant {
+    SQL_CURSOR_FORWARD_ONLY  => 0,
+    SQL_CURSOR_KEYSET_DRIVEN => 1,
+    SQL_CURSOR_DYNAMIC       => 2,
+    SQL_CURSOR_STATIC        => 3,
+    SQL_CURSOR_TYPE_DEFAULT  => 0,
+    DBIstcf_STRICT           => 0x0001,
+    DBIstcf_DISCARD_STRING   => 0x0002,
+};
+
+# Exporter wiring, %EXPORT_TAGS, and the small utility functions
+# (neat / neat_list / looks_like_number / ...) live in a separate
+# file so PerlOnJava compiles them to their own JVM class — the
+# combined DBI.pm would otherwise exceed a per-method bytecode limit.
+require DBI::_Utils;
 
 # DSN translation: convert Perl DBI DSN format to JDBC URL
 # This wraps the Java-side connect() to support dbi:Driver:... format
