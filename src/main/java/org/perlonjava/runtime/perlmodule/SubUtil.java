@@ -142,6 +142,9 @@ public class SubUtil extends PerlModuleBase {
         } else {
             code.subName = fullName;
         }
+        // Mark the CV as explicitly renamed so B::svref_2object()->GV->NAME
+        // honors the assigned name even when no matching stash entry exists.
+        code.explicitlyRenamed = true;
         return codeRef.getList();
     }
 }
