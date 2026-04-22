@@ -288,7 +288,15 @@ tasks.register('testModule', Test) {
     useJUnitPlatform {
         includeTags 'module'
     }
-    
+
+    // Tests that spawn a child perl (via $^X, e.g. System::Command)
+    // need PERLONJAVA_EXECUTABLE set to a real launcher, since under
+    // Gradle "jperl" isn't on $PATH. GlobalContext reads this env var
+    // when initializing $^X.
+    def jperlLauncher = org.gradle.internal.os.OperatingSystem.current().isWindows()
+            ? "jperl.bat" : "jperl"
+    environment 'PERLONJAVA_EXECUTABLE', file(jperlLauncher).absolutePath
+
     shouldRunAfter testUnit
 }
 
