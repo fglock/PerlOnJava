@@ -44,15 +44,153 @@ Previous baseline (after Exporter wiring only):
 
 Original baseline on master: 562 subtests, 308 passing, 254 failing.
 
-The remaining failures fall into four categories, listed below in
-priority order. Phase 1 is the hard blocker — several entire test files
-abort mid-run on PerlOnJava backend errors, so we cannot even see what
-DBI-level bugs lie behind them until the backend is fixed or we fall
-back to the interpreter.
+The remaining failures fall into five categories, listed below in
+priority order. The highest priority is now Phase 4 — a PerlOnJava
+interpreter bug discovered while working on Phase 3. It blocks an
+entire family of DBI profile-related tests and, worse, is a latent
+correctness problem that will keep surfacing in unrelated CPAN
+modules as long as it's unfixed.
+
+Phase 1 was a similar hard blocker on the JVM backend — test files
+aborted mid-run and masked the real DBI gaps. Now that Phases 1–3
+have opened up most of the suite, the interpreter bug has become
+the single biggest lever.
 
 ---
 
-## Phase 1 (priority 1): fix or fall back from bytecode-gen verifier bug
+## Phase 4 (priority 1, NEW): PerlOnJava bug — `local $h->{k}->{kk}` on tied hashes
+
+**Status: not started.** Blocks several DBI profile tests and is
+expected to come up in any module that combines `local` with tied
+hash traversal (DBIx::Class, Catalyst, many test frameworks).
+
+### The bug
+
+Taking `local` on a nested key of a TIED hash reference corrupts
+subsequent reads of the intermediate key. Minimal repro:
+
+```perl
+package Tie;
+sub TIEHASH { bless \$_[1], $_[0] }
+sub FETCH   { ${$_[0]}->{$_[1]} }
+sub STORE   { ${$_[0]}->{$_[1]} = $_[2] }
+
+package Foo;
+sub meth { print "in meth\n"; }
+
+package main;
+my $obj = bless { Path => [1, 2, 3] }, 'Foo';
+my %storage;
+my $h = \%storage;
+tie %$h, 'Tie', { obj => $obj };
+
+print "h->{obj}=", ref($h->{obj}), "\n";        # -> Foo (correct)
+{
+    local $h->{obj}->{Path} = undef;
+    print "type ", ref($h->{obj}), "\n";        # -> Foo (correct)
+    eval { $h->{obj}->meth; };
+    print "err: $@\n" if $@;
+}
+```
+
+Expected: `in meth`. Observed on PerlOnJava:
+
+```
+h->{obj}=Foo
+type Foo
+err: Can't locate object method "meth" via package
+     "Foo=HASH(0x47db50c5)" (perhaps you forgot to load
+     "Foo=HASH(0x47db50c5)"?) at -e line 19.
+```
+
+The method-resolution path treats the blessed-ref's stringification
+(`Foo=HASH(0x...)`) as the package name. Internally this looks like
+the `local` restore hook is leaving the scalar in a state where
+`ref()` still reports the class but the SVOK / invocant dispatch
+sees the stringified form instead of the ref.
+
+The same bug occurs without the tie — but with a plain hash
+`perl` / `jperl` both behave correctly; the tie is what trips it.
+
+### Impact on DBI
+
+Direct blocker for test flows that do `local $h->{Profile}->{Path}
+= undef` or similar around a `flush_to_disk()` call — that's the
+exact shape of `t/41prof_dump.t`, `t/42prof_data.t`,
+`t/43prof_env.t`, and their `zv*_41*`, `zv*_42*`, `zv*_43*`
+wrappers (~21 test files). Several other Phase 3 improvements
+(Profile inheritance, the tied-handle architecture) set up Profile
+correctly but can't get past this spot.
+
+### Plan
+
+1. **Reproduce in isolation.** Add a minimal test under
+   `src/test/resources/` (or wherever interpreter-level tests
+   live) that boils down to the snippet above and asserts the
+   method call succeeds. It should fail on master and we keep it
+   as a regression test.
+
+2. **Isolate where Perl-on-Java goes wrong.** Candidates:
+
+   - **Tie-aware `local` restore.** When we set up `local` on a
+     lvalue that goes through a tied hash, we need to snapshot
+     the old value via FETCH, then arrange for a STORE with that
+     value at scope exit. Somewhere in this flow the *intermediate*
+     ref that was returned by FETCH gets replaced with a stringified
+     view, so subsequent reads of the same tied slot produce a
+     different SV.
+
+     Likely files: the code that implements `local` in
+     `src/main/java/org/perlonjava/backend/jvm/` (look for
+     `EmitControlFlow` / `LocalVariable*`) and its interpreter
+     counterpart in `backend/bytecode/`. Also anything that
+     handles tie magic in `runtime/`.
+
+   - **Method-dispatch against a ref whose reftype changed.**
+     Alternatively the scalar may still hold the right ref, but
+     method dispatch is looking up the class via stringification
+     rather than `SvSTASH`-equivalent. In that case the fix is in
+     the method-call opcode in `backend/bytecode/CompileOperator`
+     or the JVM-side `EmitOperator`.
+
+3. **Decide on scope of the fix.** The minimal bug is:
+
+    ```perl
+    local $tied_hash->{key}->{subkey} = ...;  # then  $tied_hash->{key}->method
+    ```
+
+    A tight fix is enough. If easy, also cover
+
+    ```perl
+    local $tied_hash->{key} = ...;  # then method call
+    ```
+
+    which may share the same code path.
+
+4. **Validate.** Re-run `jcpan -t DBI` and confirm `t/41prof_dump.t`
+   / `t/42prof_data.t` / `t/43prof_env.t` (and their wrappers)
+   move from "aborts partway with `Can't locate method foo via
+   package Foo=HASH(...)`" to "real TAP results". Expected delta:
+   ~20 test files move from fail to pass (assuming the only thing
+   they were waiting on is this).
+
+5. **Audit other spots.** Grep CPAN-modules and the bundled
+   tests for the pattern `\Qlocal \$\E\S*->\{.*\}->\{` — any
+   module that uses this idiom is likely also broken today. Add
+   a short note on it in `AGENTS.md` / a skill file so it doesn't
+   get rediscovered from scratch.
+
+### Acceptance criteria
+
+- The minimal test from step 1 passes.
+- `./jperl ~/.cpan/build/DBI-1.647-5/t/41prof_dump.t` runs past the
+  `local $dbh->{Profile}->{Path} = undef; $sth->{Profile}->flush_to_disk;`
+  block and either passes the test or fails on something unrelated.
+- `make` and `jcpan -t DBI` still match-or-improve the baseline.
+
+---
+
+## Phase 1 (priority 2): fix or fall back from bytecode-gen verifier bug
 
 **Status: done (2026-04-22). Fell back to the interpreter on
 runtime VerifyError rather than fixing the emitter.**
@@ -334,7 +472,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 (first batch) in progress. Many more DBI internals filled in.
+### Current Status: Phase 1–3 landed on `fix/dbi-test-parity` (PR #546). Phase 4 is the new top priority — it's a PerlOnJava bug, not DBI work, and needs attention before more DBI polish is worth doing.
 
 ### Completed
 
@@ -423,16 +561,18 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ### Next Steps
 
-1. Continue **Phase 3**: the remaining 166 failing files are dominated
-   by (a) DBD::File / DBD::DBM-specific methods (`f_versions`,
-   `dbm_versions`, `dbm_clear_meta`, `clone`) and (b) attribute
-   FETCH on computed keys that real DBI handles via tied hashes
-   (`NAME_lc`, `ChildHandles`, etc.). Tied-hash semantics is the
-   biggest remaining gap.
-2. After that, triage the `zvg_*` / `zvp_*` / `zvx*_*` wrapper
-   families — most share backends with the base tests, so base
-   fixes cascade.
-3. Periodically re-run `jcpan -t DBI` to track progress.
+1. **Phase 4 (TOP PRIORITY): fix the `local $tied->{k}->{kk}` bug**
+   in the PerlOnJava interpreter/backend. See the Phase 4 section
+   above. Expected to unblock ~20 DBI test files in the profile
+   family plus unknown fallout across other CPAN modules.
+2. After Phase 4 lands, revisit Phase 3 polish — `HandleError`
+   flow (`t/17handle_error.t`), trace file support
+   (`t/09trace.t`, `t/19fhtrace.t`), callback integration
+   (`t/70callbacks.t`), `t/16destroy.t` handle-state-on-destroy.
+3. Phase 3c (DBD::Gofer): likely the next big family of files.
+   Gofer's `null` transport wants the tied-handle work we already
+   have, so this may now be close to free.
+4. Periodically re-run `jcpan -t DBI` to track progress.
 
 ### Open Questions
 
@@ -440,6 +580,9 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   skip it under PerlOnJava? See Phase 3a.
 - Does anyone actually use Gofer on PerlOnJava? Phase 3c can
   probably be skipped entirely.
+- Phase 4's bug: is it purely in the `local` restore path, or
+  does method dispatch on a once-`local`-ized tied slot read
+  the wrong SV? Minimal repro below will pin it down.
 
 ---
 
@@ -451,3 +594,13 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   debug-env var mentioned in Phase 1.
 - [`src/main/java/org/perlonjava/app/scriptengine/PerlLanguageProvider.java`](../../src/main/java/org/perlonjava/app/scriptengine/PerlLanguageProvider.java)
   — existing interpreter-fallback path we'd extend in Phase 1.
+- PerlOnJava source dirs relevant to Phase 4:
+  - [`src/main/java/org/perlonjava/backend/bytecode/`](../../src/main/java/org/perlonjava/backend/bytecode/)
+    — the interpreter backend (`--interpreter`), where tie magic
+    and `local` restore hooks live.
+  - [`src/main/java/org/perlonjava/backend/jvm/`](../../src/main/java/org/perlonjava/backend/jvm/)
+    — the JVM backend emitter; both backends need the fix.
+  - [`src/main/java/org/perlonjava/runtime/`](../../src/main/java/org/perlonjava/runtime/)
+    — tied hash magic (TIEHASH / FETCH / STORE dispatch) lives
+    here; the scalar representation that method dispatch reads is
+    likely also here.
