@@ -198,6 +198,14 @@ use constant {
 # combined DBI.pm would otherwise exceed a per-method bytecode limit.
 require DBI::_Utils;
 
+# Driver-architecture pieces: DBI->install_driver, DBI::_new_drh /
+# _new_dbh / _new_sth, and the DBD::_::common / dr / db / st base
+# classes. Also lives in its own file for the per-method bytecode
+# size limit reason. Required by the pure-Perl DBDs bundled with
+# upstream DBI (DBD::NullP, DBD::ExampleP, DBD::Sponge, DBD::File,
+# DBD::DBM, DBD::Mem, etc.).
+require DBI::_Handles;
+
 # DSN translation: convert Perl DBI DSN format to JDBC URL
 # This wraps the Java-side connect() to support dbi:Driver:... format
 # Handles attribute syntax: dbi:Driver(RaiseError=1):rest
@@ -230,6 +238,24 @@ require DBI::_Utils;
             eval "require $dbd_class";
             if ($dbd_class->can('_dsn_to_jdbc')) {
                 $dsn = $dbd_class->_dsn_to_jdbc($rest);
+            }
+            elsif ($dbd_class->can('driver')) {
+                # Pure-Perl DBD (no JDBC backing). Route through the
+                # DBI driver-architecture path: install the driver and
+                # let its connect() build the dbh via DBI::_new_dbh.
+                my $drh = eval { DBI->install_driver($driver) };
+                if ($drh) {
+                    my $dbh = $drh->connect($rest, $user, $pass, $attr);
+                    if ($dbh) {
+                        # real DBI does this in _new_dbh but we want
+                        # to be permissive for drivers that don't.
+                        $dbh->{Driver} = $drh;
+                        $dbh->{Name} = $rest if !defined $dbh->{Name};
+                        $dbh->STORE(Active => 1) unless $dbh->FETCH('Active');
+                    }
+                    return $dbh;
+                }
+                # fall through to JDBC path if install_driver croaked
             }
         }
         my $dbh = $orig_connect->($class, $dsn, $user, $pass, $attr);
