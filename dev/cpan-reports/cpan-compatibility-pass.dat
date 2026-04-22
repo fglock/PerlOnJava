@@ -195,6 +195,8 @@ Data::Page::NoTotalEntries	PASS	5	5		2026-04-21		3f3336774
 Data::Properties::YAML	PASS	10	10		2026-04-21		73edc8aba
 Data::Section::Simple	PASS	8	8		2026-04-21		73edc8aba
 Data::Walk	PASS	266	266		2026-04-12		c1942aad0
+Date::DayOfWeek	PASS	32	32		2026-04-22		e228c2529
+Date::Leapyear	PASS	764	764		2026-04-22		e228c2529
 Date::Tolkien::Shire::Data	PASS	5558	5558		2026-04-12		c1942aad0
 DateTime::Calendar::TauStation	PASS	69	69		2026-04-22		3f3336774
 DateTime::Duration::Patch::StringifyAsISO8601	PASS	1	1		2026-04-22		3f3336774
@@ -205,11 +207,13 @@ DateTime::Format::MySQL	PASS	97	97		2026-04-22		e228c2529
 DateTime::Format::Pg	PASS	216	216		2026-04-22		3f3336774
 DateTime::Format::Roman	PASS	23	23		2026-04-22		3f3336774
 DateTime::Format::Strptime	PASS	143	143		2026-04-12		cc5efa220
+DateTime::Format::XSD	PASS	2	2		2026-04-22		e228c2529
 DateTime::Functions	PASS	2	2		2026-04-12		c1942aad0
 DateTime::Moonpig	PASS	22	22		2026-04-12		c1942aad0
 DateTime::TimeZone::Alias	PASS	2453	2453		2026-04-12		c1942aad0
 DateTime::TimeZone::Catalog::Extend	PASS	355	355		2026-04-12		c1942aad0
 DateTime::Tiny	PASS	33	33		2026-04-22		3f3336774
+DateTime::Util::DayOfWeek	PASS	16	16		2026-04-22		e228c2529
 DateTimeX::Format::Ago	PASS	602	602		2026-04-12		c1942aad0
 DateTimeX::ISO8601::Interval	PASS	81	81		2026-04-22		3f3336774
 DateTimeX::Period	PASS	47	47		2026-04-22		3f3336774
@@ -346,6 +350,10 @@ LCS	PASS	219	219		2026-04-21		73edc8aba
 LEOCHARRE::CLI	PASS	22	22		2026-04-12		c1942aad0
 LEOCHARRE::DEBUG	PASS	10	10		2026-04-21		3f3336774
 LWP::UserAgent::Patch::Delay	PASS	1	1		2026-04-22		3f3336774
+Limper	PASS	1	1		2026-04-22		e228c2529
+Limper::Engine::PSGI	PASS	9	9		2026-04-22		e228c2529
+Limper::SendFile	PASS	1	1		2026-04-22		e228c2529
+Limper::SendJSON	PASS	1	1		2026-04-22		e228c2529
 Lingua::EN::FindNumber	PASS	5	5		2026-04-12		c1942aad0
 Lingua::EN::Inflect	PASS	2147	2147		2026-04-12		cc5efa220
 Lingua::EN::Inflect::Number	PASS	21	21		2026-04-12		c1942aad0
@@ -544,6 +552,7 @@ Term::Screen	PASS	29	29		2026-04-12		c1942aad0
 Term::UI	PASS	36	36		2026-04-22		3f3336774
 Test::API	PASS	32	32		2026-04-12		c1942aad0
 Test::CPAN::Meta	PASS	196	196		2026-04-12		c1942aad0
+Test::Carp	PASS	72	72		2026-04-22		e228c2529
 Test::CheckManifest	PASS	113	113		2026-04-21		73edc8aba
 Test::Data	PASS	119	119		2026-04-21		73edc8aba
 Test::DescribeMe	PASS	12	12		2026-04-21		73edc8aba
@@ -571,7 +580,7 @@ Test::SubCalls	PASS	25	25		2026-04-12		c1942aad0
 Test::TempDir::Tiny	PASS	4	4		2026-04-21		73edc8aba
 Test::TinyMocker	PASS	56	56		2026-04-22		3f3336774
 Test::WWW::Mechanize::PSGI	PASS	33	33		2026-04-22		3f3336774
-Text::Aligner	PASS	513	513		2026-04-21		3f3336774
+Text::Aligner	PASS	513	513		2026-04-22		e228c2529
 Text::Brew	PASS	18	18		2026-04-12		c1942aad0
 Text::Diff	PASS	33	33		2026-04-12		cc5efa220
 Text::German	PASS	34	34		2026-04-12		c1942aad0
@@ -602,6 +611,7 @@ Tree::Numbered	PASS	37	37		2026-04-22		3f3336774
 Tree::Numbered::DB	PASS	29	29		2026-04-22		3f3336774
 Tree::Object::Hash	PASS	12	12		2026-04-22		3f3336774
 Tree::To::TextLines	PASS	2	2		2026-04-22		3f3336774
+Try::Tiny::Retry	PASS	13	13		2026-04-22		e228c2529
 Twiggy	PASS	1	1		2026-04-22		3f3336774
 Types::DateTime	PASS	9	9		2026-04-22		3f3336774
 Types::Path::Tiny	PASS	20	20		2026-04-12		c1942aad0
@@ -611,6 +621,7 @@ URI::Title	PASS	11	11		2026-04-21		73edc8aba
 URI::ToDisk	PASS	130	130		2026-04-22		3f3336774
 URI::fasp	PASS	11	11		2026-04-22		3f3336774
 URI::redis	PASS	10	10		2026-04-21		73edc8aba
+URL::Encode	PASS	468	468		2026-04-22		e228c2529
 USB::Descriptor	PASS	22	22		2026-04-22		3f3336774
 UUID::Object	PASS	124	124		2026-04-21		73edc8aba
 Unicode::Stringprep	PASS	194	194		2026-04-12		c1942aad0
@@ -629,6 +640,7 @@ WWW::Google::PageRank	PASS	9	9		2026-04-22		3f3336774
 WWW::Mechanize::GZip	PASS	5	5		2026-04-22		3f3336774
 WWW::ModulrFinance	PASS	1	1		2026-04-22		3f3336774
 WWW::Moviepilot	PASS	4	4		2026-04-22		3f3336774
+WWW::RT::CPAN	PASS	1	1		2026-04-22		e228c2529
 WWW::Scraper::ISBN::Foyles_Driver	PASS	33	33		2026-04-22		3f3336774
 WWW::Scraper::ISBN::LOC_Driver	PASS	20	20		2026-04-22		3f3336774
 WWW::Shorten::Bitly	PASS	66	66		2026-04-22		3f3336774
