@@ -546,10 +546,27 @@ sub _create_install_makefile {
             push @script_cmds, _shell_cp($src, $dest);
         }
     }
-    
+
+    # Also stage EXE_FILES into blib/script/ so that 'make test' can run
+    # them from the blib tree (standard MakeMaker behavior). Tests like
+    # Pod::Markdown's t/pod2markdown.t invoke blib/script/<name> directly.
+    my @blib_script_cmds;
+    if ($scripts && %$scripts) {
+        my %bsdirs;
+        for my $src (sort keys %$scripts) {
+            my $blib_dest = File::Spec->catfile('blib', 'script', basename($src));
+            my $blib_dir = dirname($blib_dest);
+            unless ($bsdirs{$blib_dir}++) {
+                push @blib_script_cmds, _shell_mkdir($blib_dir);
+            }
+            push @blib_script_cmds, _shell_cp($src, $blib_dest);
+        }
+    }
+
     my $install_cmds_str = join("\n", @install_cmds) || "\t\@true";
     my $blib_cmds_str = join("\n", @blib_cmds) || "\t\@true";
     my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
+    my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
     
     # Build PL_FILES commands (prefixed with - so failures are non-fatal;
@@ -600,7 +617,7 @@ INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
 
-all:: pm_to_blib pure_all pl_files config
+all:: pm_to_blib pure_all pl_files blib_scripts config
 \t\@echo "PerlOnJava: $name v$version installed ($file_count files)"
 
 # Copy module and data files to installation directory
@@ -612,6 +629,10 @@ $install_cmds_str
 pure_all::
 \t\@mkdir -p blib/arch
 $blib_cmds_str
+
+# Stage EXE_FILES into blib/script/ so tests can invoke them via the blib tree
+blib_scripts::
+$blib_script_cmds_str
 
 # Process PL_FILES
 pl_files::
@@ -642,7 +663,7 @@ realclean:: clean
 distclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-.PHONY: all pm_to_blib pure_all pl_files config test install clean realclean distclean install_scripts
+.PHONY: all pm_to_blib pure_all pl_files blib_scripts config test install clean realclean distclean install_scripts
 MAKEFILE
 
     # Call MY::postamble if it exists (File::ShareDir::Install uses this)
