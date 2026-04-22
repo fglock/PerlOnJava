@@ -713,11 +713,14 @@ public class EmitOperator {
     }
 
     // Handles the 'range' operator, which creates a range of values.
+    // The operator is always emitted as ".." — in list context both `..` and
+    // `...` act as the range operator; only the scalar-context flip-flop path
+    // (handled elsewhere) cares about the distinction.
     static void handleRangeOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         // Accept both left and right operands in SCALAR context.
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
         node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        emitOperator(node, emitterVisitor);
+        emitOperatorWithKey("..", node, emitterVisitor);
     }
 
     // Handles the 'substr' operator, which extracts a substring from a string.
