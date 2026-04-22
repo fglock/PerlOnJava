@@ -610,8 +610,13 @@ sub trace {
     my ($dbh, $level, $output) = @_;
     $level ||= 0;
 
-    $dbh->{TraceLevel} = $level;
-    $dbh->{TraceOutput} = $output if defined $output;
+    if (ref $dbh) {
+        $dbh->{TraceLevel} = $level;
+        $dbh->{TraceOutput} = $output if defined $output;
+    } else {
+        # class method: DBI->trace(...) sets the process-global level
+        $DBI::dbi_debug = $level;
+    }
 
     return $level;
 }
@@ -620,9 +625,11 @@ sub trace_msg {
     my ($dbh, $msg, $level) = @_;
     $level ||= 0;
 
-    my $current_level = $dbh->{TraceLevel} || 0;
+    my $current_level = ref($dbh)
+        ? ($dbh->{TraceLevel} || 0)
+        : ($DBI::dbi_debug || 0);
     if ($level <= $current_level) {
-        if ($dbh->{TraceOutput}) {
+        if (ref($dbh) && $dbh->{TraceOutput}) {
             # TODO: Write to custom output
             print STDERR $msg;
         } else {
