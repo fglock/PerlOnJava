@@ -26,6 +26,22 @@ public class MortalList {
     // as a trivially-predicted branch; the JIT will elide them.
     public static boolean active = true;
 
+    /**
+     * Experiment #3 — cumulative-tax hypothesis.
+     * When {@code JPERL_CLASSIC=1}, collapse the branch's added refcount/
+     * walker/weaken/DESTROY machinery to a no-op where possible, so the
+     * runtime behaves as close to pre-merge master as we can get with a
+     * single static flag. Used to measure whether the full master→branch
+     * regression is recoverable at all by disabling the machinery.
+     * Breaks DESTROY + weaken + walker semantics; only safe for benchmarks.
+     */
+    public static final boolean CLASSIC =
+            System.getenv("JPERL_CLASSIC") != null;
+
+    static {
+        if (CLASSIC) active = false;
+    }
+
     // List of RuntimeBase references awaiting decrement.
     // Populated by delete() when removing tracked elements.
     // Drained at statement boundaries (FREETMPS equivalent).

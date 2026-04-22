@@ -942,6 +942,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Separated to keep setLarge() small enough for JIT inlining of set().
      */
     private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        // Experiment #3: master-like classic path. Skip all refcount /
+        // WeakRefRegistry / MortalList work, just do the assignment.
+        if (MortalList.CLASSIC) {
+            this.type = value.type;
+            this.value = value.value;
+            return this;
+        }
         // Fast path for untracked references (refCount == -1).
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
@@ -2335,6 +2342,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public static void scopeExitCleanup(RuntimeScalar scalar) {
         if (scalar == null) return;
+        if (MortalList.CLASSIC) return;
 
         // Fast path: skip if no special state (most common case for integer/string vars).
         // When all three conditions are true, the entire method body is a no-op:

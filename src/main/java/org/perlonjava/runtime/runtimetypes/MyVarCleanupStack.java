@@ -72,6 +72,7 @@ public class MyVarCleanupStack {
      * @param var the RuntimeScalar, RuntimeHash, or RuntimeArray object
      */
     public static void register(Object var) {
+        if (MortalList.CLASSIC) return;
         stack.add(var);
         // liveCounts is only consulted by ReachabilityWalker.sweepWeakRefs,
         // which runs only when WeakRefRegistry.weakRefsExist is true. For
@@ -100,7 +101,7 @@ public class MyVarCleanupStack {
      * @param var the RuntimeScalar/Array/Hash previously registered
      */
     public static void unregister(Object var) {
-        if (var == null) return;
+        if (var == null || MortalList.CLASSIC) return;
         // Block-scoped my-vars pop in reverse declaration order, so
         // scan from the top of the stack for a fast amortized match.
         for (int i = stack.size() - 1; i >= 0; i--) {

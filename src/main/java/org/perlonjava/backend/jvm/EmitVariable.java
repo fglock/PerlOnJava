@@ -1542,7 +1542,7 @@ public class EmitVariable {
                     // if die propagates through this subroutine without eval.
                     // State/our variables are excluded: state persists across calls,
                     // our is global.  register() is a no-op until the first bless().
-                    if (operator.equals("my")) {
+                    if (operator.equals("my") && !org.perlonjava.runtime.runtimetypes.MortalList.CLASSIC) {
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",

@@ -133,32 +133,36 @@ public class EmitStatement {
         // Phase 1: Run scopeExitCleanup for scalar variables.
         // This defers refCount decrements for blessed references with DESTROY,
         // and handles IO fd recycling for anonymous filehandle globs.
-        for (int idx : scalarIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    "scopeExitCleanup",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
-                    false);
+        if (!MortalList.CLASSIC) {
+            for (int idx : scalarIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "scopeExitCleanup",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                        false);
+            }
         }
         // Phase 1b: Walk hash/array variables for nested blessed references.
         // When a hash/array goes out of scope, any blessed refs stored inside
         // (or nested inside sub-containers) need their refCounts decremented.
-        for (int idx : hashIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "scopeExitCleanupHash",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
-                    false);
-        }
-        for (int idx : arrayIndices) {
-            ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "scopeExitCleanupArray",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
-                    false);
+        if (!MortalList.CLASSIC) {
+            for (int idx : hashIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupHash",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
+                        false);
+            }
+            for (int idx : arrayIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupArray",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                        false);
+            }
         }
         // Phase 2: Null all my variable slots to help GC collect associated objects.
         // For anonymous filehandle globs, this makes them unreachable so the
@@ -178,7 +182,7 @@ public class EmitStatement {
         // sub never uses bless/weaken/user-sub-calls/etc.), the stack is
         // guaranteed empty for this sub's lexicals, so the unregister
         // loop is dead code. Skipping it is the win this fast path buys.
-        if (!skipMyVarCleanup) {
+        if (!skipMyVarCleanup && !MortalList.CLASSIC) {
             for (int idx : allIndices) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -209,7 +213,7 @@ public class EmitStatement {
         //      boundaries), not entries that need to be preserved.
         // Flush when requested (non-sub, non-do blocks) even without my-variables,
         // because pending entries may exist from inner sub scope exits.
-        if (flush) {
+        if (flush && !MortalList.CLASSIC) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "flush",
