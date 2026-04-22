@@ -170,26 +170,68 @@ the Crypt::OpenSSL Bouncy Castle port. Defer until asked.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 2 complete (with caveat); Phase 3 pending
 
 ### Completed Phases
-_(none yet)_
+
+- [x] **Phase 1 — `local $tied_scalar = value` (2026-04-22)**
+  - Unit test added in `src/test/resources/unit/tie_scalar.t` asserting
+    STORE dispatch on entry, inside, and exit of a localized scope.
+  - `GlobalRuntimeScalar.dynamicSaveState/dynamicRestoreState` now detects
+    `TIED_SCALAR` and keeps the tie in place, dispatching `STORE(undef)`
+    on entry and `STORE(savedValue)` on exit (matches real Perl).
+  - **`./jcpan -t Git::Wrapper`: 75/75 pass** (was 52/57).
+  - `make` stays green.
+
+- [x] **Phase 2 — `System::Command` IPC::Open3 fallback (2026-04-22)**
+  - Patched `_spawn` in `System/Command.pm`: on PerlOnJava (detected via
+    `$Config{perlonjava}`), route through `IPC::Open3::open3` instead of
+    the manual pipe+fork+exec. `cwd` and `env` are already handled by
+    the caller via `chdir` and `local %ENV`.
+  - Bundled patched `System/Command.pm` + unchanged `System/Command/Reaper.pm`
+    in `src/main/perl/lib/` so fresh installs get the working version.
+  - **`./jcpan -t Git::Repository`: 304/328 pass (93%)**, previously almost
+    fully skipped with `fork() not supported`.
+  - **`./jcpan -t System::Command`: 132/140 pass (94%)**. Remaining 8 are
+    a `$ENV{SHLVL}` mismatch — IPC::Open3 appears to wrap the child in a
+    shell, bumping SHLVL. Unrelated to fork, low priority.
+
+### Caveat: install-time precedence
+
+`@INC` lists `~/.perlonjava/lib` before the JAR-bundled lib. If a user
+has previously run `./jcpan -i System::Command`, their installed copy
+shadows the bundled patched version. Workarounds:
+
+1. Manually remove `~/.perlonjava/lib/System/Command.pm` — the bundled
+   version will then load.
+2. **Future**: teach `jcpan`/MakeMaker to apply the `_spawn` patch during
+   install for modules listed in a patch registry. See
+   `dev/modules/cpan_patch_plan.md` for a broader strategy.
+
+For this PR we accept that existing users need workaround (1). New
+installations Just Work out of the box.
 
 ### Next Steps
-1. Write unit test for `local $tied_scalar = value`.
-2. Fix `GlobalRuntimeScalar.dynamicSaveState/dynamicRestoreState` for
-   `TieScalar`.
-3. Verify `./jcpan -t Git::Wrapper` reaches 57/57.
+
+- Phase 3 housekeeping: update `docs/FEATURE_MATRIX.md` if it mentions
+  Git modules.
+- Optional: investigate the `SHLVL` mismatch in `System::Command` tests.
+- Optional: investigate the 24 remaining Git::Repository subtest failures
+  (they look like minor edge cases — `hello redefined` warnings, version
+  parse variants, etc.).
+- Optional: implement an install-time patching mechanism so that
+  `~/.perlonjava/lib/System/Command.pm` is auto-patched after
+  `jcpan -i`.
 
 ### Open Questions
-- Does `IPC::Open3::open3` on PerlOnJava honour the parent's cwd at the
-  moment `open3` is called? Quick test showed **yes**, it uses the Java
-  process's current cwd. Good — that means `chdir + open3 + chdir back` is
-  a viable path for `System::Command`'s `cwd` option.
-- Do we need a `ProcessBuilder.directory()`/`environment()` helper exposed
-  to Perl? Probably not if we can do `local %ENV` and manual chdir.
+
+- Should the bundled copy override the user install instead? Would require
+  reordering `@INC` (JAR first) for specific paths — risky as it would
+  break legitimate user upgrades of other modules.
 
 ## Related Docs
 
 - `dev/modules/ipc_open3_fix.md` — prior work on IPC::Open3 / IO::Select.
 - `dev/modules/xs_fallback.md` — XS/C handling in MakeMaker.
+- `dev/modules/cpan_patch_plan.md` — broader strategy for patching CPAN
+  modules on PerlOnJava.
