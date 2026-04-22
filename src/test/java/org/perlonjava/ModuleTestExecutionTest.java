@@ -182,13 +182,27 @@ public class ModuleTestExecutionTest {
             Path moduleDir = resolveModuleDir(filename);
             System.setProperty("user.dir", moduleDir.toAbsolutePath().toString());
 
-            String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            // Read source bytes as ISO-8859-1 so each byte maps 1:1 to a char.
+            // Perl source files are not always UTF-8 (e.g., Text-CSV/t/55_combi.t
+            // embeds literal byte 0xE4 for 'ä' in a single-quoted string).
+            // Strict UTF-8 decoding would replace such bytes with U+FFFD, and
+            // the Perl compiler would then re-encode that U+FFFD back to its
+            // 3-byte UTF-8 representation (EF BF BD) in the compiled string.
+            // ISO-8859-1 passes every byte through unchanged as a char, which
+            // matches what ./jperl does when reading from the filesystem.
+            String content = new String(inputStream.readAllBytes(), StandardCharsets.ISO_8859_1);
             if (content.indexOf('\r') >= 0) {
                 content = content.replace("\r\n", "\n").replace("\r", "\n");
             }
 
             CompilerOptions options = new CompilerOptions();
             options.code = content;
+            // Mark source as raw bytes so the parser preserves non-ASCII bytes
+            // (e.g., Latin-1 0xE4) as single-byte chars rather than re-encoding
+            // them as UTF-8 sequences in compiled string literals.
+            // Matches what FileUtils.readFileWithEncodingDetection does for
+            // ./jperl when it detects ISO-8859-1 source.
+            options.isByteStringSource = true;
             // Set fileName relative to the module directory (CWD) so $0, FindBin, etc. resolve correctly
             // e.g., "module/Net-SSLeay/t/local/05_passwd_cb.t" -> "t/local/05_passwd_cb.t"
             Path moduleDirRel = Paths.get("module", filename.split("[/\\\\]")[1]);
