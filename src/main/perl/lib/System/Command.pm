@@ -84,7 +84,17 @@ my $_spawn = sub {
         # implemented on top of java.lang.ProcessBuilder. cwd and env
         # are already handled by the caller (System::Command::new)
         # via chdir + `local %ENV`.
-        $pid = IPC::Open3::open3($in, $out, $err, @cmd);
+        $pid = eval { IPC::Open3::open3($in, $out, $err, @cmd) };
+        if (my $err_msg = $@) {
+            # Translate IPC::Open3's "open3: exec of X failed: Y" into
+            # System::Command's own fork-path format
+            # "Can't exec( @cmd ): Y", so error-handling tests (e.g.
+            # t/11-spawn-fail.t) see the expected string in $@.
+            if ($err_msg =~ /^open3: exec of \S+ failed: (.*)$/m) {
+                croak "Can't exec( @cmd ): $1";
+            }
+            die $err_msg;
+        }
     }
     elsif (MSWin32) {
         $pid = IPC::Run::start(

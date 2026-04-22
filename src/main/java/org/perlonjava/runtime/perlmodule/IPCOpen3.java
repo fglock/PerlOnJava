@@ -62,6 +62,51 @@ public class IPCOpen3 extends PerlModuleBase {
     }
 
     /**
+     * Shell-metacharacter sniffer used to decide whether a single-arg
+     * command should be handed to `/bin/sh -c` or exec'd directly.
+     * Mirrors the heuristic real Perl uses in IPC::Open3 / system():
+     * any of these characters cause shell invocation; otherwise we
+     * exec directly so that exec-failure can be caught by the caller.
+     */
+    private static boolean hasShellMetacharacters(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isWhitespace(c)) return true;
+            switch (c) {
+                case '|': case '&': case ';': case '<': case '>':
+                case '(': case ')': case '$': case '`': case '\\':
+                case '"': case '\'': case '*': case '?': case '[':
+                case ']': case '{': case '}': case '!': case '#':
+                case '~': case '=':
+                    return true;
+                default:
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Translate a java.io.IOException from ProcessBuilder.start() into
+     * a short, Perl-style $! string. We pattern-match rather than chain
+     * through strerror because the JDK's wording varies per-platform.
+     */
+    private static String translateIOError(java.io.IOException ioe) {
+        String msg = ioe.getMessage();
+        if (msg == null) return "Exec failed";
+        if (msg.contains("error=2")
+                || msg.contains("No such file or directory")) {
+            return "No such file or directory";
+        }
+        if (msg.contains("error=13") || msg.contains("Permission denied")) {
+            return "Permission denied";
+        }
+        // Strip the "(in directory ...)" decoration the JDK tacks on.
+        int cut = msg.indexOf(" (in directory ");
+        if (cut > 0) return msg.substring(0, cut);
+        return msg;
+    }
+
+    /**
      * Register child process for waitpid() - handles both Windows and POSIX.
      */
     private static void registerChildProcess(Process process) {
@@ -108,12 +153,21 @@ public class IPCOpen3 extends PerlModuleBase {
             // Build the command
             String[] command;
             if (commandList.size() == 1) {
-                // Single string - use shell
+                // Single-element @cmd: follow real Perl's IPC::Open3
+                // rule — wrap in a shell only if the string contains
+                // shell metacharacters. Bare executable names go
+                // direct, which matches `exec { $cmd[0] } @cmd` in the
+                // fork path and lets us surface exec-failure errors
+                // (System::Command's t/11-spawn-fail.t depends on this).
                 String cmd = commandList.get(0);
-                if (IS_WINDOWS) {
-                    command = new String[]{"cmd.exe", "/c", cmd};
+                if (hasShellMetacharacters(cmd)) {
+                    if (IS_WINDOWS) {
+                        command = new String[]{"cmd.exe", "/c", cmd};
+                    } else {
+                        command = new String[]{"/bin/sh", "-c", cmd};
+                    }
                 } else {
-                    command = new String[]{"/bin/sh", "-c", cmd};
+                    command = new String[]{cmd};
                 }
             } else {
                 // Multiple arguments - direct execution
@@ -140,7 +194,21 @@ public class IPCOpen3 extends PerlModuleBase {
             }
 
             // Start the process
-            Process process = processBuilder.start();
+            Process process;
+            try {
+                process = processBuilder.start();
+            } catch (java.io.IOException ioe) {
+                // Match real Perl's IPC::Open3 error phrasing so callers
+                // (notably System::Command, which croaks $@ and matches
+                // `qr/^Can't exec\( ... \): /` in its test suite) can
+                // recognise the failure. We also preserve the Java
+                // errno-ish detail after the colon.
+                String cmd0 = commandList.get(0);
+                String detail = translateIOError(ioe);
+                getGlobalVariable("main::!").set(detail);
+                throw new RuntimeException(
+                        "open3: exec of " + cmd0 + " failed: " + detail);
+            }
             long pid = process.pid();
 
             // Register the process for waitpid() - works on both Windows and POSIX
@@ -176,6 +244,10 @@ public class IPCOpen3 extends PerlModuleBase {
 
             return new RuntimeScalar(pid).getList();
 
+        } catch (RuntimeException re) {
+            // Our inner throw already carries the correct "open3: ..."
+            // prefix; don't double-wrap.
+            throw re;
         } catch (Exception e) {
             getGlobalVariable("main::!").set(e.getMessage());
             throw new RuntimeException("open3: " + e.getMessage());
@@ -336,12 +408,17 @@ public class IPCOpen3 extends PerlModuleBase {
             // Build the command
             String[] command;
             if (commandList.size() == 1) {
-                // Single string - use shell
+                // Single-element @cmd: only wrap in a shell if the
+                // string has shell metacharacters (same rule as open3).
                 String cmd = commandList.get(0);
-                if (IS_WINDOWS) {
-                    command = new String[]{"cmd.exe", "/c", cmd};
+                if (hasShellMetacharacters(cmd)) {
+                    if (IS_WINDOWS) {
+                        command = new String[]{"cmd.exe", "/c", cmd};
+                    } else {
+                        command = new String[]{"/bin/sh", "-c", cmd};
+                    }
                 } else {
-                    command = new String[]{"/bin/sh", "-c", cmd};
+                    command = new String[]{cmd};
                 }
             } else {
                 // Multiple arguments - direct execution
@@ -359,7 +436,16 @@ public class IPCOpen3 extends PerlModuleBase {
             processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
 
             // Start the process
-            Process process = processBuilder.start();
+            Process process;
+            try {
+                process = processBuilder.start();
+            } catch (java.io.IOException ioe) {
+                String cmd0 = commandList.get(0);
+                String detail = translateIOError(ioe);
+                getGlobalVariable("main::!").set(detail);
+                throw new RuntimeException(
+                        "open2: exec of " + cmd0 + " failed: " + detail);
+            }
             long pid = process.pid();
 
             // Register the process for waitpid() - works on both Windows and POSIX
@@ -373,6 +459,8 @@ public class IPCOpen3 extends PerlModuleBase {
 
             return new RuntimeScalar(pid).getList();
 
+        } catch (RuntimeException re) {
+            throw re;
         } catch (Exception e) {
             getGlobalVariable("main::!").set(e.getMessage());
             throw new RuntimeException("open2: " + e.getMessage());
