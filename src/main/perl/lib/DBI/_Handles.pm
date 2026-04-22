@@ -29,17 +29,43 @@ package DBI;
 
 use strict;
 use warnings;
+use Carp ();
 
-our %installed_drh;    # driver_name => $drh
+our %installed_drh;    # driver_name => $drh (outer)
 
 # ---- handle factories -----------------------------------------------
+#
+# Real DBI handles are "two-headed":
+#   - an "inner" handle: the actual storage, blessed into the driver's
+#     implementor class (e.g. DBD::NullP::db).
+#   - an "outer" handle: a blessed reference to an anonymous hash,
+#     tied (at the hash level) to a small DBI::_::Tie class. The outer
+#     is what gets returned to user code.
+#
+# The outer is blessed into DBI::dr / DBI::db / DBI::st so
+# `ref($dbh) eq 'DBI::db'` and `isa('DBI::db')` hold — matching what
+# the DBI tests and DBIx::Class expect.
+#
+# Hash access on the outer (`$dbh->{Active}`) is intercepted by the
+# tie class, which forwards FETCH / STORE to methods on the inner.
+# The inner's @ISA reaches into DBD::_::common's FETCH / STORE, which
+# can compute derived keys (NAME_lc, NAME_uc, NAME_hash, …) on the
+# fly — matching real DBI's tied-hash behaviour.
+#
+# Method dispatch on the outer (`$dbh->prepare(...)`) falls through
+# DBI::db's own methods first; if not found, DBI::db's AUTOLOAD looks
+# up the method on the inner's class and invokes it with the inner
+# as invocant. That way driver-specific methods (prepare, execute,
+# f_versions, dbm_versions, …) all work transparently.
+#
+# Backward link: every inner has a weak reference to its outer in
+# $inner->{_outer}, so helpers like `_new_dbh` (which take inner as
+# $drh) can still populate new handles' `Driver` attribute with the
+# user-visible outer.
 
 sub _new_drh {
-    # called by DBD::<name>::driver() with the fully-qualified ::dr
-    # package name as $class, plus initial attrs and private data.
     my ($class, $initial_attr, $imp_data) = @_;
-    my $drh = {
-        # defaults real DBI copies down to children
+    my $inner = {
         State       => \my $h_state,
         Err         => \my $h_err,
         Errstr      => \(my $h_errstr = ''),
@@ -51,42 +77,67 @@ sub _new_drh {
         ActiveKids  => 0,
         Active      => 1,
     };
-    $drh->{_private_data} = $imp_data if defined $imp_data;
-    bless $drh, $class;
-    return wantarray ? ($drh, $drh) : $drh;
+    $inner->{_private_data} = $imp_data if defined $imp_data;
+    bless $inner, $class;
+
+    my %outer_storage;
+    my $outer = bless \%outer_storage, 'DBI::dr';
+    tie %$outer, 'DBI::_::Tie', $inner;
+    $inner->{_outer} = $outer;
+
+    return wantarray ? ($outer, $inner) : $outer;
 }
 
 sub _new_dbh {
     my ($drh, $attr, $imp_data) = @_;
-    my $imp_class = $drh->{ImplementorClass}
+    # $drh may be the inner (if called from a driver's connect(),
+    # routed via AUTOLOAD with inner as invocant) or the outer (if
+    # called directly by user code). Normalise to inner.
+    my $drh_inner = _inner_of($drh);
+    my $drh_outer = $drh_inner->{_outer} || $drh;
+
+    my $imp_class = $drh_inner->{ImplementorClass}
         or Carp::croak("DBI _new_dbh: $drh has no ImplementorClass");
-    # driver::dr -> driver::db
     (my $db_class = $imp_class) =~ s/::dr$/::db/;
-    my $dbh = {
+
+    my $inner = {
         Err       => \my $h_err,
         Errstr    => \(my $h_errstr = ''),
         State     => \my $h_state,
         TraceLevel => 0,
         %{ $attr || {} },
         ImplementorClass => $db_class,
-        Driver    => $drh,
+        Driver    => $drh_outer,
         Kids      => 0,
         ActiveKids => 0,
-        Active    => 0,   # driver's connect() is expected to set Active=1
+        Active    => 0,
         Statement => '',
     };
-    $dbh->{_private_data} = $imp_data if defined $imp_data;
-    bless $dbh, $db_class;
-    $drh->{Kids}++;
-    return wantarray ? ($dbh, $dbh) : $dbh;
+    $inner->{_private_data} = $imp_data if defined $imp_data;
+    bless $inner, $db_class;
+
+    my %outer_storage;
+    my $outer = bless \%outer_storage, 'DBI::db';
+    tie %$outer, 'DBI::_::Tie', $inner;
+    $inner->{_outer} = $outer;
+
+    $drh_inner->{Kids}++;
+    # Track child handles on the parent for visit_child_handles.
+    push @{ $drh_inner->{ChildHandles} ||= [] }, $outer;
+
+    return wantarray ? ($outer, $inner) : $outer;
 }
 
 sub _new_sth {
     my ($dbh, $attr, $imp_data) = @_;
-    my $imp_class = $dbh->{ImplementorClass}
+    my $dbh_inner = _inner_of($dbh);
+    my $dbh_outer = $dbh_inner->{_outer} || $dbh;
+
+    my $imp_class = $dbh_inner->{ImplementorClass}
         or Carp::croak("DBI _new_sth: $dbh has no ImplementorClass");
     (my $st_class = $imp_class) =~ s/::db$/::st/;
-    my $sth = {
+
+    my $inner = {
         Err       => \my $h_err,
         Errstr    => \(my $h_errstr = ''),
         State     => \my $h_state,
@@ -95,14 +146,163 @@ sub _new_sth {
         NUM_OF_PARAMS => 0,
         %{ $attr || {} },
         ImplementorClass => $st_class,
-        Database  => $dbh,
+        Database  => $dbh_outer,
         Active    => 0,
     };
-    $sth->{_private_data} = $imp_data if defined $imp_data;
-    bless $sth, $st_class;
-    $dbh->{Kids}++;
-    return wantarray ? ($sth, $sth) : $sth;
+    $inner->{_private_data} = $imp_data if defined $imp_data;
+    bless $inner, $st_class;
+
+    my %outer_storage;
+    my $outer = bless \%outer_storage, 'DBI::st';
+    tie %$outer, 'DBI::_::Tie', $inner;
+    $inner->{_outer} = $outer;
+
+    $dbh_inner->{Kids}++;
+    push @{ $dbh_inner->{ChildHandles} ||= [] }, $outer;
+
+    return wantarray ? ($outer, $inner) : $outer;
 }
+
+# Given either an outer (tied) handle or an inner (blessed driver
+# hashref), return the inner.
+sub _inner_of {
+    my $h = shift;
+    return $h unless ref $h;
+    my $tied = tied %$h;
+    if (ref($tied) eq 'DBI::_::Tie') {
+        return $$tied;
+    }
+    return $h;
+}
+
+# Given either inner or outer, return the user-facing outer. Falls back
+# to the input if no outer exists (e.g. handles constructed by older
+# code paths).
+sub _outer_of {
+    my $h = shift;
+    return $h unless ref $h;
+    my $tied = tied %$h;
+    return $h if ref($tied) eq 'DBI::_::Tie';   # already the outer
+    return $h->{_outer} || $h;                  # inner -> outer back-ref
+}
+
+# ---- DBI::_::Tie -----------------------------------------------------
+#
+# Minimal tie class: stores a reference to the inner handle, forwards
+# hash access to FETCH / STORE methods on the inner's class.
+
+{
+    package DBI::_::Tie;
+    sub TIEHASH { my ($class, $inner) = @_; bless \$inner, $class; }
+    sub FETCH   { ${$_[0]}->FETCH($_[1]); }
+    sub STORE   { ${$_[0]}->STORE($_[1], $_[2]); }
+    sub DELETE  { delete ${${$_[0]}}{$_[1]}; }
+    sub EXISTS  { exists ${${$_[0]}}{$_[1]}; }
+    sub FIRSTKEY {
+        my $h = ${$_[0]};
+        my $a = keys %$h;    # reset iterator
+        each %$h;
+    }
+    sub NEXTKEY { each %{${$_[0]}}; }
+    sub CLEAR   { %{${$_[0]}} = (); }
+    sub SCALAR  { scalar %{${$_[0]}}; }
+}
+
+# ---- outer-handle classes -------------------------------------------
+#
+# DBI::dr / DBI::db / DBI::st: the classes outer handles are blessed
+# into. Methods are dispatched via AUTOLOAD to the inner handle's
+# class, so driver-specific methods (prepare, execute, f_versions, ...)
+# work transparently.
+
+{
+    # Shared base that implements the outer-side dispatch.
+    package DBI::_::OuterHandle;
+    our @ISA = ();
+
+    # Ordered list of packages to try when dispatching a method on an
+    # outer handle. Tied (pure-Perl DBD) handles hit the inner's class
+    # first; untied handles (JDBC path) fall straight through to the
+    # common base, with the DBI package checked for Java-registered
+    # methods like prepare / execute / fetchrow_*.
+    sub _dispatch_packages {
+        my ($self) = @_;
+        my $ref = ref $self;
+        my ($suffix) = $ref =~ /^DBI::(dr|db|st)$/;
+        $suffix ||= '';
+        my $inner = DBI::_inner_of($self);
+        my $inner_class = (ref($inner) && $inner != $self) ? ref($inner) : undef;
+        my @packages;
+        push @packages, $inner_class if defined $inner_class;
+        push @packages, 'DBI' if !defined $inner_class;  # JDBC fallback
+        push @packages, "DBD::_::$suffix" if $suffix;
+        return @packages;
+    }
+
+    sub _dispatch_target {
+        my ($self) = @_;
+        my $inner = DBI::_inner_of($self);
+        return $inner if ref($inner) && $inner != $self;
+        return $self;
+    }
+
+    our $AUTOLOAD;
+    sub AUTOLOAD {
+        my $method = $AUTOLOAD;
+        $method =~ s/.*:://;
+        return if $method eq 'DESTROY';
+        my $self = shift;
+        Carp::croak("Can't call method \"$method\" on undefined handle")
+            unless defined $self && ref $self;
+        my @packages = _dispatch_packages($self);
+        my $target   = _dispatch_target($self);
+        for my $class (@packages) {
+            if (my $code = $class->can($method)) {
+                return $code->($target, @_);
+            }
+        }
+        my $ref = ref $self;
+        Carp::croak(
+            "Can't locate DBI object method \"$method\" via package \"$ref\"");
+    }
+
+    sub can {
+        my ($self, $method) = @_;
+        return unless defined $self;
+        my $pkg = ref($self) || $self;
+        my $direct = UNIVERSAL::can($pkg, $method);
+        return $direct if $direct;
+        return unless ref $self;
+        for my $class (_dispatch_packages($self)) {
+            if (my $code = $class->can($method)) {
+                return $code;
+            }
+        }
+        return;
+    }
+
+    sub isa {
+        my ($self, $class) = @_;
+        my $pkg = ref($self) || $self;
+        return 1 if UNIVERSAL::isa($pkg, $class);
+        return 0 unless ref $self;
+        for my $c (_dispatch_packages($self)) {
+            return 1 if $c->isa($class);
+        }
+        return 0;
+    }
+
+    sub DESTROY { }
+}
+
+# All three outer-handle classes are plain DBI::_::OuterHandle subclasses.
+# (They do NOT inherit from DBI: DBI has `connect` etc. registered as class
+# methods, and we don't want `$drh->connect` to recurse back into DBI::connect.
+# Java-registered methods like prepare / execute are reachable through the
+# AUTOLOAD fallback chain in _dispatch_packages.)
+{ package DBI::dr; our @ISA = ('DBI::_::OuterHandle'); }
+{ package DBI::db; our @ISA = ('DBI::_::OuterHandle'); }
+{ package DBI::st; our @ISA = ('DBI::_::OuterHandle'); }
 
 # ---- driver installation --------------------------------------------
 
@@ -314,16 +514,9 @@ sub available_drivers {
 #
 # Real DBI exposes these as `DBD::_::common` + DBD::_::{dr,db,st},
 # where each DBD::<name>::<suffix> inherits from DBD::_::<suffix>
-# (wired by setup_driver above). Real DBI additionally makes handles
-# pass `isa('DBI::dr')` / `isa('DBI::db')` / `isa('DBI::st')` —
-# DBIx::Class and the DBI self-tests rely on this. We achieve that
-# by having DBD::_::<suffix> inherit from DBI::<suffix>.
-
-{
-    package DBI::dr; our @ISA = ();
-    package DBI::db; our @ISA = ();
-    package DBI::st; our @ISA = ();
-}
+# (wired by setup_driver above). The `DBI::dr` / `DBI::db` / `DBI::st`
+# outer-handle classes are set up earlier in this file (they inherit
+# from DBI::_::OuterHandle and dispatch to the inner via AUTOLOAD).
 
 sub _get_imp_data {
     my $h = shift;
@@ -525,7 +718,10 @@ sub _get_imp_data {
 
 {
     package DBD::_::dr;
-    our @ISA = ('DBI::dr', 'DBD::_::common');
+    # Intentionally does not inherit from DBI::dr: DBI::dr is the
+    # OUTER-handle class with an AUTOLOAD that forwards to the inner.
+    # If the inner's ISA reached DBI::dr, AUTOLOAD would loop.
+    our @ISA = ('DBD::_::common');
     use strict;
 
     sub default_user {
@@ -564,7 +760,7 @@ sub _get_imp_data {
 
 {
     package DBD::_::db;
-    our @ISA = ('DBI::db', 'DBD::_::common');
+    our @ISA = ('DBD::_::common');
     use strict;
 
     sub ping { return 0 }    # DBDs should override
@@ -673,6 +869,29 @@ sub _get_imp_data {
     }
     sub commit   { return 1 }
     sub rollback { return 1 }
+
+    sub begin_work {
+        my $dbh = shift;
+        if (!$dbh->FETCH('AutoCommit')) {
+            Carp::carp("Already in a transaction");
+            return 0;
+        }
+        $dbh->STORE(AutoCommit => 0);
+        $dbh->{BegunWork} = 1;
+        return 1;
+    }
+
+    sub clone {
+        my ($dbh, $attr) = @_;
+        my $drh = $dbh->{Driver} or return;
+        my $new = $drh->connect(
+            $dbh->{Name} // '',
+            $dbh->{Username} // '',
+            '',
+            $attr || {},
+        );
+        return $new;
+    }
     sub quote {
         my ($dbh, $str, $type) = @_;
         return 'NULL' unless defined $str;
@@ -697,7 +916,7 @@ sub _get_imp_data {
 
 {
     package DBD::_::st;
-    our @ISA = ('DBI::st', 'DBD::_::common');
+    our @ISA = ('DBD::_::common');
     use strict;
 
     sub rows      { return -1 }
@@ -809,6 +1028,17 @@ sub _get_imp_data {
         my %h;
         @h{ @$names } = @$row;
         return \%h;
+    }
+
+    # `fetch` is the canonical method real DBI documents for pulling
+    # a row from a statement handle; many drivers alias it to
+    # fetchrow_arrayref. Provide a default delegate so outer
+    # `$sth->fetch` works even when the driver didn't install one.
+    sub fetch {
+        my $sth = shift;
+        my $code = ref($sth)->can('fetchrow_arrayref')
+            or return;
+        return $code->($sth);
     }
 
     # Helper used by pure-Perl DBDs (see DBD::NullP::st::fetchrow_arrayref).

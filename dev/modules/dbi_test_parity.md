@@ -5,35 +5,33 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 3 first batch (additional DBI internals: `internal`,
-`parse_dsn`, `hash`, `_concat_hash_sorted`, `dbi_profile`,
-`driver_prefix`, `_install_method`, `_get_fbav`, plus base-class
-utility methods — `do`, `prepare_cached`, `selectrow_hashref`,
-`selectall_hashref`, `selectall_arrayref`, `selectcol_arrayref`,
-`fetchall_arrayref`, `fetchall_hashref`, `FETCH_many`, `debug`,
-computed `NAME_lc` / `NAME_uc` / `NAME_hash`, and class-method
-`trace` / `trace_msg`):
+After Phase 3 second batch (tied-handle semantics for pure-Perl DBDs,
+plus `begin_work` / `clone` / `fetch` alias, `ChildHandles`
+population, dispatch fallback for JDBC-path handles):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | 5862 | 4116 | 1746 |
+
+Previous baseline (after Phase 3 first batch):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
 | `jcpan -t DBI` | 200 | 5610 | 3978 | 1632 |
 
-Previous baseline (after Phase 2 — driver-architecture pieces,
-[PR #544](https://github.com/fglock/PerlOnJava/pull/544)):
+Previous baseline (after Phase 2 — driver-architecture pieces):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
 | `jcpan -t DBI` | 200 | 1600 | 1240 | 360 |
 
-Previous baseline (after Phase 1 — runtime interpreter fallback,
-[PR #542](https://github.com/fglock/PerlOnJava/pull/542)):
+Previous baseline (after Phase 1 — runtime interpreter fallback):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
 | `jcpan -t DBI` | 200 | 946 | 676 | 270 |
 
-Previous baseline (after [PR #540](https://github.com/fglock/PerlOnJava/pull/540),
-Exporter wiring only):
+Previous baseline (after Exporter wiring only):
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
@@ -390,32 +388,32 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     (+564 additional subtests now pass; +654 more execute). 10
     fewer test files fail overall.
 
-- [x] **2026-04-22 — Phase 3 first batch: more DBI internals.** PR TBD.
-  - Added top-level `DBI->internal`, `DBI->parse_dsn`,
-    `DBI::hash`, `DBI::_concat_hash_sorted`, `DBI::dbi_profile`,
-    `DBI::dbi_profile_merge`, `DBI::dbi_profile_merge_nodes`,
-    `DBI->driver_prefix`, `DBI->dbixs_revision`,
-    `DBI->_install_method`, `DBI->install_method`.
-  - Fixed `DBI.pm`'s `trace` and `trace_msg` so they work as
-    class methods (previously crashed on strict refs when $dbh
-    was "DBI").
-  - Added on `DBD::_::db`: `do`, `prepare_cached`,
-    `selectrow_array`, `selectrow_arrayref`, `selectrow_hashref`,
-    `selectall_arrayref`, `selectall_hashref`,
-    `selectcol_arrayref`, `type_info`, and accepted `"dbi:DRIVER:"`
-    form in `data_sources`.
-  - Added on `DBD::_::st`: `fetchall_arrayref` (plain / slice /
-    hash), `fetchall_hashref`, `_get_fbav`, and computed
-    `NAME_lc` / `NAME_uc` / `NAME_hash` / `NAME_lc_hash` /
-    `NAME_uc_hash` attributes via an `st::FETCH` override. (Note:
-    this works when the driver calls `$sth->FETCH('NAME_lc')`
-    explicitly; direct `$sth->{NAME_lc}` access still needs tied
-    hashes, which we do not provide.)
-  - Added on `DBD::_::common`: `FETCH_many`, `debug`,
-    `dbixs_revision`, `install_method`, `dump_handle` helper.
-  - Baseline went from 1240/1600 passing to 3978/5610 passing
-    (+2738 additional subtests now pass; +4010 more execute).
-    4 fewer test files fail overall.
+- [x] **2026-04-22 — Phase 3 first batch: more DBI internals.**
+  - (As before.) Baseline 1240/1600 → 3978/5610 passing.
+
+- [x] **2026-04-22 — Phase 3 second batch: tied-handle semantics.**
+  - Rewrote `_new_drh` / `_new_dbh` / `_new_sth` to return an
+    "outer" handle: a blessed reference whose underlying hash is
+    tied (via `DBI::_::Tie`) to the inner storage. The outer is
+    blessed into `DBI::dr` / `DBI::db` / `DBI::st`, matching real
+    DBI's `ref($dbh) eq 'DBI::db'` invariant that many tests and
+    DBIx::Class rely on.
+  - Added `DBI::_::Tie` (thin tie class forwarding `FETCH` /
+    `STORE` / etc. to methods on the inner) and
+    `DBI::_::OuterHandle` (an AUTOLOAD-based method dispatcher
+    that routes through the inner's implementor class, falling
+    back to the Java-registered `DBI::` methods for JDBC-path
+    handles, and finally to `DBD::_::<suffix>` base classes).
+  - Added `_inner_of` / `_outer_of` helpers so driver code that
+    expects real-DBI's outer/inner distinction works.
+  - Populated `ChildHandles` on parents (drh -> dbh, dbh -> sth)
+    as handles are created; `visit_child_handles` now actually
+    walks something.
+  - Added `begin_work` and `clone` stubs on `DBD::_::db` and a
+    default `fetch` alias on `DBD::_::st` that delegates to
+    `fetchrow_arrayref`.
+  - Baseline 3978/5610 → 4116/5862 passing (+138 subtests,
+    +252 more executed).
 
 ### Next Steps
 
