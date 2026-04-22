@@ -13,6 +13,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -22,11 +23,13 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.interfaces.RSAKey;
 import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.spec.RSAPrivateCrtKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 
 import static org.perlonjava.runtime.operators.WarnDie.die;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.JAVAOBJECT;
 
 /**
@@ -35,14 +38,25 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.JAVAOBJECT;
  * <p>
  * Implements the subset of the CPAN XS interface exercised by OAuth::Lite and
  * similar consumers: PKCS#1 / X.509 PEM parsing, RSA-PKCS1v15 signing and
- * verification, and the {@code use_shaN_hash} / {@code use_*_padding} mode
- * switches. OAEP encrypt/decrypt and key-parameter introspection are not yet
- * wired up — methods that would need them throw a Perl-level error.
+ * verification, OAEP / PKCS#1 v1.5 encryption and decryption (including the
+ * legacy {@code private_encrypt} / {@code public_decrypt} primitives), the
+ * {@code use_shaN_hash} / {@code use_*_padding} mode switches, and the
+ * {@code new_key_from_parameters} / {@code get_key_parameters} round-trips
+ * (backed by {@link CryptOpenSSLBignum}).
  */
 public class CryptOpenSSLRSA extends PerlModuleBase {
 
     private static final String CLASS_NAME = "Crypt::OpenSSL::RSA";
     private static final String STATE_KEY = "_rsa_state";
+
+    // Register Bouncy Castle as a JCE provider once, so that signature
+    // algorithms the JDK doesn't ship (e.g. RIPEMD160withRSA, WhirlpoolwithRSA,
+    // PSS with non-SHA-1 digests) resolve through BC transparently.
+    static {
+        if (java.security.Security.getProvider("BC") == null) {
+            java.security.Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+        }
+    }
 
     // Sign/verify hash algorithms. Default is SHA-1 to match OAuth 1.0 RSA-SHA1
     // test vectors; the underlying Java Signature algorithm is "<hash>withRSA"
@@ -77,6 +91,8 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
             mod.registerMethod("_new_public_key_pkcs1", null);
             mod.registerMethod("_new_public_key_x509", null);
             mod.registerMethod("new_private_key", null);
+            mod.registerMethod("_new_key_from_parameters", null);
+            mod.registerMethod("_get_key_parameters", null);
             mod.registerMethod("_random_seed", null);
             mod.registerMethod("_random_status", null);
             // Instance methods
@@ -141,6 +157,22 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
         return h.createReference();
     }
 
+    // Use Bouncy Castle as the backing provider for key parsing + construction.
+    // BC is permissive about key sizes (Sun's RSA provider rejects keys
+    // smaller than 512 bits, which breaks Crypt::OpenSSL::RSA's t/format.t
+    // canary keys) and exposes a superset of the JDK's algorithms.
+    private static JcaPEMKeyConverter pemConverter() {
+        return new JcaPEMKeyConverter().setProvider("BC");
+    }
+
+    private static KeyFactory rsaKeyFactory() throws java.security.NoSuchAlgorithmException {
+        try {
+            return KeyFactory.getInstance("RSA", "BC");
+        } catch (java.security.NoSuchProviderException e) {
+            return KeyFactory.getInstance("RSA");
+        }
+    }
+
     private static String writePem(String type, byte[] der) {
         try {
             StringWriter sw = new StringWriter();
@@ -193,11 +225,10 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
             Object obj = p.readObject();
             PublicKey pk;
             if (obj instanceof SubjectPublicKeyInfo spki) {
-                pk = new JcaPEMKeyConverter().getPublicKey(spki);
+                pk = pemConverter().getPublicKey(spki);
             } else if (obj instanceof RSAPublicKey rsaPub) {
                 // Raw PKCS#1 RSAPublicKey (some BC versions expose it directly).
-                KeyFactory kf = KeyFactory.getInstance("RSA");
-                pk = kf.generatePublic(new RSAPublicKeySpec(
+                pk = rsaKeyFactory().generatePublic(new RSAPublicKeySpec(
                         rsaPub.getModulus(), rsaPub.getPublicExponent()));
             } else {
                 die(new RuntimeScalar("unrecognized public key PEM"),
@@ -235,13 +266,12 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
             Object obj = p.readObject();
             KeyPair kp;
             if (obj instanceof PEMKeyPair pkp) {
-                kp = new JcaPEMKeyConverter().getKeyPair(pkp);
+                kp = pemConverter().getKeyPair(pkp);
             } else if (obj instanceof PrivateKeyInfo pki) {
-                PrivateKey pk = new JcaPEMKeyConverter().getPrivateKey(pki);
+                PrivateKey pk = pemConverter().getPrivateKey(pki);
                 // derive public key from CRT parameters
                 if (pk instanceof RSAPrivateCrtKey crt) {
-                    KeyFactory kf = KeyFactory.getInstance("RSA");
-                    PublicKey pub = kf.generatePublic(new RSAPublicKeySpec(
+                    PublicKey pub = rsaKeyFactory().generatePublic(new RSAPublicKeySpec(
                             crt.getModulus(), crt.getPublicExponent()));
                     State st = new State();
                     st.priv = pk;
@@ -273,6 +303,165 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
     }
     public static RuntimeList _random_seed(RuntimeArray args, int ctx) {
         return scalarTrue.getList();
+    }
+
+    // ---- Bignum-backed parameter round-trips ----
+    //
+    // The Perl-side Crypt::OpenSSL::RSA wrapper passes BIGNUM values across XS
+    // as "pointers" (opaque scalars) produced by Crypt::OpenSSL::Bignum's
+    // pointer_copy(); here those scalars carry a java.math.BigInteger JAVAOBJECT.
+    // We do the BigInteger -> java.security.Key translation here.
+
+    /**
+     * _new_key_from_parameters($class, $n, $e, $d, $p, $q)
+     * <p>
+     * The public key requires ($n, $e). If ($p, $q) are present we derive the
+     * full CRT private key; otherwise if $d is present we build a plain
+     * (n,d) private key via PKCS#8. With just (n, e) we return a public-only
+     * RSA object, matching the upstream XS.
+     */
+    public static RuntimeList _new_key_from_parameters(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            die(new RuntimeScalar("Usage: Crypt::OpenSSL::RSA->new_key_from_parameters($n, $e [, $d, $p, $q])"),
+                    new RuntimeScalar("\n"));
+        }
+        String cls = args.get(0).toString();
+        BigInteger n = scalarToBigInt(args.get(1));
+        BigInteger e = scalarToBigInt(args.get(2));
+        BigInteger d = args.size() > 3 ? scalarToBigIntOrNull(args.get(3)) : null;
+        BigInteger p = args.size() > 4 ? scalarToBigIntOrNull(args.get(4)) : null;
+        BigInteger q = args.size() > 5 ? scalarToBigIntOrNull(args.get(5)) : null;
+
+        if (n == null || e == null) {
+            die(new RuntimeScalar("new_key_from_parameters: n and e are required"),
+                    new RuntimeScalar("\n"));
+        }
+
+        // Do the Bignum-level sanity / derivation work BEFORE asking Java's
+        // KeyFactory to build the public key: BC rejects even moduli outright
+        // with "RSA modulus is even", but we want to surface the semantically
+        // correct "p not prime" / "q not prime" error the caller is looking for.
+        if (d != null || p != null || q != null) {
+            // If we have one prime factor but not the other, derive it from
+            // the modulus (q = n / p when n % p == 0, and vice versa). If the
+            // division isn't exact the caller lied about the supposed prime.
+            if (p != null && q == null) {
+                BigInteger[] dr = n.divideAndRemainder(p);
+                if (dr[1].signum() != 0) {
+                    die(new RuntimeScalar("OpenSSL error: q not prime"), new RuntimeScalar("\n"));
+                }
+                q = dr[0];
+            }
+            if (q != null && p == null) {
+                BigInteger[] dr = n.divideAndRemainder(q);
+                if (dr[1].signum() != 0) {
+                    die(new RuntimeScalar("OpenSSL error: p not prime"), new RuntimeScalar("\n"));
+                }
+                p = dr[0];
+            }
+            if (p != null && !p.isProbablePrime(20)) {
+                die(new RuntimeScalar("OpenSSL error: p not prime"), new RuntimeScalar("\n"));
+            }
+            if (q != null && !q.isProbablePrime(20)) {
+                die(new RuntimeScalar("OpenSSL error: q not prime"), new RuntimeScalar("\n"));
+            }
+            // If d was omitted but we have both primes, derive it from e and
+            // the Euler totient phi(n) = (p-1)(q-1).
+            if (d == null && p != null && q != null) {
+                BigInteger phi = p.subtract(BigInteger.ONE).multiply(q.subtract(BigInteger.ONE));
+                d = e.modInverse(phi);
+            }
+        }
+
+        try {
+            KeyFactory kf = rsaKeyFactory();
+            State st = new State();
+            st.pub = kf.generatePublic(new RSAPublicKeySpec(n, e));
+
+            if (d != null) {
+                if (p != null && q != null) {
+                    // Full CRT parameters: fastest private key.
+                    BigInteger dP   = d.mod(p.subtract(BigInteger.ONE));
+                    BigInteger dQ   = d.mod(q.subtract(BigInteger.ONE));
+                    BigInteger qInv = q.modInverse(p);
+                    st.priv = kf.generatePrivate(new RSAPrivateCrtKeySpec(n, e, d, p, q, dP, dQ, qInv));
+                } else {
+                    // (n, d) only — no CRT acceleration.
+                    st.priv = kf.generatePrivate(new java.security.spec.RSAPrivateKeySpec(n, d));
+                }
+            }
+
+            return newBlessedObject(cls, st).getList();
+        } catch (org.perlonjava.runtime.runtimetypes.PerlDieException pde) {
+            throw pde;
+        } catch (Exception ex) {
+            die(new RuntimeScalar("new_key_from_parameters failed: " + ex.getMessage()),
+                    new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
+    }
+
+    /**
+     * _get_key_parameters($self)
+     * <p>
+     * Returns up to 8 "pointers" (scalars carrying BigInteger JAVAOBJECTs):
+     * n, e, d, p, q, d mod (p-1), d mod (q-1), 1/q mod p. Missing values
+     * (e.g. d/p/q on a public-only key) come back as undef, which the Perl
+     * wrapper maps to undef in the Bignum list.
+     */
+    public static RuntimeList _get_key_parameters(RuntimeArray args, int ctx) {
+        State st = getState(args.get(0));
+        RuntimeList out = new RuntimeList();
+
+        BigInteger n = null, e = null;
+        if (st.pub instanceof java.security.interfaces.RSAPublicKey pk) {
+            n = pk.getModulus();
+            e = pk.getPublicExponent();
+        } else if (st.priv instanceof RSAPrivateCrtKey crt) {
+            n = crt.getModulus();
+            e = crt.getPublicExponent();
+        }
+        out.add(asPtr(n));
+        out.add(asPtr(e));
+
+        if (st.priv instanceof RSAPrivateCrtKey crt) {
+            out.add(asPtr(crt.getPrivateExponent()));
+            out.add(asPtr(crt.getPrimeP()));
+            out.add(asPtr(crt.getPrimeQ()));
+            out.add(asPtr(crt.getPrimeExponentP()));
+            out.add(asPtr(crt.getPrimeExponentQ()));
+            out.add(asPtr(crt.getCrtCoefficient()));
+        } else if (st.priv instanceof java.security.interfaces.RSAPrivateKey pk) {
+            out.add(asPtr(pk.getPrivateExponent()));
+            for (int i = 0; i < 5; i++) out.add(scalarUndef);
+        } else {
+            // public-only key
+            for (int i = 0; i < 6; i++) out.add(scalarUndef);
+        }
+        return out;
+    }
+
+    // ---- Bignum-pointer marshaling helpers ----
+
+    /** Decode a "pointer" scalar produced by Crypt::OpenSSL::Bignum::pointer_copy. */
+    private static BigInteger scalarToBigInt(RuntimeScalar s) {
+        if (s.type == JAVAOBJECT && s.value instanceof BigInteger bi) return bi;
+        try { return new BigInteger(s.toString()); }
+        catch (NumberFormatException nfe) { return null; }
+    }
+
+    private static BigInteger scalarToBigIntOrNull(RuntimeScalar s) {
+        if (s == null) return null;
+        // The Perl wrapper maps missing Bignums to 0, which we treat as "absent".
+        if (s.type == JAVAOBJECT && s.value instanceof BigInteger bi) return bi;
+        String str = s.toString();
+        if (str.isEmpty() || str.equals("0")) return null;
+        try { return new BigInteger(str); }
+        catch (NumberFormatException nfe) { return null; }
+    }
+
+    private static RuntimeScalar asPtr(BigInteger v) {
+        return v == null ? scalarUndef : new RuntimeScalar(v);
     }
 
     // ---- instance methods ----
@@ -346,13 +535,29 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
         }
         byte[] data = scalarToBytes(args.get(1));
         try {
-            Signature sig = Signature.getInstance(st.hash.javaName + "withRSA");
-            sig.initSign(st.priv);
-            sig.update(data);
-            return bytesToScalar(sig.sign()).getList();
+            return bytesToScalar(signImpl(st, data)).getList();
         } catch (Exception e) {
             die(new RuntimeScalar("sign failed: " + e.getMessage()), new RuntimeScalar("\n"));
             return scalarFalse.getList();
+        }
+    }
+
+    private static byte[] signImpl(State st, byte[] data) throws Exception {
+        // Fast path: whatever "<hash>withRSA" Signature algorithm the JDK +
+        // Bouncy Castle collectively expose.
+        try {
+            Signature sig = Signature.getInstance(st.hash.javaName + "withRSA");
+            sig.initSign(st.priv);
+            sig.update(data);
+            return sig.sign();
+        } catch (java.security.NoSuchAlgorithmException nsa) {
+            // Fallback for hashes with no bundled <Hash>withRSA provider
+            // (e.g. Whirlpool). Build the DigestInfo ourselves and let
+            // Cipher("RSA/ECB/PKCS1Padding") apply PKCS#1 v1.5 type-1 padding.
+            byte[] digestInfo = buildDigestInfo(st.hash, data);
+            javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            c.init(javax.crypto.Cipher.ENCRYPT_MODE, st.priv);
+            return c.doFinal(digestInfo);
         }
     }
 
@@ -361,10 +566,23 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
         byte[] data = scalarToBytes(args.get(1));
         byte[] sigBytes = scalarToBytes(args.get(2));
         try {
+            // Fast path — symmetric with sign().
             Signature sig = Signature.getInstance(st.hash.javaName + "withRSA");
             sig.initVerify(st.pub);
             sig.update(data);
             return (sig.verify(sigBytes) ? scalarTrue : scalarFalse).getList();
+        } catch (java.security.NoSuchAlgorithmException nsa) {
+            // Fallback: recover DigestInfo via Cipher("RSA/ECB/PKCS1Padding")
+            // and compare against the locally-computed DigestInfo.
+            try {
+                javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding");
+                c.init(javax.crypto.Cipher.DECRYPT_MODE, st.pub);
+                byte[] recovered = c.doFinal(sigBytes);
+                byte[] expected = buildDigestInfo(st.hash, data);
+                return (java.util.Arrays.equals(recovered, expected) ? scalarTrue : scalarFalse).getList();
+            } catch (Exception e) {
+                return scalarFalse.getList();
+            }
         } catch (Exception e) {
             // Per Crypt::OpenSSL::RSA semantics, bad signatures return false,
             // not die. Only programmer errors should croak.
@@ -372,26 +590,128 @@ public class CryptOpenSSLRSA extends PerlModuleBase {
         }
     }
 
-    // encrypt/decrypt not wired up yet — OAuth doesn't need them.
+    /**
+     * Build the PKCS#1 v1.5 DigestInfo DER for the given hash algorithm over {@code data}:
+     * {@code SEQUENCE { SEQUENCE { OID algorithm, NULL }, OCTET STRING digest }}.
+     */
+    private static byte[] buildDigestInfo(Hash h, byte[] data) throws Exception {
+        String jdkName = switch (h) {
+            case SHA1       -> "SHA-1";
+            case SHA224     -> "SHA-224";
+            case SHA256     -> "SHA-256";
+            case SHA384     -> "SHA-384";
+            case SHA512     -> "SHA-512";
+            case MD5        -> "MD5";
+            case RIPEMD160  -> "RIPEMD160";
+            case WHIRLPOOL  -> "WHIRLPOOL";
+        };
+        java.security.MessageDigest md;
+        try {
+            md = java.security.MessageDigest.getInstance(jdkName);
+        } catch (java.security.NoSuchAlgorithmException nsa) {
+            md = java.security.MessageDigest.getInstance(jdkName, "BC");
+        }
+        byte[] digest = md.digest(data);
+
+        org.bouncycastle.asn1.ASN1ObjectIdentifier oid = switch (h) {
+            case SHA1       -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("1.3.14.3.2.26");
+            case SHA224     -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("2.16.840.1.101.3.4.2.4");
+            case SHA256     -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("2.16.840.1.101.3.4.2.1");
+            case SHA384     -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("2.16.840.1.101.3.4.2.2");
+            case SHA512     -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("2.16.840.1.101.3.4.2.3");
+            case MD5        -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("1.2.840.113549.2.5");
+            case RIPEMD160  -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("1.3.36.3.2.1");
+            case WHIRLPOOL  -> new org.bouncycastle.asn1.ASN1ObjectIdentifier("1.0.10118.3.0.55");
+        };
+        org.bouncycastle.asn1.x509.AlgorithmIdentifier ai =
+                new org.bouncycastle.asn1.x509.AlgorithmIdentifier(oid, org.bouncycastle.asn1.DERNull.INSTANCE);
+        return new org.bouncycastle.asn1.x509.DigestInfo(ai, digest).getEncoded(ASN1Encoding.DER);
+    }
+
+    // ---- encrypt / decrypt ----
+    //
+    // Padding → Java Cipher transformation mapping:
+    //   NONE       → RSA/ECB/NoPadding     (raw modular exponentiation)
+    //   PKCS1      → RSA/ECB/PKCS1Padding  (PKCS#1 v1.5 type 2 for enc, type 1 for sign;
+    //                                       Java chooses based on cipher mode + key type)
+    //   PKCS1_OAEP → RSA/ECB/OAEPWithSHA-1AndMGF1Padding  (SHA-1 per Crypt::OpenSSL::RSA docs)
+    //   PKCS1_PSS  → signing-only; encryption methods croak
+    //   SSLV23     → not supported by the JDK; encryption methods croak
+    //
+    // {encrypt, decrypt} use the public/private key respectively in the usual
+    // encryption direction. {private_encrypt, public_decrypt} are the legacy
+    // low-level "sign raw block" primitives OpenSSL exposes; Java's SunJCE
+    // RSA/PKCS1Padding Cipher selects the correct PKCS#1 block type (1 vs 2)
+    // based on the (mode, key type) combination, so we just plumb through.
+
+    private static String cipherTransform(Padding p) {
+        return switch (p) {
+            case NONE       -> "RSA/ECB/NoPadding";
+            case PKCS1      -> "RSA/ECB/PKCS1Padding";
+            case PKCS1_OAEP -> "RSA/ECB/OAEPWithSHA-1AndMGF1Padding";
+            case PKCS1_PSS  -> throw new IllegalStateException("PSS padding is for signing only");
+            case SSLV23     -> throw new IllegalStateException("SSLv23 padding is not supported");
+        };
+    }
+
+    private static byte[] rsaCipher(State st, int mode, java.security.Key key, byte[] data) throws Exception {
+        javax.crypto.Cipher c = javax.crypto.Cipher.getInstance(cipherTransform(st.padding));
+        c.init(mode, key);
+        return c.doFinal(data);
+    }
+
+    /** encrypt($data) — encrypt with the public key. */
     public static RuntimeList encrypt(RuntimeArray args, int ctx) {
-        die(new RuntimeScalar("Crypt::OpenSSL::RSA::encrypt: not implemented in PerlOnJava"),
-                new RuntimeScalar("\n"));
-        return scalarFalse.getList();
+        State st = getState(args.get(0));
+        byte[] data = scalarToBytes(args.get(1));
+        try {
+            return bytesToScalar(rsaCipher(st, javax.crypto.Cipher.ENCRYPT_MODE, st.pub, data)).getList();
+        } catch (Exception e) {
+            die(new RuntimeScalar("encrypt failed: " + e.getMessage()), new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
     }
+
+    /** decrypt($ciphertext) — decrypt with the private key. */
     public static RuntimeList decrypt(RuntimeArray args, int ctx) {
-        die(new RuntimeScalar("Crypt::OpenSSL::RSA::decrypt: not implemented in PerlOnJava"),
-                new RuntimeScalar("\n"));
-        return scalarFalse.getList();
+        State st = getState(args.get(0));
+        if (st.priv == null) {
+            die(new RuntimeScalar("decrypt requires a private key"), new RuntimeScalar("\n"));
+        }
+        byte[] data = scalarToBytes(args.get(1));
+        try {
+            return bytesToScalar(rsaCipher(st, javax.crypto.Cipher.DECRYPT_MODE, st.priv, data)).getList();
+        } catch (Exception e) {
+            die(new RuntimeScalar("decrypt failed: " + e.getMessage()), new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
     }
+
+    /** private_encrypt($data) — legacy "sign raw block" using the private key. */
     public static RuntimeList private_encrypt(RuntimeArray args, int ctx) {
-        die(new RuntimeScalar("Crypt::OpenSSL::RSA::private_encrypt: not implemented in PerlOnJava"),
-                new RuntimeScalar("\n"));
-        return scalarFalse.getList();
+        State st = getState(args.get(0));
+        if (st.priv == null) {
+            die(new RuntimeScalar("private_encrypt requires a private key"), new RuntimeScalar("\n"));
+        }
+        byte[] data = scalarToBytes(args.get(1));
+        try {
+            return bytesToScalar(rsaCipher(st, javax.crypto.Cipher.ENCRYPT_MODE, st.priv, data)).getList();
+        } catch (Exception e) {
+            die(new RuntimeScalar("private_encrypt failed: " + e.getMessage()), new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
     }
+
+    /** public_decrypt($ciphertext) — legacy "verify raw block" using the public key. */
     public static RuntimeList public_decrypt(RuntimeArray args, int ctx) {
-        die(new RuntimeScalar("Crypt::OpenSSL::RSA::public_decrypt: not implemented in PerlOnJava"),
-                new RuntimeScalar("\n"));
-        return scalarFalse.getList();
+        State st = getState(args.get(0));
+        byte[] data = scalarToBytes(args.get(1));
+        try {
+            return bytesToScalar(rsaCipher(st, javax.crypto.Cipher.DECRYPT_MODE, st.pub, data)).getList();
+        } catch (Exception e) {
+            die(new RuntimeScalar("public_decrypt failed: " + e.getMessage()), new RuntimeScalar("\n"));
+            return scalarFalse.getList();
+        }
     }
 
     // ---- padding selectors ----
