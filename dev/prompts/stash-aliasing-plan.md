@@ -56,16 +56,25 @@ Add an alias-resolution helper to `GlobalVariable`:
 
 ```java
 public static String resolveAliasedFqn(String fqn) {
+    if (stashAliases.isEmpty()) return fqn;              // fast path
     int idx = fqn.lastIndexOf("::");
     if (idx < 0) return fqn;
-    String pkg = fqn.substring(0, idx + 2);             // "Foo::"
-    String resolved = resolveStashAlias(pkg);           // may return "Bar::"
-    if (resolved.equals(pkg)) return fqn;
+    String pkg = fqn.substring(0, idx + 2);              // "Foo::"
+    String resolved = resolvePackageAliasCached(pkg);    // transitive, cached
+    if (resolved == pkg) return fqn;                     // identity: no alias
     return resolved + fqn.substring(idx + 2);
 }
 ```
 
-Call it from the FQN-keyed accessors:
+**Caching strategy (important for hot-path performance).** Every global symbol read/write will go through this helper, so we must avoid repeated work:
+
+- **Layer 1 — empty-map fast path.** `stashAliases.isEmpty()` short-circuits the entire resolution. This is the common case (no aliases declared in the program).
+- **Layer 2 — transitive resolution cache.** A separate `Map<String,String> resolvedPackageAliases` stores the fully-resolved package name for each alias key — i.e. `"Dst::" -> "Src::"` after walking the chain `Dst -> Mid -> Src`. `resolvePackageAliasCached(pkg)` does `cache.computeIfAbsent(pkg, p -> walkChain(p))` where `walkChain` iterates `stashAliases` up to a hop cap (e.g. 16), detects cycles, and returns the terminal package (or the input if no alias applies). On a cache hit the helper is effectively one `HashMap.get` plus one `String.lastIndexOf("::")` plus one `substring`+concat; no per-lookup chain walking.
+- **Cache invalidation.** Every mutation to `stashAliases` (add/remove/clear) must clear `resolvedPackageAliases` wholesale — chain resolutions aren't locally incremental. `setStashAlias`, `clearStashAlias`, and any stash-wipe path call `resolvedPackageAliases.clear()`. This already aligns with the existing `InheritanceResolver.invalidateCache()` / `clearPackageCache()` pattern.
+- **Return-identity trick.** When no alias applies, `resolvePackageAliasCached` returns the **same `String` instance** that was passed in, so the caller can check `resolved == pkg` (reference equality) to skip the substring+concat entirely. The cache stores the input string itself for non-aliased packages — one `HashMap.get` for every negative hit.
+- **Non-qualified names.** FQNs without `::` (e.g. plain variable names in the main package that arrive pre-normalised, or special variables) hit the `idx < 0` early-return without touching either cache.
+
+Call the helper from the FQN-keyed accessors:
 - `getGlobalVariable(name)` / `existsGlobalVariable` / `removeGlobalVariable`
 - `getGlobalArray(name)` / `existsGlobalArray` / `removeGlobalArray`
 - `getGlobalHash(name)` *when the key does not end in `::`* (i.e. `%Foo::x` not `%Foo::`)
@@ -75,7 +84,7 @@ Call it from the FQN-keyed accessors:
 
 Also call it from `NameNormalizer.normalizeVariableName` for the already-qualified branch (line 159–161), so that e.g. `sub Dst::x {}` normalises to `"Src::x"` before installation.
 
-Chain handling: `resolveStashAlias` should iterate to a fixed point (or we should prevent multi-hop aliases at set time). The existing `stashAliases` map is a one-shot lookup; an alias of an alias would need recursion. Cap iterations (e.g. 16) to guard against cycles.
+Chain handling: already folded into `resolvePackageAliasCached` above; cycles caught by the hop cap.
 
 **2b — Rewrite at assignment time (alternative):**
 

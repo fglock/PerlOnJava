@@ -134,7 +134,11 @@ public class NameNormalizer {
         // Single cache lookup - use get() instead of containsKey() + get()
         String cached = nameCache.get(cacheKey);
         if (cached != null) {
-            return cached;
+            // Apply stash-alias resolution on cached result too: the cache is
+            // populated before any alias is declared, but later a program may
+            // do `*Dst:: = *Src::;` which must redirect subsequent lookups.
+            // resolveAliasedFqn has a fast path when no aliases are declared.
+            return GlobalVariable.resolveAliasedFqn(cached);
         }
 
         char firstLetter = variable.charAt(0);
@@ -173,7 +177,9 @@ public class NameNormalizer {
         String normalizedStr = normalized.toString();
         nameCache.put(cacheKey, normalizedStr);
 
-        return normalizedStr;
+        // Apply stash-alias resolution after caching so that `*Dst:: = *Src::`
+        // redirects subsequent lookups. Fast-pathed when no aliases declared.
+        return GlobalVariable.resolveAliasedFqn(normalizedStr);
     }
 
     /**

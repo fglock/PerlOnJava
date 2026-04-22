@@ -129,6 +129,7 @@ public class GlobalVariable {
         globalGlobs.clear();
         isSubs.clear();
         stashAliases.clear();
+        resolvedStashAliasCache.clear();
         globAliases.clear();
         declaredGlobalVariables.clear();
         declaredGlobalArrays.clear();
@@ -169,11 +170,13 @@ public class GlobalVariable {
         String dst = dstNamespace.endsWith("::") ? dstNamespace : dstNamespace + "::";
         String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
         stashAliases.put(dst, src);
+        resolvedStashAliasCache.clear();
     }
 
     public static void clearStashAlias(String namespace) {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
         stashAliases.remove(key);
+        resolvedStashAliasCache.clear();
     }
 
     public static String resolveStashAlias(String namespace) {
@@ -187,6 +190,77 @@ public class GlobalVariable {
             return aliased.substring(0, aliased.length() - 2);
         }
         return aliased;
+    }
+
+    /**
+     * Cache of fully-resolved stash aliases with transitive chains collapsed to
+     * their terminal package. Keys and values both include the trailing "::".
+     * Invariant: for any `"Pkg::"` with no alias, the cache stores the SAME
+     * string instance back, so callers can use reference equality to detect a
+     * non-alias hit without allocating. Cleared whenever {@link #stashAliases}
+     * is mutated.
+     */
+    private static final Map<String, String> resolvedStashAliasCache = new HashMap<>();
+
+    /** Hop cap for cycle detection in {@link #resolvePackageAliasCached}. */
+    private static final int STASH_ALIAS_HOP_CAP = 16;
+
+    /**
+     * Resolves a package name (with trailing "::") to its terminal target,
+     * following any {@link #setStashAlias} chain to a fixed point. Result is
+     * cached. Returns the input string (identity-equal) when no alias applies.
+     */
+    private static String resolvePackageAliasCached(String pkgWithColons) {
+        String cached = resolvedStashAliasCache.get(pkgWithColons);
+        if (cached != null) {
+            return cached;
+        }
+        String current = pkgWithColons;
+        for (int hop = 0; hop < STASH_ALIAS_HOP_CAP; hop++) {
+            String next = stashAliases.get(current);
+            if (next == null || next.equals(current)) {
+                break;
+            }
+            current = next;
+        }
+        // Use identity when no alias applies so callers can fast-path with ==.
+        String result = current.equals(pkgWithColons) ? pkgWithColons : current;
+        resolvedStashAliasCache.put(pkgWithColons, result);
+        return result;
+    }
+
+    /**
+     * Resolves a fully-qualified variable/sub name through any stash aliases
+     * declared via `*Dst:: = *Src::`. FQNs without "::" are returned unchanged;
+     * FQNs ending in "::" (the stash-view hash itself, e.g. `%Foo::`) are
+     * returned unchanged — callers working with those should use
+     * {@link #resolveStashAlias(String)} directly and the unified hash storage.
+     *
+     * <p>Fast path: if no aliases have been declared, returns the input
+     * reference unchanged (no hashing, no substring). Hot-path accessors may
+     * therefore call this unconditionally.
+     *
+     * @param fqn a name like "Foo::bar" — may or may not contain "::"
+     * @return the alias-resolved FQN, or the original reference if unchanged
+     */
+    public static String resolveAliasedFqn(String fqn) {
+        if (stashAliases.isEmpty() || fqn == null) {
+            return fqn;
+        }
+        int idx = fqn.lastIndexOf("::");
+        if (idx < 0) {
+            return fqn;
+        }
+        // "Pkg::" — the stash-view hash itself. Leave it alone.
+        if (idx == fqn.length() - 2) {
+            return fqn;
+        }
+        String pkg = fqn.substring(0, idx + 2);
+        String resolved = resolvePackageAliasCached(pkg);
+        if (resolved == pkg) {  // identity: no alias applied
+            return fqn;
+        }
+        return resolved + fqn.substring(idx + 2);
     }
 
     /**
