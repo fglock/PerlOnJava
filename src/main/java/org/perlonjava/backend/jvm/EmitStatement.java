@@ -122,6 +122,15 @@ public class EmitStatement {
         //
         // JPERL_FORCE_CLEANUP=1 forces cleanupNeeded=true at the
         // EmitterMethodCreator level for correctness debugging.
+        //
+        // Phase R (classic_experiment_finding.md): we EXTEND the existing
+        // skipMyVarCleanup gate to also suppress MyVarCleanupStack.register
+        // emission on `my` declarations in EmitVariable. We deliberately
+        // leave Phase 1/1b (scopeExitCleanup, cleanupHash/Array) and Phase 3
+        // (MortalList.flush) emitting unconditionally, per the safety note
+        // above — those fire DESTROY for refs that entered via @_ even if
+        // the sub's AST has no bless/weaken/user-sub-call and was marked
+        // cleanupNeeded=false.
         boolean skipMyVarCleanup = !ctx.javaClassInfo.cleanupNeeded;
 
         // Only emit flush when there are variables that need cleanup.
