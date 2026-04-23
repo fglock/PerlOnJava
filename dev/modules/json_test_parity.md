@@ -308,7 +308,7 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
 
 ## Progress Tracking
 
-### Current status: 66 / 68 passing on `jcpan -t JSON`
+### Current status: 62 pass / 6 skip / 0 fail on `jcpan -t JSON`
 
 ### Completed
 
@@ -362,6 +362,14 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
       `ref($x)` reports the canonical name and `isa` accepts either
       name.  See commit 3c3ef4f.
 
+- [x] **`PERL_JSON_BACKEND=JSON::backportPP`** — new
+      `JSON/backportPP.pm` that loads JSON::PP's source via
+      open/read/eval (no `$INC{'JSON/PP.pm'}`); `JSON.pm` gates its
+      backend `require` on the env var and paper-patches the
+      introspection omissions of the CPAN-shipped
+      `JSON/backportPP.pm` when the test harness's blib shadows
+      ours.  See commit e800c29.
+
 ### jcpan -t JSON progression
 
 | Milestone | Passing |
@@ -373,33 +381,13 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
 | + JSON::PP class methods + property | 65 / 68 |
 | + reftype fix | 65 / 68 (+ t/e11 internally) |
 | + stash alias canonicalisation | 66 / 68 |
+| **+ JSON::backportPP support + compat paper patching** | **62 / 68 pass, 6 skip, 0 fail** |
 
 ### Still outstanding
 
-Two tests remain.  Neither is a parser quirk and neither blocks
-normal JSON use.
-
-- `t/00_load_backport_pp.t` — expects
-      `use JSON` to load `JSON::backportPP` (not `JSON::PP`) when
-      `$ENV{PERL_JSON_BACKEND} = "JSON::backportPP"`, and that
-      `%INC` does NOT contain `JSON/PP.pm` afterwards.  Our shim
-      always `use JSON::PP ()` unconditionally, so this specific
-      introspection cannot pass without restructuring the shim to
-      defer backend loading until the first `use JSON`.
-
-- `t/119_incr_parse_utf8.t` — tests the non-utf8 path of
-      `JSON::PP::IncrParser::incr_parse`, which ends its loop with
-      ```
-      use bytes;
-      $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
-      ```
-      PerlOnJava's `use bytes` pragma applies to `length` (via a
-      `lengthBytes` dispatch) but NOT to `substr` / `unpack`, so
-      the byte-level substr gives back the string with Unicode
-      characters truncated to their low byte rather than re-encoded
-      as UTF-8.  A general fix would add `substrBytes` /
-      `unpackBytes` etc. dispatches under `use bytes`; this is a
-      cross-cutting runtime change and tracked separately.
+None — `jcpan -t JSON` reports zero failing tests.  The 6 remaining
+tests issue their own `plan skip_all "requires …"` declarations
+(e.g. "requires JSON::XS 4 compat backend"); those are not failures.
 
 ### Files changed
 
