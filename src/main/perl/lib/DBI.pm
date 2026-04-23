@@ -218,6 +218,44 @@ require DBI::_Handles;
         $user = '' unless defined $user;
         $pass = '' unless defined $pass;
         $attr = {} unless ref $attr eq 'HASH';
+
+        # RootClass: real DBI reblesses returned outer handles into
+        # ${root_class}::db / ::st / ::dr so user-defined method
+        # overrides dispatch via Perl's normal MRO. The RootClass can
+        # come from an explicit attr, OR implicitly from the invocant
+        # class if the user called `MyDBI->connect(...)` where MyDBI
+        # ISA DBI.
+        my $root_class;
+        if (defined $attr->{RootClass}) {
+            $root_class = delete $attr->{RootClass};
+        } elsif (defined $class && $class ne 'DBI') {
+            $root_class = $class;
+        }
+        if (defined $root_class) {
+            # Skip `require` if the class is already defined in this
+            # process (e.g. `package MyDBI; our @ISA = qw(DBI);`
+            # inline in the caller). Real DBI has the same guard.
+            no strict 'refs';
+            my $already_loaded = scalar keys %{"${root_class}::"};
+            use strict 'refs';
+            unless ($already_loaded) {
+                my $mod = $root_class;
+                $mod =~ s{::}{/}g;
+                $mod .= '.pm';
+                unless (eval { require $mod; 1 }) {
+                    my $err = $@;
+                    # Strip the "at FILE line N" tail so the message
+                    # starts with "Can't locate X.pm" as tests expect
+                    # (see t/30subclass.t lines 170–173).
+                    $err =~ s/ at \S+ line \d+.*//s;
+                    # Real DBI always dies on RootClass load failure
+                    # regardless of RaiseError — the caller's eval
+                    # catches it, leaving $@ set for inspection.
+                    die $err;
+                }
+            }
+        }
+
         my $driver_name;
         my $dsn_rest;
         if ($dsn =~ /^dbi:(\w+)(?:\(([^)]*)\))?:(.*)$/i) {
@@ -262,6 +300,7 @@ require DBI::_Handles;
                             }
                         }
                     }
+                    DBI::_apply_root_class($dbh, $root_class) if $dbh;
                     return $dbh;
                 }
                 # fall through to JDBC path if install_driver croaked
@@ -279,8 +318,38 @@ require DBI::_Handles;
             # Set Name to DSN rest (after driver:), not the JDBC URL
             $dbh->{Name} = $dsn_rest if defined $dsn_rest;
         }
+        DBI::_apply_root_class($dbh, $root_class) if $dbh;
         return $dbh;
     };
+}
+
+# Rebless a dbh outer handle into ${root_class}::db (creating the
+# inheritance chain on the fly if the user didn't), and stash
+# RootClass on the inner so sths prepared later inherit it.
+sub _apply_root_class {
+    my ($dbh, $root_class) = @_;
+    return unless defined $root_class && ref $dbh;
+    _rebless_outer($dbh, $root_class, 'db');
+    my $inner = DBI::_inner_of($dbh);
+    if (ref $inner && $inner != $dbh) {
+        $inner->{RootClass} = $root_class;
+    }
+}
+
+sub _rebless_outer {
+    my ($outer, $root_class, $kind) = @_;
+    return unless ref $outer;
+    my $new_class = "${root_class}::${kind}";
+    my $base      = "DBI::${kind}";
+    # If the user hasn't declared a MyDBI::db-style subclass, set up
+    # the inheritance on the fly so method resolution still works
+    # (real DBI does the same when the user subclasses only MyDBI
+    # and not MyDBI::db).
+    unless ($new_class->isa($base)) {
+        no strict 'refs';
+        push @{"${new_class}::ISA"}, $base;
+    }
+    bless $outer, $new_class;
 }
 
 # Example:

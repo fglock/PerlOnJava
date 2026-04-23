@@ -184,6 +184,18 @@ sub _new_sth {
     # creation time).
     $inner->{TraceLevel} = $dbh_inner->{TraceLevel}
         if !exists($attr->{TraceLevel}) && $dbh_inner->{TraceLevel};
+    # Inherit the error-handling attributes that set_err / HandleError
+    # consult at error time. Real DBI walks the handle tree on FETCH
+    # for these; we copy them forward at construction, matching
+    # real-DBI semantics for the common case where these are set once
+    # at connect() time and don't change per-sth.
+    for my $ehk (qw(RaiseError PrintError PrintWarn RaiseWarn
+                    HandleError HandleSetErr ShowErrorStatement Warn))
+    {
+        next if exists $attr->{$ehk};
+        $inner->{$ehk} = $dbh_inner->{$ehk}
+            if exists $dbh_inner->{$ehk};
+    }
     $inner->{_private_data} = $imp_data if defined $imp_data;
     bless $inner, $st_class;
 
@@ -191,6 +203,13 @@ sub _new_sth {
     my $outer = bless \%outer_storage, 'DBI::st';
     tie %$outer, 'DBI::_::Tie', $inner;
     $inner->{_outer} = $outer;
+
+    # Inherit RootClass from the parent dbh and rebless sth outer into
+    # ${RootClass}::st so user-defined subclasses get method dispatch.
+    if (defined(my $root_class = $dbh_inner->{RootClass})) {
+        $inner->{RootClass} = $root_class;
+        DBI::_rebless_outer($outer, $root_class, 'st');
+    }
 
     $dbh_inner->{Kids}++;
     push @{ $dbh_inner->{ChildHandles} ||= [] }, $outer;
@@ -265,6 +284,14 @@ sub _outer_of {
         my ($self) = @_;
         my $ref = ref $self;
         my ($suffix) = $ref =~ /^DBI::(dr|db|st)$/;
+        # User subclasses via RootClass rebless into ${Root}::dr/db/st,
+        # which inherit from DBI::dr/db/st. Fall back to isa() to
+        # identify the suffix in that case.
+        unless ($suffix) {
+            for my $s (qw(dr db st)) {
+                if ($ref->isa("DBI::$s")) { $suffix = $s; last }
+            }
+        }
         $suffix ||= '';
         my $inner = DBI::_inner_of($self);
         my $inner_class = (ref($inner) && $inner != $self) ? ref($inner) : undef;
@@ -1249,12 +1276,36 @@ sub _get_imp_data {
     sub clone {
         my ($dbh, $attr) = @_;
         my $drh = $dbh->{Driver} or return;
+        # Preserve the user's attrs that aren't in $attr already.
+        # Real DBI's clone copies the parent's attributes onto the
+        # new dbh; we mimic that here by passing RootClass (which
+        # ensures the cloned outer is reblessed into the same
+        # subclass the original was blessed into).
+        $attr = { %{ $attr || {} } };
+        my $inner = DBI::_inner_of($dbh);
+        if (ref $inner && defined $inner->{RootClass}) {
+            $attr->{RootClass} = $inner->{RootClass}
+                unless exists $attr->{RootClass};
+        }
         my $new = $drh->connect(
             $dbh->{Name} // '',
             $dbh->{Username} // '',
             '',
-            $attr || {},
+            $attr,
         );
+        if ($new && defined $attr->{RootClass}) {
+            DBI::_apply_root_class($new, $attr->{RootClass});
+        }
+        # Real DBI's clone also carries CompatMode / other attrs
+        # forward from the parent if the user didn't pass a hash.
+        if ($new && ref $inner) {
+            for my $k (qw(CompatMode RaiseError PrintError)) {
+                next if exists $attr->{$k};
+                if (exists $inner->{$k}) {
+                    $new->STORE($k, $inner->{$k});
+                }
+            }
+        }
         return $new;
     }
     sub quote {
