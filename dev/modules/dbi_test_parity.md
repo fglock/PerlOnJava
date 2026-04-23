@@ -759,7 +759,7 @@ proper upstream-style DBD:
 | 20meta.t | 3/8 | 8/8 |
 | 30subclass.t | 43/43 | 43/43 |
 | 31methcache.t | 24/49 | **49/49** |
-| 09trace.t | 99/99 | 1/99 (PerlOnJava bug #2) |
+| 09trace.t | 99/99 | **99/99** (kept after defensive SCOPE_EXIT_CLEANUP fix) |
 | 40/41/42/43 (profile) | 13/84 | SKIP (legit PurePerl skip) |
 | 70callbacks.t | 65/81 | SKIP (legit PurePerl skip) |
 
@@ -770,11 +770,14 @@ upcoming Phase 10 will reimplement in Java.
 
 #### Known issues for follow-up
 
-1. **t/09trace.t regresses 99→1** due to a PerlOnJava interpreter
-   bug: ClassCastException on `{ COND ? (%h1, %h2) : %h1 }` under
-   the JVM→interpreter fallback. Not yet minimally reproducible
-   outside DBI.pm's connect closure context. Tracked in the plan;
-   fix deferred to a follow-up commit.
+1. **t/09trace.t** previously regressed 99→1 due to a PerlOnJava
+   interpreter bug. **Fixed in this branch** with a defensive
+   guard in `BytecodeInterpreter.SCOPE_EXIT_CLEANUP` that tolerates
+   non-scalar values in a my-scalar slot (root cause is a compiler
+   bug leaving a `RuntimeList` in a scalar register after
+   `my $x = { ternary-returning-list }`; the guard is the
+   minimal-risk fix, the proper emitter fix is tracked separately).
+   Now 99/99.
 2. **Full `jcpan -t DBI` baseline not yet re-run.** Per-test numbers
    extrapolate to ~5800–6300 passing subtests (from the 4940/6570
    Phase 7 baseline), but a full run would confirm.

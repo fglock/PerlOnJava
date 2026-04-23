@@ -174,7 +174,18 @@ public class BytecodeInterpreter {
                             case Opcodes.SCOPE_EXIT_CLEANUP -> {
                                 // Scope-exit cleanup for a my-scalar register
                                 int reg = bytecode[pc++];
-                                RuntimeScalar.scopeExitCleanup((RuntimeScalar) registers[reg]);
+                                // Defensive: some code paths (notably
+                                // `my $x = { ternary returning a list }`
+                                // under the interpreter-fallback path) can
+                                // leave a RuntimeList in a my-scalar slot.
+                                // scopeExitCleanup only matters for real
+                                // scalars (IO-owner / refCount / capture
+                                // state); for anything else there is nothing
+                                // to clean up.
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.scopeExitCleanup(rs);
+                                }
                                 registers[reg] = null;
                             }
 
