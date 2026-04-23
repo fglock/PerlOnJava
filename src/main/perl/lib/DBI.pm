@@ -252,14 +252,13 @@ require DBI::_Handles;
                         $dbh->{Driver} = $drh;
                         $dbh->{Name} = $rest if !defined $dbh->{Name};
                         $dbh->STORE(Active => 1) unless $dbh->FETCH('Active');
-                        # Apply user-supplied attributes that the
-                        # driver may not have copied over (Profile,
-                        # RaiseError, PrintError, HandleError, etc.).
+                        # Apply user-supplied attributes. These always
+                        # override whatever defaults the driver (or our
+                        # _new_dbh) installed — the user's explicit
+                        # connect() attr hash is authoritative.
                         if (ref $attr eq 'HASH') {
                             for my $k (keys %$attr) {
-                                $dbh->STORE($k, $attr->{$k})
-                                    if !exists $dbh->{$k}
-                                    || (!defined $dbh->{$k} && defined $attr->{$k});
+                                $dbh->STORE($k, $attr->{$k});
                             }
                         }
                     }

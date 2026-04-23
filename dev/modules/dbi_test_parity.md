@@ -5,6 +5,20 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
+After Phase 7 (trace/TraceLevel semantics, DBI->internal tied-handle,
+`_concat_hash_sorted` rewrite, dbh default attributes, unknown-attr
+warnings):
+
+Individual-test deltas (running `./jperl t/XX.t` directly):
+
+| Test file | Before | After |
+|---|---|---|
+| t/01basics.t | 95/130 | 100/100 (halts on unrelated `DBI::hash` issue at test 100) |
+| t/05concathash.t | 11/41 | **41/41** |
+| t/06attrs.t | 136/166 | 142/166 |
+| t/09trace.t | 83/99 | **99/99** |
+| t/17handle_error.t | 84/84 | 84/84 (maintained) |
+
 After Phase 6 (`HandleSetErr`, errstr accumulation with priority
 promotion, `Callbacks`, `:preparse_flags`):
 
@@ -601,22 +615,141 @@ Triage these once Phase 1 & 2 are done and we have clean output.
   - `t/17handle_error.t` still all 84 passing (no regression).
   - Baseline 4504/6294 → **4940/6570 passing** (+436 passes).
 
+- [x] **2026-04-23 — Phase 7: trace/TraceLevel, DBI->internal, `_concat_hash_sorted`, dbh defaults.**
+  - **TraceLevel STORE:** assigning `undef` is now a no-op (real
+    DBI semantics — makes `local $h->{TraceLevel} = ...` safe in
+    scopes that don't override). Non-numeric strings ("SQL",
+    "SQL|foo|3") are parsed through `parse_trace_flags` before
+    storage.
+  - **`$dbh->trace($level, $file)`:** the 3-arg form now routes
+    to `DBI::trace` for trace-file installation, matching the
+    class-level wrapper already in `DBI.pm`.
+  - **`parse_trace_flag` inheritance:** statement handles inherit
+    `TraceLevel` from their parent dbh in `_new_sth`.
+  - **`parse_trace_flags` warns on unknown flags** with the same
+    format real DBI uses (`"$h->parse_trace_flags($spec) ignored
+    unknown trace flags: ..."`).
+  - **`DBI->internal`** now returns a proper tied outer handle
+    built through `_new_drh` and blessed into `DBD::Switch::dr`.
+    `DBD::Switch::dr` was wired to inherit from `DBI::dr` (real
+    DBI does this too) so `isa('DBI::dr')` is true. Attribution
+    and Active are populated on the inner so `$switch->{Attribution}`
+    / `$switch->{Active}` return the expected values.
+  - **Default dbh attributes in `_new_dbh`:** Warn, PrintError,
+    PrintWarn, RaiseError, RaiseWarn, AutoCommit, CompatMode,
+    ShowErrorStatement, ChopBlanks, LongTruncOk, Executed,
+    ErrCount, FetchHashKeyName, LongReadLen are populated with
+    their real-DBI defaults.
+  - **User-attrs now always override defaults.** The `connect`
+    wrapper in `DBI.pm` previously skipped user attrs whose key
+    was already present on the dbh; that made the new defaults
+    unbypassable. Fixed: user attrs from `DBI->connect($dsn, u,
+    p, \%attr)` always win.
+  - **`_concat_hash_sorted` rewrite** to match real DBI's XS
+    behaviour: `undef` → `undef`, non-HASH → croak "is not a hash
+    reference", keys unquoted, numeric-vs-lexical sort guess when
+    `sort_type` is undef, `$a <=> $b or $a cmp $b` when numeric.
+  - **Unknown-attribute warnings** on STORE / FETCH through
+    `DBD::_::common` with a known-attribute allow-list (mirrors
+    `DBI::PurePerl`'s `%is_valid_attribute`). Lowercase keys and
+    `private_*` / `dbd_*` / `dbi_*` prefixes are always allowed.
+  - **Per-test deltas** (direct `./jperl t/X.t`):
+    - `t/01basics.t`: 95/130 → **100/100** (halts on unrelated
+      `DBI::hash` issue)
+    - `t/05concathash.t`: 11/41 → **41/41**
+    - `t/06attrs.t`: 136/166 → **142/166**
+    - `t/09trace.t`: 83/99 → **99/99**
+    - `t/17handle_error.t`: 84/84 (maintained — regression fixed
+      by removing the `!exists` guard in the connect-attr
+      re-application path)
+
 ### Next Steps
 
-1. **Profile-on-disk internals.** `t/41prof_dump.t` /
-   `t/42prof_data.t` / `t/43prof_env.t` still fail after Phase 4
-   — not blocked by the tie bug anymore, but the
-   ProfileDumper-writes-to-file path is not exercising correctly.
-   Likely `flush_to_disk` path needs more DBI::Profile internals.
-2. **HandleError flow** (`t/17handle_error.t`, `t/08keeperr.t`) —
-   the ordering between RaiseError, PrintError, HandleError, and
-   set_err is subtle and our current implementation cuts some
-   corners.
-3. **Trace file support** (`t/09trace.t`, `t/19fhtrace.t`) —
-   `trace($level, $output)` currently only tracks a level, no
-   output redirection.
-4. **`t/16destroy.t` Active-in-DESTROY semantics.**
-5. Periodically re-run `jcpan -t DBI` to track progress.
+Remaining high-signal individual-test failures (running
+`./jperl ~/.cpan/build/DBI-1.647-5/t/X.t` directly; failing-count
+before the test process halts):
+
+| Test file | Pass/Total | Area |
+|---|---|---|
+| `t/03handle.t` | 94/137 (43 fail) | `ActiveKids`, `CachedKids`, `swap_inner_handle`, Kids bookkeeping after DESTROY |
+| `t/06attrs.t` | 142/166 (24 fail) | driver-private attr semantics (`delete` on `examplep_*`), `Statement` attr on failed `do`, `ErrCount` bump-on-error |
+| `t/08keeperr.t` | 84/91 (7 fail) | `set_err` + `RaiseError` stack-trace in `$@`; `$DBI::err` undef after disconnect |
+| `t/14utf8.t` | 10/16 (6 fail) | `NAME_lc`/`NAME_uc` hash derivation for ExampleP's computed column list |
+| `t/15array.t` | 16/55 (39 fail) | `execute_array` / `bind_param_array` — needs DBD bulk-execute path |
+| `t/16destroy.t` | 17/20 (2 fail, 1 SKIP) | `Active` read inside a user-defined `DESTROY` (stray pre-connect DESTROY is firing with Active=0) |
+| `t/19fhtrace.t` | 20/27 (7 fail) | `trace($level, "STDERR")` string-target, PerlIO layer preservation on the installed trace fh |
+| `t/30subclass.t` | 19/43 (24 fail) | `RootClass` connect attribute: rebless outer handles into the subclass hierarchy |
+| `t/40profile.t` | 3/60 (17 fail, then halts) | `DBI::Profile` data capture — needs method-dispatch hook |
+| `t/41prof_dump.t` | 7/9 (2 fail, halts) | `DBI::ProfileDumper::flush_to_disk` writes to disk + round-trip |
+| `t/42prof_data.t` | 3/4 (1 fail, halts) | depends on ProfileDumper output |
+| `t/43prof_env.t` | 0/11 | `DBI_PROFILE` env-var instrumentation |
+| `t/70callbacks.t` | 65/81 (16 fail) | fatal-callback die propagation; reblessing of `$_[0]` in callbacks |
+
+1. **Profile capture** (40/41/42/43). This is the biggest
+   remaining block — 91 failing tests concentrated in 4 files.
+   Real DBI's XS hooks `DBD::_::common::AUTOLOAD` (among other
+   things) to bump the Profile tree on every method call. Options:
+   - Add a dispatch-time hook in
+     `DBI::_::OuterHandle::AUTOLOAD` that, when
+     `$h->{Profile}` is set, walks the Profile Path, builds the
+     node, and increments timings around the call.
+   - Inherit `Profile` to sth at prepare time (we already do
+     this) and bump child counts the same way.
+   - `DBI::ProfileDumper::flush_to_disk` needs to actually see
+     data in `{Data}` before it can write anything — the above
+     hook is the prerequisite.
+
+2. **`RootClass`** (`t/30subclass.t`). When `connect($dsn, u, p,
+   { RootClass => 'MyDBI' })` is used, real DBI reblesses the
+   outer handles into `${RootClass}::db` / `::st` / `::dr` so
+   user subclasses get method dispatch. Currently we ignore
+   `RootClass`. Fix: in `DBI.pm`'s `connect` wrapper, if
+   `RootClass` is set, `require` it and rebless the returned
+   outer handles. _new_sth / _new_drh should honour the same.
+
+3. **`t/03handle.t` Kids / ActiveKids / CachedKids**. After
+   `$sth->finish` / `$dbh->disconnect` / `undef $dbh`, the
+   counters on the parent handle aren't updated. Needs
+   systematic bump/decrement in `execute`, `finish`,
+   `disconnect`, and the DBD destructor.
+
+4. **`t/15array.t` `execute_array`**. Currently the
+   `execute_array` in our DBI.pm is a thin loop over
+   `execute(@row)` but many subtests depend on fine-grained
+   error handling (tuple_status), `ArrayTupleFetch` coderef
+   sources, and RaiseError propagation across rows. This is a
+   self-contained chunk.
+
+5. **`t/06attrs.t` driver-private `delete` semantics**.
+   `delete $dbh->{examplep_private_dbh_attrib}` should return
+   42 but leave the value in place (the driver re-computes it
+   on each FETCH). This requires a DELETE override in
+   `DBI::_::Tie` that consults the implementor class before
+   actually removing the key.
+
+6. **`t/16destroy.t`**. Two subtests fail because a stray dbh
+   DESTROY fires with Active=0 between `install_driver` and
+   the user's `$drh->connect`. Need to trace where that extra
+   handle comes from (likely a temporary dbh built during
+   install_driver / setup_driver that we don't InactiveDestroy).
+
+7. **`t/19fhtrace.t` PerlIO layers**. `trace(undef, $fh)` with a
+   `$fh` that has custom layers (e.g. `:utf8`) must preserve
+   them when DBI writes. Also `trace(0, "STDERR")` should parse
+   the string "STDERR" as an alias for `*STDERR`.
+
+8. **`t/08keeperr.t` `$DBI::err` cleanup on disconnect**.
+   After `$dbh->disconnect`, `$DBI::err` should revert to
+   undef. Currently it keeps the last value.
+
+9. **Full-suite `jcpan -t DBI` run.** The last attempt at
+   a fresh baseline got stuck in what looks like an infinite
+   loop inside Gofer's STORE / set_err chain. To be
+   investigated on a separate branch (the hot-loop symptom was
+   `DBD::_::common::set_err` → `DBD::Gofer::db::STORE` →
+   `_Handles.pm:816`). Once that's resolved the next baseline
+   number should reflect Phase 7's gains (est. ~+100 passes
+   from the per-test deltas).
 
 ### Open Questions
 

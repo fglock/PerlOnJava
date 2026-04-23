@@ -106,6 +106,21 @@ sub _new_dbh {
         Errstr    => \(my $h_errstr = ''),
         State     => \my $h_state,
         TraceLevel => 0,
+        # Real DBI defaults applied before driver / caller attrs.
+        Warn             => 1,
+        PrintWarn        => ($^W ? 1 : 0),
+        PrintError       => 1,
+        RaiseError       => 0,
+        RaiseWarn        => 0,
+        AutoCommit       => 1,
+        CompatMode       => 0,
+        ShowErrorStatement => 0,
+        ChopBlanks       => 0,
+        LongTruncOk      => 0,
+        Executed         => 0,
+        ErrCount         => 0,
+        FetchHashKeyName => 'NAME',
+        LongReadLen      => 80,
         %{ $attr || {} },
         ImplementorClass => $db_class,
         Driver    => $drh_outer,
@@ -164,6 +179,11 @@ sub _new_sth {
     # Inherit Profile from the parent dbh if not explicitly set.
     $inner->{Profile} = $dbh_inner->{Profile}
         if !exists $inner->{Profile} && defined $dbh_inner->{Profile};
+    # Inherit TraceLevel from the parent dbh (real DBI behaviour:
+    # TraceLevel is a per-handle attribute that children inherit at
+    # creation time).
+    $inner->{TraceLevel} = $dbh_inner->{TraceLevel}
+        if !exists($attr->{TraceLevel}) && $dbh_inner->{TraceLevel};
     $inner->{_private_data} = $imp_data if defined $imp_data;
     bless $inner, $st_class;
 
@@ -420,16 +440,23 @@ sub internal {
     return $_internal_drh if $_internal_drh;
     {
         package DBD::Switch::dr;
-        our @ISA = ('DBD::_::dr');
+        # Inherit from DBI::dr so isa('DBI::dr') is true on the inner
+        # too. Real DBI wires DBD::Switch::dr the same way. This is
+        # safe because DBI::_::OuterHandle::AUTOLOAD only fires on
+        # outer handles and _dispatch_packages falls through cleanly
+        # for inner classes that don't match /^DBI::(dr|db|st)$/.
+        our @ISA = ('DBD::_::dr', 'DBI::dr');
         sub DESTROY { }
     }
-    $_internal_drh = bless {
-        Name => 'Switch',
-        Version => $DBI::VERSION,
-        ImplementorClass => 'DBD::Switch::dr',
-        Kids => 0,
-        ActiveKids => 0,
-    }, 'DBD::Switch::dr';
+    # Build $_internal_drh as a proper tied outer handle so that
+    # FETCH / STORE route through DBD::_::common (with Attribution /
+    # Active defaults), and isa('DBI::dr') works.
+    $_internal_drh = DBI::_new_drh('DBD::Switch::dr', {
+        Name        => 'Switch',
+        Version     => $DBI::VERSION,
+        Attribution => "DBI $DBI::VERSION by Tim Bunce",
+        Active      => 1,
+    });
     return $_internal_drh;
 }
 
@@ -470,21 +497,42 @@ sub parse_dsn {
 
 # DBI::_concat_hash_sorted(hashref, kv_sep, pair_sep, neat, sort_type).
 # Serialize a hash deterministically. Used by prepare_cached cache keys
-# and a handful of tests.
+# and a handful of tests. Matches real DBI's XS behaviour:
+# - undef hashref   -> undef
+# - non-HASH ref    -> croak "... is not a hash reference"
+# - keys unquoted; values quoted (or `neat`-formatted)
+# - sort_type: 0/undef = lexical, 1 = numeric (uses looks_like_number)
 sub _concat_hash_sorted {
     my ($hash, $kv_sep, $pair_sep, $neat, $sort_type) = @_;
-    return '' unless ref($hash) eq 'HASH';
+    return undef unless defined $hash;
+    Carp::croak("$hash is not a hash reference")
+        unless ref($hash) eq 'HASH';
     $kv_sep   = '=' unless defined $kv_sep;
     $pair_sep = ',' unless defined $pair_sep;
+    my @keys = keys %$hash;
+    # Guess sort_type if not given: 1 (numeric) iff every key
+    # looks like a number, else 0 (lexical).
+    if (!defined $sort_type) {
+        $sort_type = 1;
+        for my $k (@keys) {
+            if (!Scalar::Util::looks_like_number($k)) {
+                $sort_type = 0; last;
+            }
+        }
+    }
+    no warnings 'numeric';
+    @keys = $sort_type
+        ? sort { $a <=> $b or $a cmp $b } @keys
+        : sort @keys;
     my @parts;
-    for my $k (sort keys %$hash) {
+    for my $k (@keys) {
         my $v = $hash->{$k};
         if ($neat) {
             $v = DBI::neat($v);
         } else {
             $v = defined $v ? "'$v'" : 'undef';
         }
-        push @parts, "'$k'${kv_sep}${v}";
+        push @parts, $k . $kv_sep . $v;
     }
     return join $pair_sep, @parts;
 }
@@ -585,6 +633,38 @@ sub _get_imp_data {
     our @ISA = ();
     use strict;
 
+    # Attributes DBI recognises. Used by FETCH / STORE to warn on
+    # unknown uppercase-prefixed attributes (real DBI behaviour — see
+    # DBI::PurePerl's %is_valid_attribute). Keys that start with a
+    # lowercase letter are always allowed (driver-private), as are
+    # those with the conventional private_* / dbd_* / dbi_* prefixes.
+    our %is_valid_attribute = map { $_ => 1 } qw(
+        Active ActiveKids AutoCommit AutoInactiveDestroy Attribution
+        BegunWork CachedKids Callbacks ChildHandles ChopBlanks
+        CompatMode CursorName Database Debug DebugDispatch Driver
+        Err ErrCount Errstr Executed ExecutedDestroyMode
+        FetchHashKeyName FetchHashKeyName_Drv
+        HandleError HandleSetErr HandleWarn
+        ImplementorClass InactiveDestroy Kids LongReadLen LongTruncOk
+        Name NAME NAME_lc NAME_uc NAME_hash NAME_lc_hash NAME_uc_hash
+        NULLABLE NUM_OF_FIELDS NUM_OF_PARAMS
+        ParamArrays ParamTypes ParamValues
+        PRECISION PrintError PrintWarn Profile
+        RaiseError RaiseWarn ReadOnly RootClass
+        RowCache RowCacheSize RowsInCache SCALE ShowErrorStatement
+        State Statement Taint TaintIn TaintOut TraceLevel Type TYPE
+        Username Version Warn
+        _private_data _outer _inner
+    );
+
+    sub _is_known_key {
+        my $key = shift;
+        return 1 if $is_valid_attribute{$key};
+        return 1 if $key =~ /^[a-z]/;              # lowercase = driver-private
+        return 1 if $key =~ /^(?:private_|dbd_|dbi_)/;
+        return 0;
+    }
+
     sub FETCH {
         my ($h, $key) = @_;
         return undef unless ref $h;
@@ -599,6 +679,12 @@ sub _get_imp_data {
             return 0 if $v eq '-900';
             return 1 if $v eq '-901';
         }
+        # Warn on fetch of an unknown uppercase-prefixed attribute
+        # (real DBI behaviour).
+        if (!defined $v && !exists $h->{$key} && !_is_known_key($key)) {
+            my $class = ref $h;
+            Carp::carp("Can't get " . $class . "->{$key}: unrecognised attribute");
+        }
         return $v;
     }
 
@@ -610,6 +696,23 @@ sub _get_imp_data {
             # require the requested class, call ->new, fall back to
             # DBI::Profile.
             $val = _parse_profile_spec($val);
+        }
+        if ($key eq 'TraceLevel') {
+            # Real DBI: assigning undef to TraceLevel is a no-op
+            # (used to make `local $h->{TraceLevel} = ...` safe in
+            # blocks that don't want to override). Assigning a
+            # non-numeric string routes through parse_trace_flags
+            # so names like "SQL" or "SQL|foo|3" work.
+            return 1 unless defined $val;
+            if ($val !~ /^-?\d+(?:\.\d+)?$/) {
+                $val = $h->parse_trace_flags($val);
+            }
+        }
+        # Warn on setting an unknown uppercase-prefixed attribute
+        # that's not already present (real DBI behaviour).
+        if (ref($h) && !exists($h->{$key}) && !_is_known_key($key)) {
+            my $class = ref $h;
+            Carp::carp("Can't set " . $class . "->{$key}: unrecognised attribute");
         }
         if ($key =~ /^(?:Err|Errstr|State)$/ && ref($h->{$key}) eq 'SCALAR') {
             ${ $h->{$key} } = $val;
@@ -821,10 +924,19 @@ sub _get_imp_data {
         my $old = ref($h) ? ($h->{TraceLevel} || 0) : 0;
         if (defined $level) {
             if (ref $h) {
+                # Parse string forms ("SQL|foo", "2|SQL", ...) like real DBI.
+                if ($level =~ /\D/) {
+                    $level = $h->parse_trace_flags($level);
+                }
                 $h->{TraceLevel} = $level;
             } else {
                 $DBI::dbi_debug = $level;
             }
+        }
+        # A third argument (even undef) controls the trace-output
+        # filehandle. Route to DBI::trace, which owns $DBI::tfh.
+        if (@_ >= 3) {
+            DBI::trace(undef, $DBI::dbi_debug, $file);
         }
         return $old;
     }
@@ -853,6 +965,7 @@ sub _get_imp_data {
     sub parse_trace_flags {
         my ($h, $spec) = @_;
         my ($level, $flags) = (0, 0);
+        my @unknown;
         for my $word (split /\s*[|&,]\s*/, $spec // '') {
             if ($word =~ /^\d+$/ && $word >= 0 && $word <= 0xF) {
                 $level = $word;
@@ -861,7 +974,14 @@ sub _get_imp_data {
                 last;
             } elsif (my $flag = $h->parse_trace_flag($word)) {
                 $flags |= $flag;
+            } else {
+                push @unknown, $word;
             }
+        }
+        if (@unknown && (ref $h ? ($h->FETCH('Warn') // 1) : 1)) {
+            Carp::carp(
+                "$h->parse_trace_flags($spec) ignored unknown trace flags: "
+                . join(" ", @unknown));
         }
         return $flags | $level;
     }
