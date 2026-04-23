@@ -130,6 +130,17 @@ sub from_json($) {
 
 # Methods
 
+# Backend introspection — the CPAN JSON dispatcher and its test suite call
+# these as class methods on whichever backend module was loaded (JSON::XS,
+# JSON::PP, JSON::backportPP, or — in PerlOnJava — our `JSON` shim which
+# ISA JSON::PP).  JSON::PP is the pure-Perl backend, so `is_pp == 1` and
+# `is_xs == 0`.  Upstream CPAN JSON::PP doesn't define these (the real
+# dispatcher installs them), but we ship JSON::PP as our backend and add
+# them here so that tests which introspect `JSON::PP->is_pp` directly
+# work out of the box.
+sub is_xs { 0 }
+sub is_pp { 1 }
+
 sub new {
     my $class = shift;
     my $self  = {

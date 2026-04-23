@@ -926,7 +926,17 @@ public class RegexPreprocessorHelper {
                     lastChar = c;
                     wasEscape = false;
                     break;
-                case '(', ')', '*', '?', '<', '>', '\'', '"', '`', '@', '#', '=', '&':
+                case '(', ')', '*', '<', '>', '\'', '"', '`', '@', '#', '=', '&':
+                    // NOTE: '?' is deliberately NOT in this list.  None of these
+                    // characters need to be escaped inside a Java regex character
+                    // class, so the backslash is purely cosmetic — except that a
+                    // backslashed '?' combines with a preceding `\c` to form
+                    // `\c\?`, which Java then parses as `\c\` (control-backslash
+                    // = U+001C) followed by a literal '?', silently corrupting
+                    // patterns like `[\n\t\c?]` (Perl: matches LF, TAB, DEL;
+                    // pre-fix: also matched U+001C).  See
+                    // dev/modules/json_test_parity.md and t/99_binary.t in the
+                    // CPAN JSON distribution for a motivating example.
                     sb.append('\\');
                     sb.append(Character.toChars(c));
                     first = false;

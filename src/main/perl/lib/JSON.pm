@@ -173,16 +173,44 @@ sub boolean {
     pop() ? true() : false()
 }
 
-# `property()` comes from JSON::PP via inheritance; the one chunk of
-# logic CPAN JSON.pm has that JSON::PP lacks is treating `max_size 1`
-# as 0.  Wrap it to preserve that.
+# `property()` lets callers introspect (or toggle) any named option via the
+# same name as its setter/getter.  Neither JSON::PP nor the stock JSON shim
+# provides it, but the CPAN JSON.pm dispatcher does — and several tests use
+# it (t/e01_property.t).  Implement it inline here.
+my @PropertyNames = qw(
+    ascii latin1 utf8 indent space_before space_after relaxed canonical
+    allow_nonref allow_blessed convert_blessed shrink max_depth max_size
+    allow_unknown allow_tags
+);
+
 sub property {
-    my ($self, $name, $value) = @_;
-    if (@_ == 2 && $name eq 'max_size') {
-        my $v = $self->get_max_size;
-        return $v == 1 ? 0 : $v;
+    my $self = shift;
+    if (@_ == 0) {
+        # Return all properties as a hashref
+        my %props;
+        for my $name (@PropertyNames) {
+            my $getter = 'get_' . $name;
+            my $v = $self->can($getter) ? $self->$getter() : undef;
+            # CPAN JSON.pm maps max_size == 1 back to 0 for reporting
+            $v = 0 if $name eq 'max_size' && defined $v && $v == 1;
+            $props{$name} = $v;
+        }
+        return \%props;
     }
-    return $self->SUPER::property(@_[1..$#_]);
+    Carp::croak('property() can take only the option within 2 arguments.')
+        if @_ > 2;
+
+    my ($name, $value) = @_;
+    if (@_ == 1) {
+        # Getter form
+        my $getter = 'get_' . $name;
+        return undef unless $self->can($getter);
+        my $v = $self->$getter();
+        $v = 0 if $name eq 'max_size' && defined $v && $v == 1;
+        return $v;
+    }
+    # Setter form: property($name, $value)  ->  delegate to $self->$name($value)
+    return $self->$name($value);
 }
 
 1;
