@@ -2025,9 +2025,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         1   // start looking in the parent package
                 );
             } else {
-                // Fully qualified method name - call the exact subroutine
-                method = GlobalVariable.getGlobalCodeRef(methodName);
-                if (!method.getDefinedBoolean()) {
+                // Fully qualified method name: $obj->Pkg::method(...)
+                // Perl semantics: look up `method` starting in `Pkg` and
+                // walk `@Pkg::ISA` via normal MRO. A direct symbol-table
+                // lookup would miss methods inherited into Pkg from its
+                // base classes (DBI.pm relies on this for
+                // `$drh->DBD::_::dr::STORE(...)` to find STORE in
+                // DBD::_::common via @DBD::_::dr::ISA).
+                int sep = methodName.lastIndexOf("::");
+                String targetPackage = methodName.substring(0, sep);
+                String shortMethod   = methodName.substring(sep + 2);
+                method = InheritanceResolver.findMethodInHierarchy(
+                        shortMethod, targetPackage, methodName, 0);
+                if (method == null || !method.getDefinedBoolean()) {
                     throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
                 }
             }
