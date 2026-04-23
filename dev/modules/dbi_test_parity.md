@@ -945,30 +945,115 @@ pre-existing blockers:
 |---|---|---|---|
 | `t/14utf8.t` | 1/16 | `Encode::_utf8_on` flag not preserved across hash-key storage | PerlOnJava infra gap (strings are JVM `String`, UTF-8 flag tracked externally). Out of DBI scope. |
 | `t/02dbidrv.t` | 2/54 | `$dbh->DESTROY` not copying `err`/`errstr`/`state` up to parent `$drh` | Being addressed in a separate PR (DESTROY work). |
-| `t/06attrs.t` | 2/166 | `_install_method`-generated eval-STRING wrapper: `$h->{dbi_pp_last_method} = $method_name` persists inside wrapper but is lost after wrapper returns (verified with injected `print` inside & outside wrapper). Minimal repros in isolation all pass. | Deep eval-STRING/closure/tied-hash interaction inside DBI specifically. Not cost-effective to debug for 2 subtests. |
-| `t/08keeperr.t` | 3/91 | 2/3 same as `t/06attrs.t` (wrapper's `dbi_pp_last_method` loss makes error messages say "set_err failed" instead of "do failed"). 1/3 warning-count mismatch, downstream of same issue. | Same blocker. |
+| `t/06attrs.t` | 2/166 | **PerlOnJava bug**: `local ($h->{key}) = value` (list form) inside eval-STRING-compiled subs is a no-op for the assignment. `local` scope restoration works; the RHS assignment doesn't take effect. See "Root cause of t/06attrs.t and t/08keeperr.t failures" below. | **Fixable PerlOnJava bug** — flagged for follow-up. |
+| `t/08keeperr.t` | 3/91 | Same bug as t/06attrs.t. DBI::PurePerl's `_install_method` wrapper uses `local ($h->{'dbi_pp_call_depth'}) = $call_depth;` to track call depth. The no-op means every wrapper sees `dbi_pp_call_depth = 0`, so nested error handling fires in the innermost wrapper (`set_err`) instead of bubbling to the outermost (`do`). Error message becomes `"set_err failed"` instead of `"do failed"`. | Same root cause — flagged. |
 | `t/19fhtrace.t` | 4/27 | All 4 failing tests use `open $fh, ':via(TraceDBI)'` or `:scalar` PerlIO layers | PerlOnJava doesn't implement PerlIO custom layers. Out of DBI scope. |
 
-The most interesting finding is the `_install_method` wrapper bug
-(see `dotest12.pl` + injected `print STDERR` diagnostics): the
-assignment `$h->{'dbi_pp_last_method'} = $method_name;` at line
-36 of the generated wrapper:
+The most interesting finding is a **reproducible PerlOnJava bug**
+in `local (hash-or-array-element) = value` list assignment inside
+eval-STRING-compiled subs.
 
-- Reports `dbi_pp_last_method=prepare` immediately after the
-  assignment (verified via injected print).
-- Reports `dbi_pp_last_method=undef` in the caller after the
-  wrapper returns — even though nothing between the assignment
-  and return modifies `dbi_pp_last_method`.
+### Root cause of t/06attrs.t and t/08keeperr.t failures
 
-Minimal reproductions (including eval-STRING + tied-hash
-+ `local` + `&$sub` invocation patterns) all behave identically
-between jperl and perl. The bug only manifests inside DBI's
-actual `_install_method` wrapper with full DBI initialisation.
-The issue is likely in how eval-STRING captures the
-`$method_name` closure variable across PerlOnJava's DBI shim
-boundary — but is not easily reproducible outside DBI, and not
-worth the debug cost for the ~8 subtests it blocks. Flagged for
-future deep dive.
+**Bug:** When a Perl subroutine is compiled via `eval STRING` and
+contains `local ($href->{key}) = value;` (or `local ($aref->[i]) = value;`),
+the `local` scope entry/exit machinery fires correctly, but the
+**value assignment is silently dropped**. Inside the sub's body,
+reading back the element returns the pre-local value, not the
+assigned one.
+
+**Minimal repro** (append to a Perl script):
+
+```perl
+my $h = { x => 0 };
+
+# Case A: direct file-scope compile — works
+sub directA { local ($h->{x}) = 42; print "A: x=$h->{x}\n"; }
+directA();                                                  # prints "A: x=42" (correct)
+
+# Case B: eval-STRING compiled sub — BUG
+my $subB = eval q{ sub { local ($h->{x}) = 99; print "B: x=$h->{x}\n"; } };
+$subB->();                                                  # prints "B: x=0" (WRONG)
+```
+
+Expected output (real Perl): `A: x=42`, `B: x=99`.
+Actual jperl output: `A: x=42`, `B: x=0`.
+
+**Scalar form works correctly:** `local $h->{x} = 99;` (without
+outer parens) is fine. Only the list-assignment form is broken.
+
+**Array-element list-form has the same bug**:
+`local ($a[0]) = 99;` inside eval-STRING.
+
+### Why this breaks DBI
+
+DBI::PurePerl's `_install_method` generates wrappers via
+`eval qq{#line 1 "..."\n$method_code}`. Every generated wrapper
+contains:
+
+```perl
+my $call_depth = $h->{'dbi_pp_call_depth'} + 1;
+local ($h->{'dbi_pp_call_depth'}) = $call_depth;  # ← bug: assignment is a no-op
+```
+
+Because the assignment is dropped, `$h->{dbi_pp_call_depth}` stays
+at `0` for every nested wrapper entry. The error-handling
+`post_call_frag` then incorrectly thinks each wrapper is the
+outermost one and fires the "failed" message. For
+`$dbh->do('bad sql')`, the error bubbles through
+`do → prepare → ExampleP::prepare → set_err`; because set_err's
+wrapper sees `call_depth <= 1`, it fires with
+`"set_err failed"` instead of letting do's wrapper fire with
+`"do failed"`.
+
+Verified trace (injected `print STDERR` at every call_depth
+compute + every pre-call-frag dbi_pp_last_method set):
+
+```
+[CALLDEPTH do]      computed_call_depth=1 h.cd_before_local=0
+[CALLDEPTH prepare] computed_call_depth=1 h.cd_before_local=0   ← should be 2
+[CALLDEPTH set_err] computed_call_depth=1 h.cd_before_local=0   ← should be 3
+err: DBD::ExampleP::db set_err failed: ...                       ← should say "do failed"
+```
+
+On real Perl + DBI::PurePerl the same trace shows
+`h.cd_before_local=0, 1, 2` respectively and the error is
+`"db do failed"`.
+
+### Affected code
+
+Likely in the JVM emitter's handling of `LOCAL` op on
+`HASH_ELEMENT` / `ARRAY_ELEMENT` targets when the containing sub
+is produced via eval-STRING. The compile-time bytecode for
+list-assignment localization isn't emitting the store on the
+RHS value. The pattern:
+
+```perl
+local (LVALUE_LIST) = RVALUE_LIST
+```
+
+Should be semantically equivalent to:
+```perl
+local LVALUE_LIST[0] = RVALUE_LIST[0];
+local LVALUE_LIST[1] = RVALUE_LIST[1];
+...
+```
+
+The scalar-single-element variant works (`local $h->{x} = $v`),
+suggesting the bug is in the list-context emitter path for
+`local (...)` with a single hash/array element, most likely
+specific to eval-STRING's bytecode compiler (since file-scope
+compilation of the same code works).
+
+### Impact if fixed
+
+- `t/06attrs.t`: 2/166 → expected 0/166
+- `t/08keeperr.t`: 3/91 → expected 0-1/91 (1 downstream effect)
+- Full suite: +10–15 subtests across wrapper variants
+- Latent bug affecting any CPAN module that uses eval-STRING-
+  generated subs with localized hash/array elements (DBI being
+  the most visible, but Moose/MouseX/etc. accessors may also
+  rely on this pattern)
 
 ---
 
