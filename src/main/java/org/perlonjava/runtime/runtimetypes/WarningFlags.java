@@ -71,6 +71,10 @@ public class WarningFlags {
         warningHierarchy.put("non_unicode", new String[]{"utf8::non_unicode"});
         warningHierarchy.put("surrogate", new String[]{"utf8::surrogate"});
         warningHierarchy.put("nonchar", new String[]{"utf8::nonchar"});
+        warningHierarchy.put("debugging", new String[]{"severe::debugging"});
+        warningHierarchy.put("inplace", new String[]{"severe::inplace"});
+        warningHierarchy.put("internal", new String[]{"severe::internal"});
+        warningHierarchy.put("malloc", new String[]{"severe::malloc"});
     }
     
     // ==================== Perl 5 Compatible Bit Offsets ====================

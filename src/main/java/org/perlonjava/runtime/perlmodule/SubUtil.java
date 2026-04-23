@@ -24,7 +24,7 @@ public class SubUtil extends PerlModuleBase {
         SubUtil subUtil = new SubUtil();
         subUtil.initializeExporter();
         // Set $VERSION so CPAN.pm can detect our bundled version
-        GlobalVariable.getGlobalVariable("Sub::Util::VERSION").set(new RuntimeScalar("1.63"));
+        GlobalVariable.getGlobalVariable("Sub::Util::VERSION").set(new RuntimeScalar("1.70"));
         subUtil.defineExport("EXPORT_OK", "prototype", "set_prototype", "subname", "set_subname");
         try {
             subUtil.registerMethod("prototype", "$");
@@ -142,6 +142,9 @@ public class SubUtil extends PerlModuleBase {
         } else {
             code.subName = fullName;
         }
+        // Mark the CV as explicitly renamed so B::svref_2object()->GV->NAME
+        // honors the assigned name even when no matching stash entry exists.
+        code.explicitlyRenamed = true;
         return codeRef.getList();
     }
 }

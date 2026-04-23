@@ -2,6 +2,7 @@
 *.jar
 *.swp
 *.bak
+*.ent
 *.versionsBackup
 dependency-reduced-pom.xml
 asm-9.7.jar
@@ -89,6 +90,7 @@ Image-ExifTool-*
 /.err
 /.out
 /.windsurf/
+/.cognition/
 
 # Ignore xxx/ directory (temporary module staging area)
 xxx/
@@ -104,3 +106,6 @@ test-*.html
 
 # Ignore generated lib/ directory at top level
 /lib/
+
+# Ignore heap dumps
+*.hprof

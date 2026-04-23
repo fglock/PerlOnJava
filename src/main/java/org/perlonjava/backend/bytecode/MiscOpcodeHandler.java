@@ -69,6 +69,8 @@ public class MiscOpcodeHandler {
             case Opcodes.BIND -> IOOperator.bind(ctx, argsArray);
             case Opcodes.CONNECT -> IOOperator.connect(ctx, argsArray);
             case Opcodes.LISTEN -> IOOperator.listen(ctx, argsArray);
+            case Opcodes.PIPE -> IOOperator.pipe(ctx, argsArray);
+            case Opcodes.SOCKETPAIR -> IOOperator.socketpair(ctx, argsArray);
             case Opcodes.WRITE -> IOOperator.write(ctx, argsArray);
             case Opcodes.FORMLINE -> IOOperator.formline(ctx, argsArray);
             case Opcodes.PRINTF -> IOOperator.printf(ctx, argsArray);

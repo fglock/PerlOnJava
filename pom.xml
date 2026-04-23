@@ -75,6 +75,16 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.51.3.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>1.78.1</version>
+        </dependency>
         <!-- JNR-POSIX removed - using Java FFM API for native access (Java 22+) -->
     </dependencies>
     <build>

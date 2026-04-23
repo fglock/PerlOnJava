@@ -248,7 +248,7 @@ public class SubroutineParser {
             // - Marked as package (true), OR
             // - Unknown (null) but NOT followed by '(' - like 'new NonExistentClass'
             if ((isPackage != null && !isPackage)
-                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::"))
+                    || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
                         && !(isPackage != null && isPackage))) {
                 parser.tokenIndex = currentIndex2;
@@ -357,7 +357,18 @@ public class SubroutineParser {
                     || nextTok.text.equals(":"));
             if (!terminator
                     && !infixOp
-                    && nextTok.type != LexerTokenType.IDENTIFIER
+                    && (nextTok.type != LexerTokenType.IDENTIFIER
+                        || (subName.contains("::")
+                            && !nextTok.text.equals("or")
+                            && !nextTok.text.equals("and")
+                            && !nextTok.text.equals("not")
+                            && !nextTok.text.equals("if")
+                            && !nextTok.text.equals("unless")
+                            && !nextTok.text.equals("while")
+                            && !nextTok.text.equals("until")
+                            && !nextTok.text.equals("for")
+                            && !nextTok.text.equals("foreach")
+                            && !nextTok.text.equals("when")))
                     && !nextTok.text.equals("->")
                     && !nextTok.text.equals("=>")) {
                 // Check if this looks like indirect object syntax: method $object, args
@@ -972,6 +983,12 @@ public class SubroutineParser {
 
         // - register the subroutine in the namespace
         String fullName = NameNormalizer.normalizeVariableName(subName, packageToUse);
+        // Apply stash-alias resolution so `*Dst:: = *Src::; sub Dst::foo {}`
+        // installs in Src::foo and reports "Src::foo" from caller(). The
+        // resolution happens here (not in NameNormalizer) to avoid rewriting
+        // compile-time read references that should keep pointing at their
+        // original CvGV — only install-site names are resolved.
+        fullName = GlobalVariable.resolveAliasedFqn(fullName);
         RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
         
@@ -1068,7 +1085,14 @@ public class SubroutineParser {
             placeholder.attributes = attributes;
         }
         // else: preserve existing attributes (e.g., from forward declaration)
-        placeholder.subName = subName;
+
+        // Split fullName into package/name so subName never contains "::".
+        // The raw `subName` parameter may include package qualifiers (e.g. parsing
+        // `sub Dst::foo { }` arrives here with subName="Dst::foo"), and fullName
+        // may have been rewritten by a stash alias — always derive both halves
+        // from fullName so caller()/set_subname see a consistent pair.
+        int lastSep = fullName.lastIndexOf("::");
+        placeholder.subName = lastSep >= 0 ? fullName.substring(lastSep + 2) : subName;
 
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
         // In Perl, this is called at compile time after the sub is defined.
@@ -1084,7 +1108,6 @@ public class SubroutineParser {
 
         // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
         // For `sub X::foo { }` in package main, packageName should be "X", not "main".
-        int lastSep = fullName.lastIndexOf("::");
         placeholder.packageName = lastSep >= 0
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();
@@ -1146,9 +1169,19 @@ public class SubroutineParser {
                             entry.perlPackage());
                 } else {
                     OperatorNode ast = entry.ast();
-                    int beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
-                            ast,
-                            k -> EmitterMethodCreator.classCounter++);
+                    // For state variables, the persistent-variable id is already
+                    // assigned (see OperatorParser "state" handling). Reuse it so
+                    // that the storage key here matches the key used by the state
+                    // initializer / retrieveStateScalar (which also use ast.id).
+                    int beginId;
+                    if ("state".equals(entry.decl()) && ast != null && ast.id != 0) {
+                        beginId = ast.id;
+                        RuntimeCode.evalBeginIds.putIfAbsent(ast, beginId);
+                    } else {
+                        beginId = RuntimeCode.evalBeginIds.computeIfAbsent(
+                                ast,
+                                k -> EmitterMethodCreator.classCounter++);
+                    }
                     variableName = NameNormalizer.normalizeVariableName(
                             entry.name().substring(1),
                             PersistentVariable.beginPackage(beginId));

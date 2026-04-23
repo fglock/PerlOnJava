@@ -39,6 +39,16 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("**_warn", "powWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("unaryMinus_warn", "unaryMinusWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
+        // NoOverload variants - used when 'no overloading' pragma is in effect
+        // These bypass overload dispatch entirely (blessed refs -> refaddr-like numify)
+        put("+_noOverload", "addNoOverload", "org/perlonjava/runtime/operators/MathOperators");
+        put("-_noOverload", "subtractNoOverload", "org/perlonjava/runtime/operators/MathOperators");
+        put("*_noOverload", "multiplyNoOverload", "org/perlonjava/runtime/operators/MathOperators");
+        put("/_noOverload", "divideNoOverload", "org/perlonjava/runtime/operators/MathOperators");
+        put("%_noOverload", "modulusNoOverload", "org/perlonjava/runtime/operators/MathOperators");
+        put("**_noOverload", "powNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("unaryMinus_noOverload", "unaryMinusNoOverload", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+
         put("^^", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("xor", "xor", "org/perlonjava/runtime/operators/Operator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
@@ -141,7 +151,7 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("getc", "getc", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("binmode", "binmode", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("seek", "seek", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
-        put("sysseek", "seek", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        put("sysseek", "sysseek", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("select", "select", "org/perlonjava/runtime/operators/IOOperator", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("truncate", "truncate", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("flock", "flock", "org/perlonjava/runtime/operators/IOOperator", "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
@@ -423,6 +433,18 @@ public record OperatorHandler(String className, String methodName, int methodTyp
     public static OperatorHandler getWarn(String operator) {
         OperatorHandler warnHandler = operatorHandlers.get(operator + "_warn");
         return warnHandler != null ? warnHandler : operatorHandlers.get(operator);
+    }
+
+    /**
+     * Retrieves the NoOverload variant of an OperatorHandler if available.
+     * For operators like + and -, returns the noOverload variant (addNoOverload, ...)
+     * that bypasses overload dispatch. Used when {@code no overloading} is in effect.
+     *
+     * @param operator The operator symbol.
+     * @return The NoOverload variant OperatorHandler, or null if no variant exists.
+     */
+    public static OperatorHandler getNoOverload(String operator) {
+        return operatorHandlers.get(operator + "_noOverload");
     }
 
     /**

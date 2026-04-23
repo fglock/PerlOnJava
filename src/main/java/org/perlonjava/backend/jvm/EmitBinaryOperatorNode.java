@@ -75,10 +75,11 @@ public class EmitBinaryOperatorNode {
                  "|=", "|.=", "binary|=", ">>=", ".=", "%=", "^=", "^.=",
                  "binary^=", "x=", "^^=" -> EmitBinaryOperator.handleCompoundAssignment(emitterVisitor, node);
 
-            // Range and flip-flop operators
-            case "..." -> EmitLogicalOperator.emitFlipFlopOperator(emitterVisitor, node);
-
-            case ".." -> EmitBinaryOperator.handleRangeOrFlipFlop(emitterVisitor, node);
+            // Range and flip-flop operators. In list context both `..` and `...`
+            // are the range operator; in scalar context they become flip-flops
+            // (with `...` being the variant that stays "true" for at least one
+            // iteration after transitioning).
+            case "..", "..." -> EmitBinaryOperator.handleRangeOrFlipFlop(emitterVisitor, node);
 
             // Comparison operators (chained)
             case "<", ">", "<=", ">=", "lt", "gt", "le", "ge",

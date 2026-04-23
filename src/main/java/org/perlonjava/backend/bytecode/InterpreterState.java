@@ -47,14 +47,30 @@ public class InterpreterState {
             ThreadLocal.withInitial(() -> new RuntimeScalar("main"));
 
     /**
-     * Set the runtime current package name.
-     * Called from both interpreter (SET_PACKAGE opcode) and JVM backend
-     * (package declarations) so that caller() sees the correct package.
+     * Update the runtime current-package tracker. Exposed as a static helper
+     * so JVM-compiled `package Foo;` sites can invoke it cheaply via
+     * INVOKESTATIC.
      */
-    public static void setCurrentPackage(String name) {
+    public static void setCurrentPackageStatic(String name) {
         currentPackage.get().set(name);
     }
 
+    /**
+     * Scoped variant of {@link #setCurrentPackageStatic}: pushes the current
+     * package value onto the DynamicVariableManager stack so it will be
+     * restored when the enclosing scope exits, then sets the new value.
+     * <p>
+     * Matches Perl 5 semantics: {@code package Foo;} is lexically scoped to
+     * the enclosing block / eval / file. Without the push, a {@code package Foo;}
+     * inside e.g. {@code Carp::caller_info}'s {@code { package DB; ... }} block
+     * would leak "DB" past the block, corrupting subsequent {@code do FILE}
+     * calls (which inherit the caller's package).
+     */
+    public static void setCurrentPackageLocal(String name) {
+        RuntimeScalar pkg = currentPackage.get();
+        org.perlonjava.runtime.runtimetypes.DynamicVariableManager.pushLocalVariable(pkg);
+        pkg.set(name);
+    }
     private static final ThreadLocal<Deque<InterpreterFrame>> frameStack =
             ThreadLocal.withInitial(ArrayDeque::new);
     // Use ArrayList of mutable int holders for O(1) PC updates (no pop/push overhead)

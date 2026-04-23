@@ -1,5 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.DOUBLE;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.INTEGER;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.UNDEF;
 
 /**
@@ -69,7 +73,18 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         super();
         // Don't pre-compute numeric values for strings as this would trigger
         // "Argument isn't numeric" warnings at construction time instead of at use time.
-        this.b = !s.isEmpty();  // String boolean: true if non-empty
+        //
+        // Perl boolean rules for strings: "" and "0" are false, everything else is true.
+        // This must match the logic in RuntimeScalar.getBooleanLarge() (STRING case):
+        //     !s.isEmpty() && !s.equals("0")
+        //
+        // Previously this was `!s.isEmpty()` which made "0" truthy — breaking any code
+        // that uses a string literal "0" in boolean context without an intermediate copy
+        // into a mutable RuntimeScalar.  The most visible symptom was for-loop variables
+        // aliased to literal lists:
+        //     for my $v ("0") { $v ? "true" : "false" }  # was "true", should be "false"
+        // because the loop variable directly references this RuntimeScalarReadOnly object.
+        this.b = !s.isEmpty() && !s.equals("0");
         this.i = null;  // Computed lazily on first getInt() call
         this.s = s;
         this.d = null;  // Computed lazily on first getDouble() call
@@ -157,7 +172,27 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         if (this.type == UNDEF) {
             throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
         }
+        // Dereferencing a read-only scalar whose content is a non-reference value
+        // (e.g. `for my $x (1) { %$x }`) is a strict-refs violation in perl.
+        // Literal arrow dereferences like `1->{a}` bypass this via the
+        // hashDerefGet() override below.
+        if (this.type == INTEGER || this.type == DOUBLE
+                || this.type == STRING || this.type == BYTE_STRING) {
+            throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
+        }
         throw new PerlCompilerException("Can't use value as a HASH reference");
+    }
+
+    /**
+     * `1->{a}` style arrow dereference on a read-only literal number stays silent
+     * to match perl's behavior for compile-time numeric literals.
+     */
+    @Override
+    public RuntimeScalar hashDerefGet(RuntimeScalar index) {
+        if (this.type == INTEGER || this.type == DOUBLE) {
+            return new RuntimeScalar();
+        }
+        return super.hashDerefGet(index);
     }
 
     @Override
@@ -165,9 +200,27 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         if (this.type == UNDEF) {
             throw new PerlCompilerException("Can't use an undefined value as an ARRAY reference");
         }
-        // For non-reference values (like constants), return an empty array
-        // This matches Perl's behavior where 1->[0] returns undef without error
+        // Dereferencing a read-only scalar whose content is a non-reference value
+        // (e.g. `for my $x (1) { @$x }`) is a strict-refs violation in perl.
+        // Literal arrow dereferences like `1->[0]` bypass this via the
+        // arrayDerefGet() override below.
+        if (this.type == INTEGER || this.type == DOUBLE
+                || this.type == STRING || this.type == BYTE_STRING) {
+            throw new PerlCompilerException("Can't use string (\"" + this + "\") as an ARRAY ref while \"strict refs\" in use");
+        }
         return new RuntimeArray();
+    }
+
+    /**
+     * `1->[0]` style arrow dereference on a read-only literal number stays silent
+     * to match perl's behavior for compile-time numeric literals.
+     */
+    @Override
+    public RuntimeScalar arrayDerefGet(RuntimeScalar index) {
+        if (this.type == INTEGER || this.type == DOUBLE) {
+            return new RuntimeScalar();
+        }
+        return super.arrayDerefGet(index);
     }
 
     @Override

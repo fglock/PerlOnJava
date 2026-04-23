@@ -42,6 +42,14 @@ imports:
   - source: perl5/lib/Benchmark.pm
     target: src/main/perl/lib/Benchmark.pm
 
+  # Memoize - Function return value caching (pure Perl, core since 5.8)
+  - source: perl5/cpan/Memoize/Memoize.pm
+    target: src/main/perl/lib/Memoize.pm
+
+  - source: perl5/cpan/Memoize/Memoize
+    target: src/main/perl/lib/Memoize
+    type: directory
+
   # Net::Ping - Network ping module (required by CPAN::Mirrors)
   - source: perl5/dist/Net-Ping/lib/Net/Ping.pm
     target: src/main/perl/lib/Net/Ping.pm
@@ -288,6 +296,93 @@ imports:
   - source: perl5/cpan/Params-Check/t
     target: perl5_t/Params-Check
     type: directory
+
+  # Math-BigInt upstream library (pure Perl) - replaces PerlOnJava's
+  # previous thin Java-BigInteger shim. Provides the full Math::BigInt
+  # family: Math::BigInt, Math::BigFloat, Math::BigRat, with Calc as the
+  # pure-Perl default backend implementing the Math::BigInt::Lib API.
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt.pm
+    target: src/main/perl/lib/Math/BigInt.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt/Lib.pm
+    target: src/main/perl/lib/Math/BigInt/Lib.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigInt/Calc.pm
+    target: src/main/perl/lib/Math/BigInt/Calc.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigFloat.pm
+    target: src/main/perl/lib/Math/BigFloat.pm
+
+  - source: perl5/cpan/Math-BigInt/lib/Math/BigRat.pm
+    target: src/main/perl/lib/Math/BigRat.pm
+
+  # Math-BigInt upstream test suite. They live under
+  # src/test/resources/module/ so `make test-bundled-modules` runs them.
+  #
+  # `exclude:` lists a small set of tests that still fail after the
+  # overload::constant implementation landed. They hit secondary corners
+  # (alternate `Math::BigFloat::BareSubclass`/`BareCalc` subclasses,
+  # `use Math::BigFloat w => ...` import arg, and a precision-state
+  # ordering issue that is partly a float-formatting gap). See
+  # dev/modules/math_bigint_bignum.md.
+  - source: perl5/cpan/Math-BigInt/t
+    target: src/test/resources/module/Math-BigInt/t
+    type: directory
+    exclude:
+      - bare_mbf.t
+      - bare_mbr.t
+      - use_mbfw.t
+
+  # bignum pragma family - `use bigint`, `use bignum`, `use bigrat`,
+  # `use bigfloat` -- thin pragmas built on top of Math::BigInt et al.
+  - source: perl5/cpan/bignum/lib/bigint.pm
+    target: src/main/perl/lib/bigint.pm
+
+  - source: perl5/cpan/bignum/lib/bignum.pm
+    target: src/main/perl/lib/bignum.pm
+
+  - source: perl5/cpan/bignum/lib/bigfloat.pm
+    target: src/main/perl/lib/bigfloat.pm
+
+  - source: perl5/cpan/bignum/lib/bigrat.pm
+    target: src/main/perl/lib/bigrat.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigInt/Trace.pm
+    target: src/main/perl/lib/Math/BigInt/Trace.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigFloat/Trace.pm
+    target: src/main/perl/lib/Math/BigFloat/Trace.pm
+
+  - source: perl5/cpan/bignum/lib/Math/BigRat/Trace.pm
+    target: src/main/perl/lib/Math/BigRat/Trace.pm
+
+  # bignum upstream test suite.
+  #
+  # Excluded tests:
+  #  * `backend-gmp-*.t` — rely on Math::BigInt::GMP native backend we
+  #    don't bundle. (Pari-backed tests skip cleanly via `plan skip_all`.)
+  #  * `const-*.t` / `bigfloat.t` / `overrides.t` / `option_p.t` —
+  #    remaining corner cases of `overload::constant` (float-literal
+  #    exponent/precision stringification, handler ordering inside
+  #    imports). See dev/modules/math_bigint_bignum.md.
+  #  * `scope-{bigint,bigfloat,bignum,bigrat}.t` — check lexical
+  #    unwinding of `CORE::GLOBAL::hex` / `CORE::GLOBAL::oct` overrides
+  #    installed by `use bigint`. `no bigint` only removes the
+  #    %^H constant handlers; PerlOnJava doesn't yet unwind the hex/oct
+  #    lexical overrides on scope exit.
+  - source: perl5/cpan/bignum/t
+    target: src/test/resources/module/bignum/t
+    type: directory
+    exclude:
+      - backend-gmp-*.t
+      - bigfloat.t
+      - const-*.t
+      - option_p.t
+      - overrides.t
+      - scope-bigfloat.t
+      - scope-bigint.t
+      - scope-bignum.t
+      - scope-bigrat.t
 
   # From CPAN distribution
   - source: perl5/cpan/Perl-OSType/lib/Perl/OSType.pm
@@ -779,6 +874,13 @@ imports:
       - perltw.pod
       - perlvos.pod
       - perlwin32.pod
+
+  # diagnostics - Verbose warning/error diagnostics using perldiag
+  # Required by Math::Base::Convert t/overload.t and other CPAN test suites
+  # Protected: has PerlOnJava-specific patch to search @INC for perldiag.pod
+  - source: perl5/lib/diagnostics.pm
+    target: src/main/perl/lib/diagnostics.pm
+    protected: true
 
   # Add more imports below as needed
   # Example with minimal fields:

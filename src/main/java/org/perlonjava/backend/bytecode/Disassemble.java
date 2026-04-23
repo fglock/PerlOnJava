@@ -166,6 +166,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("LOAD_UNDEF r").append(rd).append("\n");
                         break;
+                    case Opcodes.LOAD_UNDEF_READONLY:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("LOAD_UNDEF_READONLY r").append(rd).append("\n");
+                        break;
                     case Opcodes.MY_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
@@ -298,6 +302,32 @@ public class Disassemble {
                         int rsNeg = interpretedCode.bytecode[pc++];
                         sb.append("NEG_SCALAR r").append(rd).append(" = -r").append(rsNeg).append("\n");
                         break;
+                    case Opcodes.ADD_NO_OVERLOAD:
+                    case Opcodes.SUB_NO_OVERLOAD:
+                    case Opcodes.MUL_NO_OVERLOAD:
+                    case Opcodes.DIV_NO_OVERLOAD:
+                    case Opcodes.MOD_NO_OVERLOAD:
+                    case Opcodes.POW_NO_OVERLOAD: {
+                        rd = interpretedCode.bytecode[pc++];
+                        rs1 = interpretedCode.bytecode[pc++];
+                        rs2 = interpretedCode.bytecode[pc++];
+                        String op = switch (opcode) {
+                            case Opcodes.ADD_NO_OVERLOAD -> "ADD_NO_OVERLOAD";
+                            case Opcodes.SUB_NO_OVERLOAD -> "SUB_NO_OVERLOAD";
+                            case Opcodes.MUL_NO_OVERLOAD -> "MUL_NO_OVERLOAD";
+                            case Opcodes.DIV_NO_OVERLOAD -> "DIV_NO_OVERLOAD";
+                            case Opcodes.MOD_NO_OVERLOAD -> "MOD_NO_OVERLOAD";
+                            default -> "POW_NO_OVERLOAD";
+                        };
+                        sb.append(op).append(" r").append(rd).append(" = r").append(rs1).append(", r").append(rs2).append("\n");
+                        break;
+                    }
+                    case Opcodes.NEG_NO_OVERLOAD: {
+                        rd = interpretedCode.bytecode[pc++];
+                        int rsNegNo = interpretedCode.bytecode[pc++];
+                        sb.append("NEG_NO_OVERLOAD r").append(rd).append(" = -r").append(rsNegNo).append("\n");
+                        break;
+                    }
                     case Opcodes.ADD_SCALAR_INT:
                         rd = interpretedCode.bytecode[pc++];
                         int rs = interpretedCode.bytecode[pc++];
@@ -414,6 +444,21 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
                         sb.append("STRING_BITWISE_XOR_ASSIGN r").append(rd).append(" ^.= r").append(rs).append("\n");
+                        break;
+                    case Opcodes.BINARY_AND_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_AND_ASSIGN r").append(rd).append(" binary&= r").append(rs).append("\n");
+                        break;
+                    case Opcodes.BINARY_OR_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_OR_ASSIGN r").append(rd).append(" binary|= r").append(rs).append("\n");
+                        break;
+                    case Opcodes.BINARY_XOR_ASSIGN:
+                        rd = interpretedCode.bytecode[pc++];
+                        rs = interpretedCode.bytecode[pc++];
+                        sb.append("BINARY_XOR_ASSIGN r").append(rd).append(" binary^= r").append(rs).append("\n");
                         break;
                     case Opcodes.BITWISE_AND_BINARY:
                         rd = interpretedCode.bytecode[pc++];
@@ -2225,6 +2270,8 @@ public class Disassemble {
                     case Opcodes.BIND:
                     case Opcodes.CONNECT:
                     case Opcodes.LISTEN:
+                    case Opcodes.PIPE:
+                    case Opcodes.SOCKETPAIR:
                     case Opcodes.WRITE:
                     case Opcodes.FORMLINE:
                     case Opcodes.PRINTF:
@@ -2252,6 +2299,8 @@ public class Disassemble {
                             case Opcodes.BIND -> "bind";
                             case Opcodes.CONNECT -> "connect";
                             case Opcodes.LISTEN -> "listen";
+                            case Opcodes.PIPE -> "pipe";
+                            case Opcodes.SOCKETPAIR -> "socketpair";
                             case Opcodes.WRITE -> "write";
                             case Opcodes.FORMLINE -> "formline";
                             case Opcodes.PRINTF -> "printf";

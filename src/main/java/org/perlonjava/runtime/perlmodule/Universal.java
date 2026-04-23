@@ -76,11 +76,14 @@ public class Universal extends PerlModuleBase {
     public static void initialize() {
         Universal universal = new Universal();
         try {
-            // Register methods with their respective signatures
-            universal.registerMethod("can", "$$");
-            universal.registerMethod("isa", "$$");
-            universal.registerMethod("DOES", "$$");
-            universal.registerMethod("VERSION", "$");
+            // Register UNIVERSAL methods without prototypes. In real Perl,
+            // UNIVERSAL::isa / can / DOES / VERSION are plain subs with no
+            // prototype; forcing "$$" here rejects valid call patterns like
+            // `UNIVERSAL::isa(@_)` (used e.g. by Math::BigRat).
+            universal.registerMethod("can", null);
+            universal.registerMethod("isa", null);
+            universal.registerMethod("DOES", null);
+            universal.registerMethod("VERSION", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
@@ -281,13 +284,20 @@ public class Universal extends PerlModuleBase {
             case CODE:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
+                    // Perl 5 recognises both "Regexp" (ref() spelling) and "REGEXP"
+                    // (internal SV type name) for isa() checks on unblessed regexes.
+                    // Modules like Params::Validate::PP use the uppercase form in
+                    // their type-detection tables (%isas hash).
                     return getScalarBoolean(
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
                                     || type == REFERENCE && argString.equals("SCALAR")
+                                            && !(object.value instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.GLOB)
+                                    || type == REFERENCE && argString.equals("GLOB")
+                                            && object.value instanceof RuntimeScalar rs2 && rs2.type == RuntimeScalarType.GLOB
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
                                     || type == FORMAT && argString.equals("FORMAT")
-                                    || type == REGEX && argString.equals("Regexp")
+                                    || type == REGEX && (argString.equals("Regexp") || argString.equals("REGEXP"))
                                     || type == CODE && argString.equals("CODE")
                     ).getList();
                 }

@@ -5,6 +5,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
 
+import org.perlonjava.runtime.operators.WarnDie;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
 
@@ -376,7 +378,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield (element == null) ? scalarFalse : scalarTrue;
             }
             case AUTOVIVIFY_ARRAY -> scalarFalse;
-            case TIED_ARRAY -> TieArray.tiedExists(this, getScalarInt(index));
+            case TIED_ARRAY -> {
+                int idx = index;
+                if (idx < 0 && !TieArray.negativeIndicesAllowed(this)) {
+                    idx = TieArray.tiedFetchSize(this).getInt() + idx;
+                    if (idx < 0) {
+                        yield scalarFalse;   // still negative: doesn't exist
+                    }
+                }
+                yield TieArray.tiedExists(this, getScalarInt(idx));
+            }
             case READONLY_ARRAY -> {
                 if (index < 0) {
                     index = elements.size() + index; // Handle negative indices
@@ -418,7 +429,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 yield previous;
             }
             case AUTOVIVIFY_ARRAY -> scalarUndef;
-            case TIED_ARRAY -> TieArray.tiedDelete(this, getScalarInt(index));
+            case TIED_ARRAY -> {
+                int idx = index;
+                if (idx < 0 && !TieArray.negativeIndicesAllowed(this)) {
+                    idx = TieArray.tiedFetchSize(this).getInt() + idx;
+                    if (idx < 0) {
+                        yield scalarUndef;   // still negative: nothing to delete
+                    }
+                }
+                yield TieArray.tiedDelete(this, getScalarInt(idx));
+            }
             case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -605,10 +625,35 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      */
     public RuntimeScalar get(RuntimeScalar value) {
 
+        // Perl warns "Use of uninitialized value in array element" whenever an
+        // undef value is used as an array subscript (both read and lvalue/
+        // autoviv use this path). Matches perl's behavior under `use warnings`.
+        if (value != null && value.type == RuntimeScalarType.UNDEF) {
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Use of uninitialized value in array element"),
+                    RuntimeScalarCache.scalarEmptyString,
+                    "uninitialized");
+        }
+
         if (this.type == TIED_ARRAY) {
+            int idx = value.getInt();
+            Integer outOfRangeOriginal = null;
+            if (idx < 0 && !TieArray.negativeIndicesAllowed(this)) {
+                // Perl normalizes negative indices (idx + FETCHSIZE) before dispatching
+                // to FETCH, unless the tied package opts out via $Pkg::NEGATIVE_INDICES.
+                // If the normalized result is STILL negative, Perl does not call FETCH
+                // at all: reads yield undef, writes throw "Modification of non-
+                // creatable array value attempted".
+                int normalized = TieArray.tiedFetchSize(this).getInt() + idx;
+                if (normalized < 0) {
+                    outOfRangeOriginal = idx;
+                } else {
+                    value = new RuntimeScalar(normalized);
+                }
+            }
             RuntimeScalar v = new RuntimeScalar();
             v.type = TIED_SCALAR;
-            v.value = new RuntimeTiedArrayProxyEntry(this, value);
+            v.value = new RuntimeTiedArrayProxyEntry(this, value, outOfRangeOriginal);
             return v;
         }
 
@@ -723,6 +768,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
                 // Now clear and repopulate from the materialized list
                 TieArray.tiedClear(this);
+                // Perl calls EXTEND on the tied array before the STORE loop so
+                // implementations can preallocate. Tie::File relies on this to
+                // extend the backing file in autodefer mode.
+                int extendTo = materializedList.elements.size();
+                if (extendTo > 0) {
+                    TieArray.tiedExtend(this, getScalarInt(extendTo));
+                }
                 int index = 0;
                 for (RuntimeScalar element : materializedList) {
                     TieArray.tiedStore(this, getScalarInt(index), element);

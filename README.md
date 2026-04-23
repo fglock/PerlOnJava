@@ -11,7 +11,7 @@ PerlOnJava compiles Perl to JVM bytecode — run existing Perl scripts on any pl
 
 - **Single jar distribution** — no installation, no dependencies beyond Java
 - **Full toolchain** — `jperl`, `jperldoc`, `jcpan`, `jprove`
-- **150+ modules included** — [DBI](docs/guides/database-access.md), HTTP::Tiny, JSON, XML::Parser, YAML, Text::CSV, and more
+- **150+ modules included** — [DBI](docs/guides/database-access.md), HTTP::Tiny, JSON, XML::Parser, YAML, Text::CSV, and [more](docs/reference/bundled-modules.md)
 - **Install more with jcpan** — [pure-Perl CPAN modules](docs/guides/using-cpan-modules.md) work out of the box
 - **JDBC database access** — [PostgreSQL, MySQL, SQLite, Oracle](docs/guides/database-access.md) via standard JDBC drivers
 - **Embed in Java apps** — [JSR-223 ScriptEngine](docs/guides/java-integration.md) integration
@@ -38,6 +38,7 @@ make
 | [Quick Start](QUICKSTART.md) | [Java Integration](docs/guides/java-integration.md) | [CLI Options](docs/reference/cli-options.md) |
 | [Docker](docs/getting-started/docker.md) | [Using CPAN Modules](docs/guides/using-cpan-modules.md) | [Architecture](docs/reference/architecture.md) |
 | [One-liners](docs/getting-started/oneliners.md) | [Module Porting](docs/guides/module-porting.md) | [Testing](docs/reference/testing.md) |
+| | | [Bundled Modules](docs/reference/bundled-modules.md) |
 
 **About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Roadmap](docs/about/roadmap.md) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md) | [Security](SECURITY.md) | [AI Policy](AI_POLICY.md)
 

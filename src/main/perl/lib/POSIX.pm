@@ -10,6 +10,7 @@ our $VERSION = '2.21';
 
 use strict;
 use warnings;
+use Carp;
 use Exporter ();
 
 use XSLoader;
@@ -164,6 +165,7 @@ our %EXPORT_TAGS = (
         F_SETLKW FD_CLOEXEC F_RDLCK F_UNLCK F_WRLCK
         O_ACCMODE O_APPEND O_CREAT O_EXCL O_NOCTTY O_NONBLOCK
         O_RDONLY O_RDWR O_TRUNC O_WRONLY
+        SEEK_CUR SEEK_END SEEK_SET
     )],
 
     signal_h => [qw(
@@ -192,6 +194,21 @@ our %EXPORT_TAGS = (
     sys_wait_h => [qw(
         WEXITSTATUS WIFEXITED WIFSIGNALED WIFSTOPPED WNOHANG
         WSTOPSIG WTERMSIG WUNTRACED wait waitpid
+    )],
+
+    termios_h => [qw(
+        B0 B50 B75 B110 B134 B150 B200 B300 B600 B1200 B1800 B2400
+        B4800 B9600 B19200 B38400
+        BRKINT
+        CS5 CS6 CS7 CS8 CSIZE CSTOPB CREAD PARENB PARODD HUPCL CLOCAL
+        ECHO ECHOE ECHOK ECHONL
+        ICANON IEXTEN ISIG
+        ICRNL INPCK ISTRIP IXON IXOFF IGNBRK IGNCR IGNPAR INLCR IXANY PARMRK
+        OPOST
+        TCSADRAIN TCSAFLUSH TCSANOW
+        VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
+        cfgetispeed cfgetospeed cfsetispeed cfsetospeed
+        tcdrain tcflow tcflush tcgetattr tcsendbreak tcsetattr
     )],
 
     unistd_h => [qw(
@@ -258,6 +275,47 @@ sub getegid { POSIX::_getegid() }
 sub setuid { POSIX::_setuid(@_) }
 sub setgid { POSIX::_setgid(@_) }
 
+# Locale support (stubbed — PerlOnJava does not switch C library locales,
+# but many modules rely on these existing and being callable).
+sub LC_ALL      () { 0 }
+sub LC_COLLATE  () { 1 }
+sub LC_CTYPE    () { 2 }
+sub LC_MONETARY () { 3 }
+sub LC_NUMERIC  () { 4 }
+sub LC_TIME     () { 5 }
+sub LC_MESSAGES () { 6 }
+
+sub setlocale {
+    my ($category, $locale) = @_;
+    # Returning the requested locale (or the current/default one) is enough
+    # for callers that use setlocale() purely for its return value, e.g.
+    # `setlocale(LC_COLLATE, "C")`.
+    return defined $locale ? $locale : 'C';
+}
+
+sub localeconv {
+    return {
+        decimal_point   => '.',
+        thousands_sep   => '',
+        grouping        => '',
+        int_curr_symbol => '',
+        currency_symbol => '',
+        mon_decimal_point => '',
+        mon_thousands_sep => '',
+        mon_grouping    => '',
+        positive_sign   => '',
+        negative_sign   => '-',
+        int_frac_digits => -1,
+        frac_digits     => -1,
+        p_cs_precedes   => -1,
+        p_sep_by_space  => -1,
+        n_cs_precedes   => -1,
+        n_sep_by_space  => -1,
+        p_sign_posn     => -1,
+        n_sign_posn     => -1,
+    };
+}
+
 # User/Group functions
 sub getpwnam { POSIX::_getpwnam(@_) }
 sub getpwuid { POSIX::_getpwuid(@_) }
@@ -291,6 +349,20 @@ sub mkdir { POSIX::_mkdir(@_) }
 sub rmdir { POSIX::_rmdir(@_) }
 sub getcwd { POSIX::_getcwd() }
 sub chdir { POSIX::_chdir(@_) }
+
+# File control
+sub fcntl { POSIX::_fcntl(@_) }
+
+# Terminal functions
+sub isatty {
+    my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
+    return POSIX::_isatty($fd);
+}
+sub setsid { POSIX::_setsid() }
+sub ttyname {
+    my $fd = ref($_[0]) ? fileno($_[0]) : $_[0];
+    return POSIX::_ttyname($fd);
+}
 
 # Time functions
 sub time { POSIX::_time() }
@@ -379,6 +451,98 @@ sub handler { return $_[0]->{handler} }
 sub mask    { return $_[0]->{sigset} }
 sub flags   { return $_[0]->{flags} }
 
+# POSIX::Termios - terminal I/O control
+# The Java backend stores a native struct termios as an opaque byte string
+# in the blessed hashref's "_data" key.  All field access goes through the
+# Java POSIX module's termios_* methods.
+package POSIX::Termios;
+
+sub new {
+    my $class = shift;
+    my $data = POSIX::Termios::_new();
+    return bless { _data => $data }, $class;
+}
+
+sub getattr {
+    my ($self, $fd) = @_;
+    $fd = fileno($fd) if ref $fd;
+    $fd = 0 unless defined $fd;
+    my @r = POSIX::Termios::_getattr($self->{_data}, $fd);
+    return undef unless @r && defined $r[0];
+    $self->{_data} = $r[0];
+    return $r[1];  # "0 but true"
+}
+
+sub setattr {
+    my ($self, $fd, $action) = @_;
+    $fd = fileno($fd) if ref $fd;
+    $fd = 0 unless defined $fd;
+    $action = 0 unless defined $action;  # TCSANOW
+    return POSIX::Termios::_setattr($self->{_data}, $fd, $action);
+}
+
+sub getiflag { return POSIX::Termios::_getiflag($_[0]->{_data}) }
+sub getoflag { return POSIX::Termios::_getoflag($_[0]->{_data}) }
+sub getcflag { return POSIX::Termios::_getcflag($_[0]->{_data}) }
+sub getlflag { return POSIX::Termios::_getlflag($_[0]->{_data}) }
+
+sub getcc {
+    my ($self, $idx) = @_;
+    return POSIX::Termios::_getcc($self->{_data}, $idx);
+}
+
+sub setiflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setiflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setoflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setoflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setcflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setcflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setlflag {
+    my ($self, $val) = @_;
+    my @r = POSIX::Termios::_setlflag($self->{_data}, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setcc {
+    my ($self, $idx, $val) = @_;
+    my @r = POSIX::Termios::_setcc($self->{_data}, $idx, $val);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub getispeed { return POSIX::Termios::_getispeed($_[0]->{_data}) }
+sub getospeed { return POSIX::Termios::_getospeed($_[0]->{_data}) }
+
+sub setispeed {
+    my ($self, $speed) = @_;
+    my @r = POSIX::Termios::_setispeed($self->{_data}, $speed);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
+sub setospeed {
+    my ($self, $speed) = @_;
+    my @r = POSIX::Termios::_setospeed($self->{_data}, $speed);
+    $self->{_data} = $r[0] if @r && defined $r[0];
+    return $r[1];
+}
+
 package POSIX;
 
 # Constants - generate subs for each constant that has Java implementation
@@ -393,9 +557,19 @@ for my $const (qw(
 
     F_OK R_OK W_OK X_OK
 
+    F_DUPFD F_GETFD F_SETFD F_GETFL F_SETFL FD_CLOEXEC
+
     SIGHUP SIGINT SIGQUIT SIGILL SIGTRAP SIGABRT SIGBUS SIGFPE SIGKILL
     SIGUSR1 SIGSEGV SIGUSR2 SIGPIPE SIGALRM SIGTERM SIGCHLD SIGCONT
     SIGSTOP SIGTSTP
+
+    TCSANOW TCSADRAIN TCSAFLUSH
+
+    ECHO ECHOE ECHOK ECHONL ICANON IEXTEN ISIG
+    BRKINT ICRNL INPCK ISTRIP IXON
+    OPOST
+    CS8 CSIZE PARENB
+    VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";

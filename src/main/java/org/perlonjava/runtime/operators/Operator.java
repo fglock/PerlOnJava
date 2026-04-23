@@ -146,19 +146,20 @@ public class Operator {
 
                 try {
                     while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
+                        int matchStart = matcher.start();
+                        int matchEnd = matcher.end();
+
                         // Add the part before the match
 
-                        // System.out.println("matcher lastend " + lastEnd + " start " + matcher.start() + " end " + matcher.end() + " length " + inputStr.length());
-                        if (lastEnd == 0 && matcher.end() == 0) {
-                            // if (lastEnd == 0 && matchStr.isEmpty()) {
+                        // System.out.println("matcher lastend " + lastEnd + " start " + matchStart + " end " + matchEnd + " length " + inputStr.length());
+                        if (lastEnd == 0 && matchEnd == 0) {
                             // A zero-width match at the beginning of EXPR never produces an empty field
-                            // System.out.println("matcher skip first");
-                        } else if (matcher.start() == matcher.end() && matcher.start() == lastEnd) {
+                        } else if (matchStart == matchEnd && matchStart == lastEnd) {
                             // Skip consecutive zero-width matches at the same position
                             // This handles patterns like / */ that can match zero spaces
                             continue;
                         } else {
-                            splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matcher.start())));
+                            splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matchStart)));
                         }
 
                         // Add captured groups if any (but skip code block captures)
@@ -183,8 +184,40 @@ public class Operator {
                             }
                         }
 
-                        lastEnd = matcher.end();
+                        lastEnd = matchEnd;
                         splitCount++;
+
+                        // Perl's split re-runs the regex at matchEnd with
+                        // REG_NOTEMPTY_ATSTART after a zero-width match, so a
+                        // consuming alternative at the same position counts as an
+                        // additional separator (producing an empty field between
+                        // the two separators). Without this, e.g.
+                        // `split /(?:\b|\s)/, "Lorem ipsum"` loses the empty field
+                        // that should appear between the `\b` and `\s` matches at
+                        // offset 5, and the space leaks into the next field when
+                        // Java's matcher auto-advances.
+                        //
+                        // Java regex always tries alternation left-to-right, so a
+                        // pattern like `(?:\b|\s)` returns the zero-width `\b`
+                        // match even when `\s` could have consumed a character.
+                        // To find a consuming alternative we use `matches()` on
+                        // progressively larger regions starting at matchEnd: the
+                        // shortest region the whole pattern consumes is the
+                        // length of the consuming alternative.
+                        if (matchStart == matchEnd
+                                && matchEnd < inputStr.length()
+                                && (limit <= 0 || splitCount < limit - 1)) {
+                            int consumedEnd = findConsumingMatch(pattern, inputStr, matchEnd);
+                            if (consumedEnd > matchEnd) {
+                                // Emit the (empty) field between the two separators
+                                splitElements.add(new RuntimeScalar(""));
+                                lastEnd = consumedEnd;
+                                splitCount++;
+                                // Advance the primary matcher past the consumed
+                                // region so its next find() doesn't re-match inside.
+                                matcher.region(lastEnd, inputStr.length());
+                            }
+                        }
                     }
                 } catch (RegexTimeoutException e) {
                     WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
@@ -248,6 +281,32 @@ public class Operator {
             return getScalarInt(size).getList();
         }
         return result;
+    }
+
+    /**
+     * After a zero-width match at {@code pos}, return the end offset of the
+     * shortest non-zero-width match of {@code pattern} starting exactly at
+     * {@code pos}, or {@code pos} if no consuming match exists there.
+     *
+     * Java's Matcher always tries alternation left-to-right, so a pattern like
+     * {@code (?:\b|\s)} returns the zero-width {@code \b} branch even when
+     * {@code \s} could have consumed a character at the same position. We use
+     * {@link Matcher#matches()} on progressively larger regions starting at
+     * {@code pos}: the pattern matches the whole region only when some
+     * alternative consumes exactly that many characters. This approximates
+     * perl's {@code REG_NOTEMPTY_ATSTART} retry that split uses after each
+     * zero-width match.
+     */
+    private static int findConsumingMatch(Pattern pattern, String input, int pos) {
+        int max = Math.min(input.length() - pos, 64);
+        Matcher probe = pattern.matcher(input);
+        for (int len = 1; len <= max; len++) {
+            probe.region(pos, pos + len);
+            if (probe.matches()) {
+                return pos + len;
+            }
+        }
+        return pos;
     }
 
     /**
@@ -413,6 +472,15 @@ public class Operator {
      * @return a RuntimeList containing the elements that were removed
      */
     public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list) {
+        return splice(runtimeArray, list, RuntimeContextType.LIST);
+    }
+
+    /**
+     * Context-aware splice. Context only matters for tied arrays, where the
+     * user-defined SPLICE method's return value differs between scalar and
+     * list context.
+     */
+    public static RuntimeList splice(RuntimeArray runtimeArray, RuntimeList list, int ctx) {
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 RuntimeList removedElements = new RuntimeList();
@@ -488,9 +556,9 @@ public class Operator {
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
-                yield splice(runtimeArray, list); // Recursive call after vivification
+                yield splice(runtimeArray, list, ctx); // Recursive call after vivification
             }
-            case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list);
+            case TIED_ARRAY -> TieArray.tiedSplice(runtimeArray, list, ctx);
             default -> throw new IllegalStateException("Unknown array type: " + runtimeArray.type);
         };
 
@@ -653,6 +721,20 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        // Check for overloaded `x` operator (only when left operand is a blessed scalar)
+        if (value instanceof RuntimeScalar valScalar) {
+            int blessId = org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId(valScalar);
+            if (blessId < 0) {
+                RuntimeScalar result = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentOverloadDirect(valScalar, timesScalar, blessId, 0, "(x");
+                if (result != null) return result;
+                // Try nomethod fallback (may throw if fallback=0)
+                result = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentNomethod(valScalar, timesScalar, blessId, 0, "x");
+                if (result != null) return result;
+            }
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (value instanceof RuntimeScalar && !value.getDefinedBoolean()) {

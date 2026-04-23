@@ -85,8 +85,69 @@ public class ErrorMessageUtil {
         return stringifyException(t, 0);
     }
 
-    public static String stringifyException(Throwable t, int skipLevels) {
+    /**
+     * Regex matching a leading Java exception class name followed by ": ", e.g.
+     * "java.lang.NullPointerException: foo" or "org.perlonjava.runtime.RuntimeException: bar".
+     * Matches fully-qualified class names composed of dot-separated identifier segments,
+     * with at least two segments to avoid stripping legitimate "Foo: bar" Perl messages.
+     */
+    private static final java.util.regex.Pattern JAVA_EXCEPTION_PREFIX =
+            java.util.regex.Pattern.compile("^([a-zA-Z_$][\\w$]*\\.)+([A-Z][\\w$]*(?:Exception|Error|Throwable))" +
+                    "(?::\\s*|\\s+-\\s+)");
 
+    /**
+     * Strip a leading Java-style exception class prefix from a message. For example,
+     * "java.lang.NullPointerException: Cannot invoke ..." becomes "Cannot invoke ...".
+     * If no such prefix is present, the message is returned unchanged.
+     * <p>
+     * This keeps our error output readable for end users, who should not need to know
+     * about JVM internals when their Perl code fails.
+     */
+    public static String stripJavaExceptionPrefix(String message) {
+        if (message == null) return null;
+        var m = JAVA_EXCEPTION_PREFIX.matcher(message);
+        if (m.find()) {
+            String remainder = message.substring(m.end());
+            // If what's left is still something useful, return it; otherwise keep original.
+            if (!remainder.isEmpty()) return remainder;
+        }
+        return message;
+    }
+
+    /**
+     * Returns true when {@code outer} is effectively the result of calling
+     * {@code Throwable.toString()} on {@code inner} (or one of its ancestors in the
+     * cause chain) — i.e. it is a re-wrapping that adds no information beyond the
+     * Java class name and the inner message. In that case we suppress it so the
+     * user only sees the real message.
+     * <p>
+     * Also treats the slashed vs dotted representations of the same class name as
+     * equivalent — the JVM uses slashes for class-loading errors
+     * ({@code NoClassDefFoundError}) and dots for {@code ClassNotFoundException},
+     * which frequently wrap one another.
+     */
+    public static boolean isJavaToStringOf(String outer, Throwable inner) {
+        if (outer == null || inner == null) return false;
+        String outerDotted = outer.replace('/', '.');
+        Throwable cur = inner;
+        while (cur != null) {
+            if (outer.equals(cur.toString()) || outerDotted.equals(cur.toString())) return true;
+            String innerMsg = cur.getMessage();
+            if (innerMsg != null) {
+                String asToString = cur.getClass().getName() + ": " + innerMsg;
+                if (outer.equals(asToString) || outerDotted.equals(asToString)) return true;
+                // NoClassDefFoundError uses '/' while ClassNotFoundException uses '.'
+                // for the same class name; treat them as equivalent.
+                if (outerDotted.equals(innerMsg.replace('/', '.'))) return true;
+            }
+            Throwable next = cur.getCause();
+            if (next == cur || next == null) break;
+            cur = next;
+        }
+        return false;
+    }
+
+    public static String stringifyException(Throwable t, int skipLevels) {
         // Check if this is a PerlParserException that should have clean output
         if (t instanceof PerlParserException) {
             String message = t.getMessage();
@@ -121,8 +182,13 @@ public class ErrorMessageUtil {
         boolean suppressStackTrace = (message != null && message.endsWith("\n"))
                 || (message1 != null && message1.endsWith("\n"));
 
-        if (message1 != null && !message1.equals(message)) {
-            sb.append(message1);
+        // Avoid printing the outer message when it is just a re-wrapping of the
+        // innermost cause. This commonly happens when the wrapping exception's
+        // message was built from Throwable.toString() of the inner exception —
+        // which surfaces cryptic Java class names (e.g. "java.lang.NoClassDefFoundError:
+        // org/perlonjava/runtime/operators/KillOperator") above the real message.
+        if (message1 != null && !message1.equals(message) && !isJavaToStringOf(message1, innermostCause)) {
+            sb.append(stripJavaExceptionPrefix(message1));
             if (!message1.endsWith("\n")) {
                 sb.append("\n");
             }
@@ -134,7 +200,7 @@ public class ErrorMessageUtil {
             message = innermostCause.getClass().getSimpleName();
         }
 
-        sb.append(message);
+        sb.append(stripJavaExceptionPrefix(message));
         if (!message.endsWith("\n")) {
             sb.append("\n");
         }

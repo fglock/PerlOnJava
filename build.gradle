@@ -206,6 +206,8 @@ dependencies {
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
+    implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
+    implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
     // JNR-POSIX removed - using Java FFM API for native access (Java 22+)
 
     // Testing dependencies
@@ -287,7 +289,15 @@ tasks.register('testModule', Test) {
     useJUnitPlatform {
         includeTags 'module'
     }
-    
+
+    // Tests that spawn a child perl (via $^X, e.g. System::Command)
+    // need PERLONJAVA_EXECUTABLE set to a real launcher, since under
+    // Gradle "jperl" isn't on $PATH. GlobalContext reads this env var
+    // when initializing $^X.
+    def jperlLauncher = org.gradle.internal.os.OperatingSystem.current().isWindows()
+            ? "jperl.bat" : "jperl"
+    environment 'PERLONJAVA_EXECUTABLE', file(jperlLauncher).absolutePath
+
     shouldRunAfter testUnit
 }
 
@@ -356,6 +366,8 @@ sourceSets {
             include '**/*.pl'
             include '**/*.ph'
             include '**/*.pod'
+            include '**/*.dd'
+            include '**/*.yml'
             include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
             include 'bin/**'
@@ -375,6 +387,8 @@ tasks.named('processResources', Copy) {
         include '**/*.pm'
         include '**/*.ph'
         include '**/*.pod'
+        include '**/*.dd'
+        include '**/*.yml'
         include '**/media.types'
         include 'bin/**'
         include 'META-INF/services/**'

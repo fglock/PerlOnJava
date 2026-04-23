@@ -201,6 +201,11 @@ public class TieHandle extends RuntimeIO {
             // Method doesn't exist, return undef
             return RuntimeScalarCache.scalarUndef;
         }
+        // Ignore AUTOLOAD fallback — tie special methods (UNTIE, DESTROY) are
+        // "if exists" only; they should not trigger AUTOLOAD dispatch.
+        if (method.value instanceof RuntimeCode rc && rc.autoloadVariableName != null) {
+            return RuntimeScalarCache.scalarUndef;
+        }
 
         // Method exists, call it
         return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
@@ -220,6 +225,11 @@ public class TieHandle extends RuntimeIO {
 
     @Override
     public String toString() {
+        // Return the glob name (e.g., "main::STDOUT") when available, so that
+        // select() returns the correct name even when the handle is tied.
+        if (globName != null) {
+            return globName;
+        }
         return "TIED_HANDLE(" + tiedPackage + ")";
     }
 

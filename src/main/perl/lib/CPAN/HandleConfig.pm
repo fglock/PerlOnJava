@@ -548,31 +548,6 @@ sub cpan_home_dir_candidates {
     $CPAN::Config->{load_module_verbosity} = $old_v;
     my $dotcpan = $^O eq 'VMS' ? '_cpan' : '.cpan';
     @dirs = map { File::Spec->catdir($_, $dotcpan) } grep { defined } @dirs;
-    # PerlOnJava: prefer ~/.perlonjava/cpan over ~/.cpan to avoid conflicts
-    # with system Perl's CPAN configuration.
-    my $home = $ENV{HOME} || $ENV{USERPROFILE};
-    if ($home) {
-        my $poj_cpan = File::Spec->catdir($home, '.perlonjava', 'cpan');
-        # Bootstrap: create MyConfig.pm if it doesn't exist so cpan_home()
-        # finds our directory. MyConfig.pm just loads the bundled Config.
-        my $poj_myconfig = File::Spec->catfile($poj_cpan, 'CPAN', 'MyConfig.pm');
-        unless (-f $poj_myconfig) {
-            my $poj_config_dir = File::Spec->catdir($poj_cpan, 'CPAN');
-            eval {
-                require File::Path;
-                File::Path::make_path($poj_config_dir) unless -d $poj_config_dir;
-                if (open my $fh, '>', $poj_myconfig) {
-                    print $fh "# PerlOnJava CPAN configuration\n";
-                    print $fh "# This file ensures CPAN uses ~/.perlonjava/cpan/\n";
-                    print $fh "# Edit to customize, or see CPAN::Config for defaults.\n";
-                    print $fh "require CPAN::Config;\n";
-                    print $fh "1;\n";
-                    close $fh;
-                }
-            };
-        }
-        unshift @dirs, $poj_cpan;
-    }
     return wantarray ? @dirs : $dirs[0];
 }
 

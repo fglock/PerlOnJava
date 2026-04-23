@@ -193,13 +193,38 @@ sub _install_pure_perl {
     # Use explicit PM hash if provided
     if ($args->{PM}) {
         %pm = %{$args->{PM}};
-        # Expand Make-style variables like $(INST_LIB) to actual paths
+        # Expand Make-style variables like $(INST_LIB) to actual paths.
+        # Standard MakeMaker derives directory-bearing vars from NAME:
+        #   INST_LIBDIR      = INST_LIB/<parent>    (e.g. blib/lib/Term)
+        #   INST_ARCHLIBDIR  = INST_ARCHLIB/<parent>
+        #   INST_AUTODIR     = INST_LIB/auto/<full>
+        #   INST_ARCHAUTODIR = INST_ARCHLIB/auto/<full>
+        # where <parent> is NAME with the last :: component removed and
+        # <full> is the full NAME with :: replaced by /.
+        my @parts = split /::/, ($name || '');
+        pop @parts;  # drop BASEEXT (last component)
+        my $parent_dir = @parts ? join('/', @parts) : '';
+        (my $full_path = ($name || '')) =~ s{::}{/}g;
+        my $libdir = $parent_dir
+            ? File::Spec->catdir($INSTALL_BASE, $parent_dir)
+            : $INSTALL_BASE;
+        my $autodir = $full_path
+            ? File::Spec->catdir($INSTALL_BASE, 'auto', $full_path)
+            : $INSTALL_BASE;
         for my $key (keys %pm) {
             my $val = $pm{$key};
+            # Directory-bearing variables (must come before the bare LIB/ARCHLIB forms)
+            $val =~ s/\$\(INST_LIBDIR\)/$libdir/g;
+            $val =~ s/\$\(INST_ARCHLIBDIR\)/$libdir/g;  # treat ARCHLIBDIR same as LIBDIR
+            $val =~ s/\$\(INST_AUTODIR\)/$autodir/g;
+            $val =~ s/\$\(INST_ARCHAUTODIR\)/$autodir/g;
+            $val =~ s/\$\{INST_LIBDIR\}/$libdir/g;
+            $val =~ s/\$\{INST_ARCHLIBDIR\}/$libdir/g;
+            # Bare library roots
             $val =~ s/\$\(INST_LIB\)/$INSTALL_BASE/g;
             $val =~ s/\$\(INST_ARCHLIB\)/$INSTALL_BASE/g;  # treat ARCHLIB same as LIB
-            $val =~ s/\$\(INST_LIBDIR\)/$INSTALL_BASE/g;
-            $val =~ s/\$\{INST_LIB\}/$INSTALL_BASE/g;      # also handle ${VAR} form
+            $val =~ s/\$\{INST_LIB\}/$INSTALL_BASE/g;
+            $val =~ s/\$\{INST_ARCHLIB\}/$INSTALL_BASE/g;
             $pm{$key} = $val;
         }
     } else {
@@ -233,14 +258,16 @@ sub _install_pure_perl {
             }, 'blib/lib');
         }
         
-        # Fallback: scan current directory for .pm files (flat layout)
-        # Some CPAN distributions (e.g. Crypt::RC4) have .pm files at the
-        # root level instead of in lib/. Standard MakeMaker handles this via
-        # PMLIBDIRS which defaults to ['lib', $self->{BASEEXT}].
-        # We derive the install subdirectory from the NAME parameter.
-        if (!%pm && $name) {
+        # Scan root-level .pm files and BASEEXT directory.
+        # Standard MakeMaker maps:  ./*.pm => $(INST_LIBDIR)/*.pm
+        # where INST_LIBDIR = INST_LIB/Parent/Path (derived from NAME).
+        # PMLIBDIRS defaults to ['lib', $BASEEXT], so both lib/ (handled
+        # above) and root .pm files / BASEEXT dir are always scanned.
+        # This handles distributions like Math::Base::Convert where the
+        # main .pm lives at the root alongside sub-modules in lib/.
+        if ($name) {
             my @parts = split /::/, $name;
-            my $baseext = pop @parts;  # Remove BASEEXT (e.g. XML::Parser -> Parser)
+            my $baseext = pop @parts;  # BASEEXT (e.g. XML::Parser -> Parser)
             my $parent_dir = @parts ? File::Spec->catdir(@parts) : '';
             
             # Scan flat .pm files in current directory
@@ -251,7 +278,8 @@ sub _install_pure_perl {
                     my $dest_rel = $parent_dir
                         ? File::Spec->catfile($parent_dir, $file)
                         : $file;
-                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel);
+                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel)
+                        unless exists $pm{$file};
                 }
                 closedir($dh);
             }
@@ -266,7 +294,8 @@ sub _install_pure_perl {
                         my $rel = $parent_dir
                             ? File::Spec->catfile($parent_dir, $src)
                             : $src;
-                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel)
+                            unless exists $pm{$src};
                     },
                     no_chdir => 1,
                 }, $baseext);
@@ -342,7 +371,7 @@ sub _install_pure_perl {
     
     my $total = scalar(keys %pm) + scalar(keys %scripts);
     print "=" x 60, "\n";
-    print "Configured! $total files will be installed when 'make' runs.\n";
+    print "Configured! $total files will be installed when 'make install' runs.\n";
     print "=" x 60, "\n\n";
     
     return $mm;
@@ -425,9 +454,11 @@ sub _extract_version {
 sub _create_install_makefile {
     my ($name, $version, $args, $pm, $scripts, $mm) = @_;
     
-    # Create a Makefile that actually installs files when 'make' runs.
-    # This defers installation to after CPAN.pm has resolved and installed
-    # dependencies, enabling proper dependency resolution for any CPAN module.
+    # Create a Makefile that builds into ./blib when 'make' runs, runs tests
+    # against ./blib when 'make test' runs, and copies files to INSTALLSITELIB
+    # only when 'make install' runs. This matches standard ExtUtils::MakeMaker
+    # semantics so that 'cpan -t' (test-only) does not install the module,
+    # and lets CPAN.pm resolve/install dependencies before the install step.
     # Respect custom MAKEFILE name if provided
     my $makefile = $args->{MAKEFILE} || 'Makefile';
     
@@ -517,10 +548,27 @@ sub _create_install_makefile {
             push @script_cmds, _shell_cp($src, $dest);
         }
     }
-    
+
+    # Also stage EXE_FILES into blib/script/ so that 'make test' can run
+    # them from the blib tree (standard MakeMaker behavior). Tests like
+    # Pod::Markdown's t/pod2markdown.t invoke blib/script/<name> directly.
+    my @blib_script_cmds;
+    if ($scripts && %$scripts) {
+        my %bsdirs;
+        for my $src (sort keys %$scripts) {
+            my $blib_dest = File::Spec->catfile('blib', 'script', basename($src));
+            my $blib_dir = dirname($blib_dest);
+            unless ($bsdirs{$blib_dir}++) {
+                push @blib_script_cmds, _shell_mkdir($blib_dir);
+            }
+            push @blib_script_cmds, _shell_cp($src, $blib_dest);
+        }
+    }
+
     my $install_cmds_str = join("\n", @install_cmds) || "\t\@true";
     my $blib_cmds_str = join("\n", @blib_cmds) || "\t\@true";
     my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
+    my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
     
     # Build PL_FILES commands (prefixed with - so failures are non-fatal;
@@ -558,8 +606,11 @@ sub _create_install_makefile {
     
     print $fh <<"MAKEFILE";
 # Makefile generated by PerlOnJava MakeMaker
-# Files are installed during 'make' (not during Makefile.PL)
-# This enables CPAN.pm to resolve dependencies before installation
+# 'make'         builds into ./blib (no files installed to site libdir)
+# 'make test'    runs the test harness against ./blib
+# 'make install' copies ./blib files to INSTALLSITELIB
+# This matches standard ExtUtils::MakeMaker semantics so that 'cpan -t'
+# (test only) does not install, while 'cpan -i' (install) does.
 $prereq_comment
 NAME = $name
 DISTNAME = $distname
@@ -571,46 +622,58 @@ INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_RF = rm -rf
 
-all: pm_to_blib pure_all pl_files config
-\t\@echo "PerlOnJava: $name v$version installed ($file_count files)"
+all:: pm_to_blib pure_all pl_files blib_scripts config
+\t\@echo "PerlOnJava: $name v$version built ($file_count files in ./blib)"
 
-# Copy module and data files to installation directory
-pm_to_blib:
-$install_cmds_str
-
-# Copy to blib/lib for test compatibility (make test uses PERL5LIB=./blib/lib)
-# Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both)
-pure_all:
+# pm_to_blib: stage module/data files into ./blib/lib (matches standard
+# ExtUtils::MakeMaker). Files are NOT copied to INSTALLSITELIB here;
+# that happens in the 'install' target.
+# Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both).
+pm_to_blib::
 \t\@mkdir -p blib/arch
 $blib_cmds_str
 
+# pure_all is an alias target some postambles (File::ShareDir::Install,
+# Alien::Build) hook to add extra blib-staging steps. Depends on pm_to_blib.
+pure_all:: pm_to_blib
+
+# Stage EXE_FILES into blib/script/ so tests can invoke them via the blib tree
+blib_scripts::
+$blib_script_cmds_str
+
 # Process PL_FILES
-pl_files:
+pl_files::
 $pl_cmds_str
 
-# Install executable scripts
-install_scripts:
+# Install executable scripts (called only from 'install')
+install_scripts::
 $script_cmds_str
 
-# Use double-colon for config to allow postamble to add rules
+# Use double-colon rules throughout so that postambles (e.g.
+# Alien::Build's MY::postamble, File::ShareDir::Install) can add
+# additional rules for the same target. Mixing : and :: is a fatal
+# make error, and real ExtUtils::MakeMaker uses :: for these targets.
 config::
 
-test:
+test::
 \t$test_cmd
 
-install: all install_scripts
-\t\@echo "PerlOnJava: $name installed to \$(INSTALLSITELIB)"
+# install: copy staged files from ./lib to INSTALLSITELIB, plus scripts.
+# Depends on 'all' to ensure blib is built first (matches standard MakeMaker).
+install:: all install_scripts
+$install_cmds_str
+\t\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
 
-clean:
+clean::
 \t\$(RM_RF) blib pm_to_blib
 
-realclean: clean
+realclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-distclean: clean
+distclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-.PHONY: all pm_to_blib pure_all pl_files config test install clean realclean distclean install_scripts
+.PHONY: all pm_to_blib pure_all pl_files blib_scripts config test install clean realclean distclean install_scripts
 MAKEFILE
 
     # Call MY::postamble if it exists (File::ShareDir::Install uses this)
@@ -633,12 +696,16 @@ sub _shell_mkdir {
     return "\t\@mkdir -p '$dir'";
 }
 
-# Helper: generate a shell cp command for Makefile
+# Helper: generate a shell cp command for Makefile.
+# Tolerant of missing source files: some distributions generate .pm files
+# from .pm.PL scripts that require XS bootstrap (e.g. Term::ReadKey) and
+# PerlOnJava cannot run them. We skip missing sources with a warning
+# rather than failing the whole install.
 sub _shell_cp {
     my ($src, $dest) = @_;
     $src =~ s/'/'\\''/g;
     $dest =~ s/'/'\\''/g;
-    return "\t\@rm -f '$dest' && cp '$src' '$dest'";
+    return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'; else echo 'PerlOnJava: skipping missing source: $src'; fi";
 }
 
 sub _create_mymeta {

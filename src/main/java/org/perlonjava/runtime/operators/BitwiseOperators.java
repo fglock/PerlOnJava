@@ -56,11 +56,16 @@ public class BitwiseOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        // In Perl, if either operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
-            return bitwiseAndDot(val1, val2);
+        // In Perl, bitwise ops dispatch based on internal type flags (SvNIOKp):
+        // - If either operand has a numeric type (IOK/NOK), use numeric bitwise
+        // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
+        int vt1 = val1.type;
+        int vt2 = val2.type;
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
+            return bitwiseAndBinary(val1, val2);
         }
-        return bitwiseAndBinary(val1, val2);
+        return bitwiseAndDot(val1, val2);
     }
 
     /**
@@ -115,11 +120,16 @@ public class BitwiseOperators {
                 t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
                         t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
-        // In Perl, if either operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(val1) || !ScalarUtils.looksLikeNumber(val2)) {
-            return bitwiseOrDot(val1, val2);
+        // In Perl, bitwise ops dispatch based on internal type flags (SvNIOKp):
+        // - If either operand has a numeric type (IOK/NOK), use numeric bitwise
+        // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
+        int vt1 = val1.type;
+        int vt2 = val2.type;
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
+            return bitwiseOrBinary(val1, val2);
         }
-        return bitwiseOrBinary(val1, val2);
+        return bitwiseOrDot(val1, val2);
     }
 
     /**
@@ -178,13 +188,15 @@ public class BitwiseOperators {
                 t2 == RuntimeScalarType.TIED_SCALAR ? arg2.tiedFetch() :
                         t2 == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) arg2.value : arg2;
 
-        // Use numeric XOR only if BOTH operands look like numbers
-        // For everything else (strings, blessed objects, references, etc.), use string XOR
-        if (ScalarUtils.looksLikeNumber(val1) && ScalarUtils.looksLikeNumber(val2)) {
-            // Both are pure numbers (INTEGER or DOUBLE), use numeric XOR
+        // In Perl, bitwise ops dispatch based on internal type flags (SvNIOKp):
+        // - If either operand has a numeric type (IOK/NOK), use numeric bitwise
+        // - If both are non-numeric (strings from pack/vec, etc.), use string bitwise
+        int vt1 = val1.type;
+        int vt2 = val2.type;
+        if (vt1 == RuntimeScalarType.INTEGER || vt1 == RuntimeScalarType.DOUBLE ||
+                vt2 == RuntimeScalarType.INTEGER || vt2 == RuntimeScalarType.DOUBLE) {
             return bitwiseXorBinary(val1, val2);
         }
-        // At least one is a string, reference, or blessed object, use string XOR
         return bitwiseXorDot(val1, val2);
     }
 
@@ -228,11 +240,14 @@ public class BitwiseOperators {
                 runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
                         runtimeScalar.type == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
 
-        // In Perl, if the operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(val)) {
-            return bitwiseNotDot(val);
+        // In Perl, ~$val dispatches based on internal type flags (SvNIOKp):
+        // - If the operand has a numeric type (IOK/NOK), use numeric NOT
+        // - If it's a string, use string NOT (character-by-character)
+        int vt = val.type;
+        if (vt == RuntimeScalarType.INTEGER || vt == RuntimeScalarType.DOUBLE) {
+            return bitwiseNotBinary(val);
         }
-        return bitwiseNotBinary(val);
+        return bitwiseNotDot(val);
     }
 
     /**
@@ -278,8 +293,11 @@ public class BitwiseOperators {
                 runtimeScalar.type == RuntimeScalarType.TIED_SCALAR ? runtimeScalar.tiedFetch() :
                         runtimeScalar.type == RuntimeScalarType.READONLY_SCALAR ? (RuntimeScalar) runtimeScalar.value : runtimeScalar;
 
-        // In Perl, if the operand is a reference or doesn't look like a number, use string operations
-        if (!ScalarUtils.looksLikeNumber(val)) {
+        // In Perl, ~$val dispatches based on internal type flags (SvNIOKp):
+        // - If the operand has a numeric type (IOK/NOK), use numeric NOT
+        // - If it's a string, use string NOT (character-by-character)
+        int vt = val.type;
+        if (vt != RuntimeScalarType.INTEGER && vt != RuntimeScalarType.DOUBLE) {
             return bitwiseNotDot(val);
         }
 
@@ -414,6 +432,14 @@ public class BitwiseOperators {
             }
         }
 
+        // Check for overloaded '<<' operator on blessed objects
+        int blessIdL = blessedId(runtimeScalar);
+        int blessIdL2 = blessedId(arg2);
+        if (blessIdL < 0 || blessIdL2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessIdL, blessIdL2, "(<<", "<<");
+            if (result != null) return result;
+        }
+
         // Check for uninitialized values and generate warnings
         // Use getDefinedBoolean() to handle tied scalars correctly
         if (!runtimeScalar.getDefinedBoolean()) {
@@ -494,6 +520,14 @@ public class BitwiseOperators {
                 long result = unsignedValue >>> shift;
                 return new RuntimeScalar(result);
             }
+        }
+
+        // Check for overloaded '>>' operator on blessed objects
+        int blessIdR = blessedId(runtimeScalar);
+        int blessIdR2 = blessedId(arg2);
+        if (blessIdR < 0 || blessIdR2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverload(runtimeScalar, arg2, blessIdR, blessIdR2, "(>>", ">>");
+            if (result != null) return result;
         }
 
         // Check for uninitialized values and generate warnings

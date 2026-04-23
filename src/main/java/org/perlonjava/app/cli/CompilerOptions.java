@@ -77,6 +77,14 @@ public class CompilerOptions implements Cloneable {
     // Unicode/encoding flags for -C switches
     public boolean unicodeStdin = false; // -CS or -CI
     public boolean isMainProgram = false; // True if this is the top-level main script
+    /**
+     * Initial package name for the compilation unit. Defaults to null (=main),
+     * but `require FILE` / `do FILE` set this to the caller's current package
+     * so that code in the required file (which doesn't declare its own
+     * `package` statement) is compiled in the caller's package, matching
+     * Perl 5 semantics.
+     */
+    public String initialPackage = null;
     public boolean unicodeStdout = false; // -CO
     public boolean unicodeStderr = false; // -CE
     public boolean unicodeInput = false; // -CI (same as stdin)

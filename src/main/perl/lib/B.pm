@@ -165,8 +165,16 @@ package B::CV {
                     # Verify the sub still exists in the stash. Stubs whose
                     # stash entry has been deleted/cleared/undefined should be
                     # treated as anonymous (matching Perl 5's GV anonymization).
+                    # Exception: CVs explicitly renamed via Sub::Name::subname
+                    # (or Sub::Util::set_subname) carry a private flag; in
+                    # real Perl their CvGV points to a free-floating GV with
+                    # the assigned name, and NAME should always reflect that.
                     no strict 'refs';
-                    if (defined &{"$fqn"}) {
+                    my $renamed = 0;
+                    if (exists $Sub::Name::{_is_renamed}) {
+                        $renamed = Sub::Name::_is_renamed($self->{ref}) ? 1 : 0;
+                    }
+                    if ($renamed || defined &{"$fqn"}) {
                         $self->{_pkg_name} = $pkg;
                         $self->{_sub_name} = $name;
                         $self->{_is_anon}  = 0;

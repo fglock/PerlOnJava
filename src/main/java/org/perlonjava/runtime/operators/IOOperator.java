@@ -42,7 +42,11 @@ public class IOOperator {
 
     public static RuntimeScalar select(RuntimeList runtimeList, int ctx) {
         if (runtimeList.isEmpty()) {
-            // select (returns current filehandle)
+            // select() with no args returns the currently selected filehandle.
+            // In Perl 5 this returns a string name like "main::STDOUT".
+            // We return the RuntimeIO wrapped as a GLOB scalar, which stringifies
+            // to the glob name. This preserves the round-trip: select(select())
+            // correctly restores the previous handle for tied handles too.
             return new RuntimeScalar(RuntimeIO.selectedHandle);
         }
         if (runtimeList.size() == 4) {
@@ -415,6 +419,26 @@ public class IOOperator {
         }
     }
 
+    /**
+     * sysseek returns the new file position, or undef on failure.
+     * A position of zero is returned as the string "0 but true".
+     */
+    public static RuntimeScalar sysseek(RuntimeScalar fileHandle, RuntimeList runtimeList) {
+        RuntimeScalar seekResult = seek(fileHandle, runtimeList);
+        if (!seekResult.getBoolean()) {
+            return seekResult;
+        }
+        RuntimeScalar pos = tell(fileHandle);
+        long p = pos.getLong();
+        if (p < 0) {
+            return RuntimeIO.handleIOError("sysseek: could not determine position");
+        }
+        if (p == 0) {
+            return new RuntimeScalar("0 but true");
+        }
+        return pos;
+    }
+
     public static RuntimeScalar getc(int ctx, RuntimeBase... args) {
         RuntimeScalar fileHandle;
         if (args.length < 1) {
@@ -533,7 +557,41 @@ public class IOOperator {
         // We assert it's a RuntimeScalar rather than calling .scalar() which would create a copy
         RuntimeScalar fileHandle = (RuntimeScalar) args[0];
         if (args.length < 2) {
-            throw new PerlJavaUnimplementedException("1 argument open is not implemented");
+            // 1-argument open: open FILEHANDLE
+            // Uses $_ as the filename (with embedded mode prefix parsed from it)
+            String fileName = getGlobalVariable("main::_").toString();
+            RuntimeIO oneFh = RuntimeIO.open(fileName);
+            if (oneFh == null) {
+                return scalarUndef;
+            }
+            // Assign the IO handle to the filehandle glob (reuse the existing assignment logic below)
+            RuntimeGlob targetGlob = null;
+            if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
+                targetGlob = glob;
+            } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING) && fileHandle.value instanceof String name) {
+                if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
+                    String fullName = name.contains("::") ? name : ("main::" + name);
+                    targetGlob = GlobalVariable.getGlobalIO(fullName);
+                    RuntimeScalar newGlob = new RuntimeScalar();
+                    newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                    newGlob.value = targetGlob;
+                    fileHandle.set(newGlob);
+                }
+            }
+            if (targetGlob != null) {
+                targetGlob.setIO(oneFh);
+            } else {
+                RuntimeScalar newGlob = new RuntimeScalar();
+                newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(oneFh);
+                newGlob.value = anonGlob;
+                RuntimeIO.registerGlobForFdRecycling(anonGlob, oneFh);
+                fileHandle.set(newGlob);
+                fileHandle.ioOwner = true;
+            }
+            long pid = oneFh.getPid();
+            if (pid > 0) return new RuntimeScalar(pid);
+            return scalarTrue;
         }
         String mode = args[1].toString();
         RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
@@ -1152,16 +1210,9 @@ public class IOOperator {
         RuntimeScalar fileHandle = args[0].scalar();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
-        // Check if fh is null (invalid filehandle)
-        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
-            WarnDie.warn(
-                    new RuntimeScalar("syswrite() on closed filehandle"),
-                    new RuntimeScalar("\n")
-            );
-            return new RuntimeScalar(); // undef
-        }
-
+        // Check TieHandle FIRST (before closed handle check), matching sysread/print pattern.
+        // TieHandle extends RuntimeIO which initializes ioHandle as ClosedIOHandle,
+        // so the closed-handle check would incorrectly catch tied handles.
         if (fh instanceof TieHandle tieHandle) {
             RuntimeScalar data = args[1].scalar();
             int dataLen = data.toString().length();
@@ -1173,16 +1224,15 @@ public class IOOperator {
             }
         }
 
-//        // Check for closed handle - but based on the debug output,
-//        // closed handles still have their original ioHandle, not ClosedIOHandle
-//        if (fh.ioHandle == null) {
-//            getGlobalVariable("main::!").set("Bad file descriptor");
-//            WarnDie.warn(
-//                    new RuntimeScalar("syswrite() on closed filehandle"),
-//                    new RuntimeScalar("\n")
-//            );
-//            return new RuntimeScalar(); // undef
-//        }
+        // Check if fh is null or closed (after TieHandle check)
+        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
+            getGlobalVariable("main::!").set("Bad file descriptor");
+            WarnDie.warn(
+                    new RuntimeScalar("syswrite() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
@@ -1370,13 +1420,20 @@ public class IOOperator {
         // If creating a new file, apply the permissions
         if ((mode & O_CREAT) != 0) {
             File file = RuntimeIO.resolveFile(fileName);
-            if (!file.exists()) {
+            boolean existed = file.exists();
+            // O_EXCL: "error if O_CREAT and the file already exists"
+            if ((mode & O_EXCL) != 0 && existed) {
+                getGlobalVariable("main::!").set("File exists");
+                return scalarFalse;
+            }
+            if (!existed) {
                 try {
                     file.createNewFile();
                     // Apply permissions to the newly created file
                     applyFilePermissions(file.toPath(), perms);
                 } catch (IOException e) {
                     // Failed to create file
+                    getGlobalVariable("main::!").set(e.getMessage());
                     return scalarFalse;
                 }
             }
@@ -2244,11 +2301,10 @@ public class IOOperator {
 
     /**
      * ioctl(FILEHANDLE, FUNCTION, SCALAR)
-     * Implements device control operations.
-     * 
-     * Note: ioctl is highly system-specific and most operations cannot be
-     * implemented in Java. This stub allows code that uses ioctl to compile
-     * and run, but operations will generally fail or be no-ops.
+     * Implements device control operations via FFM native ioctl.
+     *
+     * Perl semantics: returns "0 but true" when ioctl returns 0,
+     * the actual integer for non-zero success, undef on error (with $! set).
      */
     public static RuntimeScalar ioctl(int ctx, RuntimeBase... args) {
         if (args.length < 3) {
@@ -2257,14 +2313,64 @@ public class IOOperator {
         }
 
         try {
-            // ioctl is generally not implementable in pure Java
-            // Return false to indicate the operation is not supported
-            getGlobalVariable("main::!").set("ioctl not implemented on this platform");
-            return scalarFalse;
+            RuntimeScalar fileHandle = args[0].scalar();
+            long request = args[1].scalar().getLong();
+            RuntimeScalar scalarArg = args[2].scalar();
 
+            RuntimeIO fh = fileHandle.getRuntimeIO();
+            if (fh == null || fh.ioHandle == null) {
+                getGlobalVariable("main::!").set(9); // EBADF
+                return scalarUndef;
+            }
+
+            // Get the native file descriptor
+            RuntimeScalar filenoResult = fh.ioHandle.fileno();
+            int fd = filenoResult.getDefinedBoolean() ? filenoResult.getInt() : -1;
+
+            if (fd < 0 || NativeUtils.IS_WINDOWS) {
+                getGlobalVariable("main::!").set("ioctl not supported on this handle");
+                return scalarUndef;
+            }
+
+            // Determine if this is a pointer-type or int-type ioctl.
+            // Perl ioctl passes either a packed binary string (pointer-type)
+            // or an integer scalar (int-type, e.g., TIOCSCTTY with arg 0).
+            // We detect by checking if the scalar looks like a binary buffer
+            // (length > 4 is a good heuristic — struct winsize is 8 bytes).
+            String scalarStr = scalarArg.toString();
+            byte[] buf = scalarStr.getBytes(StandardCharsets.ISO_8859_1);
+            int result;
+
+            if (buf.length >= 8) {
+                // Pointer argument — pass the scalar's bytes as a buffer
+                result = FFMPosix.get().ioctlWithPointer(fd, request, buf);
+                if (result >= 0) {
+                    // Write modified buffer back to the scalar (for read-type ioctls like TIOCGWINSZ)
+                    scalarArg.set(new String(buf, StandardCharsets.ISO_8859_1));
+                }
+            } else {
+                // Integer argument (e.g., TIOCSCTTY with arg 0, or TIOCNOTTY)
+                int intArg = scalarArg.getInt();
+                result = FFMPosix.get().ioctlWithInt(fd, request, intArg);
+            }
+
+            if (result < 0) {
+                getGlobalVariable("main::!").set(FFMPosix.get().errno());
+                return scalarUndef;
+            }
+
+            // Perl convention: ioctl returns "0 but true" for 0, or the integer value
+            if (result == 0) {
+                return new RuntimeScalar("0 but true");
+            }
+            return new RuntimeScalar(result);
+
+        } catch (UnsupportedOperationException e) {
+            getGlobalVariable("main::!").set("ioctl not implemented on this platform");
+            return scalarUndef;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("ioctl failed: " + e.getMessage());
-            return scalarFalse;
+            return scalarUndef;
         }
     }
 
@@ -2963,7 +3069,10 @@ public class IOOperator {
     }
 
     public static RuntimeScalar sysseek(int ctx, RuntimeBase... args) {
-        return seek(ctx, args);
+        if (args.length < 3) throw new PerlCompilerException("Not enough arguments for sysseek");
+        RuntimeList list = new RuntimeList();
+        for (int i = 1; i < args.length; i++) list.add(args[i]);
+        return sysseek(args[0].scalar(), list);
     }
 
     public static RuntimeScalar read(int ctx, RuntimeBase... args) {

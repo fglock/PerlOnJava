@@ -1023,9 +1023,13 @@ public class Variable {
         // When the sigil is %, inner {} should be treated as hash constructor (not block)
         // to match Perl 5's behavior: %{ {map { $_ => 1 } @_} } should parse the inner {} as hashref.
         boolean savedInsideBracedDereference = parser.insideBracedDereference;
+        // Reset parsingTakeReference inside block context: the block inside @{...} is an
+        // independent evaluation context, so \@{&func} should call &func (not take a reference).
+        boolean savedParsingTakeReference = parser.parsingTakeReference;
         if (sigil.equals("%")) {
             parser.insideBracedDereference = true;
         }
+        parser.parsingTakeReference = false;
         try {
             BlockNode block = ParseBlock.parseBlock(parser);
             if (!TokenUtils.peek(parser).text.equals("}")) {
@@ -1055,6 +1059,7 @@ public class Variable {
             throw new PerlParserException(multiLineError);
         } finally {
             parser.insideBracedDereference = savedInsideBracedDereference;
+            parser.parsingTakeReference = savedParsingTakeReference;
         }
     }
 

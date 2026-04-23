@@ -141,6 +141,26 @@ public class BytecodeCompiler implements Visitor {
      */
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
                             Map<String, Integer> parentRegistry) {
+        this(sourceName, sourceLine, errorUtil, parentRegistry, null);
+    }
+
+    /**
+     * Constructor for eval STRING with parent scope variable registry and declaration kinds.
+     * Initializes symbolTable with variables from parent scope, preserving 'our' vs 'my' decls
+     * so that captured 'our' (package) variables are still resolved via GlobalVariable at
+     * runtime instead of being bound to the scalar captured at eval-entry time (which would
+     * make `local $OurVar` in the caller invisible to the eval body).
+     *
+     * @param sourceName     Source name for error messages
+     * @param sourceLine     Source line for error messages
+     * @param errorUtil      Error message utility
+     * @param parentRegistry Variable registry from parent scope (for eval STRING)
+     * @param parentDecls    Optional map of varName -> decl kind ("my"/"our"/"state"). Any name
+     *                       not present defaults to "my".
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                            Map<String, Integer> parentRegistry,
+                            Map<String, String> parentDecls) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -153,12 +173,17 @@ public class BytecodeCompiler implements Visitor {
         this.isEvalString = true;
 
         if (parentRegistry != null) {
-            // Add parent scope variables to symbolTable (for eval STRING variable capture)
+            // Add parent scope variables to symbolTable (for eval STRING variable capture).
+            // Preserve the outer declaration kind: 'our' stays 'our' so the variable is
+            // resolved through GlobalVariable (visible to caller-side local), while 'my'/'state'
+            // use the captured register slot.
             for (Map.Entry<String, Integer> entry : parentRegistry.entrySet()) {
                 String varName = entry.getKey();
                 int regIndex = entry.getValue();
                 if (regIndex >= 3) {
-                    symbolTable.addVariableWithIndex(varName, regIndex, "my");
+                    String decl = parentDecls != null ? parentDecls.get(varName) : null;
+                    if (decl == null || decl.isEmpty()) decl = "my";
+                    symbolTable.addVariableWithIndex(varName, regIndex, decl);
                 }
             }
 
@@ -1413,9 +1438,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(arrayReg);
             emit(nameIdx);
             emit(currentSubroutineBeginId);
-        } else if (hasVariable(arrayVarName)) {
+        } else if (hasVariable(arrayVarName) && !isOurVariable(arrayVarName)) {
             arrayReg = getVariableRegister(arrayVarName);
         } else {
+            // 'our' arrays (or undeclared globals) must be fetched from the global
+            // registry on every access so callers' `local @OurArr` is visible.
             arrayReg = allocateRegister();
             String globalArrayName = NameNormalizer.normalizeVariableName(
                     varName,
@@ -1643,9 +1670,11 @@ public class BytecodeCompiler implements Visitor {
             emitReg(hashReg);
             emit(nameIdx);
             emit(currentSubroutineBeginId);
-        } else if (hasVariable(hashVarName)) {
+        } else if (hasVariable(hashVarName) && !isOurVariable(hashVarName)) {
             hashReg = getVariableRegister(hashVarName);
         } else {
+            // 'our' hashes (or undeclared globals) must be fetched from the global
+            // registry on every access so callers' `local %OurHash` is visible.
             hashReg = allocateRegister();
             String globalHashName = NameNormalizer.normalizeVariableName(
                     varName,
@@ -1960,9 +1989,12 @@ public class BytecodeCompiler implements Visitor {
             case "/=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_DIV_ASSIGN : Opcodes.DIVIDE_ASSIGN);
             case "%=" -> emit(isIntegerEnabled() ? Opcodes.INTEGER_MOD_ASSIGN : Opcodes.MODULUS_ASSIGN);
             case ".=" -> emit(Opcodes.STRING_CONCAT_ASSIGN);
-            case "&=", "binary&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);  // Numeric bitwise AND
-            case "|=", "binary|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);   // Numeric bitwise OR
-            case "^=", "binary^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);  // Numeric bitwise XOR
+            case "&=" -> emit(Opcodes.BITWISE_AND_ASSIGN);              // Bitwise AND (dispatch)
+            case "|=" -> emit(Opcodes.BITWISE_OR_ASSIGN);               // Bitwise OR (dispatch)
+            case "^=" -> emit(Opcodes.BITWISE_XOR_ASSIGN);              // Bitwise XOR (dispatch)
+            case "binary&=" -> emit(Opcodes.BINARY_AND_ASSIGN);         // Numeric-only bitwise AND
+            case "binary|=" -> emit(Opcodes.BINARY_OR_ASSIGN);          // Numeric-only bitwise OR
+            case "binary^=" -> emit(Opcodes.BINARY_XOR_ASSIGN);         // Numeric-only bitwise XOR
             case "&.=" -> emit(Opcodes.STRING_BITWISE_AND_ASSIGN);      // String bitwise AND
             case "|.=" -> emit(Opcodes.STRING_BITWISE_OR_ASSIGN);       // String bitwise OR
             case "^.=" -> emit(Opcodes.STRING_BITWISE_XOR_ASSIGN);      // String bitwise XOR
@@ -4475,11 +4507,20 @@ public class BytecodeCompiler implements Visitor {
         CompileOperator.visitOperator(this, node);
     }
 
+    // Sanity cap on register count. The backing storage is fully dynamic —
+    // bytecode is an ArrayList<Integer> during compile, and the runtime register
+    // array is allocated once per call as new RuntimeBase[maxRegisterEverUsed+1].
+    // This cap only exists to catch pathological / runaway allocations; at 16M
+    // registers a single call frame would already need ~128MB for the register
+    // array, which is plenty of headroom for real code (e.g. CPAN CHECKSUMS
+    // files eval'd by Safe->reval, which can legitimately need 200K+ registers).
+    private static final int REGISTER_LIMIT = 16 * 1024 * 1024;
+
     int allocateRegister() {
         int reg = nextRegister++;
-        if (reg > 65535) {
-            throwCompilerException("Too many registers: exceeded 65535 register limit. " +
-                    "Consider breaking this code into smaller subroutines.");
+        if (reg > REGISTER_LIMIT) {
+            throwCompilerException("Too many registers: exceeded " + REGISTER_LIMIT +
+                    " register limit. Consider breaking this code into smaller subroutines.");
         }
         // Track the highest register ever used for array sizing
         if (reg > maxRegisterEverUsed) {
@@ -4753,8 +4794,8 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
-     * Emit a register index as a short value.
-     * Registers are now 16-bit (0-65535) instead of 8-bit (0-255).
+     * Emit a register index. Registers are ints (full 32-bit range, bounded by
+     * REGISTER_LIMIT) stored in one bytecode slot since the stream is int[].
      */
     void emitReg(int register) {
         bytecode.add(register);

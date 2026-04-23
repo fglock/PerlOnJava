@@ -382,6 +382,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         if (this.globName.endsWith("::") && value.globName.endsWith("::")) {
             GlobalVariable.setStashAlias(this.globName, value.globName);
+            // Unify the stash-view hash so `\%Dst:: == \%Src::` and `*Dst::{HASH} == *Src::{HASH}`.
+            // Without this, the two RuntimeStash objects remain distinct even though name-level
+            // lookups resolve through stashAliases. Perl 5 semantics make the two package hashes
+            // share the same underlying SV.
+            RuntimeHash srcStash = GlobalVariable.getGlobalHash(value.globName);
+            GlobalVariable.globalHashes.put(this.globName, srcStash);
+            // Migrate any pre-existing IO entries from Dst:: to Src::. Unlike code
+            // and variable slots (where real Perl keeps the CV/SV pinned to its
+            // compile-time package), IO handles are usually transient and the
+            // parser's DATA filehandle placeholder is the common case that
+            // NEEDS to follow the alias — otherwise `<DATA>` in the aliased
+            // package reads an empty handle because the placeholder was set up
+            // at Dst::DATA before this alias declaration ran.
+            GlobalVariable.migrateStashIOEntries(this.globName, value.globName);
             InheritanceResolver.invalidateCache();
             GlobalVariable.clearPackageCache();
             return value.scalar();
@@ -557,16 +571,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                     yield this.hashSlot.createReference();
                 }
-                // For stash globs (name ends with ::), return the package stash.
-                // The glob for a stash entry like $::{"UNIVERSAL::"} has globName
-                // "main::UNIVERSAL::" but the stash is stored with key "UNIVERSAL::".
-                // Strip the "main::" prefix for top-level packages; for nested packages
-                // like $Foo::{"Bar::"}, globName "Foo::Bar::" IS the stash key.
+                // Stash entries: *Pkg::{HASH} always returns the package's symbol table,
+                // even if it hasn't been explicitly materialized. This mirrors Perl 5
+                // where the stash is an intrinsic property of the package.
+                // getGlobalHash() internally normalizes "main::Foo::" -> "Foo::".
                 if (this.globName.endsWith("::")) {
-                    String stashKey = this.globName.startsWith("main::")
-                            ? this.globName.substring(6)
-                            : this.globName;
-                    yield GlobalVariable.getGlobalHash(stashKey).createReference();
+                    yield GlobalVariable.getGlobalHash(this.globName).createReference();
                 }
                 // Only return reference if hash exists (has elements or was explicitly created)
                 if (GlobalVariable.existsGlobalHash(this.globName)) {

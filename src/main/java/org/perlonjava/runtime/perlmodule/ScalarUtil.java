@@ -27,7 +27,7 @@ public class ScalarUtil extends PerlModuleBase {
         ScalarUtil scalarUtil = new ScalarUtil();
         scalarUtil.initializeExporter(); // Use the base class method to initialize the exporter
         // Set $VERSION so CPAN.pm can detect our bundled version
-        GlobalVariable.getGlobalVariable("Scalar::Util::VERSION").set(new RuntimeScalar("1.63"));
+        GlobalVariable.getGlobalVariable("Scalar::Util::VERSION").set(new RuntimeScalar("1.70"));
         scalarUtil.defineExport("EXPORT_OK", "blessed", "refaddr", "reftype", "weaken", "unweaken", "isweak",
                 "dualvar", "isdual", "isvstring", "looks_like_number", "openhandle", "readonly",
                 "set_prototype", "tainted");
@@ -53,6 +53,21 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
+     * Triggers FETCH on a tied scalar so that get-magic is fired exactly
+     * once for blessed/reftype/refaddr. Also unwraps READONLY_SCALAR.
+     */
+    private static RuntimeScalar magicallyDeref(RuntimeScalar scalar) {
+        if (scalar == null) return scalar;
+        if (scalar.type == TIED_SCALAR) {
+            scalar = scalar.tiedFetch();
+        }
+        if (scalar != null && scalar.type == READONLY_SCALAR) {
+            scalar = (RuntimeScalar) scalar.value;
+        }
+        return scalar;
+    }
+
+    /**
      * Checks if a scalar is blessed and returns the blessing information.
      *
      * @param args The arguments passed to the method.
@@ -64,8 +79,7 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for blessed() method");
         }
 
-        RuntimeScalar scalar = args.get(0);
-        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
+        RuntimeScalar scalar = magicallyDeref(args.get(0));
         int blessId = blessedId(scalar);
         // Return undef for unblessed references (blessId == 0)
         if (blessId == 0) {
@@ -89,8 +103,7 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for refaddr() method");
         }
-        RuntimeScalar scalar = args.get(0);
-        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
+        RuntimeScalar scalar = magicallyDeref(args.get(0));
         // refaddr returns undef for non-references
         // For references, return the identity hash code of the underlying referenced object
         switch (scalar.type) {
@@ -121,8 +134,7 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for reftype() method");
         }
-        RuntimeScalar scalar = args.get(0);
-        if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
+        RuntimeScalar scalar = magicallyDeref(args.get(0));
         String type = switch (scalar.type) {
             case REFERENCE -> {
                 // Inspect the referent to distinguish SCALAR refs from REF (ref-to-ref)
@@ -257,8 +269,9 @@ public class ScalarUtil extends PerlModuleBase {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for isvstring() method");
         }
-        // Placeholder for isvstring functionality
-        return new RuntimeScalar(false).getList();
+        RuntimeScalar s = args.get(0);
+        if (s.type == READONLY_SCALAR) s = (RuntimeScalar) s.value;
+        return new RuntimeScalar(s.type == VSTRING).getList();
     }
 
     /**

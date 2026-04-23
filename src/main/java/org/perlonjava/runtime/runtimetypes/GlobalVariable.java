@@ -129,6 +129,7 @@ public class GlobalVariable {
         globalGlobs.clear();
         isSubs.clear();
         stashAliases.clear();
+        resolvedStashAliasCache.clear();
         globAliases.clear();
         declaredGlobalVariables.clear();
         declaredGlobalArrays.clear();
@@ -169,11 +170,13 @@ public class GlobalVariable {
         String dst = dstNamespace.endsWith("::") ? dstNamespace : dstNamespace + "::";
         String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
         stashAliases.put(dst, src);
+        resolvedStashAliasCache.clear();
     }
 
     public static void clearStashAlias(String namespace) {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
         stashAliases.remove(key);
+        resolvedStashAliasCache.clear();
     }
 
     public static String resolveStashAlias(String namespace) {
@@ -187,6 +190,98 @@ public class GlobalVariable {
             return aliased.substring(0, aliased.length() - 2);
         }
         return aliased;
+    }
+
+    /**
+     * Cache of fully-resolved stash aliases with transitive chains collapsed to
+     * their terminal package. Keys and values both include the trailing "::".
+     * Invariant: for any `"Pkg::"` with no alias, the cache stores the SAME
+     * string instance back, so callers can use reference equality to detect a
+     * non-alias hit without allocating. Cleared whenever {@link #stashAliases}
+     * is mutated.
+     */
+    private static final Map<String, String> resolvedStashAliasCache = new HashMap<>();
+
+    /** Hop cap for cycle detection in {@link #resolvePackageAliasCached}. */
+    private static final int STASH_ALIAS_HOP_CAP = 16;
+
+    /**
+     * Resolves a package name (with trailing "::") to its terminal target,
+     * following any {@link #setStashAlias} chain to a fixed point. Result is
+     * cached. Returns the input string (identity-equal) when no alias applies.
+     */
+    private static String resolvePackageAliasCached(String pkgWithColons) {
+        String cached = resolvedStashAliasCache.get(pkgWithColons);
+        if (cached != null) {
+            return cached;
+        }
+        String current = pkgWithColons;
+        for (int hop = 0; hop < STASH_ALIAS_HOP_CAP; hop++) {
+            String next = stashAliases.get(current);
+            if (next == null || next.equals(current)) {
+                break;
+            }
+            current = next;
+        }
+        // Use identity when no alias applies so callers can fast-path with ==.
+        String result = current.equals(pkgWithColons) ? pkgWithColons : current;
+        resolvedStashAliasCache.put(pkgWithColons, result);
+        return result;
+    }
+
+    /**
+     * Resolves a fully-qualified variable/sub name through any stash aliases
+     * declared via `*Dst:: = *Src::`. FQNs without "::" are returned unchanged;
+     * FQNs ending in "::" (the stash-view hash itself, e.g. `%Foo::`) are
+     * returned unchanged — callers working with those should use
+     * {@link #resolveStashAlias(String)} directly and the unified hash storage.
+     *
+     * <p>Fast path: if no aliases have been declared, returns the input
+     * reference unchanged (no hashing, no substring). Hot-path accessors may
+     * therefore call this unconditionally.
+     *
+     * @param fqn a name like "Foo::bar" — may or may not contain "::"
+     * @return the alias-resolved FQN, or the original reference if unchanged
+     */
+    public static String resolveAliasedFqn(String fqn) {
+        if (stashAliases.isEmpty() || fqn == null) {
+            return fqn;
+        }
+        int idx = fqn.lastIndexOf("::");
+        if (idx < 0) {
+            return fqn;
+        }
+        // "Pkg::" — the stash-view hash itself. Leave it alone.
+        if (idx == fqn.length() - 2) {
+            return fqn;
+        }
+        String pkg = fqn.substring(0, idx + 2);
+        String resolved = resolvePackageAliasCached(pkg);
+        if (resolved == pkg) {  // identity: no alias applied
+            return fqn;
+        }
+        return resolved + fqn.substring(idx + 2);
+    }
+
+    /**
+     * Migrates all IO entries keyed under {@code dstNs} (a package name ending
+     * in "::") into the corresponding slots under {@code srcNs}. Called when
+     * `*Dst:: = *Src::` fires so a DATA filehandle placeholder set up by the
+     * parser at Dst::DATA remains reachable after lookups start resolving to
+     * Src::DATA. Entries already present under {@code srcNs} are preserved.
+     * Scoped to IO only — CVs, scalars, arrays, hashes keep their original
+     * package binding as in real Perl.
+     */
+    public static void migrateStashIOEntries(String dstNs, String srcNs) {
+        if (dstNs.equals(srcNs)) return;
+        int dstLen = dstNs.length();
+        for (String key : new java.util.ArrayList<>(globalIORefs.keySet())) {
+            if (key.startsWith(dstNs) && key.length() > dstLen) {
+                String newKey = srcNs + key.substring(dstLen);
+                RuntimeGlob value = globalIORefs.remove(key);
+                if (value != null) globalIORefs.putIfAbsent(newKey, value);
+            }
+        }
     }
 
     /**
@@ -243,6 +338,19 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global variable.
      */
     public static RuntimeScalar getGlobalVariable(String key) {
+        // Stash alias resolution with fallback: if the aliased destination has
+        // a value, use it; otherwise fall through to the raw key. See
+        // getGlobalCodeRef for the rationale (preserve compile-time-qualified
+        // refs while letting runtime symbolic refs follow the alias).
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                RuntimeScalar resolved = globalVariables.get(resolvedKey);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
         RuntimeScalar var = globalVariables.get(key);
         if (var == null) {
             // Need to initialize global variable
@@ -291,6 +399,12 @@ public class GlobalVariable {
      * @return True if the global variable exists, false otherwise.
      */
     public static boolean existsGlobalVariable(String key) {
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key && globalVariables.containsKey(resolvedKey)) {
+                return true;
+            }
+        }
         return globalVariables.containsKey(key)
                 || key.endsWith("::a")  // $a, $b always exist
                 || key.endsWith("::b");
@@ -324,6 +438,15 @@ public class GlobalVariable {
      * @return The RuntimeArray representing the global array.
      */
     public static RuntimeArray getGlobalArray(String key) {
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                RuntimeArray resolved = globalArrays.get(resolvedKey);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
         RuntimeArray var = globalArrays.get(key);
         if (var == null) {
             var = new RuntimeArray();
@@ -339,6 +462,12 @@ public class GlobalVariable {
      * @return True if the global array exists, false otherwise.
      */
     public static boolean existsGlobalArray(String key) {
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key && globalArrays.containsKey(resolvedKey)) {
+                return true;
+            }
+        }
         return globalArrays.containsKey(key);
     }
 
@@ -359,6 +488,24 @@ public class GlobalVariable {
      * @return The RuntimeHash representing the global hash.
      */
     public static RuntimeHash getGlobalHash(String key) {
+        // Normalize stash lookups: in Perl, all packages are children of main::,
+        // so %{main::F::} and %F:: refer to the same stash.
+        // Strip a leading "main::" from stash keys (but keep "main::" itself).
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            key = key.substring(6);
+        }
+        // Stash alias resolution with fallback for non-stash-view hashes
+        // (e.g. %Pkg::h). Stash-view keys (ending in "::") are already
+        // unified at assignment time in RuntimeGlob.set(RuntimeGlob).
+        if (!stashAliases.isEmpty() && !key.endsWith("::")) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                RuntimeHash resolved = globalHashes.get(resolvedKey);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
             // Check if this is a package stash (ends with ::)
@@ -379,7 +526,12 @@ public class GlobalVariable {
      * @return True if the global hash exists, false otherwise.
      */
     public static boolean existsGlobalHash(String key) {
-        return globalHashes.containsKey(key);
+        if (globalHashes.containsKey(key)) return true;
+        // Normalize stash lookups: %{main::F::} and %F:: refer to the same stash.
+        if (key.length() > 6 && key.endsWith("::") && key.startsWith("main::")) {
+            return globalHashes.containsKey(key.substring(6));
+        }
+        return false;
     }
 
     /**
@@ -403,6 +555,27 @@ public class GlobalVariable {
     public static RuntimeScalar getGlobalCodeRef(String key) {
         if (key == null) {
             return new RuntimeScalar();
+        }
+        // Stash aliasing: after `*Dst:: = *Src::`, look up under the resolved
+        // target first. If no sub exists there, fall back to the raw key so
+        // that compile-time-qualified references like `\&Pkg::foo` keep
+        // working when the sub still lives at its original FQN.
+        // This matches real Perl, which keeps each CV's CvGV pinned to the
+        // package where it was compiled — the stash alias only redirects
+        // new writes and runtime hash-view lookups.
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                RuntimeScalar resolvedPinned = pinnedCodeRefs.get(resolvedKey);
+                if (resolvedPinned != null) {
+                    return resolvedPinned;
+                }
+                RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
+                if (resolvedVar != null) {
+                    pinnedCodeRefs.put(resolvedKey, resolvedVar);
+                    return resolvedVar;
+                }
+            }
         }
         // First check if we have a pinned reference that survives stash deletion
         RuntimeScalar pinned = pinnedCodeRefs.get(key);
@@ -454,10 +627,13 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global code reference.
      */
     public static RuntimeScalar defineGlobalCodeRef(String key) {
-        RuntimeScalar ref = getGlobalCodeRef(key);
+        // For defines, always resolve through stash aliases: `*Dst:: = *Src::`
+        // followed by `sub Dst::foo {}` should install the sub in Src::foo.
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar ref = getGlobalCodeRef(resolvedKey);
         // Ensure it's in globalCodeRefs so method resolution finds it
-        if (!globalCodeRefs.containsKey(key)) {
-            globalCodeRefs.put(key, ref);
+        if (!globalCodeRefs.containsKey(resolvedKey)) {
+            globalCodeRefs.put(resolvedKey, ref);
         }
         return ref;
     }
@@ -469,6 +645,12 @@ public class GlobalVariable {
      * @return True if the global code reference exists, false otherwise.
      */
     public static boolean existsGlobalCodeRef(String key) {
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key && globalCodeRefs.containsKey(resolvedKey)) {
+                return true;
+            }
+        }
         return globalCodeRefs.containsKey(key);
     }
 
@@ -656,6 +838,19 @@ public class GlobalVariable {
     }
 
     /**
+     * Runtime check for typed lexical declarations (my TYPE $var).
+     * Throws a compile-time-like error matching Perl's "No such class TYPE"
+     * if the package is not loaded at the point of execution.
+     *
+     * @param className The type annotation class name
+     */
+    public static void checkClassExists(String className) {
+        if (!isPackageLoaded(className)) {
+            throw new RuntimeException("No such class " + className);
+        }
+    }
+
+    /**
      * Resolves a fully-qualified variable name through stash hash redirections.
      * <p>
      * When {@code *PKG:: = \%OtherPkg::} is executed, accesses to {@code PKG::name}
@@ -729,7 +924,16 @@ public class GlobalVariable {
      * @return True if the global IO reference exists, false otherwise.
      */
     public static boolean existsGlobalIO(String key) {
-        return globalIORefs.containsKey(key);
+        if (globalIORefs.containsKey(key)) return true;
+        // Follow stash hash redirects so a bareword-handle existence probe in
+        // an aliased package sees IO placeholders that got redirected at
+        // auto-viv time. Without this, the parser path that tries
+        // parseBarewordHandle("DATA") in package Dst after `*Dst:: = *Src::`
+        // misses the handle and falls back to the hard-coded main::DATA path,
+        // which then reads from an empty placeholder.
+        String resolved = resolveStashHashRedirect(key);
+        if (!resolved.equals(key) && globalIORefs.containsKey(resolved)) return true;
+        return false;
     }
 
     /**

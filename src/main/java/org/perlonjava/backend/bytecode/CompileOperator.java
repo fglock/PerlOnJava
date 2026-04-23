@@ -729,6 +729,8 @@ public class CompileOperator {
             case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
             case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
             case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
+            case "pipe" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PIPE);
+            case "socketpair" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKETPAIR);
             case "write" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.WRITE);
             case "formline" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.FORMLINE);
             case "printf" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PRINTF);
@@ -827,9 +829,12 @@ public class CompileOperator {
                     }
                     bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
                     if (isClass) ClassRegistry.registerClass(packageName);
-                    boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                    // Always emit PUSH_PACKAGE so the runtime tracker is restored when
+                    // the enclosing block/sub/file exits. Perl 5's `package Foo;` is
+                    // lexically scoped; the `isScoped` annotation used to distinguish
+                    // `package Foo { BLOCK }` but bare `package Foo;` is equally scoped.
                     int nameIdx = bytecodeCompiler.addToStringPool(packageName);
-                    bytecodeCompiler.emit(isScoped ? Opcodes.PUSH_PACKAGE : Opcodes.SET_PACKAGE);
+                    bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
                     bytecodeCompiler.emit(nameIdx);
                     bytecodeCompiler.lastResultReg = -1;
                 } else {
@@ -1155,7 +1160,7 @@ public class CompileOperator {
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                bytecodeCompiler.emit(Opcodes.NEG_SCALAR);
+                bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.NEG_NO_OVERLOAD : Opcodes.NEG_SCALAR);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
                 bytecodeCompiler.lastResultReg = rd;

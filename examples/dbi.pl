@@ -1,13 +1,9 @@
-# misc/snippets/dbi.pl
+# examples/dbi.pl
 #
-# Install h2 driver:
-# curl https://repo1.maven.org/maven2/com/h2database/h2/2.2.224/h2-2.2.224.jar --output h2-2.2.224.jar
+# SQLite is bundled with PerlOnJava - no additional installation needed.
 #
 # Run using:
-# java -cp "h2-2.2.224.jar:target/perlonjava-5.42.0.jar" org.perlonjava.app.cli.Main examples/dbi.pl
-#
-# or using:
-# CLASSPATH=h2-2.2.224.jar ./jperl examples/dbi.pl
+# ./jperl examples/dbi.pl
 #
 
 use strict;
@@ -16,18 +12,18 @@ use DBI;
 use Data::Dumper;
 use feature 'say';
 
-# Connect to H2 database
+# Connect to SQLite in-memory database (bundled, no extra driver needed)
 my $dbh = DBI->connect(
-    "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",  # In-memory H2 database
-    "sa",                 # Default H2 username
-    "",                   # Empty password
+    "dbi:SQLite:dbname=:memory:",
+    "",                   # No username needed
+    "",                   # No password needed
     { RaiseError => 1 }
 );
 
 # Create a test table
 $dbh->do("CREATE TABLE users (
-    id INTEGER AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
     age INTEGER
 )");
 
@@ -82,7 +78,7 @@ print Dumper $first_row;
 
 # Fetch as hash refs with specific column names
 $sth->execute(20);
-my $named_cols = $sth->fetchall_arrayref({ NAME => 1, AGE => 1 });
+my $named_cols = $sth->fetchall_arrayref({ name => 1, age => 1 });
 say "\nNamed columns only:";
 print Dumper $named_cols;
 
@@ -106,9 +102,9 @@ print Dumper $column_subset;
 
 # Complex query with joins and hash slice (assuming we add a new table)
 $dbh->do("CREATE TABLE orders (
-    order_id INTEGER AUTO_INCREMENT PRIMARY KEY,
+    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
-    amount DECIMAL(10,2),
+    amount REAL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 )");
 
@@ -136,7 +132,7 @@ print Dumper $user_orders;
 
 
 # Add a new column that allows NULL
-$dbh->do("ALTER TABLE users ADD COLUMN last_login TIMESTAMP NULL");
+$dbh->do("ALTER TABLE users ADD COLUMN last_login TEXT");
 
 # Insert rows with NULL values
 $dbh->do("INSERT INTO users (name, age, last_login) VALUES (?, ?, ?)",
@@ -199,7 +195,7 @@ my $nested = $dbh->selectall_hashref(
 print Dumper $nested;
 
 # Access nested data example
-say "\nAccessing   nested data:";
+say "\nAccessing nested data:";
 for my $user_id (sort keys %$nested) {
     say "User $user_id orders:";
     for my $order_id (sort keys %{$nested->{$user_id}}) {
@@ -211,4 +207,3 @@ for my $user_id (sort keys %$nested) {
 
 $sth->finish;
 $dbh->disconnect;
-

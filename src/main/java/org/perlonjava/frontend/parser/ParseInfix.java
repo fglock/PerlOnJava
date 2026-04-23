@@ -162,8 +162,14 @@ public class ParseInfix {
             case ",":
             case "=>":
                 if (token.text.equals("=>") && left instanceof IdentifierNode) {
-                    // Autoquote - Convert IdentifierNode to StringNode
-                    left = new StringNode(((IdentifierNode) left).name, ((IdentifierNode) left).tokenIndex);
+                    // Autoquote - Convert IdentifierNode to StringNode.
+                    // Strip trailing "::" so that `Foo::Bar:: => ...` autoquotes to "Foo::Bar",
+                    // matching Perl 5's behavior for package-name barewords.
+                    String name = ((IdentifierNode) left).name;
+                    if (name.endsWith("::") && !name.equals("::")) {
+                        name = name.substring(0, name.length() - 2);
+                    }
+                    left = new StringNode(name, ((IdentifierNode) left).tokenIndex);
                 }
                 token = peek(parser);
                 if (token.type == LexerTokenType.EOF || ListParser.isListTerminator(parser, token) || token.text.equals(",") || token.text.equals("=>")) {

@@ -4,7 +4,6 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Enumeration;
 import java.util.Properties;
@@ -33,36 +32,48 @@ public class DBI extends PerlModuleBase {
     /**
      * Initializes and registers all DBI methods.
      * This method must be called before using any DBI functionality.
+     *
+     * With the switch to upstream DBI.pm + DBI::PurePerl, methods are now
+     * registered under DBD::JDBC::{dr,db,st} sub-packages so upstream's
+     * dispatch (which looks up $h->{ImplementorClass}::method) routes here
+     * for JDBC-backed dbhs. DBD::SQLite / DBD::Mem etc. inherit from these.
      */
     public static void initialize() {
         // Create new DBI instance
         DBI dbi = new DBI();
         try {
-            // Register all supported DBI methods
-            dbi.registerMethod("connect", null);
-            dbi.registerMethod("prepare", null);
-            dbi.registerMethod("execute", null);
-            dbi.registerMethod("fetchrow_arrayref", null);
-            dbi.registerMethod("fetchrow_hashref", null);
-            dbi.registerMethod("rows", null);
-            dbi.registerMethod("disconnect", null);
-            dbi.registerMethod("finish", null);
-            dbi.registerMethod("last_insert_id", null);
-            dbi.registerMethod("begin_work", null);
-            dbi.registerMethod("commit", null);
-            dbi.registerMethod("rollback", null);
-            dbi.registerMethod("bind_param", null);
-            dbi.registerMethod("bind_param_inout", null);
-            dbi.registerMethod("bind_col", null);
-            dbi.registerMethod("table_info", null);
-            dbi.registerMethod("column_info", null);
-            dbi.registerMethod("primary_key_info", null);
-            dbi.registerMethod("foreign_key_info", null);
-            dbi.registerMethod("type_info", null);
-            dbi.registerMethod("ping", null);
-            dbi.registerMethod("available_drivers", null);
-            dbi.registerMethod("data_sources", null);
-            dbi.registerMethod("get_info", null);
+            // dr-level: connect creates a dbh. available_drivers / data_sources
+            // are class-level but also registered here for backwards compat.
+            dbi.registerMethodInPackage("DBD::JDBC::dr", "connect", "connect");
+            dbi.registerMethodInPackage("DBD::JDBC::dr", "data_sources", "data_sources");
+
+            // db-level: SQL prep / execute / transaction / info methods.
+            dbi.registerMethodInPackage("DBD::JDBC::db", "prepare", "prepare");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "disconnect", "disconnect");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "last_insert_id", "last_insert_id");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "begin_work", "begin_work");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "commit", "commit");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "rollback", "rollback");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "ping", "ping");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "table_info", "table_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "column_info", "column_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "primary_key_info", "primary_key_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "foreign_key_info", "foreign_key_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "type_info", "type_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "get_info", "get_info");
+
+            // st-level: execute / fetch / bind / row-count methods.
+            dbi.registerMethodInPackage("DBD::JDBC::st", "execute", "execute");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_arrayref", "fetchrow_arrayref");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_hashref", "fetchrow_hashref");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "rows", "rows");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param", "bind_param");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param_inout", "bind_param_inout");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_col", "bind_col");
+
+            // Legacy: available_drivers and data_sources as DBI-class methods.
+            // Upstream DBI.pm defines available_drivers itself; register only
+            // what it doesn't already provide.
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -125,13 +136,9 @@ public class DBI extends PerlModuleBase {
             dbh.put("Password", new RuntimeScalar(password));
             RuntimeScalar attr = args.size() > 4 ? args.get(4) : new RuntimeScalar();
 
-            // Set dbh attributes. Use `new RuntimeScalar(bool)` (mutable) instead
-            // of the shared readonly `scalarTrue`/`scalarFalse`, because user
-            // code frequently does `$dbh->{AutoCommit} = 0` and a hash slot
-            // holding a readonly scalar triggers "Modification of a read-only
-            // value" on direct assignment. Seen in DBIC t/storage/txn.t line 382.
-            dbh.put("ReadOnly", new RuntimeScalar(false));
-            dbh.put("AutoCommit", new RuntimeScalar(true));
+            // Set dbh attributes
+            dbh.put("ReadOnly", scalarFalse);
+            dbh.put("AutoCommit", scalarTrue);
 
             // Handle credentials file if specified in attributes
             Properties props = new Properties();
@@ -161,14 +168,7 @@ public class DBI extends PerlModuleBase {
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
-            // Use createReferenceWithTrackedElements() for Java-created anonymous hashes.
-            // createReference() would set localBindingExists=true (designed for `my %hash; \%hash`),
-            // which prevents DESTROY from firing via MortalList.flush(). Anonymous hashes
-            // created in Java have no Perl lexical variable, so localBindingExists must be false.
-            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::db"));
-            if (System.getenv("DBI_TRACE_DESTROY") != null) {
-                System.err.println("DBI::connect created dbh=" + System.identityHashCode(dbh) + " url=" + jdbcUrl);
-            }
+            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBD::JDBC::db"));
             return dbhRef.getList();
         }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
@@ -215,13 +215,7 @@ public class DBI extends PerlModuleBase {
             conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
 
             // Set ReadOnly attribute in case it was changed
-            // Note: SQLite JDBC requires ReadOnly before connection is established;
-            // suppress the error here since it's a driver limitation
-            try {
-                conn.setReadOnly(sth.get("ReadOnly").getBoolean());
-            } catch (SQLException ignored) {
-                // Some drivers (e.g., SQLite JDBC) can't change ReadOnly after connection
-            }
+            conn.setReadOnly(sth.get("ReadOnly").getBoolean());
 
             // Prepare statement
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -255,12 +249,9 @@ public class DBI extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
 
-            // Store only the JDBC statement (not the full sth ref) for last_insert_id fallback.
-            // Storing sthRef here would create a circular reference (dbh.sth → sth, sth.Database → dbh)
-            // that prevents both objects from being garbage collected.
-            dbh.put("sth", sth.get("statement"));
+            dbh.get("sth").set(sthRef);
 
             return sthRef.getList();
         }, dbh, "prepare");
@@ -291,9 +282,10 @@ public class DBI extends PerlModuleBase {
                 sql = "SELECT lastval()";
             } else {
                 // Generic fallback (H2, etc.): use getGeneratedKeys() on the last statement
-                // dbh.sth now stores the raw JDBC Statement (not the full sth ref)
-                RuntimeScalar stmtScalar = finalDbh.get("sth");
-                if (stmtScalar != null && stmtScalar.value instanceof Statement stmt) {
+                RuntimeScalar sthRef = finalDbh.get("sth");
+                if (sthRef != null && RuntimeScalarType.isReference(sthRef)) {
+                    RuntimeHash sth = sthRef.hashDeref();
+                    Statement stmt = (Statement) sth.get("statement").value;
                     ResultSet rs = stmt.getGeneratedKeys();
                     if (rs.next()) {
                         long id = rs.getLong(1);
@@ -373,15 +365,15 @@ public class DBI extends PerlModuleBase {
             if (isBegin || isCommit || isRollback) {
                 if (isBegin) {
                     conn.setAutoCommit(false);
-                    dbh.put("AutoCommit", new RuntimeScalar(false));
+                    dbh.put("AutoCommit", scalarFalse);
                 } else if (isCommit) {
                     conn.commit();
                     conn.setAutoCommit(true);
-                    dbh.put("AutoCommit", new RuntimeScalar(true));
+                    dbh.put("AutoCommit", scalarTrue);
                 } else {
                     conn.rollback();
                     conn.setAutoCommit(true);
-                    dbh.put("AutoCommit", new RuntimeScalar(true));
+                    dbh.put("AutoCommit", scalarTrue);
                 }
                 sth.put("Executed", scalarTrue);
                 dbh.put("Executed", scalarTrue);
@@ -418,7 +410,7 @@ public class DBI extends PerlModuleBase {
                     if (args.size() > 1) {
                         // Inline parameters passed to execute(@bind_values)
                         for (int i = 1; i < args.size(); i++) {
-                            stmt.setObject(i, toJdbcValue(args.get(i)));
+                            stmt.setObject(i, args.get(i).value);
                         }
                     } else {
                         // Apply stored bound_params from bind_param() calls
@@ -428,7 +420,7 @@ public class DBI extends PerlModuleBase {
                             for (RuntimeScalar key : boundParams.keys().elements) {
                                 int paramIndex = Integer.parseInt(key.toString());
                                 RuntimeScalar val = boundParams.get(key.toString());
-                                stmt.setObject(paramIndex, toJdbcValue(val));
+                                stmt.setObject(paramIndex, val.value);
                             }
                         }
                     }
@@ -529,25 +521,9 @@ public class DBI extends PerlModuleBase {
                 RuntimeArray row = new RuntimeArray();
                 ResultSetMetaData metaData = rs.getMetaData();
                 int colCount = metaData.getColumnCount();
-                // Convert each column value to string and add to row array.
-                // Perl 5's DBD::SQLite (without sqlite_unicode) returns byte strings
-                // (no UTF-8 flag). JDBC returns Java Strings which are decoded Unicode.
-                // To match Perl 5 behavior, we must UTF-8 encode the JDBC string and
-                // return it as BYTE_STRING. This is equivalent to sqlite_unicode=0.
-                //
-                // Why: In Perl 5, DBD::SQLite works at the byte level — strings go in
-                // as raw bytes (UTF-8 encoded for STRING, raw for BYTE_STRING) and come
-                // back as raw bytes without the UTF-8 flag. JDBC works at the character
-                // level — it always decodes UTF-8 on fetch. Re-encoding to UTF-8 bytes
-                // here restores the byte-level behavior that Perl code expects.
+                // Convert each column value to string and add to row array
                 for (int i = 1; i <= colCount; i++) {
-                    RuntimeScalar val = RuntimeScalar.newScalarOrString(rs.getObject(i));
-                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
-                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
-                        val.type = RuntimeScalarType.BYTE_STRING;
-                    }
-                    RuntimeArray.push(row, val);
+                    RuntimeArray.push(row, RuntimeScalar.newScalarOrString(rs.getObject(i)));
                 }
 
                 // Update bound columns if any (for bind_columns + fetch pattern)
@@ -614,18 +590,11 @@ public class DBI extends PerlModuleBase {
                 }
                 RuntimeArray columnNames = sth.get(nameStyle).arrayDeref();
 
-                // For each column, add column name -> value pair to hash.
-                // See fetchrow_arrayref for rationale on UTF-8 encode to BYTE_STRING.
+                // For each column, add column name -> value pair to hash
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
-                    RuntimeScalar val = RuntimeScalar.newScalarOrString(value);
-                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
-                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
-                        val.type = RuntimeScalarType.BYTE_STRING;
-                    }
-                    row.put(columnName, val);
+                    row.put(columnName, RuntimeScalar.newScalarOrString(value));
                 }
 
                 // Create reference for hash
@@ -707,99 +676,11 @@ public class DBI extends PerlModuleBase {
     }
 
     /**
-     * Finishes a statement handle, closing the underlying JDBC PreparedStatement.
-     * This releases database locks (e.g., SQLite table locks) held by the statement.
-     *
-     * @param args RuntimeArray containing:
-     *             [0] - Statement handle (sth)
-     * @param ctx  Context parameter
-     * @return RuntimeList containing true (1)
-     */
-    public static RuntimeList finish(RuntimeArray args, int ctx) {
-        RuntimeHash sth = args.get(0).hashDeref();
-
-        // Close the JDBC PreparedStatement to release locks
-        RuntimeScalar stmtScalar = sth.get("statement");
-        if (stmtScalar != null && stmtScalar.value instanceof PreparedStatement stmt) {
-            try {
-                if (!stmt.isClosed()) {
-                    stmt.close();
-                }
-            } catch (Exception e) {
-                // Ignore close errors — statement may already be closed
-            }
-        }
-        // Also close any open ResultSet
-        RuntimeScalar rsScalar = sth.get("execute_result");
-        if (rsScalar != null && RuntimeScalarType.isReference(rsScalar)) {
-            Object rsObj = rsScalar.hashDeref();
-            // execute_result may be stored differently; check raw value
-        }
-
-        sth.put("Active", new RuntimeScalar(false));
-        return new RuntimeScalar(1).getList();
-    }
-
-    /**
      * Internal method to set error information on a handle.
      *
      * @param handle    The database or statement handle
      * @param exception The SQL exception that occurred
      */
-    /**
-     * Converts a RuntimeScalar to a JDBC-compatible Java object.
-     * <p>
-     * Handles type conversion:
-     * - INTEGER → Long (preserves exact integer values)
-     * - DOUBLE → Long if whole number, else Double (matches Perl's stringification: 10.0 → "10")
-     * - UNDEF → null (SQL NULL)
-     * - STRING/BYTE_STRING → String
-     * - References/blessed objects → String via toString() (triggers overload "" if present)
-     */
-    private static Object toJdbcValue(RuntimeScalar scalar) {
-        if (scalar == null) return null;
-        return switch (scalar.type) {
-            case RuntimeScalarType.INTEGER -> scalar.value;
-            case RuntimeScalarType.DOUBLE -> {
-                double d = scalar.getDouble();
-                // If the double is a whole number that fits in long, pass as Long
-                // This matches Perl's stringification: 10.0 → "10"
-                if (d == Math.floor(d) && !Double.isInfinite(d) && !Double.isNaN(d)
-                        && d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
-                    yield (long) d;
-                }
-                yield scalar.value;
-            }
-            case RuntimeScalarType.UNDEF -> null;
-            case RuntimeScalarType.STRING -> scalar.value;
-            case RuntimeScalarType.BYTE_STRING -> {
-                // BYTE_STRING values may contain UTF-8 encoded data (from utf8::encode,
-                // e.g., via DBIx::Class::UTF8Columns::store_column). In Perl 5, these
-                // raw bytes go to DBD::SQLite which stores them as-is. JDBC works at the
-                // character level, so we need to UTF-8 decode the bytes to get the actual
-                // characters before passing to JDBC. This ensures that on fetch (where we
-                // UTF-8 encode the result), the original bytes are recovered:
-                //   INSERT: bytes → UTF-8 decode → chars → JDBC → SQLite
-                //   SELECT: SQLite → JDBC → chars → UTF-8 encode → bytes (same)
-                //
-                // If the bytes are not valid UTF-8 (e.g., raw Latin-1 like "\xE9"), we
-                // fall back to passing the char values as-is. This preserves the current
-                // behavior for non-UTF-8 byte strings.
-                String s = (String) scalar.value;
-                byte[] rawBytes = s.getBytes(StandardCharsets.ISO_8859_1);
-                String decoded = new String(rawBytes, StandardCharsets.UTF_8);
-                // Check if decoding introduced replacement characters (U+FFFD),
-                // which indicates the bytes were not valid UTF-8
-                if (decoded.indexOf('\uFFFD') < 0) {
-                    yield decoded;
-                } else {
-                    yield s;
-                }
-            }
-            default -> scalar.toString(); // Triggers overload "" for blessed refs
-        };
-    }
-
     /**
      * Normalizes JDBC error messages to match native driver format.
      * JDBC drivers (especially SQLite) wrap error messages with extra context:
@@ -840,15 +721,9 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
-            // Perl 5 DBI: begin_work throws if AutoCommit is already off
-            // (i.e., a transaction is already in progress)
-            RuntimeScalar ac = dbh.get("AutoCommit");
-            if (ac != null && !ac.getBoolean()) {
-                throw new RuntimeException("begin_work invalidates a transaction already in progress");
-            }
             Connection conn = (Connection) dbh.get("connection").value;
             conn.setAutoCommit(false);
-            dbh.put("AutoCommit", new RuntimeScalar(false));
+            dbh.put("AutoCommit", scalarFalse);
             return scalarTrue.getList();
         }, dbh, "begin_work");
     }
@@ -860,7 +735,7 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.commit();
             conn.setAutoCommit(true);
-            dbh.put("AutoCommit", new RuntimeScalar(true));
+            dbh.put("AutoCommit", scalarTrue);
             return scalarTrue.getList();
         }, dbh, "commit");
     }
@@ -872,7 +747,7 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             conn.rollback();
             conn.setAutoCommit(true);
-            dbh.put("AutoCommit", new RuntimeScalar(true));
+            dbh.put("AutoCommit", scalarTrue);
             return scalarTrue.getList();
         }, dbh, "rollback");
     }
@@ -887,16 +762,12 @@ public class DBI extends PerlModuleBase {
             }
 
             int paramIndex = args.get(1).getInt();
-            RuntimeScalar paramValue = args.get(2);
+            Object value = args.get(2).value;
 
             // Store bound parameters for later use (applied during execute())
-            // Use set() to copy both type and value, preserving BYTE_STRING type
-            // which is needed for correct UTF-8 round-tripping in toJdbcValue().
             RuntimeHash boundParams = sth.get("bound_params") != null ?
                     sth.get("bound_params").hashDeref() : new RuntimeHash();
-            RuntimeScalar copy = new RuntimeScalar();
-            copy.set(paramValue);
-            boundParams.put(String.valueOf(paramIndex), copy);
+            boundParams.put(String.valueOf(paramIndex), new RuntimeScalar(value));
             sth.put("bound_params", boundParams.createReference());
 
             // Store bind attributes if provided (4th arg is attrs hashref or type int)
@@ -973,7 +844,7 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "table_info");
     }
@@ -1006,7 +877,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "column_info");
     }
@@ -1094,7 +965,7 @@ public class DBI extends PerlModuleBase {
         result.put("has_resultset", scalarTrue);
         sth.put("execute_result", result.createReference());
 
-        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
         return sthRef.getList();
     }
 
@@ -1116,7 +987,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "primary_key_info");
     }
@@ -1143,7 +1014,7 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
@@ -1157,7 +1028,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReferenceWithTrackedElements(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "type_info");
     }

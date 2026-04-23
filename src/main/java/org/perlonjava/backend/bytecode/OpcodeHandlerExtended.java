@@ -141,6 +141,31 @@ public class OpcodeHandlerExtended {
         if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        // Check for overloaded x= (falling back to x via autogeneration)
+        RuntimeBase dVal = registers[rd];
+        if (dVal instanceof RuntimeScalar dScalar) {
+            int blessId = org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId(dScalar);
+            if (blessId < 0) {
+                RuntimeScalar times = (RuntimeScalar) registers[rs];
+                // Try (x= first
+                RuntimeScalar ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                        .tryTwoArgumentOverloadDirect(dScalar, times, blessId, 0, "(x=");
+                if (ovResult == null) {
+                    // Try autogenerate via (x
+                    ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                            .tryTwoArgumentOverloadDirect(dScalar, times, blessId, 0, "(x");
+                }
+                if (ovResult == null) {
+                    // Try nomethod (may throw if fallback=0)
+                    ovResult = org.perlonjava.runtime.runtimetypes.OverloadContext
+                            .tryTwoArgumentNomethod(dScalar, times, blessId, 0, "x=");
+                }
+                if (ovResult != null) {
+                    ((RuntimeScalar) registers[rd]).set(ovResult);
+                    return pc;
+                }
+            }
+        }
         RuntimeBase result = Operator.repeat(
                 registers[rd],
                 (RuntimeScalar) registers[rs],
@@ -837,8 +862,13 @@ public class OpcodeHandlerExtended {
         RuntimeScalar fh = (RuntimeScalar) registers[fhReg];
         // Diamond operator <> passes a plain string scalar (not a glob/IO).
         // Route to DiamondIO.readline which manages @ARGV / STDIN iteration.
+        // But blessed objects may have <> overload, so route those to Readline.
         if (fh.getRuntimeIO() == null) {
-            registers[rd] = DiamondIO.readline(fh, ctx);
+            if (RuntimeScalarType.blessedId(fh) < 0) {
+                registers[rd] = Readline.readline(fh, ctx);
+            } else {
+                registers[rd] = DiamondIO.readline(fh, ctx);
+            }
         } else {
             registers[rd] = Readline.readline(fh, ctx);
         }
@@ -1066,6 +1096,60 @@ public class OpcodeHandlerExtended {
         RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
 
         registers[rd] = MathOperators.modulusAssignWarn(s1, s2);
+        return pc;
+    }
+
+    /**
+     * Execute numeric-only bitwise AND assign (use feature "bitwise").
+     * Format: BINARY_AND_ASSIGN rd rs
+     */
+    public static int executeBinaryAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseAndBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
+        return pc;
+    }
+
+    /**
+     * Execute numeric-only bitwise OR assign (use feature "bitwise").
+     * Format: BINARY_OR_ASSIGN rd rs
+     */
+    public static int executeBinaryOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseOrBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
+        return pc;
+    }
+
+    /**
+     * Execute numeric-only bitwise XOR assign (use feature "bitwise").
+     * Format: BINARY_XOR_ASSIGN rd rs
+     */
+    public static int executeBinaryXorAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        RuntimeScalar result = BitwiseOperators.bitwiseXorBinary(
+                (RuntimeScalar) registers[rd],
+                (RuntimeScalar) registers[rs]
+        );
+        ((RuntimeScalar) registers[rd]).set(result);
         return pc;
     }
 }

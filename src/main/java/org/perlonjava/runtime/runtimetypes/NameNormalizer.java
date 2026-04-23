@@ -60,7 +60,13 @@ public class NameNormalizer {
     }
 
     /**
-     * Quick check if a class has the overload marker "((" using full MRO resolution.
+     * Quick check if a class has an overload marker using full MRO resolution.
+     * A class is considered overloaded if either of the following markers is
+     * installed in its stash (anywhere in the @ISA chain):
+     *   ((   — the canonical marker created by `use overload`
+     *   ()   — the fallback-method glob, which modules that hand-roll overloads
+     *          (e.g. AnyEvent::CondVar) install directly via typeglob manipulation
+     *          to avoid loading overload.pm.
      * This is called at bless time to assign the appropriate ID range.
      */
     private static boolean hasOverloadMarker(String className) {
@@ -70,6 +76,10 @@ public class NameNormalizer {
         try {
             RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(
                     "((", className, null, 0);
+            if (method != null) return true;
+            // Fall back to `()` — Perl 5 treats this glob as an overload marker too
+            method = InheritanceResolver.findMethodInHierarchy(
+                    "()", className, null, 0);
             return method != null;
         } catch (Exception e) {
             // If we can't check (e.g., during early initialization), assume no overload

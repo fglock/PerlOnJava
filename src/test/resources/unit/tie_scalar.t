@@ -225,14 +225,60 @@ subtest 'Local and tied scalars' => sub {
     our $scalar;
     tie $scalar, 'TiedScalar';
     $scalar = "original";
-    
+
     {
         local $scalar = "localized";
         is($scalar, "localized", 'local value set correctly');
     }
-    
+
     # Note: behavior with local and tie can be complex
     # The exact behavior may depend on the Perl implementation
+};
+
+subtest 'local on tied scalar dispatches STORE/FETCH' => sub {
+    # Real Perl dispatches FETCH/STORE through the tie handler during
+    # `local $tied = value`. Critically: STORE must fire on assignments
+    # inside the localized scope, and on scope exit the original value
+    # must be restored through the tie (so downstream modules like
+    # File::chdir actually chdir back).
+    @TrackedTiedScalar::method_calls = ();
+    our $tvar;
+    tie $tvar, 'TrackedTiedScalar';
+
+    $tvar = "original";
+    my $direct_store = grep { $_->[0] eq 'STORE' && $_->[1] eq 'original' }
+        @TrackedTiedScalar::method_calls;
+    is($direct_store, 1, 'direct assignment dispatches STORE');
+
+    @TrackedTiedScalar::method_calls = ();
+    {
+        local $tvar = "scoped";
+        # Inside the scope, the tie must still be active: reading must
+        # call FETCH and return the currently-stored value.
+        my $v = $tvar;
+        is($v, "scoped", 'local value visible inside scope');
+
+        # And a fresh assignment must dispatch STORE, not just write the
+        # slot — this is what File::chdir / Git::Wrapper depend on.
+        $tvar = "scoped-again";
+        my $stored_scoped_again = grep {
+            $_->[0] eq 'STORE' && $_->[1] eq 'scoped-again'
+        } @TrackedTiedScalar::method_calls;
+        is($stored_scoped_again, 1,
+            'assignment inside local scope dispatches STORE');
+    }
+
+    # After the scope, the tied scalar must be visible again with its
+    # original value. The exact restore mechanism is implementation-
+    # defined, but the observable value must be "original".
+    is($tvar, "original", 'original value restored after local scope');
+
+    # Was STORE called at least once with the localized value during
+    # entry to the scope? (Real Perl does STORE(""), STORE($newval).)
+    my $store_scoped = grep {
+        $_->[0] eq 'STORE' && $_->[1] eq 'scoped'
+    } @TrackedTiedScalar::method_calls;
+    ok($store_scoped >= 1, 'local entry dispatches STORE with new value');
 };
 
 subtest 'References to tied scalars' => sub {

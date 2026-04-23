@@ -90,8 +90,11 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             } else {
                 lvalue.set(value);
             }
-            this.type = lvalue.type;
-            this.value = lvalue.value;
+            // Intentionally do NOT sync this.type / this.value from lvalue.
+            // $. is a PROXY whose canonical value lives in lastAccesseddHandle.currentLineNumber,
+            // which is mutated directly by readline. Caching the value on the proxy here would
+            // make fast-path code (e.g. the INTEGER/INTEGER fast path in numeric comparisons)
+            // read a stale value after subsequent readline calls bump currentLineNumber.
             return lvalue;
         }
         if (variableId == Id.HINTS) {
@@ -449,10 +452,8 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     previous.lastHandle.currentLineNumber = previous.lastLineNumber;
                 }
                 lvalue = previous.localValue;
-                if (lvalue != null) {
-                    this.type = lvalue.type;
-                    this.value = lvalue.value;
-                }
+                // Do not sync this.type/value from lvalue here; $. reads always
+                // delegate to currentLineNumber via getValueAsScalar().
             }
             return;
         }

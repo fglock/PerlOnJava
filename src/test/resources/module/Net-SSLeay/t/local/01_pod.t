@@ -9,15 +9,8 @@ use Test::Net::SSLeay;
 # Here's a snippet from the Changes file for Test::Pod 1.41:
 #   Test::Pod no longer complains about the construct L<text|url>, as it is no
 #   longer illegal (as of Perl 5.11.3).
-eval "use Test::Pod 1.41";
-if ($@) {
-    plan skip_all => "Test::Pod 1.41 required for testing pod";
-}
-
-all_pod_files_ok(qw(
-    blib/lib/Net/SSLeay.pm
-    blib/lib/Net/SSLeay/Handle.pm
-    helper_script/generate-test-pki
-    inc/Test/Net/SSLeay.pm
-    inc/Test/Net/SSLeay/Socket.pm
-));
+# PerlOnJava: Net::SSLeay is an XS module that cannot be built, so the
+# blib/ and helper_script/ directories do not exist.  When Test::Pod is
+# installed (e.g. via CPAN into ~/.perlonjava/lib/) the test would run
+# and report "not ok" for every missing file.  Skip unconditionally.
+plan skip_all => "POD distribution test not applicable without a full build (no blib/ directory)";
