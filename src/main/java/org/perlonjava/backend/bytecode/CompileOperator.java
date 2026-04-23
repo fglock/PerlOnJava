@@ -828,9 +828,12 @@ public class CompileOperator {
                     }
                     bytecodeCompiler.symbolTable.setCurrentPackage(packageName, isClass);
                     if (isClass) ClassRegistry.registerClass(packageName);
-                    boolean isScoped = Boolean.TRUE.equals(node.getAnnotation("isScoped"));
+                    // Always emit PUSH_PACKAGE so the runtime tracker is restored when
+                    // the enclosing block/sub/file exits. Perl 5's `package Foo;` is
+                    // lexically scoped; the `isScoped` annotation used to distinguish
+                    // `package Foo { BLOCK }` but bare `package Foo;` is equally scoped.
                     int nameIdx = bytecodeCompiler.addToStringPool(packageName);
-                    bytecodeCompiler.emit(isScoped ? Opcodes.PUSH_PACKAGE : Opcodes.SET_PACKAGE);
+                    bytecodeCompiler.emit(Opcodes.PUSH_PACKAGE);
                     bytecodeCompiler.emit(nameIdx);
                     bytecodeCompiler.lastResultReg = -1;
                 } else {

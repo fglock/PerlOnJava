@@ -5,17 +5,14 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 9 + 9b (upstream DBI 1.647 + DBI::PurePerl, JDBC path via
-DBD::JDBC base driver). Fresh full-suite `jcpan -t DBI` run
-(2026-04-23, master HEAD `720a04db3`):
+After Phase 10 (2026-04-23): PerlOnJava bug fix — `package Foo;`
+now lexically scoped at runtime (not just at compile time). See
+Phase 10 section below.
 
 | | Files | Subtests | Passing | Failing |
 |---|---|---|---|---|
-| `jcpan -t DBI` | 200 | **5944** | **5566 (94 %)** | 378 |
-
-See "Fresh baseline (2026-04-23)" section below for per-file
-failure distribution and the revised phase 10+ plan (skipped
-tests stay skipped — no `$DBI::PurePerl` flag flip).
+| `jcpan -t DBI` (2026-04-23, post-Phase-10) | 200 | **6600** | **6210 (94 %)** | 390 |
+| (pre-Phase-10 baseline) | 200 | 5944 | 5566 (94 %) | 378 |
 
 ---
 
@@ -854,30 +851,75 @@ indefinitely**. Focus is on failures that aren't flag-gated.
 
 #### Phase 10 (new scope): unblock t/10examp.t
 
-The test does `do "./t/lib.pl"` to pull in `test_dir()`. Under
-PerlOnJava the `do` at line 172 returns without an error but
-`main::test_dir` ends up undefined when called at line 174
-("Undefined subroutine &main::test_dir"). Isolated repros work
-fine (`jperl -e 'do "./t/lib.pl"; test_dir()'` succeeds), so
-there's something about the surrounding script state that
-disrupts the symbol-table installation.
+**Status: done (2026-04-23).** Root-caused to a PerlOnJava package-
+scoping bug (not a DBI bug). Fixed in this branch.
 
-**Hypotheses to investigate:**
-- A preceding `use DBI qw(:sql_types); use Config; use strict;`
-  plus `require File::Basename/Spec/VMS::Filespec` somehow
-  changes package-symbol-table behaviour around the `do`.
-- `strict` + the presence of a `package Test::Secret { ... }`
-  block earlier in the file may be corrupting `%main::`.
-- `do FILE` semantics when the called file contains `my $test_dir`
-  + `END { ... }` + `sub test_dir` at file scope may install the
-  sub in the wrong package or clobber it post-`do`.
+### Root cause
 
-**Effort:** small/unknown — this is a PerlOnJava interpreter bug,
-not a DBI bug. Likely 1–2 days.
+`Carp::caller_info` contains:
+```perl
+{
+    package DB;
+    @call_info{...} = caller($i);
+}
+```
 
-**Impact:** up to ~965 subtests (193 × 5 wrappers).
+In Perl 5, `package DB;` inside a bare block is lexically scoped —
+it only affects that block, and the outer package is restored on
+block exit. PerlOnJava's JVM backend was emitting
+`InterpreterState.setCurrentPackageStatic("DB")` for `package X;`
+statements without any scope-exit restore. Only the block form
+`package X { ... }` was correctly scoped via `PUSH_PACKAGE`.
 
-#### Phase 11: filesystem locking for DBM tests
+Consequence: once Test::More called `Carp::caller_info` (which it
+does during early setup), the runtime current-package tracker was
+left as `"DB"`. The next `do "./t/lib.pl"` then compiled the loaded
+file in package `DB`, so `sub test_dir` ended up as
+`DB::test_dir` — invisible to `main::test_dir` calls.
+
+### Fix
+
+- New `InterpreterState.setCurrentPackageLocal(String)` helper:
+  pushes the current package scalar onto `DynamicVariableManager`
+  and sets the new value. Restored automatically when the
+  enclosing block / sub / file exits (via the existing
+  `localTeardown` / `POP_LOCAL_LEVEL` machinery).
+- `EmitOperator.handlePackageOperator` (JVM backend) now emits
+  `setCurrentPackageLocal` instead of `setCurrentPackageStatic`.
+- `CompileOperator` (interpreter backend) always emits
+  `PUSH_PACKAGE` — the `isScoped` annotation is no longer needed
+  to distinguish scoped vs unscoped since all `package X;`
+  declarations in Perl 5 are lexically scoped.
+
+Files: `InterpreterState.java`, `EmitOperator.java`,
+`CompileOperator.java`.
+
+### Impact
+
+Fresh `jcpan -t DBI` after the fix:
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| Before Phase 10 | 200 | 5944 | 5566 (94 %) | 378 |
+| **After Phase 10** | 200 | **6600** | **6210 (94 %)** | 390 |
+| Delta | 0 | +656 | **+644** | +12 |
+
+Per-file deltas for the `t/10examp.t` family (executed subtests
+went from ~49 to ~200+ per wrapper):
+
+| Variant | Before | After (approx) |
+|---|---|---|
+| `t/10examp.t` | 49/242 executed | 200+/242 |
+| `t/zvg_10examp.t` | 48/242 executed | 200+/242 |
+| `t/zvp_10examp.t` | 49/242 executed | 200+/242 |
+| `t/zvxgp_10examp.t` | 48/242 executed | 200+/242 |
+
+The fix also eliminates a whole class of latent bugs in any CPAN
+module that uses `{ package X; ... }` — Carp itself being a
+prominent example, but the pattern is common for debugger-
+compatibility shims.
+
+### Phase 11: filesystem locking for DBM tests
 
 `t/50dbm_simple.t`, `t/51dbm_file.t`, and the `49dbd_file.t`
 family die with "Resource deadlock avoided" from
