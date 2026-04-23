@@ -308,28 +308,132 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
 
 ## Progress Tracking
 
-### Current status: Plan drafted, Phase 1 starting
+### Current status: 66 / 68 passing on `jcpan -t JSON`
 
 ### Completed
-- [x] **PR #550**: shim compatibility (import tags, `$JSON::Backend`,
-      `jsonToObj`/`objToJson`, option stubs, minimal incremental
-      parser). 16 → 22 passing.
 
-### Next
-- [ ] **Phase 1**: hand-rolled encoder
-- [ ] **Phase 2**: hand-rolled decoder
-- [ ] **Phase 3**: remaining options
-- [ ] **Phase 4**: real incremental parser
-- [ ] **Phase 5**: polish until 0 failures
+- [x] **Shim compatibility** (`src/main/perl/lib/JSON.pm`): import
+      tags (`-support_by_pp`, `-no_export`,
+      `-convert_blessed_universally`), `$JSON::Backend`,
+      `backend()`, `is_xs`/`is_pp`, `jsonToObj`/`objToJson`,
+      `pureperl_only_methods`, `null`, option stubs, `property()`.
+      **16 → 22** passing.
 
-### Files expected to change
+- [x] **Strategic pivot: delegate to JSON::PP** — instead of
+      hand-rolling an encoder/decoder in Java, the JSON shim now
+      `@ISA = 'JSON::PP'`.  The bundled `JSON::PP` is a complete
+      pure-Perl backend that already implements every option the
+      test suite exercises.  Deleted `Json.java` and the
+      `fastjson2` dependency.  **22 → 47** passing.
 
-- `src/main/java/org/perlonjava/runtime/perlmodule/Json.java` — main
-  rewrite
-- `src/main/perl/lib/JSON.pm` — small follow-ups as needed
-- `src/main/perl/lib/JSON/PP/Boolean.pm` — ensure present and blessed
-  singletons work
-- `dev/modules/json_test_parity.md` — this file, progress updates
+- [x] **Parser fix**: package-literal barewords
+      (`Foo::Bar::`) in `bless` and before word operators
+      (`eq`, `ne`, `lt`, `gt`, `le`, `ge`, `cmp`, `x`, `isa`, `and`,
+      `or`, `xor`).  Previously `bless $x, Foo::Bar::;` kept the
+      trailing `::` and `Foo::Bar:: eq $x` was mis-parsed as a sub
+      call.  See commit 80842ea.
+
+- [x] **Parser fix**: `{"a","b"}` / `{1,2}` / `{foo,1,bar,2}` now
+      parse as hashrefs (not blocks evaluating a comma expression)
+      when the first content token is a hash-key-shaped thing.
+      See commit 3cf3405.
+
+- [x] **Runtime fix**: `unpack "U*"` in character mode now reads
+      code points directly from the string instead of re-decoding
+      its UTF-8 byte representation.  Matches real Perl on any
+      Latin-1 byte string.  Fixed `JSON::PP`'s `_encode_ascii`.
+      See commit 3c1545e.
+
+- [x] **Runtime fix**: `is_xs`/`is_pp` added to `JSON::PP` as
+      class methods (was `Can't locate object method` in ~8 tests).
+
+- [x] **Parser fix**: `[\c?]` inside a character class now matches
+      U+007F (DEL), not U+001C.  The regex preprocessor no longer
+      escapes `?` inside `[ ]`.  Fixes `JSON::PP`'s control-char
+      escape regex and the whole `t/99_binary.t` suite.  See commit
+      f8b3864.
+
+- [x] **JSON.pm fix**: `-convert_blessed_universally` uses
+      `reftype` instead of `ref` to classify the underlying
+      storage of a blessed reference.  See commit da2a693.
+
+- [x] **Runtime fix**: `bless` and `UNIVERSAL::isa` now canonicalise
+      through stash aliases (`*Dst:: = *Src::;`).  After aliasing,
+      `ref($x)` reports the canonical name and `isa` accepts either
+      name.  See commit 3c3ef4f.
+
+### jcpan -t JSON progression
+
+| Milestone | Passing |
+|-----------|---------|
+| Before    | 16 / 68 |
+| Shim-only | 22 / 68 |
+| After JSON::PP delegation | 47 / 68 |
+| + parser + unpack fixes   | 64 / 68 |
+| + JSON::PP class methods + property | 65 / 68 |
+| + reftype fix | 65 / 68 (+ t/e11 internally) |
+| + stash alias canonicalisation | 66 / 68 |
+
+### Still outstanding
+
+Two tests remain.  Neither is a parser quirk and neither blocks
+normal JSON use.
+
+- `t/00_load_backport_pp.t` — expects
+      `use JSON` to load `JSON::backportPP` (not `JSON::PP`) when
+      `$ENV{PERL_JSON_BACKEND} = "JSON::backportPP"`, and that
+      `%INC` does NOT contain `JSON/PP.pm` afterwards.  Our shim
+      always `use JSON::PP ()` unconditionally, so this specific
+      introspection cannot pass without restructuring the shim to
+      defer backend loading until the first `use JSON`.
+
+- `t/119_incr_parse_utf8.t` — tests the non-utf8 path of
+      `JSON::PP::IncrParser::incr_parse`, which ends its loop with
+      ```
+      use bytes;
+      $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
+      ```
+      PerlOnJava's `use bytes` pragma applies to `length` (via a
+      `lengthBytes` dispatch) but NOT to `substr` / `unpack`, so
+      the byte-level substr gives back the string with Unicode
+      characters truncated to their low byte rather than re-encoded
+      as UTF-8.  A general fix would add `substrBytes` /
+      `unpackBytes` etc. dispatches under `use bytes`; this is a
+      cross-cutting runtime change and tracked separately.
+
+### Files changed
+
+- `src/main/perl/lib/JSON.pm` — full rewrite, now `@ISA = ('JSON::PP')`
+- `src/main/perl/lib/JSON/PP.pm` — added `is_xs` / `is_pp` class methods
+- `src/main/java/org/perlonjava/runtime/perlmodule/Json.java` — DELETED
+- `src/main/java/org/perlonjava/frontend/parser/OperatorParser.java`
+  (bless `::` strip)
+- `src/main/java/org/perlonjava/frontend/parser/SubroutineParser.java`
+  (word-op infix detection)
+- `src/main/java/org/perlonjava/frontend/parser/StatementResolver.java`
+  (hashref disambiguation)
+- `src/main/java/org/perlonjava/runtime/operators/unpack/UFormatHandler.java`
+  (unpack U*)
+- `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessorHelper.java`
+  (`?` in char class)
+- `src/main/java/org/perlonjava/runtime/operators/ReferenceOperators.java`
+  (bless via stash alias)
+- `src/main/java/org/perlonjava/runtime/perlmodule/Universal.java`
+  (isa via stash alias)
+- `src/test/resources/unit/{method_call_trailing_colons,hash_ref_disambiguation,unpack,regex/regex_charclass,stash_aliasing}.t`
+  — regression tests for every runtime/parser fix
+- Many docs cleaned up to drop fastjson2 references
+  (`docs/reference/bundled-modules.md`,
+  `docs/reference/xs-compatibility.md`,
+  `docs/guides/using-cpan-modules.md`,
+  `docs/getting-started/installation.md`,
+  `dev/modules/README.md`,
+  `dev/modules/dynamic_loading.md`,
+  `dev/design/sbom.md`,
+  `dev/custom_bytecode/TESTING.md`,
+  `dev/presentations/blogs_perl_org_jcpan_2026/blog-post{,-long}.md`,
+  `build.gradle`, `gradle/libs.versions.toml`, `pom.xml`,
+  `jperl`, `jperl.bat`)
 
 ## Related documents
 
