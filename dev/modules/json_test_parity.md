@@ -308,7 +308,7 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
 
 ## Progress Tracking
 
-### Current status: 62 pass / 6 skip / 0 fail on `jcpan -t JSON`
+### Current status: `./jcpan -t JSON` — `Result: PASS` (68 files, 26126 subtests, 0 failures)
 
 ### Completed
 
@@ -363,31 +363,44 @@ above, and `./jcpan -t JSON` reporting `PASS` at the end.
       name.  See commit 3c3ef4f.
 
 - [x] **`PERL_JSON_BACKEND=JSON::backportPP`** — new
-      `JSON/backportPP.pm` that loads JSON::PP's source via
-      open/read/eval (no `$INC{'JSON/PP.pm'}`); `JSON.pm` gates its
-      backend `require` on the env var and paper-patches the
-      introspection omissions of the CPAN-shipped
-      `JSON/backportPP.pm` when the test harness's blib shadows
-      ours.  See commit e800c29.
+      `JSON/backportPP.pm` that `require`s `JSON::PP` and then
+      `delete $INC{'JSON/PP.pm'}` so the backend-identification
+      contract (check `%INC` for `JSON/backportPP.pm` vs `JSON/PP.pm`)
+      is satisfied.  `JSON.pm` gates its backend load on the env var
+      and paper-patches the CPAN-shipped `JSON/backportPP.pm`'s
+      missing introspection (`@JSON::PP::ISA`, `@JSON::backportPP::ISA`,
+      `is_xs`/`is_pp`) so the dispatcher surface works regardless of
+      which backportPP was picked up.  See commits e800c29, 88aea98.
+
+- [x] **JSON::PP IncrParser `substr` byte handling** — replaced the
+      `use bytes; substr($text, $offset)` line (which depends on
+      `use bytes` redirecting `substr` — a feature PerlOnJava does
+      not yet implement) with an explicit encode/substr/decode when
+      `get_utf8` is off, and plain `substr` when it is on.  Fixes
+      multi-byte-char incremental parsing.  See commit b6d67bf.
 
 ### jcpan -t JSON progression
 
-| Milestone | Passing |
-|-----------|---------|
-| Before    | 16 / 68 |
+| Milestone | Result |
+|-----------|--------|
+| Before    | 16 / 68 passing |
 | Shim-only | 22 / 68 |
-| After JSON::PP delegation | 47 / 68 |
-| + parser + unpack fixes   | 64 / 68 |
+| + JSON::PP delegation, drop fastjson2 | 47 / 68 |
+| + 4 parser/runtime/regex fixes | 64 / 68 |
 | + JSON::PP class methods + property | 65 / 68 |
 | + reftype fix | 65 / 68 (+ t/e11 internally) |
 | + stash alias canonicalisation | 66 / 68 |
-| **+ JSON::backportPP support + compat paper patching** | **62 / 68 pass, 6 skip, 0 fail** |
+| + JSON::backportPP support | 67 / 68 (1 test 6/24 subtests failing) |
+| **+ IncrParser UTF-8 byte substr** | **`Result: PASS` — 68 / 68, 26126 / 26126 subtests** |
 
 ### Still outstanding
 
-None — `jcpan -t JSON` reports zero failing tests.  The 6 remaining
-tests issue their own `plan skip_all "requires …"` declarations
-(e.g. "requires JSON::XS 4 compat backend"); those are not failures.
+None — `./jcpan -t JSON` reports `Result: PASS` end-to-end.
+
+Follow-up: `use bytes` should eventually redirect `substr` / `unpack`
+/ `index` globally in PerlOnJava (following the pattern already
+established for `length`/`chr`/`ord`).  Tracked under the runtime
+roadmap; not needed for this task.
 
 ### Files changed
 
