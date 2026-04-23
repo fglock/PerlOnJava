@@ -29,7 +29,20 @@ our @ISA = ('DBD::JDBC');
     sub connect {
         my ($drh, $dbname, $user, $pass, $attr) = @_;
         my $jdbc_url = DBD::SQLite->_dsn_to_jdbc($dbname);
-        return DBD::JDBC::dr::connect($drh, $jdbc_url, $user, $pass, $attr);
+        my $dbh = DBD::JDBC::dr::connect($drh, $jdbc_url, $user, $pass, $attr);
+        if ($dbh) {
+            # The Java layer blesses the dbh into DBD::JDBC::db; re-bless
+            # into DBD::SQLite::db so ref($dbh) eq 'DBD::SQLite::db' and
+            # any SQLite-specific method dispatch resolves on MRO.
+            bless $dbh, 'DBD::SQLite::db';
+            # Back-reference from dbh to its drh. Java's connect() doesn't
+            # set this; without it, DBIx::Class::Storage::DBI::_determine_driver
+            # can't read $dbh->{Driver}{Name} and falls back to the GenericSubQ
+            # LIMIT dialect, which rejects unordered resultsets. This causes
+            # t/52leaks.t, t/101populate_rs.t and similar to explode.
+            $dbh->{Driver} = $drh;
+        }
+        return $dbh;
     }
 }
 
