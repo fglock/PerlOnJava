@@ -5,6 +5,20 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
+After Phase 9 + 9b (upstream DBI 1.647 + DBI::PurePerl, JDBC path via
+DBD::JDBC base driver). Fresh full-suite `jcpan -t DBI` run
+(2026-04-23, master HEAD `720a04db3`):
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` | 200 | **5944** | **5566 (94 %)** | 378 |
+
+See "Fresh baseline (2026-04-23)" section below for per-file
+failure distribution and the revised phase 10+ plan (skipped
+tests stay skipped — no `$DBI::PurePerl` flag flip).
+
+---
+
 After Phase 7 (trace/TraceLevel semantics, DBI->internal tied-handle,
 `_concat_hash_sorted` rewrite, dbh default attributes, unknown-attr
 warnings):
@@ -778,114 +792,132 @@ upcoming Phase 10 will reimplement in Java.
    `my $x = { ternary-returning-list }`; the guard is the
    minimal-risk fix, the proper emitter fix is tracked separately).
    Now 99/99.
-2. **Full `jcpan -t DBI` baseline not yet re-run.** Per-test numbers
-   extrapolate to ~5800–6300 passing subtests (from the 4940/6570
-   Phase 7 baseline), but a full run would confirm.
 
-### Phase 10 (planned): reimplement XS-only features in Java
+---
 
-Upstream DBI::PurePerl explicitly skips some XS features with
-warnings like `"$h->{Profile} attribute not supported for DBI::PurePerl"`.
-These are the roadmap for the next round of Java work:
+## Fresh baseline (2026-04-23): full `jcpan -t DBI`
 
-- **Profile dispatch hook** — single biggest block (91 tests in
-  t/40..43_prof_*.t). Upstream XS wraps every dispatched method in
-  a timing frame that bumps `$h->{Profile}{Data}{$path...}`. We'd
-  hook `DBI::dispatch` (via method wrapping in the Java shim) to
-  do the same.
-- **Callbacks** — 65-test block (t/70callbacks.t). Fire
-  `$h->{Callbacks}{$method}` (or `*`) before/around dispatch.
-- **Kids/ActiveKids/CachedKids** auto-bookkeeping on parent handles.
-- **swap_inner_handle**, **take_imp_data** round-trip.
-- **XS-level trace formatter** (per-handle trace fh + PerlIO layers).
+Re-ran the complete DBI test suite after Phase 9/9b landed
+(master HEAD `720a04db3`). The infinite-loop symptom in the
+Gofer `STORE`/`set_err` chain did **not** reproduce this time —
+the suite completed cleanly in 192s.
 
-### Next Steps
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` (2026-04-23) | 200 | **5944** | **5566** | **378** |
+| Failed files | | | 76/200 | |
 
-Remaining high-signal individual-test failures (running
-`./jperl ~/.cpan/build/DBI-1.647-5/t/X.t` directly; failing-count
-before the test process halts):
+Compared with the Phase 7 baseline (4940/6570 passing), subtest
+count is lower because the upstream `DBI::PurePerl` switch (Phase 9)
+caused many tests to hit early skip paths that the old home-grown
+`_Handles.pm` did not honour (`$DBI::PurePerl` guards for `Kids`,
+`swap_inner_handle`, `Executed`, Profile, Callbacks, ...). The
+raw pass rate went from 75 % → **94 %**.
 
-| Test file | Pass/Total | Area |
-|---|---|---|
-| `t/03handle.t` | 94/137 (43 fail) | `ActiveKids`, `CachedKids`, `swap_inner_handle`, Kids bookkeeping after DESTROY |
-| `t/06attrs.t` | 142/166 (24 fail) | driver-private attr semantics (`delete` on `examplep_*`), `Statement` attr on failed `do`, `ErrCount` bump-on-error |
-| `t/08keeperr.t` | 84/91 (7 fail) | `set_err` + `RaiseError` stack-trace in `$@`; `$DBI::err` undef after disconnect |
-| `t/14utf8.t` | 10/16 (6 fail) | `NAME_lc`/`NAME_uc` hash derivation for ExampleP's computed column list |
-| `t/15array.t` | 16/55 (39 fail) | `execute_array` / `bind_param_array` — needs DBD bulk-execute path |
-| `t/16destroy.t` | 17/20 (2 fail, 1 SKIP) | `Active` read inside a user-defined `DESTROY` (stray pre-connect DESTROY is firing with Active=0) |
-| `t/19fhtrace.t` | 20/27 (7 fail) | `trace($level, "STDERR")` string-target, PerlIO layer preservation on the installed trace fh |
-| `t/30subclass.t` | 19/43 (24 fail) | `RootClass` connect attribute: rebless outer handles into the subclass hierarchy |
-| `t/40profile.t` | 3/60 (17 fail, then halts) | `DBI::Profile` data capture — needs method-dispatch hook |
-| `t/41prof_dump.t` | 7/9 (2 fail, halts) | `DBI::ProfileDumper::flush_to_disk` writes to disk + round-trip |
-| `t/42prof_data.t` | 3/4 (1 fail, halts) | depends on ProfileDumper output |
-| `t/43prof_env.t` | 0/11 | `DBI_PROFILE` env-var instrumentation |
-| `t/70callbacks.t` | 65/81 (16 fail) | fatal-callback die propagation; reblessing of `$_[0]` in callbacks |
+### Failure distribution by base test file
 
-1. **Profile capture** (40/41/42/43). This is the biggest
-   remaining block — 91 failing tests concentrated in 4 files.
-   Real DBI's XS hooks `DBD::_::common::AUTOLOAD` (among other
-   things) to bump the Profile tree on every method call. Options:
-   - Add a dispatch-time hook in
-     `DBI::_::OuterHandle::AUTOLOAD` that, when
-     `$h->{Profile}` is set, walks the Profile Path, builds the
-     node, and increments timings around the call.
-   - Inherit `Profile` to sth at prepare time (we already do
-     this) and bump child counts the same way.
-   - `DBI::ProfileDumper::flush_to_disk` needs to actually see
-     data in `{Data}` before it can write anything — the above
-     hook is the prerequisite.
+Each base test is run through 5 wrappers (`t/`, `zvg_*`, `zvn_*`,
+`zvp_*`, `zvxg{n,p}*`, `zvxgp_*`). The counts below are per base
+file — multiply by wrapper count for raw subtest impact.
 
-2. **`RootClass`** (`t/30subclass.t`). When `connect($dsn, u, p,
-   { RootClass => 'MyDBI' })` is used, real DBI reblesses the
-   outer handles into `${RootClass}::db` / `::st` / `::dr` so
-   user subclasses get method dispatch. Currently we ignore
-   `RootClass`. Fix: in `DBI.pm`'s `connect` wrapper, if
-   `RootClass` is set, `require` it and rebless the returned
-   outer handles. _new_sth / _new_drh should honour the same.
+| Base test | Per-variant fail | ~Variants failing | Rough total | Area |
+|---|---|---|---|---|
+| `t/10examp.t`       | 193/242 | 5 | **~965** | **Crash at test 50**: `test_dir()` undefined after `do "./t/lib.pl"`. Blocks 80 % of the file across all variants — **single biggest lever**. |
+| `t/50dbm_simple.t`  | 16/38   | 5 | ~80 | `flock`/`fcntl` locking — "Resource deadlock avoided" on `.lck` files in `DBI::DBD::SqlEngine`. PerlOnJava file-locking semantics gap. |
+| `t/85gofer.t`       | 9/20    | 3 | ~27 | Gofer transport error-path handling (`set_err` propagation over serialised calls). |
+| `t/49dbd_file.t`    | 9/65    | 3 | ~27 | `DBD::File` table directory traversal / column naming edge cases. |
+| `t/04mods.t`        | 7/12    | 5 | ~35 | Missing bundled modules / CPAN deps not installed in ports tree. |
+| `t/72childhandles.t`| 6/16    | 5 | ~30 | `ChildHandles` weakref list — depends on Kids bookkeeping (PurePerl skip stays). |
+| `t/15array.t`       | 5/55    | 5 | ~25 | `execute_array` / `bind_param_array` — sth-level bulk-execute gaps. |
+| `t/51dbm_file.t`    | 2–5/7–10| 5 | ~15 | same locking family as 50dbm_simple. |
+| `t/19fhtrace.t`     | 4/27    | 5 | ~20 | `trace($l, "STDERR")` string alias, PerlIO layers on installed trace fh. |
+| `t/16destroy.t`     | 3/20    | 5 | ~15 | Stray pre-connect DESTROY with `Active=0`. |
+| `t/03handle.t`      | 3/137   | 5 | ~15 | Residual handle edge cases (most Kids tests now stay skipped). |
+| `t/08keeperr.t`     | 2–3/91  | 5 | ~13 | `$DBI::err` cleanup on disconnect; `RaiseError` $@ stack trace. |
+| `t/02dbidrv.t`      | 2/54    | 5 | ~10 | |
+| `t/06attrs.t`       | 2/166   | 5 | ~10 | `ErrCount` bump-on-error, `Statement` attr on failed `do`. |
+| `t/73cachedkids.t`  | 2/11    | 5 | ~10 | `CachedKids` weakref semantics. |
+| `t/14utf8.t`        | 1/16    | 5 | ~5 | `NAME_lc`/`NAME_uc` derivation for ExampleP. |
+| `t/53sqlengine_adv.t` | setup fail | 3 | 0 | Test file aborts before any assertions — needs triage. |
 
-3. **`t/03handle.t` Kids / ActiveKids / CachedKids**. After
-   `$sth->finish` / `$dbh->disconnect` / `undef $dbh`, the
-   counters on the parent handle aren't updated. Needs
-   systematic bump/decrement in `execute`, `finish`,
-   `disconnect`, and the DBD destructor.
+`t/10examp.t` alone accounts for an estimated **~25 % of all
+remaining failures**. Fixing the single `test_dir()` crash unlocks
+190+ more assertions per wrapper.
 
-4. **`t/15array.t` `execute_array`**. Currently the
-   `execute_array` in our DBI.pm is a thin loop over
-   `execute(@row)` but many subtests depend on fine-grained
-   error handling (tuple_status), `ArrayTupleFetch` coderef
-   sources, and RaiseError propagation across rows. This is a
-   self-contained chunk.
+### Revised priority order (skipped tests stay skipped)
 
-5. **`t/06attrs.t` driver-private `delete` semantics**.
-   `delete $dbh->{examplep_private_dbh_attrib}` should return
-   42 but leave the value in place (the driver re-computes it
-   on each FETCH). This requires a DELETE override in
-   `DBI::_::Tie` that consults the implementor class before
-   actually removing the key.
+All `$DBI::PurePerl`-gated `skip` / `skip_all` paths are left in
+place — we do **not** flip `$DBI::PurePerl = 0`. This means the
+old "Phase 10 big scope" (Profile/Kids/Executed/swap_inner_handle
+reimplementation in Java to flip the flag) is **deferred
+indefinitely**. Focus is on failures that aren't flag-gated.
 
-6. **`t/16destroy.t`**. Two subtests fail because a stray dbh
-   DESTROY fires with Active=0 between `install_driver` and
-   the user's `$drh->connect`. Need to trace where that extra
-   handle comes from (likely a temporary dbh built during
-   install_driver / setup_driver that we don't InactiveDestroy).
+#### Phase 10 (new scope): unblock t/10examp.t
 
-7. **`t/19fhtrace.t` PerlIO layers**. `trace(undef, $fh)` with a
-   `$fh` that has custom layers (e.g. `:utf8`) must preserve
-   them when DBI writes. Also `trace(0, "STDERR")` should parse
-   the string "STDERR" as an alias for `*STDERR`.
+The test does `do "./t/lib.pl"` to pull in `test_dir()`. Under
+PerlOnJava the `do` at line 172 returns without an error but
+`main::test_dir` ends up undefined when called at line 174
+("Undefined subroutine &main::test_dir"). Isolated repros work
+fine (`jperl -e 'do "./t/lib.pl"; test_dir()'` succeeds), so
+there's something about the surrounding script state that
+disrupts the symbol-table installation.
 
-8. **`t/08keeperr.t` `$DBI::err` cleanup on disconnect**.
-   After `$dbh->disconnect`, `$DBI::err` should revert to
-   undef. Currently it keeps the last value.
+**Hypotheses to investigate:**
+- A preceding `use DBI qw(:sql_types); use Config; use strict;`
+  plus `require File::Basename/Spec/VMS::Filespec` somehow
+  changes package-symbol-table behaviour around the `do`.
+- `strict` + the presence of a `package Test::Secret { ... }`
+  block earlier in the file may be corrupting `%main::`.
+- `do FILE` semantics when the called file contains `my $test_dir`
+  + `END { ... }` + `sub test_dir` at file scope may install the
+  sub in the wrong package or clobber it post-`do`.
 
-9. **Full-suite `jcpan -t DBI` run.** The last attempt at
-   a fresh baseline got stuck in what looks like an infinite
-   loop inside Gofer's STORE / set_err chain. To be
-   investigated on a separate branch (the hot-loop symptom was
-   `DBD::_::common::set_err` → `DBD::Gofer::db::STORE` →
-   `_Handles.pm:816`). Once that's resolved the next baseline
-   number should reflect Phase 7's gains (est. ~+100 passes
-   from the per-test deltas).
+**Effort:** small/unknown — this is a PerlOnJava interpreter bug,
+not a DBI bug. Likely 1–2 days.
+
+**Impact:** up to ~965 subtests (193 × 5 wrappers).
+
+#### Phase 11: filesystem locking for DBM tests
+
+`t/50dbm_simple.t`, `t/51dbm_file.t`, and the `49dbd_file.t`
+family die with "Resource deadlock avoided" from
+`DBI::DBD::SqlEngine` at the `flock`/`fcntl` call. Needs:
+- Verify our `flock`/`fcntl` behave on the same fd/inode pair
+  the way CPython/Perl does on macOS (FD-based vs inode-based).
+- Either match Perl's behaviour or skip these test families on
+  PerlOnJava.
+
+**Impact:** ~95 subtests (combined DBM + DBD::File variants).
+
+#### Phase 12: execute_array (t/15array.t)
+
+Already scoped in previous Next-Steps section. Still ~25 subtests.
+
+#### Phase 13: small triage (pure fix-ups)
+
+- `t/08keeperr.t`: `$DBI::err` cleanup on disconnect (~13 subtests).
+- `t/06attrs.t`: `ErrCount` bump-on-error, `Statement` on failed
+  `do` (~10).
+- `t/16destroy.t`: stray pre-connect DESTROY (~15).
+- `t/19fhtrace.t`: `trace(undef, $fh)` PerlIO layer preservation,
+  `trace(0, "STDERR")` string alias (~20).
+- `t/14utf8.t`: ExampleP `NAME_lc`/`NAME_uc` hash derivation (~5).
+- `t/02dbidrv.t`: 2 subtests (~10 across variants).
+
+**Combined impact:** ~75 subtests.
+
+#### Deferred / out of scope
+
+- **Profile / Callbacks / Kids / swap_inner_handle / Executed**
+  reimplementation in Java. Would only help if we flipped
+  `$DBI::PurePerl = 0`, which in turn would require all five to
+  work first, and would expose tests that currently stay in the
+  safe skip paths. Not a win until someone asks for it.
+- **Gofer** (`t/85gofer.t` et al.) — deferred unless a consumer
+  needs it; fix scope is non-trivial.
+- **`t/80proxy.t`** — needs `RPC::PlClient`; already skipped.
+- **`zvp_*`** (PurePerl-on-PurePerl) variants — redundant once
+  the base tests pass; no extra effort required.
 
 ### Open Questions
 
