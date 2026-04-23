@@ -859,6 +859,14 @@ public class StatementResolver {
         boolean hasContent = false; // Track if we've seen any content
         boolean firstTokenIsSigil = false; // Track if first token is % or @ (hash/array)
 
+        // Extra bits for the "{'a','b'}" / "{1,2}" / "{foo,1}" rule: real Perl
+        // treats a braced expression as a hashref when the FIRST content token
+        // is a hash-key-shaped thing (string, number, bareword identifier) and
+        // at least one plain comma appears at depth 1.  Without this, such
+        // expressions degraded to a block evaluating a comma list.
+        boolean firstTokenIsKeyLike = false;
+        boolean sawCommaAtDepth1 = false;
+
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
 
         // Check if the first token is % or @ - this strongly suggests a hash literal
@@ -867,6 +875,26 @@ public class StatementResolver {
         if (firstToken.text.equals("%") || firstToken.text.equals("@")) {
             firstTokenIsSigil = true;
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral first token is sigil: " + firstToken.text);
+        } else if (firstToken.type == LexerTokenType.STRING
+                || firstToken.type == LexerTokenType.NUMBER
+                || firstToken.text.equals("\"")
+                || firstToken.text.equals("'")
+                || firstToken.text.equals("`")) {
+            // A string or number literal as first content is only a hash key
+            // if a comma at depth 1 follows — tracked below.  Quoted strings
+            // are lexed as an OPERATOR token for the opening delimiter, so
+            // treat `"`, `'`, `` ` `` the same way.
+            firstTokenIsKeyLike = true;
+        } else if (firstToken.type == LexerTokenType.IDENTIFIER
+                && !firstToken.text.startsWith("$")
+                && !firstToken.text.startsWith("@")
+                && !firstToken.text.startsWith("%")
+                && !firstToken.text.startsWith("&")
+                && !firstToken.text.startsWith("*")
+                && !isBlockIntroducingKeyword(firstToken.text)) {
+            // Bareword identifier (not a sigil variable, not a block-introducing
+            // keyword like map/grep/sort/do/eval/return/...).  Potential hash key.
+            firstTokenIsKeyLike = true;
         }
 
         while (braceCount > 0) {
@@ -955,7 +983,9 @@ public class StatementResolver {
                     }
                     case "," -> {
                         // Comma alone is not definitive - could be function args or hash
-                        // Continue scanning for more evidence
+                        // Continue scanning for more evidence.  Recorded so the
+                        // first-content-is-key rule in the final decision can fire.
+                        sawCommaAtDepth1 = true;
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found comma, continuing scan");
                     }
                     case "for", "while", "if", "unless", "until", "foreach", "my", "our", "say", "print", "local" -> {
@@ -1015,6 +1045,14 @@ public class StatementResolver {
             // { %hash } or { @array } or { %{$ref} } - treat as hash constructor
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - starts with sigil (% or @)");
             return true;
+        } else if (firstTokenIsKeyLike && sawCommaAtDepth1) {
+            // `{ 'a', 'b' }`, `{ 1, 2 }`, `{ foo, 1 }` — first token is a
+            // hash-key-shaped thing (string/number/bareword, not a block
+            // keyword), followed by a comma.  Real Perl treats this as a
+            // hashref constructor.  `;` would have triggered hasBlockIndicator
+            // and exited above, so we know there is no statement separator.
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - first token key-like + comma at depth 1");
+            return true;
         } else if (parser.insideBracedDereference) {
             // Inside %{...}, inner {} should default to hash constructor, not block.
             // Perl 5 sets PL_expect = XTERM after %{, making the next { a hash constructor.
@@ -1025,6 +1063,25 @@ public class StatementResolver {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine
         }
+    }
+
+    // Words that, as the FIRST content token after `{`, strongly imply a
+    // block rather than a hash literal.  Used by isHashLiteral() to decide
+    // whether "{ bareword , ... }" is a hashref (if not in this list) or a
+    // block evaluating the comma expression (if in this list).
+    private static boolean isBlockIntroducingKeyword(String text) {
+        return switch (text) {
+            case "map", "grep", "sort", "do", "eval", "return",
+                 "if", "unless", "while", "until", "for", "foreach",
+                 "my", "our", "local", "state",
+                 "last", "next", "redo", "goto",
+                 "say", "print", "printf", "warn", "die",
+                 "use", "no", "require",
+                 "package", "sub",
+                 "BEGIN", "END", "INIT", "CHECK", "UNITCHECK",
+                 "when", "given", "default" -> true;
+            default -> false;
+        };
     }
 
     public static void parseStatementTerminator(Parser parser) {
