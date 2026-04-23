@@ -22,29 +22,66 @@ public class UFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         for (int i = 0; i < count; i++) {
-            // The U format reads one Unicode code point.  The semantics are
-            // mode-dependent, not storage-dependent:
+            // The U format reads one Unicode code point.  Real-Perl
+            // semantics:
             //
-            //   * Character mode (the default, or after C0 / starting with `U`):
-            //     read one code point directly from the string.  This matches
-            //     what real Perl does for e.g. `unpack "U*", "\xc2\xb6"` on a
-            //     Latin-1 byte string — it returns (0xC2, 0xB6), NOT (0xB6)
-            //     obtained by decoding those bytes as UTF-8.
+            //   * Template starts with bare `U` (e.g. `"U*"`) or has
+            //     switched to Perl "character mode" via `U0`: read one
+            //     code point directly from the string.  Default for
+            //     most templates used by Perl code (e.g. JSON::PP's
+            //     `_encode_ascii`: `unpack("U*", $str)` on a character
+            //     string yields the string's code points one by one).
+            //   * After `C0` (or default when template does NOT start
+            //     with bare `U`): bytes are interpreted as UTF-8 and one
+            //     character is decoded per consumed group.
             //
-            //   * Byte mode (after U0): the bytes are interpreted as UTF-8
-            //     and one Unicode character is decoded per consumed group.
+            // `UnpackState`'s internal `isCharacterMode()` keys off a
+            // naming calibrated for the numerous other format handlers
+            // (`StringFormatHandler`, `NumericFormatHandler`, …) and
+            // cannot be changed without auditing all of them.  Here we
+            // combine `startsWithU` (set when the template begins with
+            // bare `U`) with `!isCharacterMode()` (set after `U0`).
             //
-            // Previously this handler keyed off `isUTF8Data()` (true only for
-            // strings containing code points > 255), which caused Latin-1
-            // byte strings to be mis-decoded as UTF-8 in character mode.
-            if (state.isCharacterMode()) {
-                if (state.hasMoreCodePoints()) {
-                    output.add(new RuntimeScalar(state.nextCodePoint()));
-                } else {
+            // When we're in byte mode but reading code points (the
+            // `U0…U` case), we advance both `codePointIndex` AND
+            // `buffer.position` so a later `switchToCharacterMode`
+            // (triggered by e.g. `C0`) recomputes `codePointIndex`
+            // correctly from the byte offset.  Without that, the
+            // code-point progress inside this handler would be lost the
+            // moment the template switches back to character mode.
+            //
+            // Covered by `op/utf8decode.t` (the `C0U*` path),
+            // `op/pack.t` (the `U0U C0 W` sequence), and the JSON::PP
+            // `_encode_ascii` round-trip in `unpack.t` (the starts-with-
+            // U path).
+            boolean readCodePoints = startsWithU || !state.isCharacterMode();
+            if (readCodePoints) {
+                if (!state.hasMoreCodePoints()) {
                     break;
                 }
+                int cp = state.nextCodePoint();
+                output.add(new RuntimeScalar(cp));
+                // Keep the byte buffer in sync so subsequent mode
+                // switches don't rewind us to the start.
+                if (!state.isCharacterMode()) {
+                    ByteBuffer buf = state.getBuffer();
+                    if (buf != null) {
+                        // `originalBytes` layout mirrors what
+                        // `UnpackState.switchToByteMode` uses: ISO-8859-1
+                        // (1 byte per code point) when `!isUTF8Data`,
+                        // UTF-8 (variable length) when `isUTF8Data`.
+                        int advance = state.isUTF8Data()
+                                ? (cp <= 0x7F ? 1
+                                   : cp <= 0x7FF ? 2
+                                   : cp <= 0xFFFF ? 3
+                                   : cp <= 0x10FFFF ? 4
+                                   : 5)
+                                : 1;
+                        int newPos = Math.min(buf.position() + advance, buf.limit());
+                        buf.position(newPos);
+                    }
+                }
             } else {
-                // Byte mode: decode UTF-8 from the byte buffer.
                 ByteBuffer buffer = state.getBuffer();
                 if (!buffer.hasRemaining()) {
                     break; // Just stop unpacking
