@@ -22,16 +22,29 @@ public class UFormatHandler implements FormatHandler {
     @Override
     public void unpack(UnpackState state, List<RuntimeBase> output, int count, boolean isStarCount) {
         for (int i = 0; i < count; i++) {
-            // Check if input has UTF-8 flag (is already Unicode string)
-            if (state.isUTF8Data()) {
-                // Input is UTF-8 flagged string - read codepoints directly
+            // The U format reads one Unicode code point.  The semantics are
+            // mode-dependent, not storage-dependent:
+            //
+            //   * Character mode (the default, or after C0 / starting with `U`):
+            //     read one code point directly from the string.  This matches
+            //     what real Perl does for e.g. `unpack "U*", "\xc2\xb6"` on a
+            //     Latin-1 byte string — it returns (0xC2, 0xB6), NOT (0xB6)
+            //     obtained by decoding those bytes as UTF-8.
+            //
+            //   * Byte mode (after U0): the bytes are interpreted as UTF-8
+            //     and one Unicode character is decoded per consumed group.
+            //
+            // Previously this handler keyed off `isUTF8Data()` (true only for
+            // strings containing code points > 255), which caused Latin-1
+            // byte strings to be mis-decoded as UTF-8 in character mode.
+            if (state.isCharacterMode()) {
                 if (state.hasMoreCodePoints()) {
                     output.add(new RuntimeScalar(state.nextCodePoint()));
                 } else {
                     break;
                 }
             } else {
-                // Input is byte string - decode UTF-8
+                // Byte mode: decode UTF-8 from the byte buffer.
                 ByteBuffer buffer = state.getBuffer();
                 if (!buffer.hasRemaining()) {
                     break; // Just stop unpacking

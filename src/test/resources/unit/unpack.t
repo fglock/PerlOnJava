@@ -160,4 +160,30 @@ subtest 'Star (*) modifier tests' => sub {
     cmp_ok(abs($unpacked[1] - 2.22222222), '<', 0.00000001, 'Second double value');
 };
 
+subtest 'U format reads code points, does not UTF-8-decode' => sub {
+    # Regression: `unpack "U*", "\xc2\xb6"` must return (194, 182) — one code
+    # point per character of the string — NOT (182) obtained by re-decoding
+    # the two bytes as a single UTF-8 sequence.  In character mode (the
+    # default, or after an initial `U` / `C0`) `U` reads code points
+    # directly from the string.  Previously the handler keyed on a storage
+    # flag (isUTF8Data, true only for code points > 255), which caused
+    # Latin-1 byte strings to be mis-decoded.
+
+    no utf8;
+    my @u1 = unpack "U*", "\xc2\xb6";
+    is_deeply(\@u1, [194, 182], '{\xc2,\xb6} unpacks as two code points');
+
+    # ASCII stays ASCII.
+    my @u2 = unpack "U*", "abc";
+    is_deeply(\@u2, [97, 98, 99], 'ASCII U* returns byte values');
+
+    # In byte mode (U0), `U*` should decode UTF-8 from the bytes.
+    my @u3 = unpack "U0U*", "\xc2\xb6";
+    is_deeply(\@u3, [182], 'U0U* decodes as UTF-8');
+
+    # A string that really does contain a high Unicode code point round-trips.
+    my @u4 = unpack "U*", "\x{8000}\x{20}";
+    is_deeply(\@u4, [0x8000, 0x20], 'high Unicode U* returns code points');
+};
+
 done_testing();
