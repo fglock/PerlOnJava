@@ -351,7 +351,14 @@ public class SubroutineParser {
                     || nextTok.text.equals("]")
                     || nextTok.text.equals(",")
                     || nextTok.type == LexerTokenType.EOF;
-            boolean infixOp = nextTok.type == LexerTokenType.OPERATOR
+            // Word-operators (eq, ne, lt, gt, le, ge, cmp, x, isa, and, or,
+            // xor, …) are produced by the lexer as IDENTIFIER tokens but are
+            // listed in INFIX_OP.  Accept both OPERATOR and IDENTIFIER token
+            // types here so a bareword like `Foo::Bar::` followed by one of
+            // them is not mistaken for a sub call consuming the word
+            // operator as its first argument.
+            boolean infixOp = (nextTok.type == LexerTokenType.OPERATOR
+                    || nextTok.type == LexerTokenType.IDENTIFIER)
                     && (INFIX_OP.contains(nextTok.text)
                     || nextTok.text.equals("?")
                     || nextTok.text.equals(":"));
