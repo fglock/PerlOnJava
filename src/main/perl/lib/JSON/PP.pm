@@ -1558,8 +1558,30 @@ sub incr_parse {
 
                 my ($obj, $offset) = $coder->PP_decode_json( $self->{incr_text}, 0x00000001 );
                 push @ret, $obj;
-                use bytes;
-                $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
+                # PerlOnJava: the decoder advances its internal `$at` by the
+                # UTF-8 byte length of each multi-byte character (via
+                # `is_valid_utf8`), so `$offset` is in BYTES.  CPAN
+                # JSON::PP papers over this with `use bytes; substr`,
+                # which in upstream Perl makes substr operate on the
+                # UTF-8 byte representation of the string.  PerlOnJava's
+                # `use bytes` pragma does not yet redirect substr, so do
+                # the equivalent explicitly.
+                #
+                # When `get_utf8` is true, `$self->{incr_text}` is already
+                # a byte string (the user hands us UTF-8 bytes) and plain
+                # substr works correctly with a byte offset.  When
+                # `get_utf8` is false, we decoded to chars above and need
+                # to encode-substr-decode to match the decoder's byte
+                # bookkeeping.
+                if ( $coder->get_utf8 ) {
+                    $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
+                } else {
+                    my $bytes = $self->{incr_text};
+                    utf8::encode($bytes);
+                    my $remaining = substr($bytes, $offset || 0);
+                    utf8::decode($remaining);
+                    $self->{incr_text} = $remaining;
+                }
                 $self->{incr_pos} = 0;
                 $self->{incr_nest} = 0;
                 $self->{incr_mode} = 0;
