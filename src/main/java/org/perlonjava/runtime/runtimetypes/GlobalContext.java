@@ -287,6 +287,11 @@ public class GlobalContext {
         IOHandle.initialize();  // IO::Handle methods (_sync, _error, etc.)
         Version.initialize();   // Initialize version module for version objects
         Attributes.initialize();  // attributes:: XS-equivalent functions (used by attributes.pm)
+        // DBI JDBC backend: with the switch to upstream DBI.pm + DBI::PurePerl,
+        // our Java-backed methods register under DBD::JDBC::{dr,db,st} so they
+        // can be inherited by JDBC-driven DBDs (DBD::SQLite, DBD::Mem, ...).
+        // This runs at startup so the methods exist before any `use DBI`.
+        DBI.initialize();
         // Filter::Util::Call will be loaded via XSLoader when needed
 
         // Reset method cache after initializing UNIVERSAL

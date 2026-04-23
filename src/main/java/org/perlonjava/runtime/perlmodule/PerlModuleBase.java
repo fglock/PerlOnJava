@@ -97,6 +97,34 @@ public abstract class PerlModuleBase {
     }
 
     /**
+     * Registers a method in the Perl module under a specific target package,
+     * overriding the default moduleName-derived package. Useful for modules
+     * that need to register methods under multiple Perl packages (e.g. a DBI
+     * driver registering under DBD::Foo::dr, DBD::Foo::db, DBD::Foo::st).
+     *
+     * @param targetPackage   The Perl package to register the method under.
+     * @param perlMethodName  The name of the method in Perl.
+     * @param javaMethodName  The name of the corresponding Java method.
+     * @throws NoSuchMethodException If the Java method does not exist.
+     */
+    protected void registerMethodInPackage(String targetPackage,
+                                           String perlMethodName,
+                                           String javaMethodName) throws NoSuchMethodException {
+        try {
+            MethodHandle methodHandle = RuntimeCode.lookup.findStatic(
+                    this.getClass(), javaMethodName, RuntimeCode.methodType);
+            RuntimeCode code = new RuntimeCode(methodHandle, this, null);
+            code.isStatic = true;
+            code.packageName = targetPackage;
+            code.subName = perlMethodName;
+            String fullName = NameNormalizer.normalizeVariableName(perlMethodName, targetPackage);
+            GlobalVariable.getGlobalCodeRef(fullName).set(new RuntimeScalar(code));
+        } catch (NoSuchMethodException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Defines symbols to be exported by the Perl module.
      *
      * @param exportType The type of export (e.g., EXPORT, EXPORT_OK).

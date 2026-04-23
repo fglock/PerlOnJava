@@ -32,35 +32,48 @@ public class DBI extends PerlModuleBase {
     /**
      * Initializes and registers all DBI methods.
      * This method must be called before using any DBI functionality.
+     *
+     * With the switch to upstream DBI.pm + DBI::PurePerl, methods are now
+     * registered under DBD::JDBC::{dr,db,st} sub-packages so upstream's
+     * dispatch (which looks up $h->{ImplementorClass}::method) routes here
+     * for JDBC-backed dbhs. DBD::SQLite / DBD::Mem etc. inherit from these.
      */
     public static void initialize() {
         // Create new DBI instance
         DBI dbi = new DBI();
         try {
-            // Register all supported DBI methods
-            dbi.registerMethod("connect", null);
-            dbi.registerMethod("prepare", null);
-            dbi.registerMethod("execute", null);
-            dbi.registerMethod("fetchrow_arrayref", null);
-            dbi.registerMethod("fetchrow_hashref", null);
-            dbi.registerMethod("rows", null);
-            dbi.registerMethod("disconnect", null);
-            dbi.registerMethod("last_insert_id", null);
-            dbi.registerMethod("begin_work", null);
-            dbi.registerMethod("commit", null);
-            dbi.registerMethod("rollback", null);
-            dbi.registerMethod("bind_param", null);
-            dbi.registerMethod("bind_param_inout", null);
-            dbi.registerMethod("bind_col", null);
-            dbi.registerMethod("table_info", null);
-            dbi.registerMethod("column_info", null);
-            dbi.registerMethod("primary_key_info", null);
-            dbi.registerMethod("foreign_key_info", null);
-            dbi.registerMethod("type_info", null);
-            dbi.registerMethod("ping", null);
-            dbi.registerMethod("available_drivers", null);
-            dbi.registerMethod("data_sources", null);
-            dbi.registerMethod("get_info", null);
+            // dr-level: connect creates a dbh. available_drivers / data_sources
+            // are class-level but also registered here for backwards compat.
+            dbi.registerMethodInPackage("DBD::JDBC::dr", "connect", "connect");
+            dbi.registerMethodInPackage("DBD::JDBC::dr", "data_sources", "data_sources");
+
+            // db-level: SQL prep / execute / transaction / info methods.
+            dbi.registerMethodInPackage("DBD::JDBC::db", "prepare", "prepare");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "disconnect", "disconnect");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "last_insert_id", "last_insert_id");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "begin_work", "begin_work");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "commit", "commit");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "rollback", "rollback");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "ping", "ping");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "table_info", "table_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "column_info", "column_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "primary_key_info", "primary_key_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "foreign_key_info", "foreign_key_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "type_info", "type_info");
+            dbi.registerMethodInPackage("DBD::JDBC::db", "get_info", "get_info");
+
+            // st-level: execute / fetch / bind / row-count methods.
+            dbi.registerMethodInPackage("DBD::JDBC::st", "execute", "execute");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_arrayref", "fetchrow_arrayref");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_hashref", "fetchrow_hashref");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "rows", "rows");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param", "bind_param");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param_inout", "bind_param_inout");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "bind_col", "bind_col");
+
+            // Legacy: available_drivers and data_sources as DBI-class methods.
+            // Upstream DBI.pm defines available_drivers itself; register only
+            // what it doesn't already provide.
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing DBI method: " + e.getMessage());
         }
@@ -155,7 +168,7 @@ public class DBI extends PerlModuleBase {
             dbh.put("Name", new RuntimeScalar(jdbcUrl));
 
             // Create blessed reference for Perl compatibility
-            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBI::db"));
+            RuntimeScalar dbhRef = ReferenceOperators.bless(dbh.createReference(), new RuntimeScalar("DBD::JDBC::db"));
             return dbhRef.getList();
         }, dbh, "connect('" + jdbcUrl + "','" + dbh.get("Username") + "',...) failed");
     }
@@ -236,7 +249,7 @@ public class DBI extends PerlModuleBase {
             sth.put("NUM_OF_PARAMS", new RuntimeScalar(numParams));
 
             // Create blessed reference for statement handle
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
 
             dbh.get("sth").set(sthRef);
 
@@ -831,7 +844,7 @@ public class DBI extends PerlModuleBase {
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "table_info");
     }
@@ -864,7 +877,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getColumns(catalog, schema, table, column);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "column_info");
     }
@@ -952,7 +965,7 @@ public class DBI extends PerlModuleBase {
         result.put("has_resultset", scalarTrue);
         sth.put("execute_result", result.createReference());
 
-        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+        RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
         return sthRef.getList();
     }
 
@@ -974,7 +987,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getPrimaryKeys(catalog, schema, table);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "primary_key_info");
     }
@@ -1001,7 +1014,7 @@ public class DBI extends PerlModuleBase {
                     fkCatalog, fkSchema, fkTable);
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "foreign_key_info");
     }
@@ -1015,7 +1028,7 @@ public class DBI extends PerlModuleBase {
             ResultSet rs = metaData.getTypeInfo();
 
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
-            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBI::st"));
+            RuntimeScalar sthRef = ReferenceOperators.bless(sth.createReference(), new RuntimeScalar("DBD::JDBC::st"));
             return sthRef.getList();
         }, dbh, "type_info");
     }

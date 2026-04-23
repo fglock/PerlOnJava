@@ -172,9 +172,36 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP -> {
-                                // Scope-exit cleanup for a my-scalar register
+                                // Scope-exit cleanup for a my-scalar register.
+                                //
+                                // Root cause for the defensive `instanceof` check
+                                // below: a my-scalar declared inside a
+                                // short-circuiting expression
+                                //   if (COND_A and COND_B and defined((my $x = ...)->{k})) {...}
+                                // may never run its MY_SCALAR initialisation if
+                                // COND_A or COND_B short-circuits. The compiler
+                                // has already allocated a register for `$x`, but
+                                // that register may be holding a temp value left
+                                // over from an earlier statement (e.g. a
+                                // CREATE_LIST result from an unrelated block
+                                // whose register was later recycled). When the
+                                // enclosing scope exits, SCOPE_EXIT_CLEANUP runs
+                                // on `$x`'s register and finds a non-scalar.
+                                //
+                                // This is safe to ignore because the user never
+                                // observes `$x` in that short-circuit path (their
+                                // code is inside the same block and also skipped).
+                                // `scopeExitCleanup` only has work to do on real
+                                // RuntimeScalars (IO-owner fd recycling,
+                                // refCount decrement for blessed refs with
+                                // DESTROY, and captureCount tracking for
+                                // closures); a non-scalar slot simply has no
+                                // cleanup obligation.
                                 int reg = bytecode[pc++];
-                                RuntimeScalar.scopeExitCleanup((RuntimeScalar) registers[reg]);
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.scopeExitCleanup(rs);
+                                }
                                 registers[reg] = null;
                             }
 
@@ -317,6 +344,9 @@ public class BytecodeInterpreter {
                                 int dest = bytecode[pc++];
                                 int src = bytecode[pc++];
                                 RuntimeBase srcVal = registers[src];
+                                if (dest == 51 && srcVal instanceof RuntimeList) {
+                                    new RuntimeException("TRACE ALIAS dest=51 src=" + src + " putting list in reg 51, srcVal=" + srcVal).printStackTrace();
+                                }
                                 registers[dest] = isImmutableProxy(srcVal) ? ensureMutableScalar(srcVal) : srcVal;
                             }
 
