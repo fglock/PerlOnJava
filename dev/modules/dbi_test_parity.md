@@ -5,14 +5,18 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 10 (2026-04-23): PerlOnJava bug fix — `package Foo;`
-now lexically scoped at runtime (not just at compile time). See
-Phase 10 section below.
+After Phase 10b (2026-04-23): fixed the bytecode-interpreter
+list-form `local` assignment bug (see Phase 10b section below).
 
-| | Files | Subtests | Passing | Failing |
-|---|---|---|---|---|
-| `jcpan -t DBI` (2026-04-23, post-Phase-10) | 200 | **6600** | **6210 (94 %)** | 390 |
-| (pre-Phase-10 baseline) | 200 | 5944 | 5566 (94 %) | 378 |
+| | Files | Subtests | Passing | Failing | Files failed |
+|---|---|---|---|---|---|
+| `jcpan -t DBI` (post-Phase-10b) | 200 | **6600** | **6256 (95 %)** | 344 | 64/200 |
+| (post-Phase-10) | 200 | 6600 | 6210 (94 %) | 390 | 76/200 |
+| (pre-Phase-10) | 200 | 5944 | 5566 (94 %) | 378 | 76/200 |
+
+See "Fresh baseline (2026-04-23)" section below for per-file
+failure distribution and the revised phase 10+ plan (skipped
+tests stay skipped — no `$DBI::PurePerl` flag flip).
 
 ---
 
@@ -945,13 +949,18 @@ pre-existing blockers:
 |---|---|---|---|
 | `t/14utf8.t` | 1/16 | `Encode::_utf8_on` flag not preserved across hash-key storage | PerlOnJava infra gap (strings are JVM `String`, UTF-8 flag tracked externally). Out of DBI scope. |
 | `t/02dbidrv.t` | 2/54 | `$dbh->DESTROY` not copying `err`/`errstr`/`state` up to parent `$drh` | Being addressed in a separate PR (DESTROY work). |
-| `t/06attrs.t` | 2/166 | **PerlOnJava bug**: `local ($h->{key}) = value` (list form) inside eval-STRING-compiled subs is a no-op for the assignment. `local` scope restoration works; the RHS assignment doesn't take effect. See "Root cause of t/06attrs.t and t/08keeperr.t failures" below. | **Fixable PerlOnJava bug** — flagged for follow-up. |
-| `t/08keeperr.t` | 3/91 | Same bug as t/06attrs.t. DBI::PurePerl's `_install_method` wrapper uses `local ($h->{'dbi_pp_call_depth'}) = $call_depth;` to track call depth. The no-op means every wrapper sees `dbi_pp_call_depth = 0`, so nested error handling fires in the innermost wrapper (`set_err`) instead of bubbling to the outermost (`do`). Error message becomes `"set_err failed"` instead of `"do failed"`. | Same root cause — flagged. |
+| `t/06attrs.t` | 2/166 | **PerlOnJava bug — FIXED in Phase 10b**: `local ($h->{key}) = value` (list form) in the bytecode-interpreter backend silently dropped the RHS assignment. | **FIXED** |
+| `t/08keeperr.t` | 3/91 | Same bug as t/06attrs.t. | **FIXED** |
 | `t/19fhtrace.t` | 4/27 | All 4 failing tests use `open $fh, ':via(TraceDBI)'` or `:scalar` PerlIO layers | PerlOnJava doesn't implement PerlIO custom layers. Out of DBI scope. |
 
 The most interesting finding is a **reproducible PerlOnJava bug**
 in `local (hash-or-array-element) = value` list assignment inside
-eval-STRING-compiled subs.
+eval-STRING-compiled subs. **Fixed in Phase 10b.**
+
+### Phase 10b: list-form `local` assignment on hash/array elements
+
+**Status: done (2026-04-23).** Fixed in
+`src/main/java/org/perlonjava/backend/bytecode/CompileAssignment.java`.
 
 ### Root cause of t/06attrs.t and t/08keeperr.t failures
 
@@ -1054,6 +1063,32 @@ compilation of the same code works).
   generated subs with localized hash/array elements (DBI being
   the most visible, but Moose/MouseX/etc. accessors may also
   rely on this pattern)
+
+### Fix applied (Phase 10b)
+
+`CompileAssignment.handleLocalListAssignment` iterated over the
+list elements but only emitted bytecode for
+`OperatorNode("$" + IdentifierNode)` sigil-variable elements.
+Elements that were `BinaryOperatorNode` (i.e. `$h->{key}`,
+`$a[i]`, `$obj->method->{k}`, etc.) were silently skipped —
+no assignment bytecode emitted.
+
+Fix: added a `BinaryOperatorNode` branch in both the
+single-element special case and the multi-element loop. For each
+such element, emit:
+1. Compile the element as an lvalue (gets the element scalar ref).
+2. `PUSH_LOCAL_VARIABLE` to save the value for scope-exit restore.
+3. Multi-element: `ARRAY_GET` to pull RHS[i] from the value list.
+4. `SET_SCALAR` to assign.
+
+Measured impact on `jcpan -t DBI`:
+- 6210 → **6256 passing subtests** (+46)
+- 76 → **64 failed files** (-12)
+
+The overshoot vs the predicted "+10-15" is because many more
+DBI tests indirectly depended on `dbi_pp_call_depth` tracking
+working correctly (error messages, warning messages, method-
+dispatch trace format).
 
 ---
 
