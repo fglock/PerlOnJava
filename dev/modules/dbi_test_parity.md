@@ -5,18 +5,24 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
-After Phase 10b (2026-04-23): fixed the bytecode-interpreter
-list-form `local` assignment bug (see Phase 10b section below).
+After Phase 11 (2026-04-23): XSLoader now rejects known-XS-only
+modules cleanly so `eval { require SomeDBM }` probes fall through
+to alternatives, and the DBM family tests SKIP instead of crashing.
 
 | | Files | Subtests | Passing | Failing | Files failed |
 |---|---|---|---|---|---|
-| `jcpan -t DBI` (post-Phase-10b) | 200 | **6600** | **6256 (95 %)** | 344 | 64/200 |
+| `jcpan -t DBI` (post-Phase-11) | 200 | 6136 | 5992 | **144** | **48/200** |
+| (post-Phase-10b) | 200 | 6600 | 6256 (95 %) | 344 | 64/200 |
 | (post-Phase-10) | 200 | 6600 | 6210 (94 %) | 390 | 76/200 |
 | (pre-Phase-10) | 200 | 5944 | 5566 (94 %) | 378 | 76/200 |
 
-See "Fresh baseline (2026-04-23)" section below for per-file
-failure distribution and the revised phase 10+ plan (skipped
-tests stay skipped — no `$DBI::PurePerl` flag flip).
+**Phase 11 delta: -200 failing subtests, -16 failed files.** The
+"passing" and "subtests" columns drop because ~464 subtests that
+formerly ran (and mostly failed) inside `t/50dbm_simple.t`,
+`t/52dbm_complex.t`, `t/85gofer.t` and friends now skip entirely
+via `plan skip_all => "No DBM modules available"`. This is the
+correct outcome — CPAN-style backend probing is supposed to SKIP
+when no backend works.
 
 ---
 
@@ -923,17 +929,61 @@ module that uses `{ package X; ... }` — Carp itself being a
 prominent example, but the pattern is common for debugger-
 compatibility shims.
 
-### Phase 11: filesystem locking for DBM tests
+### Phase 11: DBM backend probing fails cleanly
 
-`t/50dbm_simple.t`, `t/51dbm_file.t`, and the `49dbd_file.t`
-family die with "Resource deadlock avoided" from
-`DBI::DBD::SqlEngine` at the `flock`/`fcntl` call. Needs:
-- Verify our `flock`/`fcntl` behave on the same fd/inode pair
-  the way CPython/Perl does on macOS (FD-based vs inode-based).
-- Either match Perl's behaviour or skip these test families on
-  PerlOnJava.
+**Status: done (2026-04-23).** Fixed in
+`src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java`
+and `src/main/perl/lib/XSLoader.pm`.
 
-**Impact:** ~95 subtests (combined DBM + DBD::File variants).
+**Root cause.** CPAN's `DB_File`, `BerkeleyDB`, `SDBM_File`,
+`GDBM_File`, `NDBM_File`, `ODBM_File` are pure-XS modules with
+no pure-Perl fallback. In PerlOnJava, `require DB_File` succeeded
+silently (XSLoader::load returned true) but the XS helpers like
+`DB_File::constant` were never defined. The first real use
+triggered an infinite `AUTOLOAD → constant → AUTOLOAD` recursion
+ending in `StackOverflowError`.
+
+CPAN test runners (DBI's `t/50dbm_simple.t` et al.) probe
+optional backends with:
+```perl
+my @dbms = qw(SDBM_File GDBM_File DB_File BerkeleyDB NDBM_File ODBM_File);
+@dbm_types = grep { eval { require "$_.pm" } } @dbms;
+plan skip_all => "No DBM modules available" unless @dbm_types;
+```
+This pattern relies on `require` **failing** for unavailable
+backends. Because XSLoader silently returned success, the test
+picked DB_File, then crashed on use.
+
+**Fix.**
+- Added an `XS_ONLY_NOT_SUPPORTED` blacklist in both
+  `XSLoader.pm` and `XSLoader.java` (kept in sync). When
+  `XSLoader::load("DB_File", ...)` etc. is called, die with
+  `"XS module not supported on PerlOnJava"`. The caller's
+  `eval { require ... }` catches it and the probe falls through.
+- Added `installEndBlockStubs("BerkeleyDB")` which registers a
+  no-op Perl sub for `BerkeleyDB::Term::close_everything` when
+  BerkeleyDB fails to load. Without this, the module's END block
+  (registered at compile time, before our die runs) would fire
+  `close_everything()` on interpreter shutdown, causing a
+  non-zero exit status that prove/TAP::Harness flags as a failed
+  program — even for tests that otherwise passed or SKIPped.
+
+**Impact.**
+
+| Test file | Before | After |
+|---|---|---|
+| `t/50dbm_simple.t` + variants | 16/38 fail × 5 | **SKIP × 5** |
+| `t/52dbm_complex.t` | partial / crash | **SKIP** |
+| `t/53sqlengine_adv.t` | crash | **SKIP** |
+| `t/49dbd_file.t` (base) | 9/65 fail | **passes 65/65** |
+
+Full-suite:
+- Failing subtests: 344 → **144** (-200)
+- Failing files: 64 → **48** (-16)
+
+Still failing in this family: `t/51dbm_file.t` (2 fails across
+variants — hard-requires a DBM backend without `eval`). Would
+require patching the test, out of scope.
 
 #### Phase 12: execute_array (t/15array.t)
 
