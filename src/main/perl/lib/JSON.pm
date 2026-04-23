@@ -71,14 +71,18 @@ sub import {
         }
         elsif ($tag eq '-convert_blessed_universally') {
             # Install a default UNIVERSAL::TO_JSON like CPAN JSON does.
+            # The hook unwraps blessed hashrefs/arrayrefs into plain refs;
+            # it must use `reftype` (not `ref`) because `ref` on a blessed
+            # ref returns the CLASS name, not the underlying reftype.
+            require Scalar::Util;
             my $org_encode = JSON::PP->can('encode');
             no warnings 'redefine';
             no strict 'refs';
             *{'JSON::PP::encode'} = sub {
                 local *UNIVERSAL::TO_JSON = sub {
-                    my $ref = ref $_[0];
-                    return $ref eq 'HASH'  ? { %{$_[0]} }
-                         : $ref eq 'ARRAY' ? [ @{$_[0]} ]
+                    my $rt = Scalar::Util::reftype($_[0]) // '';
+                    return $rt eq 'HASH'  ? { %{$_[0]} }
+                         : $rt eq 'ARRAY' ? [ @{$_[0]} ]
                          : undef;
                 };
                 $org_encode->(@_);
