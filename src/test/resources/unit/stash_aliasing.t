@@ -75,4 +75,25 @@ subtest 'chain alias' => sub {
         'chained alias resolves through to terminal package' );
 };
 
+subtest 'bless through aliased package name' => sub {
+    package StashAliasBlessSrc;
+    sub greet { "hello from src" }
+    package main;
+    *StashAliasBlessDst:: = *StashAliasBlessSrc::;
+
+    # bless using the aliased (Dst) name should be equivalent to blessing
+    # through the canonical (Src) name: ref reports the canonical name,
+    # isa succeeds for BOTH the aliased and canonical names, and method
+    # dispatch goes through to the shared stash.
+    my $x = bless {}, 'StashAliasBlessDst';
+    is( ref($x), 'StashAliasBlessSrc',
+        'ref() returns canonical (Src) name after blessing through alias' );
+    ok( $x->isa('StashAliasBlessSrc'),
+        'isa(canonical-name) is true for object blessed through alias' );
+    ok( $x->isa('StashAliasBlessDst'),
+        'isa(alias-name) is true too (alias == canonical)' );
+    is( $x->greet, 'hello from src',
+        'method dispatch works through the aliased stash' );
+};
+
 done_testing;

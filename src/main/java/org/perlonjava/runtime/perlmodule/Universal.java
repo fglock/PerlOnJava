@@ -349,6 +349,10 @@ public class Universal extends PerlModuleBase {
         } else if (normalizedArg.startsWith("::")) {
             normalizedArg = normalizedArg.substring(2);
         }
+        // Canonicalise through stash aliases (`*Foo:: = *Bar::;`): an argument
+        // like "Dummy::True" must still match an object blessed into "JSON::PP::Boolean"
+        // if the two package names are aliases.
+        normalizedArg = GlobalVariable.resolveStashAlias(normalizedArg);
 
         return new RuntimeScalar(linearizedClasses.contains(normalizedArg)).getList();
     }
