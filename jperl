@@ -32,7 +32,7 @@ fi
 JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
 # Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
-# warnings from fastjson2 library.
+# warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
 JAVA_VERSION=$(java -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
 if [ "$JAVA_VERSION" -ge 23 ] 2>/dev/null; then
     JVM_OPTS="$JVM_OPTS --sun-misc-unsafe-memory-access=allow"

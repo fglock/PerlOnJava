@@ -39,7 +39,7 @@ Micro-benchmark for interpreter performance on loop-heavy code.
 ./gradlew run -PmainClass=org.perlonjava.interpreter.ForLoopBenchmark
 
 # Method 2: Direct Java execution
-java -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' -o -name 'fastjson*.jar' | tr '\n' ':')" \
+java -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' | tr '\n' ':')" \
      org.perlonjava.interpreter.ForLoopBenchmark
 ```
 
@@ -120,7 +120,7 @@ See what methods the JVM is compiling and inlining:
 
 ```bash
 java -XX:+PrintCompilation \
-     -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' -o -name 'fastjson*.jar' | tr '\n' ':')" \
+     -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' | tr '\n' ':')" \
      org.perlonjava.interpreter.ForLoopBenchmark 2>&1 | grep -E "(BytecodeInterpreter|MathOperators|CompareOperators)"
 ```
 
@@ -130,7 +130,7 @@ See what the C2 compiler is inlining:
 
 ```bash
 java -XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining \
-     -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' -o -name 'fastjson*.jar' | tr '\n' ':')" \
+     -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' | tr '\n' ':')" \
      org.perlonjava.interpreter.ForLoopBenchmark 2>&1 > /tmp/inline.txt
 
 # Check if operators are being inlined into execute loop
@@ -144,7 +144,7 @@ View the generated interpreter bytecode:
 ```bash
 # Enable DEBUG mode in ForLoopBenchmark.java, then:
 make build
-java -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' -o -name 'fastjson*.jar' | tr '\n' ':')" \
+java -cp "build/classes/java/main:$(find ~/.gradle/caches -name 'icu4j*.jar' -o -name 'asm*.jar' | tr '\n' ':')" \
      org.perlonjava.interpreter.ForLoopBenchmark 2>&1 | head -30
 ```
 

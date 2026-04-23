@@ -99,7 +99,6 @@ sudo dpkg -r perlonjava
 - JUnit: For testing
 - ASM: For bytecode manipulation
 - ICU4J: For Unicode support
-- FASTJSON v2: For JSON support
 - SnakeYAML Engine: for YAML support
 
 ## Running PerlOnJava

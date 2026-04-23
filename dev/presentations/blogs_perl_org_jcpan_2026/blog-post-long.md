@@ -82,7 +82,7 @@ XS modules contain C code that gets compiled to native machine code. Since PerlO
 For popular XS modules, PerlOnJava includes **Java implementations** of the XS functions:
 
 - **DateTime** — java.time APIs
-- **JSON** — fastjson2 library
+- **JSON** — bundled `JSON::PP` (pure Perl)
 - **Digest::MD5/SHA** — Java MessageDigest
 - **DBI** — JDBC backend
 - **Compress::Zlib** — java.util.zip
