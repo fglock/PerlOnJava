@@ -307,10 +307,30 @@ package B::NULL {
         return bless {}, $class;
     }
 
-    sub next {
-        # NULL is terminal -- return self to prevent infinite loops
-        return $_[0];
-    }
+    # B::NULL represents the terminal "null op" in an OP chain. Real Perl's
+    # XS-backed B::NULL returns undef from all accessor methods (via xs magic),
+    # which is what common optree walkers like Test2::Util::Sub::sub_info rely
+    # on to detect end-of-chain:
+    #
+    #   my $op = $cv->START;
+    #   while ($op) {                         # <- B::NULL must be falsy-returning
+    #       push @lines => $op->line if $op->can('line');
+    #       last unless $op->can('next');
+    #       $op = $op->next;                  # <- must eventually yield undef
+    #   }
+    #
+    # Previous implementation returned `$_[0]` (self) from `next`, which kept
+    # `$op` pinned on B::NULL forever, causing infinite loops and unbounded
+    # `@all_lines` growth — observable as GC-thrash + apparent hangs in any
+    # module that introspects sub coderefs (Test2 deep-compare, Hash::Wrap,
+    # DBIx::Class, Sub::Defer). See dev/design/hash_wrap_triage_plan.md.
+    sub next { return; }
+    sub line { return; }
+    sub file { return; }
+    sub sibling { return; }
+    sub first { return; }
+    sub last { return; }
+    sub targ { return; }
 }
 
 package B::COP {
