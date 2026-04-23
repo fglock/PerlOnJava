@@ -471,7 +471,7 @@ Triage these once Phase 1 & 2 are done and we have clean output.
 
 ## Progress Tracking
 
-### Current Status: Phases 1–6 landed on `fix/dbi-test-parity` (PR #546). Callbacks, HandleSetErr, and errstr accumulation landed in Phase 6.
+### Current Status: Phases 1–7 landed on `fix/dbi-test-parity` (PR #546, merged). Phase 8 (RootClass) + architectural switch to upstream DBI.pm in progress on `feature/dbi-phase8-and-arch-switch`.
 
 ### Completed
 
@@ -662,6 +662,100 @@ Triage these once Phase 1 & 2 are done and we have clean output.
     - `t/17handle_error.t`: 84/84 (maintained — regression fixed
       by removing the `!exists` guard in the connect-attr
       re-application path)
+
+- [x] **2026-04-23 — Phase 8: RootClass subclassing.**
+  - `DBI->connect` detects `RootClass` (explicit attr or invocant
+    class ≠ DBI), eagerly `require`s it, and reblesses the outer
+    dbh/drh/sth into `${RootClass}::db` / `::dr` / `::st`. Failed
+    `require` dies unconditionally so `eval { connect(...) }` leaves
+    `$@` set for inspection (real DBI's behaviour).
+  - RootClass is stashed on the inner dbh so prepared sths inherit
+    it via `_new_sth`.
+  - `_new_sth` now inherits the error-handling attributes
+    (`RaiseError`, `PrintError`, `PrintWarn`, `RaiseWarn`,
+    `HandleError`, `HandleSetErr`, `ShowErrorStatement`, `Warn`)
+    from the parent dbh — without this, `set_err` on an sth
+    couldn't fire `RaiseError` because it looks them up on the
+    inner hash.
+  - `DBI::_::OuterHandle::_dispatch_packages` detects the
+    dr/db/st suffix via `isa()` for subclass-reblessed handles.
+  - `DBD::_::db::clone` propagates `RootClass` (plus `CompatMode`,
+    `RaiseError`, `PrintError`) to the cloned handle.
+  - **Per-test deltas:**
+    - `t/30subclass.t`: 19/43 → **43/43**
+    - `t/06attrs.t`: 142/166 → 145/166
+
+### Phase 9 (in progress): architectural switch to upstream DBI.pm
+
+A spike (see `/tmp/dbi_spike/findings.md` in the session; summarised
+below) confirmed that **upstream DBI.pm 1.647 + DBI::PurePerl load
+and run under PerlOnJava with only a 3-line shim**. Running the
+bundled DBI test suite against the upstream code (rather than our
+hand-rolled `DBI.pm` + `_Handles.pm`) produces these per-test
+deltas, at the cost of two newly-exposed PerlOnJava bugs:
+
+| Test file | Phase 8 (ours) | Upstream + PurePerl + shim |
+|---|---|---|
+| 01basics.t | 100/130 (halts) | **130/130** |
+| 03handle.t | 94/137 | 134/137 |
+| 06attrs.t | 145/166 | 164/166 |
+| 15array.t | 16/55 | **50/55** |
+| 30subclass.t | 43/43 | 43/43 (free) |
+| 31methcache.t | 24/49 | **49/49** |
+| 12quote.t | 5/10 | 10/10 |
+| 14utf8.t | 10/16 | 15/16 |
+| 20meta.t | 3/8 | 8/8 |
+| 09trace.t | 99/99 | 1/99 (PerlOnJava bug #2) |
+| 40/41/42/43 (profile) | 13/84 | SKIP (legit PurePerl skips) |
+| 70callbacks.t | 65/81 | SKIP (legit PurePerl skip) |
+
+8 files jump from partial to full pass; 4 more go from badly
+broken to ≥95%. Profile/Callbacks/Kids/`swap_inner_handle` are
+SKIPped by PurePerl on purpose — they're the XS-only features
+the Java shim will reimplement.
+
+**Two PerlOnJava interpreter bugs need fixing first:**
+
+1. **Qualified method call doesn't walk target's `@ISA`.**
+   `$x->Bar::hello()` with `@Bar::ISA = ('Foo')` and `Foo::hello`
+   defined → real Perl finds it, PerlOnJava dies with
+   "Undefined subroutine &Bar::hello". Affects DBI.pm:1345
+   (`$drh->DBD::_::dr::STORE($k, $v)` relies on
+   `@DBD::_::dr::ISA = qw(DBD::_::common)` and
+   `DBD::_::common::STORE`).
+2. **ClassCastException in `{ COND ? (%h1, %h2) : %h1 }` hash-list
+   construction inside a hash constructor.** Interpreter backend.
+   Affects DBI.pm:704. Explains the 09trace regression.
+
+**Implementation plan for Phase 9:**
+
+1. Fix PerlOnJava bug #1 (qualified method call @ISA walk) in
+   `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java`.
+2. Fix PerlOnJava bug #2 (hash-list ternary ClassCastException) in
+   the interpreter backend. Needs minimal repro first.
+3. Replace `src/main/perl/lib/DBI.pm` with upstream DBI.pm 1.647
+   plus a small PerlOnJava-specific wrapper that loads
+   `DBI::PurePerl` automatically (`$ENV{DBI_PUREPERL} //= 2`)
+   and keeps our JDBC-path `connect` wrapper for `dbi:<JDBC>:…`
+   DSNs. Delete most of `DBI/_Handles.pm`; upstream
+   `DBD::_::common` / `DBD::_::db` / `DBD::_::st` come from DBI.pm
+   and DBI::PurePerl.
+4. Port upstream `DBI::PurePerl` into
+   `src/main/perl/lib/DBI/PurePerl.pm` (it's 1279 lines of pure
+   Perl, already battle-tested).
+5. Leave `src/main/java/org/perlonjava/runtime/perlmodule/DBI.java`
+   in place — the Java-registered `connect` / `prepare` /
+   `execute` / `fetchrow_*` cooperate with upstream DBI via the
+   driver-registration path.
+6. Run full `jcpan -t DBI` baseline; expect a large jump from
+   today's 4940/6570 to somewhere in the **5800–6300/6570** range
+   (upstream DBI handles most of what we were re-implementing).
+7. Subsequent phases reimplement the PurePerl-skipped XS features
+   in Java:
+   - Profile dispatch hook (solves the 91-test Phase 8 block).
+   - Callbacks dispatch-time firing.
+   - Kids/ActiveKids/CachedKids auto-bookkeeping.
+   - `swap_inner_handle`, `take_imp_data`.
 
 ### Next Steps
 
