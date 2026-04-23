@@ -937,16 +937,40 @@ Already scoped in previous Next-Steps section. Still ~25 subtests.
 
 #### Phase 13: small triage (pure fix-ups)
 
-- `t/08keeperr.t`: `$DBI::err` cleanup on disconnect (~13 subtests).
-- `t/06attrs.t`: `ErrCount` bump-on-error, `Statement` on failed
-  `do` (~10).
-- `t/16destroy.t`: stray pre-connect DESTROY (~15).
-- `t/19fhtrace.t`: `trace(undef, $fh)` PerlIO layer preservation,
-  `trace(0, "STDERR")` string alias (~20).
-- `t/14utf8.t`: ExampleP `NAME_lc`/`NAME_uc` hash derivation (~5).
-- `t/02dbidrv.t`: 2 subtests (~10 across variants).
+**Status: triaged 2026-04-23, no code changes landed.** Each
+failure in the targeted files traces back to one of three
+pre-existing blockers:
 
-**Combined impact:** ~75 subtests.
+| Test file | Failures | Root cause | Disposition |
+|---|---|---|---|
+| `t/14utf8.t` | 1/16 | `Encode::_utf8_on` flag not preserved across hash-key storage | PerlOnJava infra gap (strings are JVM `String`, UTF-8 flag tracked externally). Out of DBI scope. |
+| `t/02dbidrv.t` | 2/54 | `$dbh->DESTROY` not copying `err`/`errstr`/`state` up to parent `$drh` | Being addressed in a separate PR (DESTROY work). |
+| `t/06attrs.t` | 2/166 | `_install_method`-generated eval-STRING wrapper: `$h->{dbi_pp_last_method} = $method_name` persists inside wrapper but is lost after wrapper returns (verified with injected `print` inside & outside wrapper). Minimal repros in isolation all pass. | Deep eval-STRING/closure/tied-hash interaction inside DBI specifically. Not cost-effective to debug for 2 subtests. |
+| `t/08keeperr.t` | 3/91 | 2/3 same as `t/06attrs.t` (wrapper's `dbi_pp_last_method` loss makes error messages say "set_err failed" instead of "do failed"). 1/3 warning-count mismatch, downstream of same issue. | Same blocker. |
+| `t/19fhtrace.t` | 4/27 | All 4 failing tests use `open $fh, ':via(TraceDBI)'` or `:scalar` PerlIO layers | PerlOnJava doesn't implement PerlIO custom layers. Out of DBI scope. |
+
+The most interesting finding is the `_install_method` wrapper bug
+(see `dotest12.pl` + injected `print STDERR` diagnostics): the
+assignment `$h->{'dbi_pp_last_method'} = $method_name;` at line
+36 of the generated wrapper:
+
+- Reports `dbi_pp_last_method=prepare` immediately after the
+  assignment (verified via injected print).
+- Reports `dbi_pp_last_method=undef` in the caller after the
+  wrapper returns — even though nothing between the assignment
+  and return modifies `dbi_pp_last_method`.
+
+Minimal reproductions (including eval-STRING + tied-hash
++ `local` + `&$sub` invocation patterns) all behave identically
+between jperl and perl. The bug only manifests inside DBI's
+actual `_install_method` wrapper with full DBI initialisation.
+The issue is likely in how eval-STRING captures the
+`$method_name` closure variable across PerlOnJava's DBI shim
+boundary — but is not easily reproducible outside DBI, and not
+worth the debug cost for the ~8 subtests it blocks. Flagged for
+future deep dive.
+
+---
 
 #### Deferred / out of scope
 
