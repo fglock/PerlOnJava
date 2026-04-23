@@ -15,26 +15,56 @@ package XSLoader;
 
 our $VERSION = "0.32";
 
+# Modules that are pure-XS in real Perl with no PerlOnJava-side implementation.
+# When XSLoader::load is called for one of these, we die cleanly so that
+# `eval { require SomeModule }` in CPAN code (and test suites that probe for
+# optional backends like DBM engines) correctly falls through to alternatives
+# instead of silently "succeeding" and then crashing later when methods are
+# actually called.
+#
+# Rule of thumb for adding to this list: the module's whole functionality
+# lives in a `.so`/DLL shipped with CPAN, and there is no pure-Perl or
+# Java-backed replacement in PerlOnJava. Pre-registered Java modules
+# (File::Glob, Encode, Time::HiRes, etc.) must NOT appear here.
+our %XS_ONLY_NOT_SUPPORTED = map { $_ => 1 } qw(
+    DB_File
+    BerkeleyDB
+    GDBM_File
+    NDBM_File
+    ODBM_File
+    SDBM_File
+);
+
 # Only define our load() if it's not already defined by Java
 BEGIN {
     unless (defined &load) {
         *load = sub {
             my ($module, $version) = @_;
             $module = caller() unless defined $module;
-            
+
+            # Bail out cleanly for pure-XS modules PerlOnJava can't back.
+            # Without this, modules like DB_File load but XS functions such
+            # as `constant` are undefined, which triggers infinite AUTOLOAD
+            # recursion (StackOverflowError) the first time the module is
+            # actually used.
+            if ($XS_ONLY_NOT_SUPPORTED{$module}) {
+                die "Can't load '$module' for module $module: "
+                    . "XS module not supported on PerlOnJava\n";
+            }
+
             # Check if the module has a bootstrap function (like standard XSLoader)
             my $boots = "${module}::bootstrap";
             if (defined &{$boots}) {
                 goto &{$boots};
             }
-            
+
             # For Java-backed modules, the methods are already registered.
             # For pure-Perl modules, nothing needs to be done.
             # Either way, just return success.
             return 1;
         };
     }
-    
+
     # Alias for compatibility
     *bootstrap_inherit = \&load unless defined &bootstrap_inherit;
 }

@@ -261,6 +261,24 @@ public class CompileAssignment {
                 bc.lastResultReg = localReg;
                 return true;
             }
+            // Single-element list with an lvalue like $h->{k}, $a[i], $obj->method->{k}, etc.
+            // Delegate to the scalar-local handler (matches the `local EXPR = RHS` path at
+            // line 20). Without this, the element falls through the main loop below and
+            // emits nothing - a silent no-op assignment. Reproduced by:
+            //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
+            if (element instanceof BinaryOperatorNode binOp) {
+                bc.compileNode(binOp, -1, rhsContext);
+                int elemReg = bc.lastResultReg;
+                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                bc.emitReg(elemReg);
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(elemReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = elemReg;
+                return true;
+            }
         }
         bc.compileNode(node.right, -1, rhsContext);
         int valueReg = bc.lastResultReg;
@@ -292,6 +310,26 @@ public class CompileAssignment {
                 bc.emitReg(localReg);
                 bc.emitReg(elemReg);
                 if (i == 0) bc.lastResultReg = localReg;
+            } else if (element instanceof BinaryOperatorNode binOp) {
+                // Element is an lvalue expression (e.g. $h->{k}, $a[i], $obj->attr).
+                // Compile to get the element reference, localize it, and assign RHS[i].
+                bc.compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                int elemLvalReg = bc.lastResultReg;
+                bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+                bc.emitReg(elemLvalReg);
+                int idxReg = bc.allocateRegister();
+                bc.emit(Opcodes.LOAD_INT);
+                bc.emitReg(idxReg);
+                bc.emit(i);
+                int rhsElemReg = bc.allocateRegister();
+                bc.emit(Opcodes.ARRAY_GET);
+                bc.emitReg(rhsElemReg);
+                bc.emitReg(valueReg);
+                bc.emitReg(idxReg);
+                bc.emit(Opcodes.SET_SCALAR);
+                bc.emitReg(elemLvalReg);
+                bc.emitReg(rhsElemReg);
+                if (i == 0) bc.lastResultReg = elemLvalReg;
             }
         }
         return true;

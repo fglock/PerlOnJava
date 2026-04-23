@@ -1123,13 +1123,18 @@ public class EmitOperator {
         // `require FILE` (which inspects InterpreterState.currentPackage to
         // compile the required file in the correct namespace) see the right
         // package after a `package Foo;` declaration in JVM-compiled code.
-        // Without this, the runtime tracker stays at "main" in compiled code,
-        // and `require FILE` incorrectly installs subs in main::.
+        //
+        // Use the *scoped* (local) variant so the runtime tracker is restored
+        // when the enclosing block / sub / file exits. Perl 5's `package Foo;`
+        // is lexically scoped; without the restore, a `package DB;` inside
+        // e.g. Carp::caller_info's inner `{ package DB; ... }` block would
+        // leak past the block and break subsequent `do FILE` calls which
+        // compile the loaded file in the *current* runtime package.
         emitterVisitor.ctx.mv.visitLdcInsn(name);
         emitterVisitor.ctx.mv.visitMethodInsn(
                 org.objectweb.asm.Opcodes.INVOKESTATIC,
                 "org/perlonjava/backend/bytecode/InterpreterState",
-                "setCurrentPackageStatic",
+                "setCurrentPackageLocal",
                 "(Ljava/lang/String;)V",
                 false);
         // Set debug information for the file name.

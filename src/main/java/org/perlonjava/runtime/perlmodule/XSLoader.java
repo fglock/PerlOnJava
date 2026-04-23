@@ -34,6 +34,30 @@ public class XSLoader extends PerlModuleBase {
     );
 
     /**
+     * Modules that are pure-XS in real Perl with no PerlOnJava-side implementation.
+     * When XSLoader::load is called for one of these, we die cleanly so that
+     * {@code eval { require SomeModule }} in CPAN code (and test suites that
+     * probe for optional backends like DBM engines) correctly falls through
+     * to alternatives instead of silently "succeeding" and then crashing
+     * later when methods are actually called.
+     * <p>
+     * Rule of thumb: the module's whole functionality lives in a shared
+     * library shipped with CPAN, and there is no pure-Perl or Java-backed
+     * replacement in PerlOnJava. Pre-registered Java modules (File::Glob,
+     * Encode, Time::HiRes, etc.) must NOT appear here.
+     * <p>
+     * Kept in sync with the Perl-side copy in {@code lib/XSLoader.pm}.
+     */
+    private static final Set<String> XS_ONLY_NOT_SUPPORTED = Set.of(
+            "DB_File",
+            "BerkeleyDB",
+            "GDBM_File",
+            "NDBM_File",
+            "ODBM_File",
+            "SDBM_File"
+    );
+
+    /**
      * Constructor for XSLoader.
      * Initializes the module with the name "XSLoader".
      */
@@ -55,6 +79,41 @@ public class XSLoader extends PerlModuleBase {
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing XSLoader method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Installs no-op Perl subroutines for XS symbols that a failed-to-load
+     * module's END block is known to call. Without these, the END queue
+     * aborts on interpreter shutdown with a non-zero exit status, which
+     * prove/TAP::Harness counts as a failed test program even when the
+     * program's actual assertions all passed or were SKIPped.
+     *
+     * Keyed by the module name passed to {@code XSLoader::load}.
+     */
+    private static void installEndBlockStubs(String moduleName) {
+        String[] symbols = switch (moduleName) {
+            case "BerkeleyDB" -> new String[] { "BerkeleyDB::Term::close_everything" };
+            default -> null;
+        };
+        if (symbols == null) return;
+        try {
+            java.lang.invoke.MethodHandle mh = RuntimeCode.lookup.findStatic(
+                    XSLoader.class, "noopStub", RuntimeCode.methodType);
+            for (String sym : symbols) {
+                if (GlobalVariable.existsGlobalCodeRef(sym)) continue;
+                RuntimeCode code = new RuntimeCode(mh, null, null);
+                code.isStatic = true;
+                GlobalVariable.getGlobalCodeRef(sym).set(new RuntimeScalar(code));
+            }
+        } catch (Exception e) {
+            // Non-fatal: the test program may still report a spurious non-zero
+            // exit, but the module-load failure path is unaffected.
+        }
+    }
+
+    /** No-op Perl sub used by {@link #installEndBlockStubs}. */
+    public static RuntimeList noopStub(RuntimeArray args, int ctx) {
+        return new RuntimeList();
     }
 
     /**
@@ -88,6 +147,29 @@ public class XSLoader extends PerlModuleBase {
             }
         } else {
             moduleName = args.getFirst().toString();
+        }
+
+        // Bail out cleanly for pure-XS modules PerlOnJava can't back.
+        // Without this, modules like DB_File load but their XS helpers
+        // (constant, etc.) are undefined, leading to infinite AUTOLOAD
+        // recursion (StackOverflowError) the first time the module is
+        // actually used. CPAN test suites commonly probe optional backends
+        // with `eval { require SomeDBM }` and rely on require FAILING to
+        // fall through to alternatives; silent success breaks them.
+        if (XS_ONLY_NOT_SUPPORTED.contains(moduleName)) {
+            // Install no-op stubs for any functions the module registers in an
+            // END block — the `.pm` file was already compiled end-to-end before
+            // we reach this `load`, so its END queue entries will fire at
+            // interpreter shutdown regardless of whether `require` succeeds.
+            // Without these, CPAN prove-style runners report the (otherwise-
+            // passing / SKIPped) test program as "exited 1" from the END die.
+            installEndBlockStubs(moduleName);
+
+            return WarnDie.die(
+                    new RuntimeScalar("Can't load '" + moduleName + "' for module " + moduleName
+                            + ": XS module not supported on PerlOnJava"),
+                    new RuntimeScalar("\n")
+            ).getList();
         }
 
         // Convert Perl::Module::Name to org.perlonjava.runtime.perlmodule.PerlModuleName

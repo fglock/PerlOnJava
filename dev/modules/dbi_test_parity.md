@@ -5,6 +5,27 @@ DBI test suite, 200 test files) pass on PerlOnJava.
 
 ## Current Baseline
 
+After Phase 11 (2026-04-23): XSLoader now rejects known-XS-only
+modules cleanly so `eval { require SomeDBM }` probes fall through
+to alternatives, and the DBM family tests SKIP instead of crashing.
+
+| | Files | Subtests | Passing | Failing | Files failed |
+|---|---|---|---|---|---|
+| `jcpan -t DBI` (post-Phase-11) | 200 | 6136 | 5992 | **144** | **48/200** |
+| (post-Phase-10b) | 200 | 6600 | 6256 (95 %) | 344 | 64/200 |
+| (post-Phase-10) | 200 | 6600 | 6210 (94 %) | 390 | 76/200 |
+| (pre-Phase-10) | 200 | 5944 | 5566 (94 %) | 378 | 76/200 |
+
+**Phase 11 delta: -200 failing subtests, -16 failed files.** The
+"passing" and "subtests" columns drop because ~464 subtests that
+formerly ran (and mostly failed) inside `t/50dbm_simple.t`,
+`t/52dbm_complex.t`, `t/85gofer.t` and friends now skip entirely
+via `plan skip_all => "No DBM modules available"`. This is the
+correct outcome — CPAN-style backend probing is supposed to SKIP
+when no backend works.
+
+---
+
 After Phase 7 (trace/TraceLevel semantics, DBI->internal tied-handle,
 `_concat_hash_sorted` rewrite, dbh default attributes, unknown-attr
 warnings):
@@ -778,114 +799,361 @@ upcoming Phase 10 will reimplement in Java.
    `my $x = { ternary-returning-list }`; the guard is the
    minimal-risk fix, the proper emitter fix is tracked separately).
    Now 99/99.
-2. **Full `jcpan -t DBI` baseline not yet re-run.** Per-test numbers
-   extrapolate to ~5800–6300 passing subtests (from the 4940/6570
-   Phase 7 baseline), but a full run would confirm.
 
-### Phase 10 (planned): reimplement XS-only features in Java
+---
 
-Upstream DBI::PurePerl explicitly skips some XS features with
-warnings like `"$h->{Profile} attribute not supported for DBI::PurePerl"`.
-These are the roadmap for the next round of Java work:
+## Fresh baseline (2026-04-23): full `jcpan -t DBI`
 
-- **Profile dispatch hook** — single biggest block (91 tests in
-  t/40..43_prof_*.t). Upstream XS wraps every dispatched method in
-  a timing frame that bumps `$h->{Profile}{Data}{$path...}`. We'd
-  hook `DBI::dispatch` (via method wrapping in the Java shim) to
-  do the same.
-- **Callbacks** — 65-test block (t/70callbacks.t). Fire
-  `$h->{Callbacks}{$method}` (or `*`) before/around dispatch.
-- **Kids/ActiveKids/CachedKids** auto-bookkeeping on parent handles.
-- **swap_inner_handle**, **take_imp_data** round-trip.
-- **XS-level trace formatter** (per-handle trace fh + PerlIO layers).
+Re-ran the complete DBI test suite after Phase 9/9b landed
+(master HEAD `720a04db3`). The infinite-loop symptom in the
+Gofer `STORE`/`set_err` chain did **not** reproduce this time —
+the suite completed cleanly in 192s.
 
-### Next Steps
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| `jcpan -t DBI` (2026-04-23) | 200 | **5944** | **5566** | **378** |
+| Failed files | | | 76/200 | |
 
-Remaining high-signal individual-test failures (running
-`./jperl ~/.cpan/build/DBI-1.647-5/t/X.t` directly; failing-count
-before the test process halts):
+Compared with the Phase 7 baseline (4940/6570 passing), subtest
+count is lower because the upstream `DBI::PurePerl` switch (Phase 9)
+caused many tests to hit early skip paths that the old home-grown
+`_Handles.pm` did not honour (`$DBI::PurePerl` guards for `Kids`,
+`swap_inner_handle`, `Executed`, Profile, Callbacks, ...). The
+raw pass rate went from 75 % → **94 %**.
 
-| Test file | Pass/Total | Area |
+### Failure distribution by base test file
+
+Each base test is run through 5 wrappers (`t/`, `zvg_*`, `zvn_*`,
+`zvp_*`, `zvxg{n,p}*`, `zvxgp_*`). The counts below are per base
+file — multiply by wrapper count for raw subtest impact.
+
+| Base test | Per-variant fail | ~Variants failing | Rough total | Area |
+|---|---|---|---|---|
+| `t/10examp.t`       | 193/242 | 5 | **~965** | **Crash at test 50**: `test_dir()` undefined after `do "./t/lib.pl"`. Blocks 80 % of the file across all variants — **single biggest lever**. |
+| `t/50dbm_simple.t`  | 16/38   | 5 | ~80 | `flock`/`fcntl` locking — "Resource deadlock avoided" on `.lck` files in `DBI::DBD::SqlEngine`. PerlOnJava file-locking semantics gap. |
+| `t/85gofer.t`       | 9/20    | 3 | ~27 | Gofer transport error-path handling (`set_err` propagation over serialised calls). |
+| `t/49dbd_file.t`    | 9/65    | 3 | ~27 | `DBD::File` table directory traversal / column naming edge cases. |
+| `t/04mods.t`        | 7/12    | 5 | ~35 | Missing bundled modules / CPAN deps not installed in ports tree. |
+| `t/72childhandles.t`| 6/16    | 5 | ~30 | `ChildHandles` weakref list — depends on Kids bookkeeping (PurePerl skip stays). |
+| `t/15array.t`       | 5/55    | 5 | ~25 | `execute_array` / `bind_param_array` — sth-level bulk-execute gaps. |
+| `t/51dbm_file.t`    | 2–5/7–10| 5 | ~15 | same locking family as 50dbm_simple. |
+| `t/19fhtrace.t`     | 4/27    | 5 | ~20 | `trace($l, "STDERR")` string alias, PerlIO layers on installed trace fh. |
+| `t/16destroy.t`     | 3/20    | 5 | ~15 | Stray pre-connect DESTROY with `Active=0`. |
+| `t/03handle.t`      | 3/137   | 5 | ~15 | Residual handle edge cases (most Kids tests now stay skipped). |
+| `t/08keeperr.t`     | 2–3/91  | 5 | ~13 | `$DBI::err` cleanup on disconnect; `RaiseError` $@ stack trace. |
+| `t/02dbidrv.t`      | 2/54    | 5 | ~10 | |
+| `t/06attrs.t`       | 2/166   | 5 | ~10 | `ErrCount` bump-on-error, `Statement` attr on failed `do`. |
+| `t/73cachedkids.t`  | 2/11    | 5 | ~10 | `CachedKids` weakref semantics. |
+| `t/14utf8.t`        | 1/16    | 5 | ~5 | `NAME_lc`/`NAME_uc` derivation for ExampleP. |
+| `t/53sqlengine_adv.t` | setup fail | 3 | 0 | Test file aborts before any assertions — needs triage. |
+
+`t/10examp.t` alone accounts for an estimated **~25 % of all
+remaining failures**. Fixing the single `test_dir()` crash unlocks
+190+ more assertions per wrapper.
+
+### Revised priority order (skipped tests stay skipped)
+
+All `$DBI::PurePerl`-gated `skip` / `skip_all` paths are left in
+place — we do **not** flip `$DBI::PurePerl = 0`. This means the
+old "Phase 10 big scope" (Profile/Kids/Executed/swap_inner_handle
+reimplementation in Java to flip the flag) is **deferred
+indefinitely**. Focus is on failures that aren't flag-gated.
+
+#### Phase 10 (new scope): unblock t/10examp.t
+
+**Status: done (2026-04-23).** Root-caused to a PerlOnJava package-
+scoping bug (not a DBI bug). Fixed in this branch.
+
+### Root cause
+
+`Carp::caller_info` contains:
+```perl
+{
+    package DB;
+    @call_info{...} = caller($i);
+}
+```
+
+In Perl 5, `package DB;` inside a bare block is lexically scoped —
+it only affects that block, and the outer package is restored on
+block exit. PerlOnJava's JVM backend was emitting
+`InterpreterState.setCurrentPackageStatic("DB")` for `package X;`
+statements without any scope-exit restore. Only the block form
+`package X { ... }` was correctly scoped via `PUSH_PACKAGE`.
+
+Consequence: once Test::More called `Carp::caller_info` (which it
+does during early setup), the runtime current-package tracker was
+left as `"DB"`. The next `do "./t/lib.pl"` then compiled the loaded
+file in package `DB`, so `sub test_dir` ended up as
+`DB::test_dir` — invisible to `main::test_dir` calls.
+
+### Fix
+
+- New `InterpreterState.setCurrentPackageLocal(String)` helper:
+  pushes the current package scalar onto `DynamicVariableManager`
+  and sets the new value. Restored automatically when the
+  enclosing block / sub / file exits (via the existing
+  `localTeardown` / `POP_LOCAL_LEVEL` machinery).
+- `EmitOperator.handlePackageOperator` (JVM backend) now emits
+  `setCurrentPackageLocal` instead of `setCurrentPackageStatic`.
+- `CompileOperator` (interpreter backend) always emits
+  `PUSH_PACKAGE` — the `isScoped` annotation is no longer needed
+  to distinguish scoped vs unscoped since all `package X;`
+  declarations in Perl 5 are lexically scoped.
+
+Files: `InterpreterState.java`, `EmitOperator.java`,
+`CompileOperator.java`.
+
+### Impact
+
+Fresh `jcpan -t DBI` after the fix:
+
+| | Files | Subtests | Passing | Failing |
+|---|---|---|---|---|
+| Before Phase 10 | 200 | 5944 | 5566 (94 %) | 378 |
+| **After Phase 10** | 200 | **6600** | **6210 (94 %)** | 390 |
+| Delta | 0 | +656 | **+644** | +12 |
+
+Per-file deltas for the `t/10examp.t` family (executed subtests
+went from ~49 to ~200+ per wrapper):
+
+| Variant | Before | After (approx) |
 |---|---|---|
-| `t/03handle.t` | 94/137 (43 fail) | `ActiveKids`, `CachedKids`, `swap_inner_handle`, Kids bookkeeping after DESTROY |
-| `t/06attrs.t` | 142/166 (24 fail) | driver-private attr semantics (`delete` on `examplep_*`), `Statement` attr on failed `do`, `ErrCount` bump-on-error |
-| `t/08keeperr.t` | 84/91 (7 fail) | `set_err` + `RaiseError` stack-trace in `$@`; `$DBI::err` undef after disconnect |
-| `t/14utf8.t` | 10/16 (6 fail) | `NAME_lc`/`NAME_uc` hash derivation for ExampleP's computed column list |
-| `t/15array.t` | 16/55 (39 fail) | `execute_array` / `bind_param_array` — needs DBD bulk-execute path |
-| `t/16destroy.t` | 17/20 (2 fail, 1 SKIP) | `Active` read inside a user-defined `DESTROY` (stray pre-connect DESTROY is firing with Active=0) |
-| `t/19fhtrace.t` | 20/27 (7 fail) | `trace($level, "STDERR")` string-target, PerlIO layer preservation on the installed trace fh |
-| `t/30subclass.t` | 19/43 (24 fail) | `RootClass` connect attribute: rebless outer handles into the subclass hierarchy |
-| `t/40profile.t` | 3/60 (17 fail, then halts) | `DBI::Profile` data capture — needs method-dispatch hook |
-| `t/41prof_dump.t` | 7/9 (2 fail, halts) | `DBI::ProfileDumper::flush_to_disk` writes to disk + round-trip |
-| `t/42prof_data.t` | 3/4 (1 fail, halts) | depends on ProfileDumper output |
-| `t/43prof_env.t` | 0/11 | `DBI_PROFILE` env-var instrumentation |
-| `t/70callbacks.t` | 65/81 (16 fail) | fatal-callback die propagation; reblessing of `$_[0]` in callbacks |
+| `t/10examp.t` | 49/242 executed | 200+/242 |
+| `t/zvg_10examp.t` | 48/242 executed | 200+/242 |
+| `t/zvp_10examp.t` | 49/242 executed | 200+/242 |
+| `t/zvxgp_10examp.t` | 48/242 executed | 200+/242 |
 
-1. **Profile capture** (40/41/42/43). This is the biggest
-   remaining block — 91 failing tests concentrated in 4 files.
-   Real DBI's XS hooks `DBD::_::common::AUTOLOAD` (among other
-   things) to bump the Profile tree on every method call. Options:
-   - Add a dispatch-time hook in
-     `DBI::_::OuterHandle::AUTOLOAD` that, when
-     `$h->{Profile}` is set, walks the Profile Path, builds the
-     node, and increments timings around the call.
-   - Inherit `Profile` to sth at prepare time (we already do
-     this) and bump child counts the same way.
-   - `DBI::ProfileDumper::flush_to_disk` needs to actually see
-     data in `{Data}` before it can write anything — the above
-     hook is the prerequisite.
+The fix also eliminates a whole class of latent bugs in any CPAN
+module that uses `{ package X; ... }` — Carp itself being a
+prominent example, but the pattern is common for debugger-
+compatibility shims.
 
-2. **`RootClass`** (`t/30subclass.t`). When `connect($dsn, u, p,
-   { RootClass => 'MyDBI' })` is used, real DBI reblesses the
-   outer handles into `${RootClass}::db` / `::st` / `::dr` so
-   user subclasses get method dispatch. Currently we ignore
-   `RootClass`. Fix: in `DBI.pm`'s `connect` wrapper, if
-   `RootClass` is set, `require` it and rebless the returned
-   outer handles. _new_sth / _new_drh should honour the same.
+### Phase 11: DBM backend probing fails cleanly
 
-3. **`t/03handle.t` Kids / ActiveKids / CachedKids**. After
-   `$sth->finish` / `$dbh->disconnect` / `undef $dbh`, the
-   counters on the parent handle aren't updated. Needs
-   systematic bump/decrement in `execute`, `finish`,
-   `disconnect`, and the DBD destructor.
+**Status: done (2026-04-23).** Fixed in
+`src/main/java/org/perlonjava/runtime/perlmodule/XSLoader.java`
+and `src/main/perl/lib/XSLoader.pm`.
 
-4. **`t/15array.t` `execute_array`**. Currently the
-   `execute_array` in our DBI.pm is a thin loop over
-   `execute(@row)` but many subtests depend on fine-grained
-   error handling (tuple_status), `ArrayTupleFetch` coderef
-   sources, and RaiseError propagation across rows. This is a
-   self-contained chunk.
+**Root cause.** CPAN's `DB_File`, `BerkeleyDB`, `SDBM_File`,
+`GDBM_File`, `NDBM_File`, `ODBM_File` are pure-XS modules with
+no pure-Perl fallback. In PerlOnJava, `require DB_File` succeeded
+silently (XSLoader::load returned true) but the XS helpers like
+`DB_File::constant` were never defined. The first real use
+triggered an infinite `AUTOLOAD → constant → AUTOLOAD` recursion
+ending in `StackOverflowError`.
 
-5. **`t/06attrs.t` driver-private `delete` semantics**.
-   `delete $dbh->{examplep_private_dbh_attrib}` should return
-   42 but leave the value in place (the driver re-computes it
-   on each FETCH). This requires a DELETE override in
-   `DBI::_::Tie` that consults the implementor class before
-   actually removing the key.
+CPAN test runners (DBI's `t/50dbm_simple.t` et al.) probe
+optional backends with:
+```perl
+my @dbms = qw(SDBM_File GDBM_File DB_File BerkeleyDB NDBM_File ODBM_File);
+@dbm_types = grep { eval { require "$_.pm" } } @dbms;
+plan skip_all => "No DBM modules available" unless @dbm_types;
+```
+This pattern relies on `require` **failing** for unavailable
+backends. Because XSLoader silently returned success, the test
+picked DB_File, then crashed on use.
 
-6. **`t/16destroy.t`**. Two subtests fail because a stray dbh
-   DESTROY fires with Active=0 between `install_driver` and
-   the user's `$drh->connect`. Need to trace where that extra
-   handle comes from (likely a temporary dbh built during
-   install_driver / setup_driver that we don't InactiveDestroy).
+**Fix.**
+- Added an `XS_ONLY_NOT_SUPPORTED` blacklist in both
+  `XSLoader.pm` and `XSLoader.java` (kept in sync). When
+  `XSLoader::load("DB_File", ...)` etc. is called, die with
+  `"XS module not supported on PerlOnJava"`. The caller's
+  `eval { require ... }` catches it and the probe falls through.
+- Added `installEndBlockStubs("BerkeleyDB")` which registers a
+  no-op Perl sub for `BerkeleyDB::Term::close_everything` when
+  BerkeleyDB fails to load. Without this, the module's END block
+  (registered at compile time, before our die runs) would fire
+  `close_everything()` on interpreter shutdown, causing a
+  non-zero exit status that prove/TAP::Harness flags as a failed
+  program — even for tests that otherwise passed or SKIPped.
 
-7. **`t/19fhtrace.t` PerlIO layers**. `trace(undef, $fh)` with a
-   `$fh` that has custom layers (e.g. `:utf8`) must preserve
-   them when DBI writes. Also `trace(0, "STDERR")` should parse
-   the string "STDERR" as an alias for `*STDERR`.
+**Impact.**
 
-8. **`t/08keeperr.t` `$DBI::err` cleanup on disconnect**.
-   After `$dbh->disconnect`, `$DBI::err` should revert to
-   undef. Currently it keeps the last value.
+| Test file | Before | After |
+|---|---|---|
+| `t/50dbm_simple.t` + variants | 16/38 fail × 5 | **SKIP × 5** |
+| `t/52dbm_complex.t` | partial / crash | **SKIP** |
+| `t/53sqlengine_adv.t` | crash | **SKIP** |
+| `t/49dbd_file.t` (base) | 9/65 fail | **passes 65/65** |
 
-9. **Full-suite `jcpan -t DBI` run.** The last attempt at
-   a fresh baseline got stuck in what looks like an infinite
-   loop inside Gofer's STORE / set_err chain. To be
-   investigated on a separate branch (the hot-loop symptom was
-   `DBD::_::common::set_err` → `DBD::Gofer::db::STORE` →
-   `_Handles.pm:816`). Once that's resolved the next baseline
-   number should reflect Phase 7's gains (est. ~+100 passes
-   from the per-test deltas).
+Full-suite:
+- Failing subtests: 344 → **144** (-200)
+- Failing files: 64 → **48** (-16)
+
+Still failing in this family: `t/51dbm_file.t` (2 fails across
+variants — hard-requires a DBM backend without `eval`). Would
+require patching the test, out of scope.
+
+#### Phase 12: execute_array (t/15array.t)
+
+Already scoped in previous Next-Steps section. Still ~25 subtests.
+
+#### Phase 13: small triage (pure fix-ups)
+
+**Status: triaged 2026-04-23, no code changes landed.** Each
+failure in the targeted files traces back to one of three
+pre-existing blockers:
+
+| Test file | Failures | Root cause | Disposition |
+|---|---|---|---|
+| `t/14utf8.t` | 1/16 | `Encode::_utf8_on` flag not preserved across hash-key storage | PerlOnJava infra gap (strings are JVM `String`, UTF-8 flag tracked externally). Out of DBI scope. |
+| `t/02dbidrv.t` | 2/54 | `$dbh->DESTROY` not copying `err`/`errstr`/`state` up to parent `$drh` | Being addressed in a separate PR (DESTROY work). |
+| `t/06attrs.t` | 2/166 | **PerlOnJava bug — FIXED in Phase 10b**: `local ($h->{key}) = value` (list form) in the bytecode-interpreter backend silently dropped the RHS assignment. | **FIXED** |
+| `t/08keeperr.t` | 3/91 | Same bug as t/06attrs.t. | **FIXED** |
+| `t/19fhtrace.t` | 4/27 | All 4 failing tests use `open $fh, ':via(TraceDBI)'` or `:scalar` PerlIO layers | PerlOnJava doesn't implement PerlIO custom layers. Out of DBI scope. |
+
+The most interesting finding is a **reproducible PerlOnJava bug**
+in `local (hash-or-array-element) = value` list assignment inside
+eval-STRING-compiled subs. **Fixed in Phase 10b.**
+
+### Phase 10b: list-form `local` assignment on hash/array elements
+
+**Status: done (2026-04-23).** Fixed in
+`src/main/java/org/perlonjava/backend/bytecode/CompileAssignment.java`.
+
+### Root cause of t/06attrs.t and t/08keeperr.t failures
+
+**Bug:** When a Perl subroutine is compiled via `eval STRING` and
+contains `local ($href->{key}) = value;` (or `local ($aref->[i]) = value;`),
+the `local` scope entry/exit machinery fires correctly, but the
+**value assignment is silently dropped**. Inside the sub's body,
+reading back the element returns the pre-local value, not the
+assigned one.
+
+**Minimal repro** (append to a Perl script):
+
+```perl
+my $h = { x => 0 };
+
+# Case A: direct file-scope compile — works
+sub directA { local ($h->{x}) = 42; print "A: x=$h->{x}\n"; }
+directA();                                                  # prints "A: x=42" (correct)
+
+# Case B: eval-STRING compiled sub — BUG
+my $subB = eval q{ sub { local ($h->{x}) = 99; print "B: x=$h->{x}\n"; } };
+$subB->();                                                  # prints "B: x=0" (WRONG)
+```
+
+Expected output (real Perl): `A: x=42`, `B: x=99`.
+Actual jperl output: `A: x=42`, `B: x=0`.
+
+**Scalar form works correctly:** `local $h->{x} = 99;` (without
+outer parens) is fine. Only the list-assignment form is broken.
+
+**Array-element list-form has the same bug**:
+`local ($a[0]) = 99;` inside eval-STRING.
+
+### Why this breaks DBI
+
+DBI::PurePerl's `_install_method` generates wrappers via
+`eval qq{#line 1 "..."\n$method_code}`. Every generated wrapper
+contains:
+
+```perl
+my $call_depth = $h->{'dbi_pp_call_depth'} + 1;
+local ($h->{'dbi_pp_call_depth'}) = $call_depth;  # ← bug: assignment is a no-op
+```
+
+Because the assignment is dropped, `$h->{dbi_pp_call_depth}` stays
+at `0` for every nested wrapper entry. The error-handling
+`post_call_frag` then incorrectly thinks each wrapper is the
+outermost one and fires the "failed" message. For
+`$dbh->do('bad sql')`, the error bubbles through
+`do → prepare → ExampleP::prepare → set_err`; because set_err's
+wrapper sees `call_depth <= 1`, it fires with
+`"set_err failed"` instead of letting do's wrapper fire with
+`"do failed"`.
+
+Verified trace (injected `print STDERR` at every call_depth
+compute + every pre-call-frag dbi_pp_last_method set):
+
+```
+[CALLDEPTH do]      computed_call_depth=1 h.cd_before_local=0
+[CALLDEPTH prepare] computed_call_depth=1 h.cd_before_local=0   ← should be 2
+[CALLDEPTH set_err] computed_call_depth=1 h.cd_before_local=0   ← should be 3
+err: DBD::ExampleP::db set_err failed: ...                       ← should say "do failed"
+```
+
+On real Perl + DBI::PurePerl the same trace shows
+`h.cd_before_local=0, 1, 2` respectively and the error is
+`"db do failed"`.
+
+### Affected code
+
+Likely in the JVM emitter's handling of `LOCAL` op on
+`HASH_ELEMENT` / `ARRAY_ELEMENT` targets when the containing sub
+is produced via eval-STRING. The compile-time bytecode for
+list-assignment localization isn't emitting the store on the
+RHS value. The pattern:
+
+```perl
+local (LVALUE_LIST) = RVALUE_LIST
+```
+
+Should be semantically equivalent to:
+```perl
+local LVALUE_LIST[0] = RVALUE_LIST[0];
+local LVALUE_LIST[1] = RVALUE_LIST[1];
+...
+```
+
+The scalar-single-element variant works (`local $h->{x} = $v`),
+suggesting the bug is in the list-context emitter path for
+`local (...)` with a single hash/array element, most likely
+specific to eval-STRING's bytecode compiler (since file-scope
+compilation of the same code works).
+
+### Impact if fixed
+
+- `t/06attrs.t`: 2/166 → expected 0/166
+- `t/08keeperr.t`: 3/91 → expected 0-1/91 (1 downstream effect)
+- Full suite: +10–15 subtests across wrapper variants
+- Latent bug affecting any CPAN module that uses eval-STRING-
+  generated subs with localized hash/array elements (DBI being
+  the most visible, but Moose/MouseX/etc. accessors may also
+  rely on this pattern)
+
+### Fix applied (Phase 10b)
+
+`CompileAssignment.handleLocalListAssignment` iterated over the
+list elements but only emitted bytecode for
+`OperatorNode("$" + IdentifierNode)` sigil-variable elements.
+Elements that were `BinaryOperatorNode` (i.e. `$h->{key}`,
+`$a[i]`, `$obj->method->{k}`, etc.) were silently skipped —
+no assignment bytecode emitted.
+
+Fix: added a `BinaryOperatorNode` branch in both the
+single-element special case and the multi-element loop. For each
+such element, emit:
+1. Compile the element as an lvalue (gets the element scalar ref).
+2. `PUSH_LOCAL_VARIABLE` to save the value for scope-exit restore.
+3. Multi-element: `ARRAY_GET` to pull RHS[i] from the value list.
+4. `SET_SCALAR` to assign.
+
+Measured impact on `jcpan -t DBI`:
+- 6210 → **6256 passing subtests** (+46)
+- 76 → **64 failed files** (-12)
+
+The overshoot vs the predicted "+10-15" is because many more
+DBI tests indirectly depended on `dbi_pp_call_depth` tracking
+working correctly (error messages, warning messages, method-
+dispatch trace format).
+
+---
+
+#### Deferred / out of scope
+
+- **Profile / Callbacks / Kids / swap_inner_handle / Executed**
+  reimplementation in Java. Would only help if we flipped
+  `$DBI::PurePerl = 0`, which in turn would require all five to
+  work first, and would expose tests that currently stay in the
+  safe skip paths. Not a win until someone asks for it.
+- **Gofer** (`t/85gofer.t` et al.) — deferred unless a consumer
+  needs it; fix scope is non-trivial.
+- **`t/80proxy.t`** — needs `RPC::PlClient`; already skipped.
+- **`zvp_*`** (PurePerl-on-PurePerl) variants — redundant once
+  the base tests pass; no extra effort required.
 
 ### Open Questions
 
