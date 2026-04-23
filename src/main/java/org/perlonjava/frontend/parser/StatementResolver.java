@@ -880,20 +880,24 @@ public class StatementResolver {
                 || firstToken.text.equals("\"")
                 || firstToken.text.equals("'")
                 || firstToken.text.equals("`")) {
-            // A string or number literal as first content is only a hash key
-            // if a comma at depth 1 follows — tracked below.  Quoted strings
-            // are lexed as an OPERATOR token for the opening delimiter, so
-            // treat `"`, `'`, `` ` `` the same way.
-            firstTokenIsKeyLike = true;
-        } else if (firstToken.type == LexerTokenType.IDENTIFIER
-                && !firstToken.text.startsWith("$")
-                && !firstToken.text.startsWith("@")
-                && !firstToken.text.startsWith("%")
-                && !firstToken.text.startsWith("&")
-                && !firstToken.text.startsWith("*")
-                && !isBlockIntroducingKeyword(firstToken.text)) {
-            // Bareword identifier (not a sigil variable, not a block-introducing
-            // keyword like map/grep/sort/do/eval/return/...).  Potential hash key.
+            // A string or number literal as first content makes this a hash
+            // key context (if a comma at depth 1 follows — tracked below).
+            // Quoted strings are lexed as an OPERATOR token for the opening
+            // delimiter, so treat `"`, `'`, `` ` `` the same way.
+            //
+            // Barewords (IDENTIFIER) are deliberately NOT considered key-like
+            // here: real Perl treats `{ foo, 1 }` as a block (evaluating the
+            // comma expression), not a hashref, because the bareword might
+            // be a function call.  Matching that behaviour also avoids
+            // false positives from code like
+            //   {  # comment
+            //       some_function(...);
+            //   }
+            // where stray `{` / `}` tokens inside string arguments can
+            // confuse this pre-parse scanner's brace balance — our scanner
+            // walks the raw token stream without tracking string boundaries,
+            // so it must stay conservative.  See perl5_t/t/re/pat.t for
+            // real-world misbalanced regex fragments in string arguments.
             firstTokenIsKeyLike = true;
         }
 
@@ -1063,25 +1067,6 @@ public class StatementResolver {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: FALSE - default for ambiguous case (assuming block)");
             return false; // Default: assume block when we can't determine
         }
-    }
-
-    // Words that, as the FIRST content token after `{`, strongly imply a
-    // block rather than a hash literal.  Used by isHashLiteral() to decide
-    // whether "{ bareword , ... }" is a hashref (if not in this list) or a
-    // block evaluating the comma expression (if in this list).
-    private static boolean isBlockIntroducingKeyword(String text) {
-        return switch (text) {
-            case "map", "grep", "sort", "do", "eval", "return",
-                 "if", "unless", "while", "until", "for", "foreach",
-                 "my", "our", "local", "state",
-                 "last", "next", "redo", "goto",
-                 "say", "print", "printf", "warn", "die",
-                 "use", "no", "require",
-                 "package", "sub",
-                 "BEGIN", "END", "INIT", "CHECK", "UNITCHECK",
-                 "when", "given", "default" -> true;
-            default -> false;
-        };
     }
 
     public static void parseStatementTerminator(Parser parser) {

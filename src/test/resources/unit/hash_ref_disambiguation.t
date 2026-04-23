@@ -4,18 +4,20 @@ use Test::More tests => 14;
 
 # Regression tests for block-vs-hashref disambiguation inside `{ ... }`.
 # Real Perl treats `{ KEY, VALUE, ... }` as an anonymous hash when the
-# first content token is a hash-key-shaped thing (string, number,
-# bareword that is not a block-introducing keyword) and a plain comma
-# appears at depth 1.
+# first content token is a STRING or NUMBER literal (or fat-comma key)
+# and a plain comma appears at depth 1.  Bare identifiers as the first
+# token make it a BLOCK — `{ foo, 1 }` could be `foo()` called with
+# `1` as arg.  Matching that behaviour also keeps our pre-parse scanner
+# conservative w.r.t. string contents it can't see past.
 
 # --- hashref forms ---
 
-is(ref(sub { {"a","b"} }->()),       'HASH', '{"a","b"} is a hashref');
-is(ref(sub { {1,2,3,4} }->()),       'HASH', '{1,2,3,4} is a hashref');
-is(ref(sub { {"foo",1,"bar",2} }->()), 'HASH', '{"foo",1,"bar",2} is a hashref');
-is(ref(sub { { a => 1 } }->()),      'HASH', 'fat-comma hash still works');
-is(ref(sub { +{"a","b"} }->()),      'HASH', 'explicit +{} still works');
-is(ref(sub { {} }->()),              'HASH', 'empty {} still a hashref');
+is(ref(sub { {"a","b"} }->()),            'HASH', '{"a","b"} is a hashref');
+is(ref(sub { {1,2,3,4} }->()),            'HASH', '{1,2,3,4} is a hashref');
+is(ref(sub { {"foo",1,"bar",2} }->()),    'HASH', '{"foo",1,"bar",2} is a hashref');
+is(ref(sub { { a => 1 } }->()),           'HASH', 'fat-comma hash still works');
+is(ref(sub { +{"a","b"} }->()),           'HASH', 'explicit +{} still works');
+is(ref(sub { {} }->()),                   'HASH', 'empty {} still a hashref');
 
 # --- content is preserved ---
 
