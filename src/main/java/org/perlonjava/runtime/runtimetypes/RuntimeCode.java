@@ -1756,6 +1756,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        // Handle tied scalars: the invocant may be a TIED_SCALAR returned
+        // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
+        // Dispatch sees only the TIED_SCALAR shell, so unwrap to the
+        // underlying blessed reference before cache / invocant checks.
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
+                    currentSub, args, callContext);
+        }
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
             // Unwrap READONLY_SCALAR for blessId check (same as in call())
@@ -1875,6 +1883,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                    RuntimeScalar currentSub,
                                    RuntimeArray args,
                                    int callContext) {
+        // Handle tied scalars: the invocant may be a TIED_SCALAR returned
+        // from a tied hash / array FETCH. Unwrap before dispatch so
+        // isReference / blessId checks see the real underlying value.
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
+        }
+
         // insert `this` into the parameter list
         args.elements.addFirst(runtimeScalar);
 

@@ -3,15 +3,20 @@ use strict;
 use warnings;
 use Scalar::Util ();
 use XSLoader;
+use Exporter ();
 
 our $VERSION = '1.643';
 
 XSLoader::load( 'DBI' );
 
 # DBI::db and DBI::st inherit from DBI so method dispatch works
-# when handles are blessed into subclass packages
+# when handles are blessed into subclass packages.
+# DBI also inherits from Exporter so `use DBI qw(:sql_types ...)` works.
+our @ISA = ('Exporter');
 @DBI::db::ISA = ('DBI');
 @DBI::st::ISA = ('DBI');
+
+our $neat_maxlen = 1000;
 
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
@@ -107,7 +112,9 @@ sub _handle_error_with_handler {
 #       src/main/java/org/perlonjava/runtime/perlmodule/DBI.java
 
 # SQL type constants (from DBI spec, java.sql.Types values)
-# Used by DBIx::Class::Storage::DBI::SQLite and others
+# Used by DBIx::Class::Storage::DBI::SQLite and others.
+# Split into multiple blocks to avoid a PerlOnJava bytecode verifier
+# limit with very large `use constant { ... }` hashes.
 use constant {
     SQL_GUID            => -11,
     SQL_WLONGVARCHAR    => -10,
@@ -130,6 +137,9 @@ use constant {
     SQL_FLOAT           => 6,
     SQL_REAL            => 7,
     SQL_DOUBLE          => 8,
+};
+
+use constant {
     SQL_DATETIME        => 9,
     SQL_DATE            => 9,
     SQL_INTERVAL        => 10,
@@ -146,13 +156,55 @@ use constant {
     SQL_CLOB            => 40,
     SQL_CLOB_LOCATOR    => 41,
     SQL_ARRAY           => 50,
+    SQL_ARRAY_LOCATOR   => 51,
     SQL_MULTISET        => 55,
+    SQL_MULTISET_LOCATOR => 56,
     SQL_TYPE_DATE       => 91,
     SQL_TYPE_TIME       => 92,
     SQL_TYPE_TIMESTAMP  => 93,
     SQL_TYPE_TIME_WITH_TIMEZONE      => 94,
     SQL_TYPE_TIMESTAMP_WITH_TIMEZONE => 95,
 };
+
+use constant {
+    SQL_INTERVAL_YEAR                => 101,
+    SQL_INTERVAL_MONTH               => 102,
+    SQL_INTERVAL_DAY                 => 103,
+    SQL_INTERVAL_HOUR                => 104,
+    SQL_INTERVAL_MINUTE              => 105,
+    SQL_INTERVAL_SECOND              => 106,
+    SQL_INTERVAL_YEAR_TO_MONTH       => 107,
+    SQL_INTERVAL_DAY_TO_HOUR         => 108,
+    SQL_INTERVAL_DAY_TO_MINUTE       => 109,
+    SQL_INTERVAL_DAY_TO_SECOND       => 110,
+    SQL_INTERVAL_HOUR_TO_MINUTE      => 111,
+    SQL_INTERVAL_HOUR_TO_SECOND      => 112,
+    SQL_INTERVAL_MINUTE_TO_SECOND    => 113,
+};
+
+use constant {
+    SQL_CURSOR_FORWARD_ONLY  => 0,
+    SQL_CURSOR_KEYSET_DRIVEN => 1,
+    SQL_CURSOR_DYNAMIC       => 2,
+    SQL_CURSOR_STATIC        => 3,
+    SQL_CURSOR_TYPE_DEFAULT  => 0,
+    DBIstcf_STRICT           => 0x0001,
+    DBIstcf_DISCARD_STRING   => 0x0002,
+};
+
+# Exporter wiring, %EXPORT_TAGS, and the small utility functions
+# (neat / neat_list / looks_like_number / ...) live in a separate
+# file so PerlOnJava compiles them to their own JVM class — the
+# combined DBI.pm would otherwise exceed a per-method bytecode limit.
+require DBI::_Utils;
+
+# Driver-architecture pieces: DBI->install_driver, DBI::_new_drh /
+# _new_dbh / _new_sth, and the DBD::_::common / dr / db / st base
+# classes. Also lives in its own file for the per-method bytecode
+# size limit reason. Required by the pure-Perl DBDs bundled with
+# upstream DBI (DBD::NullP, DBD::ExampleP, DBD::Sponge, DBD::File,
+# DBD::DBM, DBD::Mem, etc.).
+require DBI::_Handles;
 
 # DSN translation: convert Perl DBI DSN format to JDBC URL
 # This wraps the Java-side connect() to support dbi:Driver:... format
@@ -186,6 +238,34 @@ use constant {
             eval "require $dbd_class";
             if ($dbd_class->can('_dsn_to_jdbc')) {
                 $dsn = $dbd_class->_dsn_to_jdbc($rest);
+            }
+            elsif ($dbd_class->can('driver')) {
+                # Pure-Perl DBD (no JDBC backing). Route through the
+                # DBI driver-architecture path: install the driver and
+                # let its connect() build the dbh via DBI::_new_dbh.
+                my $drh = eval { DBI->install_driver($driver) };
+                if ($drh) {
+                    my $dbh = $drh->connect($rest, $user, $pass, $attr);
+                    if ($dbh) {
+                        # real DBI does this in _new_dbh but we want
+                        # to be permissive for drivers that don't.
+                        $dbh->{Driver} = $drh;
+                        $dbh->{Name} = $rest if !defined $dbh->{Name};
+                        $dbh->STORE(Active => 1) unless $dbh->FETCH('Active');
+                        # Apply user-supplied attributes that the
+                        # driver may not have copied over (Profile,
+                        # RaiseError, PrintError, HandleError, etc.).
+                        if (ref $attr eq 'HASH') {
+                            for my $k (keys %$attr) {
+                                $dbh->STORE($k, $attr->{$k})
+                                    if !exists $dbh->{$k}
+                                    || (!defined $dbh->{$k} && defined $attr->{$k});
+                            }
+                        }
+                    }
+                    return $dbh;
+                }
+                # fall through to JDBC path if install_driver croaked
             }
         }
         my $dbh = $orig_connect->($class, $dsn, $user, $pass, $attr);
@@ -538,26 +618,65 @@ sub bind_columns {
 
 sub trace {
     my ($dbh, $level, $output) = @_;
-    $level ||= 0;
+    my $old_level;
 
-    $dbh->{TraceLevel} = $level;
-    $dbh->{TraceOutput} = $output if defined $output;
+    if (ref $dbh) {
+        $old_level = $dbh->{TraceLevel} || 0;
+        $dbh->{TraceLevel} = $level if defined $level;
+    } else {
+        # class method: DBI->trace(...) sets the process-global level
+        $old_level = $DBI::dbi_debug || 0;
+        $DBI::dbi_debug = $level if defined $level;
+    }
 
-    return $level;
+    # If a third argument is passed (even as undef), it controls where
+    # trace output goes. A filename or filehandle opens / installs it
+    # as the process-global trace filehandle (real DBI's $DBI::tfh).
+    # undef closes any installed tracefile and reverts to STDERR.
+    if (@_ >= 3) {
+        if (ref $output && (ref $output eq 'GLOB' || eval { *{$output}{IO} })) {
+            $DBI::tfh = $output;
+        } elsif (defined $output && length $output) {
+            # Close any previously-opened trace file.
+            if ($DBI::tfh_owned) {
+                close $DBI::tfh;
+                $DBI::tfh = undef;
+            }
+            open my $fh, '>>', $output
+                or do { warn "DBI trace($output): $!"; return $old_level };
+            # unbuffer trace output so the test `-s $trace_file` sees it.
+            my $oldfh = select $fh; $| = 1; select $oldfh;
+            $DBI::tfh = $fh;
+            $DBI::tfh_owned = 1;
+        } else {
+            # $output was passed but is undef / empty — restore STDERR.
+            if ($DBI::tfh_owned) {
+                close $DBI::tfh;
+                $DBI::tfh_owned = 0;
+            }
+            $DBI::tfh = undef;
+        }
+    }
+
+    return $old_level;
+}
+
+# _trace_fh() — picks the right filehandle to write a trace message to.
+sub _trace_fh {
+    return $DBI::tfh if defined $DBI::tfh;
+    return \*STDERR;
 }
 
 sub trace_msg {
     my ($dbh, $msg, $level) = @_;
-    $level ||= 0;
+    $level ||= 1;
 
-    my $current_level = $dbh->{TraceLevel} || 0;
+    my $current_level = ref($dbh)
+        ? ($dbh->{TraceLevel} || 0)
+        : ($DBI::dbi_debug || 0);
     if ($level <= $current_level) {
-        if ($dbh->{TraceOutput}) {
-            # TODO: Write to custom output
-            print STDERR $msg;
-        } else {
-            print STDERR $msg;
-        }
+        my $fh = DBI::_trace_fh();
+        print $fh $msg;
     }
     return 1;
 }

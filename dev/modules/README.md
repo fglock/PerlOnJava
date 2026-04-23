@@ -13,6 +13,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [makemaker_perlonjava.md](makemaker_perlonjava.md) | ExtUtils::MakeMaker implementation |
 | [cpan_client.md](cpan_client.md) | jcpan - CPAN client for PerlOnJava |
 | [dbix_class.md](dbix_class.md) | DBIx::Class support (in progress) |
+| [dbi_test_parity.md](dbi_test_parity.md) | DBI test-suite parity (~13.5× more passes than master; Phases 1–4 done, incl. a tied-hash method-dispatch fix in the PerlOnJava runtime) |
 | [math_bigint_bignum.md](math_bigint_bignum.md) | Math::BigInt / BigFloat / BigRat / bignum support (in progress) |
 
 ## Module Status Overview
