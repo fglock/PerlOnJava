@@ -99,8 +99,16 @@ public class EmitSubroutine {
         // definition context. Only anonymous subs (my sub, state sub, or true anonymous subs) should
         // capture variables. This prevents issues like defining 'sub bar::foo' inside a block with
         // 'our sub foo' from incorrectly capturing the 'our sub' as a closure variable.
-        // Note: "(eval)" is a special name for eval blocks which should capture variables like anonymous subs
-        boolean isPackageSub = node.name != null && !node.name.equals("<anon>") && !node.name.equals("(eval)");
+        // Note: "(eval)" is a special name for eval blocks which should capture variables like anonymous subs.
+        //
+        // Exception: named subs defined inside an eval-string DO need to capture outer lexicals.
+        // This matches Perl 5 semantics: `eval "sub outer_name { \$outer_var }"` closes over \$outer_var.
+        // Without this exception, Sub::Defer (which eval-compiles deferred subs that close over
+        // \$undeferred and \$deferred_info) loses its closure captures, leaving \$deferred_info
+        // unreferenced after defer_sub returns. The weakened %DEFERRED entry then immediately
+        // clears, and the deferred sub's `goto &\$undeferred` loops into itself forever.
+        boolean isPackageSub = node.name != null && !node.name.equals("<anon>") && !node.name.equals("(eval)")
+                && !ctx.javaClassInfo.isInEvalString;
         if (isPackageSub) {
             // Package subs should not capture any closure variables
             // They can only access global variables and their parameters

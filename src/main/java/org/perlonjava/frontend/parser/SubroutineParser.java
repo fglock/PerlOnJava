@@ -1299,6 +1299,15 @@ public class SubroutineParser {
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
                     field.set(placeholder.codeObject, codeRef);
 
+                    // Track closure captures: increment captureCount on each
+                    // captured outer lexical, so scopeExitCleanup knows this
+                    // named sub holds a strong ref to them. Without this, weaken-
+                    // based patterns like Sub::Defer's %DEFERRED registry clear
+                    // immediately after defer_sub returns, causing the deferred
+                    // sub's `goto &$undeferred` to loop into itself forever.
+                    // The anon-sub path already does this inside makeCodeObject().
+                    RuntimeCode.trackClosureCaptures(placeholder, placeholder.codeObject, generatedClass);
+
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
                     // This is critical: hash assignments copy RuntimeScalar but share the same

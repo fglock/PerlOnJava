@@ -1630,6 +1630,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return makeCodeObject(codeObject, null);
     }
 
+    /**
+     * Track closure captures: iterate all RuntimeScalar fields of the generated
+     * code class (except the self-referencing __SUB__), increment captureCount
+     * on each, and store the list on the RuntimeCode for eventual release when
+     * the CODE ref's refCount drops to 0.
+     *
+     * <p>Called from both {@link #makeCodeObject} (anonymous subs installed
+     * via {@code sub {...}}) and SubroutineParser (named subs). Without this
+     * call, named subs defined inside an eval-string leak their closure
+     * captures — captureCount stays at 0 on the outer lexicals, causing
+     * scopeExitCleanup to treat them as uncaptured and prematurely decrement
+     * referent refCounts. That in turn breaks weaken-based patterns like
+     * Sub::Defer's %DEFERRED registry, which relies on closure-kept-alive
+     * lexicals to keep weakened hash entries defined until the first call
+     * to the deferred sub.
+     */
+    public static void trackClosureCaptures(RuntimeCode code, Object codeObject, Class<?> clazz) throws IllegalAccessException {
+        Field[] allFields = clazz.getDeclaredFields();
+        List<RuntimeScalar> captured = new ArrayList<>();
+        for (Field f : allFields) {
+            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
+                RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
+                if (capturedVar != null) {
+                    captured.add(capturedVar);
+                    capturedVar.captureCount++;
+                }
+            }
+        }
+        if (!captured.isEmpty()) {
+            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+            // Enable refCount tracking for closures with captures.
+            // When the CODE ref's refCount drops to 0, releaseCaptures()
+            // fires (via DestroyDispatch.callDestroy), letting captured
+            // blessed objects run DESTROY.
+            code.refCount = 0;
+        }
+    }
+
     public static RuntimeScalar makeCodeObject(Object codeObject, String prototype) throws Exception {
         return makeCodeObject(codeObject, prototype, null);
     }
@@ -1673,25 +1711,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Each instance field of type RuntimeScalar (except __SUB__) is a
         // captured lexical variable. We store them so that releaseCaptures()
         // can decrement blessed ref refCounts when the closure is discarded.
-        Field[] allFields = clazz.getDeclaredFields();
-        List<RuntimeScalar> captured = new ArrayList<>();
-        for (Field f : allFields) {
-            if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
-                RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
-                if (capturedVar != null) {
-                    captured.add(capturedVar);
-                    capturedVar.captureCount++;
-                }
-            }
-        }
-        if (!captured.isEmpty()) {
-            code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
-            // Enable refCount tracking for closures with captures.
-            // When the CODE ref's refCount drops to 0, releaseCaptures()
-            // fires (via DestroyDispatch.callDestroy), letting captured
-            // blessed objects run DESTROY.
-            code.refCount = 0;
-        }
+        trackClosureCaptures(code, codeObject, clazz);
 
         RuntimeScalar codeRef = new RuntimeScalar(code);
 
