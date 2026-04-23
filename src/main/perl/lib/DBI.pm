@@ -2013,13 +2013,28 @@ sub _new_sth {	# called by DBD::<drivername>::db::prepare)
         my $rc_total = 0;
 	my $err_count;
 	while ( my $tuple = &$fetch_tuple_sub() ) {
-	    if ( my $rc = $sth->execute(@$tuple) ) {
+	    # PerlOnJava patch: locally disable RaiseError/PrintError so
+	    # execute() returns false on error rather than dying, so that
+	    # $tuple_status can be populated with [err, errstr, state] for
+	    # each failed row. Matches upstream XS DBI's Executive.c behavior.
+	    # Required by DBIx::Class::Storage::DBI::_dbh_execute_for_fetch
+	    # (scans $tuple_status for ref entries to locate failed rows).
+	    local $sth->{RaiseError}  = 0;
+	    local $sth->{PrintError}  = 0;
+	    local $sth->{HandleError} = undef;
+	    my $rc;
+	    my $ok = eval { $rc = $sth->execute(@$tuple); 1 };
+	    if ( $ok && $rc ) {
 		push @$tuple_status, $rc;
 		$rc_total = ($rc >= 0 && $rc_total >= 0) ? $rc_total + $rc : -1;
 	    }
 	    else {
 		$err_count++;
-		push @$tuple_status, [ $sth->err, $sth->errstr, $sth->state ];
+		# Prefer the driver's err/errstr/state; fall back to $@ if
+		# execute died before populating them (e.g., bind-time error).
+		my $err    = $sth->err    // $DBI::stderr;
+		my $errstr = $sth->errstr // (ref $@ ? "$@" : $@);
+		push @$tuple_status, [ $err, $errstr, $sth->state ];
                 # XXX drivers implementing execute_for_fetch could opt to "last;" here
                 # if they know the error code means no further executes will work.
 	    }
