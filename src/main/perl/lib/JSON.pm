@@ -1,19 +1,35 @@
 package JSON;
 
-our $VERSION = '4.11';
-
-use Exporter "import";
-use warnings;
 use strict;
+use warnings;
+use Carp ();
+use Exporter ();
 use Symbol;
-use Carp;
+
+our $VERSION = '4.11';
+our @ISA = qw(Exporter);
+our @EXPORT = qw(from_json to_json jsonToObj objToJson encode_json decode_json);
+
+# PerlOnJava acts as the XS backend.  Declare ourselves so CPAN JSON.pm-
+# style introspection (JSON->backend, $JSON::Backend, is_xs/is_pp) works
+# without the real CPAN dispatcher being loaded.
+our $Backend          = 'JSON';
+our $BackendModule    = 'JSON';
+our $BackendModuleXS  = 'JSON';
+our $BackendModulePP;
+
+our $DEBUG = 0;
+$DEBUG = $ENV{PERL_JSON_DEBUG} if exists $ENV{PERL_JSON_DEBUG};
 
 XSLoader::load( 'Json' );
 
-# NOTE: The rest of the code is in file:
-#       src/main/java/org/perlonjava/perlmodule/Json.java
+# NOTE: encode/decode/true/false/null/is_bool are defined in
+#       src/main/java/org/perlonjava/runtime/perlmodule/Json.java
 
-our @EXPORT = ("encode_json", "decode_json", "to_json", "from_json");
+my %RequiredVersion = (
+    'JSON::PP' => '2.27203',
+    'JSON::XS' => '2.34',
+);
 
 my @PublicMethods = qw/
     ascii latin1 utf8 pretty indent space_before space_after relaxed canonical allow_nonref
@@ -28,13 +44,52 @@ my @Properties = qw/
     allow_tags
 /;
 
+my @PPOnlyMethods = qw/
+    indent_length sort_by
+    allow_singlequote allow_bignum loose allow_barekey escape_slash as_nonblessed
+/;
+
+# CPAN JSON.pm supports several special import tags.  We accept them so
+# modules that write `use JSON -support_by_pp;` load without failing, even
+# though we don't actually implement the pp-only feature set.
+sub import {
+    my $pkg = shift;
+    my @to_export;
+    my $no_export;
+
+    for my $tag (@_) {
+        if ($tag eq '-support_by_pp') {
+            # no-op: PerlOnJava JSON already treats pp-only methods as settable
+            next;
+        }
+        elsif ($tag eq '-no_export') {
+            $no_export++;
+            next;
+        }
+        elsif ($tag eq '-convert_blessed_universally') {
+            # no-op: handled by convert_blessed option on the object
+            next;
+        }
+        push @to_export, $tag;
+    }
+    return if $no_export;
+    __PACKAGE__->export_to_level(1, $pkg, @to_export);
+}
+
 sub new {
     my ($class) = @_;
     return bless {}, $class;
 }
 
-sub is_xs { 1 };
-sub is_pp { 0 };
+# Backend introspection — called as both class and instance method.
+sub backend            { $Backend }
+sub is_xs              { 1 }
+sub is_pp              { 0 }
+sub require_xs_version { $RequiredVersion{'JSON::XS'} }
+sub pureperl_only_methods { @PPOnlyMethods }
+
+# Provide a null() routine (CPAN JSON exports it indirectly via some paths).
+sub null { undef }
 
 
 # INTERFACES
@@ -75,14 +130,31 @@ sub from_json ($@) {
     return $json->decode( $_[0] );
 }
 
+# Obsolete aliases (CPAN JSON keeps them with a warn).
+sub jsonToObj {
+    my $alt = 'from_json';
+    if (defined $_[0] and UNIVERSAL::isa($_[0], 'JSON')) {
+        shift @_;
+        $alt = 'decode';
+    }
+    Carp::carp "'jsonToObj' will be obsoleted. Please use '$alt' instead.";
+    return JSON::from_json(@_);
+}
+
+sub objToJson {
+    my $alt = 'to_json';
+    if (defined $_[0] and UNIVERSAL::isa($_[0], 'JSON')) {
+        shift @_;
+        $alt = 'encode';
+    }
+    Carp::carp "'objToJson' will be obsoleted. Please use '$alt' instead.";
+    return JSON::to_json(@_);
+}
+
 sub boolean {
     # might be called as method or as function, so pop() to get the last arg instead of shift() to get the first
     pop() ? true() : false()
 }
-
-sub require_xs_version {}
-
-sub backend {}
 
 sub property {
     my ($self, $name, $value) = @_;
@@ -160,6 +232,61 @@ sub pretty {
     }
 
     $self;
+}
+
+# Options we don't fully honor but accept without error so modules that
+# chain ->max_depth(...)->max_size(...)->sort_by(...) continue to work.
+for my $name (qw(
+    max_depth max_size indent_length
+    filter_json_object filter_json_single_key_object
+    sort_by
+)) {
+    no strict 'refs';
+    my $sym = Symbol::qualify_to_ref($name, __PACKAGE__);
+    *$sym = sub {
+        my $self = shift;
+        $self->{$name} = @_ ? $_[0] : 1;
+        $self;
+    };
+    my $gsym = Symbol::qualify_to_ref("get_$name", __PACKAGE__);
+    *$gsym = sub { $_[0]->{$name} };
+}
+
+# Stubs for incremental parsing.  The CPAN modules support stream parsing
+# via a buffer that accumulates partial input; PerlOnJava's JSON doesn't
+# yet implement this, but returning an empty result (rather than dying
+# with "Can't locate object method") lets most sanity tests proceed.
+sub incr_text {
+    my $self = shift;
+    if (@_) {
+        $self->{_incr_buf} = $_[0];
+        return $self;
+    }
+    return $self->{_incr_buf};
+}
+
+sub incr_parse {
+    my ($self, $data) = @_;
+    $self->{_incr_buf} = '' unless defined $self->{_incr_buf};
+    $self->{_incr_buf} .= $data if defined $data;
+    # Best-effort: try to decode whatever we have; on failure leave buffer intact.
+    return unless length $self->{_incr_buf};
+    my $res = eval { $self->decode($self->{_incr_buf}) };
+    if ($@) { return; }  # need more data
+    $self->{_incr_buf} = '';
+    return $res;
+}
+
+sub incr_skip {
+    my $self = shift;
+    $self->{_incr_buf} = '';
+    return;
+}
+
+sub incr_reset {
+    my $self = shift;
+    $self->{_incr_buf} = '';
+    return $self;
 }
 
 # Functions
