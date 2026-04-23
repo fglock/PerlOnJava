@@ -20,7 +20,46 @@ package JSON;
 use strict;
 use warnings;
 use Carp ();
-use JSON::PP ();
+
+# Pick the pure-Perl backend to load.  The CPAN `JSON` dispatcher
+# honours `$ENV{PERL_JSON_BACKEND}`: the value `JSON::backportPP`
+# asks for a self-contained copy of JSON::PP that should not leave
+# `$INC{'JSON/PP.pm'}` populated.  PerlOnJava ships both
+# `JSON::PP` and `JSON::backportPP`; the latter loads JSON::PP's
+# source without registering the PP file in `%INC`.
+BEGIN {
+    my $backend = $ENV{PERL_JSON_BACKEND};
+    if (defined $backend && $backend eq 'JSON::backportPP') {
+        require JSON::backportPP;
+    } else {
+        require JSON::PP;
+    }
+    # The CPAN `JSON::backportPP` declares `package JSON::PP;` internally
+    # but only sets `@JSON::backportPP::ISA = ('Exporter')`, leaving
+    # `@JSON::PP::ISA` empty AND leaving `JSON::backportPP` without
+    # `isa('JSON::PP')`, `is_pp`, `is_xs`.  Our own `JSON::PP.pm` /
+    # `JSON::backportPP.pm` set these up correctly, but the CPAN tarball
+    # ships its own copies that shadow ours under
+    # `PERL5LIB=./blib/lib:./blib/arch` during `make test`.  Paper over
+    # both omissions so the dispatcher surface behaves the same either
+    # way.
+    unless (@JSON::PP::ISA) {
+        @JSON::PP::ISA = ('Exporter');
+    }
+    unless (grep { $_ eq 'JSON::PP' } @JSON::backportPP::ISA) {
+        push @JSON::backportPP::ISA, 'JSON::PP';
+    }
+    unless (defined &JSON::backportPP::is_pp) {
+        no warnings 'once';
+        *JSON::backportPP::is_pp = sub { 1 };
+        *JSON::backportPP::is_xs = sub { 0 };
+    }
+    unless (defined &JSON::PP::is_pp) {
+        no warnings 'once';
+        *JSON::PP::is_pp = sub { 1 };
+        *JSON::PP::is_xs = sub { 0 };
+    }
+}
 
 our $VERSION = '4.11';
 
@@ -32,11 +71,20 @@ our @ISA = ('JSON::PP');
 our @EXPORT = qw(from_json to_json jsonToObj objToJson encode_json decode_json);
 
 # Backend introspection variables populated by the real CPAN JSON
-# after it loads a backend.  We populate them up-front so tests that
-# do `$JSON::Backend->VERSION` / `$JSON::BackendModulePP` etc. work.
-our $Backend          = 'JSON::PP';
-our $BackendModule    = 'JSON::PP';
-our $BackendModulePP  = 'JSON::PP';
+# after it loads a backend.  Mirror the CPAN semantics: when
+# `PERL_JSON_BACKEND` picked `JSON::backportPP`, report that
+# (and set the module-PP name to match); otherwise report
+# JSON::PP as the backend.  Tests look at both.
+our ($Backend, $BackendModule, $BackendModulePP);
+BEGIN {
+    my $chosen = (defined $ENV{PERL_JSON_BACKEND}
+                      && $ENV{PERL_JSON_BACKEND} eq 'JSON::backportPP')
+                 ? 'JSON::backportPP'
+                 : 'JSON::PP';
+    $Backend         = $chosen;
+    $BackendModule   = $chosen;
+    $BackendModulePP = $chosen;
+}
 our $BackendModuleXS;   # left undef: no XS backend available
 
 our $DEBUG = 0;
