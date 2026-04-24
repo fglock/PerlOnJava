@@ -919,12 +919,28 @@ public class DBI extends PerlModuleBase {
             }
 
             int paramIndex = args.get(1).getInt();
-            Object value = args.get(2).value;
+            RuntimeScalar paramValue = args.get(2);
 
-            // Store bound parameters for later use (applied during execute())
+            // Store bound parameters for later use (applied during execute()).
+            //
+            // Use set() to copy both type AND value, preserving BYTE_STRING
+            // which is needed for correct UTF-8 round-tripping in
+            // toJdbcValue(). Master's Phase 9b simplification passed
+            // args.get(2).value to `new RuntimeScalar(Object)` — that
+            // constructor treats the Object as a STRING value, losing the
+            // BYTE_STRING type marker. toJdbcValue() then takes the
+            // STRING branch (pass-through) instead of BYTE_STRING branch
+            // (ISO-8859-1 → UTF-8 decode), so the UTF-8 bytes stored by
+            // DBIC::UTF8Columns never round-trip correctly.
+            //
+            // Test impact: DBIC t/85utf8.t subtests 27 ("UPDATE: raw bytes
+            // retrieved from database") and 28 ("column is not dirty after
+            // setting the same unicode value") — both pass on backup.
             RuntimeHash boundParams = sth.get("bound_params") != null ?
                     sth.get("bound_params").hashDeref() : new RuntimeHash();
-            boundParams.put(String.valueOf(paramIndex), new RuntimeScalar(value));
+            RuntimeScalar copy = new RuntimeScalar();
+            copy.set(paramValue);
+            boundParams.put(String.valueOf(paramIndex), copy);
             sth.put("bound_params", boundParams.createReference());
 
             // Store bind attributes if provided (4th arg is attrs hashref or type int)
