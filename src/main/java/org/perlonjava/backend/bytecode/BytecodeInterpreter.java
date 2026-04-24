@@ -658,7 +658,11 @@ public class BytecodeInterpreter {
                                 int rs = bytecode[pc++];
                                 RuntimeBase rdVal = registers[rd];
                                 RuntimeScalar rdScalar;
-                                if (isImmutableProxy(rdVal)) {
+                                if (rdVal instanceof ScalarSpecialVariable) {
+                                    // $&, $1 … — defensive unbox (see ensureMutableScalar rationale).
+                                    // Intentionally NOT unboxing RuntimeScalarReadOnly so that
+                                    // `for (3) { $_ = 4 }` and similar aliased-rvalue assignments
+                                    // throw "Modification of a read-only value" (op/ref.t 232).
                                     rdScalar = new RuntimeScalar();
                                     registers[rd] = rdScalar;
                                 } else if (rdVal instanceof RuntimeScalar) {
