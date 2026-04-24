@@ -1064,15 +1064,32 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
+        // Fire DESTROYs one-at-a-time so each destructor sees the remaining
+        // entries of the (progressively shrinking) hash. Matches Perl's
+        // semantics for `undef %hash` on blessed values — op/undef.t 19-35
+        // (bug 3096): destructors expect keys/values/each to be consistent
+        // with what has not yet been destroyed, and may re-insert entries
+        // (which will then be destroyed in subsequent iterations).
+        //
+        // The previous one-shot variant (deferDestroyForContainerClear +
+        // clear() + flush) replaced this.elements with an empty map BEFORE
+        // running destructors, so DESTROY saw an empty hash.
+        while (!this.elements.isEmpty()) {
+            Iterator<Map.Entry<String, RuntimeScalar>> it = this.elements.entrySet().iterator();
+            Map.Entry<String, RuntimeScalar> entry = it.next();
+            String key = entry.getKey();
+            RuntimeScalar value = entry.getValue();
+            it.remove();
+            if (this.byteKeys != null) this.byteKeys.remove(key);
+            // Defer DESTROY for this one value, then flush so it runs now.
+            MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(value));
+            MortalList.flush();
+        }
         // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
-        MortalList.deferDestroyForContainerClear(this.elements.values());
         if (this.type == PLAIN_HASH) {
             this.elements = new StableHashMap<>();
-        } else {
-            this.elements.clear();
         }
         this.byteKeys = null;
-        MortalList.flush();
         return this;
     }
 
