@@ -3730,6 +3730,13 @@ public class BytecodeCompiler implements Visitor {
                             emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
                             emitReg(rd);
                             emit(nameIdx);
+                            // Re-load the (now localized) global into ourReg so
+                            // subsequent reads/writes through our @pkg / $pkg / %pkg
+                            // see the localized container, not the saved pre-local one.
+                            // Fixes op/split.t 164-166 (`local our @pkg; @pkg = split...`).
+                            emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                            emitReg(ourReg);
+                            emit(nameIdx);
                         }
                         case "@" -> {
                             emit(Opcodes.LOAD_GLOBAL_ARRAY);
@@ -3738,6 +3745,10 @@ public class BytecodeCompiler implements Visitor {
                             emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
                             emitReg(rd);
                             emit(nameIdx);
+                            // Re-load: see comment above.
+                            emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                            emitReg(ourReg);
+                            emit(nameIdx);
                         }
                         case "%" -> {
                             emit(Opcodes.LOAD_GLOBAL_HASH);
@@ -3745,6 +3756,10 @@ public class BytecodeCompiler implements Visitor {
                             emit(nameIdx);
                             emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
                             emitReg(rd);
+                            emit(nameIdx);
+                            // Re-load: see comment above.
+                            emit(Opcodes.LOAD_GLOBAL_HASH);
+                            emitReg(ourReg);
                             emit(nameIdx);
                         }
                         default -> throwCompilerException("Unsupported variable type in local our: " + innerSigil);
