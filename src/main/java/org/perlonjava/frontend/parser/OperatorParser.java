@@ -46,6 +46,11 @@ public class OperatorParser {
             block = ParseBlock.parseBlock(parser);
             parser.parsingTakeReference = parsingTakeReference;
             TokenUtils.consume(parser, OPERATOR, "}");
+            // Mark as a do-block so that scope-exit cleanup skips flushing
+            // the mortal list. Like subroutine bodies, do-block return values
+            // are on the JVM operand stack and must not be destroyed before
+            // the caller captures them (e.g., $self->{cursor} ||= do { ... }).
+            block.setAnnotation("blockIsDoBlock", true);
             return block;
         }
         // `do` file

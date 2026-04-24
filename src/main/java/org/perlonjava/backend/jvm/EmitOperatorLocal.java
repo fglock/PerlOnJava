@@ -4,10 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
-import org.perlonjava.frontend.astnode.IdentifierNode;
-import org.perlonjava.frontend.astnode.ListNode;
-import org.perlonjava.frontend.astnode.Node;
-import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
@@ -216,7 +213,19 @@ public class EmitOperatorLocal {
                     "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeGlob;",
                     false);
         } else {
-            varToLocal.accept(emitterVisitor.with(lvalueContext));
+            // For direct hash element access (local $hash{key}), use getForLocal instead of get.
+            // This ensures the proxy holds parent+key refs so restore survives hash reassignment.
+            if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
+                    && binNode.left instanceof OperatorNode sigNode && sigNode.operator.equals("$")
+                    && sigNode.operand instanceof IdentifierNode) {
+                Dereference.handleHashElementOperator(emitterVisitor.with(lvalueContext), binNode, "getForLocal");
+            } else if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("->")
+                    && binNode.right instanceof HashLiteralNode) {
+                // For arrow hash dereference (local $ref->{key}), use getForLocal via arrow deref path.
+                Dereference.handleArrowHashDeref(emitterVisitor.with(lvalueContext), binNode, "getForLocal");
+            } else {
+                varToLocal.accept(emitterVisitor.with(lvalueContext));
+            }
         }
         
         // save the old value

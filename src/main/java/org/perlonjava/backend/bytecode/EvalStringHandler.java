@@ -239,6 +239,23 @@ public class EvalStringHandler {
                 }
             }
 
+            // Inherit the caller's `our` aliases. In Perl 5, `our $foo` creates
+            // a lexical alias that survives `package Bar;` inside the same
+            // compilation unit, including inside eval STRING bodies compiled
+            // within that unit. Seed the eval's symbol table with the same
+            // aliases so that inner `package Foo; $bar` still resolves to
+            // the originally-declared package.
+            if (currentCode != null && currentCode.ourVariableRegistry != null) {
+                for (Map.Entry<String, String> ourEntry : currentCode.ourVariableRegistry.entrySet()) {
+                    String varName = ourEntry.getKey();
+                    String declPkg = ourEntry.getValue();
+                    if (varName == null || declPkg == null) continue;
+                    if (symbolTable.getSymbolEntry(varName) == null) {
+                        symbolTable.addVariable(varName, "our", declPkg, null);
+                    }
+                }
+            }
+
             // Inherit lexical pragma flags from parent if available
             if (currentCode != null) {
                 int strictOpts = (siteStrictOptions >= 0) ? siteStrictOptions : currentCode.strictOptions;

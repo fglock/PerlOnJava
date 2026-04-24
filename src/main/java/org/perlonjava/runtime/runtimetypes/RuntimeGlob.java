@@ -20,11 +20,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public String globName;
     public RuntimeScalar IO;
     // Local scalar slot for anonymous globs (when globName is null)
-    private RuntimeScalar scalarSlot;
+    RuntimeScalar scalarSlot;
     // Local array slot for anonymous globs (when globName is null)
-    private RuntimeArray arraySlot;
+    RuntimeArray arraySlot;
     // Local hash slot for anonymous globs (when globName is null)
-    private RuntimeHash hashSlot;
+    RuntimeHash hashSlot;
     // Local code slot for detached globs (from stash delete)
     public RuntimeScalar codeSlot;
 
@@ -220,9 +220,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // causing compile-time constants to be freed and weak refs to be cleared.
                 if (codeContainer.value instanceof RuntimeCode oldCode) {
                     oldCode.clearPadConstantWeakRefs();
+                    // Decrement stashRefCount on the old CODE ref being replaced
+                    if (oldCode.stashRefCount > 0) {
+                        oldCode.stashRefCount--;
+                    }
                 }
 
                 codeContainer.set(value);
+
+                // Increment stashRefCount on the new CODE ref installed in the stash.
+                // This tracks that the stash holds a reference to this CODE object,
+                // which is invisible to the cooperative refCount mechanism.
+                if (value.value instanceof RuntimeCode newCode) {
+                    newCode.stashRefCount++;
+                }
 
                 // Invalidate the method resolution cache
                 InheritanceResolver.invalidateCache();
@@ -563,6 +574,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Stash entries: *Pkg::{HASH} always returns the package's symbol table,
                 // even if it hasn't been explicitly materialized. This mirrors Perl 5
                 // where the stash is an intrinsic property of the package.
+                // getGlobalHash() internally normalizes "main::Foo::" -> "Foo::".
                 if (this.globName.endsWith("::")) {
                     yield GlobalVariable.getGlobalHash(this.globName).createReference();
                 }
@@ -597,6 +609,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (this.globName == null) {
             this.hashSlot = new RuntimeHash();
             return this.hashSlot;
+        }
+        // For stash globs (name ends with ::), resolve to the correct package stash.
+        // The glob for $::{"UNIVERSAL::"} has globName "main::UNIVERSAL::" but the
+        // stash is stored with key "UNIVERSAL::". Strip "main::" for top-level packages.
+        if (this.globName.endsWith("::")) {
+            String stashKey = this.globName.startsWith("main::")
+                    ? this.globName.substring(6)
+                    : this.globName;
+            return GlobalVariable.getGlobalHash(stashKey);
         }
         return GlobalVariable.getGlobalHash(this.globName);
     }
@@ -927,6 +948,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.globalCodeRefs.put(this.globName, newCode);
+        // Decrement stashRefCount on the saved CODE ref being removed from the stash
+        if (savedCode != null && savedCode.value instanceof RuntimeCode savedCodeObj) {
+            if (savedCodeObj.stashRefCount > 0) {
+                savedCodeObj.stashRefCount--;
+            }
+        }
         // Also redirect pinnedCodeRefs to the new empty code for the local scope.
         // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
         // assignments during the local scope would mutate the saved snapshot instead
@@ -995,12 +1022,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // from firing at the right time.
         RuntimeScalar localCode = GlobalVariable.globalCodeRefs.get(snap.globName);
         if (localCode != null && (localCode.type & REFERENCE_BIT) != 0 && localCode.value instanceof RuntimeBase localBase) {
+            // Decrement stashRefCount on the local scope's CODE ref being removed
+            if (localBase instanceof RuntimeCode localCodeObj) {
+                if (localCodeObj.stashRefCount > 0) {
+                    localCodeObj.stashRefCount--;
+                }
+            }
             if (localBase.refCount > 0 && --localBase.refCount == 0) {
                 localBase.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(localBase);
             }
         }
         GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
+        // Increment stashRefCount on the restored CODE ref being put back in the stash
+        if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
+            restoredCode.stashRefCount++;
+        }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.
         GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);

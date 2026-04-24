@@ -117,7 +117,9 @@ public class EmitOperatorNode {
             case "delete", "exists" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
             case "delete_local" -> EmitOperatorDeleteExists.handleDeleteExists(emitterVisitor, node);
             case "defined" -> EmitOperatorDeleteExists.handleDefined(node, node.operator, emitterVisitor);
-            case "local" -> EmitOperatorLocal.handleLocal(emitterVisitor, node);
+            case "local" -> {
+                EmitOperatorLocal.handleLocal(emitterVisitor, node);
+            }
             case "\\" -> EmitOperator.handleCreateReference(emitterVisitor, node);
             case "$#" -> EmitOperator.handleArrayUnaryBuiltin(emitterVisitor,
                     new OperatorNode("$#", new OperatorNode("@", node.operand, node.tokenIndex), node.tokenIndex),

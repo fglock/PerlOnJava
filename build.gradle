@@ -230,9 +230,10 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:deprecation'
 }
 
-// Test execution configuration with native access
+// Test execution configuration with native access and adequate heap
 tasks.withType(Test).configureEach {
     jvmArgs += '--enable-native-access=ALL-UNNAMED'
+    maxHeapSize = '1g'
 }
 
 // Enable native access for all Java execution tasks
@@ -366,6 +367,7 @@ sourceSets {
             include '**/*.pod'
             include '**/*.dd'
             include '**/*.yml'
+            include '**/*.patch'
             include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
             include 'bin/**'

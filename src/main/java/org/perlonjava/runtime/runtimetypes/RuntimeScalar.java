@@ -784,6 +784,101 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Add itself to a RuntimeArray.
+    //
+    // ─── WARNING: refCount accounting is intentionally asymmetric here ───
+    //
+    // Do NOT add an `incrementRefCountForContainerStore(copy)` call to the
+    // PLAIN_ARRAY branch below, even though its sister method
+    // `RuntimeArray.add(RuntimeScalar)` (used for anon-array-literal
+    // construction) *does* incref. There is a reason — but the asymmetry
+    // is a workaround for a DEEPER architectural mismatch with real Perl.
+    //
+    // ─── The deeper issue: PerlOnJava COPIES where real Perl ALIASES ───
+    //
+    // In system (XS) Perl, arg passing uses SV aliasing: `f($g)` stores
+    // the caller's $g SV pointer directly into @_. No copy, no SvREFCNT_inc,
+    // no SvREFCNT_dec. The callee's @_[0] IS the caller's $g. Lifetime is
+    // bound to the caller.
+    //
+    // Anon-array-literal construction in real Perl uses `newSVsv` which
+    // DOES copy and DOES incref the referent — because the AV owns the
+    // elements and must release them when the AV dies.
+    //
+    // Real Perl's "symmetry" is thus: each primitive has well-defined
+    // refcount semantics; aliasing is used where ownership stays with
+    // the caller, copying is used where ownership transfers to the
+    // container. The two Perl-level operations (pass-by-value vs
+    // anon-array-literal) use different primitives on purpose.
+    //
+    // PerlOnJava currently copies in both cases (this method, and
+    // RuntimeArray.add). So the same *runtime primitive* needs to have
+    // DIFFERENT ownership semantics depending on which Perl-level
+    // operation called it — which is structurally awkward and the reason
+    // for the asymmetric incref policy. The asymmetry is not a property
+    // of Perl; it's a property of our copy-everywhere implementation
+    // choice trying to emulate Perl's alias-vs-copy distinction.
+    //
+    // ─── What went wrong historically ───
+    //
+    // Commit c8f669b14 (Template fix — "incref anon-array elements on
+    // add — fixes TT directive.t") added incref to BOTH sites. The
+    // anon-array-literal path has a matching createReferenceWithTrackedElements
+    // at the end of the literal so its incref is balanced. This method,
+    // however, is also reached from arg-passing — and the args array has
+    // NO matching decref: it's popped off argsStack without walking its
+    // elements. A blessed referent's refCount leaked by +1 per function
+    // call. Most tests didn't notice (process-exit GC catches it), but
+    // anything relying on SYNCHRONOUS DESTROY — e.g. DBIC
+    // `t/storage/txn_scope_guard.t#18` (zombie-ref double-DESTROY
+    // detection via @DB::args capture) — broke.
+    //
+    // Minimal repro (before the narrow fix below, DESTROY fires late at
+    // process exit; after the fix, it fires from `@capture = ()`):
+    //
+    //   package Guard;
+    //   sub new { bless { id => $_[1] }, "Guard" }
+    //   sub DESTROY { warn "DESTROY id=$_[0]->{id}\n" }
+    //   package main;
+    //   my @capture;
+    //   sub inner {
+    //       package DB;
+    //       my $f = 0;
+    //       while (my @fr = caller(++$f)) { push @capture, @DB::args }
+    //   }
+    //   sub call_with_guard { inner() }
+    //   { my $g = Guard->new("A"); call_with_guard($g); }
+    //   warn "--- before clear\n";
+    //   @capture = ();
+    //   warn "--- after clear (DESTROY must have fired by here)\n";
+    //
+    // ─── Fixes, in increasing order of cleanliness ───
+    //
+    //   1. [CURRENT — pragmatic workaround] Drop the incref from this
+    //      method (arg-passing path), keep it in RuntimeArray.add
+    //      (anon-array-literal path). Both Template and DBIC pass.
+    //      But the two copy-sites have different ownership semantics,
+    //      which is confusing and fragile.
+    //
+    //   2. [LOCAL FIX] Keep the incref here and teach popArgs() to
+    //      walk the args array's elements and decref each one. Keeps
+    //      the "arrays always own their elements" invariant clean.
+    //      Per-call cost proportional to arg count — usually small.
+    //
+    //   3. [SEMANTICALLY CORRECT — bigger refactor] Implement
+    //      alias-on-pass to match Perl's @_. Arg passing stores the
+    //      caller's RuntimeScalar pointer directly; no copy, no
+    //      refcount traffic. The scalar's lifetime is tied to the
+    //      caller, as in Perl. @_-mutation semantics (shift/pop/slice)
+    //      would need to reflect this, and everything reading @_ would
+    //      need to handle aliased values. This is the RIGHT answer
+    //      long-term but touches many files.
+    //
+    // If you're auditing for refcount symmetry, or you hit a leak
+    // regression that seems to point here: prefer option 2 or 3
+    // over re-adding the incref. See dev/design/perf-dbic-safe-port.md
+    // and commit history for context.
+    //
+    // Regression test: t/destroy_zombie_captured_by_db_args.t
     public void addToArray(RuntimeArray runtimeArray) {
         switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
@@ -835,6 +930,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && base.refCount >= 0) {
             base.refCount++;
             scalar.refCountOwned = true;
+            // Phase B1 (refcount_alignment_52leaks_plan.md): track the
+            // container element so ReachabilityWalker can see it via
+            // ScalarRefRegistry.
+            ScalarRefRegistry.registerRef(scalar);
         }
     }
 
@@ -1036,16 +1135,86 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        // Phase B1 (refcount_alignment_52leaks_plan.md): track this
+        // scalar so the reachability walker can enumerate live lexicals.
+        if (newOwned) {
+            ScalarRefRegistry.registerRef(this);
+        }
+
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+
+        // DESTROY rescue detection for reference types.
+        // Only trigger when the OLD value was a reference to the DESTROY target
+        // (e.g., a weak ref being overwritten by a strong ref to the same object).
+        // This detects Schema::DESTROY's self-save pattern where:
+        //   $source->{schema} = $self  (overwriting weak ref with strong ref)
+        // But avoids false positives from:
+        //   my $self = shift  (new local variable, oldBase is null)
+        if (DestroyDispatch.currentDestroyTarget != null
+                && oldBase == DestroyDispatch.currentDestroyTarget
+                && this.value instanceof RuntimeBase base
+                && base == DestroyDispatch.currentDestroyTarget) {
+            DestroyDispatch.destroyTargetRescued = true;
+            // Transition from destroyed (MIN_VALUE) to tracked so that when the
+            // rescuing reference is eventually released (e.g., source goes out of
+            // scope at the end of DESTROY), cascading cleanup brings the refCount
+            // back to 0 and triggers weak ref clearing. Without this, the rescued
+            // object stays untracked (-1) and weak refs are never cleared, causing
+            // leak detection failures (DBIC t/52leaks.t tests 12-20).
+            //
+            // Set to 1: the rescue container's single counted reference.
+            // When the rescue source dies and DESTROY weakens source->{schema},
+            // refCount goes 1→0→callDestroy. That callDestroy is intercepted by
+            // the rescuedObjects check in callDestroy's destroyFired path (no
+            // clearWeakRefsTo or cascade), keeping Schema's internals intact.
+            // Proper cleanup happens at END time via clearRescuedWeakRefs.
+            if (base.refCount == Integer.MIN_VALUE) {
+                base.refCount = 1;
+            } else if (base.refCount >= 0) {
+                base.refCount++;
+            }
+            newOwned = true;
+        }
+
+        // Phase B1 (refcount_alignment_52leaks_plan.md): register this
+        // scalar in ScalarRefRegistry so the reachability walker can
+        // enumerate live ref-holding RuntimeScalars on demand. No-op
+        // when no weaken() has ever been called.
+        if (newOwned) {
+            ScalarRefRegistry.registerRef(this);
+        }
 
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
-                oldBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(oldBase);
+                if (oldBase.localBindingExists) {
+                    // Named container (my %hash / my @array): the local variable
+                    // slot holds a strong reference not counted in refCount.
+                    // Don't call callDestroy — the container is still alive.
+                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else {
+                    oldBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(oldBase);
+                }
+            } else if (oldBase.refCount > 0 && value.type == UNDEF
+                    && oldBase.blessId != 0
+                    && DestroyDispatch.isInsideDestroy()
+                    && WeakRefRegistry.weakRefsExist) {
+                // Phase D: inside a DESTROY body, an explicit undef
+                // assignment released our strong ref to another
+                // blessed-with-DESTROY object but cooperative refCount
+                // didn't drop to 0 (cycles). Flag a deferred sweep to
+                // run once at the end of the outermost DESTROY.
+                // Narrow gating (only inside DESTROY, only value==UNDEF,
+                // only blessed) keeps per-set() cost to an int compare
+                // and one BitSet lookup.
+                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                    DestroyDispatch.sweepPendingAfterOuterDestroy = true;
+                }
             }
         }
 
@@ -1199,7 +1368,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case CODE -> Overload.stringify(this).toString();
             default -> {
                 if (type == REGEX) yield value.toString();
-                yield Overload.stringify(this).toString();
+                // Overload.stringify calls the ("" method. If it returns THIS
+                // exact scalar (or another object whose ("" points back here),
+                // naively calling .toString() on the result would recurse. Perl
+                // falls back to the default reference form in that case; so do
+                // we. Detect by identity first, then by depth via a ThreadLocal
+                // guard inside Overload.stringify (handles the transitive case).
+                RuntimeScalar overloaded = Overload.stringify(this);
+                if (overloaded == this) yield toStringRef();
+                yield overloaded.toString();
             }
         };
     }
@@ -1319,6 +1496,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `$v->{key}`, when "no strict refs" is in effect
     public RuntimeScalar hashDerefGetNonStrict(RuntimeScalar index, String packageName) {
         return this.hashDerefNonStrict(packageName).get(index);
+    }
+
+    // Method to implement `local $v->{key}` - returns a proxy that survives hash reassignment
+    public RuntimeScalar hashDerefGetForLocal(RuntimeScalar index) {
+        return this.hashDeref().getForLocal(index);
+    }
+
+    // Method to implement `local $v->{key}`, when "no strict refs" is in effect
+    public RuntimeScalar hashDerefGetForLocalNonStrict(RuntimeScalar index, String packageName) {
+        return this.hashDerefNonStrict(packageName).getForLocal(index);
     }
 
     // Method to implement `delete $v->{key}`
@@ -2080,6 +2267,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = null;
 
         // Decrement AFTER clearing (Perl 5 semantics: DESTROY sees the new state)
+        boolean undefOnBlessedWithDestroy = false;
         if (oldBase != null) {
             if (oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
                 // Weakly-tracked object (unblessed, birth-tracked, with weak refs):
@@ -2092,8 +2280,46 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             } else if (this.refCountOwned && oldBase.refCount > 0) {
                 this.refCountOwned = false;
                 if (--oldBase.refCount == 0) {
-                    oldBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(oldBase);
+                    if (oldBase.localBindingExists) {
+                        // Named container: local variable may still exist. Skip callDestroy.
+                    } else {
+                        oldBase.refCount = Integer.MIN_VALUE;
+                        DestroyDispatch.callDestroy(oldBase);
+                        // Phase H (t/storage/error.t test 49): if the DESTROY self-
+                        // saved the object (rescued), user's explicit undef still
+                        // means their lexical handle is gone — weak refs pointing
+                        // to the rescued object (e.g. HandleError closure's weak
+                        // $schema) must be cleared so callbacks that fire AFTER
+                        // this point can detect "schema is gone".
+                        if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+                            String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                            if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                                undefOnBlessedWithDestroy = true;
+                            }
+                        }
+                    }
+                } else if (oldBase.blessId != 0 && oldBase.refCount > 0
+                        && WeakRefRegistry.weakRefsExist) {
+                    // Phase D: cooperative refCount suggests this object still has
+                    // strong references, but those may all be internal cycles
+                    // (e.g. DBIC's Schema <-> source_registrations). Defer to the
+                    // reachability walker if the class has DESTROY — it's the
+                    // canonical decider of liveness once the user has explicitly
+                    // released their lexical handle.
+                    String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                    if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                        undefOnBlessedWithDestroy = true;
+                    }
+                }
+            } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
+                // Phase D: no owned-count decrement (refCountOwned was false, or
+                // refCount was already 0 from prior cooperative drift). The
+                // object is blessed — if its class has DESTROY, let the walker
+                // decide whether this undef just released the last live lexical
+                // handle.
+                String cn = NameNormalizer.getBlessStr(oldBase.blessId);
+                if (cn != null && DestroyDispatch.classHasDestroy(oldBase.blessId, cn)) {
+                    undefOnBlessedWithDestroy = true;
                 }
             }
         }
@@ -2104,6 +2330,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // appear inflated at the point of `undef $ref`. This matches Perl 5
         // where FREETMPS runs at statement boundaries.
         MortalList.flush();
+
+        // Phase D: undef-of-blessed auto-trigger for the reachability walker.
+        // When the user explicitly undef's a blessed ref with DESTROY but
+        // cooperative refCount stays > 0 (internal cycles), ask the walker
+        // to determine real reachability. Bypasses the MortalList auto-sweep
+        // throttle because this is an explicit release, not an opportunistic
+        // check. Skips when we're in module-init to avoid clearing weak refs
+        // that require/use chains still depend on.
+        if (undefOnBlessedWithDestroy && !ModuleInitGuard.inModuleInit()) {
+            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
+                System.err.println("DBG Phase D undef-of-blessed trigger for " +
+                        (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
+                        " refCount=" + (oldBase != null ? oldBase.refCount : -1));
+            }
+            ReachabilityWalker.sweepWeakRefs(false);
+        }
 
         return this;
     }
@@ -2190,7 +2432,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
         // - ioOwner=false → IO fd recycling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) return;
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) {
+            // Special case: CODE refs with unreleased captures that were never
+            // stored via set() (e.g., anonymous subs passed directly as arguments).
+            // These have refCount=0 (from makeCodeObject) and refCountOwned=false
+            // (never went through setLargeRefCounted). Without this check,
+            // releaseCaptures() would never fire, permanently elevating
+            // captureCount on captured variables and leaking blessed objects.
+            // The null check on capturedScalars ensures we only fire once
+            // (releaseCaptures sets capturedScalars=null to prevent re-entry).
+            if (scalar.type == RuntimeScalarType.CODE
+                    && scalar.value instanceof RuntimeCode code
+                    && code.capturedScalars != null
+                    && code.refCount == 0) {
+                code.releaseCaptures();
+            }
+            return;
+        }
 
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
@@ -2245,6 +2503,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && scalar.value instanceof RuntimeCode) {
                 // Fall through to deferDecrementIfTracked below
             } else {
+                // For non-CODE blessed refs with DESTROY: register for deferred
+                // cleanup after the main script returns. The interpreter captures
+                // ALL visible lexicals for eval STRING support, inflating
+                // captureCount on variables that closures don't actually use.
+                // At inner scope exit we can't decrement (closures in outer scopes
+                // may legitimately keep the object alive), but after the main
+                // script finishes ALL scopes have exited, so it's safe.
+                if (scalar.refCountOwned
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && scalar.value instanceof RuntimeBase rb
+                        && rb.blessId != 0) {
+                    MortalList.addDeferredCapture(scalar);
+                }
                 return;
             }
         }

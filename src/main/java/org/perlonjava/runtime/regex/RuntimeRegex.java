@@ -1059,7 +1059,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Save the original replacement and flags before potentially changing regex
         RuntimeScalar replacement = regex.replacement;
+        RuntimeArray callerArgs = regex.callerArgs;
         RegexFlags originalFlags = regex.regexFlags;
+
+        // Clear the replacement and callerArgs from the regex object to release closure
+        // references. The replacement code reference may capture lexical variables from
+        // the calling scope; holding it in the persistent regex object would prevent those
+        // variables (and any tracked objects they reference) from being freed at scope exit.
+        // The local variables above hold the references for the duration of this method.
+        regex.replacement = null;
+        regex.callerArgs = null;
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
         if (regex.patternString == null || regex.patternString.isEmpty()) {
@@ -1192,7 +1201,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (replacementIsCode) {
                     // Evaluate the replacement as code
                     // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
-                    RuntimeArray args = (regex.callerArgs != null) ? regex.callerArgs : new RuntimeArray();
+                    RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                     RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
                     replacementStr = result.toString();
                 } else {
@@ -1227,6 +1236,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             resultBuffer.append(inputStr, lastAppendEnd, inputStr.length());
         } else {
             matcher.appendTail(resultBuffer);
+        }
+
+        // Release captures from the replacement closure to unblock DESTROY.
+        // The s///eg replacement is compiled as an anonymous sub that captures
+        // lexical variables from the enclosing scope (incrementing their captureCount).
+        // Since this closure is a JVM stack temporary (not a Perl 'my' variable),
+        // scopeExitCleanup is never called for it, so releaseCaptures() would never
+        // fire. Without this, captured variables' captureCount stays elevated,
+        // preventing refCount decrement at scope exit, and DESTROY never fires.
+        if (replacementIsCode && replacement.value instanceof RuntimeCode code) {
+            code.releaseCaptures();
         }
 
         if (found > 0) {

@@ -1,0 +1,17 @@
+--- /tmp/LeakTracer.pm.orig	2026-04-19 14:55:37
++++ LeakTracer.pm	2026-04-19 14:58:13
+@@ -201,6 +201,14 @@
+ }
+ 
+ sub assert_empty_weakregistry {
++  # jperl: run reachability sweep to clear weak refs for unreachable objects.
++  # Guarded: only runs when registry has many entries (heuristic: the outer
++  # test-wide registry). Inner per-object registries during cleanup loops
++  # are skipped so Perl-level cycle-breaking code (e.g. $r->result_source(undef))
++  # still sees the expected live references.
++  if (defined &Internals::jperl_gc && ref($_[0]) eq "HASH" && scalar(keys %{$_[0]}) > 5) {
++    Internals::jperl_gc();
++  }
+   my ($weak_registry, $quiet) = @_;
+ 
+   # in case we hooked bless any extra object creation will wreak

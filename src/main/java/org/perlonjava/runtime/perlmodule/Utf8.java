@@ -254,7 +254,22 @@ public class Utf8 extends PerlModuleBase {
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT);
             CharBuffer decoded = decoder.decode(ByteBuffer.wrap(bytes));
-            scalar.set(decoded.toString());
+            String decodedStr = decoded.toString();
+            scalar.set(decodedStr);
+            // Per Perl 5 docs: "The UTF-8 flag is turned on only if the string
+            // contains a multi-byte UTF-8 character (i.e., any char above 0x7F
+            // after decoding)." For pure ASCII input (all chars <= 0x7F), the
+            // UTF-8 flag stays off even though the decode succeeded.
+            boolean hasMultiByte = false;
+            for (int i = 0; i < decodedStr.length(); i++) {
+                if (decodedStr.charAt(i) > 0x7F) {
+                    hasMultiByte = true;
+                    break;
+                }
+            }
+            if (!hasMultiByte) {
+                scalar.type = BYTE_STRING;
+            }
             return new RuntimeScalar(true).getList();
         } catch (Exception e) {
             return new RuntimeScalar(false).getList();

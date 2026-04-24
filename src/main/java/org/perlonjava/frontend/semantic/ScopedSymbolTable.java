@@ -400,11 +400,41 @@ public class ScopedSymbolTable {
         symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, getCurrentPackage());
     }
 
+    /**
+     * Overload that lets the caller specify an explicit Perl package for the
+     * symbol entry. Used when seeding an eval STRING's symbol table with the
+     * caller's `our` declarations: the declaring package must be preserved
+     * (not overwritten with the current package) so that the lexical alias
+     * remains correct even after `package Foo;` inside the eval body.
+     */
+    public void addVariableWithIndex(String name, int index, String variableDeclType, String perlPackage) {
+        clearVisibleVariablesCache();
+        symbolTableStack.peek().addVariableWithIndex(name, index, variableDeclType, perlPackage);
+    }
+
     public Map<String, Integer> getVisibleVariableRegistry() {
         Map<String, Integer> registry = new HashMap<>();
         Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
         for (SymbolTable.SymbolEntry entry : visible.values()) {
             registry.put(entry.name(), entry.index());
+        }
+        return registry;
+    }
+
+    /**
+     * Returns a map of visible `our` variable names to their declaring package.
+     * This is used by eval STRING to inherit the caller's `our` aliases so that
+     * even after a `package Foo;` directive inside the eval body, references to
+     * `$bar` still resolve through the outer scope's `our $bar` alias to the
+     * original package (matching Perl 5 lexical-scoping semantics).
+     */
+    public Map<String, String> getVisibleOurRegistry() {
+        Map<String, String> registry = new HashMap<>();
+        Map<Integer, SymbolTable.SymbolEntry> visible = getAllVisibleVariables();
+        for (SymbolTable.SymbolEntry entry : visible.values()) {
+            if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
+                registry.put(entry.name(), entry.perlPackage());
+            }
         }
         return registry;
     }
@@ -650,11 +680,14 @@ public class ScopedSymbolTable {
         ScopedSymbolTable st = new ScopedSymbolTable();
         st.enterScope();
 
-        // Clone visible variables
+        // Clone visible variables (preserve the original `perlPackage` for
+        // `our` entries — otherwise eval STRING compiled against this snapshot
+        // would lose the caller's `our` aliases and resolve names against
+        // whatever package is active inside the eval body).
         Map<Integer, SymbolTable.SymbolEntry> visibleVariables = this.getAllVisibleVariables();
         for (Integer index : visibleVariables.keySet()) {
             SymbolTable.SymbolEntry entry = visibleVariables.get(index);
-            st.addVariable(entry.name(), entry.decl(), entry.ast());
+            st.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
         }
 
         // Clone the current package

@@ -77,7 +77,6 @@ public class CallerStack {
         if (entry instanceof CallerInfo ci) {
             return ci;
         } else if (entry instanceof LazyCallerInfo lazy) {
-            // Don't resolve on pop - caller info not needed
             return null;
         }
         return null;
@@ -102,6 +101,25 @@ public class CallerStack {
             }
         }
         return result;
+    }
+
+    /**
+     * Count the number of consecutive lazy (interpreter-pushed) entries from the top
+     * of the stack, starting from the given call frame index.
+     * This is used by ExceptionFormatter to skip past interpreter CallerStack entries
+     * that sit on top of compile-time entries from parseUseDeclaration/runSpecialBlock.
+     *
+     * @param startCallFrame The call frame index to start counting from (0 = top of stack)
+     * @return The number of consecutive lazy entries from startCallFrame
+     */
+    public static int countLazyFromTop(int startCallFrame) {
+        int count = 0;
+        int index = callerStack.size() - 1 - startCallFrame;
+        while (index >= 0 && callerStack.get(index) instanceof LazyCallerInfo) {
+            count++;
+            index--;
+        }
+        return count;
     }
 
     /**

@@ -43,6 +43,17 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     }
 
     /**
+     * Pre-initializes the lvalue pointer. Used by {@code RuntimeHash.getForLocal()}
+     * when the key already exists in the hash, so that {@code dynamicSaveState()}
+     * correctly sees the existing value rather than treating it as a new key.
+     */
+    void initLvalue(RuntimeScalar existing) {
+        this.lvalue = existing;
+        this.type = existing.type;
+        this.value = existing.value;
+    }
+
+    /**
      * Creates a reference to the underlying lvalue, vivifying it first.
      * In Perl, \$hash{key} auto-vivifies the hash entry so that the reference
      * points to the actual hash element, not a temporary.
@@ -113,24 +124,36 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
             if (previousState == null) {
-                // Key didn't exist before — remove it.
-                // Decrement refCount of the current value being displaced.
-                if (this.lvalue != null
-                        && (this.lvalue.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && this.lvalue.value instanceof RuntimeBase displacedBase
+                // Key didn't exist before — remove it from the parent hash.
+                // Re-fetch from parent in case hash was reassigned (setFromList clears elements).
+                RuntimeScalar current = parent.elements.remove(key);
+                if (current != null
+                        && (current.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && current.value instanceof RuntimeBase displacedBase
                         && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
                     displacedBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(displacedBase);
                 }
-                parent.elements.remove(key);
                 this.lvalue = null;
                 this.type = RuntimeScalarType.UNDEF;
                 this.value = null;
             } else {
-                // Restore the type, value from the saved state
-                // this.set() goes through setLarge() which handles refCount
-                this.set(previousState);
+                // Re-fetch or create the entry in the parent hash by key.
+                // This handles the case where %hash was reassigned between save and restore
+                // (setFromList does elements.clear() which orphans the old lvalue).
+                RuntimeScalar target = parent.elements.get(key);
+                if (target == null) {
+                    target = new RuntimeScalar();
+                    parent.elements.put(key, target);
+                }
+                this.lvalue = target;
+                // Restore the saved value into the current hash entry
+                // lvalue.set() goes through setLarge() which handles refCount
+                this.lvalue.set(previousState);
                 this.lvalue.blessId = previousState.blessId;
+                // Sync proxy state
+                this.type = this.lvalue.type;
+                this.value = this.lvalue.value;
                 this.blessId = previousState.blessId;
             }
         }
