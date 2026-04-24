@@ -867,6 +867,7 @@ public class GlobalVariable {
      *         or the original name if no redirection is active.
      */
     public static String resolveStashHashRedirect(String fullName) {
+        if (fullName == null) return null;
         int lastDoubleColon = fullName.lastIndexOf("::");
         if (lastDoubleColon >= 0) {
             String pkgPart = fullName.substring(0, lastDoubleColon + 2);

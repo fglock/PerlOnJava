@@ -20,11 +20,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     public String globName;
     public RuntimeScalar IO;
     // Local scalar slot for anonymous globs (when globName is null)
-    private RuntimeScalar scalarSlot;
+    RuntimeScalar scalarSlot;
     // Local array slot for anonymous globs (when globName is null)
-    private RuntimeArray arraySlot;
+    RuntimeArray arraySlot;
     // Local hash slot for anonymous globs (when globName is null)
-    private RuntimeHash hashSlot;
+    RuntimeHash hashSlot;
     // Local code slot for detached globs (from stash delete)
     public RuntimeScalar codeSlot;
 

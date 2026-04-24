@@ -170,13 +170,53 @@ public class RuntimeStashEntry extends RuntimeGlob {
                     // *dest = *source - copy all slots from source glob to dest glob
                     String sourceGlobName = sourceGlob.globName;
 
-                    // Copy all slots from source to destination
-                    this.set(GlobalVariable.getGlobalCodeRef(sourceGlobName));
-                    this.set(GlobalVariable.getGlobalIO(sourceGlobName));
-                    this.set(GlobalVariable.getGlobalArray(sourceGlobName).createReference());
-                    this.set(GlobalVariable.getGlobalHash(sourceGlobName).createReference());
-                    this.set(GlobalVariable.getGlobalVariable(sourceGlobName).createReference());
-                    this.set(GlobalVariable.getGlobalFormatRef(sourceGlobName));
+                    // Mark the destination glob as assigned so that parser checks
+                    // like RuntimeGlob.isGlobAssigned() see it as installed.
+                    // This matters for CORE::GLOBAL::require round-trips via
+                    // delete+reassign of stash entries, where the destination
+                    // must appear assigned for the parser to route require
+                    // through the override.
+                    GlobalVariable.globalGlobs.put(this.globName, true);
+
+                    if (sourceGlobName == null) {
+                        // Detached glob (e.g. returned by delete $stash->{name}):
+                        // its slot values live on the glob object itself, not in
+                        // GlobalVariable maps. Re-install those slots into the
+                        // destination's slot-indexed maps directly (do NOT route
+                        // through this.set(codeSlot), since that can self-assign
+                        // the pinned CODE ref back onto itself via
+                        // defineGlobalCodeRef -> getGlobalCodeRef returning the
+                        // very same RuntimeScalar, which breaks refCount
+                        // accounting for reference-type slots).
+                        //
+                        // This supports the common round-trip pattern:
+                        //   my $saved = delete $stash->{name};
+                        //   $stash->{name} = $saved;
+                        if (sourceGlob.codeSlot != null) {
+                            GlobalVariable.globalCodeRefs.put(this.globName, sourceGlob.codeSlot);
+                            InheritanceResolver.invalidateCache();
+                        }
+                        if (sourceGlob.IO != null && sourceGlob.IO.getDefinedBoolean()) {
+                            this.set(sourceGlob.IO);
+                        }
+                        if (sourceGlob.arraySlot != null) {
+                            GlobalVariable.globalArrays.put(this.globName, sourceGlob.arraySlot);
+                        }
+                        if (sourceGlob.hashSlot != null) {
+                            GlobalVariable.globalHashes.put(this.globName, sourceGlob.hashSlot);
+                        }
+                        if (sourceGlob.scalarSlot != null) {
+                            GlobalVariable.globalVariables.put(this.globName, sourceGlob.scalarSlot);
+                        }
+                    } else {
+                        // Copy all slots from source to destination
+                        this.set(GlobalVariable.getGlobalCodeRef(sourceGlobName));
+                        this.set(GlobalVariable.getGlobalIO(sourceGlobName));
+                        this.set(GlobalVariable.getGlobalArray(sourceGlobName).createReference());
+                        this.set(GlobalVariable.getGlobalHash(sourceGlobName).createReference());
+                        this.set(GlobalVariable.getGlobalVariable(sourceGlobName).createReference());
+                        this.set(GlobalVariable.getGlobalFormatRef(sourceGlobName));
+                    }
                 }
                 return value;
             // Handle the case where a typeglob is assigned a reference to an array
