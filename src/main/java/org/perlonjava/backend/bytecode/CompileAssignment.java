@@ -1447,7 +1447,13 @@ public class CompileAssignment {
                                     bytecodeCompiler.emitReg(hashReg);
                                     bytecodeCompiler.emit(nameIdx);
                                 }
-                            } else if (hashOp.operand instanceof OperatorNode) {
+                            } else if (hashOp.operand instanceof OperatorNode
+                                    || hashOp.operand instanceof BlockNode) {
+                                // Handles both:
+                                //   @$ref{keys}   — hashOp.operand is OperatorNode("$", ...)
+                                //   @{EXPR}{keys} — hashOp.operand is BlockNode wrapping an
+                                //                   expression that evaluates to a hashref
+                                // Compile the operand to a scalar ref, then deref as hash.
                                 bytecodeCompiler.compileNode(hashOp.operand, -1, rhsContext);
                                 int scalarRefReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();
