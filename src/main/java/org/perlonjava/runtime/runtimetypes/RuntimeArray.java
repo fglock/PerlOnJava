@@ -318,6 +318,23 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // array. incrementRefCountForContainerStore is idempotent, so the
         // final pass in createReferenceWithTrackedElements is a no-op for
         // these. See tt_arr2.pl / TT directive.t repro.
+        //
+        // NOTE: This method is ONLY called from the anon-array-literal
+        // emit path (EmitLiteral -> addElementToArray -> INVOKEVIRTUAL
+        // "add(LRuntimeScalar;)V"), which is *always* followed by
+        // `createReferenceWithTrackedElements` at the end of the literal.
+        // That final call walks the array's elements and pairs each
+        // incref here with a corresponding refCount-owning reference,
+        // so the accounting balances.
+        //
+        // Do NOT port this incref into {@link RuntimeScalar#addToArray}:
+        // that sister method is also used for arg-list construction
+        // (`f($g)` -> args.addToArray), where no matching decref exists,
+        // and the leaked +1 would break DBIC
+        // t/storage/txn_scope_guard.t#18 (zombie-ref double-DESTROY
+        // detection). See the long comment on
+        // {@link RuntimeScalar#addToArray} for the full analysis and
+        // minimal repro.
         RuntimeScalar copy = new RuntimeScalar(value);
         elements.add(copy);
         RuntimeScalar.incrementRefCountForContainerStore(copy);

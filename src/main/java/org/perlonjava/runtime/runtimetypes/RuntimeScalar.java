@@ -784,19 +784,105 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     // Add itself to a RuntimeArray.
+    //
+    // ─── WARNING: refCount accounting is intentionally asymmetric here ───
+    //
+    // Do NOT add an `incrementRefCountForContainerStore(copy)` call to the
+    // PLAIN_ARRAY branch below, even though its sister method
+    // `RuntimeArray.add(RuntimeScalar)` (used for anon-array-literal
+    // construction) *does* incref. There is a reason — but the asymmetry
+    // is a workaround for a DEEPER architectural mismatch with real Perl.
+    //
+    // ─── The deeper issue: PerlOnJava COPIES where real Perl ALIASES ───
+    //
+    // In system (XS) Perl, arg passing uses SV aliasing: `f($g)` stores
+    // the caller's $g SV pointer directly into @_. No copy, no SvREFCNT_inc,
+    // no SvREFCNT_dec. The callee's @_[0] IS the caller's $g. Lifetime is
+    // bound to the caller.
+    //
+    // Anon-array-literal construction in real Perl uses `newSVsv` which
+    // DOES copy and DOES incref the referent — because the AV owns the
+    // elements and must release them when the AV dies.
+    //
+    // Real Perl's "symmetry" is thus: each primitive has well-defined
+    // refcount semantics; aliasing is used where ownership stays with
+    // the caller, copying is used where ownership transfers to the
+    // container. The two Perl-level operations (pass-by-value vs
+    // anon-array-literal) use different primitives on purpose.
+    //
+    // PerlOnJava currently copies in both cases (this method, and
+    // RuntimeArray.add). So the same *runtime primitive* needs to have
+    // DIFFERENT ownership semantics depending on which Perl-level
+    // operation called it — which is structurally awkward and the reason
+    // for the asymmetric incref policy. The asymmetry is not a property
+    // of Perl; it's a property of our copy-everywhere implementation
+    // choice trying to emulate Perl's alias-vs-copy distinction.
+    //
+    // ─── What went wrong historically ───
+    //
+    // Commit c8f669b14 (Template fix — "incref anon-array elements on
+    // add — fixes TT directive.t") added incref to BOTH sites. The
+    // anon-array-literal path has a matching createReferenceWithTrackedElements
+    // at the end of the literal so its incref is balanced. This method,
+    // however, is also reached from arg-passing — and the args array has
+    // NO matching decref: it's popped off argsStack without walking its
+    // elements. A blessed referent's refCount leaked by +1 per function
+    // call. Most tests didn't notice (process-exit GC catches it), but
+    // anything relying on SYNCHRONOUS DESTROY — e.g. DBIC
+    // `t/storage/txn_scope_guard.t#18` (zombie-ref double-DESTROY
+    // detection via @DB::args capture) — broke.
+    //
+    // Minimal repro (before the narrow fix below, DESTROY fires late at
+    // process exit; after the fix, it fires from `@capture = ()`):
+    //
+    //   package Guard;
+    //   sub new { bless { id => $_[1] }, "Guard" }
+    //   sub DESTROY { warn "DESTROY id=$_[0]->{id}\n" }
+    //   package main;
+    //   my @capture;
+    //   sub inner {
+    //       package DB;
+    //       my $f = 0;
+    //       while (my @fr = caller(++$f)) { push @capture, @DB::args }
+    //   }
+    //   sub call_with_guard { inner() }
+    //   { my $g = Guard->new("A"); call_with_guard($g); }
+    //   warn "--- before clear\n";
+    //   @capture = ();
+    //   warn "--- after clear (DESTROY must have fired by here)\n";
+    //
+    // ─── Fixes, in increasing order of cleanliness ───
+    //
+    //   1. [CURRENT — pragmatic workaround] Drop the incref from this
+    //      method (arg-passing path), keep it in RuntimeArray.add
+    //      (anon-array-literal path). Both Template and DBIC pass.
+    //      But the two copy-sites have different ownership semantics,
+    //      which is confusing and fragile.
+    //
+    //   2. [LOCAL FIX] Keep the incref here and teach popArgs() to
+    //      walk the args array's elements and decref each one. Keeps
+    //      the "arrays always own their elements" invariant clean.
+    //      Per-call cost proportional to arg count — usually small.
+    //
+    //   3. [SEMANTICALLY CORRECT — bigger refactor] Implement
+    //      alias-on-pass to match Perl's @_. Arg passing stores the
+    //      caller's RuntimeScalar pointer directly; no copy, no
+    //      refcount traffic. The scalar's lifetime is tied to the
+    //      caller, as in Perl. @_-mutation semantics (shift/pop/slice)
+    //      would need to reflect this, and everything reading @_ would
+    //      need to handle aliased values. This is the RIGHT answer
+    //      long-term but touches many files.
+    //
+    // If you're auditing for refcount symmetry, or you hit a leak
+    // regression that seems to point here: prefer option 2 or 3
+    // over re-adding the incref. See dev/design/perf-dbic-safe-port.md
+    // and commit history for context.
+    //
+    // Regression test: t/destroy_zombie_captured_by_db_args.t
     public void addToArray(RuntimeArray runtimeArray) {
         switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
-                // Incref immediately so intermediate MortalList.flush() calls
-                // from later expressions (during anon-array-literal construction
-                // or arg-list building) don't drop a pending-mortal referent to
-                // refCount=0 before the container finalizes ownership. The
-                // matching incref in createReferenceWithTrackedElements /
-                // incrementRefCountForContainerStore is idempotent (skips
-                // refCountOwned=true), so no double-incref.
-                RuntimeScalar copy = new RuntimeScalar(this);
-                runtimeArray.elements.add(copy);
-                RuntimeScalar.incrementRefCountForContainerStore(copy);
+                runtimeArray.elements.add(new RuntimeScalar(this));
             }
             case AUTOVIVIFY_ARRAY -> {
                 AutovivificationArray.vivify(runtimeArray);
