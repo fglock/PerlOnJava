@@ -118,8 +118,13 @@ public class ParseMapGrepSort {
             block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode(currentPackage + "::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode(currentPackage + "::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
         }
         if (block instanceof BlockNode) {
+            // Sort's comparator is a proper subroutine — `return $b <=> $a`
+            // must return the comparison value, not propagate as a non-local
+            // return through the enclosing sub. So we do NOT set the
+            // `isMapGrepBlock` annotation here (contrast `parseMapGrep`
+            // below, where `return` is a "pseudo block" escape and must
+            // propagate).
             SubroutineNode subNode = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
-            subNode.setAnnotation("isMapGrepBlock", true);
             block = subNode;
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
