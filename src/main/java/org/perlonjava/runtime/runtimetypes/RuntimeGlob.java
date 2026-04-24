@@ -415,8 +415,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the IO slot: both names point to the same IO object
         // Must update BOTH this.IO (for detached copies) AND the global glob's IO
+        //
+        // NOTE: Prefer `value.IO` (the RuntimeGlob instance that was actually
+        // passed in) over `getGlobalIO(globName).IO`.  The two may differ when
+        // the source glob has been removed from its stash, which is exactly
+        // what `Symbol::gensym` does (it creates `*Symbol::GEN<n>`, stashes a
+        // reference, and then `delete $Symbol::{GEN<n>}` to make the glob
+        // "anonymous").  A subsequent `tie *$ref, ...` stores the TieHandle
+        // on that original RuntimeGlob — not in any stash — so
+        // `getGlobalIO(globName)` would materialise a *fresh* empty glob and
+        // the tie would be lost during `*STDERR = $fh` / `*STDERR = *$fh`.
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
         RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
+
+        RuntimeScalar ioSource = (value.IO != null) ? value.IO : sourceIO.IO;
 
         // Save old IO for selectedHandle check (needed for local *STDOUT = *OTHER)
         RuntimeIO oldRuntimeIO = null;
@@ -424,12 +436,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             oldRuntimeIO = rio;
         }
 
-        this.IO = sourceIO.IO;
-        targetIO.IO = sourceIO.IO;
+        this.IO = ioSource;
+        targetIO.IO = ioSource;
 
         // Update selectedHandle if the old IO was the currently selected output handle
         if (oldRuntimeIO != null && oldRuntimeIO == RuntimeIO.selectedHandle
-                && sourceIO.IO != null && sourceIO.IO.value instanceof RuntimeIO newRIO) {
+                && ioSource != null && ioSource.value instanceof RuntimeIO newRIO) {
             RuntimeIO.selectedHandle = newRIO;
         }
 

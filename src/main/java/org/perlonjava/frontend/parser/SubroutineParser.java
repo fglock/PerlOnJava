@@ -202,7 +202,15 @@ public class SubroutineParser {
         // If a package name follows, then it looks like a indirect method
         // Unless the subName looks like an operator
         // Unless the subName has a prototype with `*`
-        if (peek(parser).type == LexerTokenType.IDENTIFIER && isValidIndirectMethod(subName) && !prototypeHasGlob) {
+        //
+        // Note: feature-gated core keywords (`try`, `catch`, `finally`) should
+        // participate in indirect-object parsing when their feature is *off* —
+        // this is how Error.pm's classic
+        //     try { ... } catch Error::Simple with { ... }
+        // idiom is recognised (parses as `Error::Simple->catch(with {...})`).
+        if (peek(parser).type == LexerTokenType.IDENTIFIER
+                && isValidIndirectMethod(subName, parser)
+                && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
@@ -484,7 +492,21 @@ public class SubroutineParser {
     }
 
     private static boolean isValidIndirectMethod(String subName) {
-        return !CORE_PROTOTYPES.containsKey(subName) && !subName.startsWith("CORE::");
+        return isValidIndirectMethod(subName, null);
+    }
+
+    private static boolean isValidIndirectMethod(String subName, Parser parser) {
+        if (subName.startsWith("CORE::")) return false;
+        if (!CORE_PROTOTYPES.containsKey(subName)) return true;
+        // `try`, `catch`, `finally` are feature-gated.  When the `try`
+        // feature is *off* they are not reserved and can participate in
+        // indirect-object parsing (Error.pm's `catch CLASS with {...}` idiom).
+        if (parser != null
+                && (subName.equals("try") || subName.equals("catch") || subName.equals("finally"))
+                && !parser.ctx.symbolTable.isFeatureCategoryEnabled("try")) {
+            return true;
+        }
+        return false;
     }
 
     private static Node parseIndirectMethodCall(Parser parser, IdentifierNode nameNode) {

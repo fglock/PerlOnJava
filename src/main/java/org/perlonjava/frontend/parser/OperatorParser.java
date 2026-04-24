@@ -1072,7 +1072,19 @@ public class OperatorParser {
 
     static OperatorNode parseReturn(Parser parser, int currentIndex) {
         Node operand;
-        // Handle 'return' keyword as a unary operator with an operand
+        // Handle 'return' keyword as a unary operator with an operand.
+        //
+        // Special case: `return ~~ EXPR` — `~~` here is the prefix
+        // double-bitwise-complement (numeric-scalar idiom), not binary
+        // smartmatch. parseZeroOrMoreList's looksLikeEmptyList sees `~~`
+        // as an infix operator and would treat the list as empty,
+        // silently dropping EXPR. Force a prefix parse in that case.
+        if (TokenUtils.peek(parser).text.equals("~~")) {
+            Node expr = parser.parseExpression(parser.getPrecedence(",") + 1);
+            ListNode list = new ListNode(currentIndex);
+            list.elements.add(expr);
+            return new OperatorNode("return", list, currentIndex);
+        }
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode("return", operand, currentIndex);
     }

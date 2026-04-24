@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.charset.Charset;
@@ -248,6 +249,15 @@ public class LayeredIOHandle implements IOHandle {
             // Parse and apply new layers
             parseAndSetLayers(modeStr);
             return new RuntimeScalar(1);
+        } catch (PerlJavaUnimplementedException e) {
+            // Loud-fail for unimplemented layers (e.g. :via(Foo)).
+            // Matches upstream behavior of returning false from binmode on
+            // layer push failure, but also surfaces the reason via a warning
+            // so users don't silently lose their layer configuration.
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar(e.getMessage() + "\n"),
+                    new RuntimeScalar(""));
+            return new RuntimeScalar(0);
         } catch (Exception e) {
             return new RuntimeScalar(0);
         }
@@ -303,19 +313,21 @@ public class LayeredIOHandle implements IOHandle {
                 }
                 start = i + 1;
                 i++;
-            } else if (modeStr.startsWith("encoding(", i)) {
-                // Handle encoding(...) specially to preserve parentheses
+            } else if (modeStr.startsWith("encoding(", i) || modeStr.startsWith("via(", i)) {
+                // Handle encoding(...) / via(...) specially to preserve parentheses.
+                // Without this, ":via(Foo::Bar)" would be split at the "::" inside
+                // the class name because ":" is the layer separator.
                 int closeIdx = modeStr.indexOf(')', i);
                 if (closeIdx != -1) {
-                    // Extract everything before encoding() if any
+                    // Extract everything before the layer() call if any
                     if (i > start) {
                         result.add(modeStr.substring(start, i));
                     }
-                    // Extract the complete encoding(...) specification
+                    // Extract the complete layer(...) specification
                     result.add(modeStr.substring(i, closeIdx + 1));
                     i = closeIdx + 1;
                     start = i;
-                    // Skip separator if present after encoding()
+                    // Skip separator if present after the layer()
                     if (i < modeStr.length() && modeStr.charAt(i) == ':') {
                         start++;
                         i++;
@@ -389,6 +401,18 @@ public class LayeredIOHandle implements IOHandle {
                     } catch (Exception e) {
                         throw new IllegalArgumentException("Unknown encoding: " + charsetName);
                     }
+                } else if (layerSpec.startsWith("via(") && layerSpec.endsWith(")")) {
+                    // :via(Foo) invokes a Perl-implemented PerlIO layer. PerlOnJava
+                    // does not yet bridge the :via(...) layer dispatch back into
+                    // Perl callbacks (PUSHED / FILL / READ / WRITE / CLOSE ...).
+                    // Fail loudly so users don't get a silent no-op; see
+                    // dev/modules/perlio_via.md for the plan to make this
+                    // functional. Under JPERL_UNIMPLEMENTED=warn this is still
+                    // caught by binmode()/open() and surfaced via $!.
+                    String className = layerSpec.substring(4, layerSpec.length() - 1);
+                    throw new PerlJavaUnimplementedException(
+                            "PerlIO layer :via(" + className + ") not implemented " +
+                                    "in PerlOnJava (see dev/modules/perlio_via.md)");
                 } else {
                     throw new IllegalArgumentException("Unknown layer: " + layerSpec);
                 }
