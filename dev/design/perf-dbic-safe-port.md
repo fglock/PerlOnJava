@@ -125,3 +125,51 @@ Not on Phase 2 list:
 - ThreadLocal-consolidation chain (886e7498b etc.) — big on closure/method
   microbench but not life_bitpacked; would need whole chain picked together.
 
+
+---
+
+## Follow-up after PR #552 merges
+
+### PerlOnJava quirk: user `sub do` in a package isn't callable via name
+
+**Symptoms** (minimal repro):
+```perl
+package MyClass;
+sub do { return "custom do" }
+package main;
+print defined(&MyClass::do) ? "YES\n" : "NO\n";  # NO (on PerlOnJava)
+print \&MyClass::do, "\n";                        # CODE(0x...)  (ref returned!)
+MyClass::do();                                    # dies: Undefined subroutine
+```
+
+Real Perl returns `YES`, `CODE(...)`, prints `"custom do"`.
+
+**Impact hit during the DBIC rebase:** we wanted to override `sub do` in
+`DBD::JDBC::db` to call `$sth->finish` and release JDBC locks (fixes
+`t/storage/on_connect_do.t#8`). Glob-alias workaround
+(`*DBD::JDBC::db::do = \&_do_impl`) reproduces the same quirk — the
+symbol-table slot appears populated (`\&…do` returns a coderef,
+`UNIVERSAL::can("do")` finds it) but user-code dispatch falls through
+to "Undefined subroutine".
+
+**Suspected cause:** our parser / code-generator special-cases the `do`
+keyword (for `do FILE` / `do BLOCK` forms) at a level that precedes
+normal method/package dispatch, so identifiers named `do` in a package
+context are routed to the builtin parser instead of the user stash
+slot. Likely similar to the constraints real Perl has on `INIT`,
+`AUTOLOAD`, `DESTROY`, etc. — but we allow those.
+
+**Fix candidates (not yet attempted):**
+1. In the parser's `parsePackageMethodCall` / equivalent, check the
+   package's stash for `do` *before* falling back to the builtin.
+2. Let `sub do {...}` in a package context register normally, and
+   re-route `$obj->do(...)` dispatch through that slot.
+3. Provide an explicit escape like `$obj->${\"do"}(...)` that already
+   works today — but that's a workaround, not a fix.
+
+**Workarounds currently in use:**
+- DBD::JDBC code uses `_do_impl` + glob alias; the glob alias happens
+  to *not* fix the dispatch issue, so `sub do` for `$dbh->do(...)` is
+  effectively unpatched. This leaves DBIC `t/storage/on_connect_do.t#8`
+  failing with "database table is locked" on file-backed SQLite until
+  this quirk is resolved.

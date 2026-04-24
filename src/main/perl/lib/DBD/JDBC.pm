@@ -69,9 +69,14 @@ use strict;
 # DBIC t/storage/on_connect_do.t#8 hits this precisely (on_disconnect_do
 # runs a SELECT via do() then a DROP TABLE on the same dbh).
 #
-# Override do() to explicitly finish() the sth before returning, so the
-# underlying java.sql.PreparedStatement is closed deterministically.
-sub do {
+# Override do() in DBD::JDBC::db to call $sth->finish before return, so
+# the underlying java.sql.PreparedStatement is closed deterministically.
+#
+# NOTE: `do` is a Perl keyword (do FILE / do BLOCK). PerlOnJava's runtime
+# currently doesn't expose user `sub do` via ordinary method dispatch
+# (defined(&DBD::JDBC::db::do) returns NO even with \&... working), so
+# we install via glob aliasing to an explicitly-named helper.
+sub _do_impl {
     my ($dbh, $statement, $attr, @params) = @_;
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or do { $sth->finish; return undef };
@@ -79,6 +84,7 @@ sub do {
     $sth->finish;
     return ($rows == 0) ? "0E0" : $rows;
 }
+*DBD::JDBC::db::do = \&_do_impl;
 
 # `do` is inherited from DBD::_::db (via DBI.pm), which calls prepare +
 # execute + (optionally) rows — that all routes back into our
