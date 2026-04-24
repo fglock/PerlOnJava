@@ -173,3 +173,118 @@ slot. Likely similar to the constraints real Perl has on `INIT`,
   effectively unpatched. This leaves DBIC `t/storage/on_connect_do.t#8`
   failing with "database table is locked" on file-backed SQLite until
   this quirk is resolved.
+
+---
+
+## Next Steps (2026-04-24, post-DBI-revert)
+
+Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
+
+### Commits on branch (ahead of origin/master)
+- `e8b0a7f4a` revert(DBI): roll back upstream DBI 1.647 + PurePerl
+- `73bc6b4d8` fix(eval-string): preserve `our` aliases across inner `package` change
+- `aa8287f1a` fix(stash): preserve CORE::GLOBAL::require across delete+restore round-trip
+- `a1bace135` build: remove `make dev` target
+- `17abda575` revert(scope-exit): drop bca73bd5's LIFO reverse
+- Plus 4 perf phase commits and all non-DBI post-merge fixes inherited from earlier work
+
+### Verified state at `e8b0a7f4a` (measurements)
+- **`make`**: BUILD SUCCESSFUL (all unit-test shards green)
+- **DBIx::Class full suite** (`./jcpan -t DBIx::Class`):
+  `Files=314, Tests=13858, Result: PASS` — 0 Dubious, 0 "not ok" — ~24 min wallclock
+- **Moo** (`./jcpan -t Moo`):
+  `Files=71, Tests=841, Result: PASS` — 0 Dubious
+- **Template** (`./jcpan -t Template`):
+  `Files=106, Tests=2935, Result: PASS` — 0 Dubious
+- **Perf**: ~11.8–12.1 Mcells/s (above the 11.69 Mcells/s target from `1c79bbc7b`)
+
+### Ordered next steps
+
+1. **Push `perf/dbic-safe-port` to origin and update PR #552 FIRST.**
+   - This is IMPORTANT and intentionally step 1: it gives us a safe
+     backup on GitHub BEFORE any further changes (cherry-picks, doc
+     updates, rebases) that could regress the current known-PASS state.
+   - Document the CURRENT commit (`e8b0a7f4a`) as the "PASS" reference
+     point and record the measurements above in the PR body so
+     reviewers can reproduce the result.
+   - Reference this design doc and the revert commit message for the
+     rationale on rolling back DBI 1.647.
+
+2. **Cherry-pick the two generally-useful fixes on top of the reverted DBI.**
+   These are post-merge commits that happen to be useful independently of
+   the DBI 1.647 upgrade — they don't regress when applied on top of the
+   reverted minimal DBI:
+   - `07b961dd4` fix(DBI): tolerate setReadOnly() rejection on JDBC drivers
+     that disallow it — useful for any JDBC driver that rejects readOnly.
+   - `cdf400cbc` fix(DBD::SQLite): set `$dbh->{Driver}` back-reference
+     after JDBC connect — fixes a symbol-table hole used by `DBI::_new_dbh`
+     consumers.
+   Verify each cherry-pick with `make`, then `./jcpan -t DBIx::Class` (or
+   at least `dbic_fast_check.sh`) to confirm no regression from the
+   already-PASSING state. Drop a commit if it doesn't apply cleanly or
+   if it pulls in too much surrounding change — these are opportunistic,
+   not required.
+
+3. **Update `dev/architecture/weaken-destroy.md`** to reflect any behavior
+   the recent refcount / scope-exit / stash fixes touched. Very important
+   to keep this in sync — the file is the canonical description of our
+   refcount-over-JVM-GC model and is referenced from AGENTS.md.
+   Specifically:
+   - The `bca73bd5` LIFO logic revert (scope exit cleanup ordering is back
+     to relying on HashMap iteration order that empirically matches
+     Perl 5's reverse-declaration LIFO).
+   - The `aa8287f1a` stash fix for CORE::GLOBAL::require round-trip via
+     `delete` + re-assign (detached-glob slot re-installation path).
+   - The `73bc6b4d8` `our` alias inheritance into eval STRING via
+     `ScopedSymbolTable.snapShot` + `BytecodeCompiler` parent-our-packages.
+
+4. **Disable `module/Net-SSLeay/t/local/01_pod.t`.**
+   - This is a pre-existing pod-coverage author test — false alarm,
+     not a real bug. Add it to whichever skip list `make test-bundled-modules`
+     uses (likely a `.gitignore`-style config under `src/test/resources/module/Net-SSLeay/`
+     or the Gradle `testModule` task).
+
+5. **Complete the secondary tests: `make test-bundled-modules`.**
+   - Verify on the current branch tip, after skipping 01_pod.t.
+
+6. **If step 5 still fails, add a follow-up phase to this plan:**
+   - Fix `module/Text-CSV/t/55_combi.t` — this IS a real failure that
+     could affect user programs. Worth a focused debug session. Do not
+     leave it as a known-fail indefinitely.
+
+7. **Review and refresh any outdated documentation** (AGENTS.md, design
+   docs, README snippets) touched by the branch's scope. Examples:
+   - DBI.pm now pre-merge minimal (~830 lines) — any doc referencing
+     "DBI 1.647" should be updated to say we're on the pre-merge
+     purpose-built DBI until a proper upgrade lands.
+   - `make dev` removal note in AGENTS.md is already done.
+
+8. **Push again** after steps 3-7 (incremental updates to the PR).
+
+9. **Rebase with master.** Resolve conflicts as "ours" for the three
+   DBI files (DBI.pm, DBI.java, DBI/PurePerl.pm — the last will stay
+   deleted). Keep everything else from master. This re-validates that
+   our branch can merge forward cleanly.
+
+10. **Re-run the full battery after the rebase:**
+    - `make` (unit tests)
+    - `./jcpan -t Moo`
+    - `./jcpan -t Template`
+    - `./jcpan -t DBIx::Class` (full 314 files)
+    - `make test-bundled-modules`
+
+11. **Fix any regressions** introduced by the rebase and repeat step 10.
+
+12. **Final push.**
+
+13. **Hand off to user** for their final validation tests (whatever
+    environment-specific checks they want to run: user's own scripts,
+    larger integration tests, perf benchmarks on their machine, etc.).
+
+### Followup (separate PR/issue, NOT in this PR's scope)
+
+- **Proper DBI 1.647 migration**: bring back the upstream DBI with the
+  PurePerl `connect`/`Active` bug fixed so DBIx::Class passes unmodified.
+  Re-apply the generally-useful subset of the reverted fix commits
+  (07b961dd4 setReadOnly, cdf400cbc SQLite Driver backref, ddfcd9771
+  HandleError ordering) on top of a working 1.647 base.
