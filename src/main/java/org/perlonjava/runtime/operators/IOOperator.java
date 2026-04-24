@@ -636,10 +636,10 @@ public class IOOperator {
                 }
 
                 // Check if it's a numeric file descriptor
-                if (argStr.matches("^\\d+$")) {
+                if (argStr.matches("^-?\\d+$")) {
                     int fd = Integer.parseInt(argStr);
                     // Handle numeric file descriptor duplication
-                    RuntimeIO sourceHandle = findFileHandleByDescriptor(fd);
+                    RuntimeIO sourceHandle = fd >= 0 ? findFileHandleByDescriptor(fd) : null;
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
                             // &= mode: non-owning wrapper sharing the same fd
@@ -649,7 +649,14 @@ public class IOOperator {
                             fh = duplicateFileHandle(sourceHandle);
                         }
                     } else {
-                        throw new PerlCompilerException("Bad file descriptor: " + fd);
+                        // Match real Perl: negative fd -> return undef with empty $!,
+                        // unknown non-negative fd -> return undef with $! = EBADF
+                        if (fd >= 0) {
+                            GlobalVariable.getGlobalVariable("main::!").set(9);
+                        } else {
+                            GlobalVariable.getGlobalVariable("main::!").set("");
+                        }
+                        fh = null;
                     }
                 }
                 // Check if it's a GLOB or GLOBREFERENCE
