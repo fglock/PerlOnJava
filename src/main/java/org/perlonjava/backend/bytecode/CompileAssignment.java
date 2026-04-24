@@ -281,6 +281,25 @@ public class CompileAssignment {
                 bc.lastResultReg = elemReg;
                 return true;
             }
+            // Single-element list with a glob: `local(*foo) = *bar` — previously fell
+            // through the main loop which only handled `$` and binary-op lvalues, so
+            // the assignment was a silent no-op (op/ref.t 1).
+            if (element instanceof OperatorNode globOp && globOp.operator.equals("*")
+                    && globOp.operand instanceof IdentifierNode globId) {
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                String globalVarName = NameNormalizer.normalizeVariableName(globId.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.STORE_GLOB);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = localReg;
+                return true;
+            }
         }
         bc.compileNode(node.right, -1, rhsContext);
         int valueReg = bc.lastResultReg;
