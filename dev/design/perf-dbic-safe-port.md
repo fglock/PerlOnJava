@@ -272,14 +272,28 @@ Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
    deleted). Keep everything else from master. This re-validates that
    our branch can merge forward cleanly.
 
-10. **Re-run the full battery after the rebase:**
-    - `make` (unit tests)
-    - `./jcpan -t Moo`
-    - `./jcpan -t Template`
-    - `./jcpan -t DBIx::Class` (full 314 files)
-    - `make test-bundled-modules`
+10. **Re-run the full battery after the rebase:** ✓ DONE (2026-04-24).
+    - `make` (unit tests) — BUILD SUCCESSFUL
+    - `./jcpan -t Moo` — PASS (841/841)
+    - `./jcpan -t Template` — PASS (2935/2935)
+    - `./jcpan -t DBIx::Class` (full 314 files) — PASS (13858/13858, 0 Dubious)
+      *after* narrowing master commit `7f3e0d12d`'s stash-alias
+      canonicalisation. The broad version (in `bless`) caused ~29
+      Dubious failures via "detached result source (source 'CD' is
+      not associated with a schema)"; the narrow version (only in
+      `isa`, with both directions handled) keeps DBIC green.
+      See commit `e9bb4cb9c` for the fix.
+    - `./jcpan -t JSON` — 1 Dubious (`t/13_limit.t`). This is identical
+      before and after `e9bb4cb9c`, so it is *not* a regression from
+      the alias fix. Tracked in the followup section as a separate
+      bug to investigate.
+    - `make test-bundled-modules` — 2 pre-existing failures already
+      documented (Net-SSLeay `33_x509_create_cert.t`,
+      Text-CSV `55_combi.t`). No new regressions from the merge.
 
 11. **Fix any regressions** introduced by the rebase and repeat step 10.
+    ✓ DONE (commit `e9bb4cb9c` is the fix for the single real merge
+    regression — see step 10). JSON `t/13_limit.t` moved to followup.
 
 12. **Final push.**
 
@@ -336,3 +350,15 @@ Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
   Acceptance: full `make test-bundled-modules` green (0 failures,
   no entries in the skip list beyond the current 01_pod.t false
   alarm).
+
+- **JSON `t/13_limit.t` dubious on `jcpan -t JSON`.** Wstat 65280
+  (exited 255), "Bad plan. You planned 11 tests but ran 1/2" — the
+  test process dies partway. From the log context, the failure
+  site is around `JSON::PP` line 849 / 1030 (repeated stack lines,
+  likely an infinite recursion or limit-test that terminates the
+  interpreter). Present both before and after the stash-alias fix
+  (`e9bb4cb9c`), so it is NOT caused by the alias work. Likely a
+  real PerlOnJava limit / recursion / stack bug exercised by JSON's
+  deliberately-pathological `13_limit.t` inputs. Investigate and
+  fix in a follow-up; for now JSON is 67/68 tests green with one
+  dubious file.
