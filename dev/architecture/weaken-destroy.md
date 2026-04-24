@@ -1,17 +1,16 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-19
+**Last Updated:** 2026-04-24
 **Status:** PRODUCTION READY
 - 841/841 Moo subtests (100%)
-- 269/270 DBIC test files pass (1 pre-existing failure, unrelated)
-- DBIC `t/52leaks.t`: with LeakTracer patch: **0 real failures via Phase 4** → **1 real failure after Phase B1** (basic rerefrozen, TODO)
-  *(Phase B1's lexical-aware walker exposed a narrower leak than the previous purely-refcount-based sweep; see §10a.)*
-- DBIC `t/storage/txn.t`: 90/90, `t/storage/txn_scope_guard.t`: 18/18
+- 13858/13858 DBIx::Class subtests across 314 test files (100%, 0 Dubious) — measured on branch `perf/dbic-safe-port` at `2ef41907d`
+- 2935/2935 Template-Toolkit subtests (100%)
 - `dev/sandbox/destroy_weaken/*.t`: 213/213
 
 See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md),
 [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md),
-and [dev/design/refcount_alignment_52leaks_plan.md](../design/refcount_alignment_52leaks_plan.md)
+[dev/design/refcount_alignment_52leaks_plan.md](../design/refcount_alignment_52leaks_plan.md),
+and [dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md)
 for the 2026-04 alignment work that closes the remaining Perl-parity gaps.
 
 ---
@@ -992,6 +991,7 @@ Tests are organized in four tiers:
 - [dev/design/destroy_weaken_plan.md](../design/destroy_weaken_plan.md) -- Design document with implementation history, strategy analysis, and evolution of the WEAKLY_TRACKED design
 - [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md) -- 2026-04 plan for aligning cooperative refcount with Perl semantics (phases 0-7)
 - [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md) -- Per-phase progress log
+- [dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md) -- 2026-04-24 post-merge branch plan
 - [dev/modules/moo.md](../modules/moo.md) -- Moo test tracking and category-by-category fix log
 - [dev/modules/dbix_class.md](../modules/dbix_class.md) -- DBIC test tracking and historical failure analysis
 - [dev/patches/cpan/DBIx-Class-0.082844/](../patches/cpan/DBIx-Class-0.082844/) -- DBIC patches (TxnScopeGuard + LeakTracer `jperl_gc` hook)

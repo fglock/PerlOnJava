@@ -211,32 +211,30 @@ Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
      rationale on rolling back DBI 1.647.
 
 2. **Cherry-pick the two generally-useful fixes on top of the reverted DBI.**
-   These are post-merge commits that happen to be useful independently of
+   ~~These are post-merge commits that happen to be useful independently of
    the DBI 1.647 upgrade — they don't regress when applied on top of the
-   reverted minimal DBI:
-   - `07b961dd4` fix(DBI): tolerate setReadOnly() rejection on JDBC drivers
-     that disallow it — useful for any JDBC driver that rejects readOnly.
-   - `cdf400cbc` fix(DBD::SQLite): set `$dbh->{Driver}` back-reference
-     after JDBC connect — fixes a symbol-table hole used by `DBI::_new_dbh`
-     consumers.
-   Verify each cherry-pick with `make`, then `./jcpan -t DBIx::Class` (or
-   at least `dbic_fast_check.sh`) to confirm no regression from the
-   already-PASSING state. Drop a commit if it doesn't apply cleanly or
-   if it pulls in too much surrounding change — these are opportunistic,
-   not required.
+   reverted minimal DBI:~~
+   - ~~`07b961dd4` fix(DBI): tolerate setReadOnly() rejection on JDBC drivers~~
+     ~~that disallow it~~
+   - ~~`cdf400cbc` fix(DBD::SQLite): set `$dbh->{Driver}` back-reference~~
 
-3. **Update `dev/architecture/weaken-destroy.md`** to reflect any behavior
-   the recent refcount / scope-exit / stash fixes touched. Very important
-   to keep this in sync — the file is the canonical description of our
-   refcount-over-JVM-GC model and is referenced from AGENTS.md.
-   Specifically:
-   - The `bca73bd5` LIFO logic revert (scope exit cleanup ordering is back
-     to relying on HashMap iteration order that empirically matches
-     Perl 5's reverse-declaration LIFO).
-   - The `aa8287f1a` stash fix for CORE::GLOBAL::require round-trip via
-     `delete` + re-assign (detached-glob slot re-installation path).
-   - The `73bc6b4d8` `our` alias inheritance into eval STRING via
-     `ScopedSymbolTable.snapShot` + `BytecodeCompiler` parent-our-packages.
+   **STATUS (2026-04-24): SKIPPED — both commits turned out to be
+   no-ops against the reverted baseline.** The pre-merge minimal
+   `DBI.java` already guards `setReadOnly` in a try/catch (the
+   current behavior at `e8b0a7f4a` matches `07b961dd4`'s intent),
+   and the pre-merge `DBD/SQLite.pm` already sets
+   `$dbh->{Driver}` correctly (the current behavior matches
+   `cdf400cbc`'s intent). Both `git cherry-pick` attempts ended in
+   either a conflict where "ours" was already equivalent, or an
+   empty commit — no actual change to apply. Moving to step 3.
+
+3. **Update `dev/architecture/weaken-destroy.md`** ✓ DONE (2026-04-24).
+   Updated status header (DBIC 13858/13858, Template 2935/2935) and
+   added a "2026-04-24 touch-ups on `perf/dbic-safe-port`" section
+   documenting all three refcount/scope-exit/stash/alias fixes:
+   - `17abda575` scope-exit LIFO revert
+   - `aa8287f1a` CORE::GLOBAL::require delete+restore fix
+   - `73bc6b4d8` `our` alias inheritance into eval STRING
 
 4. **Disable `module/Net-SSLeay/t/local/01_pod.t`.**
    - This is a pre-existing pod-coverage author test — false alarm,
