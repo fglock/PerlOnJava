@@ -68,6 +68,7 @@ public class DBI extends PerlModuleBase {
             dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_arrayref", "fetchrow_arrayref");
             dbi.registerMethodInPackage("DBD::JDBC::st", "fetchrow_hashref", "fetchrow_hashref");
             dbi.registerMethodInPackage("DBD::JDBC::st", "rows", "rows");
+            dbi.registerMethodInPackage("DBD::JDBC::st", "finish", "finish");
             dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param", "bind_param");
             dbi.registerMethodInPackage("DBD::JDBC::st", "bind_param_inout", "bind_param_inout");
             dbi.registerMethodInPackage("DBD::JDBC::st", "bind_col", "bind_col");
@@ -719,6 +720,41 @@ public class DBI extends PerlModuleBase {
             // Return undef if no more rows
             return scalarUndef.getList();
         }, dbh, "fetchrow_hashref");
+    }
+
+    /**
+     * finish() — close the underlying JDBC {@link PreparedStatement} and any
+     * open {@link ResultSet}, and mark {@code Active=0} on the sth hash.
+     *
+     * <p>Upstream DBI.pm's generic finish() just sets {@code $sth->{Active}=0};
+     * the underlying XS (or pure-Perl-DBD) layer is responsible for releasing
+     * driver-owned resources. For PerlOnJava + DBD::JDBC, that's us: if we
+     * don't close the PreparedStatement, SQLite-JDBC holds a shared table
+     * lock that prevents a subsequent {@code DROP TABLE} / schema change
+     * from the same connection — DBIC t/storage/on_connect_do.t#8
+     * exercises exactly that pattern via on_disconnect_do.
+     *
+     * <p>Best-effort: swallow SQLException from close(). Idempotent — a
+     * second finish() on an already-closed stmt is a no-op.
+     */
+    public static RuntimeList finish(RuntimeArray args, int ctx) {
+        RuntimeHash sth = args.get(0).hashDeref();
+        RuntimeScalar rsScalar = sth.get("execute_result");
+        if (rsScalar != null && rsScalar.value instanceof ResultSet rs) {
+            try {
+                if (!rs.isClosed()) rs.close();
+            } catch (SQLException ignored) {
+            }
+        }
+        RuntimeScalar stmtScalar = sth.get("statement");
+        if (stmtScalar != null && stmtScalar.value instanceof PreparedStatement stmt) {
+            try {
+                if (!stmt.isClosed()) stmt.close();
+            } catch (SQLException ignored) {
+            }
+        }
+        sth.put("Active", scalarFalse);
+        return scalarTrue.getList();
     }
 
     /**

@@ -59,6 +59,27 @@ package DBD::JDBC::db;
 our @ISA = ('DBD::_::db');
 use strict;
 
+# Upstream DBI.pm's default do() is:
+#   my $sth = $dbh->prepare(...); $sth->execute(...); my $rows = $sth->rows;
+# which leaves $sth's PreparedStatement alive until scope exit DESTROY
+# fires. Under PerlOnJava's JVM refcount model the sth often stays
+# reachable via $dbh->{sth} or via cached references, so DESTROY is
+# delayed — SQLite-JDBC then keeps a shared table lock that blocks
+# subsequent DROP / ALTER / schema change on the same connection.
+# DBIC t/storage/on_connect_do.t#8 hits this precisely (on_disconnect_do
+# runs a SELECT via do() then a DROP TABLE on the same dbh).
+#
+# Override do() to explicitly finish() the sth before returning, so the
+# underlying java.sql.PreparedStatement is closed deterministically.
+sub do {
+    my ($dbh, $statement, $attr, @params) = @_;
+    my $sth = $dbh->prepare($statement, $attr) or return undef;
+    $sth->execute(@params) or do { $sth->finish; return undef };
+    my $rows = $sth->rows;
+    $sth->finish;
+    return ($rows == 0) ? "0E0" : $rows;
+}
+
 # `do` is inherited from DBD::_::db (via DBI.pm), which calls prepare +
 # execute + (optionally) rows — that all routes back into our
 # Java-registered methods on this class.
@@ -74,6 +95,21 @@ use strict;
 # the driver has implemented at least one).
 *fetch    = \&fetchrow_arrayref;
 *fetchrow = \&fetchrow_arrayref;
+
+# Scope-exit DESTROY closes the underlying JDBC PreparedStatement /
+# ResultSet. Without this, a `$dbh->do('SELECT ...')` leaves its sth
+# stmt open once the local $sth goes out of scope (upstream DBI.pm's
+# do() relies on scope-exit to tear down), and SQLite-JDBC keeps a
+# shared table lock that blocks subsequent DROP TABLE / schema changes
+# on the same connection. DBIC t/storage/on_connect_do.t#8 exercises
+# exactly that via on_disconnect_do -> DROP TABLE.
+sub DESTROY {
+    my $sth = shift;
+    # finish() is a no-op if already closed (checks stmt.isClosed()).
+    # Wrapped in eval because $sth may be partially constructed if an
+    # earlier prepare step died.
+    eval { $sth->finish if $sth->can('finish') };
+}
 
 1;
 
