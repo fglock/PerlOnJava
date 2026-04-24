@@ -391,21 +391,21 @@ public class ParsePrimary {
                 return new OperatorNode(operator, operand, parser.tokenIndex);
 
             case "~~":
-                // Handle ~~ as two separate ~ operators
-                // First, handle it as a single ~ operator
-                String firstOperator = "~";
+                // Handle prefix ~~ as double bitwise complement: ~(~EXPR)
+                // This forces numeric scalar context (commonly used as ~~@array to count).
+                String tildeOp = "~";
                 if (parser.ctx.symbolTable.isFeatureCategoryEnabled("bitwise")) {
-                    firstOperator = "binary~";
+                    tildeOp = "binary~";
                 }
 
-                // Put back a single ~ token for the next parse
-                parser.tokenIndex--; // Back up
-                LexerToken currentToken = parser.tokens.get(parser.tokenIndex);
-                currentToken.text = "~";
-
-                // Parse the operand (which will start with the second ~)
+                // Parse the operand at the same precedence as a single ~
                 operand = parser.parseExpression(parser.getPrecedence("~") + 1);
-                return new OperatorNode(firstOperator, operand, parser.tokenIndex);
+                if (operand == null) {
+                    parser.throwError("syntax error");
+                }
+                return new OperatorNode(tildeOp,
+                        new OperatorNode(tildeOp, operand, parser.tokenIndex),
+                        parser.tokenIndex);
 
             case "--":
             case "++":
