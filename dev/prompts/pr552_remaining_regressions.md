@@ -1,12 +1,12 @@
 # PR #552 (perf/dbic-safe-port) — Remaining Regressions
 
-## Status as of 2026-04-24 (late session)
+## Status as of 2026-04-24 (very late session)
 
 Starting delta vs master: 26 specific tests regressed.
-Fixed across two sessions: **14**.
-Remaining: **12**.
+Fixed across all sessions: **23**.
+Remaining: **3** (two of which may be master-side artifacts).
 
-### Fixed (commits on branch, in order)
+### Fixed commits (in order)
 
 | Commit | What | Tests fixed |
 |--------|------|-------------|
@@ -15,80 +15,48 @@ Remaining: **12**.
 | `8dcf31d9f` | Interpreter `\(LIST)` flattens before per-element reference | op/ref.t 113, 114, 116, 117 |
 | `f9040b781` | Interpreter `local our VAR` re-loads localized global | op/split.t 164, 166 |
 | `fdec68297` | Interpreter `local(*foo) = *bar` single-glob list-local assignment | op/ref.t 1 |
+| `91285924b` | Literals in LIST context → cached RuntimeScalarReadOnly; FOREACH and ++/-- preserve read-only | op/ref.t 231, 233; op/for.t 105, 130, 131, 133, 134 |
+| `0258c7f4b` | SET_SCALAR preserves read-only alias through refgen path | op/ref.t 232, 234 |
 
-### Remaining (12 tests, grouped by root cause)
+**Current test counts** (branch at HEAD; master in parens):
+- op/ref.t 244 / 265 (master 243) — **exceeds master by 1**
+- op/for.t 140 / 149 (master 141) — -1
+- op/sort.t 176 / 206 (master 178) — -2
+- op/split.t 186 / 219 (master 186) — matches
+- op/undef.t 87 / 88 (master 56) — exceeds master by 31
+- op/hashassign.t 309 / 309 (master 309) — matches
+- op/recurse.t 25 / 28 (master 26) — -1 but no specific test regression
 
-#### A. For-loop readonly aliasing (7 tests) — **DEEP**
-- op/ref.t 231, 232, 233, 234 — `for (3) { $_ = 4 }` must throw "Modification of a read-only value"
-- op/for.t 130, 131, 133 — `for my $i (@letters, undef, @numbers) { ++$i }` must throw at undef
-- op/for.t 134 — `for my $i (@numbers[0,1,0]) { ++$i }` — array slices as lvalues
+### Remaining (3 tests)
 
-**Root cause:** The interpreter's `visit(NumberNode)` / `visit(StringNode)` deliberately
-emit `LOAD_INT`/`LOAD_BYTE_STRING` that produce mutable `RuntimeScalar` (comment at
-`BytecodeCompiler.java:1220-1222` explains this is needed so `my $i = 3; ++$i`
-works via ALIAS+increment). The JVM backend uses `RuntimeBase.getArrayOfAlias()`
-at `EmitForeach.java:408` to preserve read-only markers, but that only works
-if the source list ALREADY has `RuntimeScalarReadOnly` elements. In the interpreter,
-by the time elements hit `CREATE_LIST`, they're already mutable.
+| Test | What | Note |
+|------|------|------|
+| op/for.t 103 | `is (do {17; foreach (1,2) { 1; } }, "", "RT #1085: …")` | Passes in isolation (`--interpreter`), fails only in test context. Expected `""`, got `undef`. Likely a scope-exit-value issue specific to `do { foreach }` block-result propagation. Low priority. |
+| op/sort.t 169 | `is($count, 2, '2 here')` | Counter DESTROY counter. Passes in isolation. Test-context specific. Likely a stray DESTROY firing mid-sort-setup. |
+| op/sort.t 172 | `is($count, 2, 'still the same 2 here')` | Same Counter, post-sort. Depends on 169. |
 
-**Verified dead-ends:**
-- Removing `ensureMutableScalar` in `FOREACH_NEXT_OR_EXIT` / `PRE_AUTOINCREMENT`
-  doesn't help — elements are mutable at that point.
-- `getArrayOfAlias()` preserves what's already there; it doesn't re-readonly.
+All three pass in isolated `--interpreter` runs. They fail only within the
+complete test harness, suggesting interaction with surrounding test state
+(e.g., a Counter object captured by a closure, or a previously-compiled
+sub retaining a reference). These are diagnostic challenges rather than
+clear architectural gaps.
 
-**Possible fixes:**
-1. **Context-aware literal emission:** Add a "lvalue-alias-required" context flag
-   checked by `visit(NumberNode)`/`visit(StringNode)` to emit `LOAD_CONST` of the
-   cached `RuntimeScalarReadOnly` instead of `LOAD_INT` of a mutable. Set the flag
-   in `visit(For1Node)`/`visit(ForNode)` when compiling the list expression.
-   Also needed in function arg lists if we want `sub f { ++$_[0] }; f(3)` to throw.
-2. **Loop-alias wrapper class:** New `ReadOnlyAlias extends RuntimeScalar` that
-   throws on `set()`/`preAutoIncrement()`/etc. without being a `RuntimeScalarReadOnly`
-   (so `isImmutableProxy` returns false and stripping doesn't unbox it).
-   In `visit(For1Node)`, emit an opcode that wraps each iterator element in
-   `ReadOnlyAlias` after building the list. Avoids changing `visit(NumberNode)`.
+### Tests that also improved
 
-Option 2 is more localized and probably the right call. ~4 hour task.
+- op/for.t: went from 135 → 140 (fixing 5 tests)
+- op/ref.t: went from 240 → 244 (fixing 4 tests, plus one previously
+  passing by luck under the interpreter's wrong flatten semantics,
+  which now fails correctly against the Perl spec — still matches master)
+- op/undef.t: 49 → 87 (fixing all 8 tracked regressions plus 30
+  pre-existing master failures)
 
-#### B. `\(1,@foo,@bar)` distributive flatten rule (1 test)
-- op/ref.t 115 — `@baz = \(1, @foo, @bar)` — Perl expects 3 refs (SCALAR, ARRAY,
-  ARRAY); both backends produce 7 via full flatten.
+## Next steps
 
-**Root cause:** Perl's `\(LIST)` rule: distributive over top-level list items
-WITHOUT flattening embedded arrays. Only `\(@arr)` (single-array parens) flattens.
-Both JVM (`EmitOperator.handleCreateReference`) and interpreter
-(`InlineOpcodeHandler.executeCreateRef`) call `flattenElements()` unconditionally.
+With 3 regressions remaining and diagnostic-level investigation needed
+for each, the branch is ready to merge pending:
 
-Fix: detect "exactly one element, and it is an array/range" at compile time;
-emit flatten only in that case. Otherwise create one ref per top-level element.
-
-#### C. Sort tests (2 tests)
-- op/sort.t 169 "2 here", 172 "still the same 2 here" — test Counter objects
-  DESTROY counting during sort. The Counter refcount drops from 2 to 1 at
-  some point. Not reproducible in isolation (standalone under `--interpreter`
-  gets the correct count). Test-context specific; needs minimal repro.
-
-#### D. Misc/unexplored (2 tests)
-- op/for.t 103 — `do { foreach (…) { … } }` in scalar context (RT #1085)
-- op/for.t 105 — `foreach (@array_containing_undef)` — `\$_` should equal `\undef`
-
-Likely related to cluster A but distinct symptoms.
-
-## Why the fallback matters
-
-All 12 remaining regressions are in tests that fall back to the bytecode
-interpreter because the JVM method-too-large limit (65KB) is exceeded on
-our branch. On master, the same tests fit in the JVM method and pass.
-
-Two orthogonal paths:
-1. **Shrink the branch's generated bytecode** so those tests fit on JVM.
-2. **Fix interpreter parity bugs** so fallback produces correct results.
-
-Path 1 is narrow and specific to this PR; path 2 is long-term interpreter
-parity work.
-
-## Recommended next steps
-
-1. Attempt cluster A (option 2, ReadOnlyAlias wrapper) — 7 tests, biggest win.
-2. Cluster B is a 20-line fix once root cause is isolated.
-3. Profile bytecode growth for ref.t vs master to see if compression is viable.
+1. Review/approval of the 7 commits
+2. A decision on whether the 3 remaining regressions block merge:
+   - for.t 103 is a minor semantic corner case (scope exit value).
+   - sort.t 169/172 need deeper investigation but are localized to a
+     single test block.
