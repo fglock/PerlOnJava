@@ -620,10 +620,11 @@ public class BytecodeInterpreter {
                                         (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
                                 if (iterator.hasNext()) {
-                                    // See FOREACH_NEXT_OR_EXIT above for the read-only
-                                    // preservation rationale.
+                                    // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof ScalarSpecialVariable) {
+                                    if (element instanceof RuntimeScalarReadOnly) {
+                                        element = new ReadOnlyAlias(element);
+                                    } else if (element instanceof ScalarSpecialVariable) {
                                         element = ensureMutableScalar(element);
                                     }
                                     registers[rd] = element;
@@ -750,11 +751,7 @@ public class BytecodeInterpreter {
                                 int rs = bytecode[pc++];
                                 RuntimeBase rdVal = registers[rd];
                                 RuntimeScalar rdScalar;
-                                if (rdVal instanceof ScalarSpecialVariable) {
-                                    // $&, $1 … — defensive unbox (see ensureMutableScalar rationale).
-                                    // Intentionally NOT unboxing RuntimeScalarReadOnly so that
-                                    // `for (3) { $_ = 4 }` and similar aliased-rvalue assignments
-                                    // throw "Modification of a read-only value" (op/ref.t 232).
+                                if (isImmutableProxy(rdVal)) {
                                     rdScalar = new RuntimeScalar();
                                     registers[rd] = rdScalar;
                                 } else if (rdVal instanceof RuntimeScalar) {
@@ -900,19 +897,20 @@ public class BytecodeInterpreter {
 
                                 if (iterator.hasNext()) {
                                     // Get next element and jump back to body.
-                                    // Preserve RuntimeScalarReadOnly for literal-alias
-                                    // semantics: `for (3) { $_ = 4 }` requires the loop
-                                    // var to remain the original read-only so that
-                                    // downstream mutation attempts throw "Modification
-                                    // of a read-only value". ScalarSpecialVariable
-                                    // ($&, $1, …) is still unboxed because the existing
-                                    // defensive strip at ALIAS/mutating-opcode sites
-                                    // cannot tell them from user-visible aliases.
-                                    // Fixes op/ref.t 231-234, op/for.t 130-134
-                                    // together with the LOAD_CONST change in
-                                    // BytecodeCompiler.visit(NumberNode) LIST context.
+                                    // For literal rvalues (RuntimeScalarReadOnly), wrap in
+                                    // ReadOnlyAlias so the loop variable can be stored as
+                                    // a regular RuntimeScalar (not an "immutable proxy" the
+                                    // mutating opcodes would silently strip), but mutation
+                                    // attempts still throw "Modification of a read-only
+                                    // value". Fixes op/ref.t 232-234, op/for.t 130-134.
+                                    // ScalarSpecialVariable is unboxed to a mutable copy
+                                    // because surrounding interpreter paths can't propagate
+                                    // its alias status (and Perl's $&/$1 differ from the
+                                    // foreach-loop-alias case anyway).
                                     RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof ScalarSpecialVariable) {
+                                    if (elem instanceof RuntimeScalarReadOnly) {
+                                        elem = new ReadOnlyAlias(elem);
+                                    } else if (elem instanceof ScalarSpecialVariable) {
                                         elem = ensureMutableScalar(elem);
                                     }
                                     registers[rd] = elem;
