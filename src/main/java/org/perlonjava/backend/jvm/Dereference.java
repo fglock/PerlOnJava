@@ -1284,7 +1284,17 @@ public class Dereference {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit -> (HashLiteralNode) autoquote " + node.right);
-        nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        if (nodeRight.elements.size() > 1) {
+            // Multiple elements: join them with $; (SUBSEP), like $h{a,b,c}
+            emitterVisitor.ctx.mv.visitLdcInsn("main::;");
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getGlobalVariable", "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            nodeRight.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/StringOperators",
+                    "join", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        } else {
+            nodeRight.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        }
 
         int keySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledKey = keySlot >= 0;
