@@ -156,6 +156,33 @@ public class DBI extends PerlModuleBase {
             if (secondHandle != null) setError(secondHandle, sqlEx);
         }
         RuntimeScalar msg = new RuntimeScalar("DBI " + methodName + " failed: " + getGlobalVariable("DBI::errstr"));
+
+        // Per DBI spec, HandleError fires BEFORE RaiseError / PrintError. If
+        // HandleError returns true the error is considered handled (no die,
+        // no warn); if it returns false the normal RaiseError/PrintError
+        // path proceeds. DBIC relies on this to wrap raw DBD errors with
+        // "DBI Exception: ..." via a HandleError it installs at connect time
+        // (see DBIx::Class::Storage::DBI::_dbh_error_handler_installer).
+        RuntimeScalar handleError = handle.get("HandleError");
+        if (handleError != null && handleError.getBoolean()
+                && RuntimeScalarType.isReference(handleError)) {
+            // Invoke $handle->{HandleError}->($errmsg, $handle, $retval)
+            RuntimeArray heArgs = new RuntimeArray();
+            heArgs.elements.add(msg);
+            heArgs.elements.add(handle.createReference());
+            heArgs.elements.add(scalarUndef);
+            try {
+                RuntimeList heRet = RuntimeCode.apply(handleError, heArgs, RuntimeContextType.SCALAR);
+                if (heRet.scalar().getBoolean()) {
+                    // Handled — caller gets empty list back, no die/warn.
+                    return new RuntimeList();
+                }
+            } catch (RuntimeException heDied) {
+                // HandleError itself died — propagate that exception.
+                throw heDied;
+            }
+        }
+
         if (handle.get("RaiseError").getBoolean()) {
             throw new PerlCompilerException(msg.toString());
         }
