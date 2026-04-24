@@ -339,6 +339,21 @@ public class ReachabilityWalker {
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             if (!live.contains(referent)) {
+                // A named hash/array lexical (`my %h`, `my @a`) is NOT a
+                // walker root — the walker only seeds from globals and
+                // ScalarRefRegistry (scalars). If `\%h` was weakened,
+                // `%h` itself does not appear in any walker seed set,
+                // so it is trivially "unreachable" — but the lexical
+                // slot is still alive. Guard: localBindingExists=true
+                // means the named Perl lexical still holds this
+                // container alive; skip clearing weak refs to it.
+                // Scope exit (scopeExitCleanupHash/Array) will clear
+                // the flag and let a later sweep reap it if truly dead.
+                // Fixes op/hashassign.t 218 (bug #76716).
+                if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                        && referent.localBindingExists) {
+                    continue;
+                }
                 // Phase I (52leaks/60core): skip clearing weak refs to
                 // scalars that hold CODE refs, or scalars that are already
                 // UNDEF. These are commonly Sub::Quote/Sub::Defer

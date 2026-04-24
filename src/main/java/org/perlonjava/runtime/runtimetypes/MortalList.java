@@ -542,14 +542,17 @@ public class MortalList {
                         // Named container: local variable may still exist. Skip callDestroy.
                         // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                         //
-                        // Fix 10a: Clear weak refs even when localBindingExists blocks
-                        // callDestroy. This handles objects created by Storable::dclone
-                        // whose anonymous hashes get localBindingExists=true from
-                        // createReferenceWithTrackedElements but never get
-                        // scopeExitCleanupHash (only called for my %hash, not anonymous
-                        // hashes stored in scalars). Without this, their weak refs persist
-                        // and DBIC's leak tracer reports false leaks.
-                        WeakRefRegistry.clearWeakRefsTo(base);
+                        // Do NOT clear weak refs here: localBindingExists=true means
+                        // the container is still alive via its lexical slot. Test
+                        // op/hashassign.t 218 (bug #76716, "undef %hash should not
+                        // zap weak refs") requires that `is $p, \%tb; undef %tb;`
+                        // does not zap the weak ref $p to %tb — the `\%tb` inside
+                        // `is(...)` triggers a deferred decrement whose refCount
+                        // transition 1→0 lands here, but the hash is still alive.
+                        // An earlier "Fix 10a" cleared weak refs here for anon-hash
+                        // leak-tracing scenarios; those scenarios now use
+                        // createAnonymousReference() (localBindingExists stays false)
+                        // so the clear is no longer needed and broke #76716.
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);
