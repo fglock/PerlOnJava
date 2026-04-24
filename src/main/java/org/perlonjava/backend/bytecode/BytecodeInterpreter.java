@@ -620,8 +620,10 @@ public class BytecodeInterpreter {
                                         (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
                                 if (iterator.hasNext()) {
+                                    // See FOREACH_NEXT_OR_EXIT above for the read-only
+                                    // preservation rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (isImmutableProxy(element)) {
+                                    if (element instanceof ScalarSpecialVariable) {
                                         element = ensureMutableScalar(element);
                                     }
                                     registers[rd] = element;
@@ -893,9 +895,23 @@ public class BytecodeInterpreter {
                                         (java.util.Iterator<RuntimeScalar>) iterScalar.value;
 
                                 if (iterator.hasNext()) {
-                                    // Get next element and jump back to body
+                                    // Get next element and jump back to body.
+                                    // Preserve RuntimeScalarReadOnly for literal-alias
+                                    // semantics: `for (3) { $_ = 4 }` requires the loop
+                                    // var to remain the original read-only so that
+                                    // downstream mutation attempts throw "Modification
+                                    // of a read-only value". ScalarSpecialVariable
+                                    // ($&, $1, …) is still unboxed because the existing
+                                    // defensive strip at ALIAS/mutating-opcode sites
+                                    // cannot tell them from user-visible aliases.
+                                    // Fixes op/ref.t 231-234, op/for.t 130-134
+                                    // together with the LOAD_CONST change in
+                                    // BytecodeCompiler.visit(NumberNode) LIST context.
                                     RuntimeScalar elem = iterator.next();
-                                    registers[rd] = (isImmutableProxy(elem)) ? ensureMutableScalar(elem) : elem;
+                                    if (elem instanceof ScalarSpecialVariable) {
+                                        elem = ensureMutableScalar(elem);
+                                    }
+                                    registers[rd] = elem;
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
                                 } else {
                                     registers[rd] = new RuntimeScalar();

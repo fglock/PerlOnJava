@@ -1217,13 +1217,27 @@ public class BytecodeCompiler implements Visitor {
             boolean isLargeInteger = !isInteger && value.matches("^-?\\d+$");
 
             if (isInteger) {
-                // Regular integer - use LOAD_INT to create mutable scalar
-                // Note: We don't use RuntimeScalarCache here because ALIAS just copies references,
-                // and we need mutable scalars for variables (++, --, etc.)
                 int intValue = Integer.parseInt(value);
-                emit(Opcodes.LOAD_INT);
-                emitReg(rd);
-                emitInt(intValue);
+                if (currentCallContext == RuntimeContextType.LIST) {
+                    // In LIST context, emit the cached read-only scalar so foreach
+                    // iteration preserves Perl's "literal alias" semantics:
+                    // `for (3) { $_ = 4 }` must throw "Modification of a read-only
+                    // value". Downstream copy-consumers (MY_SCALAR via addToScalar,
+                    // array/hash setFromList, etc.) copy by value so mutable storage
+                    // is unaffected. Fixes op/ref.t 231-234, op/for.t 130-134
+                    // (interpreter fallback).
+                    int constIdx = addToConstantPool(RuntimeScalarCache.getScalarInt(intValue));
+                    emit(Opcodes.LOAD_CONST);
+                    emitReg(rd);
+                    emit(constIdx);
+                } else {
+                    // Regular integer - use LOAD_INT to create mutable scalar
+                    // Note: We don't use RuntimeScalarCache here because ALIAS just copies references,
+                    // and we need mutable scalars for variables (++, --, etc.)
+                    emit(Opcodes.LOAD_INT);
+                    emitReg(rd);
+                    emitInt(intValue);
+                }
             } else if (isLargeInteger) {
                 // Large integer - store as double to match Perl 5 IV-to-NV promotion
                 RuntimeScalar doubleScalar = new RuntimeScalar(Double.parseDouble(value));
@@ -1351,6 +1365,29 @@ public class BytecodeCompiler implements Visitor {
             opcode = hasWideChars ? Opcodes.LOAD_STRING : Opcodes.LOAD_BYTE_STRING;
         } else {
             opcode = Opcodes.LOAD_STRING;
+        }
+
+        // In LIST context, emit the cached read-only scalar so foreach iteration
+        // preserves Perl's "literal alias" semantics: `for ("abc") { $_ = 4 }`
+        // must throw "Modification of a read-only value". See visit(NumberNode)
+        // for the symmetric integer treatment. Fixes op/ref.t 232-234.
+        if (currentCallContext == RuntimeContextType.LIST
+                && opcode != Opcodes.LOAD_VSTRING) {
+            int cacheIdx = (opcode == Opcodes.LOAD_BYTE_STRING)
+                    ? RuntimeScalarCache.getOrCreateByteStringIndex(node.value)
+                    : RuntimeScalarCache.getOrCreateStringIndex(node.value);
+            if (cacheIdx >= 0) {
+                RuntimeScalar cached = (opcode == Opcodes.LOAD_BYTE_STRING)
+                        ? RuntimeScalarCache.getScalarByteString(cacheIdx)
+                        : RuntimeScalarCache.getScalarString(cacheIdx);
+                int constIdx = addToConstantPool(cached);
+                emit(Opcodes.LOAD_CONST);
+                emitReg(rd);
+                emit(constIdx);
+                lastResultReg = rd;
+                return;
+            }
+            // Fall through to normal emission for uncacheable strings (too long).
         }
         emit(opcode);
         emitReg(rd);
@@ -4766,7 +4803,7 @@ public class BytecodeCompiler implements Visitor {
         emit(constIdx);
     }
 
-    private int addToConstantPool(Object obj) {
+    int addToConstantPool(Object obj) {
         // Use HashMap for O(1) lookup instead of O(n) ArrayList.indexOf()
         Integer cached = constantPoolIndex.get(obj);
         if (cached != null) {

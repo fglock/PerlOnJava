@@ -1152,8 +1152,19 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(operandReg);
                 }
                 int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
+                if (bytecodeCompiler.currentCallContext == RuntimeContextType.LIST) {
+                    // In LIST context, emit the cached read-only undef so
+                    // `for my $i (@a, undef, @b) { ++$i }` throws at the undef
+                    // slot. See BytecodeCompiler.visit(NumberNode) for the
+                    // symmetric integer treatment. Fixes op/for.t 130-133.
+                    int constIdx = bytecodeCompiler.addToConstantPool(RuntimeScalarCache.scalarUndef);
+                    bytecodeCompiler.emit(Opcodes.LOAD_CONST);
+                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.emit(constIdx);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(undefReg);
+                }
                 bytecodeCompiler.lastResultReg = undefReg;
             }
             case "unaryMinus" -> {
