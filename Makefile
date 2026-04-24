@@ -39,13 +39,28 @@ else
 	./gradlew classes testUnitParallel --parallel shadowJar
 endif
 
-# Development build - forces recompilation (use during active development)
-dev: check-java-gradle
-ifeq ($(OS),Windows_NT)
-	gradlew.bat clean compileJava shadowJar installDist
-else
-	./gradlew clean compileJava shadowJar installDist
-endif
+# `make dev` is disabled on purpose.
+#
+# It used to be a "build without running tests" shortcut, but that is
+# precisely what makes it dangerous: it lets changes land on a branch
+# without having ever been exercised by the unit test suite.  Agents
+# (and humans in a hurry) reach for `make dev` to iterate faster and
+# then forget to run `make` before pushing, so regressions sneak in.
+#
+# Use `make` (the default target) instead: it builds *and* runs the
+# fast unit tests.  If you really need a no-test build for a very
+# specific reason, invoke Gradle directly (`./gradlew shadowJar`) and
+# own the consequences.
+dev:
+	@echo "ERROR: 'make dev' is disabled on purpose."
+	@echo ""
+	@echo "  It skipped the unit tests, which caused regressions to slip"
+	@echo "  into commits.  Please use 'make' (which builds + tests) for"
+	@echo "  everyday iteration."
+	@echo ""
+	@echo "  If you truly need a no-test build, invoke Gradle directly:"
+	@echo "      ./gradlew shadowJar installDist"
+	@exit 1
 
 # Default test target - fast unit tests using perl_test_runner.pl
 test: test-unit

@@ -99,9 +99,13 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op/ > /tmp/test_output.txt 2>&1
 
 | Command | What it does |
 |---------|--------------|
-| `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+| `make` | Build + run all unit tests (always use this) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
+
+`make dev` has been disabled on purpose — it used to build without
+running tests, which let regressions sneak into commits.  Always use
+`make`; if you truly need a no-test build, invoke Gradle directly
+(`./gradlew shadowJar installDist`).
 
 - For interpreter changes, test with both backends:
   ```bash
