@@ -286,3 +286,45 @@ Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
   Re-apply the generally-useful subset of the reverted fix commits
   (07b961dd4 setReadOnly, cdf400cbc SQLite Driver backref, ddfcd9771
   HandleError ordering) on top of a working 1.647 base.
+
+- **Real bundled-module bugs surfaced by `make test-bundled-modules`.**
+  Neither is a false alarm — both reflect real code paths that can
+  affect user programs. They are intentionally NOT hidden in the skip
+  list; track and fix in a dedicated follow-up phase/PR.
+
+  1. `module/Net-SSLeay/t/local/33_x509_create_cert.t` — 139/141
+     subtests pass. The 2 failures are:
+     ```
+     Failed test 'Crypt::OpenSSL::Bignum exponent once'
+       at t/local/33_x509_create_cert.t line 42.
+            got: '17'
+       expected: '65537'
+     Failed test 'Crypt::OpenSSL::Bignum exponent twice'
+       at t/local/33_x509_create_cert.t line 47.
+            got: '18'
+       expected: '65537'
+     ```
+     The test pulls an RSA key's public exponent out via
+     `Crypt::OpenSSL::Bignum` and calls `->to_hex` (or similar) on it.
+     The canonical RSA public exponent is `65537` (`0x10001`).
+     Getting `17` / `18` instead smells like a decimal-vs-hex
+     stringification bug, or the Bignum is being truncated /
+     interpreted as a small int somewhere. Likely a narrow fix in the
+     Java-backed `Crypt::OpenSSL::Bignum` emulation (or whichever
+     Perl module provides that interface in PerlOnJava).
+     Fix plan: reproduce with a tiny test (`my $e = RSA key's e;
+     print $e->to_hex;`); locate the stringification path; align
+     with real OpenSSL behavior.
+
+  2. `module/Text-CSV/t/55_combi.t` — subtest 26 fails (`not ok 26 -
+     content`). The test generates large numbers of CSV input
+     variations (hence the 16-second runtime) and is specifically
+     designed to catch obscure combinatorial CSV edge cases. Failure
+     mode to capture in the fix plan: narrow down which exact
+     combination fails (quote/escape/separator permutation).
+     This can affect user programs that parse CSV with unusual
+     configurations.
+
+  Acceptance: full `make test-bundled-modules` green (0 failures,
+  no entries in the skip list beyond the current 01_pod.t false
+  alarm).
