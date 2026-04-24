@@ -743,6 +743,29 @@ public class StatementParser {
                 // call Module->import( LIST )
                 // or Module->unimport( LIST )
 
+                // Before executing the argument list, process any pending heredocs.
+                // This handles cases like: use constant FOO => <<'EOT'; ... \n heredoc content \n EOT
+                // The heredoc content comes after the newline that follows the ';', but the
+                // BEGIN-equivalent evaluation of the import list happens immediately, so we
+                // must fill in heredoc bodies before the list is compiled and executed.
+                if (!parser.getHeredocNodes().isEmpty()) {
+                    int savedIndex = parser.tokenIndex;
+                    int newlineIndex = -1;
+                    for (int i = savedIndex; i < parser.tokens.size(); i++) {
+                        if (parser.tokens.get(i).type == LexerTokenType.NEWLINE) {
+                            newlineIndex = i;
+                            break;
+                        }
+                    }
+                    if (newlineIndex >= 0) {
+                        parser.tokenIndex = newlineIndex;
+                        ParseHeredoc.parseHeredocAfterNewline(parser);
+                        parser.heredocSkipToIndex = parser.tokenIndex;
+                        parser.heredocNewlineIndex = newlineIndex;
+                        parser.tokenIndex = savedIndex;
+                    }
+                }
+
                 // Execute the argument list immediately in LIST context
                 // This is necessary for expressions like: use lib ($path =~ /^(.*)$/);
                 // where the regex match must return captured groups, not just success/failure
