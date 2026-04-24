@@ -116,7 +116,6 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op/ > /tmp/test_output.txt 2>&1
 | Command | What it does |
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration during debugging) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
 
 - For interpreter changes, test with both backends:

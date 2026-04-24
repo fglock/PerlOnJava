@@ -39,13 +39,12 @@ else
 	./gradlew classes testUnitParallel --parallel shadowJar
 endif
 
-# Development build - forces recompilation (use during active development)
-dev: check-java-gradle
-ifeq ($(OS),Windows_NT)
-	gradlew.bat clean compileJava shadowJar installDist
-else
-	./gradlew clean compileJava shadowJar installDist
-endif
+# `make dev` used to build without tests — removed because it allowed broken
+# commits to land silently. Always use `make`, which builds + runs unit tests.
+dev:
+	@echo "Error: 'make dev' has been removed. Use 'make' — it must pass before commits/pushes."
+	@echo "See AGENTS.md: \"Always run \`make\` and ensure it passes before pushing commits\"."
+	@exit 1
 
 # Default test target - fast unit tests using perl_test_runner.pl
 test: test-unit
