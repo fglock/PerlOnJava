@@ -57,6 +57,34 @@ public class InheritanceResolver {
     }
 
     /**
+     * Linearizes the inheritance hierarchy for a class always using C3.
+     * This is used by next::method which always uses C3 regardless of the class's MRO setting,
+     * matching Perl 5 behavior where next::method always uses C3 linearization.
+     *
+     * @param className The name of the class to linearize.
+     * @return A list of class names in C3 order.
+     */
+    public static List<String> linearizeC3Always(String className) {
+        // Check if ISA has changed and invalidate cache if needed
+        if (hasIsaChanged(className)) {
+            invalidateCacheForClass(className);
+        }
+
+        // Use a separate cache key for C3-always linearization
+        String cacheKey = className + "::__C3__";
+        List<String> cached = linearizedClassesCache.get(cacheKey);
+        if (cached != null) {
+            return new ArrayList<>(cached);
+        }
+
+        List<String> result = C3.linearizeC3(className);
+
+        // Cache the result
+        linearizedClassesCache.put(cacheKey, new ArrayList<>(result));
+        return result;
+    }
+
+    /**
      * Linearizes the inheritance hierarchy for a class using the appropriate MRO algorithm.
      *
      * @param className The name of the class to linearize.

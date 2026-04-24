@@ -184,6 +184,8 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray.push(freezeArgs, scalar);
                 RuntimeArray.push(freezeArgs, new RuntimeScalar(0)); // cloning = false
                 RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                // Phase G: release arg-push refCount bumps — see releaseApplyArgs Javadoc.
+                releaseApplyArgs(freezeArgs);
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
@@ -333,7 +335,7 @@ public class Storable extends PerlModuleBase {
 
                 // Create new blessed object
                 RuntimeHash newHash = new RuntimeHash();
-                result = newHash.createReference();
+                result = newHash.createAnonymousReference();
                 ReferenceOperators.bless(result, new RuntimeScalar(hookClass));
                 refList.add(result);
 
@@ -349,11 +351,13 @@ public class Storable extends PerlModuleBase {
                         RuntimeArray.push(thawArgs, ref);
                     }
                     RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                    // Phase G: release arg-push refCount bumps.
+                    releaseApplyArgs(thawArgs);
                 }
             }
             case SX_HASH -> {
                 RuntimeHash hash = new RuntimeHash();
-                result = hash.createReference();
+                result = hash.createAnonymousReference();
                 refList.add(result);
                 int numKeys = readInt(data, pos);
                 for (int i = 0; i < numKeys; i++) {
@@ -367,7 +371,7 @@ public class Storable extends PerlModuleBase {
             }
             case SX_ARRAY -> {
                 RuntimeArray array = new RuntimeArray();
-                result = array.createReference();
+                result = array.createAnonymousReference();
                 refList.add(result);
                 int numElements = readInt(data, pos);
                 for (int i = 0; i < numElements; i++) {
@@ -525,6 +529,42 @@ public class Storable extends PerlModuleBase {
     }
 
     /**
+     * Phase G (refcount_alignment_52leaks_plan.md): release the
+     * refCount bumps that {@link RuntimeArray#push} applied via
+     * {@link RuntimeScalar#incrementRefCountForContainerStore} for
+     * elements in an arg-passing array that's about to be discarded.
+     * <p>
+     * Storable's deepClone/freeze/thaw build temporary Java-side
+     * {@link RuntimeArray} objects to hand to Perl-side hook
+     * methods via {@link RuntimeCode#apply}. After the Perl call
+     * returns, the Java array goes out of scope — but its elements'
+     * {@code refCountOwned=true} flag keeps their referents'
+     * refCount permanently inflated, which prevents downstream
+     * cleanup (DESTROY, {@code clearWeakRefsTo}, and the 52leaks.t
+     * {@code basic result_source_handle} assertion).
+     * <p>
+     * This helper decrements each element's referent refCount,
+     * flips {@code refCountOwned=false}, and clears the list, so
+     * subsequent JVM GC of the array is semantically aligned with
+     * what a Perl-side {@code @_} release would do.
+     *
+     * @param args the temporary args array to release
+     */
+    private static void releaseApplyArgs(RuntimeArray args) {
+        if (args == null || args.elements == null) return;
+        for (RuntimeScalar elem : args.elements) {
+            if (elem == null) continue;
+            if (elem.refCountOwned && elem.value instanceof RuntimeBase base
+                    && base.refCount > 0) {
+                base.refCount--;
+                elem.refCountOwned = false;
+            }
+        }
+        args.elements.clear();
+        args.elementsOwned = false;
+    }
+
+    /**
      * Recursively deep-clones a RuntimeScalar, handling circular references and
      * STORABLE_freeze/STORABLE_thaw hooks on blessed objects.
      */
@@ -549,6 +589,15 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray.push(freezeArgs, scalar);
                 RuntimeArray.push(freezeArgs, new RuntimeScalar(1)); // cloning = true
                 RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                // Phase G (refcount_alignment_52leaks_plan.md): decrement
+                // refCount bumps that RuntimeArray.push applied via
+                // incrementRefCountForContainerStore. The args array is
+                // a Java local vessel; its elements would otherwise keep
+                // their referents' refCount permanently inflated,
+                // preventing DESTROY / weak-ref clearing on objects that
+                // had their only strong reference in this arg list
+                // (DBIC's ResultSourceHandle via STORABLE_freeze).
+                releaseApplyArgs(freezeArgs);
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
@@ -558,12 +607,12 @@ public class Storable extends PerlModuleBase {
                     // Create a new empty blessed object of the same reference type as the original
                     RuntimeScalar newObj;
                     if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
-                        newObj = new RuntimeArray().createReference();
+                        newObj = new RuntimeArray().createAnonymousReference();
                     } else if (scalar.type == RuntimeScalarType.REFERENCE) {
                         newObj = new RuntimeScalar().createReference();
                     } else {
                         // Default to hash reference (most common case)
-                        newObj = new RuntimeHash().createReference();
+                        newObj = new RuntimeHash().createAnonymousReference();
                     }
                     ReferenceOperators.bless(newObj, new RuntimeScalar(className));
                     cloned.put(scalar.value, newObj);
@@ -583,6 +632,9 @@ public class Storable extends PerlModuleBase {
                             RuntimeArray.push(thawArgs, deepClone(freezeArray.get(i), cloned));
                         }
                         RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                        // Phase G: release arg-push refCount bumps (see
+                        // freezeArgs comment above).
+                        releaseApplyArgs(thawArgs);
                     }
 
                     return newObj;
@@ -596,7 +648,11 @@ public class Storable extends PerlModuleBase {
             case RuntimeScalarType.HASHREFERENCE -> {
                 RuntimeHash origHash = (RuntimeHash) scalar.value;
                 RuntimeHash newHash = new RuntimeHash();
-                RuntimeScalar newRef = newHash.createReference();
+                // Anonymous ref: not bound to a named variable, so callDestroy
+                // must fire when refCount reaches 0. Using createReference() here
+                // would set localBindingExists=true and suppress DESTROY/weak-ref
+                // clearing (DBIC t/52leaks.t test 18).
+                RuntimeScalar newRef = newHash.createAnonymousReference();
                 cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
@@ -632,7 +688,8 @@ public class Storable extends PerlModuleBase {
             case RuntimeScalarType.ARRAYREFERENCE -> {
                 RuntimeArray origArray = (RuntimeArray) scalar.value;
                 RuntimeArray newArray = new RuntimeArray();
-                RuntimeScalar newRef = newArray.createReference();
+                // Anonymous ref — see note on HASHREFERENCE case above.
+                RuntimeScalar newRef = newArray.createAnonymousReference();
                 cloned.put(scalar.value, newRef);
 
                 // Preserve blessing
@@ -766,6 +823,8 @@ public class Storable extends PerlModuleBase {
                 RuntimeArray.push(freezeArgs, scalar);
                 RuntimeArray.push(freezeArgs, new RuntimeScalar(0)); // cloning = false
                 RuntimeList freezeResult = RuntimeCode.apply(freezeMethod, freezeArgs, RuntimeContextType.LIST);
+                // Phase G: release arg-push refCount bumps.
+                releaseApplyArgs(freezeArgs);
                 RuntimeArray freezeArray = new RuntimeArray();
                 freezeResult.setArrayOfAlias(freezeArray);
 
@@ -877,7 +936,7 @@ public class Storable extends PerlModuleBase {
                         // Handle STORABLE_freeze/thaw hooks
                         String className = key.substring("!!perl/freeze:".length());
                         RuntimeHash newHash = new RuntimeHash();
-                        RuntimeScalar newObj = newHash.createReference();
+                        RuntimeScalar newObj = newHash.createAnonymousReference();
                         ReferenceOperators.bless(newObj, new RuntimeScalar(className));
 
                         // Call STORABLE_thaw($new_obj, $cloning=0, $serialized_string)
@@ -890,6 +949,8 @@ public class Storable extends PerlModuleBase {
                             RuntimeArray.push(thawArgs, new RuntimeScalar(
                                     entry.getValue() != null ? entry.getValue().toString() : ""));
                             RuntimeCode.apply(thawMethod, thawArgs, RuntimeContextType.VOID);
+                            // Phase G: release arg-push refCount bumps.
+                            releaseApplyArgs(thawArgs);
                         }
                         yield newObj;
                     } else if (key.equals("!!perl/ref")) {
@@ -904,7 +965,7 @@ public class Storable extends PerlModuleBase {
 
                 // Regular hash
                 RuntimeHash hash = new RuntimeHash();
-                RuntimeScalar hashRef = hash.createReference();
+                RuntimeScalar hashRef = hash.createAnonymousReference();
                 seen.put(yaml, hashRef);
                 map.forEach((key, value) ->
                         hash.put(key.toString(), convertFromYAMLWithTags(value, seen)));
@@ -912,7 +973,7 @@ public class Storable extends PerlModuleBase {
             }
             case List<?> list -> {
                 RuntimeArray array = new RuntimeArray();
-                RuntimeScalar arrayRef = array.createReference();
+                RuntimeScalar arrayRef = array.createAnonymousReference();
                 seen.put(yaml, arrayRef);
                 list.forEach(item ->
                         array.elements.add(convertFromYAMLWithTags(item, seen)));

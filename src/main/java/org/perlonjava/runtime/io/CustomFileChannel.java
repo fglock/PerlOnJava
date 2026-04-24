@@ -66,6 +66,52 @@ public class CustomFileChannel implements IOHandle {
     private static final int LOCK_UN = 8;  // Unlock
 
     /**
+     * Per-JVM registry of active shared flock() locks, keyed by canonical file path.
+     * Java NIO's FileChannel.lock() treats all FileChannels within a single JVM as
+     * the same process and throws OverlappingFileLockException if the same region is
+     * locked twice, even for shared locks. POSIX flock() (which Perl exposes) allows
+     * multiple shared locks on the same file from the same process.
+     * <p>
+     * To match POSIX semantics, we track shared locks per canonical path in this
+     * map. The first shared-lock request acquires a real FileLock on the underlying
+     * channel; subsequent shared-lock requests on the same file increment the
+     * refCount without acquiring a new NIO lock. The real lock is released when the
+     * last holder calls LOCK_UN or closes its handle.
+     * <p>
+     * This fixes DBICTest's global lock acquisition (t/lib/DBICTest.pm import), which
+     * does sysopen() + flock(LOCK_SH) multiple times across nested module loads.
+     * Without this, the second flock(LOCK_SH) call deadlocks inside await_flock().
+     */
+    private static final java.util.Map<String, SharedLockState> sharedLockRegistry =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * State for a JVM-wide shared flock() on a file path. Contains the owning
+     * FileLock (from the first acquirer) and a count of how many channels in this
+     * JVM currently hold the shared lock.
+     */
+    private static final class SharedLockState {
+        FileLock nioLock;
+        int refCount;
+    }
+
+    /**
+     * Canonical key for this channel's file, used to look up entries in
+     * {@link #sharedLockRegistry}. Null when the channel was created from a file
+     * descriptor (e.g., dup'd handles) and we have no path. Lookup falls back to
+     * the plain NIO lock path in that case.
+     */
+    private final String lockKey;
+
+    /**
+     * True when this channel currently "holds" a shared lock via the JVM-wide
+     * registry (rather than via its own NIO {@link #currentLock}). On release,
+     * we decrement the registry's refCount instead of calling nioLock.release()
+     * directly.
+     */
+    private boolean holdsSharedLockViaRegistry;
+
+    /**
      * The underlying Java NIO FileChannel for actual I/O operations
      */
     private final FileChannel fileChannel;
@@ -99,6 +145,15 @@ public class CustomFileChannel implements IOHandle {
         this.fileChannel = FileChannel.open(path, options);
         this.isEOF = false;
         this.appendMode = false;
+        // Canonical path for the shared-lock registry. Fall back to absolute path
+        // if canonicalization fails (e.g., the file was deleted after open).
+        String key;
+        try {
+            key = path.toFile().getCanonicalPath();
+        } catch (IOException e) {
+            key = path.toAbsolutePath().toString();
+        }
+        this.lockKey = key;
     }
 
     /**
@@ -114,6 +169,7 @@ public class CustomFileChannel implements IOHandle {
      */
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
         this.filePath = null;
+        this.lockKey = null;
         if (options.contains(StandardOpenOption.READ)) {
             this.fileChannel = new FileInputStream(fd).getChannel();
         } else if (options.contains(StandardOpenOption.WRITE)) {
@@ -233,6 +289,10 @@ public class CustomFileChannel implements IOHandle {
     @Override
     public RuntimeScalar close() {
         try {
+            // Release any flock() we're still holding. For shared locks we may
+            // be the last holder in the JVM — release via the registry so the
+            // underlying NIO lock is freed exactly once.
+            releaseCurrentLock();
             fileChannel.close();
             return scalarTrue;
         } catch (IOException e) {
@@ -414,34 +474,67 @@ public class CustomFileChannel implements IOHandle {
             boolean exclusive = (operation & LOCK_EX) != 0;
 
             if (unlock) {
-                // Release any existing lock
-                if (currentLock != null) {
-                    currentLock.release();
-                    currentLock = null;
-                }
+                releaseCurrentLock();
                 return scalarTrue;
             }
 
             // Release any existing lock before acquiring a new one
-            if (currentLock != null) {
-                currentLock.release();
-                currentLock = null;
-            }
+            releaseCurrentLock();
 
             if (exclusive || shared) {
                 // shared=true for LOCK_SH, shared=false for LOCK_EX
                 boolean isShared = shared && !exclusive;
 
+                // For SHARED locks with a known path, consult the JVM-wide registry
+                // so that multiple flock(LOCK_SH) calls on the same file from the
+                // same JVM don't trip OverlappingFileLockException. This matches
+                // POSIX flock() semantics (multiple shared locks per process are OK).
+                if (isShared && lockKey != null) {
+                    synchronized (sharedLockRegistry) {
+                        SharedLockState state = sharedLockRegistry.get(lockKey);
+                        if (state != null && state.nioLock != null && state.nioLock.isShared()) {
+                            // Another CustomFileChannel in this JVM already holds a
+                            // shared lock on this file — piggyback on it.
+                            state.refCount++;
+                            holdsSharedLockViaRegistry = true;
+                            return scalarTrue;
+                        }
+                        // No existing shared lock. Acquire one on our channel and
+                        // register it so sibling channels can piggyback.
+                        try {
+                            FileLock lock = nonBlocking
+                                    ? fileChannel.tryLock(0, Long.MAX_VALUE, true)
+                                    : fileChannel.lock(0, Long.MAX_VALUE, true);
+                            if (lock == null) {
+                                getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
+                                return RuntimeScalarCache.scalarFalse;
+                            }
+                            SharedLockState newState = new SharedLockState();
+                            newState.nioLock = lock;
+                            newState.refCount = 1;
+                            sharedLockRegistry.put(lockKey, newState);
+                            currentLock = lock;
+                            holdsSharedLockViaRegistry = true;
+                            return scalarTrue;
+                        } catch (OverlappingFileLockException e) {
+                            // Same JVM already holds a lock on this region that
+                            // wasn't registered (e.g. a prior EXCLUSIVE lock from
+                            // a different channel). Fall through to EAGAIN.
+                            getGlobalVariable("main::!").set(11);
+                            return RuntimeScalarCache.scalarFalse;
+                        }
+                    }
+                }
+
+                // Exclusive lock, or shared lock with no path (fd-only channel):
+                // use the straight NIO path and accept its stricter semantics.
                 if (nonBlocking) {
-                    // Non-blocking: use tryLock
                     currentLock = fileChannel.tryLock(0, Long.MAX_VALUE, isShared);
                     if (currentLock == null) {
-                        // Would block - return false
                         getGlobalVariable("main::!").set(11); // EAGAIN/EWOULDBLOCK
                         return RuntimeScalarCache.scalarFalse;
                     }
                 } else {
-                    // Blocking: use lock (will wait until lock is available)
                     currentLock = fileChannel.lock(0, Long.MAX_VALUE, isShared);
                 }
                 return scalarTrue;
@@ -457,6 +550,41 @@ public class CustomFileChannel implements IOHandle {
             return RuntimeScalarCache.scalarFalse;
         } catch (IOException e) {
             return handleIOException(e, "flock failed");
+        }
+    }
+
+    /**
+     * Release whatever lock this channel currently holds, whether directly via
+     * {@link #currentLock} or via the shared-lock registry. Safe to call when
+     * no lock is held.
+     */
+    private void releaseCurrentLock() throws IOException {
+        if (holdsSharedLockViaRegistry && lockKey != null) {
+            synchronized (sharedLockRegistry) {
+                SharedLockState state = sharedLockRegistry.get(lockKey);
+                if (state != null) {
+                    state.refCount--;
+                    if (state.refCount <= 0) {
+                        // Last holder — release the real NIO lock.
+                        if (state.nioLock != null && state.nioLock.isValid()) {
+                            state.nioLock.release();
+                        }
+                        sharedLockRegistry.remove(lockKey);
+                    }
+                }
+            }
+            // currentLock may point to the registry's NIO lock; either the last
+            // holder released it above, or another holder still needs it. Either
+            // way, we must not call release() on it ourselves a second time.
+            currentLock = null;
+            holdsSharedLockViaRegistry = false;
+            return;
+        }
+        if (currentLock != null) {
+            if (currentLock.isValid()) {
+                currentLock.release();
+            }
+            currentLock = null;
         }
     }
 

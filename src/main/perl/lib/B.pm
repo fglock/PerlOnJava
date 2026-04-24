@@ -49,16 +49,42 @@ use constant {
 # Stub classes for B objects
 package B::SV {
     sub new {
-        my ($class, $ref) = @_;
-        return bless { ref => $ref }, $class;
+        # IMPORTANT: Avoid `my ($class, $ref) = @_` or `shift` — each local
+        # variable assignment that holds a reference inflates the referent's
+        # cooperative refcount by 1 (via setLargeRefCounted). Instead, use
+        # $_[0]/$_[1] (aliases into @_) which don't increment refcount.
+        # This keeps the only inflation to the `$self->{ref}` hash slot,
+        # which REFCNT compensates for with its -1 adjustment.
+        my $self = bless {}, $_[0];
+        $self->{ref} = $_[1];
+        return $self;
     }
 
     sub REFCNT {
-        # JVM uses tracing GC, not reference counting.
-        # Return 1 as a reasonable default for compatibility.
-        # This aligns with Internals::SvREFCNT() and Devel::Peek::SvREFCNT()
-        # which also return 1, and makes is_oneref() checks pass.
-        return 1;
+        # Return the cooperative refcount via Internals::SvREFCNT.
+        #
+        # In PerlOnJava, B::SV stores the reference in $self->{ref} which is
+        # a tracked (blessed) hash element. This inflates the referent's
+        # cooperative refCount by +1 via setLargeRefCounted.
+        #
+        # In Perl 5, B::svref_2object() stores the SV pointer directly (a C
+        # pointer), so it does NOT inflate the referent's refcnt. However,
+        # Perl 5 has higher refcounts overall because ALL references count
+        # (hash elements, stack temporaries, mortal slots). PerlOnJava's
+        # cooperative refCount is lower because:
+        #   1. Stack/JVM temporaries don't contribute
+        #   2. Method call argument copies don't contribute
+        #
+        # The B::SV inflation (+1) roughly compensates for these deficits,
+        # so we return the raw cooperative refCount WITHOUT subtracting 1.
+        #
+        # For Schema::DESTROY's `refcount($source) > 1` check:
+        #   - Source with 1 cooperative ref (e.g., source_registrations only):
+        #     B::SV inflation → 2, REFCNT = 2 → > 1 → rescue ✓
+        #     (In Perl 5 this source also shows > 1 because stack temps add refs)
+        #   - Source with 0 cooperative refs (untracked):
+        #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
+        Internals::SvREFCNT($_[0]->{ref});
     }
 
     sub RV {
@@ -334,37 +360,42 @@ sub class {
 
 # Main introspection function
 sub svref_2object {
-    my $ref = shift;
-    my $type = ref($ref);
+    # IMPORTANT: Do NOT do `my $ref = shift` — that creates a local variable
+    # holding a reference, which inflates the referent's cooperative refcount
+    # by 1 (via setLargeRefCounted). Use $_[0] (an alias into @_) instead,
+    # which doesn't increment refcount. This is critical for DBIC's
+    # refcount() function which calls B::svref_2object($_[0])->REFCNT
+    # and expects the refcount to not be inflated by the call chain.
+    my $type = ref($_[0]);
 
     # A plain CODE scalar (e.g. from \&f in interpreter mode) has ref() eq 'CODE'.
     # A CODE-typed scalar passed directly (not wrapped in REFERENCE) also needs
     # to be treated as a CV — detect it via Scalar::Util::reftype as well.
     if ($type eq 'CODE') {
-        return B::CV->new($ref);
+        return B::CV->new($_[0]);
     }
 
     # Scalar::Util::reftype sees through blessing; use it as a fallback
     # for cases where ref() returns a package name (blessed code ref).
     require Scalar::Util;
-    my $rtype = Scalar::Util::reftype($ref) // '';
+    my $rtype = Scalar::Util::reftype($_[0]) // '';
     if ($rtype eq 'CODE') {
-        return B::CV->new($ref);
+        return B::CV->new($_[0]);
     }
 
     if ($rtype eq 'GLOB') {
-        my $name = *{$ref}{NAME} // '';
-        my $pkg  = *{$ref}{PACKAGE} // 'main';
+        my $name = *{$_[0]}{NAME} // '';
+        my $pkg  = *{$_[0]}{PACKAGE} // 'main';
         my $gv = B::GV->new($name, $pkg);
-        $gv->{ref} = $ref;  # store glob ref for SV method access
+        $gv->{ref} = $_[0];  # store glob ref for SV method access
         return $gv;
     }
 
     if ($type eq 'SCALAR') {
-        return B::PVIV->new($ref);
+        return B::PVIV->new($_[0]);
     }
 
-    return B::SV->new($ref);
+    return B::SV->new($_[0]);
 }
 
 # Export CVf_ANON as a function

@@ -647,6 +647,7 @@ public class CompileOperator {
             case "defined" -> visitDefined(bytecodeCompiler, node);
             case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
             case "time" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.TIME_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
+            case "wait" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WAIT_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "getppid" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex()); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "open" -> visitOpen(bytecodeCompiler, node);
             case "matchRegex" -> visitMatchRegex(bytecodeCompiler, node);

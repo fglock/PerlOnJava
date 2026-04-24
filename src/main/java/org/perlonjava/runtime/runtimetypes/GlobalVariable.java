@@ -762,6 +762,12 @@ public class GlobalVariable {
 
     public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
         RuntimeScalar deleted = globalCodeRefs.remove(key);
+        // Decrement stashRefCount on the removed CODE ref
+        if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {
+            if (removedCode.stashRefCount > 0) {
+                removedCode.stashRefCount--;
+            }
+        }
         return deleted != null ? deleted : scalarFalse;
     }
 
@@ -861,6 +867,7 @@ public class GlobalVariable {
      *         or the original name if no redirection is active.
      */
     public static String resolveStashHashRedirect(String fullName) {
+        if (fullName == null) return null;
         int lastDoubleColon = fullName.lastIndexOf("::");
         if (lastDoubleColon >= 0) {
             String pkgPart = fullName.substring(0, lastDoubleColon + 2);

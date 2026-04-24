@@ -1,923 +1,224 @@
 # DBIx::Class Fix Plan
 
-## Overview
+**Module**: DBIx::Class 0.082844 (installed via `jcpan`)
+**Branch**: `feature/dbix-class-destroy-weaken`  |  **PR**: https://github.com/fglock/PerlOnJava/pull/485
 
-**Module**: DBIx::Class 0.082844  
-**Test command**: `./jcpan -t DBIx::Class`  
-**Branch**: `feature/dbix-class-fixes`  
-**PR**: https://github.com/fglock/PerlOnJava/pull/415 (original), PR TBD (current)  
-**Status**: Phase 5 — Fix runtime issues iteratively
+## Documentation Policy
 
-## Dependency Tree
+Every non-trivial code change MUST document: what it solves, why this approach, what would break if removed.
 
-### Runtime Dependencies
+## Installation & Paths
 
-| Dependency | Required | Status | Notes |
-|-----------|---------|--------|-------|
-| DBI | >= 1.57 | PASS | Bundled Java JDBC implementation; `$VERSION = '1.643'` added |
-| Sub::Name | >= 0.04 | PASS | Bundled Java implementation |
-| Try::Tiny | >= 0.07 | PASS | Bundled pure Perl |
-| Text::Balanced | >= 2.00 | PASS | Bundled core module |
-| Moo | >= 2.000 | PASS | Installed (v2.005005) via jcpan |
-| Sub::Quote | >= 2.006006 | PASS | Installed via jcpan |
-| MRO::Compat | >= 0.12 | PASS | Installed (v0.15); uses native `mro` on PerlOnJava |
-| namespace::clean | >= 0.24 | PASS | Installed (v0.27) |
-| Scope::Guard | >= 0.03 | PASS | Installed |
-| Class::Inspector | >= 1.24 | PASS | Installed |
-| Class::Accessor::Grouped | >= 0.10012 | PASS | Installed via jcpan |
-| Class::C3::Componentised | >= 1.0009 | PASS | Installed via jcpan |
-| Config::Any | >= 0.20 | PASS | Installed via jcpan |
-| Context::Preserve | >= 0.01 | PASS | Installed via jcpan |
-| Data::Dumper::Concise | >= 2.020 | PASS | Installed via jcpan |
-| Devel::GlobalDestruction | >= 0.09 | PASS | Installed via jcpan |
-| Hash::Merge | >= 0.12 | PASS | Installed via jcpan |
-| Module::Find | >= 0.07 | PASS | Installed via jcpan |
-| Path::Class | >= 0.18 | PASS | Installed but has File::stat VerifyError (see Known Bugs) |
-| SQL::Abstract::Classic | >= 1.91 | PASS | Installed via jcpan |
+| Path | Contents |
+|------|----------|
+| `~/.perlonjava/lib/` | Installed modules (`@INC` entry) |
+| `~/.perlonjava/cpan/build/DBIx-Class-0.082844-NN/` | Build dir with tests |
 
-### Test Dependencies
-
-| Dependency | Status | Notes |
-|-----------|--------|-------|
-| Test::More | >= 0.94 | PASS | Bundled |
-| Test::Deep | >= 0.101 | PASS | Installed |
-| Test::Warn | >= 0.21 | PASS | Installed |
-| File::Temp | >= 0.22 | PASS | Bundled Java implementation |
-| Package::Stash | >= 0.28 | PASS | Installed (PP fallback) |
-| Test::Exception | >= 0.31 | PASS | Installed; Sub::Uplevel CORE::GLOBAL::caller bug fixed |
-| DBD::SQLite | >= 1.29 | PASS | JDBC shim via `DBD/SQLite.pm` + sqlite-jdbc driver |
-
-### Supporting Modules (already installed)
-
-B::Hooks::EndOfScope, Package::Stash::PP, Role::Tiny, Class::Method::Modifiers,
-Module::Implementation, Module::Runtime, Params::Util, Exporter::Tiny, Type::Tiny,
-Scalar::Util, List::Util, Storable, Data::Dumper, mro, namespace::autoclean,
-Sub::Util, Dist::CheckConflicts, Eval::Closure, Sub::Uplevel.
-
----
-
-## Fix Plan
-
-### Phase 1: Unblock Makefile.PL (DONE)
-
-Four blockers fixed to get `Makefile.PL` to complete:
-
-| Blocker | Error | Fix | Status |
-|---------|-------|-----|--------|
-| 1. `strict::bits` missing | `Undefined subroutine &strict::bits` | Added `bits`, `all_bits`, `all_explicit_bits` to Strict.java | DONE |
-| 2. `UNIVERSAL::can` returning AUTOLOAD methods | Module::Install `$self->can('call')` resolved via AUTOLOAD | Added `isAutoloadDispatch()` filter in Universal.java | DONE |
-| 3. `goto &sub` wantarray + eval{} @_ sharing | `Not an ARRAY reference` at AutoInstall.pm line 32 | Fixed tail call trampoline context propagation; eval{} now shares @_ | DONE |
-| 4. `%{+{@a}}` parsing | `Type of arg 1 to keys must be hash or array` | Added +{ check in IdentifierParser.java for hash constructor disambiguation | DONE |
-
-### Phase 2: Install missing pure-Perl dependencies (DONE)
-
-All runtime and test dependencies installed via `./jcpan -fi`:
-
-| Step | Description | Status |
-|------|-------------|--------|
-| 2.1 | `./jcpan install Devel::GlobalDestruction` | DONE |
-| 2.2 | `./jcpan install Context::Preserve` | DONE |
-| 2.3 | `./jcpan install Data::Dumper::Concise` | DONE |
-| 2.4 | `./jcpan install Module::Find` | DONE |
-| 2.5 | `./jcpan install Path::Class` | DONE (has VerifyError, see Known Bugs) |
-| 2.6 | `./jcpan install Hash::Merge` | DONE |
-| 2.7 | `./jcpan install Config::Any` | DONE |
-| 2.8 | `./jcpan install Class::Accessor::Grouped` | DONE |
-| 2.9 | `./jcpan install Class::C3::Componentised` | DONE |
-| 2.10 | `./jcpan install SQL::Abstract::Classic` | DONE |
-| 2.11 | `./jcpan install Test::Exception` | DONE |
-
-### Phase 3: Fix DBI version detection (DONE)
-
-| Step | Description | Status |
-|------|-------------|--------|
-| 3.1 | Added `our $VERSION = '1.643';` to `src/main/perl/lib/DBI.pm` | DONE |
-| 3.2 | Makefile.PL now recognizes DBI version correctly | DONE |
-
-### Phase 4: Create DBD::SQLite JDBC shim (DONE)
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 4.1 | Created `DBD::SQLite` shim translating DSN format | `src/main/perl/lib/DBD/SQLite.pm` | DONE |
-| 4.2 | Added sqlite-jdbc 3.49.1.0 dependency | `build.gradle`, `pom.xml`, `gradle/libs.versions.toml` | DONE |
-| 4.3 | Added try/catch for metadata on DDL statements | `DBI.java` | DONE |
-| 4.4 | Verified `DBI->connect("dbi:SQLite:dbname=:memory:")` works | manual test | DONE |
-
-### Phase 4.5: Fix CORE::GLOBAL::caller override bug (DONE)
-
-Sub::Uplevel (dependency of Test::Exception) overrides `*CORE::GLOBAL::caller`.
-This caused a parse error when `caller` appeared as the RHS of an infix operator.
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 4.5.1 | Fixed whitespace-sensitive token insertion for CORE::GLOBAL:: overrides | `ParsePrimary.java` | DONE |
-| 4.5.2 | Test::Exception now loads and works correctly | verified | DONE |
-
-### Phase 4.6: Fix stash aliasing glob vivification (DONE)
-
-Package::Stash::PP's `add_symbol` does `*__ANON__:: = \%Pkg::` then `*{"__ANON__::foo"}`.
-PerlOnJava's flat-map architecture stored the vivified glob under the wrong prefix.
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 4.6.1 | Added `resolveStashHashRedirect()` to detect aliased stashes | `GlobalVariable.java` | DONE |
-| 4.6.2 | Integrated redirect into `getGlobalIO()` and JVM backend | `GlobalVariable.java`, `EmitVariable.java` | DONE |
-
-### Phase 4.7: Fix mixed-context ternary lvalue assignment (DONE)
-
-`Class::Accessor::Grouped` uses `wantarray ? @rv = eval $src : $rv[0] = eval $src`.
-Perl 5 parses this as `(wantarray ? (@rv = eval $src) : $rv[0]) = eval $src` — a
-ternary-as-lvalue where the true branch contains an assignment expression.
-`LValueVisitor` threw "Assignment to both a list and a scalar" at compile time.
-
-The fix matches Perl 5's `S_assignment_type()` from `op.c`: assignment ops
-(`OP_AASSIGN`, `OP_SASSIGN`) are not in the `ASSIGN_LIST` set, so they return
-`ASSIGN_SCALAR` when classifying ternary branches. This allows the CAG pattern
-while still rejecting genuinely invalid patterns like `($c ? $a : @b) = 123`.
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 4.7.1 | Add `assignmentTypeOf()` helper to classify ternary branches matching Perl 5's `S_assignment_type()` | `LValueVisitor.java` | DONE |
-
-**Known runtime limitation**: The ternary-as-lvalue emitter does not properly
-handle assignment-expression branches with non-constant conditions (e.g.,
-`wantarray`). When the true branch is taken at runtime, the result of
-`@rv = eval $src` is not returned as a modifiable lvalue, causing
-"Modification of a read-only value attempted". Constant-folded cases
-(`1 ? @rv = eval $src : $rv[0]`) work correctly. This is a separate JVM
-backend code generation issue.
-
-### Phase 4.8: Fix `cp` on read-only installed files (DONE)
-
-`ExtUtils::MakeMaker`'s `_shell_cp` generated bare `cp` commands. When reinstalling
-a module whose `.pod`/`.pm` files were previously installed as read-only (0444),
-`cp` fails with "Permission denied". Fixed by adding `rm -f` before `cp`.
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 4.8.1 | Changed `_shell_cp` to `rm -f` then `cp` | `ExtUtils/MakeMaker.pm` | DONE |
-
-### Phase 5: Fix runtime issues (CURRENT — iterative)
-
-| Step | Description | File | Status |
-|------|-------------|------|--------|
-| 5.1 | Fix `@${$v}` string interpolation | `StringSegmentParser.java` | DONE |
-| 5.2 | Add `B::SV::REFCNT` method (returns 0 for JVM tracing GC) | `B.pm` | DONE |
-| 5.3 | Add DBI `FETCH`/`STORE` methods for tied-hash compat | `DBI.pm` | DONE |
-| 5.4 | Add `DBI::Const::GetInfoReturn` stub | `DBI/Const/GetInfoReturn.pm` | DONE |
-| 5.5 | Fix list assignment autovivification (`($x, @$undef_ref) = ...`) | `RuntimeList.java` | DONE |
-| 5.6 | Add DBI `execute_for_fetch` and `bind_param` methods | `DBI.pm` | DONE |
-| 5.7 | Fix `&func` (no parens) to share caller's `@_` by alias | Parser, JVM emitter, interpreter | DONE |
-| 5.8 | Fix DBI `execute()` return value (row count, not hash ref) | `DBI.java` | DONE |
-| 5.9 | Set `$dbh->{Driver}` for SQLite driver detection | `DBI.pm` | DONE |
-| 5.10 | Fix DBI `get_info()` to accept numeric constants per DBI spec | `DBI.java` | DONE |
-| 5.11 | Add DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.) | `DBI.pm` | DONE |
-| 5.12 | Fix `bind_columns` + `fetch` to update bound scalar references | `DBI.java` | DONE |
-| 5.13 | Implement `column_info()` via SQLite PRAGMA; bless metadata sth | `DBI.java` | DONE |
-| 5.14 | Add `AutoCommit` state tracking for literal transaction SQL | `DBI.java` | DONE |
-| 5.15 | Intercept BEGIN/COMMIT/ROLLBACK via JDBC API instead of executing SQL | `DBI.java` | DONE |
-| 5.16 | Fix `prepare_cached` to use per-dbh `CachedKids` cache | `DBI.pm` | DONE |
-| 5.17 | Fix `-w` flag overriding `no warnings 'redefine'` pragma | `SubroutineParser.java` | DONE |
-| 5.18 | Fix InterpreterFallbackException not caught at top-level | `PerlLanguageProvider.java` | DONE |
-| 5.19 | Implement `MODIFY_CODE_ATTRIBUTES` for subroutine attributes | `SubroutineParser.java` | DONE |
-| 5.20 | Fix ROLLBACK TO SAVEPOINT intercepted as full ROLLBACK | `DBI.java` | DONE |
-| 5.21 | Support CODE reference returns from @INC hooks (PAR simulation) | `ModuleOperators.java` | DONE |
-| 5.25 | Normalize JDBC error messages to match native driver format | `DBI.java` | DONE |
-| 5.26 | Fix regex `\Q` delimiter escaping (`qr/\Qfoo\/bar/`) | `StringParser.java` | DONE |
-| 5.27 | Fix `bind_param()` to defer `stmt.setObject()` to `execute()` | `DBI.java` | DONE |
-| 5.28 | Fix `execute()` to apply stored bound_params when no inline params | `DBI.java` | DONE |
-| 5.29 | Add STORABLE_freeze/thaw hook support to Storable dclone/freeze/thaw | `Storable.java` | DONE |
-| 5.30 | Fix stale PreparedStatement after ROLLBACK in execute() | `DBI.java` | DONE |
-| 5.31 | Fix interpreter context propagation for subroutine bodies | `BytecodeCompiler.java`, `BytecodeInterpreter.java`, opcode handlers | DONE |
-| 5.35 | Fix `last_insert_id()` to use connection-level SQL queries | `DBI.java` | DONE |
-| 5.36 | Fix `%{{ expr }}` parser disambiguation inside dereference context | `Parser.java`, `StatementResolver.java`, `Variable.java` | DONE |
-| 5.37 | Fix `//=`, `||=`, `&&=` short-circuit in bytecode interpreter | `BytecodeCompiler.java` | DONE |
-| 5.57 | Fix post-rebase regressions: integer `/=` warn, do{}until const fold, vec 32-bit, strict propagation, caller hints, %- CAPTURE_ALL, large int literals | Multiple files | DONE |
-| 5.58 | Fix pack/unpack 32-bit consistency: j/J use ivsize=4 bytes, disable q/Q (no use64bitint) | `NumericPackHandler.java`, `NumericFormatHandler.java`, `Unpack.java`, `PackParser.java` | DONE |
-
-**t/60core.t results** (142 tests emitted, updated after step 5.56):
-- **125 ok**: All real tests pass
-- **not ok 82–93**: 12 "Unreachable cached statement still active" — cursors not fully consumed, need DESTROY to call finish()
-- **not ok 138–142**: 5 garbage collection tests — expected (JVM has no reference counting / `weaken`)
-
-**Full test suite results** (314 test files, updated 2026-04-02):
-
-| Category | Count | Details |
-|----------|-------|---------|
-| Fully passing | 72 | 24 substantive + 48 DB-specific skips |
-| GC-only failures | 147 | All real tests pass; only appended GC leak checks fail |
-| Real TAP failures | 40 | See categorized breakdown below |
-| CDBI (need Class::DBI) | 41 | Expected — Class::DBI not installed |
-| Other errors | 13 | Missing DateTime modules, syntax errors, etc. |
-| Incomplete | 1 | t/inflate/file_column.t |
-
-- **Individual test pass rate: 96.7%** (8,923/9,231 tests OK)
-- **Effective file pass rate: 80.2%** (219/273 files pass or GC-only, excluding CDBI)
-
----
-
-## Blocking Issues — Not Quick Fixes
-
-### ~~HIGH PRIORITY: `$^S` wrong inside `$SIG{__DIE__}` when `require` fails in `eval {}`~~ — RESOLVED (step 5.17)
-
-**Symptom**: `$^S` is 0 (top-level) instead of 1 (inside eval) when `require` triggers `$SIG{__DIE__}` from within `eval {}`. This causes die handlers that check `$^S` to misidentify eval-guarded require failures as top-level crashes.
-
-**Affected tests**: `t/00describe_environment.t` — the test installs a `$SIG{__DIE__}` handler that uses `$^S` to distinguish eval-caught exceptions from real crashes. Because `$^S` is wrong, the optional `require File::HomeDir` (inside `eval {}`) triggers the "Something horrible happened" path and `exit 0`, aborting the test. The `Class::Accessor::Grouped->VERSION` check also crashes the same way.
-
-**Repro**:
 ```bash
-# PerlOnJava (wrong): S=0
-./jperl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" }; eval { require No::Such::Module }; print "after eval\n"'
-
-# Perl 5 (correct): S=1
-perl -e '$SIG{__DIE__} = sub { print "S=", defined($^S) ? $^S : "undef", "\n" }; eval { require No::Such::Module }; print "after eval\n"'
+DBIC_BUILD=$(ls -d ~/.perlonjava/cpan/build/DBIx-Class-0.082844-* 2>/dev/null | grep -v yml | sort -t- -k5 -n | tail -1)
 ```
 
-**Root cause**: The `require` failure path does not propagate the eval depth / `$^S` state when invoking `$SIG{__DIE__}`. A plain `die` inside `eval {}` correctly reports `$^S=1`, but a failed `require` inside `eval {}` reports `$^S=0`.
+## How to Run the Suite
 
-**What's needed to fix**:
-- Find where `require` failure invokes the `__DIE__` handler (likely in `Require.java` or `WarnDie.java`)
-- Ensure `$^S` reflects the enclosing eval context, matching the behavior of `die` inside `eval {}`
-
-**Impact**: HIGH — blocks `t/00describe_environment.t` and any code that relies on `$^S` in `$SIG{__DIE__}` with `require` inside `eval {}`. Common pattern in CPAN (Test::Exception, DBIx::Class, Moose).
-
-### ~~HIGH PRIORITY: VerifyError (bytecode compiler bug)~~ — RESOLVED for File::stat; systemic issue remains low-priority
-
-**Symptom**: `java.lang.VerifyError: Bad type on operand stack` when compiling complex anonymous subroutines with many local variables.
-
-**Affected tests**: `t/00describe_environment.t` (secondary issue — also blocked by `$^S` bug above)
-
-**Root cause**: The JVM bytecode emitter generates incorrect stack map frames when a subroutine has many locals and complex control flow (ternary chains, nested `eval`, `for` loops). The JVM verifier rejects the class because `java/lang/Object` on the stack is not assignable to `RuntimeScalar`.
-
-**What's needed to fix**:
-- Debug the bytecode emitter's stack map frame generation (likely in `EmitSubroutine.java` or related emit classes)
-- The anonymous sub `anon2920` in the test has ~100 local variable slots and deeply nested control flow
-- May need to split large subroutines or fix how the stack map calculator handles branch merging
-- This is the same class of bug as the File::stat VerifyError (see Known Bugs below)
-
-**Impact**: Currently low for DBIx::Class (test already skips), but affects any complex Perl subroutine. Could block other CPAN modules.
-
-### SYSTEMIC: DESTROY / TxnScopeGuard — leaked transaction_depth
-
-**Symptom**: After a failed `_insert_bulk`, `transaction_depth` stays elevated (1 instead of 0). Subsequent `txn_begin` calls increment the counter without emitting `BEGIN`, causing SQL trace tests to fail.
-
-**Affected tests**: `t/100populate.t` tests 37-42 (SQL trace expects `BEGIN`/`INSERT`/`COMMIT` but gets `INSERT` only), test 53 ("populate is atomic").
-
-**Root cause**: `_insert_bulk` uses `TxnScopeGuard`:
-```perl
-my $guard = $self->txn_scope_guard;   # txn_begin → depth 0→1, emits BEGIN
-# ... INSERT that fails with exception ...
-$guard->commit;                        # never reached
-# $guard goes out of scope → DESTROY should rollback → depth 1→0
+```bash
+cd /Users/fglock/projects/PerlOnJava3 && make
+cd "$DBIC_BUILD"
+JPERL=/Users/fglock/projects/PerlOnJava3/jperl
+mkdir -p /tmp/dbic_suite
+for t in t/*.t t/storage/*.t t/inflate/*.t t/multi_create/*.t t/prefetch/*.t \
+         t/relationship/*.t t/resultset/*.t t/row/*.t t/search/*.t \
+         t/sqlmaker/*.t t/sqlmaker/limit_dialects/*.t t/delete/*.t t/cdbi/*.t; do
+    [ -f "$t" ] || continue
+    timeout 60 "$JPERL" -Iblib/lib -Iblib/arch "$t" > /tmp/dbic_suite/$(echo "$t" | tr '/' '_' | sed 's/\.t$//').txt 2>&1
+done
+# Summary excluding TODO failures
+for f in /tmp/dbic_suite/*.txt; do
+    real=$(grep "^not ok " "$f" 2>/dev/null | grep -v "# TODO" | wc -l | tr -d ' ')
+    [ "$real" -gt 0 ] && echo "FAIL($real): $(basename $f .txt)"
+done | sort
 ```
-Without DESTROY, the guard is silently dropped. `transaction_depth` stays at 1. Next `txn_begin` sees depth=1, increments to 2, skips `_exec_txn_begin` (no `BEGIN`). The JDBC connection also stays in non-autocommit mode.
-
-**Why DESTROY is hard on JVM**: Perl uses reference counting — DESTROY fires deterministically at scope exit when the last reference disappears. JVM uses tracing GC with non-deterministic collection. PerlOnJava has no refcounting.
-
-**Potential fix approach — DeferBlock/DVM-based scope guard**:
-
-PerlOnJava already has `DynamicVariableManager` (DVM) with a stack of `DynamicState` items. `DeferBlock` implements `DynamicState` — its `dynamicRestoreState()` runs deferred code at scope exit. `Local.localTeardown()` pops the stack, with exception safety.
-
-A `DestroyGuard` could work similarly:
-1. When `bless()` is called on an object whose class has a DESTROY method, push a `DestroyGuard(weakref_to_object)` onto the DVM stack
-2. `DestroyGuard.dynamicRestoreState()` checks if the object still has `blessId != 0` and calls DESTROY
-3. This leverages existing scope-exit infrastructure (LIFO ordering, exception safety)
-
-**Caveats**: This is scope-based, not refcount-based. It would correctly handle the common single-owner pattern (`my $guard = ...`) but would be wrong for objects returned from subs or stored in globals (DESTROY would fire too early). A compile-time heuristic could limit registration to `my $var` that are never returned/assigned elsewhere.
-
-**Affected files for implementation**:
-- `ReferenceOperators.java` (bless) — detect DESTROY method, push DestroyGuard
-- `DynamicVariableManager.java` — new `DestroyGuard` class implementing `DynamicState`
-- `EmitterMethodCreator.java` / `Local.java` — ensure teardown runs on scope exit
-
-**Impact**: Fixes t/100populate.t tests 37-42, 53. Would also fix TxnScopeGuard usage across all DBIx::Class tests and any other CPAN module using scope guards (Scope::Guard, Guard, etc.).
-
-### SYSTEMIC: GC / `weaken` / `isweak` absence
-
-**Symptom**: Every DBIx::Class test file appends 5+ garbage collection leak tests that always fail.
-
-**Affected tests**: All 36 "GC-only" failures, plus the GC portion of all 12 "real failure" tests.
-
-**Root cause**: JVM uses tracing GC, not reference counting. PerlOnJava cannot implement `weaken`/`isweak` from `Scalar::Util`. DBIx::Class uses `Test::DBIx::Class::LeakTracer` which inserts `is_refcount`-based leak tests at END time.
-
-**What's needed to fix**:
-- **Option A (hard)**: Implement reference counting alongside JVM GC using a side table mapping object IDs to manual ref counts. Would require wrapping every `RuntimeScalar` assignment. Massive performance impact.
-- **Option B (pragmatic)**: Accept these as known failures. The GC tests verify Perl-specific memory patterns that don't apply to JVM. Real functionality works correctly.
-- **Option C (workaround)**: Patch DBIx::Class's test infrastructure to skip leak tests when `Scalar::Util::weaken` is not functional. Could set `$ENV{DBIC_SKIP_LEAK_TESTS}` or similar.
-
-**Impact**: Makes test output noisy (287 GC-only sub-test failures) but does NOT affect functionality.
-
-### RowParser.pm line 260 crash (post-test cleanup)
-
-**Symptom**: `Not a HASH reference at RowParser.pm line 260` — occurs 8 times across the test suite, always in END blocks or cleanup after tests have already completed.
-
-**Root cause**: During END-block teardown, `_resolve_collapse` is called with stale or partially-destroyed data structures. The code does `$my_cols->{$_}{via_fk}` where `$my_cols->{$_}` may have been clobbered during object destruction. Since PerlOnJava lacks `DESTROY`/`DEMOLISH`, circular references persist and cleanup code may run in unexpected order.
-
-**What's needed to fix**:
-- Investigate exactly which END block triggers the call
-- May be related to `weaken` absence — objects that should be dead are still alive
-- Could potentially be fixed by adding defensive `ref()` checks in RowParser.pm, but that's patching the module rather than fixing the engine
-
-**Impact**: Non-blocking — all real tests complete before the crash. Only affects test harness exit code.
 
 ---
 
-## Remaining Real Failures — Categorized (updated 2026-04-02)
+## Remaining Failures
 
-Of the 40 test files with real TAP failures, detailed analysis shows:
-- **4 files**: GC-only (previously miscounted — t/storage/txn.t, t/101populate_rs.t, t/inflate/hri.t, t/storage/nobindvars.t)
-- **5 files**: TODO/SKIP + GC only (t/inflate/core.t, t/inflate/datetime.t, t/sqlmaker/order_by_func.t, t/prefetch/count.t, t/delete/related.t)
-- **9 files**: Real logic bugs (38 individual test failures across 6 root causes)
-- **Remainder**: DESTROY-dependent or already-fixed
+| File | Count | Status |
+|------|-------|--------|
+| `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain. Needs refCount-inflation audit; hasn't reproduced in simpler tests |
+| `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE). Tried refCount-reset approach — caused infinite DESTROY loops when __WARN__ handler re-triggers captures. Needs architectural redesign (separate "destroying" state from MIN_VALUE sentinel) |
 
-### Previously Fixed Tests — RESOLVED
-
-| Test | Status | What was fixed |
-|------|--------|----------------|
-| `t/64db.t` | **FIXED** (4/4 real pass) | `column_info()` implemented via SQLite PRAGMA (step 5.13) |
-| `t/752sqlite.t` | **FIXED** (34/34 real pass) | AutoCommit tracking + BEGIN/COMMIT/ROLLBACK interception (steps 5.14-5.15); `prepare_cached` per-dbh cache (step 5.16) |
-| `t/00describe_environment.t` | **FIXED** (fully passing) | `$^S` correctly reports 1 inside `$SIG{__DIE__}` for `require` failures in `eval {}` (step 5.17) |
-| `t/83cache.t` | **FIXED** (all real tests pass) | Prefetch result collapsing fixed by `//=` short-circuit fix (step 5.37) |
-| `t/90join_torture.t` | **FIXED** (all real tests pass) | Same `//=` short-circuit fix (step 5.37) |
-| `t/106dbic_carp.t` | **FIXED** (3/3 real pass) | `__LINE__` inside `@{[]}` string interpolation (step 5.18) |
-| `t/84serialize.t` | **FIXED** (115/115 real pass) | STORABLE_freeze/thaw hook support (step 5.29) |
-| `t/101populate_rs.t` | **FIXED** (165/165 real pass) | Parser disambiguation (step 5.36), last_insert_id (step 5.35), context propagation (step 5.31) |
-| `t/90ensure_class_loaded.t` | **FIXED** (28/28 real pass) | @INC CODE refs (step 5.24), relative filenames (step 5.32b) |
-| `t/40resultsetmanager.t` | **FIXED** (5/5 real pass) | MODIFY_CODE_ATTRIBUTES (step 5.22) |
-
-### Root Cause Cluster 1: SQL `ORDER__BY` counter offset — 16 tests
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/sqlmaker/limit_dialects/fetch_first.t` | 8 | SQL generates `ORDER__BY__000` but expected `ORDER__BY__001` |
-| `t/sqlmaker/limit_dialects/toplimit.t` | 8 | Same counter offset bug |
-
-**Root cause**: Global counter/state initialization off-by-one in SQLMaker limit dialect rewriting. Likely a single variable init fix.
-
-### Root Cause Cluster 2: Multi-create FK insertion ordering — 9 tests
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/multi_create/in_memory.t` | 8 | `NOT NULL constraint failed: cd.artist` — FK not set before child INSERT |
-| `t/multi_create/standard.t` | 1 | Same root cause |
-
-**Root cause**: When creating parent + child in one `create()` call, the parent's auto-generated ID isn't being propagated to the child row before INSERT. May relate to `last_insert_id` code path in multi-create or `new_related`/`insert` ordering.
-
-### Root Cause Cluster 3: SQL condition parenthesization — 10 tests
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/search/stack_cond.t` | 7 | Extra wrapping parens: `WHERE ( ( ( ... ) ) )` instead of flat `WHERE ...` |
-| `t/sqlmaker/dbihacks_internals.t` | 3 | Condition collapse produces HASH where ARRAY expected (2870/2877 pass) |
-
-**Root cause**: SQL::Abstract or DBIC condition stacking adds extra parenthesization layers.
-
-### Root Cause Cluster 4: Transaction/scope guard — 6 real tests + DESTROY
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/storage/txn_scope_guard.t` | 6 real + 2 TODO + ~36 GC | "Correct transaction depth", "rollback successful without exception", missing expected warnings |
-
-**Root cause**: TxnScopeGuard::DESTROY never fires (no DESTROY support). Transaction depth tracking, rollback behavior, and scope guard warnings all depend on deterministic destruction.
-
-### Root Cause Cluster 5: Custom opaque relationship — 2 tests
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/relationship/custom_opaque.t` | 2 | Returns undef / empty SQL for custom relationships |
-
-**Root cause**: Opaque custom relationship conditions are not being resolved into SQL.
-
-### Root Cause Cluster 6: DBI error path + misc — 2 tests
-
-| Test | Failures | Details |
-|------|----------|---------|
-| `t/storage/base.t` | 1 | Expected `prepare_cached failed` but got `prepare() failed` |
-| `t/60core.t` | 1 (test 38) | `-and` array condition in `find()` returns row instead of undef |
-
-### Other known failures
-
-| Test | Failures | Root cause | Status |
-|------|----------|------------|--------|
-| `t/60core.t` tests 82-93 | 12 | "Unreachable cached statement" — DESTROY-related (reduced from 45 by step 5.56) | Systemic |
-| `t/85utf8.t` | 14 | `utf8::is_utf8` flag — JVM strings are natively Unicode | Systemic |
-| `t/100populate.t` | 12 | Tests 37-42/53 DESTROY-related; test 59 JDBC batch execution | Partially systemic |
-| `t/88result_set_column.t` | 1 | DBIx::Class's own TODO test | Not a PerlOnJava bug |
-| `t/53lean_startup.t` | 1 | Module load footprint mismatch | Won't fix |
+`t/storage/txn.t` — **FIXED** (90/90 pass) via Fix 10m (eq/ne fallback semantics).
 
 ---
 
-## Must Fix
-
-### Ternary-as-lvalue with assignment branches — FIXED (step 5.34)
-
-Expressions like `($x) ? @$a = () : $b = []` triggered "Modification of a read-only value attempted" at runtime. Perl 5 parses this as `($x ? (@$a = ()) : $b) = []`, where the true branch is a LIST assignment expression.
-
-**Root cause**: LIST assignments in scalar context return cached `RuntimeScalarReadOnly` values (e.g., the element count 0). When the ternary stored this in a spill slot and the outer assignment tried to `.set()` on it, `RuntimeBaseProxy.set()` called `vivify()` → `RuntimeScalarReadOnly.vivify()` threw the error.
-
-**Fix**: In `EmitVariable.handleAssignOperator()`, detect when the LHS ternary has LIST assignment branches (via `LValueVisitor.getContext()`). For those branches, emit the inner assignment in void context (side effects only) and use the outer RHS as the result. Non-LIST-assignment branches (including scalar assignments like `$c = 100` which return the writable target variable) still get the outer assignment applied normally as lvalue targets.
-
-**Key distinction**: Scalar assignments (`$a = 1`) return the variable itself (writable lvalue). LIST assignments (`@a = ()`) return the element count (read-only cached value). Only LIST assignment branches need special handling.
-
-**Impact**: Enables the Class::Accessor::Grouped pattern: `wantarray ? @rv = eval $src : $rv[0] = eval $src`
-
-### File::stat VerifyError — FIXED (resolved by prior commits)
-- `use File::stat` no longer triggers VerifyError
-- Confirmed working with JVM backend (no interpreter fallback)
-- Both the `Class::Struct + use overload` combination and `eval { &{"Fcntl::S_IF..."} }` patterns now compile correctly
-
-### JDBC error message format mismatch — FIXED (step 5.25)
-
-**Fix**: Added `normalizeErrorMessage()` in `DBI.java` that extracts the parenthesized native message from JDBC-wrapped errors like `[SQLITE_MISMATCH] Data type mismatch (datatype mismatch)` → `datatype mismatch`.
-
-### SQL expression formatting differences (t/100populate.t tests 37-42) — FIXED
-
-**Fix**: Transaction depth cleanup after failed `_insert_bulk`. The issue was that `TxnScopeGuard::DESTROY` never fires in PerlOnJava (no DESTROY support), so after `_insert_bulk` failed, `transaction_depth` stayed at 1 permanently. Fixed by wrapping the guard-protected code in `eval { ... } or do { ... }` that manually rolls back on error.
-
-### bind parameter attribute handling (t/100populate.t tests 58-59) — PARTIALLY FIXED
-
-**Test 58 (FIXED)**: The `\Q` delimiter escaping bug caused `qr/\Qfoo\/bar/` to produce `(?^:foo\\\/bar)` instead of `(?^:foo\/bar)`. Fixed in `StringParser.java` by resolving delimiter escaping before `\Q` processing.
-
-**Test 59 (STILL FAILING)**: `literal+bind with semantically identical attrs works after normalization`. The `execute_for_fetch()` aborts with "statement is not executing" from the SQLite JDBC driver. This happens when DBIx::Class's `_insert_bulk` uses `bind_param` with type attributes, then calls `execute_for_fetch` which calls `execute(@$tuple)` for each row. The JDBC PreparedStatement may need to be re-prepared or have its state reset between executions in the batch context.
-
-## Summary
-
-| Phase | Complexity | Description | Status |
-|-------|-----------|-------------|--------|
-| 1 | Medium | Unblock Makefile.PL (4 engine fixes) | DONE |
-| 2 | Medium | Install ~11 missing pure-Perl deps via jcpan | DONE |
-| 3 | Simple | Fix DBI version detection | DONE |
-| 4 | Medium | Create DBD::SQLite JDBC compatibility shim | DONE |
-| 4.5 | Medium | Fix CORE::GLOBAL::caller override bug | DONE |
-| 4.6 | Medium | Fix stash aliasing glob vivification | DONE |
-| 4.7 | Simple | Fix mixed-context ternary lvalue assignment | DONE |
-| 4.8 | Simple | Fix `cp` on read-only installed files | DONE |
-| 5 | Complex | Fix runtime issues iteratively | **CURRENT** |
-
-## Progress Tracking
-
-### Current Status: Phase 5 — fixing runtime issues iteratively
-
-### Completed Phases
-- [x] Phase 1: Unblock Makefile.PL (2025-03-31)
-  - Blocker 1: Added strict::bits to Strict.java
-  - Blocker 2: Fixed UNIVERSAL::can AUTOLOAD filter in Universal.java
-  - Blocker 3: Fixed goto &sub wantarray propagation + eval{} @_ sharing
-  - Blocker 4: Fixed +{} hash constructor parsing in IdentifierParser.java
-- [x] Phase 2: Install missing pure-Perl dependencies (2025-03-31)
-  - All 11 modules installed via `./jcpan -fi`
-- [x] Phase 3: Fix DBI version detection (2025-03-31)
-  - Added `our $VERSION = '1.643'` to DBI.pm
-- [x] Phase 4: Create DBD::SQLite JDBC shim (2025-03-31)
-  - Created DBD/SQLite.pm DSN translation shim
-  - Added sqlite-jdbc 3.49.1.0 dependency
-  - Wrapped getMetaData()/getParameterMetaData() in DBI.java
-- [x] Phase 4.5: Fix CORE::GLOBAL::caller bug (2025-03-31)
-  - Fixed whitespace-sensitive token insertion in ParsePrimary.java
-  - Test::Exception + Sub::Uplevel now work correctly
-- [x] Phase 4.6: Fix stash aliasing glob vivification (2025-03-31)
-  - Added `resolveStashHashRedirect()` to GlobalVariable.java
-  - Applied redirect in `getGlobalIO()` and EmitVariable.java (JVM backend)
-  - Unblocks Package::Stash::PP and namespace::clean
-- [x] Phase 4.7: Fix mixed-context ternary lvalue assignment (2025-03-31)
-  - Added `assignmentTypeOf()` helper matching Perl 5's `S_assignment_type()` — assignment expressions classified as SCALAR in ternary branches
-  - Unblocks Class::Accessor::Grouped (compile-time)
-  - Known runtime limitation: ternary-as-lvalue with assignment branches fails for non-constant conditions (e.g., `wantarray`)
-- [x] Phase 4.8: Fix `cp` on read-only installed files (2025-03-31)
-  - Changed `_shell_cp` in ExtUtils::MakeMaker.pm to `rm -f` then `cp`
-  - Fixes reinstall of modules with read-only (0444) .pod/.pm files
-- [x] Phase 5 steps 5.1–5.8 (2026-03-31 / 2026-04-01)
-  - 5.1: Fixed `@${$v}` string interpolation in StringSegmentParser.java
-  - 5.2: Added `B::SV::REFCNT` returning 0 (JVM has no reference counting)
-  - 5.3: Added DBI `FETCH`/`STORE` wrappers for tied-hash compatibility
-  - 5.4: Created `DBI::Const::GetInfoReturn` stub module
-  - 5.5: Fixed list assignment autovivification in RuntimeList.java
-  - 5.6: Added DBI `execute_for_fetch` and `bind_param` methods
-  - 5.7: Fixed `&func` (no parens) to share caller's `@_` by alias — unblocks Hash::Merge
-  - 5.8: Fixed DBI `execute()` to return row count per DBI spec — unblocks UPDATE operations
-- [x] Phase 5 steps 5.9–5.12 (2026-04-01)
-  - 5.9: Set `$dbh->{Driver}` with `DBI::dr` object — DBIC now detects SQLite driver
-  - 5.10: Fixed `get_info()` to accept numeric DBI constants and return scalar
-  - 5.11: Added DBI SQL type constants (`SQL_BIGINT`, `SQL_INTEGER`, etc.)
-  - 5.12: Fixed `bind_columns` + `fetch` to update bound scalar references — unblocks ALL join/prefetch queries
-  - Result: 51/65 active tests now pass all real tests (was ~15/65 before)
-- [x] Phase 5 steps 5.13–5.16 (2026-04-01)
-  - 5.13: Implemented `column_info()` via SQLite `PRAGMA table_info()` — preserves original type case (JDBC uppercases), returns pre-fetched rows; also blessed metadata sth into `DBI` class with proper attributes
-  - 5.14: Added `AutoCommit` state tracking — `execute()` now detects literal BEGIN/COMMIT/ROLLBACK SQL and updates `$dbh->{AutoCommit}` accordingly
-  - 5.15: Intercepted literal transaction SQL via JDBC API — `conn.setAutoCommit(false)`, `conn.commit()`, `conn.rollback()` instead of executing SQL directly; fixes SQLite JDBC autocommit conflicts
-  - 5.16: Fixed `prepare_cached` to use per-dbh `CachedKids` cache instead of global hash — prevents cross-connection cache pollution when multiple `:memory:` SQLite connections share the same DSN name; added `if_active` parameter handling
-  - Also: `execute()` now handles metadata sth (no PreparedStatement) gracefully; `fetchrow_hashref` supports PRAGMA pre-fetched rows
-  - Result: 60/68 active tests now pass all real tests (was 51/65 = 78%, now 88%)
-- [x] Phase 5 steps 5.17–5.19 (2026-04-01, earlier session)
-  - 5.17: Fixed `$^S` to correctly report 1 inside `$SIG{__DIE__}` when `require` fails in `eval {}` — temporarily restores `evalDepth` in `catchEval()` before calling handler. Unblocks t/00describe_environment.t
-  - 5.18: Fixed `__LINE__` inside `@{[expr]}` string interpolation — added `baseLineNumber` to Parser for string sub-parsers, computed from outer source position. Fixes t/106dbic_carp.t tests 2-3
-  - 5.19: Fixed `execute_for_fetch` to match real DBI 1.647 behavior — tracks error count, stores `[$sth->err, $sth->errstr, $sth->state]` on failure, dies with error count if `RaiseError` is on. Also fixed `execute()` to set err/errstr/state on both sth and dbh. Fixes t/100populate.t test 2
-  - Result: 62/68 active tests now pass all real tests (91%, was 88%)
-- [x] Phase 5 steps 5.20–5.24 (2026-04-01, current session)
-  - 5.20: Fixed `-w` flag overriding `no warnings 'redefine'` pragma — changed condition in SubroutineParser.java to check `isWarningDisabled("redefine")` first
-  - 5.21: Fixed `InterpreterFallbackException` not caught at top-level `compileToExecutable()` — ASM's Frame.merge() crashes on methods with 600+ jumps to single label (Sub::Quote-generated subs); added explicit catch in PerlLanguageProvider.java. Fixes t/88result_set_column.t (46/47 pass)
-  - 5.22: Implemented `MODIFY_CODE_ATTRIBUTES` call for subroutine attributes — when `sub foo : Attr { }` is parsed, now calls `MODIFY_CODE_ATTRIBUTES($package, \&code, @attrs)` at compile time. Fixes t/40resultsetmanager.t (5/5 pass)
-  - 5.23: Fixed ROLLBACK TO SAVEPOINT being intercepted as full ROLLBACK — `sqlUpper.startsWith("ROLLBACK")` now excludes SAVEPOINT-related statements. Fixes t/752sqlite.t (171/172 pass)
-  - 5.24: Added CODE reference returns from @INC hooks — PAR-style module loading where hook returns a line-reader sub that sets `$_` per line. Fixes t/90ensure_class_loaded.t tests 14,17 (27/28 pass)
-  - Result: 68/314 fully passing, 93.7% individual test pass rate (5579/5953 OK)
-- [x] Phase 5 steps 5.25–5.28 (2026-04-01)
-  - 5.25: Normalized JDBC error messages — `normalizeErrorMessage()` extracts parenthesized native message from JDBC-wrapped errors. Fixes t/100populate.t test 52-53
-  - 5.26: Fixed regex `\Q` delimiter escaping — in `StringParser.java`, delimiter escaping (`\/` → `/`) now resolved before `\Q` processing. Fixes t/100populate.t test 58
-  - 5.27: Fixed `bind_param()` to defer `stmt.setObject()` to `execute()` — removed immediate JDBC call, params stored in `bound_params` hash only. Also stores bind attributes in `bound_attrs` hash
-  - 5.28: Fixed `execute()` to apply stored `bound_params` when no inline params provided — uses `RuntimeScalarType.isReference()` check (not `== REFERENCE` which misses `HASHREFERENCE`)
-  - Also: Transaction depth cleanup in `_insert_bulk` (patched DBIx::Class::Storage::DBI.pm) — wraps guard-protected code in eval/or-do that manually rolls back on error since TxnScopeGuard::DESTROY doesn't fire
-  - Result: t/100populate.t now passes 59/60 real tests (was ~36/65; tests 37-42, 52-53, 58 newly passing)
-- [x] Phase 5 steps 5.29–5.30 (2026-04-01)
-  - 5.29: Added STORABLE_freeze/thaw hook support — `dclone()` uses direct deep-copy (`deepClone()`) instead of YAML round-trip, calling hooks on blessed objects; `freeze`/`nfreeze` YAML serialization checks for `STORABLE_freeze` and stores frozen data with `!!perl/freeze:` tag; `thaw`/`nthaw` handles `!!perl/freeze:` by creating new blessed object and calling `STORABLE_thaw`. Fixes entire freeze/thaw chain for DBIx::Class objects (ResultSource → ResultSourceHandle → Schema)
-  - 5.30: Added retry logic for stale PreparedStatements after ROLLBACK — if `setObject`/`execute` throws "not executing", re-prepares via `conn.prepareStatement()` and retries once
-  - Result: t/84serialize.t now passes 115/115 real tests (was 0); t/100populate.t at 52/60 (tests 37-42 regressed due to lost _insert_bulk patch in rebuilt cpan build dir)
-- [x] Phase 5 step 5.31 (2026-04-01)
-  - 5.31: Fixed interpreter context propagation for subroutine bodies — when anonymous/named subs are compiled by the bytecode interpreter (due to JVM "Method too large" fallback), the calling context was hardcoded as LIST. Set `subCompiler.currentCallContext = RUNTIME` in `BytecodeCompiler` for both `visitAnonymousSubroutine()` and `visitNamedSubroutine()`. Added RUNTIME→register 2 resolution in 22+ opcode handlers across `BytecodeInterpreter`, `OpcodeHandlerExtended`, `InlineOpcodeHandler`, `MiscOpcodeHandler`, `SlowOpcodeHandler`. All `op/wantarray.t` tests pass (28/28). Fixes t/101populate_rs.t test 4.
-- [x] Phase 5 step 5.32 (2026-04-01)
-  - 5.32a: Fixed B::CV introspection — `B::svref_2object(\&sub)->STASH->NAME` and `GV->NAME` now correctly report the defining package and sub name using `Sub::Util::subname` introspection, instead of always returning "main"/"__ANON__". `CvFLAGS` now only sets `CVf_ANON` for anonymous subs. Fixes DBIx::Class t/85utf8.t tests 7-8 (warnings_like tests for incorrect UTF8Columns loading order detection, which depend on `B::svref_2object($coderef)->STASH->NAME` in `Componentised.pm`).
-  - 5.32b: Preserved @INC entry relativity in require/use filenames — `ModuleOperators.java` now uses `dirName + "/" + fileName` for display/error-message filenames instead of the absolute resolved path. File I/O still uses the absolute `fullName` internally. This makes error messages and `%INC` match Perl 5 behavior (e.g. `t/lib/Foo.pm` instead of `/abs/path/t/lib/Foo.pm`). Fixes DBIx::Class t/90ensure_class_loaded.t test 28.
-- [x] Phase 5 step 5.33 (2026-04-01)
-  - 5.33a: Fixed `Long.MIN_VALUE` overflow in `initializeWithLong()` — `Math.abs(Long.MIN_VALUE)` overflows in Java (returns `Long.MIN_VALUE`, a negative number), causing the value to be incorrectly stored as `double` instead of `String`. Changed to direct range comparison `(lv <= 2^53 && lv >= -2^53)` to avoid the overflow. Fixes t/752sqlite.t test 170 (64-bit signed int boundary value).
-  - 5.33b: Full DBIx::Class test suite scan — ran all 87 test files. Results: 18 clean passes, 44 GC-only failures (known JVM limitation), 22 skipped (no DB/fork/threads), and only 2 files with real non-GC failures remaining: t/85utf8.t (utf8 flag semantics, systemic JVM issue) and t/88result_set_column.t (DBIx::Class TODO test, not a PerlOnJava bug).
-- [x] Phase 5 step 5.34 (2026-04-01)
-  - 5.34a: Fixed ternary-as-lvalue with LIST assignment branches — In `EmitVariable.handleAssignOperator()`, detect when the LHS ternary has LIST assignment branches (via `LValueVisitor.getContext()`). For LIST assignment branches, emit in void context (side effects only) and use the outer RHS as result. Scalar assignment branches (which return writable lvalues) use the normal code path. Enables `wantarray ? @rv = eval $src : $rv[0] = eval $src` (Class::Accessor::Grouped pattern).
-  - 5.34b: Confirmed File::stat VerifyError is already fixed — `use File::stat` works natively with JVM backend (no interpreter fallback). Both `Class::Struct + use overload` and `eval { &{"Fcntl::S_IF..."} }` patterns compile correctly.
-- [x] Phase 5 steps 5.35–5.37 (2026-04-01)
-  - 5.35: Fixed `last_insert_id()` — replaced statement-level `getGeneratedKeys()` with connection-level SQL queries (`SELECT last_insert_rowid()` for SQLite, `LASTVAL()` for PostgreSQL, etc.). The old approach broke when any `prepare()` call between INSERT and `last_insert_id()` overwrote the stored statement handle. Fixes t/79aliasing.t, t/87ordered.t, t/101populate_rs.t auto-increment detection.
-  - 5.36: Fixed `%{{ expr }}` parser disambiguation — added `insideDereference` flag to Parser.java. In `Variable.parseBracedVariable()`, sets flag before calling `ParseBlock.parseBlock()`. In `StatementResolver.isHashLiteral()`, when inside dereference context with no block indicators, defaults to hash (true) instead of block (false). Fixes `%{{ map { ... } @list }}` (RowParser.pm `__unique_numlist`) and `values %{{ func() }}` (Ordered.pm) patterns. Unblocks t/79aliasing.t, t/87ordered.t, t/101populate_rs.t.
-  - 5.37: Fixed `//=`, `||=`, `&&=` short-circuit in bytecode interpreter — the bytecode compiler (`BytecodeCompiler.handleCompoundAssignment()`) was eagerly evaluating the RHS before the `DEFINED_OR_ASSIGN`/`LOGICAL_AND_ASSIGN`/`LOGICAL_OR_ASSIGN` opcode checked the condition. Side effects like `$result_pos++` always executed, breaking DBIx::Class's eval-generated row collapser code. Added `handleShortCircuitAssignment()` that compiles LHS first, emits `GOTO_IF_TRUE`/`GOTO_IF_FALSE` to conditionally skip RHS evaluation, and only assigns via `SET_SCALAR` when needed. Fixes prefetch result collapsing in t/83cache.t test 7 and t/90join_torture.t test 4.
-
-### Test Suite Summary (314 files, updated 2026-04-02)
-
-| Category | Count | Details |
-|----------|-------|---------|
-| Fully passing | 72 | 24 substantive + 48 DB-specific skips |
-| GC-only failures | 147 | All real tests pass; only appended GC leak checks fail |
-| Real TAP failures | 40 | 9 files with real logic bugs (38 tests); rest are DESTROY/TODO/GC |
-| CDBI errors | 41 | Need Class::DBI — expected |
-| Other errors | 13 | Missing DateTime modules, syntax errors |
-| Incomplete | 1 | t/inflate/file_column.t |
-
-**Individual test pass rate: 96.7%** (8,923/9,231)
-
-### Dependency Module Test Results (updated 2026-04-02)
-
-| Module | Pass Rate | Tests OK/Total | Key Failures |
-|--------|-----------|----------------|--------------|
-| Class-C3-Componentised | **100%** | 46/46 | None |
-| Context-Preserve | **100%** | 14/14 | None |
-| namespace-clean | **99.4%** | 2086/2099 | Stash symbol deletion edge cases |
-| Hash-Merge | **99.4%** | 845/850 | GC/weaken |
-| SQL-Abstract-Classic | **100%** | 1311/1311 | None |
-| Class-Accessor-Grouped | **97.8%** | 543/555 | GC/weaken |
-| Moo | **97.3%** | 816/839 | weaken, DEMOLISH, `no Moo` cleanup |
-| MRO-Compat | **100%** | 26/26 | None |
-| Sub-Quote | **98.7%** | 2720/2755 | GC/weaken (28), hints propagation (5), syntax error line numbering (1), use integer (1) |
-| Config-Any | ~80-90% | 58/113 (runner artifact) | Passes individually; parallel runner issue |
-
-**Aggregate: 99.3%** (8,383/8,435 across all dependency modules)
-
-### Implementation Plan (Phase 5 continued)
-
-#### Tier 1 — Quick Wins (18 DBIC tests) ✅ COMPLETED
-
-| Step | What | Tests Fixed | Status |
-|------|------|------------|--------|
-| 5.38 | SQL `ORDER__BY` counter offset | 16 | ✅ Done |
-| 5.39 | `prepare_cached` error message | 1 | ✅ Done |
-| 5.40 | `-and` array condition in `find()` | 1 | ✅ Done |
-
-#### Tier 2 — Medium Effort (21 DBIC tests) ✅ COMPLETED
-
-| Step | What | Tests Fixed | Status |
-|------|------|------------|--------|
-| 5.41 | Multi-create FK / DBI HandleError | 9 | ✅ Done — root cause was missing HandleError support |
-| 5.42 | SQL condition / Storable sort order | 10 | ✅ Done — binary Storable serializer matching Perl 5 |
-| 5.43 | Custom opaque relationship SQL | 2 | ✅ Done — fixed PerlOnJava autovivification bug |
-
-#### Tier 3+ — Dependency Module Fixes
-
-| Step | What | Tests Fixed | Status |
-|------|------|------------|--------|
-| 5.44 | Nested ref-of-ref detection (`ref()` chain) | 4 (SQL-Abstract) | Done |
-| 5.45 | `caller()` hints: `$^H` and `%^H` return values | 53 (Sub-Quote) | Done |
-| 5.46 | `mro::get_isarev` dynamic scan + `pkg_gen` auto-increment | 4 (MRO-Compat) | Done |
-| 5.47 | BytecodeCompiler sub-compiler pragma inheritance | 2 (Sub-Quote) | Done |
-| 5.48 | `warn()` returns 1 (was undef) | 1 (SQL-Abstract IS NULL) | Done |
-| 5.49 | Overload fallback semantics and autogeneration | 17 (SQL-Abstract overload) | Done |
-| 5.50 | B.pm SV flags rewrite (IOK/NOK/POK) | quotify.t countable | Done |
-| 5.51 | Large integer literals stored as DOUBLE not STRING | 6 (quotify.t) | Done |
-| 5.52 | `caller()` in eval STRING with `#line` directives | Sub-Quote | Done |
-| 5.53 | Interpreter LIST_SLICE implementation | 4 (Sub-Quote) | Done |
-| 5.54 | LIST_SLICE opcode collision + scalar context | 2 (op/pack.t) | Done |
-| 5.55 | Storable nfreeze/thaw STORABLE_freeze/thaw hooks | 115 (t/84serialize.t) | Done |
-
-#### Systemic — Not planned for short-term
-
-- GC / weaken / isweak (~44 files with GC-only noise)
-- UTF8 flag semantics (8 tests in t/85utf8.t — JVM strings are natively Unicode)
-
-#### Phase 6 — DBI Statement Handle Lifecycle ✅ COMPLETED
-
-**Root cause**: Three compounding bugs in PerlOnJava DBI's `Active` flag management:
-1. `prepare()` copies ALL dbh attributes to sth including `Active=true` (DBI.java line 193)
-2. `execute()` never sets `Active` based on whether there are results
-3. Fetch methods never clear `Active` when result set is exhausted
-
-In real Perl DBI: sth starts with Active=false, becomes true on execute with results,
-becomes false when all rows are fetched or finish() is called.
-
-| Step | What | Impact | Status |
-|------|------|--------|--------|
-| 5.56 | Fix sth Active flag lifecycle: false after prepare, true after execute with results, false on fetch exhaustion. Use mutable RuntimeScalar (not read-only scalarFalse). Close previous JDBC ResultSet on re-execute. | t/60core.t: 45→12 cached stmt failures | ✅ Done |
-
-#### Phase 7 — Transaction Scope Guard Cleanup (targets 12 t/100populate.t tests)
-
-**Root cause**: `TxnScopeGuard::DESTROY` never fires → no ROLLBACK on exception →
-`transaction_depth` stays elevated permanently.
-
-**Approach**: Cannot fix via general DESTROY (bless happens in constructor, wrong DVM scope).
-Best option is patching `_insert_bulk` and other callers to use explicit try/catch rollback
-instead of relying on DESTROY.
-
-| Step | What | Impact | Status |
-|------|------|--------|--------|
-| 5.58 | Patch `_insert_bulk` with explicit try/catch rollback | 12 (t/100populate.t) | |
-| 5.59 | Audit other txn_scope_guard callers for similar issues | Future test coverage | |
-
-#### Phase 8 — Remaining Dependency Fixes
-
-| Step | What | Impact | Status |
-|------|------|--------|--------|
-| 5.60 | Sub-Quote hints.t tests 4-5 (${^WARNING_BITS} round-trip) | 2 (Sub-Quote) | |
-| 5.61 | `overload::constant` support | 2 (Sub-Quote hints.t 9,14) | |
-
-### Progress Tracking
-
-#### Current Status: Step 5.58 complete (pack/unpack 32-bit consistency)
-
-#### Key Test Results (2026-04-02)
-
-| Test File | Real Failures | Notes |
-|-----------|---------------|-------|
-| t/sqlmaker/dbihacks_internals.t | **0** | Was 3, fixed by Storable binary serializer |
-| t/search/stack_cond.t | **0** | Was 7-12, fixed by Storable sort order |
-| t/multi_create/standard.t | **0** | Was 1, fixed by DBI HandleError |
-| t/multi_create/in_memory.t | **0** | Was 8, fixed by DBI HandleError |
-| t/storage/base.t | **0** | Was 1 |
-| t/search/related_strip_prefetch.t | **0** | |
-| t/relationship/custom_opaque.t | **0** | Was 2, fixed by autovivification bug fix |
-| t/60core.t | 17 (12 cached + 5 GC) | Reduced from 50 by step 5.56 (Active flag lifecycle fix). Remaining 12 need DESTROY. |
-
-#### Completed Work
-
-**Step 5.58 (2026-04-02) — Pack/unpack 32-bit consistency:**
-- `j`/`J` format now uses 4 bytes (matching `ivsize=4`) instead of hardcoded 8 bytes
-- `q`/`Q` format now throws "Invalid type" (matching 32-bit Perl without `use64bitint`)
-- op/pack.t: +5 passes (14665 ok, was 14660); op/64bitint.t: fully skipped
-- Files: `NumericPackHandler.java`, `NumericFormatHandler.java`, `Unpack.java`, `PackParser.java`
-
-**Step 5.41-5.42 (2026-04-01):**
-- Binary Storable serializer matching Perl 5 sort order (`Storable.java`)
-- DBI HandleError support (`DBI.java`)
-- DBI error message format fix (`DBI.java`, `DBI.pm`)
-- Commit: `e662f76ed`
-
-**Step 5.43 (2026-04-02):**
-- Fixed PerlOnJava autovivification bug: multi-element list assignment to hash elements
-  from undef scalar now works correctly (`AutovivificationHash.java`, `AutovivificationArray.java`)
-- Root cause: `($h->{a}, $h->{b}) = (v1, v2)` when `$h` is undef created two separate
-  hashes (one per `hashDeref()` call). Fix caches the autovivification hash in the scalar's
-  value field so subsequent hashDeref() calls reuse the same hash.
-
-**Step 5.44 (2026-04-02):**
-- Fixed `ref()` for nested references: `ref(\\$x)` returned "SCALAR" instead of "REF"
-- Root cause: `REFERENCE` type missing from inner switch in `ReferenceOperators.ref()` —
-  when a REFERENCE pointed to another REFERENCE, it fell to `default -> "SCALAR"`
-- Also fixed parallel bug in `builtin::reftype` in `Builtin.java`
-- Files changed: `ReferenceOperators.java`, `Builtin.java`
-- SQL-Abstract-Classic `t/09refkind.t` now 13/13 (was 9/13)
-- Remaining 18 SQL-Abstract failures: 17 in `t/23_is_X_value.t` (overload fallback
-  detection — `use overload bool` without `fallback` should allow auto-stringification
-  in Perl 5 ≥ 5.17, but PerlOnJava's overload doesn't support this derivation),
-  1 in `t/02where.t` (`{like => undef}` generates `requestor NULL` instead of `IS NULL`)
-
-**Step 5.45 (2026-04-02):**
-- Implemented `caller()[8]` ($^H hints) and `caller()[10]` (%^H hint hash) return values
-- Created parallel infrastructure to existing `callerBitsStack`: `callSiteHints`,
-  `callerHintsStack`, `callSiteHintHash`, `callerHintHashStack` in `WarningBitsRegistry.java`
-- Wired emission in `EmitCompilerFlag.java` and `BytecodeCompiler.java`
-- Updated `RuntimeCode.java` to read hints at caller frames and push/pop at all 3 apply() sites
-- Updated `PerlLanguageProvider.java` for BEGIN block hints propagation
-- Sub-Quote improved from 137/178 to 188/237 (different test count due to hints.t newly countable)
-
-**Step 5.46 (2026-04-02):**
-- Fixed `mro::get_isarev` to dynamically scan all @ISA arrays instead of hardcoded class names
-- Implemented `GlobalVariable.getAllIsaArrays()` (was empty stub)
-- Made `Mro.incrementPackageGeneration()` public; called from `RuntimeGlob.java` on CODE assignment
-- Added lazy @ISA change detection in `get_pkg_gen()` via `pkgGenIsaState` map
-- Files changed: `GlobalVariable.java`, `Mro.java`, `RuntimeGlob.java`
-- MRO-Compat now 26/26 (was 22/26) — 100%
-
-**Step 5.47 (2026-04-02):**
-- Fixed BytecodeCompiler sub-compiler not inheriting pragma flags (strict/warnings/features)
-- Root cause: Sub::Quote generates `sub { BEGIN { $^H = 1538; } ... }` in eval STRING;
-  the sub-compiler created for the sub body didn't inherit the parent's pragma state
-- Added `getEffectiveSymbolTable()` helper with fallback to `this.symbolTable` when
-  `emitterContext` is null. Updated 5 pragma check methods to use it.
-- Added `inheritPragmaFlags()` method called in both named and anonymous sub compilation
-- Sub-Quote hints.t improved from 11/18 to 13/18; overall Sub-Quote: 190/237 (was 188/237)
-
-**Step 5.48 (2026-04-02):**
-- Fixed `warn()` return value — Perl 5 `warn()` always returns 1; PerlOnJava returned undef
-- Root cause: `WarnDie.java` line 199 returned `new RuntimeScalar()` (undef) instead of `new RuntimeScalar(1)`
-- Impact: SQL-Abstract-Classic `{like => undef}` generated `requestor NULL` instead of `requestor IS NULL`
-  because `$self->belch(...) && 'is'` short-circuited on falsy return from warn/belch
-- Files changed: `WarnDie.java`
-
-**Step 5.49 (2026-04-02):**
-- Fixed overload fallback semantics and autogeneration
-- Bug A: `tryOverloadFallback()` returned null when no `()` glob existed, blocking autogeneration.
-  Perl 5 says: no fallback specified → allow autogeneration
-- Bug B: `prepare()` was CALLING the `()` method (which is `\&overload::nil`, returns undef)
-  instead of READING the SCALAR slot `${"Class::()"}` which holds the actual fallback value
-- Rewrote `OverloadContext.prepare()` to walk hierarchy and read SCALAR slot
-- Rewrote `tryOverloadFallback()` with correct 3-state semantics (undef/0/1)
-- Added `tryTwoArgumentOverload()` with autogeneration varargs for compound ops
-- Updated all 10 compound assignment methods in `MathOperators.java` to pass base operator
-- Files changed: `OverloadContext.java`, `MathOperators.java`
-
-**Step 5.50 (2026-04-02):**
-- Rewrote B.pm SV flags for proper integer/float/string distinction
-- Updated SV flag constants to standard Perl 5 values (SVf_IOK=0x100, SVf_NOK=0x200,
-  SVf_POK=0x400, SVp_IOK=0x1000, SVp_NOK=0x2000, SVp_POK=0x4000)
-- Rewrote `FLAGS()` method to use `builtin::created_as_number()` for proper type detection
-- Added export functions for all new constants
-- Files changed: `B.pm`
-
-**Step 5.51 (2026-04-02):**
-- Fixed large integer literals (>= 2^31) stored as STRING instead of DOUBLE
-- In Perl 5, integers that overflow IV are promoted to NV (double), not PV (string)
-- JVM emitter (`EmitLiteral.java`): changed `isLargeInteger` boxed branch from
-  `new RuntimeScalar(String)` to `new RuntimeScalar(double)`
-- Bytecode interpreter (`BytecodeCompiler.java`): changed from `LOAD_STRING` to
-  `LOAD_CONST` with double-valued `RuntimeScalar`
-- Impact: quotify.t goes from 2586/2592 to 2592/2592 (6 large-integer tests fixed)
-- Files changed: `EmitLiteral.java`, `BytecodeCompiler.java`
-
-**Step 5.52 (2026-04-01):**
-- Fixed `caller(0)` returning wrong file/line in eval STRING with `#line` directives
-- Root cause: ExceptionFormatter's frame skip logic assumed first frame is sub's own
-  location (true for JVM), but interpreter frames from CallerStack are already the call site
-- Added `StackTraceResult` record to `ExceptionFormatter` with `firstFrameFromInterpreter` flag
-- `callerWithSub()` now conditionally skips based on frame type
-- Fixed eval STRING's `ErrorMessageUtil` to use `evalCtx.compilerOptions.fileName`
-- Fixed sub naming: `SubroutineParser` uses fully qualified names via `NameNormalizer`
-- Files changed: `ExceptionFormatter.java`, `RuntimeCode.java`, `SubroutineParser.java`
-
-**Step 5.53 (2026-04-01):**
-- Fixed interpreter list slice: `(list)[indices]` was compiled as `[list]->[indices]`
-  (array ref dereference returning one scalar instead of proper list slice)
-- Added `LIST_SLICE` opcode (452) that calls `RuntimeList.getSlice()` for proper
-  multi-element list slice semantics
-- Files changed: `Opcodes.java`, `CompileBinaryOperator.java`,
-  `BytecodeInterpreter.java`, `Disassemble.java`
-- Impact: Sub-Quote goes from 52/56 to 54/56 (tests 48,50,55,56 fixed)
-
-**Step 5.54 (2026-04-01):**
-- Fixed opcode collision: `LIST_SLICE` and `VIVIFY_LVALUE` both assigned opcode 452 in
-  `Opcodes.java`. Changed `LIST_SLICE` to 453.
-- Fixed interpreter LIST_SLICE scalar context conversion: `getSlice()` returns a
-  `RuntimeList` but in SCALAR context it should return the last element (via `.scalar()`),
-  not the count. Added context conversion in `BytecodeInterpreter.java` after
-  `list.getSlice(indices)` call, checking the `context` parameter and calling `.scalar()`
-  for scalar context or returning empty list for void context.
-- Impact: op/pack.t tests 4173 and 4267 fixed — both use `(unpack(...))[0]` syntax which
-  triggers LIST_SLICE in interpreter. The `is($$@)` prototype forces first arg to scalar
-  context, so LIST_SLICE must honor context.
-- Files changed: `Opcodes.java` (452→453), `BytecodeInterpreter.java`
-- Commit: `9e53afe78`
-
-**Step 5.55 (2026-04-01):**
-- Fixed Storable `nfreeze()`/`thaw()` to call `STORABLE_freeze`/`STORABLE_thaw` hooks on
-  blessed objects. Previously only `dclone()` (via `deepClone()`) called these hooks;
-  `serializeBinary()` and `deserializeBinary()` raw-serialized blessed objects without hooks.
-- Added `SX_HOOK` (type 19) to binary format for hook-serialized objects, containing:
-  class name, serialized string from freeze, and any extra refs
-- In `serializeBinary()`: check for STORABLE_freeze method before the existing SX_BLESS
-  code path. If found, call hook and emit SX_HOOK format.
-- In `deserializeBinary()`: new SX_HOOK case creates blessed object, reads serialized
-  string and extra refs, then calls STORABLE_thaw to reconstitute.
-- Impact: t/84serialize.t goes from 1 real failure to 0 real failures (115/115 real pass).
-  The `dclone_method` strategy now correctly chains: `deepClone` → `STORABLE_freeze` →
-  `nfreeze(handle)` → `serializeBinary` with hooks → compact 200-byte frozen data
-  (was 152KB without hooks, causing "Can't bless non-reference value" on thaw).
-- Files changed: `Storable.java`
-
-**Step 5.56 (2026-04-02):**
-- Fixed DBI sth Active flag lifecycle to match real DBI behavior
-- `prepare()` now sets sth Active=false (was inheriting dbh's Active=true via setFromList)
-- `execute()` sets Active=true only for SELECTs with result sets, false for DML
-- `fetchrow_arrayref()` and `fetchrow_hashref()` set Active=false when no more rows
-- `execute()` now closes previous JDBC ResultSet before re-executing (resource leak fix)
-- Used mutable `new RuntimeScalar(false)` instead of read-only `scalarFalse` constant,
-  fixing "Modification of a read-only value attempted" in DBI.pm `finish()`
-- Impact: t/60core.t goes from 50 failures (45 cached stmt + 5 GC) to 17 (12 cached + 5 GC)
-  The 33 fixed failures were: stale Active=true from prepare, DML leaving Active=true,
-  and exhausted cursors still showing Active=true
-- Remaining 12 are SELECTs where cursor was opened but not fully consumed, needing DESTROY
-  to call finish() on scope exit
-- Files changed: `DBI.java`
-- Commit: `3de38f462`
-
-**Step 5.57 (2026-04-02) — Post-rebase regression fixes:**
-- Fixed 6 post-rebase regressions in Perl test suite:
-  - **op/assignwarn.t** (116/116): Created `integerDivideWarn()` and `integerDivideAssignWarn()`
-    for uninitialized value warnings with `/=` under `use integer`. Root cause: bytecode
-    interpreter's `INTEGER_DIV_ASSIGN` called `integerDivide()` which used `getLong()` without
-    checking for undef. Updated both bytecode interpreter (`InlineOpcodeHandler.java`) and JVM
-    backend (`EmitBinaryOperator.java` + `OperatorHandler.java`).
-  - **op/while.t** test 26 (23/26): Added constant condition optimization to `do{}while/until`
-    loops. Three fixes: (1) `resolveConstantSubBoolean` now returns true for reference constants
-    without calling `getBoolean()` (which triggered overloaded `bool` at compile time);
-    (2) `getConstantConditionValue` handles `not`/`!` operators (used for `until` conditions);
-    (3) `emitDoWhile` checks for constant conditions in both JVM (`EmitStatement.java`) and
-    bytecode (`BytecodeCompiler.java`) backends.
-  - **op/vec.t** (74/78, matches master): Fixed unsigned 32-bit vec values by using `getLong()`
-    for both 32-bit and 64-bit widths. Root cause: values > 0x7FFFFFFF clamped to
-    `Integer.MAX_VALUE` via double→int narrowing. Files: `Vec.java`, `RuntimeVecLvalue.java`.
-  - **Strict options propagation**: `propagateStrictOptionsToAllLevels` → `setStrictOptions`
-    in `PerlLanguageProvider.java`.
-  - **caller()[10] hints**: Reverted to scalarUndef in `RuntimeCode.java`.
-  - **%- CAPTURE_ALL**: Returns array refs in `HashSpecialVariable.java`.
-  - **Large integer literals**: `EmitLiteral.java` uses DOUBLE fallback for values exceeding
-    long range.
-- Files changed: `MathOperators.java`, `OperatorHandler.java`, `InlineOpcodeHandler.java`,
-  `EmitBinaryOperator.java`, `ConstantFoldingVisitor.java`, `EmitStatement.java`,
-  `BytecodeCompiler.java`, `Vec.java`, `RuntimeVecLvalue.java`, `PerlLanguageProvider.java`,
-  `RuntimeCode.java`, `HashSpecialVariable.java`, `EmitLiteral.java`
-- Commit: `3cc2ff1e8`
-
-### DBIx::Class Full Test Suite Results (updated 2026-04-02)
-
-**92 test programs (66 active, 26 skipped)**
-
-| Category | Count | Details |
-|----------|-------|---------|
-| Fully passing | 15 | All subtests pass including GC |
-| GC-only failures | 44 | All real tests pass; only GC epilogue fails |
-| Real + GC failures | 4 | Have actual functional failures beyond GC |
-| Skipped | 26 | No DB driver / fork / threads |
-| Parse/skip errors | 3 | t/52leaks.t, t/71mysql.t, t/746sybase.t |
-
-**Programs with real (non-GC) failures:**
-
-| Test | Total Failed | GC Failures | Real Failures | Root Cause |
-|------|-------------|-------------|---------------|------------|
-| t/60core.t | 17 | 5 | 12 | "Unreachable cached statement" — 12 remaining after Active flag fix (step 5.56), need DESTROY |
-| t/100populate.t | 17 | 5 | 12 | Transaction depth (DESTROY), JDBC batch execution |
-| t/85utf8.t | 13 | 5 | 8 | UTF-8 byte handling (JVM strings natively Unicode) |
-
-**Previously miscounted as having real failures (actually all GC-only):**
-
-| Test | Total Failed | Actual Real | Explanation |
-|------|-------------|-------------|-------------|
-| t/40compose_connection.t | 7 | 0 | All 7 are GC (2 planned tests both pass) |
-| t/40resultsetmanager.t | 1 | 0 | GC test beyond plan (5 planned all pass) |
-| t/53lean_startup.t | 10 | 0 | All 10 are GC (6 planned tests all pass) |
-| t/84serialize.t | 5 | 0 | Was 1 real, **fixed by step 5.55** (115/115 pass) |
-| t/752sqlite.t | 30 | 0 | All GC (6 schemas × 5 GC) |
-| t/93single_accessor_object.t | 15 | 0 | All GC (3 schemas × 5 GC) |
-
-**Effective pass rate (excluding GC):** 59 of 63 active test programs pass all real tests (94%)
-
-### Sub-Quote Test Results (updated 2026-04-01)
-
-**5378/5421 (99.2%)**
-
-| Test File | Pass/Total | Key Failures |
-|-----------|-----------|--------------|
-| sub-quote.t | 54/56 | Test 24 (line numbering in %^H PRELUDE), test 27 (weaken) |
-| sub-defer.t | 43/59 | 16 failures all weaken-related |
-| hints.t | 13/18 | Tests 4-5 (${^WARNING_BITS} round-trip), test 8 (%^H in eval BEGIN), tests 9,14 (overload::constant) |
-| leaks.t | 5/9 | 4 failures all weaken-related |
+## Completed Fixes
+
+| Fix | What | Key Insight |
+|-----|------|-------------|
+| 1 | LIFO scope exit + rescue detection | `LinkedHashMap` for declaration order; detect `$self` rescue in DESTROY |
+| 2 | Deferred weak-ref clearing for rescued objects | Sibling ResultSources still need weak back-refs |
+| 3 | DBI `RootClass` attribute for CDBI compat | Re-bless handles into `${RootClass}::db/st` |
+| 4 | `clearAllBlessedWeakRefs` + exit path | END-time sweep for all blessed objects; also run on `exit()` |
+| 5 | Auto-finish cached statements | `prepare_cached` should `finish()` Active reused sth |
+| 6 | `next::method` always uses C3 | Perl 5 always uses C3 regardless of class MRO setting |
+| 7 | Stash delete weak-ref clearing + B::REFCNT fix | `deleteGlob()` triggers clearWeakRefs |
+| 8 | DBI BYTE_STRING + utf8::decode conditional | Match DBD::SQLite byte-string semantics |
+| 9 | DBI UTF-8 round-trip + ClosedIOHandle | Proper UTF-8 encode/decode for JDBC |
+| 10a | Clear weak refs when `localBindingExists` blocks callDestroy | In `flush()` at refCount 0 |
+| 10d | `clearAllBlessedWeakRefs` clears ALL objects | END-time safety net no longer blessed-only |
+| 10e | `createAnonymousReference()` for Storable/deserializers | Anon hashes from dclone no longer look like named `\%h` |
+| 10f | Cascade scope-exit cleanup when weak refs exist | `WeakRefRegistry.weakRefsExist` fast-path flag |
+| 10g | `base.pm`: treat `@ISA` / `$VERSION` as "already loaded" | Fixes `use base 'Pkg'` on eval-created packages. DBIC t/inflate/hri.t now 193/193 |
+| 10h | `flock()` allows multiple shared locks from same JVM | Per-JVM shared-lock registry keyed by canonical path. Fixes `t/cdbi/columns_as_hashes.t` hang |
+| 10i | `fork()` doesn't emit `1..0 # SKIP` after tests have run | Only emits when `Test::Builder->current_test == 0`. Sets $! to numeric EAGAIN + auto-loads Errno. Fixes DBIC txn.t "Bad plan" |
+| 10j | DBI stores mutable scalars for user-writable attrs | `new RuntimeScalar(bool)` instead of `scalarTrue` so `$dbh->{AutoCommit} = 0` works |
+| 10k | Overload `""` self-reference falls back to default ref form | Identity check in `toStringLarge` + ThreadLocal depth guard in `Overload.stringify` |
+| 10l | `@DB::args` preserves invocation args after `shift(@_)` | New `originalArgsStack` (snapshot) in RuntimeCode parallel to live `argsStack` |
+| 10m | `eq`/`ne` throw "no method found" when overload fallback not permitted | Match Perl 5: blessed class with `""` overload but no `(eq`/`(ne`/`(cmp` and no `fallback=>1` → throw. Fixes DBIC t/storage/txn.t test 90 |
+
+---
+
+## What Didn't Work (don't re-try)
+
+| Approach | Why it failed |
+|----------|---------------|
+| `System.gc()` before END assertions | Advisory; no guarantee |
+| `releaseCaptures()` on ALL unblessed containers | Falsely reaches 0 via stash refs; Moo infinite recursion |
+| Decrement refCount for captured blessed refs at inner scope exit | Breaks `destroy_collections.t` test 20 — outer closures legitimately keep objects alive |
+| `git stash` for testing alternatives | **Lost work** — never use |
+| Rescued object `refCount = 1` instead of `-1` | Infinite DESTROY loops (inflated refcounts always trigger rescue) |
+| Cascading cleanup after rescue | Destroys Schema internals (Storage, DBI::db) the rescued Schema needs |
+| Call `clearAllBlessedWeakRefs` earlier | Can't pick "significant" scope exits during test execution |
+| `WEAKLY_TRACKED` for birth-tracked objects | Birth-tracked (refCount≥0) don't enter WEAKLY_TRACKED path in `weaken()` |
+| Decrement refCount for WEAKLY_TRACKED in `setLargeRefCounted` | WEAKLY_TRACKED refcounts inaccurate; false-zero triggers |
+| Hook into `assert_empty_weakregistry` via Perl code | Can't modify CPAN test code per project rules |
+| `deepClearAllWeakRefs` in unblessed callDestroy | Too aggressive — clears refs for objects still alive elsewhere. Failed `destroy_anon_containers.t` test 15 |
+| DESTROY resurrection via refCount=0 reset + incrementRefCountForContainerStore resurrection branch | Worked for simple cases but caused infinite DESTROY loops for the `warn` inside DESTROY pattern: each DESTROY call triggers the __WARN__ handler which pushes to @DB::args → apparent resurrection → refCount > 0 → eventual decrement → DESTROY fires again → loop. The mechanism needs a separate "being destroyed" state distinct from MIN_VALUE to avoid re-entry |
+
+---
+
+## Non-Bug Warnings (informational)
+
+- **`Mismatch of versions '1.1' and '1.45'`** in `t/00describe_environment.t` for `Params::ValidationCompiler::Exception::Named::Required`: Not a PerlOnJava bug. `Exception::Class` deliberately sets `$INC{$subclass.pm} = __FILE__` on every generated subclass.
+- **`Subroutine is_bool redefined at Cpanel::JSON::XS line 2429`**: Triggered when Cpanel::JSON::XS loads through `@ISA` fallback. Cosmetic only.
+
+---
+
+## Fix 10: t/52leaks.t tests 12-18 — IN PROGRESS
+
+### Failure Inventory
+
+| Test | Object | B::REFCNT | Category |
+|------|--------|-----------|----------|
+| 12 | `ARRAY \| basic random_results` | 1 | Unblessed, birth-tracked |
+| 13-15 | `DBICTest::Artist` / `DBICTest::CD` | 2 | Blessed row objects |
+| 16 | `ResultSource::Table` (artist) | 2 | Blessed ResultSource |
+| 17 | `ResultSource::Table` (artist) | 5 | Blessed ResultSource |
+| 18 | `HASH \| basic rerefrozen` | 0 | Unblessed, dclone output |
+
+All 7 fail at line 526 `assert_empty_weakregistry` — weak refs still `defined`.
+
+### Key Timing Constraint
+
+Assertion runs **during test execution** (line 526), not in an END block. `clearAllBlessedWeakRefs()` (END-time sweep) is too late.
+
+### Root Cause: Parent Container Inflation
+
+`$base_collection` (parent anonymous hash) has refCount inflated by JVM temporaries from:
+- `visit_refs()` deep walk (passes hashref as function arg)
+- `populate_weakregistry()` + hash access temporaries
+- `Storable::dclone` internals
+- `$fire_resultsets->()` closures
+
+When scope exits, scalar releases 1 reference but hash stays at refCount > 0. `callDestroy` never fires → `scopeExitCleanupHash` never walks elements → weak refs persist.
+
+**Implication**: Fixes that hook into callDestroy/scopeExit for the parent hash are blocked because it never dies. Our minimal reproducers (`/tmp/dbic_like.pl`, `/tmp/blessed_leak.pl`, `/tmp/circular_leak.pl`) no longer leak, but the real DBIC pattern still does.
+
+### Diagnostic Facts
+
+- **B::REFCNT inflates by +1** vs actual: `B::svref_2object($x)->REFCNT` calls `Internals::SvREFCNT($self->{ref})` which bumps via B::SV's blessed hash slot. Failure inventory values are actual refCount + 1 (or 0 when refCount = MIN_VALUE).
+- **Unicode confirmed irrelevant**: t/52leaks.t uses only ASCII data.
 
 ### Next Steps
-1. Remaining real failures are systemic: DESTROY/TxnScopeGuard (12 t/60core.t + 12 t/100populate.t), UTF-8 flag (8 tests)
-2. Phase 7: TxnScopeGuard fix for t/100populate.t (explicit try/catch rollback)
-3. Phase 8: Remaining dependency module fixes (Sub-Quote hints)
-4. Investigate remaining Sub-Quote failures: test 24 (syntax error line numbering), test 27 (weaken/GC)
-5. Long-term: Investigate ASM Frame.merge() crash (root cause behind InterpreterFallbackException fallback)
-6. Pragmatic: Accept GC-only failures as known JVM limitation; consider `DBIC_SKIP_LEAK_TESTS` env var
 
-### Open Questions
-- `weaken`/`isweak` absence causes GC test noise but no functional impact — Option B (accept) or Option C (skip env var)?
-- RowParser crash: is it safe to ignore since all real tests pass before it fires?
+Both remaining failures (t/52leaks.t tests 12-18 and t/storage/txn_scope_guard.t test 18) hit **fundamental limitations** of PerlOnJava's cooperative refCounting that can't be solved without a major architectural change:
 
-## Related Documents
+#### Why t/52leaks.t tests 12-18 Are Blocked
 
-- `dev/modules/moo_support.md` — Moo support (dependency of DBIx::Class)
-- `dev/modules/xs_fallback.md` — XS fallback mechanism
-- `dev/modules/makemaker_perlonjava.md` — MakeMaker for PerlOnJava
-- `dev/modules/cpan_client.md` — jcpan CPAN client
-- `docs/guides/database-access.md` — JDBC database guide (DBI, SQLite support)
+`$base_collection` (parent anonymous hash) has refCount inflated by JVM temporaries created during `visit_refs`, `populate_weakregistry`, `Storable::dclone`, `$fire_resultsets->()`. When its scope exits, the scalar releases 1 reference but the hash stays at refCount > 0 → `callDestroy` never fires → `scopeExitCleanupHash` never cascades into children → weak refs persist.
+
+Attempted fixes:
+- **Orphan sweep for refCount==0 objects** (Fix 10n attempt #1): No effect because leaked objects have refCount 1-5, not 0.
+- **Deep cascade from parent at scope exit**: Parent itself never triggers scope exit because its refCount > 0.
+- **Reachability-based weak-ref clearing**: Would require true mark-and-sweep from symbol-table roots — a major architectural addition.
+
+The simple reproducers (`/tmp/dbic_like.pl`, `/tmp/blessed_leak.pl`, `/tmp/anon_refcount{2,3,4}.pl`, `/tmp/dbic_like2.pl`) all pass. Only the full DBIC pattern leaks, because real DBIC code paths create JVM temporaries via overloaded comparisons, accessor chains, method resolution, etc.
+
+#### Why t/storage/txn_scope_guard.t test 18 Is Blocked
+
+Test requires DESTROY resurrection semantics: a strong ref to the object escapes DESTROY via `@DB::args` capture in a `$SIG{__WARN__}` handler. When that ref is later released, Perl calls DESTROY a *second* time; DBIC's `detected_reinvoked_destructor` emits `Preventing *MULTIPLE* DESTROY()` warning.
+
+Attempted fix (Fix 10n attempt #2): Set `refCount = 0` during DESTROY body (not MIN_VALUE), track `currentlyDestroying` flag to guard re-entry, detect resurrection by checking `refCount > 0` post-DESTROY.
+
+**Failure mode**: `my $self = shift` inside DESTROY body increments `refCount` to 1 via `setLargeRefCounted` when `$self` is assigned. When DESTROY returns, `$self` is a Java local that goes out of scope without triggering a corresponding decrement (PerlOnJava lexicals don't hook scope-exit decrements for scalar copies). Post-DESTROY `refCount=1` → false resurrection detection → loops indefinitely on File::Temp DESTROY during DBIC test loading.
+
+Root cause: PerlOnJava's cooperative refCount scheme can't accurately track the net delta from a DESTROY body, because lexical assignments increment but lexical destruction doesn't always decrement.
+
+#### What Would Fix Both
+
+Either:
+1. **True reachability-based GC** — mark from symbol-table roots on demand, clear weak refs for unreachable objects. Expensive but matches Perl's model exactly.
+2. **Accurate lexical decrement at scope exit** — audit every `my $x = <ref>` path to ensure scope exit fires a matching decrement. Large, risky refactor.
+
+See [`dev/design/refcount_alignment_plan.md`](../design/refcount_alignment_plan.md) for a phased plan that implements both.
+
+Deferred until such architectural work becomes practical.
+
+### Historical notes (previously attempted)
+
+1. **visit_refs / LeakTracer instrumentation** — ran diagnostics, identified parent hash refCount inflation as the blocker.
+2. **`createReference()` audit** — Fixed: Storable, DBI. Other deserializers (JSON, XML::Parser) don't appear in the DBIC leak pattern.
+3. **Targeted refcount inflation sources** — function-arg copies tracked via `originalArgsStack` (Fix 10l), @DB::args preservation works; but inflation in `map`/`grep`/`keys` temporaries remains.
+
+### Cooperative Refcounting Internals (reference)
+
+**States**: `-1`=untracked; `0`=tracked, 0 counted refs; `>0`=N counted refs; `-2`=WEAKLY_TRACKED; `MIN_VALUE`=DESTROY called.
+
+**Tracking activation**: `[...]`/`{...}` → refCount=0; `\@arr`/`\%hash` → refCount=0 + localBindingExists=true; `bless` → refCount=0; `weaken()` on untracked non-CODE → WEAKLY_TRACKED.
+
+**Increment/decrement**: `setLargeRefCounted()` on ref assignment when refCount≥0; marks scalar `refCountOwned=true`. Decrement at overwrite or `scopeExitCleanup` → `deferDecrementIfTracked` → `flush()`.
+
+**END-time order**: main returns → `flushDeferredCaptures` → `flush()` → `clearRescuedWeakRefs` → `clearAllBlessedWeakRefs` → END blocks.
+
+**`Internals::SvREFCNT`**: `refCount>=0` → actual; `<0` → 1; `MIN_VALUE` → 0.
+
+### Key Code Locations
+
+| File | Method | Relevance |
+|------|--------|-----------|
+| `RuntimeScalar.java` | `setLargeRefCounted()` | Increment/decrement |
+| `RuntimeScalar.java` | `scopeExitCleanup()` | Lexical cleanup at scope exit |
+| `RuntimeScalar.java` | `toStringLarge()` | Overload `""` self-recursion guard |
+| `MortalList.java` | `deferDecrementIfTracked()` | Defers decrement to flush |
+| `MortalList.java` | `scopeExitCleanupHash()` | Hash value cascade |
+| `MortalList.java` | `flush()` | Processes pending decrements |
+| `DestroyDispatch.java` | `callDestroy()` | Fires DESTROY / clears weak refs |
+| `WeakRefRegistry.java` | `weaken()` | WEAKLY_TRACKED transition |
+| `WeakRefRegistry.java` | `clearAllBlessedWeakRefs()` | END-time sweep (all objects) |
+| `RuntimeHash.java` | `createReference()` / `createAnonymousReference()` | Named vs anonymous hash ref creation |
+| `RuntimeArray.java` | `createReference()` / `createAnonymousReference()` | Named vs anonymous array ref creation |
+| `RuntimeCode.java` | `pushArgs` + `originalArgsStack` | @DB::args snapshot preservation |
+| `Overload.java` | `stringify()` | Overload `""` recursion depth guard |
+| `CustomFileChannel.java` | `flock()` + `sharedLockRegistry` | POSIX-compatible multi-shared-lock |
+| `SystemOperator.java` | `fork()` | Test-safe skip + EAGAIN errno |
+| `Base.java` | `importBase()` | `@ISA` / `$VERSION` loaded-check |
+| `Internals.java` | `svRefcount()` | Internals::SvREFCNT impl |
+
+---
+
+## Architecture Reference
+
+- `dev/architecture/weaken-destroy.md` — refCount state machine, MortalList, WeakRefRegistry
+- `dev/design/destroy_weaken_plan.md` — DESTROY/weaken implementation plan (PR #464)
+- `dev/sandbox/destroy_weaken/` — DESTROY/weaken test sandbox
+- `dev/patches/cpan/DBIx-Class-0.082844/` — applied patches for txn_scope_guard

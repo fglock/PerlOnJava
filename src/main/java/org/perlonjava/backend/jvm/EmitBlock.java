@@ -303,6 +303,19 @@ public class EmitBlock {
                     // General case for all other elements
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Element: " + element);
                     element.accept(voidVisitor);
+                    // FREETMPS: Flush deferred mortal decrements at statement boundaries.
+                    // Uses flushAboveMark() instead of flush() so that entries from
+                    // the caller's scope (below the function-entry mark pushed by
+                    // RuntimeCode.apply) are NOT processed. This prevents premature
+                    // DESTROY of method chain temporaries like Foo->new()->method()
+                    // where the bless mortal entry from the outer scope must survive
+                    // until the caller's statement boundary.
+                    // If no mark exists (top-level code), behaves like flush().
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/MortalList",
+                            "flushAboveMark",
+                            "()V",
+                            false);
                 }
 
                 // NOTE: Registry checks are DISABLED in EmitBlock because:
@@ -372,11 +385,15 @@ public class EmitBlock {
                     "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
 
-        // Flush mortal list for non-subroutine blocks. Subroutine body blocks must
-        // NOT flush here because the implicit return value may be on the JVM stack
-        // and flushing could destroy it before the caller captures it.
+        // Flush mortal list for non-subroutine, non-do blocks. Subroutine body
+        // blocks and do-blocks must NOT flush here because the implicit return value
+        // may be on the JVM stack and flushing could destroy it before the caller
+        // captures it. Example: $self->{cursor} ||= do { my $x = ...; create_obj() }
+        // — the do-block's scope exit would flush pending decrements from create_obj's
+        // scope exit, destroying the return value before ||= can store it.
         boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !isSubBody);
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, !isSubBody && !isDoBlock);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
     }

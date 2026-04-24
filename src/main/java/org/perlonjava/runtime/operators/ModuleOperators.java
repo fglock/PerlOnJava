@@ -840,9 +840,10 @@ public class ModuleOperators {
             // Check if this was a compilation failure (stored as undef)
             RuntimeScalar incEntry = incHash.elements.get(fileName);
             if (!incEntry.defined().getBoolean()) {
-                // This was a compilation failure, throw the cached error
-                // Perl outputs: "Attempt to reload <file> aborted.\nCompilation failed in require at ..."
-                throw new PerlCompilerException("Attempt to reload " + fileName + " aborted.\nCompilation failed in require at " + fileName);
+                // This was a compilation failure, report as "Can't locate" so that
+                // callers like Moo::_Utils::_maybe_load_module that check for
+                // /\ACan't locate/ will silently fall back instead of warning.
+                throw new PerlCompilerException("Can't locate " + fileName + " in @INC (compilation previously failed)");
             }
             // module was already loaded successfully - always return exactly 1
             return getScalarInt(1);
@@ -898,8 +899,11 @@ public class ModuleOperators {
                     fullErr += "\n";
                 }
                 message = fullErr + "Compilation failed in require";
-                // Set %INC as undef to mark compilation failure
-                incHash.put(fileName, new RuntimeScalar());
+                // Delete %INC entry on compilation failure (modern Perl 5 behavior,
+                // perl commit 44f8325f). This allows subsequent require attempts
+                // (e.g., fallback from XS to pure-Perl) instead of triggering
+                // "Attempt to reload ... aborted".
+                incHash.elements.remove(fileName);
                 // Update $@ so eval{} sees the full message (catchEval preserves $@ for PerlCompilerException)
                 getGlobalVariable("main::@").set(message);
                 throw new PerlCompilerException(message);

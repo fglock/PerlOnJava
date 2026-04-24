@@ -96,7 +96,22 @@ public class Base extends PerlModuleBase {
                 continue;
             }
 
-            if (!GlobalVariable.isPackageLoaded(baseClassName)) {
+            // Check if the base class is already "loaded" in the Perl sense.
+            // Match Perl 5 base.pm semantics: a package counts as loaded if it has
+            //   - $VERSION set, OR
+            //   - @ISA populated, OR
+            //   - any CODE refs in its stash
+            // (Perl's base.pm uses: !defined($VERSION) && !@ISA → then require.)
+            // Without this, packages that were populated programmatically (e.g. DBIC
+            // schema classes built from result_source metadata, or eval-created
+            // packages) would be spuriously require()d and fail because there is
+            // no corresponding .pm file. Fixes DBIC t/inflate/hri.t which does:
+            //   eval "package DBICTest::CDSubclass; use base '$orig_resclass'";
+            // where $orig_resclass is DBICTest::CD (defined in memory, no file).
+            boolean baseIsLoaded = GlobalVariable.isPackageLoaded(baseClassName)
+                    || !GlobalVariable.getGlobalArray(baseClassName + "::ISA").elements.isEmpty()
+                    || GlobalVariable.existsGlobalVariable(baseClassName + "::VERSION");
+            if (!baseIsLoaded) {
                 // Require the base class file
                 String filename = baseClassName.replace("::", "/").replace("'", "/") + ".pm";
                 try {

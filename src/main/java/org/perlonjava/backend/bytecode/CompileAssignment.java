@@ -19,6 +19,8 @@ public class CompileAssignment {
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
             bc.compileNode(binOp, -1, rhsContext);
+            // Patch HASH_GET → HASH_GET_FOR_LOCAL so local $hash{key} survives hash reassignment
+            bc.patchLastHashGetForLocal();
             int elemReg = bc.lastResultReg;
             bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
             bc.emitReg(elemReg);

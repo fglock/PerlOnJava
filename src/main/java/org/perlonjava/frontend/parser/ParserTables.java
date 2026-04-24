@@ -25,6 +25,7 @@ public class ParserTables {
     // The list below was obtained by running this in the perl git:
     // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
     public static final Set<String> OVERRIDABLE_OP = Set.of(
+            "bless",
             "caller", "chdir", "close", "connect",
             "die", "do",
             "exec", "exit",
