@@ -1,81 +1,94 @@
 # PR #552 (perf/dbic-safe-port) — Remaining Regressions
 
-## Status as of 2026-04-24
+## Status as of 2026-04-24 (late session)
 
 Starting delta vs master: 26 specific tests regressed.
-Fixed this session: **13**.
-Remaining: **13**.
+Fixed across two sessions: **14**.
+Remaining: **12**.
 
-### Fixed (commits on branch)
+### Fixed (commits on branch, in order)
 
 | Commit | What | Tests fixed |
 |--------|------|-------------|
-| `48ebef398` | `undef %hash` fires DESTROY progressively, not after clearing | op/undef.t 19-35 (all 8 tracked, plus ~30 pre-existing master failures) |
-| `6fadf3def` | Named hash/array lexicals are walker roots via `localBindingExists` (fixes weak-ref zap in auto-sweep) | op/hashassign.t 218 |
-| `8dcf31d9f` | Interpreter `\(LIST)` flattens before per-element reference creation | op/ref.t 113, 114, 116, 117 |
+| `48ebef398` | `undef %hash` fires DESTROY progressively, not after clearing | op/undef.t 19-35 (all 8, plus ~30 pre-existing) |
+| `6fadf3def` | Named hash/array lexicals are walker roots via `localBindingExists` | op/hashassign.t 218 |
+| `8dcf31d9f` | Interpreter `\(LIST)` flattens before per-element reference | op/ref.t 113, 114, 116, 117 |
+| `f9040b781` | Interpreter `local our VAR` re-loads localized global | op/split.t 164, 166 |
+| `fdec68297` | Interpreter `local(*foo) = *bar` single-glob list-local assignment | op/ref.t 1 |
 
-### Remaining (13 tests, grouped by root cause)
+### Remaining (12 tests, grouped by root cause)
 
-#### A. For-loop readonly aliasing (7 tests) — DEEP issue
-- op/ref.t 232, 233, 234 — `for (3) { $_ = 4 }` must throw "Modification of a read-only value"
+#### A. For-loop readonly aliasing (7 tests) — **DEEP**
+- op/ref.t 231, 232, 233, 234 — `for (3) { $_ = 4 }` must throw "Modification of a read-only value"
 - op/for.t 130, 131, 133 — `for my $i (@letters, undef, @numbers) { ++$i }` must throw at undef
 - op/for.t 134 — `for my $i (@numbers[0,1,0]) { ++$i }` — array slices as lvalues
 
-**Root cause:** The interpreter's list-construction path copies RuntimeScalarReadOnly
-elements into mutable RuntimeScalar before they reach the foreach iterator. The JVM
-backend uses `RuntimeBase.getArrayOfAlias()` at `EmitForeach.java:408` to preserve
-read-only markers. The interpreter's `ITERATOR_CREATE` calls `.iterator()` on a list
-whose elements are already plain mutable RuntimeScalar copies.
+**Root cause:** The interpreter's `visit(NumberNode)` / `visit(StringNode)` deliberately
+emit `LOAD_INT`/`LOAD_BYTE_STRING` that produce mutable `RuntimeScalar` (comment at
+`BytecodeCompiler.java:1220-1222` explains this is needed so `my $i = 3; ++$i`
+works via ALIAS+increment). The JVM backend uses `RuntimeBase.getArrayOfAlias()`
+at `EmitForeach.java:408` to preserve read-only markers, but that only works
+if the source list ALREADY has `RuntimeScalarReadOnly` elements. In the interpreter,
+by the time elements hit `CREATE_LIST`, they're already mutable.
 
-**Where:** the list is built by `visit(ListNode)` in `BytecodeCompiler.java:6033-6104`.
-It emits `CREATE_LIST`/`LIST_ADD` opcodes that currently flatten via `addToList()`
-and copy scalar values. Need to thread "is-alias" through this path, or emit a
-distinct `CREATE_LIST_ALIAS` that uses `getArrayOfAlias()`.
+**Verified dead-ends:**
+- Removing `ensureMutableScalar` in `FOREACH_NEXT_OR_EXIT` / `PRE_AUTOINCREMENT`
+  doesn't help — elements are mutable at that point.
+- `getArrayOfAlias()` preserves what's already there; it doesn't re-readonly.
 
-**Verified:**
-- `JPERL_TRACE_FOREACH=1` shows iterator elements arrive as `RuntimeScalar`
-  (not `RuntimeScalarReadOnly`) even for `for (3) {...}`.
-- Simply removing `ensureMutableScalar` in FOREACH_NEXT_OR_EXIT / PRE_AUTOINCREMENT
-  does not help, because the list elements are already mutable at that point.
+**Possible fixes:**
+1. **Context-aware literal emission:** Add a "lvalue-alias-required" context flag
+   checked by `visit(NumberNode)`/`visit(StringNode)` to emit `LOAD_CONST` of the
+   cached `RuntimeScalarReadOnly` instead of `LOAD_INT` of a mutable. Set the flag
+   in `visit(For1Node)`/`visit(ForNode)` when compiling the list expression.
+   Also needed in function arg lists if we want `sub f { ++$_[0] }; f(3)` to throw.
+2. **Loop-alias wrapper class:** New `ReadOnlyAlias extends RuntimeScalar` that
+   throws on `set()`/`preAutoIncrement()`/etc. without being a `RuntimeScalarReadOnly`
+   (so `isImmutableProxy` returns false and stripping doesn't unbox it).
+   In `visit(For1Node)`, emit an opcode that wraps each iterator element in
+   `ReadOnlyAlias` after building the list. Avoids changing `visit(NumberNode)`.
+
+Option 2 is more localized and probably the right call. ~4 hour task.
 
 #### B. `\(1,@foo,@bar)` distributive flatten rule (1 test)
 - op/ref.t 115 — `@baz = \(1, @foo, @bar)` — Perl expects 3 refs (SCALAR, ARRAY,
-  ARRAY); both backends produce 7 (via full flatten).
+  ARRAY); both backends produce 7 via full flatten.
 
-**Root cause:** Perl's `\(LIST)` rule is distributive over top-level list items
-without flattening embedded arrays. When the list is exactly `(@arr)`, it flattens
-(per-element refs). When it has multiple elements, each element gets one ref.
-Both JVM and interpreter paths call `flattenElements()` unconditionally. See
-`EmitOperator.handleCreateReference` and `InlineOpcodeHandler.executeCreateRef`.
+**Root cause:** Perl's `\(LIST)` rule: distributive over top-level list items
+WITHOUT flattening embedded arrays. Only `\(@arr)` (single-array parens) flattens.
+Both JVM (`EmitOperator.handleCreateReference`) and interpreter
+(`InlineOpcodeHandler.executeCreateRef`) call `flattenElements()` unconditionally.
 
-#### C. Miscellaneous interpreter fallback gaps (5 tests)
-- op/ref.t 1 — `local(*foo) = *bar`
-- op/ref.t 231 — NUL-clean class name: `bless {}, "nul\0clean"`
-- op/sort.t 169 — deep recursion sort (1000 deep)
-- op/sort.t 172 — AUTOLOAD for comparison sub
-- op/split.t 164, 166 — `split` into package global array inside paren-assign
+Fix: detect "exactly one element, and it is an array/range" at compile time;
+emit flatten only in that case. Otherwise create one ref per top-level element.
 
-These likely each need separate investigation; no shared root cause evident.
-Some may also be interpreter fallback artifacts similar to (A).
+#### C. Sort tests (2 tests)
+- op/sort.t 169 "2 here", 172 "still the same 2 here" — test Counter objects
+  DESTROY counting during sort. The Counter refcount drops from 2 to 1 at
+  some point. Not reproducible in isolation (standalone under `--interpreter`
+  gets the correct count). Test-context specific; needs minimal repro.
+
+#### D. Misc/unexplored (2 tests)
+- op/for.t 103 — `do { foreach (…) { … } }` in scalar context (RT #1085)
+- op/for.t 105 — `foreach (@array_containing_undef)` — `\$_` should equal `\undef`
+
+Likely related to cluster A but distinct symptoms.
 
 ## Why the fallback matters
 
-ref.t is falling back to the bytecode interpreter ("Method too large, using
-interpreter backend") because our perf/dbic-safe-port branch's accumulated
-refcount tracking bytecode pushes it over the JVM 65KB method limit. On master,
-ref.t fits in the JVM method and tests pass.
+All 12 remaining regressions are in tests that fall back to the bytecode
+interpreter because the JVM method-too-large limit (65KB) is exceeded on
+our branch. On master, the same tests fit in the JVM method and pass.
 
-Two orthogonal paths to fixing:
-1. Shrink the branch's generated bytecode so ref.t fits on JVM.
-2. Fix interpreter bugs so fallback produces correct results.
+Two orthogonal paths:
+1. **Shrink the branch's generated bytecode** so those tests fit on JVM.
+2. **Fix interpreter parity bugs** so fallback produces correct results.
 
-Path 1 is probably the right engineering call for PR #552; path 2 is the
-right call for long-term interpreter parity.
+Path 1 is narrow and specific to this PR; path 2 is long-term interpreter
+parity work.
 
 ## Recommended next steps
 
-1. Profile ref.t bytecode size growth on branch vs master. Identify which
-   perf-branch opcodes contributed and whether any can be compressed.
-2. If bytecode reduction can't get ref.t under 65KB, accept the 13 remaining
-   regressions for PR #552 and file follow-up issues for (A)/(B)/(C).
-3. (A) work — design doc in `dev/design/interpreter-alias-semantics.md`.
+1. Attempt cluster A (option 2, ReadOnlyAlias wrapper) — 7 tests, biggest win.
+2. Cluster B is a 20-line fix once root cause is isolated.
+3. Profile bytecode growth for ref.t vs master to see if compression is viable.
