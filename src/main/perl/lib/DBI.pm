@@ -1731,7 +1731,20 @@ sub _new_sth {	# called by DBD::<drivername>::db::prepare)
 	    return $sth  if $if_active <= 2;
 	}
 
-	$sth = $dbh->prepare($statement, $attr);
+	$sth = eval { $dbh->prepare($statement, $attr) };
+	# PerlOnJava patch: wrap prepare failures with "prepare_cached failed"
+	# context. Real upstream XS DBI's dispatcher adds this context; PurePerl
+	# does not. DBIC's test suite (and the wider ecosystem) expect this
+	# exact text, e.g. DBIx-Class t/storage/base.t test 3 matches
+	# qr/prepare_cached failed/.
+	if ( $@ or ! $sth ) {
+	    my $err = $@ || ( $dbh->errstr // '<no error string>' );
+	    # Avoid double-wrapping if an outer call already tagged it.
+	    if ( $err !~ /prepare_cached failed/ ) {
+		Carp::croak("prepare_cached failed: $err");
+	    }
+	    die $err;
+	}
 	$cache->{$key} = $sth if $sth;
 
 	return $sth;
