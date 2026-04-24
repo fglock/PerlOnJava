@@ -5414,6 +5414,18 @@ public class BytecodeCompiler implements Visitor {
                 && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
             globalLoopVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
         }
+        // `for our $i (...)` — the loop variable is a package-global with a
+        // lexical alias in scope. Treat it like an implicit-$_ global loop
+        // variable: the iterator writes to the global via
+        // FOREACH_GLOBAL_NEXT_OR_EXIT, and the body reads `$i` via its
+        // package-qualified name. Without this, the iterator wrote to a
+        // local temp register that nothing read, and the body saw the
+        // uninitialised `$main::i`.
+        if (globalLoopVarName == null && node.variable instanceof OperatorNode varOp0
+                && varOp0.operator.equals("our") && varOp0.operand instanceof OperatorNode sigilOp0
+                && sigilOp0.operator.equals("$") && sigilOp0.operand instanceof IdentifierNode idNode0) {
+            globalLoopVarName = NameNormalizer.normalizeVariableName(idNode0.name, getCurrentPackage());
+        }
 
         // Step 1: Evaluate list in list context
         compileNode(node.list, -1, RuntimeContextType.LIST);
