@@ -1,5 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
+import java.util.BitSet;
+
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
@@ -102,6 +104,12 @@ public class BytecodeInterpreter {
         // so that `local` variables inside the eval block are properly unwound.
         java.util.ArrayDeque<Integer> evalLocalLevelStack = new java.util.ArrayDeque<>();
 
+        // Parallel stack tracking the first register allocated inside the eval body.
+        // When an exception is caught, registers from this index to the end of the
+        // register array are cleaned up (scope exit cleanup + mortal flush) so that
+        // DESTROY fires for blessed objects that went out of scope during die.
+        java.util.ArrayDeque<Integer> evalBaseRegStack = new java.util.ArrayDeque<>();
+
         // Labeled block stack for non-local last/next/redo handling.
         // When a function call returns a RuntimeControlFlowList, we check this stack
         // to see if the label matches an enclosing labeled block.
@@ -124,6 +132,23 @@ public class BytecodeInterpreter {
         if (usesLocalization) {
             RegexState.save();
         }
+        // Track whether an exception is propagating out of this frame, so the
+        // finally block can do scope-exit cleanup for blessed objects in my-variables.
+        // Without this, DESTROY doesn't fire for objects in subroutines that are
+        // unwound by die when there's no enclosing eval in the same frame.
+        Throwable propagatingException = null;
+
+        // First my-variable register index (skip reserved + captured vars).
+        int firstMyVarReg = 3 + (code.capturedVars != null ? code.capturedVars.length : 0);
+
+        // Track closures created by CREATE_CLOSURE in this frame.
+        // At frame exit, we release captures for closures that were never stored
+        // via set() (refCount stayed at 0). This handles eval STRING map/grep
+        // block closures that over-capture all visible variables but are temporary.
+        // This matches the JVM-compiled path where scopeExitCleanup releases
+        // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
+        java.util.List<RuntimeCode> createdClosures = null;
+
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
         // Outer try/finally — cleanup only, no catch.
@@ -696,7 +721,23 @@ public class BytecodeInterpreter {
                             case Opcodes.CREATE_CLOSURE -> {
                                 // Create closure with captured variables
                                 // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...
+                                int closureRd = bytecode[pc]; // peek at destination register
                                 pc = OpcodeHandlerExtended.executeCreateClosure(bytecode, pc, registers, code);
+                                // Track closure for frame-exit capture release.
+                                // The interpreter's BytecodeCompiler captures ALL visible
+                                // variables for closures (for eval STRING compatibility),
+                                // inflating captureCount on variables the closure doesn't
+                                // actually use. When the closure is temporary (map/grep
+                                // block), releaseCaptures must fire to decrement captureCount.
+                                RuntimeBase closureVal = registers[closureRd];
+                                if (closureVal instanceof RuntimeScalar crs
+                                        && crs.value instanceof RuntimeCode ic
+                                        && ic.capturedScalars != null) {
+                                    if (createdClosures == null) {
+                                        createdClosures = new java.util.ArrayList<>();
+                                    }
+                                    createdClosures.add(ic);
+                                }
                             }
 
                             case Opcodes.SET_SCALAR -> {
@@ -1016,6 +1057,18 @@ public class BytecodeInterpreter {
 
                             case Opcodes.HASH_GET -> {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.HASH_GET_FOR_LOCAL -> {
+                                // Like HASH_GET but always returns a RuntimeHashProxyEntry.
+                                // Used by local $hash{key} so the proxy can re-resolve
+                                // the key in the parent hash on restore (survives %hash = (...)).
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyReg = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                RuntimeScalar key = (RuntimeScalar) registers[keyReg];
+                                registers[rd] = hash.getForLocal(key);
                             }
 
                             case Opcodes.HASH_SET -> {
@@ -1716,14 +1769,19 @@ public class BytecodeInterpreter {
 
                             case Opcodes.EVAL_TRY -> {
                                 // Start of eval block with exception handling
-                                // Format: [EVAL_TRY] [catch_target_high] [catch_target_low]
-                                // catch_target is absolute bytecode address (4 bytes)
+                                // Format: [EVAL_TRY] [catch_target(4 bytes)] [firstBodyReg]
+                                // catch_target is absolute bytecode address
 
                                 int catchPc = readInt(bytecode, pc);  // Read 4-byte absolute address
-                                pc += 1;  // Skip the 2 shorts we just read
+                                pc += 1;  // Skip the int we just read
+
+                                int firstBodyReg = bytecode[pc++];  // First register in eval body
 
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
+
+                                // Save first body register for scope cleanup on exception
+                                evalBaseRegStack.push(firstBodyReg);
 
                                 // Save local level so we can restore local variables on eval exit
                                 evalLocalLevelStack.push(DynamicVariableManager.getLocalLevel());
@@ -1745,6 +1803,11 @@ public class BytecodeInterpreter {
                                 // Pop the catch PC from eval stack (we didn't need it)
                                 if (!evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
+                                }
+
+                                // Pop the base register (not needed on success path)
+                                if (!evalBaseRegStack.isEmpty()) {
+                                    evalBaseRegStack.pop();
                                 }
 
                                 // Restore local variables that were pushed inside the eval block
@@ -1932,6 +1995,10 @@ public class BytecodeInterpreter {
                             case Opcodes.TIME_OP -> {
                                 int rd = bytecode[pc++];
                                 registers[rd] = org.perlonjava.runtime.operators.Time.time();
+                            }
+                            case Opcodes.WAIT_OP -> {
+                                int rd = bytecode[pc++];
+                                registers[rd] = org.perlonjava.runtime.operators.WaitpidOperator.waitForChild();
                             }
                             case Opcodes.EVAL_STRING, Opcodes.SELECT_OP, Opcodes.LOAD_GLOB, Opcodes.SLEEP_OP,
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
@@ -2184,6 +2251,47 @@ public class BytecodeInterpreter {
                                 registers[rd] = hash.get(key);
                             }
 
+                            case Opcodes.HASH_DEREF_FETCH_FOR_LOCAL -> {
+                                // Like HASH_DEREF_FETCH but returns a RuntimeHashProxyEntry for local() context.
+                                // Format: HASH_DEREF_FETCH_FOR_LOCAL rd hashref_reg key_string_idx
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDeref();
+                                }
+
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.getForLocal(key);
+                            }
+
+                            case Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL -> {
+                                // Like HASH_DEREF_FETCH_NONSTRICT but returns a RuntimeHashProxyEntry for local() context.
+                                // Format: HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL rd hashref_reg key_string_idx pkg_string_idx
+                                int rd = bytecode[pc++];
+                                int hashrefReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+                                int pkgIdx = bytecode[pc++];
+
+                                RuntimeBase hashrefBase = registers[hashrefReg];
+
+                                RuntimeHash hash;
+                                if (hashrefBase instanceof RuntimeHash) {
+                                    hash = (RuntimeHash) hashrefBase;
+                                } else {
+                                    hash = hashrefBase.scalar().hashDerefNonStrict(code.stringPool[pkgIdx]);
+                                }
+
+                                String key = code.stringPool[keyIdx];
+                                registers[rd] = hash.getForLocal(key);
+                            }
+
                             case Opcodes.ARRAY_DEREF_FETCH_NONSTRICT -> {
                                 // Combined: DEREF_ARRAY_NONSTRICT + LOAD_INT + ARRAY_GET
                                 // Format: ARRAY_DEREF_FETCH_NONSTRICT rd arrayref_reg index_immediate pkg_string_idx
@@ -2307,15 +2415,44 @@ public class BytecodeInterpreter {
                     StackTraceElement[] st = e.getStackTrace();
                     String javaLine = (st.length > 0) ? " [java:" + st[0].getFileName() + ":" + st[0].getLineNumber() + "]" : "";
                     String errorMessage = "ClassCastException" + bcContext + ": " + e.getMessage() + javaLine;
+                    propagatingException = e;
                     throw new RuntimeException(formatInterpreterError(code, errorPc, new Exception(errorMessage)), e);
                 } catch (PerlExitException e) {
                     // exit() should NEVER be caught by eval{} - always propagate
+                    propagatingException = e;
                     throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
                     if (!evalCatchStack.isEmpty()) {
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
+
+                        // Scope exit cleanup for lexical variables allocated inside the eval body.
+                        // When die throws a PerlDieException, the SCOPE_EXIT_CLEANUP opcodes
+                        // between the throw site and the eval boundary are skipped. This loop
+                        // ensures DESTROY fires for blessed objects that went out of scope.
+                        if (!evalBaseRegStack.isEmpty()) {
+                            int baseReg = evalBaseRegStack.pop();
+                            boolean needsFlush = false;
+                            for (int i = baseReg; i < registers.length; i++) {
+                                RuntimeBase reg = registers[i];
+                                if (reg == null) continue;
+                                if (reg instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.scopeExitCleanup(rs);
+                                    needsFlush = true;
+                                } else if (reg instanceof RuntimeHash rh) {
+                                    MortalList.scopeExitCleanupHash(rh);
+                                    needsFlush = true;
+                                } else if (reg instanceof RuntimeArray ra) {
+                                    MortalList.scopeExitCleanupArray(ra);
+                                    needsFlush = true;
+                                }
+                                registers[i] = null;
+                            }
+                            if (needsFlush) {
+                                MortalList.flush();
+                            }
+                        }
 
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
@@ -2335,6 +2472,7 @@ public class BytecodeInterpreter {
 
                     // Not in eval block - propagate exception
                     // Re-throw RuntimeExceptions as-is (includes PerlDieException)
+                    propagatingException = e;
                     if (e instanceof RuntimeException re) {
                         throw re;
                     }
@@ -2363,6 +2501,55 @@ public class BytecodeInterpreter {
                 }
             } // end outer while (eval/die retry loop)
         } finally {
+            // Release captures for interpreter closures created in this frame
+            // that were never stored via set() (refCount stayed at 0).
+            // This handles eval STRING map/grep block closures that over-capture
+            // all visible variables but are temporary and should release captures.
+            // Closures stored via set() have refCount > 0 and are skipped.
+            // This matches the JVM-compiled path where scopeExitCleanup releases
+            // captures for CODE refs with refCount=0 (see RuntimeScalar.java
+            // scopeExitCleanup special case for CODE refs).
+            if (createdClosures != null) {
+                for (RuntimeCode closure : createdClosures) {
+                    if (closure.capturedScalars != null
+                            && closure.refCount == 0
+                            && closure.stashRefCount <= 0) {
+                        closure.releaseCaptures();
+                    }
+                }
+            }
+
+            // Scope-exit cleanup for my-variables when an exception propagates out
+            // of this subroutine frame without being caught by an eval.
+            // This ensures DESTROY fires for blessed objects going out of scope
+            // during die unwinding (e.g. TxnScopeGuard in a sub called from eval).
+            if (propagatingException != null) {
+                // Only clean up registers that are actual "my" variables.
+                // Temporary registers may alias hash/array elements (via HASH_GET,
+                // HASH_DEREF_FETCH, etc.) and calling scopeExitCleanup on them
+                // would incorrectly decrement refCounts, causing premature DESTROY.
+                BitSet myVars = code.myVarRegisters;
+                boolean needsFlush = false;
+                for (int i = myVars.nextSetBit(firstMyVarReg); i >= 0; i = myVars.nextSetBit(i + 1)) {
+                    RuntimeBase reg = registers[i];
+                    if (reg == null) continue;
+                    if (reg instanceof RuntimeScalar rs) {
+                        RuntimeScalar.scopeExitCleanup(rs);
+                        needsFlush = true;
+                    } else if (reg instanceof RuntimeHash rh) {
+                        MortalList.scopeExitCleanupHash(rh);
+                        needsFlush = true;
+                    } else if (reg instanceof RuntimeArray ra) {
+                        MortalList.scopeExitCleanupArray(ra);
+                        needsFlush = true;
+                    }
+                    registers[i] = null;
+                }
+                if (needsFlush) {
+                    MortalList.flush();
+                }
+            }
+
             // Outer finally: restore interpreter state saved at method entry.
             // Unwinds all `local` variables pushed during this frame, restores
             // the current package, and pops the InterpreterState call stack.

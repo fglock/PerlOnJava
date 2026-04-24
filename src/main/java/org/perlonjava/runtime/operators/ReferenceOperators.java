@@ -32,45 +32,109 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            // Canonicalise the class name through any stash aliases
-            // (`*Foo:: = *Bar::`).  In Perl, `bless` binds the referent to
-            // the stash object itself, whose `HvNAME` is the canonical
-            // package name — so if Foo has been aliased to Bar, a later
-            // `bless $x, "Foo"` reports `ref($x) eq "Bar"`.  Without this
-            // canonicalisation, `ref` would return "Foo" and
-            // `$x->isa("Bar")` would miss the linearised hierarchy that
-            // the aliased stash exposes.
-            str = GlobalVariable.resolveStashAlias(str);
+            // NOTE: we intentionally do NOT canonicalise `str` through
+            // `GlobalVariable.resolveStashAlias` here. An earlier change
+            // (commit 7f3e0d12d, "fix(runtime): bless / isa canonicalise
+            // through stash aliases") did so to match real Perl's
+            // `ref($x) == canonical-stash-name` semantics for the
+            // JSON::PP::Boolean + `*Dst:: = *Src::;` idiom, but that broke
+            // DBIx::Class: when DBIC had unrelated stash aliases active,
+            // canonicalising here silently re-stamped ResultSource classes
+            // to names DBIC's internal source lookup tables didn't know,
+            // yielding "detached result source" errors across the suite.
+            //
+            // Instead we handle the alias in `UNIVERSAL::isa` (see
+            // `Universal.java#isa`) by linearising BOTH the user-provided
+            // class name and its canonical form, plus canonicalising the
+            // argument through the alias chain. That gives correct answers
+            // for `$x->isa("alias")` / `$x->isa("canonical")` in both
+            // directions without mutating the bless id.
+            //
+            // Known divergence from real Perl: `ref($x)` returns the
+            // user-provided name, not the canonical. Round-tripping a
+            // value through a serialiser that dispatches purely on `ref`
+            // (e.g. some JSON boolean detectors) may still need the
+            // canonical. Tracked in dev/design/perf-dbic-safe-port.md.
 
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
             int newBlessId = NameNormalizer.getBlessId(str);
 
             if (referent.refCount >= 0) {
-                // Re-bless: update class, keep refCount
-                referent.setBlessId(newBlessId);
-                if (!DestroyDispatch.classHasDestroy(newBlessId, str)) {
-                    // New class has no DESTROY — stop tracking
-                    referent.refCount = -1;
+                // Already-tracked referent (e.g., anonymous hash from `bless {}`).
+                // Always keep tracking — even classes without DESTROY need
+                // cascading cleanup of their hash/array elements when freed.
+                if (referent.blessId == 0) {
+                    // First bless of a tracked referent. Mortal-ize: bump refCount
+                    // and queue a deferred decrement so that if the blessed ref is
+                    // never stored in a named variable (method-chain temporaries like
+                    // `Foo->new()->method()`), the flush brings refCount back to 0
+                    // and fires DESTROY.  If the ref IS stored (the common
+                    // `my $self = bless {}, $class` pattern), setLargeRefCounted()
+                    // increments refCount first, so the mortal flush leaves it at the
+                    // correct count.
+                    referent.setBlessId(newBlessId);
+                    referent.refCount++;  // 0 → 1 (or N → N+1 for edge cases)
+                    MortalList.deferDecrement(referent);
+                } else {
+                    // Re-bless: update class, keep refCount.
+                    referent.setBlessId(newBlessId);
                 }
             } else {
                 // First bless (or previously untracked)
                 boolean wasAlreadyBlessed = referent.blessId != 0;
                 referent.setBlessId(newBlessId);
-                if (DestroyDispatch.classHasDestroy(newBlessId, str)) {
-                    if (wasAlreadyBlessed) {
-                        // Re-bless from untracked class: the scalar being blessed
-                        // already holds a reference that was never counted (because
-                        // tracking wasn't active at assignment time). Count it as 1.
-                        referent.refCount = 1;
-                        runtimeScalar.refCountOwned = true;
-                    } else {
-                        // First bless (e.g., inside new()): the RuntimeScalar is a
-                        // temporary that will be copied into a named variable via
-                        // setLarge(), which increments refCount. Start at 0.
-                        referent.refCount = 0;
+                // Always activate tracking for blessed objects. Even without
+                // DESTROY, we need cascading cleanup of hash/array elements
+                // (e.g., Moo objects like BlockRunner that hold strong refs).
+
+                // Retroactively count references stored in existing elements.
+                // When the hash/array was created (e.g., bless { key => $ref }),
+                // elements were stored while the container was untracked
+                // (refCount == -1). Those stores did NOT increment referents'
+                // refCounts. Now that we're transitioning to tracked, we must
+                // count these as strong references so scopeExitCleanupHash
+                // correctly decrements them when the container is destroyed.
+                // Without this, references stored before bless are invisible to
+                // cooperative refcounting, causing premature destruction of
+                // objects held only by this container (e.g., DBIC ResultSource
+                // held by a ResultSet's {result_source} hash element).
+                if (referent instanceof RuntimeHash hash) {
+                    for (RuntimeScalar elem : hash.elements.values()) {
+                        RuntimeScalar.incrementRefCountForContainerStore(elem);
+                    }
+                } else if (referent instanceof RuntimeArray arr) {
+                    for (RuntimeScalar elem : arr.elements) {
+                        RuntimeScalar.incrementRefCountForContainerStore(elem);
                     }
                 }
-                // If no DESTROY, leave refCount = -1 (untracked)
+
+                if (wasAlreadyBlessed) {
+                    // Re-bless from untracked class: the scalar being blessed
+                    // already holds a reference that was never counted (because
+                    // tracking wasn't active at assignment time). Count it as 1.
+                    referent.refCount = 1;
+                    runtimeScalar.refCountOwned = true;
+                } else {
+                    // First bless: start at refCount=1 and add to MortalList.
+                    // The mortal entry will decrement back to 0 at the next
+                    // statement-boundary flush (FREETMPS equivalent).
+                    //
+                    // If the blessed ref is stored in a named variable (the
+                    // common `my $self = bless {}, $class` pattern), setLarge()
+                    // increments refCount to 2. The mortal flush then brings it
+                    // back to 1, which is correct: only the variable owns it.
+                    //
+                    // If the blessed ref is returned directly without storage
+                    // (e.g., `sub new { bless {}, shift }`), the mortal entry
+                    // ensures the object is properly cleaned up when the caller's
+                    // statement boundary flushes, fixing method chain temporaries
+                    // like `Foo->new()->method()` where the invocant was never
+                    // tracked.
+                    referent.refCount = 1;
+                    MortalList.deferDecrement(referent);
+                }
+                // Activate the mortal mechanism
+                MortalList.active = true;
             }
         } else {
             throw new PerlCompilerException("Can't bless non-reference value");

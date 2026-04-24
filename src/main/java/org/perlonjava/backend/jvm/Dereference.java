@@ -1311,6 +1311,7 @@ public class Dereference {
             // Use strict version (throws error on symbolic references)
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGet";
+                case "getForLocal" -> "hashDerefGetForLocal";
                 case "delete" -> "hashDerefDelete";
                 case "deleteLocal" -> "hashDerefDeleteLocal";
                 case "exists" -> "hashDerefExists";
@@ -1323,6 +1324,7 @@ public class Dereference {
             // Use non-strict version (allows symbolic references)
             String methodName = switch (hashOperation) {
                 case "get" -> "hashDerefGetNonStrict";
+                case "getForLocal" -> "hashDerefGetForLocalNonStrict";
                 case "delete" -> "hashDerefDeleteNonStrict";
                 case "deleteLocal" -> "hashDerefDeleteLocalNonStrict";
                 case "exists" -> "hashDerefExistsNonStrict";
@@ -1344,7 +1346,7 @@ public class Dereference {
         }
 
         // Only force FETCH for "get" operations - delete/exists can return null
-        if (hashOperation.equals("get")) {
+        if (hashOperation.equals("get") || hashOperation.equals("getForLocal")) {
             EmitOperator.handleVoidContextForTied(emitterVisitor);
         } else {
             EmitOperator.handleVoidContext(emitterVisitor);

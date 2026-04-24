@@ -114,7 +114,11 @@ public class ExceptionFormatter {
                 // the CORRECT package, file, and line for the BEGIN block context. Use it to
                 // correct the preceding anon class frame, which may have wrong source mapper
                 // data when its tokenIndex falls in a gap in ByteCodeSourceMapper entries.
-                var callerInfo = CallerStack.peek(callerStackIndex);
+                // Skip past any lazy (interpreter-pushed) CallerStack entries that sit on top
+                // of the compile-time entry from runSpecialBlock.
+                int lazyToSkip = CallerStack.countLazyFromTop(callerStackIndex);
+                int effectiveIndex = callerStackIndex + lazyToSkip;
+                var callerInfo = CallerStack.peek(effectiveIndex);
                 if (callerInfo != null) {
                     if (!stackTrace.isEmpty()) {
                         var lastEntry = stackTrace.getLast();
@@ -126,7 +130,7 @@ public class ExceptionFormatter {
                         lastEntry.set(2, String.valueOf(callerInfo.line()));
                     }
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
-                    callerStackIndex++;
+                    callerStackIndex = effectiveIndex + 1;
                 }
                 lastWasRunSpecialBlock = true;
                 continue;
@@ -137,8 +141,12 @@ public class ExceptionFormatter {
             
             if (element.getClassName().equals("org.perlonjava.frontend.parser.StatementParser") &&
                     element.getMethodName().equals("parseUseDeclaration")) {
-                // Artificial caller stack entry created at `use` statement
-                var callerInfo = CallerStack.peek(callerStackIndex);
+                // Artificial caller stack entry created at `use` statement.
+                // Skip past any lazy (interpreter-pushed) CallerStack entries that sit on top
+                // of the compile-time entry from parseUseDeclaration.
+                int lazyToSkip = CallerStack.countLazyFromTop(callerStackIndex);
+                int effectiveIndex = callerStackIndex + lazyToSkip;
+                var callerInfo = CallerStack.peek(effectiveIndex);
                 if (callerInfo != null) {
                     var entry = new ArrayList<String>();
                     String ciPkg = callerInfo.packageName();
@@ -148,7 +156,7 @@ public class ExceptionFormatter {
                     entry.add(null);  // No subroutine name available for use statements
                     stackTrace.add(entry);
                     lastFileName = callerInfo.filename() != null ? callerInfo.filename() : "";
-                    callerStackIndex++;
+                    callerStackIndex = effectiveIndex + 1;
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.InterpretedCode") &&
                     element.getMethodName().equals("apply")) {
@@ -257,12 +265,10 @@ public class ExceptionFormatter {
             }
         }
 
-        // Compute the total number of CallerStack entries consumed.
-        // This includes entries consumed by compile-time frame processing (callerStackIndex)
-        // and entries consumed by interpreter frame processing (interpreterFrameIndex).
-        // The outermost entry check below uses the effective index to avoid re-reading
-        // CallerStack entries already consumed by interpreter frame processing.
-        int effectiveCallerStackIndex = Math.max(callerStackIndex, interpreterFrameIndex);
+        // Compute the effective CallerStack index for the outermost entry.
+        // Skip past any remaining lazy (interpreter-pushed) entries.
+        int lazyToSkip = CallerStack.countLazyFromTop(callerStackIndex);
+        int effectiveCallerStackIndex = callerStackIndex + lazyToSkip;
 
         // Add the outermost artificial stack entry if different from last file
         var callerInfo = CallerStack.peek(effectiveCallerStackIndex);

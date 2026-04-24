@@ -118,7 +118,9 @@ public class ParseMapGrepSort {
             block = new BlockNode(List.of(new BinaryOperatorNode("cmp", new OperatorNode("$", new IdentifierNode(currentPackage + "::a", parser.tokenIndex), parser.tokenIndex), new OperatorNode("$", new IdentifierNode(currentPackage + "::b", parser.tokenIndex), parser.tokenIndex), parser.tokenIndex)), parser.tokenIndex);
         }
         if (block instanceof BlockNode) {
-            block = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
+            SubroutineNode subNode = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
+            subNode.setAnnotation("isMapGrepBlock", true);
+            block = subNode;
         }
         return new BinaryOperatorNode(token.text, block, operand, parser.tokenIndex);
     }

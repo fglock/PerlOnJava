@@ -161,6 +161,20 @@ public class BytecodeCompiler implements Visitor {
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
                             Map<String, Integer> parentRegistry,
                             Map<String, String> parentDecls) {
+        this(sourceName, sourceLine, errorUtil, parentRegistry, parentDecls, null);
+    }
+
+    /**
+     * Overload that accepts an additional map of parent `our` variable names
+     * to their declaring Perl package. This is critical for eval STRING: when
+     * the eval body does `package Foo; $x`, `$x` must still resolve through
+     * the caller's `our $x` alias (original package) rather than being
+     * re-qualified to `$Foo::x`.
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                            Map<String, Integer> parentRegistry,
+                            Map<String, String> parentDecls,
+                            Map<String, String> parentOurPackages) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -183,7 +197,18 @@ public class BytecodeCompiler implements Visitor {
                 if (regIndex >= 3) {
                     String decl = parentDecls != null ? parentDecls.get(varName) : null;
                     if (decl == null || decl.isEmpty()) decl = "my";
-                    symbolTable.addVariableWithIndex(varName, regIndex, decl);
+                    // Preserve the declaring package for `our` entries, so eval STRING
+                    // with an inner `package Foo;` still resolves through the caller's
+                    // original alias target. Fall back to current package for non-our.
+                    String perlPkg = null;
+                    if ("our".equals(decl) && parentOurPackages != null) {
+                        perlPkg = parentOurPackages.get(varName);
+                    }
+                    if (perlPkg != null) {
+                        symbolTable.addVariableWithIndex(varName, regIndex, decl, perlPkg);
+                    } else {
+                        symbolTable.addVariableWithIndex(varName, regIndex, decl);
+                    }
                 }
             }
 
@@ -728,6 +753,11 @@ public class BytecodeCompiler implements Visitor {
         // returns only the outermost scope variables. Per-eval-site registries
         // (stored in evalSiteRegistries) provide the correct scope-aware mappings.
         Map<String, Integer> variableRegistry = symbolTable.getVisibleVariableRegistry();
+        // Parallel `our` registry (name → declaring package). Used by eval STRING
+        // to restore the caller's `our` aliases in the eval's compile-time
+        // symbol table — critical for correct resolution when the eval body
+        // changes package via `package Foo;` before referencing an outer `our`.
+        Map<String, String> ourVariableRegistry = symbolTable.getVisibleOurRegistry();
 
         // Extract strict/feature/warning flags for eval STRING inheritance
         int strictOptions = 0;
@@ -772,6 +802,8 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
+        code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
         // Store goto label map for dynamic goto support (goto $variable)
         if (!this.gotoLabelPcs.isEmpty()) {
             code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
@@ -795,6 +827,29 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        // Phase F (refcount_alignment_52leaks_plan.md): narrow the
+        // captured set to only lexicals actually referenced by the
+        // closure body. Ports the JVM-backend optimization from
+        // EmitSubroutine.java:120-140 so the interpreter backend
+        // stops over-capturing every visible lexical as a closure
+        // context. Over-capture inflates captureCount on unrelated
+        // lexicals, pinning them (and their container elements) in
+        // MortalList.deferredCaptures past Perl-level scope exit —
+        // the root cause of the t/52leaks.t "basic rerefrozen" leak.
+        //
+        // When `eval STRING` is present, skip the narrowing: the
+        // eval body can reference any visible lexical dynamically at
+        // runtime, so we must still capture everything.
+        Set<String> usedVars = null;
+        if (ast != null) {
+            Set<String> used = new HashSet<>();
+            VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
+            ast.accept(collector);
+            if (!collector.hasEvalString()) {
+                usedVars = used;
+            }
+        }
+
         // Use getAllVisibleVariables() (TreeMap sorted by register index) with the same
         // filtering as SubroutineParser to ensure capturedVars ordering matches exactly.
         Map<Integer, org.perlonjava.frontend.semantic.SymbolTable.SymbolEntry> outerVars =
@@ -816,6 +871,9 @@ public class BytecodeCompiler implements Visitor {
             if (entry.decl().isEmpty()) continue;
             if (entry.decl().equals("field")) continue;
             if (name.startsWith("&")) continue;
+            // Phase F: skip visible lexicals not actually referenced
+            // by the closure body.
+            if (usedVars != null && !usedVars.contains(name)) continue;
             capturedVarIndices.put(name, reg);
             outerVarNames.add(name);
             outerVarDecls.add(entry.decl());
@@ -1118,10 +1176,12 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Exit scope restores register state.
-        // Flush mortal list for non-subroutine blocks so DESTROY fires promptly
-        // at scope exit. Subroutine body blocks must NOT flush — the implicit
-        // return value may still be in a register and flushing could destroy it.
-        exitScope(!node.getBooleanAnnotation("blockIsSubroutine"));
+        // Flush mortal list for non-subroutine, non-do blocks so DESTROY fires
+        // promptly at scope exit. Subroutine body blocks and do-blocks must NOT
+        // flush — the implicit return value may still be in a register and
+        // flushing could destroy it before the caller captures it.
+        exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
+                && !node.getBooleanAnnotation("blockIsDoBlock"));
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -3965,6 +4025,10 @@ public class BytecodeCompiler implements Visitor {
             // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
             if (node.operand instanceof BinaryOperatorNode binOp) {
                 compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                // Patch HASH_GET → HASH_GET_FOR_LOCAL so that local $hash{key}
+                // always gets a RuntimeHashProxyEntry (not a bare scalar).
+                // This ensures the save/restore mechanism can survive hash reassignment.
+                patchLastHashGetForLocal();
                 int elemReg = lastResultReg;
                 emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 emitReg(elemReg);
@@ -3999,11 +4063,21 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
                     // 'our' variable - must load from global table to see local() changes
-                    // This ensures 'local $Pkg::Var' modifications are visible inside subroutines
+                    // This ensures 'local $Pkg::Var' modifications are visible inside subroutines.
+                    //
+                    // Use the declaring package recorded on the `our` symbol entry, NOT the
+                    // current package: the lexical alias established by `our $foo` must
+                    // survive `package Bar;` directives in the same scope (including inside
+                    // eval STRING bodies). Without this, a package switch inside an eval
+                    // would re-qualify `$foo` to `$CurrentPkg::foo`, losing the alias.
                     String globalVarName = varName.substring(1); // Remove $ sigil
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPkg = (ourEntry != null && ourEntry.perlPackage() != null)
+                            ? ourEntry.perlPackage()
+                            : getCurrentPackage();
                     globalVarName = NameNormalizer.normalizeVariableName(
                             globalVarName,
-                            getCurrentPackage()
+                            ourPkg
                     );
                     int rd = allocateRegister();
                     int nameIdx = addToStringPool(globalVarName);
@@ -4557,6 +4631,36 @@ public class BytecodeCompiler implements Visitor {
     }
 
     /**
+     * Phase F (refcount_alignment_52leaks_plan.md): narrow the visible-
+     * variable set to only names referenced by the given AST (closure
+     * body), matching the JVM-backend optimization from
+     * EmitSubroutine.java:120-140. Prevents interpreter-mode closures
+     * from over-capturing every visible lexical as closure context,
+     * which inflates captureCount on unused lexicals and pins them in
+     * MortalList.deferredCaptures past Perl-level scope exit.
+     * <p>
+     * Returns the full map unchanged when:
+     * - {@code body} is null (caller didn't provide AST)
+     * - the AST contains {@code eval STRING} (runtime may reference
+     *   any visible lexical dynamically)
+     */
+    TreeMap<Integer, String> collectVisiblePerlVariablesNarrowed(Node body) {
+        TreeMap<Integer, String> all = collectVisiblePerlVariables();
+        if (body == null) return all;
+        Set<String> used = new HashSet<>();
+        VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
+        body.accept(collector);
+        if (collector.hasEvalString()) return all;
+        TreeMap<Integer, String> narrowed = new TreeMap<>();
+        for (Map.Entry<Integer, String> e : all.entrySet()) {
+            if (used.contains(e.getValue())) {
+                narrowed.put(e.getKey(), e.getValue());
+            }
+        }
+        return narrowed;
+    }
+
+    /**
      * Get the highest register index currently used by variables (not temporaries).
      * This is used to determine the reset point for register recycling.
      */
@@ -4689,6 +4793,35 @@ public class BytecodeCompiler implements Visitor {
 
     void emit(int value) {
         bytecode.add(value);
+    }
+
+    /**
+     * Scan backwards through emitted bytecode and patch the last HASH_GET
+     * to HASH_GET_FOR_LOCAL. Called after compiling hash element access
+     * in 'local' context so that the result is always a RuntimeHashProxyEntry.
+     * Safe to call even if no HASH_GET was emitted (e.g., for local $array[i]).
+     */
+    void patchLastHashGetForLocal() {
+        // HASH_GET format: HASH_GET rd hashReg keyReg (4 slots total)
+        // Scan backwards looking for a HASH_GET opcode
+        for (int i = bytecode.size() - 1; i >= 0; i--) {
+            int val = bytecode.get(i);
+            if (val == Opcodes.HASH_GET) {
+                bytecode.set(i, (int) Opcodes.HASH_GET_FOR_LOCAL);
+                return;
+            }
+            // Also patch superoperators for arrow hash dereference ($ref->{key})
+            if (val == Opcodes.HASH_DEREF_FETCH) {
+                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_FOR_LOCAL);
+                return;
+            }
+            if (val == Opcodes.HASH_DEREF_FETCH_NONSTRICT) {
+                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL);
+                return;
+            }
+            // Don't scan too far back — the HASH_GET should be very recent
+            if (bytecode.size() - i > 20) return;
+        }
     }
 
     void emitInt(int value) {
@@ -4907,7 +5040,12 @@ public class BytecodeCompiler implements Visitor {
         //
         // Therefore capture all visible Perl variables (scalars/arrays/hashes) from the
         // current scope, not just variables referenced directly in the sub AST.
-        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
+        //
+        // Phase F: narrow to variables actually used by the sub body
+        // (collectVisiblePerlVariablesNarrowed falls back to the full
+        // set if the body contains eval STRING).
+        TreeMap<Integer, String> closureVarsByReg =
+                collectVisiblePerlVariablesNarrowed(node.block);
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
@@ -5048,7 +5186,14 @@ public class BytecodeCompiler implements Visitor {
         // lexicals only inside strings (so they won't appear as IdentifierNodes in the AST).
         // Perl still expects those lexicals to be visible to eval STRING at runtime.
         // Capture all visible Perl variables (scalars/arrays/hashes) from the current scope.
-        TreeMap<Integer, String> closureVarsByReg = collectVisiblePerlVariables();
+        //
+        // Phase F (refcount_alignment_52leaks_plan.md): narrow to
+        // variables actually referenced by the sub body. The helper
+        // detects `eval STRING` in the body and falls back to the
+        // full visible set when present, preserving Perl's dynamic-
+        // reference semantics.
+        TreeMap<Integer, String> closureVarsByReg =
+                collectVisiblePerlVariablesNarrowed(node.block);
 
         List<String> closureVarNames = new ArrayList<>(closureVarsByReg.values());
         List<Integer> closureVarIndices = new ArrayList<>(closureVarsByReg.keySet());
@@ -5175,10 +5320,17 @@ public class BytecodeCompiler implements Visitor {
     private void visitEvalBlock(SubroutineNode node) {
         int resultReg = allocateRegister();
 
+        // Record the first register that will be allocated inside the eval body.
+        // Registers from firstBodyReg up to peakRegister will be cleaned up on
+        // exception to ensure DESTROY fires for blessed objects going out of scope.
+        int firstBodyReg = nextRegister;
+
         // Emit EVAL_TRY with placeholder for catch target (absolute address)
+        // and the first body register for exception cleanup
         emitWithToken(Opcodes.EVAL_TRY, node.getIndex());
         int catchTargetPos = bytecode.size();
         emitInt(0); // Placeholder for absolute catch address (4 bytes)
+        emitReg(firstBodyReg); // First register allocated inside eval body
 
         // Track eval block nesting for "goto &sub from eval" detection
         evalBlockDepth++;

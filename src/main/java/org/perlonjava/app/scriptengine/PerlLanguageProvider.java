@@ -368,6 +368,26 @@ public class PerlLanguageProvider {
      * @return The result of the Perl code execution.
      */
     private static RuntimeList executeCode(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
+        // Phase B2a (refcount_alignment_52leaks_plan.md): mark this
+        // body as module-initialization for the sake of the
+        // reachability-walker auto-sweep, UNLESS it's the main
+        // program body. DBIC's LeakTracer and similar leak-detection
+        // code is sensitive to weak refs being cleared mid-initializer
+        // chain, so auto-sweep inhibits itself while this counter is
+        // positive.
+        boolean guardEntered = false;
+        if (!isMainProgram) {
+            ModuleInitGuard.enter();
+            guardEntered = true;
+        }
+        try {
+            return executeCodeImpl(runtimeCode, ast, ctx, isMainProgram, callerContext);
+        } finally {
+            if (guardEntered) ModuleInitGuard.exit();
+        }
+    }
+
+    private static RuntimeList executeCodeImpl(RuntimeCode runtimeCode, Node ast, EmitterContext ctx, boolean isMainProgram, int callerContext) throws Exception {
         runUnitcheckBlocks(ctx.unitcheckBlocks);
         if (isMainProgram) {
             // Push a CallerStack entry so caller() inside CHECK/INIT/END blocks
@@ -433,6 +453,24 @@ public class PerlLanguageProvider {
 
             try {
                 if (isMainProgram) {
+                    // Flush deferred mortal decrements from file-scoped lexical cleanup.
+                    // The main script's apply() runs scopeExitCleanup for all my-variables
+                    // (deferring refCount decrements), but the MortalList is not flushed
+                    // inside the subroutine (flush=false for blockIsSubroutine). Process
+                    // those decrements now so objects reach refCount=0 and DESTROY fires
+                    // BEFORE END blocks run — matching Perl 5's destruct sequence where
+                    // file-scoped lexicals are destroyed before END block dispatch.
+                    MortalList.flush();
+
+                    // Process captured variables whose scope has exited but whose
+                    // refCount was deferred because captureCount > 0. The interpreter
+                    // captures ALL visible lexicals for eval STRING support, inflating
+                    // captureCount on variables that closures don't actually use.
+                    // Now that all scopes have exited, it's safe to decrement.
+                    // This must happen before END blocks so that DBIC's LeakTracer
+                    // (which runs in an END block) sees objects properly DESTROY'd.
+                    MortalList.flushDeferredCaptures();
+
                     CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                     try {
                         runEndBlocks();
@@ -459,6 +497,8 @@ public class PerlLanguageProvider {
             result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
         } catch (Throwable t) {
             if (isMainProgram) {
+                MortalList.flush();  // Flush file-scoped lexical cleanup before END
+                MortalList.flushDeferredCaptures();  // Process captured vars (see above)
                 CallerStack.push("main", ctx.compilerOptions.fileName, 0);
                 try {
                     runEndBlocks(false);  // Don't reset $? on exception path
