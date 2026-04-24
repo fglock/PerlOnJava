@@ -785,7 +785,13 @@ public class OpcodeHandlerExtended {
      */
     public static int executePreAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        // ScalarSpecialVariable ($&, $1, …) is copy-on-mutate: these are read-only
+        // by design but the interpreter's other code paths don't propagate alias
+        // status, so strip them defensively. RuntimeScalarReadOnly (literal alias
+        // from e.g. `for (3)` or `LOAD_CONST`) must NOT be stripped — its .vivify()
+        // throws "Modification of a read-only value", which is what Perl expects
+        // for `for (3) { ++$_ }` and similar aliased-rvalue writes.
+        if (registers[rd] instanceof ScalarSpecialVariable) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         ((RuntimeScalar) registers[rd]).preAutoIncrement();
@@ -799,7 +805,7 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+        if (registers[rs] instanceof ScalarSpecialVariable) {
             registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
         }
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoIncrement();
@@ -812,7 +818,7 @@ public class OpcodeHandlerExtended {
      */
     public static int executePreAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        if (registers[rd] instanceof ScalarSpecialVariable) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
         ((RuntimeScalar) registers[rd]).preAutoDecrement();
@@ -826,7 +832,7 @@ public class OpcodeHandlerExtended {
     public static int executePostAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+        if (registers[rs] instanceof ScalarSpecialVariable) {
             registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
         }
         registers[rd] = ((RuntimeScalar) registers[rs]).postAutoDecrement();
