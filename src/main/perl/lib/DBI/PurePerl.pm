@@ -789,7 +789,13 @@ sub FETCH {
     my($key)=shift;
     return $DBI::err     if $$key eq '*err';
     return $DBI::errstr  if $$key eq '&errstr';
-    Carp::confess("FETCH $key not supported when using DBI::PurePerl");
+    # PerlOnJava patch: upstream confesses here. That kills any caller
+    # that scans the DBI:: symbol table and touches a tied var (e.g.
+    # DBIx-Class's DBICTest::Util::LeakTracer::symtable_referenced_addresses,
+    # which FETCHes every glob it finds when scanning ::DBI). Return undef
+    # instead so the scan can proceed; this mirrors the XS DBI's lenient
+    # fallback for unknown DBI::var keys.
+    return undef;
 }
 
 package

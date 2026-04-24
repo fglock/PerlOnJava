@@ -57,6 +57,49 @@ pl:
   env:
     PARAMS_VALIDATE_IMPLEMENTATION: PP
 YAML
+        'DBI.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for DBI.
+
+  We bundle a patched DBI.pm + DBI::PurePerl + DBI::Const in the JAR
+  (src/main/perl/lib/DBI*). The bundled copy carries several fixes
+  that DBIx::Class (and other CPAN consumers) depend on:
+
+    1. DBI.pm:
+       a. force $ENV{DBI_PUREPERL}=2 unconditionally (no XSLoader on JVM)
+       b. prepare_cached wraps prepare failures with the XS-DBI-style
+          "prepare_cached failed: <orig>" context DBIC tests match on
+       c. execute_for_fetch wraps execute() in eval{} + local
+          RaiseError/PrintError=0 so per-row errors populate
+          \$tuple_status (DBIC _dbh_execute_for_fetch relies on it)
+
+    2. DBI/PurePerl.pm:
+       DBI::var::FETCH returns undef for unknown keys instead of
+       Carp::confess, so symbol-table walkers like DBIC's LeakTracer
+       don't die mid-scan.
+
+  Running `jcpan -i DBI` (directly or as a transitive dep) would
+  install upstream 1.647 into ~/.perlonjava/lib/DBI/ which is
+  PRE-JAR in @INC — silently shadowing our bundled patched copy
+  and breaking DBIC. Prevent that: make all build/test/install
+  steps a no-op. The JAR-bundled copy is authoritative.
+
+  When PerlOnJava wants to adopt a newer DBI, bump the bundled
+  files in src/main/perl/lib/DBI*, regenerate the reference patch
+  set in src/main/perl/lib/PerlOnJava/CpanPatches/DBI-X.YZ/, and
+  update the distribution-match regex below.
+match:
+  distribution: "/DBI-1\\.647(?:\\b|\\.)"
+pl:
+  commandline: "true"
+make:
+  commandline: "true"
+test:
+  commandline: "true"
+install:
+  commandline: "true"
+YAML
     );
 
     # Check if any files need to be written
@@ -86,6 +129,68 @@ YAML
     }
 }
 _bootstrap_prefs();
+
+# Bootstrap CPAN patches (referenced by distroprefs' `patches:` key).
+#
+# CPAN::Distribution applies these via /usr/bin/patch before make/test/
+# install runs. We ship the patch sources bundled in the JAR under
+# lib/PerlOnJava/CpanPatches/ and copy them out to
+# ~/.perlonjava/cpan/patches/ on first run so the external `patch`
+# binary (which operates on the filesystem) can reach them.
+#
+# Patches are keyed by "<Distribution>-<version>/<filename>.patch"
+# relative to $CPAN::Config->{patches_dir}.
+sub _bootstrap_patches {
+    my $patches_dir = File::Spec->catdir($cpan_home, 'patches');
+
+    # Map: target path relative to $patches_dir  =>  source path inside the JAR
+    # (or on-disk dev tree during `make`). The source is located via @INC.
+    my @bundled = (
+        [ 'DBI-1.647/DBI.pm.patch',
+          'PerlOnJava/CpanPatches/DBI-1.647/DBI.pm.patch' ],
+        [ 'DBI-1.647/PurePerl.pm.patch',
+          'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
+    );
+
+    # Fast path: if every target exists, skip everything.
+    my $needs_write = 0;
+    for my $pair (@bundled) {
+        my ($rel, undef) = @$pair;
+        my $dest = File::Spec->catfile($patches_dir, $rel);
+        unless (-f $dest) { $needs_write = 1; last }
+    }
+    return unless $needs_write;
+
+    require File::Path;
+    for my $pair (@bundled) {
+        my ($rel, $src_rel) = @$pair;
+        my $dest = File::Spec->catfile($patches_dir, $rel);
+        next if -f $dest;
+
+        # Locate the source file in @INC (finds either jar:PERL5LIB/… at
+        # runtime or src/main/perl/lib/… during make/test).
+        my $src;
+        for my $inc (@INC) {
+            my $candidate = File::Spec->catfile($inc, $src_rel);
+            if (-f $candidate) { $src = $candidate; last }
+        }
+        next unless defined $src;
+
+        my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
+        File::Path::make_path($dest_dir) unless -d $dest_dir;
+
+        # Slurp + write — the JAR resource reader is opaque to File::Copy.
+        if (open my $in, '<', $src) {
+            if (open my $out, '>', $dest) {
+                local $/;
+                print $out scalar <$in>;
+                close $out;
+            }
+            close $in;
+        }
+    }
+}
+_bootstrap_patches();
 
 $CPAN::Config = {
     'applypatch' => q[],
@@ -128,6 +233,7 @@ $CPAN::Config = {
     'no_proxy' => q[],
     'pager' => $is_windows ? q[more] : q[/usr/bin/less],
     'patch' => $is_windows ? q[] : q[/usr/bin/patch],
+    'patches_dir' => File::Spec->catdir($cpan_home, 'patches'),
     'perl5lib_verbosity' => q[none],
     'prefer_external_tar' => q[1],
     'prefer_installer' => q[MB],

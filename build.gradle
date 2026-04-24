@@ -368,6 +368,7 @@ sourceSets {
             include '**/*.pod'
             include '**/*.dd'
             include '**/*.yml'
+            include '**/*.patch'
             include '**/media.types'
             include 'lib/ExtUtils/xsubpp'
             include 'bin/**'

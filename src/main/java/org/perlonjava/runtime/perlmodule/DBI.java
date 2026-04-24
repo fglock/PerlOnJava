@@ -832,6 +832,16 @@ public class DBI extends PerlModuleBase {
         RuntimeHash dbh = args.get(0).hashDeref();
 
         return executeWithErrorHandling(() -> {
+            // Guard: begin_work must fail if we're already inside a
+            // transaction (AutoCommit already false). Real XS DBI and our
+            // pre-merge DBI.java both enforce this. DBIx::Class
+            // t/52leaks.t test 4 calls begin_work from inside txn_do and
+            // relies on it dying — otherwise DBIC's rollback-on-error
+            // bookkeeping gets out of sync.
+            RuntimeScalar ac = dbh.get("AutoCommit");
+            if (ac != null && !ac.getBoolean()) {
+                throw new RuntimeException("begin_work invalidates a transaction already in progress");
+            }
             Connection conn = (Connection) dbh.get("connection").value;
             conn.setAutoCommit(false);
             dbh.put("AutoCommit", scalarFalse);
