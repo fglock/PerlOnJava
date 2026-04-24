@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Enumeration;
 import java.util.Properties;
@@ -89,6 +90,58 @@ public class DBI extends PerlModuleBase {
      */
     private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, String methodName) {
         return executeWithErrorHandling(operation, handle, null, methodName);
+    }
+
+    /**
+     * Convert a RuntimeScalar value to a JDBC-appropriate Java object for
+     * {@link PreparedStatement#setObject(int, Object)}.
+     *
+     * <p>Master's Phase 9b simplification passed {@code scalar.value} directly,
+     * which sends our internal representations straight to JDBC — notably
+     * {@code BYTE_STRING} values go through as ISO-8859-1 strings, producing
+     * mojibake when the original data was UTF-8 (DBIC {@code t/85utf8.t},
+     * {@code t/storage/prefer_stringification.t}).
+     *
+     * <p>This restores the type-aware conversion our pre-merge DBI.java had:
+     * <ul>
+     *   <li>INTEGER / DOUBLE — pass the numeric value</li>
+     *   <li>UNDEF — NULL</li>
+     *   <li>STRING — Java {@link String} as-is</li>
+     *   <li>BYTE_STRING — decode ISO-8859-1 bytes back to UTF-8 String for
+     *       JDBC (the inverse of the re-encoding in
+     *       {@link #fetchrow_arrayref(RuntimeArray, int)})</li>
+     *   <li>anything else (blessed refs, RuntimeArray, etc.) —
+     *       stringify via {@code toString()} so overload {@code ""} fires</li>
+     * </ul>
+     */
+    private static Object toJdbcValue(RuntimeScalar scalar) {
+        if (scalar == null) return null;
+        return switch (scalar.type) {
+            case RuntimeScalarType.INTEGER -> scalar.value;
+            case RuntimeScalarType.DOUBLE -> {
+                double d = scalar.getDouble();
+                if (d == Math.floor(d) && !Double.isInfinite(d) && !Double.isNaN(d)
+                        && d >= Long.MIN_VALUE && d <= Long.MAX_VALUE) {
+                    yield (long) d;
+                }
+                yield scalar.value;
+            }
+            case RuntimeScalarType.UNDEF -> null;
+            case RuntimeScalarType.STRING -> scalar.value;
+            case RuntimeScalarType.BYTE_STRING -> {
+                String s = (String) scalar.value;
+                byte[] rawBytes = s.getBytes(StandardCharsets.ISO_8859_1);
+                String decoded = new String(rawBytes, StandardCharsets.UTF_8);
+                // If the bytes were not valid UTF-8, fall back to the raw
+                // Latin-1 string so binary data passes through unharmed.
+                if (decoded.indexOf('\uFFFD') < 0) {
+                    yield decoded;
+                } else {
+                    yield s;
+                }
+            }
+            default -> scalar.toString(); // Triggers overload "" for blessed refs
+        };
     }
 
     private static RuntimeList executeWithErrorHandling(DBIOperation operation, RuntimeHash handle, RuntimeHash secondHandle, String methodName) {
@@ -410,7 +463,7 @@ public class DBI extends PerlModuleBase {
                     if (args.size() > 1) {
                         // Inline parameters passed to execute(@bind_values)
                         for (int i = 1; i < args.size(); i++) {
-                            stmt.setObject(i, args.get(i).value);
+                            stmt.setObject(i, toJdbcValue(args.get(i)));
                         }
                     } else {
                         // Apply stored bound_params from bind_param() calls
@@ -420,7 +473,7 @@ public class DBI extends PerlModuleBase {
                             for (RuntimeScalar key : boundParams.keys().elements) {
                                 int paramIndex = Integer.parseInt(key.toString());
                                 RuntimeScalar val = boundParams.get(key.toString());
-                                stmt.setObject(paramIndex, val.value);
+                                stmt.setObject(paramIndex, toJdbcValue(val));
                             }
                         }
                     }
@@ -523,7 +576,20 @@ public class DBI extends PerlModuleBase {
                 int colCount = metaData.getColumnCount();
                 // Convert each column value to string and add to row array
                 for (int i = 1; i <= colCount; i++) {
-                    RuntimeArray.push(row, RuntimeScalar.newScalarOrString(rs.getObject(i)));
+                    // Re-encode JDBC-returned Strings as UTF-8 bytes stored
+                    // in a BYTE_STRING scalar. JDBC returns column text as
+                    // java.lang.String (decoded from whatever charset the
+                    // driver used), but Perl callers (DBIC / tests like
+                    // t/85utf8.t) expect byte-level UTF-8 data so that
+                    // `use utf8` + Encode::decode_utf8 round-trip as in
+                    // real XS DBD::SQLite.
+                    RuntimeScalar val = RuntimeScalar.newScalarOrString(rs.getObject(i));
+                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                        val.type = RuntimeScalarType.BYTE_STRING;
+                    }
+                    RuntimeArray.push(row, val);
                 }
 
                 // Update bound columns if any (for bind_columns + fetch pattern)
@@ -594,7 +660,15 @@ public class DBI extends PerlModuleBase {
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
-                    row.put(columnName, RuntimeScalar.newScalarOrString(value));
+                    // See fetchrow_arrayref() above: re-encode JDBC Strings
+                    // as UTF-8 bytes (BYTE_STRING) so Perl-level tests round-trip.
+                    RuntimeScalar val = RuntimeScalar.newScalarOrString(value);
+                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                        val.type = RuntimeScalarType.BYTE_STRING;
+                    }
+                    row.put(columnName, val);
                 }
 
                 // Create reference for hash
