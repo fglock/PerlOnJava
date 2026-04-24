@@ -161,6 +161,20 @@ public class BytecodeCompiler implements Visitor {
     public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
                             Map<String, Integer> parentRegistry,
                             Map<String, String> parentDecls) {
+        this(sourceName, sourceLine, errorUtil, parentRegistry, parentDecls, null);
+    }
+
+    /**
+     * Overload that accepts an additional map of parent `our` variable names
+     * to their declaring Perl package. This is critical for eval STRING: when
+     * the eval body does `package Foo; $x`, `$x` must still resolve through
+     * the caller's `our $x` alias (original package) rather than being
+     * re-qualified to `$Foo::x`.
+     */
+    public BytecodeCompiler(String sourceName, int sourceLine, ErrorMessageUtil errorUtil,
+                            Map<String, Integer> parentRegistry,
+                            Map<String, String> parentDecls,
+                            Map<String, String> parentOurPackages) {
         this.sourceName = sourceName;
         this.sourceLine = sourceLine;
         this.errorUtil = errorUtil;
@@ -183,7 +197,18 @@ public class BytecodeCompiler implements Visitor {
                 if (regIndex >= 3) {
                     String decl = parentDecls != null ? parentDecls.get(varName) : null;
                     if (decl == null || decl.isEmpty()) decl = "my";
-                    symbolTable.addVariableWithIndex(varName, regIndex, decl);
+                    // Preserve the declaring package for `our` entries, so eval STRING
+                    // with an inner `package Foo;` still resolves through the caller's
+                    // original alias target. Fall back to current package for non-our.
+                    String perlPkg = null;
+                    if ("our".equals(decl) && parentOurPackages != null) {
+                        perlPkg = parentOurPackages.get(varName);
+                    }
+                    if (perlPkg != null) {
+                        symbolTable.addVariableWithIndex(varName, regIndex, decl, perlPkg);
+                    } else {
+                        symbolTable.addVariableWithIndex(varName, regIndex, decl);
+                    }
                 }
             }
 
@@ -728,6 +753,11 @@ public class BytecodeCompiler implements Visitor {
         // returns only the outermost scope variables. Per-eval-site registries
         // (stored in evalSiteRegistries) provide the correct scope-aware mappings.
         Map<String, Integer> variableRegistry = symbolTable.getVisibleVariableRegistry();
+        // Parallel `our` registry (name → declaring package). Used by eval STRING
+        // to restore the caller's `our` aliases in the eval's compile-time
+        // symbol table — critical for correct resolution when the eval body
+        // changes package via `package Foo;` before referencing an outer `our`.
+        Map<String, String> ourVariableRegistry = symbolTable.getVisibleOurRegistry();
 
         // Extract strict/feature/warning flags for eval STRING inheritance
         int strictOptions = 0;
@@ -772,6 +802,8 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
+        code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
         // Store goto label map for dynamic goto support (goto $variable)
         if (!this.gotoLabelPcs.isEmpty()) {
             code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
@@ -4031,11 +4063,21 @@ public class BytecodeCompiler implements Visitor {
                     lastResultReg = getVariableRegister(varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
                     // 'our' variable - must load from global table to see local() changes
-                    // This ensures 'local $Pkg::Var' modifications are visible inside subroutines
+                    // This ensures 'local $Pkg::Var' modifications are visible inside subroutines.
+                    //
+                    // Use the declaring package recorded on the `our` symbol entry, NOT the
+                    // current package: the lexical alias established by `our $foo` must
+                    // survive `package Bar;` directives in the same scope (including inside
+                    // eval STRING bodies). Without this, a package switch inside an eval
+                    // would re-qualify `$foo` to `$CurrentPkg::foo`, losing the alias.
                     String globalVarName = varName.substring(1); // Remove $ sigil
+                    SymbolTable.SymbolEntry ourEntry = symbolTable.getSymbolEntry(varName);
+                    String ourPkg = (ourEntry != null && ourEntry.perlPackage() != null)
+                            ? ourEntry.perlPackage()
+                            : getCurrentPackage();
                     globalVarName = NameNormalizer.normalizeVariableName(
                             globalVarName,
-                            getCurrentPackage()
+                            ourPkg
                     );
                     int rd = allocateRegister();
                     int nameIdx = addToStringPool(globalVarName);

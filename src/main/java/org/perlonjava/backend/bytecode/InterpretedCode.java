@@ -30,6 +30,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    // `our` declarations visible at compile time, kept so that eval STRING can
+    // inherit the caller's `our` aliases (name → declaring package). Without
+    // this, eval STRING with an inner `package Foo;` loses the outer `our`
+    // binding and resolves the name to $Foo::... instead of the original one.
+    public Map<String, String> ourVariableRegistry;
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strictOptions, featureFlags]
 

@@ -1463,6 +1463,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // caller is visible inside the eval. Without this hint, captured 'our' vars are
                 // treated as lexical 'my' vars bound to the scalar captured at eval-entry time.
                 Map<String, String> adjustedDecls = new HashMap<>();
+                // Parallel map of `our` var name → declaring package. Seeded so the eval's
+                // BytecodeCompiler keeps the caller's lexical alias intact even after the
+                // eval body changes package (e.g. `package Foo; $x`).
+                Map<String, String> adjustedOurPackages = new HashMap<>();
                 if (ctx.capturedEnv != null) {
                     for (int i = 3; i < ctx.capturedEnv.length; i++) {
                         String varName = ctx.capturedEnv[i];
@@ -1470,6 +1474,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         SymbolTable.SymbolEntry entry = capturedSymbolTable.getSymbolEntry(varName);
                         if (entry != null && !entry.decl().isEmpty()) {
                             adjustedDecls.put(varName, entry.decl());
+                            if ("our".equals(entry.decl()) && entry.perlPackage() != null) {
+                                adjustedOurPackages.put(varName, entry.perlPackage());
+                            }
                         }
                     }
                 }
@@ -1490,7 +1497,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         1,
                         evalCtx.errorUtil,
                         adjustedRegistry,
-                        adjustedDecls);
+                        adjustedDecls,
+                        adjustedOurPackages);
                 compiler.setCompilePackage(capturedSymbolTable.getCurrentPackage());
                 interpretedCode = compiler.compile(ast, evalCtx);
                 evalTrace("evalStringWithInterpreter compiled tag=" + evalTag +
