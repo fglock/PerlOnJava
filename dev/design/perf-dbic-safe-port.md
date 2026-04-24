@@ -236,28 +236,36 @@ Current state: `perf/dbic-safe-port` at `e8b0a7f4a`, 5 commits ahead of origin.
    - `aa8287f1a` CORE::GLOBAL::require delete+restore fix
    - `73bc6b4d8` `our` alias inheritance into eval STRING
 
-4. **Disable `module/Net-SSLeay/t/local/01_pod.t`.**
-   - This is a pre-existing pod-coverage author test — false alarm,
-     not a real bug. Add it to whichever skip list `make test-bundled-modules`
-     uses (likely a `.gitignore`-style config under `src/test/resources/module/Net-SSLeay/`
-     or the Gradle `testModule` task).
+4. **Disable `module/Net-SSLeay/t/local/01_pod.t`.** ✓ DONE (2026-04-24).
+   Commit `761f1c9cf`: added `SKIPPED_MODULE_TESTS` set in
+   `ModuleTestExecutionTest.java` with `module/Net-SSLeay/t/local/01_pod.t`
+   as the first (and so far only) entry. Note: 01_pod.t already had
+   `plan skip_all`, so it wasn't actually failing — the skip list
+   codifies the intent and gives us a mechanism for future false-alarm
+   entries.
 
 5. **Complete the secondary tests: `make test-bundled-modules`.**
-   - Verify on the current branch tip, after skipping 01_pod.t.
+   ✓ DONE (2026-04-24). 2 failures remain:
+   - `module/Net-SSLeay/t/local/33_x509_create_cert.t` (Crypt::OpenSSL::Bignum
+     exponent returning `17` instead of `65537` — real bug)
+   - `module/Text-CSV/t/55_combi.t` (subtest 26 content mismatch — real bug)
+   Both added to the "Followup" section at the bottom of this doc.
 
 6. **If step 5 still fails, add a follow-up phase to this plan:**
-   - Fix `module/Text-CSV/t/55_combi.t` — this IS a real failure that
-     could affect user programs. Worth a focused debug session. Do not
-     leave it as a known-fail indefinitely.
+   ✓ DONE (commit `ddc869b6c`) — both real failures documented in the
+   followup section with reproduction/fix-plan notes. Not in this PR's
+   scope.
 
 7. **Review and refresh any outdated documentation** (AGENTS.md, design
-   docs, README snippets) touched by the branch's scope. Examples:
-   - DBI.pm now pre-merge minimal (~830 lines) — any doc referencing
-     "DBI 1.647" should be updated to say we're on the pre-merge
-     purpose-built DBI until a proper upgrade lands.
-   - `make dev` removal note in AGENTS.md is already done.
+   docs, README snippets) touched by the branch's scope. ✓ DONE
+   (commit `ddc869b6c`):
+   - `dev/modules/dbi_test_parity.md` now has a top-of-file note saying
+     the upstream-DBI-switch work is reverted on `perf/dbic-safe-port`.
+   - AGENTS.md was already updated in commit `a1bace135` (remove
+     `make dev` reference).
 
-8. **Push again** after steps 3-7 (incremental updates to the PR).
+8. **Push again** after steps 3-7. ✓ DONE (2026-04-24, tip `ddc869b6c`
+   pushed to origin).
 
 9. **Rebase with master.** Resolve conflicts as "ours" for the three
    DBI files (DBI.pm, DBI.java, DBI/PurePerl.pm — the last will stay
