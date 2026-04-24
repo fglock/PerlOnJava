@@ -294,8 +294,18 @@ public class DBI extends PerlModuleBase {
             // Set AutoCommit attribute in case it was changed
             conn.setAutoCommit(dbh.get("AutoCommit").getBoolean());
 
-            // Set ReadOnly attribute in case it was changed
-            conn.setReadOnly(sth.get("ReadOnly").getBoolean());
+            // Set ReadOnly attribute in case it was changed.
+            // Some JDBC drivers (notably xerial sqlite-jdbc) reject
+            // setReadOnly() after a connection has been established,
+            // throwing "Cannot change read-only flag after establishing
+            // a connection". Silently ignore such rejections — the
+            // driver's existing ReadOnly state is already what the user
+            // asked for at connect time (if they cared). DBIC
+            // t/storage/dbi_env.t exercises this path.
+            try {
+                conn.setReadOnly(sth.get("ReadOnly").getBoolean());
+            } catch (SQLException ignored) {
+            }
 
             // Prepare statement
             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
