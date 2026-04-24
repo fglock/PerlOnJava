@@ -17,7 +17,7 @@ These modules have optimized Java implementations built into PerlOnJava:
 
 | Module | Java Class | XS_VERSION | Notes |
 |--------|------------|------------|-------|
-| JSON | Json.java | - | Uses fastjson2 library |
+| JSON | _(Perl)_ | 4.11 | Delegates to the bundled pure-Perl `JSON::PP` |
 | DateTime | DateTime.java | 1.65 | Uses java.time APIs, JulianFields.RATA_DIE |
 | Digest::MD5 | DigestMD5.java | - | Uses Java MessageDigest |
 | Digest::SHA | DigestSHA.java | - | Uses Java MessageDigest |

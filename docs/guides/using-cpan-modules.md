@@ -71,7 +71,7 @@ PerlOnJava includes Java implementations of XS functions for several modules:
 | Module | Notes |
 |--------|-------|
 | DateTime | Uses java.time APIs with JulianFields.RATA_DIE |
-| JSON | Fast JSON encode/decode using fastjson2 |
+| JSON | Delegates to the bundled pure-Perl `JSON::PP` for full `JSON::XS` option parity |
 | Digest::MD5 | Java MessageDigest API |
 | Digest::SHA | Java MessageDigest API |
 | Time::HiRes | Java System.nanoTime() |

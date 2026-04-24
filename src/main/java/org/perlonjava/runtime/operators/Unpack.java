@@ -81,7 +81,9 @@ public class Unpack {
         // Create state object - always starts in character mode
         UnpackState state = new UnpackState(dataString, false, utf8Flagged);
 
-        // Check if template starts with U0 to switch to byte mode
+        // Check if template starts with U0 to switch to byte mode.
+        // (See inline `case 'C'/'U' 0` handler below for the historical
+        // naming quirk.)
         if (template.startsWith("U0")) {
             state.switchToByteMode();
         }
@@ -250,7 +252,15 @@ public class Unpack {
                 continue;
             }
 
-            // Check for explicit mode modifiers
+            // Check for explicit mode modifiers.  Historical quirk: the
+            // internal state's `characterMode` name is inverted from what
+            // the Perl docs call "character mode".  `C0` puts the state
+            // into what the rest of the code (StringFormatHandler etc.)
+            // treats as "operate on raw code-units", which matches the
+            // Perl `C0` semantics of "strip UTF-8 flag & treat as bytes".
+            // `U0` puts it into the opposite mode.  Don't touch this
+            // unless you're ready to audit every other handler that
+            // keys off `state.isCharacterMode()`.
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
                 state.switchToCharacterMode();
                 i += 2; // Skip 'C0'
