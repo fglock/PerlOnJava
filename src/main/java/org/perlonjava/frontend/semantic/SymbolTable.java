@@ -2,7 +2,7 @@ package org.perlonjava.frontend.semantic;
 
 import org.perlonjava.frontend.astnode.OperatorNode;
 
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -10,11 +10,7 @@ import java.util.Map;
  */
 public class SymbolTable {
     // A map to store variable names and their corresponding indices
-    // LinkedHashMap preserves insertion (declaration) order, which is critical
-    // for scope exit cleanup: Perl 5 destroys variables in reverse declaration
-    // order (LIFO). Using HashMap would give random cleanup order, causing
-    // Schema::DESTROY to see incorrect refcounts on sibling variables.
-    public Map<String, SymbolEntry> variableIndex = new LinkedHashMap<>();
+    public Map<String, SymbolEntry> variableIndex = new HashMap<>();
 
     // A counter to generate unique indices for variables
     public int index;
