@@ -234,7 +234,6 @@ The root build configurations that will build all subprojects:
         <asm.version>9.7.1</asm.version>
         <junit.version>5.11.4</junit.version>
         <icu4j.version>76.1</icu4j.version>
-        <fastjson.version>2.0.54</fastjson.version>
         <snakeyaml.version>2.9</snakeyaml.version>
     </properties>
 
@@ -254,11 +253,6 @@ The root build configurations that will build all subprojects:
                 <groupId>com.ibm.icu</groupId>
                 <artifactId>icu4j</artifactId>
                 <version>${icu4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.alibaba.fastjson2</groupId>
-                <artifactId>fastjson2</artifactId>
-                <version>${fastjson.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.snakeyaml</groupId>
@@ -312,7 +306,6 @@ subprojects {
 ext {
     asmVersion = '9.7.1'
     icu4jVersion = '76.1'
-    fastjsonVersion = '2.0.54'
     snakeyamlVersion = '2.9'
     junitVersion = '5.9.2'
 }

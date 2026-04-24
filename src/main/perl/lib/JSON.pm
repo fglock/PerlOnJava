@@ -1,43 +1,168 @@
 package JSON;
 
-our $VERSION = '4.11';
+# PerlOnJava's bundled JSON backend.
+#
+# CPAN `JSON` is a pure-Perl dispatcher that loads `JSON::XS` or
+# `JSON::PP`.  In PerlOnJava we use `JSON::PP` as the real backend —
+# it is a complete pure-Perl implementation that handles every
+# option, edge case and error message the CPAN test suite checks
+# for.  A previous iteration of this shim delegated to a partial
+# Java implementation in `Json.java`; that implementation did not
+# honour most of the JSON::XS options and was replaced by the
+# JSON::PP inheritance below.  `Json.java` is kept in the tree but
+# no longer loaded by this module.
+#
+# We still provide the dispatcher's surface so code that writes
+#   use JSON -support_by_pp;
+#   my $v = JSON->backend->VERSION;
+# continues to load cleanly.
 
-use Exporter "import";
-use warnings;
 use strict;
-use Symbol;
-use Carp;
+use warnings;
+use Carp ();
 
-XSLoader::load( 'Json' );
-
-# NOTE: The rest of the code is in file:
-#       src/main/java/org/perlonjava/perlmodule/Json.java
-
-our @EXPORT = ("encode_json", "decode_json", "to_json", "from_json");
-
-my @PublicMethods = qw/
-    ascii latin1 utf8 pretty indent space_before space_after relaxed canonical allow_nonref
-    allow_blessed convert_blessed filter_json_object filter_json_single_key_object
-    shrink max_depth max_size encode decode decode_prefix allow_unknown
-    allow_tags
-/;
-
-my @Properties = qw/
-    ascii latin1 utf8 indent space_before space_after relaxed canonical allow_nonref
-    allow_blessed convert_blessed shrink max_depth max_size allow_unknown
-    allow_tags
-/;
-
-sub new {
-    my ($class) = @_;
-    return bless {}, $class;
+# Pick the pure-Perl backend to load.  The CPAN `JSON` dispatcher
+# honours `$ENV{PERL_JSON_BACKEND}`: the value `JSON::backportPP`
+# asks for a self-contained copy of JSON::PP that should not leave
+# `$INC{'JSON/PP.pm'}` populated.  PerlOnJava ships both
+# `JSON::PP` and `JSON::backportPP`; the latter loads JSON::PP's
+# source without registering the PP file in `%INC`.
+BEGIN {
+    my $backend = $ENV{PERL_JSON_BACKEND};
+    if (defined $backend && $backend eq 'JSON::backportPP') {
+        require JSON::backportPP;
+    } else {
+        require JSON::PP;
+    }
+    # The CPAN `JSON::backportPP` declares `package JSON::PP;` internally
+    # but only sets `@JSON::backportPP::ISA = ('Exporter')`, leaving
+    # `@JSON::PP::ISA` empty AND leaving `JSON::backportPP` without
+    # `isa('JSON::PP')`, `is_pp`, `is_xs`.  Our own `JSON::PP.pm` /
+    # `JSON::backportPP.pm` set these up correctly, but the CPAN tarball
+    # ships its own copies that shadow ours under
+    # `PERL5LIB=./blib/lib:./blib/arch` during `make test`.  Paper over
+    # both omissions so the dispatcher surface behaves the same either
+    # way.
+    unless (@JSON::PP::ISA) {
+        @JSON::PP::ISA = ('Exporter');
+    }
+    unless (grep { $_ eq 'JSON::PP' } @JSON::backportPP::ISA) {
+        push @JSON::backportPP::ISA, 'JSON::PP';
+    }
+    unless (defined &JSON::backportPP::is_pp) {
+        no warnings 'once';
+        *JSON::backportPP::is_pp = sub { 1 };
+        *JSON::backportPP::is_xs = sub { 0 };
+    }
+    unless (defined &JSON::PP::is_pp) {
+        no warnings 'once';
+        *JSON::PP::is_pp = sub { 1 };
+        *JSON::PP::is_xs = sub { 0 };
+    }
 }
 
-sub is_xs { 1 };
-sub is_pp { 0 };
+our $VERSION = '4.11';
+
+# Inherit all encode/decode/option methods from JSON::PP.  Using @ISA
+# (rather than re-exporting every sub) means future JSON::PP updates
+# are picked up automatically.
+our @ISA = ('JSON::PP');
+
+our @EXPORT = qw(from_json to_json jsonToObj objToJson encode_json decode_json);
+
+# Backend introspection variables populated by the real CPAN JSON
+# after it loads a backend.  Mirror the CPAN semantics: when
+# `PERL_JSON_BACKEND` picked `JSON::backportPP`, report that
+# (and set the module-PP name to match); otherwise report
+# JSON::PP as the backend.  Tests look at both.
+our ($Backend, $BackendModule, $BackendModulePP);
+BEGIN {
+    my $chosen = (defined $ENV{PERL_JSON_BACKEND}
+                      && $ENV{PERL_JSON_BACKEND} eq 'JSON::backportPP')
+                 ? 'JSON::backportPP'
+                 : 'JSON::PP';
+    $Backend         = $chosen;
+    $BackendModule   = $chosen;
+    $BackendModulePP = $chosen;
+}
+our $BackendModuleXS;   # left undef: no XS backend available
+
+our $DEBUG = 0;
+$DEBUG = $ENV{PERL_JSON_DEBUG} if exists $ENV{PERL_JSON_DEBUG};
+
+my %RequiredVersion = (
+    'JSON::PP' => '2.27203',
+    'JSON::XS' => '2.34',
+);
+
+# PP-only methods, reported by pureperl_only_methods().
+my @PPOnlyMethods = qw/
+    indent_length sort_by
+    allow_singlequote allow_bignum loose allow_barekey escape_slash as_nonblessed
+/;
+
+# CPAN JSON.pm supports several special import tags; accept them as
+# no-ops so modules that use them at `use` time continue to load.
+sub import {
+    my $pkg = shift;
+    my @to_export;
+    my $no_export;
+
+    for my $tag (@_) {
+        if ($tag eq '-support_by_pp') {
+            # already supported — JSON::PP is our backend
+            next;
+        }
+        elsif ($tag eq '-no_export') {
+            $no_export++;
+            next;
+        }
+        elsif ($tag eq '-convert_blessed_universally') {
+            # Install a default UNIVERSAL::TO_JSON like CPAN JSON does.
+            # The hook unwraps blessed hashrefs/arrayrefs into plain refs;
+            # it must use `reftype` (not `ref`) because `ref` on a blessed
+            # ref returns the CLASS name, not the underlying reftype.
+            require Scalar::Util;
+            my $org_encode = JSON::PP->can('encode');
+            no warnings 'redefine';
+            no strict 'refs';
+            *{'JSON::PP::encode'} = sub {
+                local *UNIVERSAL::TO_JSON = sub {
+                    my $rt = Scalar::Util::reftype($_[0]) // '';
+                    return $rt eq 'HASH'  ? { %{$_[0]} }
+                         : $rt eq 'ARRAY' ? [ @{$_[0]} ]
+                         : undef;
+                };
+                $org_encode->(@_);
+            };
+            next;
+        }
+        push @to_export, $tag;
+    }
+    return if $no_export;
+    __PACKAGE__->export_to_level(1, $pkg, @to_export);
+}
+
+# CPAN's `encode_json` / `decode_json` are package subs in JSON::PP,
+# not imported-to-this-package.  Re-export them under the JSON
+# package so `JSON::encode_json(...)` and a bare `encode_json(...)`
+# after `use JSON` both work.
+*encode_json = \&JSON::PP::encode_json;
+*decode_json = \&JSON::PP::decode_json;
+*is_bool     = \&JSON::PP::is_bool;
+*true        = \&JSON::PP::true;
+*false       = \&JSON::PP::false;
+*null        = sub { undef };
+
+# Backend introspection.  Works both as class and instance method.
+sub backend               { $Backend }
+sub is_xs                 { 0 }
+sub is_pp                 { 1 }
+sub require_xs_version    { $RequiredVersion{'JSON::XS'} }
+sub pureperl_only_methods { @PPOnlyMethods }
 
 
-# INTERFACES
+# INTERFACES — thin wrappers matching CPAN JSON.pm exactly.
 
 sub to_json ($@) {
     if (
@@ -58,7 +183,6 @@ sub to_json ($@) {
     $json->encode($_[0]);
 }
 
-
 sub from_json ($@) {
     if ( ref($_[0]) eq 'JSON' or $_[0] eq 'JSON' ) {
         Carp::croak "from_json should not be called as a method.";
@@ -75,129 +199,98 @@ sub from_json ($@) {
     return $json->decode( $_[0] );
 }
 
+sub jsonToObj {
+    my $alt = 'from_json';
+    if (defined $_[0] and UNIVERSAL::isa($_[0], 'JSON')) {
+        shift @_;
+        $alt = 'decode';
+    }
+    Carp::carp "'jsonToObj' will be obsoleted. Please use '$alt' instead.";
+    return JSON::from_json(@_);
+}
+
+sub objToJson {
+    my $alt = 'to_json';
+    if (defined $_[0] and UNIVERSAL::isa($_[0], 'JSON')) {
+        shift @_;
+        $alt = 'encode';
+    }
+    Carp::carp "'objToJson' will be obsoleted. Please use '$alt' instead.";
+    return JSON::to_json(@_);
+}
+
 sub boolean {
-    # might be called as method or as function, so pop() to get the last arg instead of shift() to get the first
+    # might be called as method or as function; use pop() to fetch the
+    # intended boolean regardless.
     pop() ? true() : false()
 }
 
-sub require_xs_version {}
-
-sub backend {}
+# `property()` lets callers introspect (or toggle) any named option via the
+# same name as its setter/getter.  Neither JSON::PP nor the stock JSON shim
+# provides it, but the CPAN JSON.pm dispatcher does — and several tests use
+# it (t/e01_property.t).  Implement it inline here.
+my @PropertyNames = qw(
+    ascii latin1 utf8 indent space_before space_after relaxed canonical
+    allow_nonref allow_blessed convert_blessed shrink max_depth max_size
+    allow_unknown allow_tags
+);
 
 sub property {
-    my ($self, $name, $value) = @_;
-
-    if (@_ == 1) {
+    my $self = shift;
+    if (@_ == 0) {
+        # Return all properties as a hashref
         my %props;
-        for $name (@Properties) {
-            my $method = 'get_' . $name;
-            if ($name eq 'max_size') {
-                my $value = $self->$method();
-                $props{$name} = $value == 1 ? 0 : $value;
-                next;
-            }
-            $props{$name} = $self->$method();
+        for my $name (@PropertyNames) {
+            my $getter = 'get_' . $name;
+            my $v = $self->can($getter) ? $self->$getter() : undef;
+            # CPAN JSON.pm maps max_size == 1 back to 0 for reporting
+            $v = 0 if $name eq 'max_size' && defined $v && $v == 1;
+            $props{$name} = $v;
         }
         return \%props;
     }
-    elsif (@_ > 3) {
-        Carp::croak('property() can take only the option within 2 arguments.');
+    Carp::croak('property() can take only the option within 2 arguments.')
+        if @_ > 2;
+
+    my ($name, $value) = @_;
+    if (@_ == 1) {
+        # Getter form
+        my $getter = 'get_' . $name;
+        return undef unless $self->can($getter);
+        my $v = $self->$getter();
+        $v = 0 if $name eq 'max_size' && defined $v && $v == 1;
+        return $v;
     }
-    elsif (@_ == 2) {
-        if ( my $method = $self->can('get_' . $name) ) {
-            if ($name eq 'max_size') {
-                my $value = $self->$method();
-                return $value == 1 ? 0 : $value;
-            }
-            $self->$method();
-        }
-    }
-    else {
-        $self->$name($value);
-    }
-
-}
-
-BEGIN {
-    my @xs_compati_bit_properties = qw(
-        latin1 ascii utf8 indent canonical space_before space_after allow_nonref shrink
-        allow_blessed convert_blessed relaxed allow_unknown
-        allow_tags
-    );
-    my @pp_bit_properties = qw(
-        allow_singlequote allow_bignum loose
-        allow_barekey escape_slash as_nonblessed
-    );
-    for my $name (@xs_compati_bit_properties, @pp_bit_properties) {
-        my $sym_ref = Symbol::qualify_to_ref($name, __PACKAGE__);
-        *$sym_ref = sub {
-            if ($_[1] // 1) {
-                $_[0]->{$name} = 1;
-            }
-            else {
-                $_[0]->{$name} = 0;
-            }
-            $_[0];
-        };
-        $sym_ref = Symbol::qualify_to_ref("get_$name", __PACKAGE__);
-        *$sym_ref = sub {
-            $_[0]->{$name} ? 1 : '';
-        };
-    }
-}
-
-# pretty printing
-
-sub pretty {
-    my ($self, $v) = @_;
-    my $enable = defined $v ? $v : 1;
-
-    if ($enable) { # indent_length(3) for JSON::XS compatibility
-        $self->indent(1)->space_before(1)->space_after(1);
-    }
-    else {
-        $self->indent(0)->space_before(0)->space_after(0);
-    }
-
-    $self;
-}
-
-# Functions
-
-my $JSON; # cache
-
-sub encode_json ($) { # encode
-    ($JSON ||= __PACKAGE__->new->utf8)->encode(@_);
-}
-
-
-sub decode_json { # decode
-    ($JSON ||= __PACKAGE__->new->utf8)->decode(@_);
+    # Setter form: property($name, $value)  ->  delegate to $self->$name($value)
+    return $self->$name($value);
 }
 
 1;
 
 __END__
 
-Author and Copyright messages from the original JSON.pm:
+=head1 NAME
+
+JSON - PerlOnJava bundled JSON backend (delegates to JSON::PP)
+
+=head1 DESCRIPTION
+
+This module exposes the CPAN C<JSON> dispatcher API but is backed
+unconditionally by L<JSON::PP>, which is shipped inside the PerlOnJava
+JAR.  The original hand-coded Java encoder in C<Json.java> has been
+retired in favour of the complete pure-Perl implementation so that
+every JSON::XS-style option, error message, and edge case matches the
+CPAN test suite.
 
 =head1 AUTHOR
 
-Makamaka Hannyaharamitu, E<lt>makamaka[at]cpan.orgE<gt>
-
-JSON::XS was written by  Marc Lehmann E<lt>schmorp[at]schmorp.deE<gt>
-
-The release of this new version owes to the courtesy of Marc Lehmann.
-
-=head1 CURRENT MAINTAINER
-
-Kenichi Ishigaki, E<lt>ishigaki[at]cpan.orgE<gt>
+The CPAN C<JSON> module is maintained by Kenichi Ishigaki, originally
+authored by Makamaka Hannyaharamitu.  This PerlOnJava shim preserves
+the author/licence of the original.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2005-2013 by Makamaka Hannyaharamitu
-
-Most of the documentation is taken from JSON::XS by Marc Lehmann
+Copyright 2005-2013 by Makamaka Hannyaharamitu.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

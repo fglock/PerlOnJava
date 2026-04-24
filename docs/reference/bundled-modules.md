@@ -112,7 +112,7 @@ These are loaded automatically or via `use`:
 | Module | Implementation | Notes |
 |--------|---------------|-------|
 | `Data::Dumper` | Java + Perl | |
-| `JSON` / `JSON::PP` | Java | Fast encode/decode via fastjson2 |
+| `JSON` / `JSON::PP` | Perl | `JSON` delegates to the bundled pure-Perl `JSON::PP` |
 | `YAML::PP` | Java + Perl | |
 | `TOML` | Java | |
 | `Text::CSV` | Java | |

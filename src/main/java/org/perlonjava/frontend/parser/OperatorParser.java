@@ -780,8 +780,15 @@ public class OperatorParser {
 
             // Handle bareword class names
             if (className instanceof IdentifierNode identifierNode) {
-                // Convert bareword to string (like "Moo" -> StringNode("Moo"))
-                className = new StringNode(identifierNode.name, currentIndex);
+                // Convert bareword to string (like "Moo" -> StringNode("Moo")).
+                // A package-literal bareword ending in "::" means the class
+                // name without the trailing "::", matching standard Perl:
+                //   bless $r, Foo::Bar::;   # class is "Foo::Bar", not "Foo::Bar::"
+                String name = identifierNode.name;
+                if (name.endsWith("::") && !name.equals("::")) {
+                    name = name.substring(0, name.length() - 2);
+                }
+                className = new StringNode(name, currentIndex);
             } else if (className instanceof StringNode stringNode && stringNode.value.isEmpty()) {
                 // default to main package if empty class name is provided
                 className = new StringNode("main", currentIndex);

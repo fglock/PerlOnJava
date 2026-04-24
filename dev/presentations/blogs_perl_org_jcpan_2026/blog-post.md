@@ -39,7 +39,7 @@ For XS modules (those with C code), PerlOnJava provides Java implementations for
 | Module | Java Backend |
 |--------|--------------|
 | DateTime | java.time with JulianFields |
-| JSON | fastjson2 |
+| JSON | bundled `JSON::PP` (pure Perl) |
 | Digest::MD5/SHA | Java MessageDigest |
 | DBI | JDBC |
 | Compress::Zlib | java.util.zip |

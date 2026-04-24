@@ -160,4 +160,43 @@ subtest 'Star (*) modifier tests' => sub {
     cmp_ok(abs($unpacked[1] - 2.22222222), '<', 0.00000001, 'Second double value');
 };
 
+subtest 'U format reads code points, does not UTF-8-decode' => sub {
+    # Regression: `unpack "U*", "\xc2\xb6"` must return (194, 182) — one code
+    # point per character of the string — NOT (182) obtained by re-decoding
+    # the two bytes as a single UTF-8 sequence.  A template starting with
+    # a bare `U` implies `U0` (Perl's "character mode"), so `U` reads code
+    # points directly from the string.  Previously the handler keyed on a
+    # storage flag (isUTF8Data, true only for code points > 255), which
+    # caused Latin-1 byte strings to be mis-decoded.
+
+    no utf8;
+    my @u1 = unpack "U*", "\xc2\xb6";
+    is_deeply(\@u1, [194, 182], '{\xc2,\xb6} unpacks as two code points');
+
+    # ASCII stays ASCII.
+    my @u2 = unpack "U*", "abc";
+    is_deeply(\@u2, [97, 98, 99], 'ASCII U* returns byte values');
+
+    # After `C0` Perl switches to "byte mode" — the string is treated as
+    # UTF-8 bytes and `U` decodes one multi-byte sequence per read.
+    my @u3 = unpack "C0U*", "\xc2\xb6";
+    is_deeply(\@u3, [182], 'C0U* decodes as UTF-8');
+
+    # After `U0` we stay in character mode and `U` reads code points
+    # directly (same as starting the template with `U`).
+    my @u4 = unpack "U0U*", "\xc2\xb6";
+    is_deeply(\@u4, [194, 182], 'U0U* reads code points');
+
+    # A string that really does contain a high Unicode code point round-trips.
+    my @u5 = unpack "U*", "\x{8000}\x{20}";
+    is_deeply(\@u5, [0x8000, 0x20], 'high Unicode U* returns code points');
+
+    # And the `U0U C0 W` sequence from op/pack.t must advance both the
+    # code-point and byte cursors when U is read in byte mode, so that
+    # the subsequent `C0 W` sees the *next* character, not the one we
+    # just consumed.
+    my @u6 = unpack "U0U C0 W", "\xf8\xf9\xfa";
+    is_deeply(\@u6, [248, 249], 'U0U C0 W advances both cursors');
+};
+
 done_testing();

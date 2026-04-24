@@ -39,11 +39,27 @@ else
 	./gradlew classes testUnitParallel --parallel shadowJar
 endif
 
-# `make dev` used to build without tests — removed because it allowed broken
-# commits to land silently. Always use `make`, which builds + runs unit tests.
+# `make dev` is disabled on purpose.
+#
+# It used to be a "build without running tests" shortcut, but that is
+# precisely what makes it dangerous: it lets changes land on a branch
+# without having ever been exercised by the unit test suite.  Agents
+# (and humans in a hurry) reach for `make dev` to iterate faster and
+# then forget to run `make` before pushing, so regressions sneak in.
+#
+# Use `make` (the default target) instead: it builds *and* runs the
+# fast unit tests.  If you really need a no-test build for a very
+# specific reason, invoke Gradle directly (`./gradlew shadowJar`) and
+# own the consequences.
 dev:
-	@echo "Error: 'make dev' has been removed. Use 'make' — it must pass before commits/pushes."
-	@echo "See AGENTS.md: \"Always run \`make\` and ensure it passes before pushing commits\"."
+	@echo "ERROR: 'make dev' is disabled on purpose."
+	@echo ""
+	@echo "  It skipped the unit tests, which caused regressions to slip"
+	@echo "  into commits.  Please use 'make' (which builds + tests) for"
+	@echo "  everyday iteration."
+	@echo ""
+	@echo "  If you truly need a no-test build, invoke Gradle directly:"
+	@echo "      ./gradlew shadowJar installDist"
 	@exit 1
 
 # Default test target - fast unit tests using perl_test_runner.pl

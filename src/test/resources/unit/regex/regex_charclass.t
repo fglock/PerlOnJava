@@ -41,4 +41,23 @@ $pattern = qr/[[:punct:]]+/;
 $match = $string =~ $pattern;
 ok($match, '\'Hello, World!\' matches \'[[:punct:]]+\'');
 
+# Regression: `[\c?]` must match only U+007F (DEL), not U+001C.
+# Earlier, the preprocessor escaped `?` inside [] as `\?`, so `[\c?]`
+# leaked out as `[\c\?]` which Java parses as `\c\` (= 0x1C) plus a
+# literal `?`, matching the wrong code point.  This silently corrupted
+# patterns like `[\n\t\c?[:^cntrl:]]` used by JSON::PP's ASCII escape
+# regex (and any other Perl code that uses `\c?` inside a class).
+subtest 'bracketed \c? matches DEL only' => sub {
+    my @matched;
+    for my $i (0x00..0x1f, 0x7f) {
+        push @matched, sprintf("0x%02x", $i) if chr($i) =~ /[\c?]/;
+    }
+    is_deeply(\@matched, ["0x7f"], '[\c?] matches U+007F only');
+
+    # Sanity: literal `?` still works in classes and as a quantifier.
+    ok("?" =~ /[?]/, "bracketed literal ? still matches");
+    ok("colour" =~ /colou?r/, "? quantifier still works");
+    ok("color"  =~ /colou?r/, "? quantifier still works (absent)");
+};
+
 done_testing();

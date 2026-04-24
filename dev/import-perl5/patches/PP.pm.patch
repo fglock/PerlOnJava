@@ -1,6 +1,24 @@
---- perl5/cpan/JSON-PP/lib/JSON/PP.pm
-+++ src/main/perl/lib/JSON/PP.pm
-@@ -695,6 +695,9 @@ BEGIN {
+--- perl5/cpan/JSON-PP/lib/JSON/PP.pm	2025-12-30 10:25:00
++++ src/main/perl/lib/JSON/PP.pm	2026-04-23 21:59:52
+@@ -129,6 +129,17 @@
+ 
+ 
+ # Methods
++
++# Backend introspection — the CPAN JSON dispatcher and its test suite call
++# these as class methods on whichever backend module was loaded (JSON::XS,
++# JSON::PP, JSON::backportPP, or — in PerlOnJava — our `JSON` shim which
++# ISA JSON::PP).  JSON::PP is the pure-Perl backend, so `is_pp == 1` and
++# `is_xs == 0`.  Upstream CPAN JSON::PP doesn't define these (the real
++# dispatcher installs them), but we ship JSON::PP as our backend and add
++# them here so that tests which introspect `JSON::PP->is_pp` directly
++# work out of the box.
++sub is_xs { 0 }
++sub is_pp { 1 }
+ 
+ sub new {
+     my $class = shift;
+@@ -695,6 +706,9 @@
              last;
          }
      }
@@ -10,3 +28,36 @@
  }
  
  { # PARSE 
+@@ -1544,8 +1558,30 @@
+ 
+                 my ($obj, $offset) = $coder->PP_decode_json( $self->{incr_text}, 0x00000001 );
+                 push @ret, $obj;
+-                use bytes;
+-                $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
++                # PerlOnJava: the decoder advances its internal `$at` by the
++                # UTF-8 byte length of each multi-byte character (via
++                # `is_valid_utf8`), so `$offset` is in BYTES.  CPAN
++                # JSON::PP papers over this with `use bytes; substr`,
++                # which in upstream Perl makes substr operate on the
++                # UTF-8 byte representation of the string.  PerlOnJava's
++                # `use bytes` pragma does not yet redirect substr, so do
++                # the equivalent explicitly.
++                #
++                # When `get_utf8` is true, `$self->{incr_text}` is already
++                # a byte string (the user hands us UTF-8 bytes) and plain
++                # substr works correctly with a byte offset.  When
++                # `get_utf8` is false, we decoded to chars above and need
++                # to encode-substr-decode to match the decoder's byte
++                # bookkeeping.
++                if ( $coder->get_utf8 ) {
++                    $self->{incr_text} = substr( $self->{incr_text}, $offset || 0 );
++                } else {
++                    my $bytes = $self->{incr_text};
++                    utf8::encode($bytes);
++                    my $remaining = substr($bytes, $offset || 0);
++                    utf8::decode($remaining);
++                    $self->{incr_text} = $remaining;
++                }
+                 $self->{incr_pos} = 0;
+                 $self->{incr_nest} = 0;
+                 $self->{incr_mode} = 0;

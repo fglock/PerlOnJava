@@ -32,6 +32,15 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
+            // Canonicalise the class name through any stash aliases
+            // (`*Foo:: = *Bar::`).  In Perl, `bless` binds the referent to
+            // the stash object itself, whose `HvNAME` is the canonical
+            // package name — so if Foo has been aliased to Bar, a later
+            // `bless $x, "Foo"` reports `ref($x) eq "Bar"`.  Without this
+            // canonicalisation, `ref` would return "Foo" and
+            // `$x->isa("Bar")` would miss the linearised hierarchy that
+            // the aliased stash exposes.
+            str = GlobalVariable.resolveStashAlias(str);
 
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
             int newBlessId = NameNormalizer.getBlessId(str);

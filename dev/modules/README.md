@@ -69,7 +69,7 @@ PerlOnJava's XSLoader returns an error matching `/loadable object/` which these 
 For performance-critical modules, PerlOnJava can provide Java implementations:
 
 - `DateTime` - Uses `java.time` APIs
-- `JSON::XS` - Falls back to JSON::PP (or could use FASTJSON)
+- `JSON::XS` - Falls back to the bundled `JSON::PP`
 - `DBI` - Custom Java implementation with JDBC
 
 See [xs_fallback.md](xs_fallback.md) for implementation details.

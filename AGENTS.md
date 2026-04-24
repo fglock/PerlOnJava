@@ -20,18 +20,6 @@
 
 ---
 
-## ⚠️ Resource Management: Avoid Fork Exhaustion ⚠️
-
-**Do NOT spawn excessive parallel processes.** Running too many background shells, subagents, or parallel builds at once can exhaust the system's process table (fork bomb), forcing a reboot and losing work.
-
-- **Limit parallel operations**: Run at most 2-3 concurrent processes at a time
-- **Avoid unnecessary background shells**: Use foreground execution when you don't need parallelism
-- **Wait for processes to finish** before starting new ones when possible
-- **Never run `make` in parallel with other heavy processes** (builds already use multiple threads internally)
-- **Clean up**: Kill background shells when they're no longer needed
-
----
-
 ## Project Rules
 
 ### Progress Tracking for Multi-Phase Work
@@ -72,10 +60,6 @@ Example format at the end of a design doc:
 - Keep docs updated as implementation progresses
 - Reference related docs and skills at the end
 
-### Sandbox Tests
-
-- `dev/sandbox/destroy_weaken/` — Tests for DESTROY and weaken behavior (cascading cleanup, scope exit timing, blessed-without-DESTROY, etc.). Run with `./jperl` or `perl` for comparison.
-
 ### Partially Implemented Features
 
 | Feature | Status |
@@ -115,8 +99,13 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op/ > /tmp/test_output.txt 2>&1
 
 | Command | What it does |
 |---------|--------------|
-| `make` | Build + run all unit tests (use before committing) |
+| `make` | Build + run all unit tests (always use this) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
+
+`make dev` has been disabled on purpose — it used to build without
+running tests, which let regressions sneak into commits.  Always use
+`make`; if you truly need a no-test build, invoke Gradle directly
+(`./gradlew shadowJar installDist`).
 
 - For interpreter changes, test with both backends:
   ```bash

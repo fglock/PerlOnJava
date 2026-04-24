@@ -57,14 +57,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
     private final Stack<CaseModifier> caseModifiers = new Stack<>();
 
     /**
-     * Flag indicating whether we're inside a \Q...\E quotemeta region.
-     *
-     * <p>When true, all special characters (including $ and @) are treated as literals,
-     * and escape sequences are not processed (except \E to end the region).
-     */
-    private boolean inQuotemeta = false;
-
-    /**
      * Private constructor for StringDoubleQuoted parser.
      *
      * <p>Use {@link #parseDoubleQuotedString} factory method to create instances.
@@ -357,37 +349,20 @@ public class StringDoubleQuoted extends StringSegmentParser {
     /**
      * Parses escape sequences based on context.
      *
-     * <p>This method delegates to different escape handling based on the
-     * parseEscapes flag and quotemeta mode:
+     * <p>Delegates to different escape handling based on the parseEscapes flag:
      * <ul>
-     *   <li>inQuotemeta=true: Only \E is special, everything else is literal</li>
      *   <li>parseEscapes=true: Process escapes like \n to actual newline</li>
      *   <li>parseEscapes=false: Preserve escapes for regex engine</li>
      * </ul>
+     *
+     * <p>Note: \Q...\E quotemeta regions are handled via the case-modifier stack
+     * (pushing a "Q" modifier in the \Q handler and applying it in \E), so no
+     * special in-string state is needed. Inside \Q, escape sequences and variable
+     * interpolation continue to work normally; the accumulated content is wrapped
+     * in quotemeta() at the point where \E is encountered.
      */
     @Override
     protected void parseEscapeSequence() {
-        if (inQuotemeta) {
-            // In quotemeta mode, everything is literal except \E
-            var token = tokens.get(parser.tokenIndex);
-            if (token.text.startsWith("E")) {
-                // End quotemeta mode
-                TokenUtils.consumeChar(parser);
-                flushCurrentSegment();
-                if (!caseModifiers.isEmpty() && caseModifiers.peek().type.equals("Q")) {
-                    applyCaseModifier(caseModifiers.pop());
-                }
-                inQuotemeta = false;
-            } else if (token.text.startsWith("Q")) {
-                // In quotemeta mode, \Q is idempotent and should be ignored.
-                TokenUtils.consumeChar(parser);
-            } else {
-                // Everything else is literal, including the backslash
-                currentSegment.append("\\");
-            }
-            return;
-        }
-
         if (parseEscapes) {
             parseDoubleQuotedEscapes();
         } else {
@@ -423,7 +398,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Quotemeta modifier
             case "Q" -> {
                 flushCurrentSegment();
-                inQuotemeta = true;
                 caseModifiers.push(new CaseModifier("Q", false));
             }
 
@@ -525,7 +499,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Quotemeta modifier
             case "Q" -> {
                 flushCurrentSegment();
-                inQuotemeta = true;
                 caseModifiers.push(new CaseModifier("Q", false));
             }
 

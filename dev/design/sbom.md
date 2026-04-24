@@ -75,7 +75,6 @@ These are external libraries downloaded from Maven Central during build:
 | org.ow2.asm:asm | 9.9.1 | BSD-3-Clause | JVM bytecode generation |
 | org.ow2.asm:asm-util | 9.9.1 | BSD-3-Clause | ASM utilities |
 | com.ibm.icu:icu4j | 78.2 | ICU License | Unicode support |
-| com.alibaba.fastjson2:fastjson2 | 2.0.61 | Apache-2.0 | JSON processing |
 | org.snakeyaml:snakeyaml-engine | 3.0.1 | Apache-2.0 | YAML processing |
 | org.tomlj:tomlj | 1.1.1 | Apache-2.0 | TOML processing |
 | org.apache.commons:commons-csv | 1.14.1 | Apache-2.0 | CSV processing |
