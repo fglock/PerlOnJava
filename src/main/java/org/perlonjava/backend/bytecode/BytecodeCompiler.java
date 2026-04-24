@@ -80,6 +80,11 @@ public class BytecodeCompiler implements Visitor {
     private static int nextCallsiteId = 1;
     // Track last result register for expression chaining
     int lastResultReg = -1;
+    // PC of the most recently emitted HASH_GET / HASH_DEREF_FETCH(_NONSTRICT)
+    // opcode. Used by {@link #patchLastHashGetForLocal()} to retarget the
+    // opcode for `local $hash{key}` without scanning raw bytecode (which is
+    // ambiguous — operand values can coincidentally equal opcode numbers).
+    int lastHashGetPc = -1;
     // Target output register for ALIAS elimination (same save/restore pattern as currentCallContext).
     // Callers set this before accept(); callees consume it via allocateOutputRegister().
     // Compound visitors save/restore around non-final children.
@@ -1743,7 +1748,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit HASH_GET opcode
                 int rd = allocateOutputRegister();
-                emit(Opcodes.HASH_GET);
+                lastHashGetPc = bytecode.size(); emit(Opcodes.HASH_GET);
                 emitReg(rd);
                 emitReg(hashReg);
                 emitReg(keyReg);
@@ -1756,7 +1761,7 @@ public class BytecodeCompiler implements Visitor {
 
                 // Emit HASH_GET opcode
                 int rd = allocateOutputRegister();
-                emit(Opcodes.HASH_GET);
+                lastHashGetPc = bytecode.size(); emit(Opcodes.HASH_GET);
                 emitReg(rd);
                 emitReg(hashReg);
                 emitReg(keyReg);
@@ -2174,14 +2179,14 @@ public class BytecodeCompiler implements Visitor {
             int rd = allocateOutputRegister();
             if (isStrictRefsEnabled()) {
                 // SUPEROPERATOR: Constant key + strict refs - use HASH_DEREF_FETCH
-                emit(Opcodes.HASH_DEREF_FETCH);
+                lastHashGetPc = bytecode.size(); emit(Opcodes.HASH_DEREF_FETCH);
                 emitReg(rd);
                 emitReg(baseReg);
                 emit(keyIdx);
             } else {
                 // SUPEROPERATOR: Constant key + non-strict - use HASH_DEREF_FETCH_NONSTRICT
                 int pkgIdx = addToStringPool(getCurrentPackage());
-                emit(Opcodes.HASH_DEREF_FETCH_NONSTRICT);
+                lastHashGetPc = bytecode.size(); emit(Opcodes.HASH_DEREF_FETCH_NONSTRICT);
                 emitReg(rd);
                 emitReg(baseReg);
                 emit(keyIdx);
@@ -2219,7 +2224,7 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int rd = allocateOutputRegister();
-        emit(Opcodes.HASH_GET);
+        lastHashGetPc = bytecode.size(); emit(Opcodes.HASH_GET);
         emitReg(rd);
         emitReg(hashReg);
         emitReg(keyReg);
@@ -4800,28 +4805,42 @@ public class BytecodeCompiler implements Visitor {
      * to HASH_GET_FOR_LOCAL. Called after compiling hash element access
      * in 'local' context so that the result is always a RuntimeHashProxyEntry.
      * Safe to call even if no HASH_GET was emitted (e.g., for local $array[i]).
+     *
+     * <p>NOTE: scanning raw bytecode for an opcode value is fundamentally
+     * ambiguous because opcodes and operands share the same int stream —
+     * a register index that happens to equal the opcode number would be
+     * misidentified and corrupted. We bracket the scan with a short
+     * window (20 slots) and remember the PC where we last emitted the
+     * relevant opcode, so we only ever patch at that exact PC. If the
+     * remembered PC no longer matches the opcode, bail without patching.
      */
     void patchLastHashGetForLocal() {
-        // HASH_GET format: HASH_GET rd hashReg keyReg (4 slots total)
-        // Scan backwards looking for a HASH_GET opcode
-        for (int i = bytecode.size() - 1; i >= 0; i--) {
-            int val = bytecode.get(i);
+        // Primary: if the caller registered the expected PC via
+        // lastHashGetPc, trust that position and verify the opcode value.
+        if (lastHashGetPc >= 0 && lastHashGetPc < bytecode.size()) {
+            int val = bytecode.get(lastHashGetPc);
             if (val == Opcodes.HASH_GET) {
-                bytecode.set(i, (int) Opcodes.HASH_GET_FOR_LOCAL);
+                bytecode.set(lastHashGetPc, (int) Opcodes.HASH_GET_FOR_LOCAL);
+                lastHashGetPc = -1;
                 return;
             }
-            // Also patch superoperators for arrow hash dereference ($ref->{key})
             if (val == Opcodes.HASH_DEREF_FETCH) {
-                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_FOR_LOCAL);
+                bytecode.set(lastHashGetPc, (int) Opcodes.HASH_DEREF_FETCH_FOR_LOCAL);
+                lastHashGetPc = -1;
                 return;
             }
             if (val == Opcodes.HASH_DEREF_FETCH_NONSTRICT) {
-                bytecode.set(i, (int) Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL);
+                bytecode.set(lastHashGetPc, (int) Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL);
+                lastHashGetPc = -1;
                 return;
             }
-            // Don't scan too far back — the HASH_GET should be very recent
-            if (bytecode.size() - i > 20) return;
+            lastHashGetPc = -1;
         }
+        // No recorded PC — nothing to patch. Previously scanned backwards
+        // looking for the raw opcode value, but that misinterpreted
+        // register-index operands that happened to equal the opcode number
+        // (e.g. HASH_GET = 476, HASH_GET_FOR_LOCAL = 482), producing
+        // "Index 482 out of bounds" at runtime.
     }
 
     void emitInt(int value) {
