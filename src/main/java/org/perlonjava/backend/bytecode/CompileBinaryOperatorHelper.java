@@ -288,12 +288,16 @@ public class CompileBinaryOperatorHelper {
                 // rs1 = pattern (string or regex)
                 // rs2 = list containing string to split (and optional limit)
 
-                // Emit direct opcode SPLIT
+                // Emit direct opcode SPLIT with the actual call context —
+                // scalar context must return the element count, list
+                // context the actual elements. Hardcoding LIST here
+                // caused `$cnt = split(...)` to return the last element
+                // (via scalar-of-list fallback) instead of the count.
                 bytecodeCompiler.emit(Opcodes.SPLIT);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);  // Pattern register
                 bytecodeCompiler.emitReg(rs2);  // Args register
-                bytecodeCompiler.emit(RuntimeContextType.LIST);  // Split uses list context
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a
