@@ -1265,8 +1265,13 @@ public class InlineOpcodeHandler {
         if (value == null) {
             registers[rd] = RuntimeScalarCache.scalarUndef;
         } else if (value instanceof RuntimeList list) {
-            // \(LIST) semantics: create individual refs for each element
-            registers[rd] = list.createListReference();
+            // \(LIST) semantics: create individual refs for each element.
+            // Flatten first so embedded PerlRange (1..3) and RuntimeArray/@foo
+            // expand into individual scalars before the per-element
+            // createReference() pass. Matches the JVM backend's
+            // flattenElements().createListReference() chain in
+            // EmitOperator.handleCreateReference. Fixes op/ref.t 113-117.
+            registers[rd] = list.flattenElements().createListReference();
         } else {
             registers[rd] = value.createReference();
         }
