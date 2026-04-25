@@ -318,8 +318,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // scalar rather than modifying in-place. In Perl 5, *foo = "value"
                 // replaces the GvSV slot, not modifies the existing SV in-place.
                 RuntimeScalar currentScalar = GlobalVariable.getGlobalVariable(this.globName);
-                if (currentScalar instanceof RuntimeScalarReadOnly
-                        || currentScalar instanceof ReadOnlyAlias) {
+                if (currentScalar instanceof RuntimeScalarReadOnly) {
+                    // Includes ReadOnlyAlias (foreach literal-alias):
+                    // replace the GvSV slot rather than mutating in place.
                     RuntimeScalar newScalar = new RuntimeScalar();
                     newScalar.set(value);
                     GlobalVariable.aliasGlobalVariable(this.globName, newScalar);
