@@ -1064,16 +1064,35 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
-        // Fire DESTROYs one-at-a-time so each destructor sees the remaining
-        // entries of the (progressively shrinking) hash. Matches Perl's
-        // semantics for `undef %hash` on blessed values — op/undef.t 19-35
-        // (bug 3096): destructors expect keys/values/each to be consistent
-        // with what has not yet been destroyed, and may re-insert entries
-        // (which will then be destroyed in subsequent iterations).
+        // Fast path: if no value could possibly fire a DESTROY, use the
+        // old one-shot path (one flush total instead of N flushes). The
+        // slow progressive path below is only required when at least one
+        // value is a blessed reference whose destructor might inspect
+        // the remaining hash entries (op/undef.t 19-35, bug 3096).
         //
-        // The previous one-shot variant (deferDestroyForContainerClear +
-        // clear() + flush) replaced this.elements with an empty map BEFORE
-        // running destructors, so DESTROY saw an empty hash.
+        // Without this fast path, large schema-style hashes paid
+        // O(N) flushes + auto-sweep checks per `undef %hash`, which under
+        // parallel-load DBIC tests pushed t/cdbi/68 / t/96 / t/debug/core
+        // past their 300s harness timeout.
+        if (!hasDestroyableValues()) {
+            MortalList.deferDestroyForContainerClear(this.elements.values());
+            if (this.type == PLAIN_HASH) {
+                this.elements = new StableHashMap<>();
+            } else {
+                this.elements.clear();
+            }
+            this.byteKeys = null;
+            MortalList.flush();
+            return this;
+        }
+
+        // Slow path: fire DESTROYs one-at-a-time so each destructor sees
+        // the remaining entries of the (progressively shrinking) hash.
+        // Matches Perl's semantics for `undef %hash` on blessed values —
+        // op/undef.t 19-35 (bug 3096): destructors expect keys/values/each
+        // to be consistent with what has not yet been destroyed, and may
+        // re-insert entries (which will then be destroyed in subsequent
+        // iterations).
         while (!this.elements.isEmpty()) {
             Iterator<Map.Entry<String, RuntimeScalar>> it = this.elements.entrySet().iterator();
             Map.Entry<String, RuntimeScalar> entry = it.next();
@@ -1091,6 +1110,25 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
         this.byteKeys = null;
         return this;
+    }
+
+    /**
+     * Quick scan: does this hash contain any value whose DESTROY could be
+     * triggered by undef %hash? Only blessed references qualify — plain
+     * scalars (strings, ints, undef) and unblessed refs never have a
+     * destructor. Used by undefine() to take a fast path that avoids
+     * O(N) MortalList flushes for the common case (e.g. DBIC schema
+     * hashes that hold plain SQL strings or unblessed result-source
+     * structures).
+     */
+    private boolean hasDestroyableValues() {
+        for (RuntimeScalar v : this.elements.values()) {
+            if (v == null) continue;
+            if ((v.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (!(v.value instanceof RuntimeBase b)) continue;
+            if (b.blessId != 0) return true;
+        }
+        return false;
     }
 
     /**
