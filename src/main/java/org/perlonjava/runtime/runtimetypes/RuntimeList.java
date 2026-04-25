@@ -450,6 +450,35 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
+    /**
+     * Apply Perl's distributive {@code \(LIST)} semantics for the refgen
+     * operator. When the list has exactly one element which is an array,
+     * hash, or range, flatten that element so the subsequent
+     * {@link #createListReference()} produces a per-element reference for
+     * each scalar of the array/hash/range. When the list has multiple
+     * top-level elements (or its single element is itself a scalar), do
+     * NOT flatten -- backslash distributes over the top-level items only,
+     * matching:
+     * <pre>
+     *   \(@a)        → (\$a[0], \$a[1], …)            // flatten @a
+     *   \(@a, @b)    → (\@a, \@b)                     // no flatten
+     *   \(1, @a)     → (\1, \@a)                      // no flatten
+     *   \my (\@f, @g) → (\\@f, \@g)                   // no flatten
+     * </pre>
+     * <p>
+     * Fixes op/decl-refs.t {@code 2nd retval of my (\@f, @g) is @g}
+     * (and the parallel state/our/local + scalar-and-hash variants).
+     */
+    public RuntimeList flattenForRefgen() {
+        if (elements.size() == 1) {
+            RuntimeBase only = elements.get(0);
+            if (only instanceof RuntimeArray || only instanceof RuntimeHash || only instanceof PerlRange) {
+                return flattenElements();
+            }
+        }
+        return this;
+    }
+
     public RuntimeList createListReference() {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> resultList = result.elements;

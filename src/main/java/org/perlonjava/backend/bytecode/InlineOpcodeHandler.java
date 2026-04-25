@@ -1267,12 +1267,12 @@ public class InlineOpcodeHandler {
             registers[rd] = RuntimeScalarCache.scalarUndef;
         } else if (value instanceof RuntimeList list) {
             // \(LIST) semantics: create individual refs for each element.
-            // Flatten first so embedded PerlRange (1..3) and RuntimeArray/@foo
-            // expand into individual scalars before the per-element
-            // createReference() pass. Matches the JVM backend's
-            // flattenElements().createListReference() chain in
-            // EmitOperator.handleCreateReference. Fixes op/ref.t 113-117.
-            registers[rd] = list.flattenElements().createListReference();
+            // Use flattenForRefgen() — Perl's distributive rule: flatten only
+            // a single-array/hash/range; multi-element lists distribute over
+            // top-level items without flattening embedded arrays.
+            // Fixes op/ref.t 113-117 (single array case) and op/decl-refs.t
+            // 2nd-retval-of-my-(\@f, @g) (multi-element case).
+            registers[rd] = list.flattenForRefgen().createListReference();
         } else {
             registers[rd] = value.createReference();
         }
