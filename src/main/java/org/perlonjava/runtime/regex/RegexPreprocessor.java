@@ -1379,6 +1379,11 @@ public class RegexPreprocessor {
             char ch = s.charAt(bracketEnd);
             if (inEscape) {
                 inEscape = false;
+                // \cX consumes the next character (control-character escape),
+                // even if that character is ']' or '\' (e.g., \c], \c\).
+                if (ch == 'c' && bracketEnd + 1 < length) {
+                    bracketEnd++; // skip the control-char target
+                }
             } else if (ch == '\\') {
                 inEscape = true;
             } else if (ch == '[') {
