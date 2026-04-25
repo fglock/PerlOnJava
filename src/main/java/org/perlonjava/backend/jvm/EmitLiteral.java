@@ -86,6 +86,22 @@ public class EmitLiteral {
         // because it keeps refcount accounting symmetric — see the long
         // note on RuntimeScalar.addToArray for why per-element incref had
         // DBIC TxnScopeGuard regressions.
+        // Push a mortal-list mark so that the closing flush below only drains
+        // entries added DURING this literal-build, not entries from the
+        // surrounding scope (e.g. blesses from earlier elements in an outer
+        // list `(bless [], bless [], bless [])`). Earlier we used
+        // suppressFlush(true) + flush() at end, which left pending entries
+        // alone during the build but the closing flush() drained the entire
+        // pending list -- destroying objects whose only strong ref was the
+        // outer list literal we were still constructing. Using
+        // pushMark/popAndFlush ensures we only process locals.
+        // Fixes op/grep.t "grep void/scalar/list pre", op/postfixderef.t
+        // "no stooges outlast scope", op/sort.t 169/172, op/inccode*.t
+        // "no leaks", op/for-many.t.
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "pushMark", "()V", false);
+
         mv.visitInsn(Opcodes.ICONST_1);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
@@ -129,22 +145,20 @@ public class EmitLiteral {
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Stack: [RuntimeScalar]  (the array reference we'll return)
 
-        // Restore previous suppressFlush state and (if flush was previously
-        // allowed) drain any deferred decrements that accumulated during the
-        // literal-build. Keep the return value on the stack throughout.
+        // Restore previous suppressFlush state (keep the return value on the stack throughout).
         mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "suppressFlush", "(Z)Z", false);
         mv.visitInsn(Opcodes.POP);
 
-        mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
-        org.objectweb.asm.Label skipFlush = new org.objectweb.asm.Label();
-        mv.visitJumpInsn(Opcodes.IFNE, skipFlush);
+        // Always pop our mark and flush above-mark entries (those added inside
+        // this literal). suppressFlush guarded against intermediate flushes,
+        // popAndFlush ensures we drain ONLY our local entries, leaving any
+        // pre-existing pending entries from outer expressions untouched.
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
-                "flush", "()V", false);
-        mv.visitLabel(skipFlush);
+                "popAndFlush", "()V", false);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
