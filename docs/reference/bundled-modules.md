@@ -294,6 +294,7 @@ These are loaded automatically or via `use`:
 | `Pod::Man` | Perl | |
 | `Pod::Usage` | Perl | |
 | `Pod::Checker` | Perl | |
+| `Pod::Html` | Perl | + `Pod::Html::Util`; `pod2html` POD-to-HTML converter |
 
 ### Java Integration
 

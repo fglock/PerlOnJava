@@ -2,26 +2,9 @@
 
 ## Status
 
-**Not started.** Plan only — no code yet.
-
-`./jcpan -t Pod::Html` currently fails for two independent reasons:
-
-1. `Pod::Html` is a dual-life Perl module distributed on CPAN only as
-   part of the full perl source tarball
-   (`SHAY/perl-5.42.2.tar.gz`). `cpan` therefore refuses to install it
-   directly, and `cpan -f` blows up trying to run perl's `Configure`
-   shell script. The module is **not** currently bundled with
-   PerlOnJava (`use Pod::Html` → `Can't locate Pod/Html.pm in @INC`).
-2. After staging the upstream source locally and running its test
-   suite against the in-tree `Pod::Simple`/`Pod::Simple::XHTML`/etc.,
-   3 substantive tests fail because of a **regex engine bug in
-   PerlOnJava** affecting `^` in `/m` mode under `/g`, which corrupts
-   the line-walking idiom inside
-   `Pod::Html::Util::trim_leading_whitespace`.
-
-This plan covers both: a small infrastructure fix for the regex bug
-(which benefits the whole codebase, not just Pod::Html), then bundling
-Pod::Html via the existing `dev/import-perl5/sync.pl` flow.
+**Implemented (2026-04-25).** Both phases shipped together in PR #557.
+`use Pod::Html` works out of the box; the upstream test suite is green
+under `make test-bundled-modules`.
 
 ## Goals
 
@@ -342,20 +325,42 @@ deviation. Track separately if/when somebody cares.
 
 ## Progress Tracking
 
-### Current Status: Plan only — no implementation yet.
+### Current Status: ✅ Done (2026-04-25)
 
 ### Completed Phases
-None.
+- [x] Phase 0 — Regex `^/m/g` fix.
+  - Tightened the `matcher.region(...)` call site in
+    `RuntimeRegex.matchRegexDirect` (LIST-context branch) so it only
+    runs after the engine forcibly advances past a zero-length match.
+  - Added `matcher.useAnchoringBounds(false)` at every
+    `matcher.region(...)` site, restoring Perl's `^`/`$` semantics
+    under `/m`.
+  - Reduced unit test:
+    `src/test/resources/unit/regex/regex_caret_multiline_global.t`
+    (15 subtests covering the canonical line-walking idioms).
+- [x] Phase 1 — Bundle Pod::Html.
+  - Added `perl5/ext/Pod-Html/lib/Pod` entry to
+    `dev/import-perl5/config.yaml` and ran `sync.pl` to import
+    `Pod/Html.pm` (1.36) and `Pod/Html/Util.pm`.
+  - Copied upstream `t/` and `corpus/` to
+    `src/test/resources/module/Pod-Html/`.
+  - All 18 upstream tests pass under `make test-bundled-modules`.
+- [x] Cosmetic fix (folded into Phase 1):
+  populate `$Config{perladmin}`, `$Config{cf_email}`, `$Config{cf_by}`,
+  `$Config{myhostname}` from the running JVM. Eliminates "Use of
+  uninitialized value" warnings inside Pod-Html's test harness
+  (`Testing.pm:543` interpolating `$Config::Config{perladmin}`) and
+  fills in `<link rev="made" href="mailto:user@host">` in
+  `pod2html` output. Was tracked as Phase 3 in the original plan;
+  ended up being needed for `feature2.t` to pass.
+
+### Skipped (deferred)
+- Phase 2 — `bin/pod2html` wrapper. Not needed by the upstream tests
+  and no consumer currently asks for it. Easy follow-up if/when a
+  user wants to invoke the script directly from the shell.
 
 ### Next Steps
-1. Phase 0 — fix the regex bug on its own feature branch
-   (`fix/regex-multiline-global-anchor`) and ship as a stand-alone PR;
-   it's general infrastructure and not specific to Pod::Html.
-2. Once Phase 0 is merged, Phase 1 on
-   `feature/pod-html` rebased on top.
-
-### Open Questions
-See "Open questions" section above.
+None. Module is fully bundled and passing tests.
 
 ## References
 

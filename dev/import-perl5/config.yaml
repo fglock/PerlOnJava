@@ -128,6 +128,12 @@ imports:
     target: src/main/perl/lib/Pod
     type: directory
 
+  # Pod::Html - convert POD to HTML (dual-life; lives in ext/, not cpan/).
+  # Brings in Pod/Html.pm and Pod/Html/Util.pm.
+  - source: perl5/ext/Pod-Html/lib/Pod
+    target: src/main/perl/lib/Pod
+    type: directory
+
   # Text::Tabs - Required by Pod modules for text wrapping
   - source: perl5/cpan/Text-Tabs/lib/Text
     target: src/main/perl/lib/Text
