@@ -156,6 +156,22 @@ if ($data =~ /\G(\w+)/) {
 }
 
 ###################
+# `s/\G.../.../` honors pos() set by a previous /g match.
+# This is the idiom DateTime::Format::Natural uses to rewrite "feb 28 at 3"
+# into "feb 28 at 3:00":
+#   $s =~ /\S+? \s+? at \s+? (\S+)/g;   # leaves pos($s) at end of match
+#   $s =~ s/\G/:00/;                    # must insert at pos(), not at 0
+{
+    my $s = "feb 28 at 3";
+    if ($s =~ /\S+? \s+? at \s+? (\S+)/gx) {
+        $s =~ s/\G/:00/;
+        is($s, "feb 28 at 3:00", '\\G in s/// honors pos() from previous /g');
+    } else {
+        fail('precondition: /g match did not succeed');
+    }
+}
+
+###################
 # End of Perl `pos` and `\G` Tests
 
 done_testing();

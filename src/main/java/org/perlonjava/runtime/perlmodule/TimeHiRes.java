@@ -3,6 +3,7 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.MathOperators;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -54,10 +55,17 @@ public class TimeHiRes extends PerlModuleBase {
     public static RuntimeList gettimeofday(RuntimeArray args, int ctx) {
         Instant now = Instant.now();
         long seconds = now.getEpochSecond();
-        double microseconds = now.getNano() / 1000.0;
+        long micros = now.getNano() / 1000L;
+        // In SCALAR/VOID context Time::HiRes::gettimeofday returns a single
+        // floating-point number `seconds + micros/1_000_000`. In LIST context
+        // it returns the (seconds, microseconds) pair as integers.
+        if (ctx != RuntimeContextType.LIST) {
+            double preciseEpochTime = seconds + micros / 1_000_000.0;
+            return new RuntimeScalar(preciseEpochTime).getList();
+        }
         RuntimeList result = new RuntimeList();
         result.add(new RuntimeScalar(seconds));
-        result.add(new RuntimeScalar(microseconds));
+        result.add(new RuntimeScalar(micros));
         return result;
     }
 

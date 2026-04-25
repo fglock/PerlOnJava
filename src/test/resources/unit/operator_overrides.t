@@ -168,4 +168,25 @@ subtest 'die operator override' => sub {
     is($result, "DIED: test error", 'die override returned custom value');
 };
 
+subtest 'sleep operator override' => sub {
+    plan tests => 3;
+
+    # Override sleep globally so it doesn't actually wait.
+    # Required for Test::MockTime::HiRes-style mocking.
+    our @sleep_args;
+    BEGIN {
+        *CORE::GLOBAL::sleep = sub {
+            push @sleep_args, $_[0];
+            return $_[0];
+        };
+    }
+
+    my $start = time;
+    my $rc = sleep 5;
+    my $elapsed = time - $start;
+    is($rc, 5, 'sleep override returned the requested duration');
+    cmp_ok($elapsed, '<', 2, 'sleep override did not actually wait');
+    is_deeply(\@sleep_args, [5], 'sleep override saw the right argument');
+};
+
 done_testing();

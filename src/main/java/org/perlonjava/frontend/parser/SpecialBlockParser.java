@@ -7,6 +7,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -125,6 +126,35 @@ public class SpecialBlockParser {
 
         // Execute other special blocks normally
         runSpecialBlock(parser, blockName, block);
+
+        // After a BEGIN block runs, propagate any compile-time state changes the
+        // block made (e.g. `BEGIN { unimport warnings qw(File::Find) }`) to the
+        // surrounding lexical scope at runtime, the same way `parseUseDeclaration`
+        // does for `use`/`no` statements. Without this, a BEGIN block that calls
+        // `warnings::unimport` (or any pragma `unimport`) would set lastScopeId
+        // but never emit `local ${^WARNING_SCOPE} = N`, so warnings::warnif would
+        // not honor the suppression at runtime.
+        if ("BEGIN".equals(blockName)) {
+            int warningScopeId = WarningFlags.getLastScopeId();
+            WarningFlags.clearLastScopeId();
+
+            java.util.BitSet fatalFlags = (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
+            java.util.BitSet disabledFlags = (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+            int hintHashSnapshotId = HintHashRegistry.snapshotCurrentHintHash();
+            CompilerFlagNode flagNode = new CompilerFlagNode(
+                    (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.getLast().clone(),
+                    fatalFlags,
+                    disabledFlags,
+                    parser.ctx.symbolTable.featureFlagsStack.getLast(),
+                    parser.ctx.symbolTable.strictOptionsStack.getLast(),
+                    warningScopeId,
+                    hintHashSnapshotId,
+                    parser.tokenIndex);
+            if (warningScopeId == 0 && hintHashSnapshotId == 0) {
+                flagNode.setAnnotation("compileTimeOnly", true);
+            }
+            return flagNode;
+        }
 
         // Return an undefined operator node marked as compile-time-only
         // so it doesn't affect the file's return value
