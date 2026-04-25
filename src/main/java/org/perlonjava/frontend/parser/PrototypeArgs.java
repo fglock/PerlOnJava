@@ -570,13 +570,22 @@ public class PrototypeArgs {
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
             args.elements.add(typeglobRef == null ? expr : typeglobRef);
         } else if (expr instanceof StringNode strNode
+                && isBuiltinOperator(parser)
                 && isValidFilehandleName(strNode.value)) {
-            // Constant-string filehandle name, e.g. open("FH", $path).
-            // Real Perl looks the string up as a typeglob; PerlOnJava used to
-            // pass it through as a plain scalar, which produced
-            // "Modification of a read-only value attempted" because open then
-            // tried to write the new IO into the read-only string literal.
-            // Treat it the same as a bareword.
+            // Constant-string filehandle name in a Perl built-in that takes
+            // a `*` (glob/filehandle) argument: open("FH", $path),
+            // close "FH", binmode "FH", fileno "FH", eof "FH", and friends.
+            // Real Perl looks the string up as a typeglob name (the legacy
+            // "indirect filehandle" idiom). PerlOnJava used to pass the
+            // literal through as a plain scalar, which produced
+            // "Modification of a read-only value attempted" in open's case
+            // and silent no-ops elsewhere.
+            //
+            // This is gated to **built-in** operators because the `*`
+            // prototype is generic: for user-defined `sub foo (*) { }`,
+            // real Perl passes a literal string through as a SCALAR
+            // (only barewords and globs get typeglob conversion). See
+            // comp/proto.t's `star "FOO"` / `star2 "FOO", "BAR"` cases.
             String name = strNode.value;
             GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, name);
@@ -588,6 +597,18 @@ public class PrototypeArgs {
             args.elements.add(scalarArg);
         }
         return 1;
+    }
+
+    /**
+     * True if the operator currently being parsed is a Perl built-in
+     * (registered in {@link ParserTables#CORE_PROTOTYPES}). Used to
+     * decide whether a literal-string argument in a `*` (glob) slot
+     * should be looked up as a typeglob (built-in semantics) or passed
+     * through as a plain scalar (user-defined sub semantics).
+     */
+    private static boolean isBuiltinOperator(Parser parser) {
+        String name = parser.ctx.symbolTable.getCurrentSubroutine();
+        return name != null && ParserTables.CORE_PROTOTYPES.containsKey(name);
     }
 
     /**

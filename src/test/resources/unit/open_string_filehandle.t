@@ -50,4 +50,30 @@ close $fh_w;
     is($line, "line one\n", "lvalue scalar form still works");
 }
 
+# Other built-ins with `*` prototype must also accept a literal-string
+# filehandle name (close, fileno, binmode, eof, ...). Real Perl looks
+# the string up as a typeglob.
+{
+    open(MYFH, "<", $path) or die $!;
+    is(fileno("MYFH"), fileno(MYFH),
+       'fileno with string FH name matches bareword');
+    ok(close("MYFH"), 'close with string FH name returns truthy');
+    # And the bareword should now actually be closed.
+    ok(!fileno(MYFH), 'bareword FH is closed after close("MYFH")');
+}
+
+# User-defined sub with `*` prototype must NOT typeglob-convert a string
+# literal — only Perl built-ins (those registered in CORE_PROTOTYPES) do
+# the indirect-handle lookup. Regression for proto.t failures
+# (star "FOO" / star2 "FOO", "BAR") seen when this fix was first landed.
+{
+    my @got;
+    sub _proto_star (*&) { push @got, $_[0]; $_[1]->() }
+    _proto_star "ABC", sub { 1 };
+    is($got[0], "ABC",
+       'literal string passed to user sub with `*` prototype stays SCALAR');
+    is(ref(\$got[0]), 'SCALAR',
+       '  ... and is not silently promoted to a glob');
+}
+
 done_testing();
