@@ -848,6 +848,26 @@ public class RegexPreprocessorHelper {
                         lastChar = 0x08;  // Backspace character for range validation
                         first = false;
                         afterCaret = false;
+                    } else if (s.codePointAt(offset) == 'c' && offset + 1 < length) {
+                        // \cX control-character escape: consume the next character
+                        // and convert to a hex escape so Java doesn't mis-parse
+                        // sequences like \c\, \c[, \c] (where the next char is
+                        // special inside a character class).
+                        // Perl semantics: ord(uc(X)) XOR 0x40, low 8 bits.
+                        int ctrl = s.codePointAt(offset + 1);
+                        if (ctrl >= 'a' && ctrl <= 'z') {
+                            ctrl = ctrl - 'a' + 'A'; // upper-case ASCII letter
+                        }
+                        int value = (ctrl ^ 0x40) & 0xFF;
+                        // Remove the backslash that was already appended
+                        sb.setLength(sb.length() - 1);
+                        sb.append(String.format("\\x{%X}", value));
+                        offset++; // skip past the control-char target (outer loop bumps past it)
+                        lastChar = value;
+                        first = false;
+                        afterCaret = false;
+                        wasEscape = true;
+                        break;
                     } else {
                         int c2 = s.codePointAt(offset);
                         if (c2 >= '0' && c2 <= '7') {
