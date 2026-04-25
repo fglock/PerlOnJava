@@ -734,10 +734,13 @@ public class ModuleOperators {
             // not be caught as a file-loading error
             throw e;
         } catch (Throwable t) {
-            // For require, if there was a compilation failure, we need to handle %INC specially
+            // For require, on compilation failure leave the %INC entry as
+            // undef (a marker that this file was tried and failed). Subsequent
+            // `require <same-file>` should fail with the cached error rather
+            // than re-attempting compilation. Matches Perl 5's behaviour
+            // (see comp/require.t tests 24, 27-33).
             if (isRequire && setINC) {
-                // Remove the entry we just added, we'll handle this in require() method
-                getGlobalHash("main::INC").elements.remove(fileName);
+                getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
             }
             GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
             return new RuntimeScalar(); // return undef
@@ -840,10 +843,12 @@ public class ModuleOperators {
             // Check if this was a compilation failure (stored as undef)
             RuntimeScalar incEntry = incHash.elements.get(fileName);
             if (!incEntry.defined().getBoolean()) {
-                // This was a compilation failure, report as "Can't locate" so that
-                // callers like Moo::_Utils::_maybe_load_module that check for
-                // /\ACan't locate/ will silently fall back instead of warning.
-                throw new PerlCompilerException("Can't locate " + fileName + " in @INC (compilation previously failed)");
+                // Cached compilation failure: report Perl 5's
+                // "Attempt to reload <file> aborted." + "Compilation failed in require"
+                // (matches comp/require.t test 32 "Compilation failed").
+                throw new PerlCompilerException(
+                        "Attempt to reload " + fileName + " aborted.\n"
+                                + "Compilation failed in require");
             }
             // module was already loaded successfully - always return exactly 1
             return getScalarInt(1);
@@ -899,11 +904,16 @@ public class ModuleOperators {
                     fullErr += "\n";
                 }
                 message = fullErr + "Compilation failed in require";
-                // Delete %INC entry on compilation failure (modern Perl 5 behavior,
-                // perl commit 44f8325f). This allows subsequent require attempts
-                // (e.g., fallback from XS to pure-Perl) instead of triggering
-                // "Attempt to reload ... aborted".
-                incHash.elements.remove(fileName);
+                // Mark this file as failed in %INC by setting it to undef
+                // (Perl 5's caching mechanism for failed requires). The
+                // catch block in doFile already set this entry to undef;
+                // we keep it here so subsequent `require <same-file>` short-
+                // circuits to "Can't locate ... compilation previously failed"
+                // (matching `exists $INC{file}` checks in comp/require.t
+                // 24, 28, 30, 33).
+                if (!incHash.elements.containsKey(fileName)) {
+                    incHash.elements.put(fileName, new RuntimeScalar());
+                }
                 // Update $@ so eval{} sees the full message (catchEval preserves $@ for PerlCompilerException)
                 getGlobalVariable("main::@").set(message);
                 throw new PerlCompilerException(message);
