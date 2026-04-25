@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.text.DateFormatSymbols;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
 import java.util.*;
@@ -76,7 +77,14 @@ public class TimePiece extends PerlModuleBase {
         String javaPattern = convertStrftimeToJava(format, locales);
         
         try {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(javaPattern, Locale.getDefault());
+            // Use a lenient parser so non-padded numeric fields are accepted,
+            // matching POSIX strptime / Perl's Time::Piece::strptime. Without
+            // this, "1:13:8" won't match "%H:%M:%S" because Java's `HH`/`mm`/`ss`
+            // require exactly two digits.
+            DateTimeFormatter formatter = new DateTimeFormatterBuilder()
+                    .parseLenient()
+                    .appendPattern(javaPattern)
+                    .toFormatter(Locale.getDefault());
             
             // Try to parse - we need to handle partial dates
             LocalDateTime parsedDateTime = parseFlexible(dateString, formatter, javaPattern);
