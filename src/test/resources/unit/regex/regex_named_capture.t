@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 22;
 
 # Test case 1: Simple named capture
 my $string1 = 'foo';
@@ -81,6 +81,42 @@ if ($string9 =~ /(?<first>mouse)(rat)\g{-2}/) {
     is($1, 'mouse', 'Test case 9: Relative backreference match <<' . $1 . '>>');
 } else {
     fail('Test case 9: Pattern did not match');
+}
+
+# Test case 10: Duplicate named capture across alternation branches.
+# Perl 5.10+ allows the same name in multiple branches; only one branch
+# can match at a time. Also exercises that /i fold expansion does not
+# corrupt the capture-group name.
+{
+    my @cases = (
+        ['foo', 'foo'],
+        ['bar', 'bar'],
+        ['BAR', 'BAR'],   # /i fold; name 'off'-shaped names must survive
+    );
+    for my $c (@cases) {
+        my ($s, $expect) = @$c;
+        if ($s =~ /(?<y>foo)|(?<y>bar)/i) {
+            is($+{y}, $expect, "Test case 10: dup-name '$s' -> \$+{y} = '$expect'");
+        } else {
+            fail("Test case 10: pattern did not match '$s'");
+        }
+    }
+    # %- aggregates all alternatives; only the matched branch carries a value.
+    'foo' =~ /(?<y>foo)|(?<y>bar)/;
+    is_deeply($-{y}, ['foo', undef], 'Test case 10: %- aggregates dup-name branches');
+    'bar' =~ /(?<y>foo)|(?<y>bar)/;
+    is_deeply($-{y}, [undef, 'bar'], 'Test case 10: %- second branch');
+}
+
+# Test case 11: capture-group name that contains characters which trigger
+# /i multi-char fold expansion ('ff' would become (?:ff|ﬁ) without the
+# preprocessor skipping name text). Regression test for Date::Manip use.
+{
+    if ('OFF' =~ /(?<off>off)/i) {
+        is($+{off}, 'OFF', 'Test case 11: /i name with foldable letters (off)');
+    } else {
+        fail('Test case 11: /i pattern with foldable name did not match');
+    }
 }
 
 done_testing();

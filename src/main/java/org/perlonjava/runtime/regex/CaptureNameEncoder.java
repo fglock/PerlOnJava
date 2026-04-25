@@ -63,6 +63,28 @@ public class CaptureNameEncoder {
     public static final int MAX_CAPTURE_NAME_LENGTH = 200;
 
     /**
+     * Marker appended to capture group names that appear more than once in the
+     * same pattern, e.g. {@code (?<y>a)|(?<y>b)}. Perl accepts duplicate names
+     * in alternation; Java rejects them. RegexPreprocessor appends
+     * "{@value #DUPLICATE_MARKER}<N>" to the second and later occurrences, and
+     * {@link #decodeGroupName} strips the suffix back off so user code sees
+     * the original name.
+     *
+     * The marker is intentionally distinctive (no underscores so it survives
+     * the underscore encoding round-trip; bookended by 'Z' so it is unlikely
+     * to collide with any real Perl capture name).
+     */
+    public static final String DUPLICATE_MARKER = "ZpjdupZ";
+
+    /**
+     * Compiled pattern that matches the duplicate-name marker followed by its
+     * counter at the end of a Java group name. Used by {@link #decodeGroupName}
+     * and {@link #stripDuplicateMarker} to recover the original Perl name.
+     */
+    private static final java.util.regex.Pattern DUPLICATE_MARKER_PATTERN =
+            java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(DUPLICATE_MARKER) + "\\d+$");
+
+    /**
      * Encodes a code block constant value into a capture group name.
      * Simple approach: hex-encode the string representation.
      *
@@ -195,13 +217,21 @@ public class CaptureNameEncoder {
 
     /**
      * Decodes a Java regex capture group name back to the original Perl name.
-     * Reverses the encoding done by encodeGroupName.
+     * Reverses the encoding done by encodeGroupName, and also strips any
+     * duplicate-name marker added by {@link RegexPreprocessor#handleNamedCapture}
+     * for patterns like {@code (?<y>a)|(?<y>b)}.
      *
      * @param javaName The encoded Java group name
      * @return The original Perl capture group name
      */
     public static String decodeGroupName(String javaName) {
-        if (javaName == null || !javaName.contains("U95")) {
+        if (javaName == null) {
+            return javaName;
+        }
+        // First strip any duplicate-name marker (preprocessor adds this for
+        // names that appear more than once in alternation branches).
+        javaName = stripDuplicateMarker(javaName);
+        if (!javaName.contains("U95")) {
             return javaName;
         }
         // First restore underscores from "U95"
@@ -209,6 +239,29 @@ public class CaptureNameEncoder {
         // Then restore literal "U95" from "U_95" (which was "UU95" before first step)
         decoded = decoded.replace("U_95", "U95");
         return decoded;
+    }
+
+    /**
+     * Strips a trailing duplicate-name marker (e.g. "ZpjdupZ3") if present.
+     * Returns the input unchanged if no marker is present.
+     */
+    public static String stripDuplicateMarker(String javaName) {
+        if (javaName == null || !javaName.contains(DUPLICATE_MARKER)) {
+            return javaName;
+        }
+        java.util.regex.Matcher m = DUPLICATE_MARKER_PATTERN.matcher(javaName);
+        if (m.find()) {
+            return javaName.substring(0, m.start());
+        }
+        return javaName;
+    }
+
+    /**
+     * Returns true if {@code javaName} carries a duplicate-name marker, i.e.
+     * it is the second-or-later occurrence of a duplicated capture name.
+     */
+    public static boolean isDuplicateMarkerName(String javaName) {
+        return javaName != null && DUPLICATE_MARKER_PATTERN.matcher(javaName).find();
     }
 
     /**

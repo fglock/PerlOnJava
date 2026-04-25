@@ -60,6 +60,16 @@ public class RegexPreprocessor {
     static boolean inlinePFlagEncountered;
     static boolean branchResetEncountered;
     static boolean backslashKEncountered;
+    /**
+     * Tracks named capture groups already emitted in the current pattern.
+     * Used to detect duplicate names like `(?<x>a)|(?<x>b)` (legal in Perl,
+     * rejected by Java). Duplicates get a synthetic suffix added by
+     * {@link #handleNamedCapture}; {@link CaptureNameEncoder#decodeGroupName}
+     * strips the suffix back off when reporting names to user code via
+     * `%+` / `%-`.
+     */
+    static java.util.Set<String> seenNamedCaptures = new java.util.HashSet<>();
+    static int duplicateNameCounter;
 
     static void markDeferredUnicodePropertyEncountered() {
         deferredUnicodePropertyEncountered = true;
@@ -104,6 +114,8 @@ public class RegexPreprocessor {
         inlinePFlagEncountered = false;
         branchResetEncountered = false;
         backslashKEncountered = false;
+        seenNamedCaptures.clear();
+        duplicateNameCounter = 0;
 
         // First, escape invalid quantifier braces (Perl compatibility)
         // DISABLED: Causes test regressions - needs more work
@@ -379,6 +391,46 @@ public class RegexPreprocessor {
                     inCharClass = true;
                 } else if (ch == ']') {
                     inCharClass = false;
+                }
+            }
+
+            // Skip the name of a named capture group / backreference. Group
+            // names are syntactic identifiers, not pattern text, so the fold
+            // expansion must not touch them — otherwise `(?<off>...)` under /i
+            // becomes `(?<o(?:ff|ﬀ)>...)` and Java rejects the resulting name.
+            if (!escaped && !inCharClass && ch == '(' && i + 2 < len
+                    && pattern.charAt(i + 1) == '?'
+                    && (pattern.charAt(i + 2) == '<' || pattern.charAt(i + 2) == '\''
+                            || (pattern.charAt(i + 2) == 'P' && i + 3 < len
+                                    && (pattern.charAt(i + 3) == '<' || pattern.charAt(i + 3) == '\'' || pattern.charAt(i + 3) == '=')))) {
+                // (?<name>... | (?'name'... | (?P<name>... | (?P'name'... | (?P=name)
+                int nameStart;
+                char closer;
+                if (pattern.charAt(i + 2) == 'P') {
+                    if (pattern.charAt(i + 3) == '=') {
+                        // (?P=name) — name terminates at ')'
+                        nameStart = i + 4;
+                        closer = ')';
+                    } else {
+                        nameStart = i + 4;
+                        closer = pattern.charAt(i + 3) == '<' ? '>' : '\'';
+                    }
+                } else {
+                    nameStart = i + 3;
+                    closer = pattern.charAt(i + 2) == '<' ? '>' : '\'';
+                }
+                // Reject lookbehind: (?<= or (?<! (those aren't named captures)
+                if (closer == '>' && nameStart < len
+                        && (pattern.charAt(nameStart) == '=' || pattern.charAt(nameStart) == '!')) {
+                    // Not a named capture; fall through to normal handling.
+                } else {
+                    int closeIdx = pattern.indexOf(closer, nameStart);
+                    if (closeIdx > nameStart) {
+                        // Append the literal `(?<NAME>` (or variant) verbatim, no folding.
+                        result.append(pattern, i, closeIdx + 1);
+                        i = closeIdx + 1;
+                        continue;
+                    }
                 }
             }
 
@@ -1214,6 +1266,14 @@ public class RegexPreprocessor {
         String name = s.substring(start, end);
         // Encode underscores for Java regex compatibility
         String encodedName = CaptureNameEncoder.encodeGroupName(name);
+        // Perl allows the same capture group name to appear in multiple
+        // alternation branches (e.g. `(?<y>\d+)|(?<y>foo)`). Java's regex
+        // engine rejects duplicates outright, so we suffix subsequent
+        // occurrences with a synthetic marker; CaptureNameEncoder.decodeGroupName
+        // strips the marker back off when reporting names to user code.
+        if (!seenNamedCaptures.add(encodedName)) {
+            encodedName = encodedName + CaptureNameEncoder.DUPLICATE_MARKER + (duplicateNameCounter++);
+        }
         sb.append("(?<").append(encodedName).append(">");
         captureGroupCount++; // Increment counter for capturing groups
         return handleRegex(s, end + 1, sb, regexFlags, true); // Process content inside the group
