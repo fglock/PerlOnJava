@@ -1141,6 +1141,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
         Matcher matcher = pattern.matcher(matchInput);
 
+        // Honor pos() when \G is used. `s/\G.../.../` should anchor at
+        // pos($string) so a substitution inserted right after a previous /g
+        // match takes effect at the right offset (e.g. the
+        // DateTime::Format::Natural rewrite idiom: `$s =~ /pat/g; $s =~ s/\G/:00/`).
+        // Without setting region(), Java's matcher would scan from offset 0
+        // and \G would anchor at 0, prepending the replacement.
+        if (regex.useGAssertion) {
+            RuntimeScalar posScalar = RuntimePosLvalue.pos(string);
+            if (posScalar.getDefinedBoolean()) {
+                int startPos = posScalar.getInt();
+                if (startPos >= 0 && startPos <= inputStr.length()) {
+                    matcher.region(startPos, inputStr.length());
+                    // Same rationale as matchRegex: keep ^/$ from anchoring
+                    // at the artificial region boundary under /m.
+                    matcher.useAnchoringBounds(false);
+                }
+            }
+        }
+
         // The result string after substitutions
         StringBuilder resultBuffer = new StringBuilder();
         int found = 0;
