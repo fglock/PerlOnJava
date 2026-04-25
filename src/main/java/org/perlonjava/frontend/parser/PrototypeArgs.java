@@ -569,6 +569,18 @@ public class PrototypeArgs {
 
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
             args.elements.add(typeglobRef == null ? expr : typeglobRef);
+        } else if (expr instanceof StringNode strNode
+                && isValidFilehandleName(strNode.value)) {
+            // Constant-string filehandle name, e.g. open("FH", $path).
+            // Real Perl looks the string up as a typeglob; PerlOnJava used to
+            // pass it through as a plain scalar, which produced
+            // "Modification of a read-only value attempted" because open then
+            // tried to write the new IO into the read-only string literal.
+            // Treat it the same as a bareword.
+            String name = strNode.value;
+            GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+            Node typeglobRef = FileHandle.parseBarewordHandle(parser, name);
+            args.elements.add(typeglobRef == null ? expr : typeglobRef);
         } else {
             // Bare scalars
             Node scalarArg = ParserNodeUtils.toScalarContext(expr);
@@ -576,6 +588,39 @@ public class PrototypeArgs {
             args.elements.add(scalarArg);
         }
         return 1;
+    }
+
+    /**
+     * True if the given string is a syntactically valid Perl filehandle/glob name:
+     * one or more identifier components (`[A-Za-z_][A-Za-z0-9_]*`) separated by
+     * `::`. Used to recognise e.g. `open("FH", ...)` or `open("Pkg::FH", ...)`
+     * and route the literal string to the same path as a bareword.
+     */
+    private static boolean isValidFilehandleName(String s) {
+        if (s == null || s.isEmpty()) return false;
+        int n = s.length();
+        int i = 0;
+        while (i < n) {
+            char c = s.charAt(i);
+            if (!(Character.isLetter(c) || c == '_')) return false;
+            i++;
+            while (i < n) {
+                char d = s.charAt(i);
+                if (Character.isLetterOrDigit(d) || d == '_') {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            if (i >= n) return true;
+            // Expect "::" between identifier components
+            if (i + 1 < n && s.charAt(i) == ':' && s.charAt(i + 1) == ':') {
+                i += 2;
+            } else {
+                return false;
+            }
+        }
+        return false;
     }
 
     private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma) {

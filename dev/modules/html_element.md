@@ -2,14 +2,17 @@
 
 ## Status
 
-**In progress.** Phases 1 and 2 (the parser closure-capture bug and the
-`tokens` argspec) are being implemented on
-`feature/html-element-fixes`.
+**In progress.** Phases 1, 2, and 3 implemented on
+`feature/html-element-fixes` (PR #559). Phase 4 (weak-ref refloop)
+is being addressed on a separate branch and is out of scope here.
 
-`./jcpan -t HTML::Element` (== HTML-Tree 5.07) currently fails 10 of
-23 test files. Investigation traced the failures to **four distinct
-root causes**, three of them in PerlOnJava itself (parser, `HTML::Parser`
-shim, `open`) and one in the weak-ref subsystem.
+Before this work: `./jcpan -t HTML::Element` (HTML-Tree 5.07)
+fails **10 of 23** upstream test files. After Phases 1–3: **3 of
+23** still fail (`refloop.t`, `whitespace.t` — hangs on `\xA0`,
+`split.t` — entity-handling diff). Investigation traced the
+failures to **four distinct root causes**, three of them in
+PerlOnJava itself (parser, `HTML::Parser` shim, `open`) and one in
+the weak-ref subsystem.
 
 ## Goal
 
@@ -399,18 +402,32 @@ The work here is:
 
 ## Progress Tracking
 
-### Current Status: Implementing Phases 1 + 2 on `feature/html-element-fixes`.
+### Current Status: Phases 1, 2, 3 implemented on `feature/html-element-fixes`.
 
 ### Completed Phases
-None yet.
+- [x] Phase 1 (2026-04-25): `For3Node.continueBlock` traversal in
+      `VariableCollectorVisitor`. Fixed `attributes.t`, `children.t`,
+      and unblocked `whitespace.t`/`refloop.t` to run further.
+      Files: `VariableCollectorVisitor.java`,
+      `src/test/resources/unit/closure.t`.
+- [x] Phase 2 (2026-04-25): `tokens`/`tokenN`/`tokenpos` argspecs
+      in `HTMLParser.java::buildArgs`. Fixed `comment.t`,
+      `construct_tree.t`, `parse.t`, `parsefile.t`; nearly all of
+      `split.t`. Files: `HTMLParser.java`,
+      `src/test/resources/unit/html_parser_tokens.t`.
+- [x] Phase 3 (2026-04-25): literal-string filehandle in
+      `open("FH", ...)` — `handleTypeGlobArgument` now treats a
+      `StringNode` whose value is a valid identifier the same as a
+      bareword. Fixed `oldparse.t` (16/16). Files:
+      `PrototypeArgs.java`,
+      `src/test/resources/unit/open_string_filehandle.t`.
 
 ### Next Steps
-1. Land Phase 1 (`continueBlock` in `VariableCollectorVisitor`).
-2. Land Phase 2 (`tokens` argspec in `HTMLParser.java`).
-3. Re-run `./jcpan -t HTML::Element` to confirm Phase 1/2 reduce
-   the failure set.
-4. Open follow-up issues / sub-PRs for Phase 3 (`open` 2-arg
-   string filehandle) and Phase 4 (`-weak` refloop).
+1. Land the WIP PR (#559) once review is complete.
+2. Phase 4 (`-weak` refloop) is being implemented on a separate
+   branch — do **not** address here.
+3. Two HTML-Tree-only follow-ups to triage in their own PRs:
+   `whitespace.t` hang on `\xA0` input, and `split.t` entity diff.
 
 ### Blockers / risks
 - `FindDeclarationVisitor` audit (Phase 1) might surface a related
