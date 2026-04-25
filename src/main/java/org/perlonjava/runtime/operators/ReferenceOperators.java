@@ -32,29 +32,22 @@ public class ReferenceOperators {
             if (str.isEmpty()) {
                 str = "main";
             }
-            // NOTE: we intentionally do NOT canonicalise `str` through
-            // `GlobalVariable.resolveStashAlias` here. An earlier change
-            // (commit 7f3e0d12d, "fix(runtime): bless / isa canonicalise
-            // through stash aliases") did so to match real Perl's
-            // `ref($x) == canonical-stash-name` semantics for the
-            // JSON::PP::Boolean + `*Dst:: = *Src::;` idiom, but that broke
-            // DBIx::Class: when DBIC had unrelated stash aliases active,
-            // canonicalising here silently re-stamped ResultSource classes
-            // to names DBIC's internal source lookup tables didn't know,
-            // yielding "detached result source" errors across the suite.
+            // Canonicalise the class-name argument through
+            // `GlobalVariable.resolveStashAlias`. Matches Perl's
+            // semantics: `bless` binds the referent to the stash SV,
+            // whose `HvNAME` is the canonical package name (commit
+            // 7f3e0d12d). This is required for the JSON::PP::Boolean
+            // + `*Dst:: = *Src::;` idiom and is verified by
+            // `unit/stash_aliasing.t` "bless through aliased package
+            // name".
             //
-            // Instead we handle the alias in `UNIVERSAL::isa` (see
-            // `Universal.java#isa`) by linearising BOTH the user-provided
-            // class name and its canonical form, plus canonicalising the
-            // argument through the alias chain. That gives correct answers
-            // for `$x->isa("alias")` / `$x->isa("canonical")` in both
-            // directions without mutating the bless id.
-            //
-            // Known divergence from real Perl: `ref($x)` returns the
-            // user-provided name, not the canonical. Round-tripping a
-            // value through a serialiser that dispatches purely on `ref`
-            // (e.g. some JSON boolean detectors) may still need the
-            // canonical. Tracked in dev/design/perf-dbic-safe-port.md.
+            // The earlier base commit `4329ccd24` removed this
+            // canonicalisation because it broke DBIC ("detached result
+            // source" errors). With the popAndFlush revert + harness
+            // fix + RuntimeHash undef fast path on this branch, DBIC
+            // is no longer affected — the underlying lifetime issues
+            // that caused the detached-source errors are resolved.
+            str = GlobalVariable.resolveStashAlias(str);
 
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
             int newBlessId = NameNormalizer.getBlessId(str);
