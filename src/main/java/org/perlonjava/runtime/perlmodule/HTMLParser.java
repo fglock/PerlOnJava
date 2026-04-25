@@ -684,7 +684,46 @@ public class HTMLParser extends PerlModuleBase {
                             RuntimeArray.push(result, new RuntimeScalar(""));
                         }
                     } else {
-                        RuntimeArray.push(result, new RuntimeScalar(""));
+                        // Fall back to tokens[0] for non-PI events
+                        RuntimeArray tokensArr = buildTokensArray(eventName, eventArgs);
+                        if (tokensArr.size() > 0) {
+                            RuntimeArray.push(result, tokensArr.get(0));
+                        } else {
+                            RuntimeArray.push(result, new RuntimeScalar(""));
+                        }
+                    }
+                    break;
+
+                case "tokens":
+                    // Array reference of all tokens for this event.
+                    //   start       => [tagname, attr1, val1, attr2, val2, ...]
+                    //   end         => [tagname]
+                    //   text/dtext  => [text]
+                    //   comment     => [comment_body]
+                    //   declaration => [declaration_body]
+                    //   process     => [pi_body]
+                    RuntimeArray.push(result,
+                            buildTokensArray(eventName, eventArgs).createReference());
+                    break;
+
+                case "tokenpos":
+                    // Array reference of [start, end] byte-offset pairs
+                    // matching `tokens`. We don't track byte offsets yet, so
+                    // return a same-length arrayref of [0, 0] pairs. This is
+                    // good enough for callers that just iterate; downstream
+                    // modules treating tokenpos as authoritative will need
+                    // proper offset tracking (currently a TODO at the
+                    // `offset`/`offset_end` cases).
+                    {
+                        RuntimeArray pos = new RuntimeArray();
+                        RuntimeArray tokensArr = buildTokensArray(eventName, eventArgs);
+                        for (int i = 0; i < tokensArr.size(); i++) {
+                            RuntimeArray pair = new RuntimeArray();
+                            RuntimeArray.push(pair, new RuntimeScalar(0));
+                            RuntimeArray.push(pair, new RuntimeScalar(0));
+                            RuntimeArray.push(pos, pair.createReference());
+                        }
+                        RuntimeArray.push(result, pos.createReference());
                     }
                     break;
 
@@ -693,14 +732,80 @@ public class HTMLParser extends PerlModuleBase {
                     break;
 
                 default:
-                    // Unknown argspec token - pass empty string
-                    RuntimeArray.push(result, new RuntimeScalar(""));
+                    // tokenN where N is a non-negative integer => tokens[N]
+                    if (token.length() > 5 && token.startsWith("token")
+                            && token.substring(5).chars().allMatch(Character::isDigit)) {
+                        int idx;
+                        try {
+                            idx = Integer.parseInt(token.substring(5));
+                        } catch (NumberFormatException e) {
+                            idx = -1;
+                        }
+                        RuntimeArray tokensArr = buildTokensArray(eventName, eventArgs);
+                        if (idx >= 0 && idx < tokensArr.size()) {
+                            RuntimeArray.push(result, tokensArr.get(idx));
+                        } else {
+                            RuntimeArray.push(result, new RuntimeScalar(""));
+                        }
+                    } else {
+                        // Unknown argspec token - pass empty string
+                        RuntimeArray.push(result, new RuntimeScalar(""));
+                    }
                     break;
             }
         }
 
         return result;
     }
+
+    /**
+     * Build the `tokens` array for a given event, per HTML::Parser semantics.
+     * See `case "tokens":` above for the per-event shape.
+     *
+     * @param eventName the event name (start, end, text, comment, ...)
+     * @param eventArgs the internal event-arg tuple as passed to fireEvent
+     * @return a flat RuntimeArray of token scalars (NOT yet a reference)
+     */
+    private static RuntimeArray buildTokensArray(String eventName, RuntimeScalar[] eventArgs) {
+        RuntimeArray tokens = new RuntimeArray();
+        if (eventArgs == null || eventArgs.length == 0) {
+            return tokens;
+        }
+        switch (eventName) {
+            case "start":
+                // eventArgs = [tagname, attr_hashref, attrseq_arrayref, original_text]
+                RuntimeArray.push(tokens, eventArgs[0]);
+                if (eventArgs.length > 2) {
+                    RuntimeScalar attrHashRef = eventArgs[1];
+                    RuntimeScalar attrSeqRef = eventArgs[2];
+                    RuntimeHash attrHash = attrHashRef.hashDeref();
+                    RuntimeArray attrSeq = attrSeqRef.arrayDeref();
+                    int n = attrSeq.size();
+                    for (int i = 0; i < n; i++) {
+                        RuntimeScalar key = attrSeq.get(i);
+                        String keyStr = key.toString();
+                        RuntimeArray.push(tokens, key);
+                        RuntimeArray.push(tokens, attrHash.get(keyStr));
+                    }
+                }
+                break;
+            case "end":
+            case "text":
+            case "dtext":
+            case "comment":
+            case "declaration":
+            case "process":
+            case "default":
+                RuntimeArray.push(tokens, eventArgs[0]);
+                break;
+            default:
+                // Unknown event: best-effort, push the first arg.
+                RuntimeArray.push(tokens, eventArgs[0]);
+                break;
+        }
+        return tokens;
+    }
+
 
     /**
      * Basic HTML parser - fires text, start, end events.

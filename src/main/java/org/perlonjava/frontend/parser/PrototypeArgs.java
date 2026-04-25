@@ -569,6 +569,27 @@ public class PrototypeArgs {
 
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
             args.elements.add(typeglobRef == null ? expr : typeglobRef);
+        } else if (expr instanceof StringNode strNode
+                && isBuiltinOperator(parser)
+                && isValidFilehandleName(strNode.value)) {
+            // Constant-string filehandle name in a Perl built-in that takes
+            // a `*` (glob/filehandle) argument: open("FH", $path),
+            // close "FH", binmode "FH", fileno "FH", eof "FH", and friends.
+            // Real Perl looks the string up as a typeglob name (the legacy
+            // "indirect filehandle" idiom). PerlOnJava used to pass the
+            // literal through as a plain scalar, which produced
+            // "Modification of a read-only value attempted" in open's case
+            // and silent no-ops elsewhere.
+            //
+            // This is gated to **built-in** operators because the `*`
+            // prototype is generic: for user-defined `sub foo (*) { }`,
+            // real Perl passes a literal string through as a SCALAR
+            // (only barewords and globs get typeglob conversion). See
+            // comp/proto.t's `star "FOO"` / `star2 "FOO", "BAR"` cases.
+            String name = strNode.value;
+            GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+            Node typeglobRef = FileHandle.parseBarewordHandle(parser, name);
+            args.elements.add(typeglobRef == null ? expr : typeglobRef);
         } else {
             // Bare scalars
             Node scalarArg = ParserNodeUtils.toScalarContext(expr);
@@ -576,6 +597,51 @@ public class PrototypeArgs {
             args.elements.add(scalarArg);
         }
         return 1;
+    }
+
+    /**
+     * True if the operator currently being parsed is a Perl built-in
+     * (registered in {@link ParserTables#CORE_PROTOTYPES}). Used to
+     * decide whether a literal-string argument in a `*` (glob) slot
+     * should be looked up as a typeglob (built-in semantics) or passed
+     * through as a plain scalar (user-defined sub semantics).
+     */
+    private static boolean isBuiltinOperator(Parser parser) {
+        String name = parser.ctx.symbolTable.getCurrentSubroutine();
+        return name != null && ParserTables.CORE_PROTOTYPES.containsKey(name);
+    }
+
+    /**
+     * True if the given string is a syntactically valid Perl filehandle/glob name:
+     * one or more identifier components (`[A-Za-z_][A-Za-z0-9_]*`) separated by
+     * `::`. Used to recognise e.g. `open("FH", ...)` or `open("Pkg::FH", ...)`
+     * and route the literal string to the same path as a bareword.
+     */
+    private static boolean isValidFilehandleName(String s) {
+        if (s == null || s.isEmpty()) return false;
+        int n = s.length();
+        int i = 0;
+        while (i < n) {
+            char c = s.charAt(i);
+            if (!(Character.isLetter(c) || c == '_')) return false;
+            i++;
+            while (i < n) {
+                char d = s.charAt(i);
+                if (Character.isLetterOrDigit(d) || d == '_') {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            if (i >= n) return true;
+            // Expect "::" between identifier components
+            if (i + 1 < n && s.charAt(i) == ':' && s.charAt(i + 1) == ':') {
+                i += 2;
+            } else {
+                return false;
+            }
+        }
+        return false;
     }
 
     private static void handleListOrHashArgument(Parser parser, ListNode args, boolean needComma) {

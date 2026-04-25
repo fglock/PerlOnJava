@@ -181,6 +181,14 @@ public class VariableCollectorVisitor implements Visitor {
         if (node.body != null) {
             node.body.accept(this);
         }
+        // continueBlock holds variables referenced by `while {} continue { ... }`.
+        // Forgetting this caused the selective-capture optimisation in
+        // SubroutineParser to drop those lexicals from the closure, which
+        // tripped HTML/Element.pm's look_down at runtime with a
+        // "Global symbol $nillio requires explicit package name" error.
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(this);
+        }
     }
 
     @Override

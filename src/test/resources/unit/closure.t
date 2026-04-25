@@ -102,4 +102,48 @@ use feature 'say';
     is($inner->(), 130, "nested closure sees both outer updates");
 }
 
+# Closure capture inside `while {} continue { ... }` block of a sub
+# Regression test: VariableCollectorVisitor.visit(For3Node) used to skip
+# continueBlock, so the selective-capture optimisation in SubroutineParser
+# would drop variables only referenced from the continue block. The lazy
+# compiler then failed at first call with
+#   Global symbol "$nillio" requires explicit package name
+# This was discovered via HTML/Element.pm look_down() in HTML-Tree 5.07.
+{
+    my $captured = [42];
+    my $foo = sub {
+        my @pile = (1);
+        my @out;
+        my $this;
+        while (defined($this = shift @pile)) {
+            push @out, $this;
+        }
+        continue {
+            push @out, @{$captured};
+        }
+        return @out;
+    };
+    is_deeply([$foo->()], [1, 42], "continue block captures outer my variable");
+}
+
+# Same shape with named sub (forces lazy-compile path)
+{
+    my $sentinel = [99];
+    my @drained;
+    sub _drain_it {
+        my @pile = (1, 2);
+        my @out;
+        my $this;
+        while (defined($this = shift @pile)) {
+            push @out, $this;
+        }
+        continue {
+            push @out, @{$sentinel};
+        }
+        return @out;
+    }
+    is_deeply([_drain_it()], [1, 99, 2, 99],
+              "named sub: continue block captures outer my variable");
+}
+
 done_testing();
