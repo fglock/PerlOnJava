@@ -204,15 +204,37 @@ independently.
 
 ## Progress Tracking
 
-### Current Status: in progress
+### Current Status: Issues A, C, D fixed; Issue B remains as planned follow-up
 
 ### Completed Phases
-- [ ] Plan written
+- [x] Plan written (2026-04-25)
+- [x] Issue D (`CORE::GLOBAL::sleep`) fixed (2026-04-25)
+  - `src/main/java/org/perlonjava/frontend/parser/ParserTables.java`: added `sleep` to `OVERRIDABLE_OP`.
+  - Test: `src/test/resources/unit/operator_overrides.t` — new "sleep operator override" subtest.
+- [x] Issue C (silent missing-path) fixed (2026-04-25)
+  - `src/main/java/org/perlonjava/frontend/parser/SpecialBlockParser.java`: emit a `CompilerFlagNode` after a BEGIN block so `BEGIN { unimport warnings ... }` propagates the runtime warning scope (`local ${^WARNING_SCOPE} = N`) the same way `parseUseDeclaration` does for `use`/`no` declarations.
+  - Test: `src/test/resources/unit/warnings.t` — new test covering the `File::Find` use case.
+- [x] Issue A (duplicate named captures) fixed (2026-04-25)
+  - `src/main/java/org/perlonjava/runtime/regex/RegexPreprocessor.java`: track named captures already emitted in the current pattern and suffix subsequent occurrences with `ZpjdupZ<N>`. Also skip name text inside `(?<name>` / `(?'name'` / `(?P<name>` / `(?P=name)` when applying multi-char fold expansion (otherwise `(?<off>...)/i` becomes `(?<o(?:ff|ﬁ)>...)`).
+  - `src/main/java/org/perlonjava/runtime/regex/CaptureNameEncoder.java`: `decodeGroupName` strips the duplicate marker; new `stripDuplicateMarker`/`isDuplicateMarkerName` helpers.
+  - `src/main/java/org/perlonjava/runtime/runtimetypes/HashSpecialVariable.java`: group duplicate captures by decoded Perl name in `entrySet`/`get`/`containsKey` so `$+{name}` returns the matched alternative and `$-{name}` returns an arrayref of all alternatives.
+  - Test: `src/test/resources/unit/regex/regex_named_capture.t` — new test cases 10 & 11.
+
+### Verification
+
+After the three fixes, `jcpan -t DateTimeX::Easy` results changed as follows:
+
+| Dist | Before | After |
+|---|---|---|
+| DateTime::Format::DateManip | t/01conversions.t exits 255, 0 tests | **PASS** (7 tests) |
+| DateTime::Set | PASS | PASS (959 tests) |
+| Module::Util | 1/47 subtests fail | **PASS** (47 tests) |
+| Test::MockTime::HiRes | 7/13 subtests fail across 3 files | 1/4 subtests fail in t/02_hires.t |
+| DateTime::Format::Natural | 23/28 test programs fail | **8/28** test programs fail, 14/8913 subtests |
+| DateTimeX::Easy itself | 1/1 fails (cascade) | still 1/1 fails (cascade from Natural) |
+
+`make` (full build + parallel unit tests) is green on the feature branch.
 
 ### Next Steps
-1. Create feature branch.
-2. Fix Issue D and add a unit test asserting `CORE::GLOBAL::sleep` override is honored.
-3. Fix Issue C and add a unit test asserting silence for `find(sub {}, "/no/such/dir")`.
-4. Fix Issue A and add unit tests for duplicate-name patterns.
-5. Run `make` end-to-end and verify no regressions.
-6. Re-run `jcpan -t DateTimeX::Easy`; document remaining failures (expected: Issue B residue).
+- Investigate Issue B (`DateTime::Format::Natural` `t/11-parse_success.t` "feb 28 at 3" etc.). With Issues A/C/D fixed many of the previous Natural failures evaporated; the remaining 14/8913 subtest failures need a focused look. Once Natural fully installs, `DateTimeX::Easy` itself should pass.
+- Consider whether the residual `t/02_hires.t` failure in `Test::MockTime::HiRes` is worth attacking now (it likely needs a similar treatment for `Time::HiRes::gettimeofday` mocking).
