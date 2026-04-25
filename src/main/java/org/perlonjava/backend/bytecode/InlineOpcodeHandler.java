@@ -23,6 +23,7 @@ public class InlineOpcodeHandler {
      * These cannot be mutated in place.
      */
     static boolean isImmutableProxy(RuntimeBase val) {
+        if (val instanceof ReadOnlyAlias) return false;
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 

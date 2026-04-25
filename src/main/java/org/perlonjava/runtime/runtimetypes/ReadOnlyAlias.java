@@ -1,69 +1,69 @@
 package org.perlonjava.runtime.runtimetypes;
 
 /**
- * A scalar that aliases a read-only literal but is NOT a
- * {@link RuntimeScalarReadOnly}, so the bytecode interpreter's defensive
- * "strip immutable proxy" paths (see {@code BytecodeInterpreter.ensureMutableScalar}
- * and {@code OpcodeHandlerExtended} mutating opcodes) leave it alone.
+ * A scalar that aliases a read-only literal in foreach loop context.
  * <p>
- * Used to implement Perl's {@code foreach} alias semantics for literal
- * rvalues without disrupting unrelated arithmetic that returns cached
- * read-only scalars (e.g. {@code MathOperators.subtract} returning
- * {@code RuntimeScalarCache.getScalarInt(-1)} for {@code $#_++} -- the
- * cache singleton must still be silently copied by mutating opcodes
- * because the user did not write a literal-alias).
+ * Extends {@link RuntimeScalarReadOnly} so existing code that checks
+ * {@code instanceof RuntimeScalarReadOnly} (e.g. {@code utf8::upgrade},
+ * {@code utf8::downgrade}, {@code RuntimeGlob.set}, autovivification
+ * paths in {@code RuntimeScalar} and {@code RuntimeBaseProxy}) treats
+ * it like any other read-only scalar -- no in-place mutation, fall
+ * back to scalar replacement or undef.
  * <p>
- * <strong>Identity:</strong> shares {@code type} and {@code value} with
- * the wrapped read-only scalar so reads (stringification, getInt, etc.)
- * see the original value. All mutating methods throw
- * "Modification of a read-only value attempted".
+ * <strong>Special case:</strong> the bytecode interpreter's
+ * {@code isImmutableProxy}/{@code ensureMutableScalar} pair (see
+ * {@link org.perlonjava.backend.bytecode.BytecodeInterpreter} and
+ * {@link org.perlonjava.backend.bytecode.InlineOpcodeHandler}) used to
+ * silently unbox any RuntimeScalarReadOnly into a fresh mutable
+ * RuntimeScalar at every {@code ALIAS}, {@code SET_SCALAR}, and
+ * {@code PRE/POST_AUTOINCREMENT/DECREMENT} opcode. That behaviour is
+ * correct for cached read-only singletons (e.g. arithmetic results
+ * like {@code MathOperators.subtract} returning
+ * {@code RuntimeScalarCache.getScalarInt(-1)} for {@code $#_++}), but
+ * it broke Perl's foreach-aliasing semantics: {@code for (3) { ++$_ }}
+ * must throw "Modification of a read-only value", not silently
+ * succeed against a copy.
+ * <p>
+ * The interpreter's {@code isImmutableProxy} therefore explicitly
+ * excludes {@code ReadOnlyAlias}: instances slip through the strip
+ * path and reach {@code preAutoIncrement()}, where
+ * {@link RuntimeScalarReadOnly#vivify} throws the expected error.
  */
-public class ReadOnlyAlias extends RuntimeScalar {
+public class ReadOnlyAlias extends RuntimeScalarReadOnly {
+
+    /** The original read-only scalar this aliases. Reads delegate to it. */
+    private final RuntimeScalar src;
 
     public ReadOnlyAlias(RuntimeScalar src) {
         super();
+        this.src = src;
         this.type = src.type;
         this.value = src.value;
         this.blessId = src.blessId;
     }
 
-    private static RuntimeException readOnlyError() {
-        return new RuntimeException("Modification of a read-only value attempted");
+    @Override
+    public String toString() {
+        return src.toString();
     }
 
     @Override
-    public RuntimeScalar set(RuntimeScalar value) { throw readOnlyError(); }
+    public boolean getBoolean() {
+        return src.getBoolean();
+    }
 
     @Override
-    public RuntimeScalar set(String value) { throw readOnlyError(); }
+    public int getInt() {
+        return src.getInt();
+    }
 
     @Override
-    public RuntimeScalar set(long value) { throw readOnlyError(); }
+    public long getLong() {
+        return src.getLong();
+    }
 
     @Override
-    public RuntimeScalar set(int value) { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar set(boolean value) { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar preAutoIncrement() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar postAutoIncrement() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar preAutoDecrement() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar postAutoDecrement() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar undefine() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar chop() { throw readOnlyError(); }
-
-    @Override
-    public RuntimeScalar chomp() { throw readOnlyError(); }
+    public double getDouble() {
+        return src.getDouble();
+    }
 }
