@@ -1,5 +1,5 @@
 use strict;
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 # Note: warnings::enabled() is currently broken - it always returns false
 # because warning flags are set at compile time but getCurrentScope() at
@@ -75,3 +75,21 @@ use Test::More tests => 6;
 # no warnings 'numeric';
 # ok(!warnings::enabled('numeric'), "'no warnings \"numeric\"' disables numeric");
 # ok(warnings::enabled('substr'), "other categories remain enabled");
+
+# Test 7: BEGIN { unimport warnings 'cat' } inside a sub propagates the
+# suppression to runtime. Module::Util uses this idiom to silence
+# File::Find's "Can't stat" warnings.
+{
+    use File::Find;
+    sub _find_with_no_warn {
+        BEGIN { unimport warnings qw(File::Find) if $] >= 5.008 }
+        my @out;
+        File::Find::find({ no_chdir => 1, wanted => sub { push @out, $_ } }, $_[0]);
+        return @out;
+    }
+
+    my @w;
+    local $SIG{__WARN__} = sub { push @w, @_ };
+    _find_with_no_warn("/no/such/path-for-warnings-test");
+    is(scalar(@w), 0, 'BEGIN { unimport warnings ... } inside sub propagates to runtime');
+}
