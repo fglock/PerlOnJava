@@ -44,5 +44,5 @@ if [ -n "$CLASSPATH" ]; then
 else
     CP="$JAR_PATH"
 fi
-java $JVM_OPTS ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"
+exec java $JVM_OPTS ${JPERL_OPTS} -cp "$CP" org.perlonjava.app.cli.Main "$@"
 
