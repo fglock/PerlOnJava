@@ -43,6 +43,12 @@ public class BytecodeInterpreter {
     }
 
     static boolean isImmutableProxy(RuntimeBase val) {
+        // ReadOnlyAlias is a deliberate exception: it extends
+        // RuntimeScalarReadOnly so utf8::upgrade/downgrade and similar
+        // paths treat it as read-only (skip in-place mutation), but the
+        // interpreter's mutating opcodes must NOT silently strip it --
+        // we want `for (3) { ++$_ }` to throw, not silently succeed.
+        if (val instanceof ReadOnlyAlias) return false;
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 
