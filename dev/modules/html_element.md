@@ -332,6 +332,11 @@ unblocks one (cosmetically odd) test file.
 
 ## Phase 4 — `-weak` mode of `HTML::TreeBuilder`: object_count > 0 after $tree = undef
 
+> **Out of scope for this PR.** weaken/DESTROY work is being done on
+> a separate branch; this section is plan-only and **must not** be
+> implemented here.
+
+
 ### Symptom
 
 `t/refloop.t` tests 2, 4, 6:
