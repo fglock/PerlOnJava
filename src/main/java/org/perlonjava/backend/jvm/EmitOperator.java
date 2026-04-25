@@ -1647,9 +1647,14 @@ public class EmitOperator {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         if (resultIsList(node)) {
             node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            // Use flattenForRefgen() — Perl's distributive \(LIST) rule:
+            // only flatten when the list is a single array/hash/range.
+            // For multi-element lists (or scalar-only lists), distribute over
+            // top-level items WITHOUT flattening. Fixes op/decl-refs.t 2nd-
+            // retval-of-my-(\@f, @g)-is-@g and parallel state/our/local cases.
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
-                    "flattenElements",
+                    "flattenForRefgen",
                     "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
