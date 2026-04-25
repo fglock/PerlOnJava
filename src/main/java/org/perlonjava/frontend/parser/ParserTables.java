@@ -34,6 +34,7 @@ public class ParserTables {
             "kill",
             "oct", "open",
             "readline", "readpipe", "rename", "require",
+            "sleep",
             "stat", "system",
             "time",
             "uc",
