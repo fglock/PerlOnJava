@@ -118,6 +118,33 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
     }
 
     /**
+     * chop on a read-only scalar: silently return the last character
+     * without modifying. Real Perl raises a compile-time "Can't modify
+     * constant item in chop" error, but our compiler doesn't catch this,
+     * so emulate the runtime: return the character that *would* be
+     * chopped (or "") and leave the literal untouched. Avoids spurious
+     * "Modification of a read-only value" runtime errors in code like
+     * {@code eval q{chop "literal"}} (op/lex_assign.t 283-284).
+     */
+    @Override
+    public RuntimeScalar chop() {
+        if (type != RuntimeScalarType.STRING && type != RuntimeScalarType.BYTE_STRING) {
+            return new RuntimeScalar("");
+        }
+        if (s == null || s.isEmpty()) return new RuntimeScalar("");
+        return new RuntimeScalar(s.substring(s.length() - 1));
+    }
+
+    /**
+     * chomp on a read-only scalar: silently return 0 without modifying.
+     * See {@link #chop()} for rationale (op/lex_assign.t).
+     */
+    @Override
+    public RuntimeScalar chomp() {
+        return new RuntimeScalar(0);
+    }
+
+    /**
      * Retrieves the integer representation of the scalar.
      * For STRING type, computes lazily to ensure warnings are generated at use time.
      *
