@@ -769,6 +769,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // (skip if notempty variant already found a match - region() would reset the matcher)
         if (isPosDefined && !skipFirstFind) {
             matcher.region(startPos, inputStr.length());
+            // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
+            // line breaks in the input, not at the artificial region boundary.
+            // Java's default useAnchoringBounds(true) would let ^ match at startPos
+            // even when startPos is not preceded by \n, producing spurious matches
+            // for patterns like /^(.*)/mg.
+            matcher.useAnchoringBounds(false);
         }
 
         boolean found = false;
@@ -871,6 +877,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Update the position for the next match
                     int matchStart = matcher.start();
                     int matchEnd = matcher.end();
+                    boolean forcedAdvance = false;
 
                     // Detect zero-length match that would cause infinite loop
                     if (matchEnd == matchStart && matchStart == previousMatchEnd) {
@@ -881,6 +888,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         // In middle of string, advance by 1 to avoid infinite loop
                         matchEnd = matchStart + 1;
+                        forcedAdvance = true;
                     }
 
                     previousMatchEnd = matchEnd;
@@ -903,9 +911,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         if (posScalar != null) {
                             posScalar.set(startPos);
                         }
-                        // Update matcher region if we advanced past a zero-length match
-                        if (startPos > matchStart) {
+                        // Only redirect the matcher when we forcibly advanced past
+                        // a zero-length match. In every other case Java's find()
+                        // already continues from matcher.end() naturally, and
+                        // calling region() here would (a) re-enable anchoring
+                        // bounds at an arbitrary offset (breaking ^/$ semantics
+                        // under /m -- e.g. "ab\ncd\n" =~ /^(.*)/mg producing
+                        // spurious empty matches) and (b) reset internal state.
+                        if (forcedAdvance) {
                             matcher.region(startPos, inputStr.length());
+                            matcher.useAnchoringBounds(false);
                         }
                     }
                 }

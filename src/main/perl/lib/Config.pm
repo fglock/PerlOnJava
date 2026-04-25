@@ -67,6 +67,13 @@ my $path_separator = getProperty('path.separator') || ':';
 my $user_home = getProperty('user.home') || '';
 my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
+my $user_name = getProperty('user.name') || 'unknown';
+
+# Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
+my $host_name = eval {
+    require Sys::Hostname;
+    Sys::Hostname::hostname();
+} || 'localhost';
 
 # Normalize OS name
 $os_name = lc($os_name);
@@ -100,6 +107,16 @@ $os_name =~ s/\s+/_/g;
     # User directories
     home => $user_home,
     pwd => $user_dir,
+
+    # Build / maintainer identity. Real perl populates these at Configure
+    # time. Under PerlOnJava there is no Configure, so we synthesise sane
+    # defaults from the running JVM. They show up in Pod::Html output
+    # (<link rev="made" href="mailto:...">), in test fixtures that
+    # interpolate $Config{perladmin}, and in the like.
+    perladmin => "$user_name\@$host_name",
+    cf_email  => "$user_name\@$host_name",
+    cf_by     => $user_name,
+    myhostname => $host_name,
 
     # Standard Perl paths (relative to jar or filesystem)
     archlibexp => 'perlonjava/lib/perl5/5.42.0/' . "java-$java_version-$os_arch",

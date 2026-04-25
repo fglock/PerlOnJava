@@ -12,7 +12,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Lexical warnings with `use warnings` and FATAL support
 - Non-local control flow: `last`/`next`/`redo`/`goto LABEL`/`goto $EXPR`
 - Tail call with trampoline for `goto &NAME` and `goto __SUB__`
-- Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`, `XML::Parser`, `Net::SSLeay`, `IO::Socket::SSL`.
+- Add modules: `CPAN`, `Time::Piece`, `TOML`, `DirHandle`, `Dumpvalue`, `Sys::Hostname`, `IO::Socket`, `IO::Socket::INET`, `IO::Socket::UNIX`, `IO::Zlib`, `Archive::Tar`, `Archive::Zip`, `Net::FTP`, `Net::Cmd`, `IPC::Open2`, `IPC::Open3`, `ExtUtils::MakeMaker`, `XML::Parser`, `Net::SSLeay`, `IO::Socket::SSL`, `Pod::Html` (+ `Pod::Html::Util`).
 - Add operators: `flock`, `syscall`, `fcntl`, `ioctl`. 
 - Add `\&CORE::X` subroutine references: built-in functions can be used as first-class code refs (e.g., `\&CORE::push`, `\&CORE::length`) with correct prototypes and glob aliasing.
 - Support for forking patterns with `exec`:
@@ -22,6 +22,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Bugfix: parser now handles `@{${...}}` nested dereference in push/unshift.
 - Bugfix: regex octal escapes `\10`-`\377` now work correctly.
 - Bugfix: `\K` (keep left) assertion now works in `m//` and `s///`.
+- Bugfix: `^` / `$` in `/m` mode under `/g` no longer produce spurious empty matches in list context (e.g. `"ab\ncd\n" =~ /^(.*)/mg` now returns 2 matches as in Perl, not 4). Restores correct behaviour for the common line-walking idiom and unblocks `Pod::Html::Util::trim_leading_whitespace`.
+- Bugfix: `$Config{perladmin}`, `$Config{cf_email}`, `$Config{cf_by}`, and `$Config{myhostname}` are now populated from the running JVM's user/host info instead of being undef.
 - Bugfix: operator override in Time::Hires now works.
 - Bugfix: internal temp variables are now pre-initialized.
 - Optimization: faster list assignment.
