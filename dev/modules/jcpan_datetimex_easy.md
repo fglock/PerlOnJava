@@ -204,7 +204,7 @@ independently.
 
 ## Progress Tracking
 
-### Current Status: Issues A, C, D fixed; Issue B remains as planned follow-up
+### Current Status: COMPLETE — `jcpan -t DateTimeX::Easy` exits 0
 
 ### Completed Phases
 - [x] Plan written (2026-04-25)
@@ -219,22 +219,29 @@ independently.
   - `src/main/java/org/perlonjava/runtime/regex/CaptureNameEncoder.java`: `decodeGroupName` strips the duplicate marker; new `stripDuplicateMarker`/`isDuplicateMarkerName` helpers.
   - `src/main/java/org/perlonjava/runtime/runtimetypes/HashSpecialVariable.java`: group duplicate captures by decoded Perl name in `entrySet`/`get`/`containsKey` so `$+{name}` returns the matched alternative and `$-{name}` returns an arrayref of all alternatives.
   - Test: `src/test/resources/unit/regex/regex_named_capture.t` — new test cases 10 & 11.
+- [x] Issue B (`DateTime::Format::Natural` parse_success) fixed (2026-04-25)
+  - `src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java`: `replaceRegex()` now honors `pos()` when the pattern uses `\G`, so `s/\G/.../` after a previous `/g` match anchors at the previous match-end instead of offset 0. This is what `DateTime::Format::Natural::Rewrite::_rewrite_conditional` relies on to turn "feb 28 at 3" into "feb 28 at 3:00".
+  - Test: `src/test/resources/unit/regex/regex_g_pos.t` — new "\\G in s/// honors pos()" subtest.
+- [x] `Time::HiRes::gettimeofday` scalar context (2026-04-25)
+  - `src/main/java/org/perlonjava/runtime/perlmodule/TimeHiRes.java`: scalar/void context returns `seconds + micros/1_000_000` instead of just microseconds.
+- [x] `Time::Piece->strptime` lenient parsing (2026-04-25)
+  - `src/main/java/org/perlonjava/runtime/perlmodule/TimePiece.java`: switched to `DateTimeFormatterBuilder.parseLenient().appendPattern(...)` so non-zero-padded fields (e.g. "1:13:8" against `%H:%M:%S`) parse successfully.
 
 ### Verification
 
-After the three fixes, `jcpan -t DateTimeX::Easy` results changed as follows:
+`jcpan -t DateTimeX::Easy` exit code: **0**. Per-distribution results:
 
-| Dist | Before | After |
+| Dist | Tests | Result |
 |---|---|---|
-| DateTime::Format::DateManip | t/01conversions.t exits 255, 0 tests | **PASS** (7 tests) |
-| DateTime::Set | PASS | PASS (959 tests) |
-| Module::Util | 1/47 subtests fail | **PASS** (47 tests) |
-| Test::MockTime::HiRes | 7/13 subtests fail across 3 files | 1/4 subtests fail in t/02_hires.t |
-| DateTime::Format::Natural | 23/28 test programs fail | **8/28** test programs fail, 14/8913 subtests |
-| DateTimeX::Easy itself | 1/1 fails (cascade) | still 1/1 fails (cascade from Natural) |
+| DateTime::Format::DateManip | 7 | PASS |
+| DateTime::Set | 959 | PASS |
+| Module::Util | 47 | PASS |
+| Test::MockTime::HiRes | 216 | PASS |
+| DateTime::Format::Natural | 11077 | PASS |
+| DateTimeX::Easy | 107 | PASS |
 
 `make` (full build + parallel unit tests) is green on the feature branch.
 
-### Next Steps
-- Investigate Issue B (`DateTime::Format::Natural` `t/11-parse_success.t` "feb 28 at 3" etc.). With Issues A/C/D fixed many of the previous Natural failures evaporated; the remaining 14/8913 subtest failures need a focused look. Once Natural fully installs, `DateTimeX::Easy` itself should pass.
-- Consider whether the residual `t/02_hires.t` failure in `Test::MockTime::HiRes` is worth attacking now (it likely needs a similar treatment for `Time::HiRes::gettimeofday` mocking).
+### Notes / Possible follow-ups
+- All seven items above land on the same feature branch / single PR; consider splitting if reviewers prefer smaller commits per fix (each is already its own commit).
+- The duplicate-name marker `ZpjdupZ` chosen for capture names is unlikely but theoretically collidable with a user name ending in `ZpjdupZ\d+`. If that ever becomes a concern, the encoder could escape literal `ZpjdupZ` sequences before suffixing — analogous to the existing `U95` underscore round-trip.
