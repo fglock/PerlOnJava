@@ -102,21 +102,35 @@ public class Internals extends PerlModuleBase {
             // PerlOnJava's `refCount` counts *external* refs (RVs, container
             // slots). Real Perl's SvREFCNT also counts the lexical pad slot
             // that owns the SV. We model the lexical slot via the separate
-            // `localBindingExists` flag, so add +1 when it's true to match
-            // Perl's view: a `my @arr` with no other refs reports SvREFCNT=1
-            // in Perl (the pad slot's ownership), and after `my $r = \@arr`
-            // it reports 2 (pad + RV).
-            // For a freshly-created tracked object with no counted owners
-            // (rc == 0) and no lexical, return 1 to match Perl's convention
-            // of "at least one owner" for live SVs.
+            // `localBindingExists` flag.
+            //
+            // Real Perl's `Internals::SvREFCNT(arg)` semantics, verified
+            // empirically:
+            //   my @a; &SvREFCNT(\@a)        => 1   (just lex pad)
+            //   $r=\@a; &SvREFCNT(\@a)       => 2   (lex + $r)
+            //   my $x = []; &SvREFCNT($x)    => 0   (1 owner, reports owner-1)
+            //   $r=$x; &SvREFCNT($x)         => 1   (2 owners, reports owner-1)
+            //
+            // For named lexicals (`localBindingExists=true`), add +1 for the
+            // pad slot. For anonymous referents the function arg itself is
+            // one of the counted refs; real Perl discounts it (-1) so that
+            // a single owner reports 0. The two adjustments together match
+            // real Perl across all test patterns:
+            //   - inccode.t "no leaks" delta-checks
+            //   - for-many.t "refcount inside/after loop"
+            //   - test_pl/examples.t "only one reference"/"two references"
             int extra = base.localBindingExists ? 1 : 0;
+            // Legacy fudge: anonymous tracked container with no counted
+            // owners -- still report 1 to indicate "live SV". Used by
+            // Sub::Quote / Moo introspection paths that probe for liveness.
             if (rc == 0 && extra == 0) return new RuntimeScalar(1).getList();
-            // For rc > 0 we return the cooperative refCount + lexical extra.
-            // This is intentionally NOT adjusted by -1: see B::SV::REFCNT in
-            // bundled-modules/B.pm which relies on the +1 inflation from
-            // storing the ref in a tracked hash slot to compensate for
-            // under-counted stack/JVM temporaries elsewhere.
-            return new RuntimeScalar(rc + extra).getList();
+            // Real Perl reports `owner_count − 1` when the queried referent
+            // is an anonymous tracked container (the function arg itself is
+            // one of the owners and gets discounted). For named lexicals,
+            // no adjustment — the temp `\@a` from the arg doesn't add an
+            // extra owner in real Perl.
+            int adjust = base.localBindingExists ? 0 : -1;
+            return new RuntimeScalar(rc + extra + adjust).getList();
         }
         return new RuntimeScalar(1).getList();
     }
