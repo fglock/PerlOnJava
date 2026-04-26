@@ -207,3 +207,98 @@ So the right surgical fix is in `bless` + `MyVarCleanupStack.register` (Step C),
 
 - `win32/seekdir.t -30`, `porting/checkcase.t -27` — environmental (Windows-specific filesystem; file-count varies per checkout). Document in the merge PR description.
 - `op/do.t #70` — deferred (Step D); document as known limitation if Steps A+B+C land cleanly.
+
+---
+
+## Step D investigation notes (post-rebase, 2026-04-26)
+
+### Reproducer
+
+```perl
+package p124248;
+our $d = 0;
+sub DESTROY { $d++ }
+package main;
+sub f { print "in f, d=$p124248::d (expected 1)\n"; }
+f(do { 1; !!(my $x = bless [], 'p124248'); });
+```
+
+System Perl: `in f, d=1`. PerlOnJava: `in f, d=0` (DESTROY fires only after `f()` returns).
+
+### Root cause analysis
+
+In `EmitBlock.java` (line ~382), do-blocks are emitted with `flush=false`:
+
+```java
+boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+EmitStatement.emitScopeExitNullStores(ctx, scopeIndex, !isSubBody && !isDoBlock);
+```
+
+The comment explains: do-block result may be on the JVM operand stack; a full
+`MortalList.flush()` could destroy it before the caller captures it. This is
+correct for cases like `do { my $x = ...; $x }` where the result IS the my-var.
+
+But it also suppresses DESTROY for *truly transient* my-vars (like the
+`my $x = bless []` inside `!!(...)` above) whose values do **not** escape
+the do-block.
+
+### Why naive flush=true breaks DBIC
+
+A previous attempt to set `flush=true` for do-blocks broke
+`DBIx::Class t/60core.t` with 14 fails. Pattern in DBIC code:
+
+```perl
+$self->{cursor} ||= do { my $x = $self->_create_cursor; $x };
+```
+
+Here `$x` IS the do-block's result. Flushing at scope exit would destroy
+the cursor before `||=` stores it.
+
+### Possible fix paths (NOT YET IMPLEMENTED)
+
+1. **Result-saved flush.** At do-block exit:
+   1. Increment refCount of the result on the JVM stack.
+   2. Run `MortalList.flush()` — destroys true transients but the result
+      is protected by its bumped refCount.
+   3. Decrement refCount back, deferring it to the OUTER scope's MortalList.
+
+   This is essentially what real Perl 5's SAVETMPS/FREETMPS+sv_2mortal does.
+   Implementation: in `EmitBlock` after `materializeBlockResult`, emit
+   `result.refCount++; flush(); MortalList.deferDecrement(result);`.
+
+2. **Mark-bounded flush via pushMark/popAndFlush.** Only flush entries
+   added during the do-block's own execution. Earlier entries (from outer
+   expression context) are preserved. Still risks destroying the result
+   if the result was added to MortalList by something inside the do-block.
+
+3. **AST analysis.** Detect at compile time whether the do-block's
+   syntactic result expression references any of the my-vars declared
+   inside. If not, emit `flush=true`. If yes, emit `flush=false`.
+   Most conservative; matches DBIC's `do { my $x = ...; $x }` pattern.
+
+   Implementation hint: the do-block's result expression is the last
+   statement. Walk it for any IdentifierNode that resolves to a my-var
+   declared in the do-block's scope. If found, suppress flush.
+
+### Recommendation
+
+**Path 3 (AST analysis)** is the safest: it gives DBIC's "result IS my-var"
+pattern the current behavior, and gives RT 124248's "result is independent"
+pattern the FREETMPS behavior. Path 1 is most Perl-faithful but riskier.
+
+### Acceptance criteria for Step D
+
+- `op/do.t` test #70 (RT 124248) passes (69/73 → matches master, no -1
+  regression).
+- `./jcpan -t DBIx::Class`: 314/314 PASS, 0 Dubious — **must not regress**.
+- `./jcpan -t Moo`: 71/71. `./jcpan -t Template`: 106/106.
+- `make`: BUILD SUCCESSFUL.
+- No new regressions in `compare_test_logs.pl` output.
+
+### Next steps for Step D (when ready)
+
+1. Implement Path 3: add AST visitor to detect "result references inner my-var".
+2. In `EmitBlock`, when `isDoBlock` and the AST analysis says "no escape",
+   pass `flush=true` to `emitScopeExitNullStores`.
+3. Run gates after each commit; tag green checkpoints.
+4. If still risky, fall back to Path 1 with extra DBIC stress-testing.
