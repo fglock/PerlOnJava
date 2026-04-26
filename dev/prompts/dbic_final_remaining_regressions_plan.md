@@ -302,3 +302,35 @@ pattern the FREETMPS behavior. Path 1 is most Perl-faithful but riskier.
    pass `flush=true` to `emitScopeExitNullStores`.
 3. Run gates after each commit; tag green checkpoints.
 4. If still risky, fall back to Path 1 with extra DBIC stress-testing.
+
+### Path 1 attempt (2026-04-26) — REVERTED
+
+Implemented `MortalList.protectResultAndFlush(RuntimeScalar)` and
+`protectResultAndFlushList(RuntimeBase)`. Wired into `EmitBlock` for
+do-blocks in SCALAR/LIST/RUNTIME contexts; VOID context got plain flush.
+
+**Result on standalone repros:** all worked (SCALAR, VOID, LIST). DESTROY
+fired before `f()` was called.
+
+**Result on `op/do.t`:** RT 124248 (test 98) STILL failed when run as
+part of the full op/do.t — likely some accumulated state from prior tests
+in the file. Additionally introduced 2 NEW regressions:
+- Test 61 "return (do { }, (do { }) x ...) - scalar context 1"
+- Test 62 "return (do { }, (do { }) x ...) - scalar context 2"
+
+Pattern: `$x = $test_code->(0, 0)` where `$test_code = sub { ... return (do { }, ...) }`.
+The protect-and-flush of the do-blocks inside the `return` statement
+must be interfering with the list construction.
+
+**Lesson:** Path 1 is more invasive than expected. Even with standalone
+test passing, file-level test interactions exposed deeper issues. Reverted
+the change; Step D remains deferred for a future PR with more careful
+analysis of `return (do {}, do {})` and similar list-construction
+patterns.
+
+**Recommendation:** future Step D work should:
+1. Build a comprehensive test matrix BEFORE coding (not just RT 124248).
+2. Include DBIC `t/60core.t` and `t/52leaks.t` in the gate.
+3. Consider Path 3 (AST analysis) — can statically detect when the
+   do-block's result expression is independent of inner my-vars,
+   avoiding the list-construction interference altogether.
