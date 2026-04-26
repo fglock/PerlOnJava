@@ -612,6 +612,17 @@ public class RuntimeList extends RuntimeBase {
                 result.elements.add(useAlias ? rhsAlias : rhsValue);
 
                 if (rhsIndex < rhsSize) {
+                    // Undo the materialized copy's refCount increment for the consumed
+                    // RHS value (mirrors the corresponding fix in the assigned-scalar
+                    // branch below). Without this, `my (undef, $name) = @_;` patterns
+                    // leak +1 refCount per call on the discarded first arg — visible
+                    // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
+                    if (rhsValue != null && rhsValue.refCountOwned
+                            && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.refCount--;
+                        rhsValue.refCountOwned = false;
+                    }
                     rhsIndex++;
                 }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
