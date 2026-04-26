@@ -253,18 +253,71 @@ through helper subs `Moose::Exporter::_set_flag`/`_get_flag`.
 ./jcpan -t ANSI::Unicode                                            # → PASS
 ./jperl -MMoose -e 'package P { use Moose; has x => (is=>"rw") } P->new(x=>1)'
 
+# Run upstream Moose's full test suite against the shim (no install)
+./jcpan -t Moose                                                    # → see baseline below
+
 # After Phase A (HasCompiler stub)
 ./jperl -MExtUtils::HasCompiler=can_compile_loadable_object \
         -e 'print can_compile_loadable_object(quiet=>1) ? "yes" : "no"'  # → no
 
 # After Phase B (XS-strip in WriteMakefile)
-./jcpan -t Moose                                                    # → install OK, Moose tests run
+./jcpan -t Moose                                                    # → install OK, more tests pass
 
 # After Phase C+D (real Class::MOP / Moose)
 ./jperl -MClass::MOP -e 'print Class::MOP::get_code_info(\&Class::MOP::class_of)'
 ./jcpan -t Moose
 ./jcpan -t MooseX::Types
 ```
+
+### Running upstream Moose's test suite against the shim
+
+`./jcpan -t Moose` is wired up via a CPAN distroprefs entry shipped from
+`src/main/perl/lib/CPAN/Config.pm` (auto-bootstrapped to
+`~/.perlonjava/cpan/prefs/Moose.yml` on first run). It:
+
+- skips `Makefile.PL` (`touch Makefile` placates CPAN's "no Makefile
+  created" fallback path),
+- skips `make` (nothing to build),
+- runs `prove --exec "$JPERL_BIN" -r t/` against the unpacked tarball,
+  with `JPERL_BIN` set by the `jcpan` / `jcpan.bat` wrapper,
+- skips `install` (the shim is already on `@INC` via the jar).
+
+Because `prove --exec` invokes `jperl` per test file without adding
+`lib/` or `blib/lib/` to `@INC`, the **bundled shim from the jar** wins
+over the unpacked upstream `lib/Moose.pm`. So you can run the entire
+upstream suite end-to-end and see honestly which tests pass, without
+patching Moose's `Makefile.PL` or shipping a fragile diff.
+
+The same recipe is the model for any future "test against shim, don't
+install" scenario — define a distroprefs entry that overrides `pl` /
+`make` / `install` with no-ops and `test` with a `prove --exec` line.
+
+### Quick-path baseline (Moose 2.4000)
+
+Snapshot from `./jcpan -t Moose` against the current shim:
+
+| Metric | Value |
+|---|---|
+| Test files executed | 478 |
+| Individual assertions executed | 616 |
+| Fully passing files | ~29 |
+| Partially passing files | ~44 |
+| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 |
+| Assertions ok | 370 |
+| Assertions fail | 246 |
+
+The 29 fully-passing files cover BUILDARGS / BUILD chains, immutable
+round-trips, anonymous role creation, several Moo↔Moose bug regressions,
+the cookbook recipes for basic attribute / inheritance / subtype use,
+and the Type::Tiny integration test. The 44 partials include
+high-value chunks such as `basics/import_unimport.t` (31/48),
+`basics/wrapped_method_cxt_propagation.t` (6/7), and
+`recipes/basics_point_attributesandsubclassing.t` (28/31).
+
+Phases C/D (real `Class::MOP` and `Moose` ports) should move these
+numbers; record the new totals here whenever they shift.
+
+---
 
 ### Lock in progress as bundled-module tests
 
