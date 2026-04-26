@@ -22,7 +22,9 @@ goto parse_args
 :run
 rem Set default per-test timeout (300s) to kill hanging tests
 if not defined JPERL_TEST_TIMEOUT set "JPERL_TEST_TIMEOUT=300"
-rem Expose jperl launcher for distroprefs (e.g. Moose.yml) to use as
-rem prove --exec "%JPERL_BIN%".
+rem Expose jperl launcher AND jcpan launcher itself for distroprefs
+rem (e.g. Moose.yml) to use as `prove --exec "%JPERL_BIN%"` and
+rem `"%JCPAN_BIN%" SomeModule`.
 set "JPERL_BIN=%SCRIPT_DIR%jperl.bat"
+set "JCPAN_BIN=%SCRIPT_DIR%jcpan.bat"
 "%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_ARGS%

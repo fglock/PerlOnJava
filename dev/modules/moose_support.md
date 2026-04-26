@@ -275,12 +275,22 @@ through helper subs `Moose::Exporter::_set_flag`/`_get_flag`.
 `src/main/perl/lib/CPAN/Config.pm` (auto-bootstrapped to
 `~/.perlonjava/cpan/prefs/Moose.yml` on first run). It:
 
+- ensures `Moo` is installed before testing — the shim delegates to Moo,
+  so the `pl:` step runs `"$JPERL_BIN" -e "require Moo; 1" || "$JCPAN_BIN" Moo`
+  to bootstrap it the first time on a fresh checkout,
 - skips `Makefile.PL` (`touch Makefile` placates CPAN's "no Makefile
   created" fallback path),
 - skips `make` (nothing to build),
 - runs `prove --exec "$JPERL_BIN" -r t/` against the unpacked tarball,
-  with `JPERL_BIN` set by the `jcpan` / `jcpan.bat` wrapper,
+  with `JPERL_BIN` and `JCPAN_BIN` both exported by the
+  `jcpan` / `jcpan.bat` wrapper,
 - skips `install` (the shim is already on `@INC` via the jar).
+
+We deliberately avoid a CPAN `depends:` block — that would force CPAN to
+resolve Moose's full upstream prereq tree (`Package::Stash::XS`,
+`MooseX::NonMoose`, …), most of which is XS and unsatisfiable. The
+`pl:` shell-conditional is narrower: it installs only `Moo`, which is
+the real runtime dependency of the shim.
 
 Because `prove --exec` invokes `jperl` per test file without adding
 `lib/` or `blib/lib/` to `@INC`, the **bundled shim from the jar** wins

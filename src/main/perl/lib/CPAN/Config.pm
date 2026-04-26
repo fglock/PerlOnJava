@@ -91,7 +91,13 @@ match:
   distribution: "^ETHER/Moose-"
 disabled: 0
 pl:
-  commandline: "touch Makefile"
+  # The Moose shim delegates to Moo at runtime. Auto-install Moo if it
+  # isn't already loadable, then create a stub Makefile so CPAN's "no
+  # Makefile created" fallback path doesn't kick in. We avoid the
+  # `depends:` block here because CPAN would then try to resolve
+  # Moose's full upstream prereq tree (Package::Stash::XS,
+  # MooseX::NonMoose, ...), most of which is XS and unsatisfiable.
+  commandline: '"$JPERL_BIN" -e "require Moo; 1" >/dev/null 2>&1 || "$JCPAN_BIN" Moo; touch Makefile'
 make:
   commandline: "true"
 test:
