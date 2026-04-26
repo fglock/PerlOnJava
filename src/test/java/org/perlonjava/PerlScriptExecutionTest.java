@@ -122,27 +122,59 @@ public class PerlScriptExecutionTest {
             return sortedScripts.stream();
         }
 
-        // Sharding logic
+        // Sharding logic.
+        //
+        // We use a simple "heavy-test isolation" scheme for balance:
+        //   - The LAST shard is dedicated to known-heavy tests (HEAVY_TESTS).
+        //   - All other shards round-robin the remaining (light) tests.
+        //
+        // Rationale: a single test (currently unit/code_too_large.t at ~16s)
+        // can dominate one shard's wall time well beyond what round-robin
+        // can balance. Putting it on its own shard lets the others split
+        // the rest evenly. To extend, just add filenames to HEAVY_TESTS.
         String shardIndexProp = System.getProperty("test.shard.index");
         String shardTotalProp = System.getProperty("test.shard.total");
-        
-        if (shardIndexProp != null && !shardIndexProp.isEmpty() && 
+
+        if (shardIndexProp != null && !shardIndexProp.isEmpty() &&
             shardTotalProp != null && !shardTotalProp.isEmpty()) {
             try {
                 int shardIndex = Integer.parseInt(shardIndexProp);
                 int shardTotal = Integer.parseInt(shardTotalProp);
-                
-                // Maven surefire.forkNumber is 1-indexed, convert to 0-indexed
-                if (shardIndex >= 1 && shardIndex <= shardTotal) {
-                    shardIndex = shardIndex - 1;
-                }
-                
+
+                // Both Gradle and Maven now pass 0-indexed shard.index values
+                // (see build.gradle and pom.xml). Earlier code attempted to
+                // detect Maven 1-indexed values heuristically, which silently
+                // collapsed shard 1 onto shard 0 and dropped the last shard
+                // entirely; do not reintroduce that.
+
                 if (shardTotal > 1 && shardIndex >= 0 && shardIndex < shardTotal) {
                     System.out.println("Running shard " + (shardIndex + 1) + " of " + shardTotal);
+
+                    // Tests known to be much slower than the rest. Use forward
+                    // slashes; we match against both '/' and '\' separators.
+                    final List<String> HEAVY_TESTS = List.of(
+                        "unit/code_too_large.t"
+                    );
+                    java.util.function.Predicate<String> isHeavy = s -> {
+                        String norm = s.replace('\\', '/');
+                        return HEAVY_TESTS.contains(norm);
+                    };
+
+                    final int lastShard = shardTotal - 1;
+                    if (shardIndex == lastShard) {
+                        // Dedicated shard: only the heavy tests.
+                        return sortedScripts.stream().filter(isHeavy);
+                    }
+
+                    // Light shards: round-robin over the remaining (shardTotal - 1) shards.
+                    List<String> lightScripts = sortedScripts.stream()
+                            .filter(isHeavy.negate())
+                            .collect(Collectors.toList());
+                    final int lightShards = shardTotal - 1;
                     final int finalShardIndex = shardIndex;
-                    return IntStream.range(0, sortedScripts.size())
-                        .filter(i -> i % shardTotal == finalShardIndex)
-                        .mapToObj(sortedScripts::get);
+                    return IntStream.range(0, lightScripts.size())
+                            .filter(i -> i % lightShards == finalShardIndex)
+                            .mapToObj(lightScripts::get);
                 }
             } catch (NumberFormatException e) {
                 // Silently fall through to run all tests
