@@ -63,6 +63,19 @@ public class GlobalRuntimeArray implements DynamicState {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
+                // If the local'd array was blessed during the scope (e.g.
+                // `bless \@foo, 'Class'` where @foo is the localized one),
+                // fire DESTROY now since the local array is about to be
+                // discarded. Test: postfixderef.t #38 "no stooges outlast
+                // their scope".
+                RuntimeArray localArray = GlobalVariable.globalArrays.get(saved.fullName);
+                if (localArray != null && localArray.blessId != 0
+                        && !localArray.destroyFired
+                        && (saved.originalArray == null || localArray != saved.originalArray)) {
+                    localArray.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(localArray);
+                }
+
                 // Restore the original array reference in the global map
                 GlobalVariable.globalArrays.put(saved.fullName, saved.originalArray);
 

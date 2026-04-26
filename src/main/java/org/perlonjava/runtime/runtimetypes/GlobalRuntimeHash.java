@@ -59,6 +59,16 @@ public class GlobalRuntimeHash implements DynamicState {
             if (saved.fullName.equals(this.fullName)) {
                 localizedStack.pop();
 
+                // Fire DESTROY if the local hash was blessed during the scope.
+                // Test: postfixderef.t #38 "no stooges outlast their scope".
+                RuntimeHash localHash = GlobalVariable.globalHashes.get(saved.fullName);
+                if (localHash != null && localHash.blessId != 0
+                        && !localHash.destroyFired
+                        && (saved.originalHash == null || localHash != saved.originalHash)) {
+                    localHash.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(localHash);
+                }
+
                 // Restore the original hash reference in the global map
                 GlobalVariable.globalHashes.put(saved.fullName, saved.originalHash);
 

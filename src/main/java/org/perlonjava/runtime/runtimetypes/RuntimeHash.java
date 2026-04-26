@@ -1199,6 +1199,21 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             // would leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
             MortalList.deferDestroyForContainerClear(this.elements.values());
+            // Real Perl semantics: a `local %h` that gets `bless`ed during the
+            // local scope must fire DESTROY when restored — the local'd
+            // temporary is conceptually freed. PerlOnJava reuses the same HV,
+            // so we fire DESTROY explicitly. See RuntimeArray.dynamicRestoreState
+            // for the equivalent fix for arrays.
+            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+                int savedBlessId = this.blessId;
+                int savedRefCount = this.refCount;
+                boolean savedDestroyFired = this.destroyFired;
+                this.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(this);
+                this.destroyFired = savedDestroyFired;
+                this.refCount = savedRefCount;
+                this.blessId = savedBlessId;
+            }
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;

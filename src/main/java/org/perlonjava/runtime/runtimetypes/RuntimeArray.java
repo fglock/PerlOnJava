@@ -1399,6 +1399,30 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // leak refCounts because the local elements are replaced without
             // ever going through scopeExitCleanup.
             MortalList.deferDestroyForContainerClear(this.elements);
+            // Real Perl semantics: `local @arr` creates a fresh temporary AV
+            // for the scope; `bless \@arr, 'X'` blesses that temporary; at
+            // local-restore, the temporary is freed and DESTROY fires for
+            // class X. PerlOnJava reuses the same AV across local/restore,
+            // so we need to fire DESTROY explicitly when the current state
+            // was blessed but the previous state was not (or vice-versa
+            // changed bless class). Test: postfixderef.t #38 "no stooges
+            // outlast their scope".
+            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+                int savedBlessId = this.blessId;
+                int savedRefCount = this.refCount;
+                int savedType = this.type;
+                boolean savedDestroyFired = this.destroyFired;
+                // callDestroy contract: caller sets refCount = MIN_VALUE.
+                this.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(this);
+                // Restore for safe state replacement below. Reset
+                // destroyFired so subsequent local/restore cycles can
+                // also fire DESTROY.
+                this.destroyFired = savedDestroyFired;
+                this.refCount = savedRefCount;
+                this.type = savedType;
+                this.blessId = savedBlessId;
+            }
             // Restore the elements from the saved state
             this.elements = previousState.elements;
             // Restore the type from the saved state (important for tied arrays)
