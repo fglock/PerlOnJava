@@ -31,7 +31,7 @@ check-java-gradle:
 
 wrapper: check-java-gradle
 
-# Standard build - incremental compilation with parallel tests (4 JVMs)
+# Standard build - incremental compilation with parallel tests (5 JVMs; last shard isolates heavy tests)
 build: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat classes testUnitParallel --parallel shadowJar
@@ -149,7 +149,7 @@ else
 	./gradlew testAll --rerun-tasks
 endif
 
-# Parallel unit tests via Gradle/JUnit (4 JVMs)
+# Parallel unit tests via Gradle/JUnit (5 JVMs; last shard isolates heavy tests)
 test-gradle-parallel: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat testUnitParallel --parallel --rerun-tasks
@@ -157,12 +157,12 @@ else
 	./gradlew testUnitParallel --parallel --rerun-tasks
 endif
 
-# Parallel unit tests via Maven (4 JVMs)
+# Parallel unit tests via Maven (5 JVMs; last shard isolates heavy tests)
 test-maven-parallel:
 ifeq ($(OS),Windows_NT)
-	start /B mvn test -Pshard1 & start /B mvn test -Pshard2 & start /B mvn test -Pshard3 & start /B mvn test -Pshard4
+	start /B mvn test -Pshard1 & start /B mvn test -Pshard2 & start /B mvn test -Pshard3 & start /B mvn test -Pshard4 & start /B mvn test -Pshard5
 else
-	mvn test -Pshard1 & mvn test -Pshard2 & mvn test -Pshard3 & mvn test -Pshard4 & wait
+	mvn test -Pshard1 & mvn test -Pshard2 & mvn test -Pshard3 & mvn test -Pshard4 & mvn test -Pshard5 & wait
 endif
 
 clean: check-java-gradle
