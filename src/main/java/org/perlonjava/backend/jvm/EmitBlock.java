@@ -303,19 +303,6 @@ public class EmitBlock {
                     // General case for all other elements
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("Element: " + element);
                     element.accept(voidVisitor);
-                    // FREETMPS: Flush deferred mortal decrements at statement boundaries.
-                    // Uses flushAboveMark() instead of flush() so that entries from
-                    // the caller's scope (below the function-entry mark pushed by
-                    // RuntimeCode.apply) are NOT processed. This prevents premature
-                    // DESTROY of method chain temporaries like Foo->new()->method()
-                    // where the bless mortal entry from the outer scope must survive
-                    // until the caller's statement boundary.
-                    // If no mark exists (top-level code), behaves like flush().
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/MortalList",
-                            "flushAboveMark",
-                            "()V",
-                            false);
                 }
 
                 // NOTE: Registry checks are DISABLED in EmitBlock because:
