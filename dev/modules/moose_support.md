@@ -276,21 +276,32 @@ through helper subs `Moose::Exporter::_set_flag`/`_get_flag`.
 `~/.perlonjava/cpan/prefs/Moose.yml` on first run). It:
 
 - ensures `Moo` is installed before testing — the shim delegates to Moo,
-  so the `pl:` step runs `"$JPERL_BIN" -e "require Moo; 1" || "$JCPAN_BIN" Moo`
-  to bootstrap it the first time on a fresh checkout,
-- skips `Makefile.PL` (`touch Makefile` placates CPAN's "no Makefile
-  created" fallback path),
-- skips `make` (nothing to build),
-- runs `prove --exec "$JPERL_BIN" -r t/` against the unpacked tarball,
-  with `JPERL_BIN` and `JCPAN_BIN` both exported by the
-  `jcpan` / `jcpan.bat` wrapper,
-- skips `install` (the shim is already on `@INC` via the jar).
+  so the `pl:` step calls a tiny Perl helper
+  (`PerlOnJava::Distroprefs::Moose::bootstrap_pl_phase`) that does
+  `require Moo` and falls back to `system $ENV{JCPAN_BIN}, "Moo"` if
+  Moo isn't loadable;
+- creates a stub `Makefile` so CPAN.pm's "no Makefile created" fallback
+  path doesn't kick in (also done by the same helper);
+- skips `make` and `install` (`PerlOnJava::Distroprefs::Moose::noop`,
+  cross-platform replacement for POSIX `true`);
+- runs `prove --exec jperl -r t/` against the unpacked tarball.
 
-We deliberately avoid a CPAN `depends:` block — that would force CPAN to
+`jcpan` / `jcpan.bat` prepend the project directory to `PATH` so
+shell-spawned subprocesses (CPAN's distroprefs commandlines, prove's
+child processes) find `jperl` on both Unix and Windows. They also
+export `JCPAN_BIN` for the helper to recursively call jcpan when Moo
+needs installing.
+
+This design avoids POSIX-only shell constructs — `||`, `;`, `touch`,
+`/dev/null`, `$VAR` — that don't work in Windows `cmd.exe`. Each phase
+is a single `jperl -MPerlOnJava::Distroprefs::Moose -e '...'` (or
+`prove --exec jperl ...`) invocation, parsed identically by `bash`,
+`sh`, `cmd.exe`, and PowerShell.
+
+We deliberately avoid a CPAN `depends:` block — it would force CPAN to
 resolve Moose's full upstream prereq tree (`Package::Stash::XS`,
 `MooseX::NonMoose`, …), most of which is XS and unsatisfiable. The
-`pl:` shell-conditional is narrower: it installs only `Moo`, which is
-the real runtime dependency of the shim.
+helper installs only `Moo`, the real runtime dependency of the shim.
 
 Because `prove --exec` invokes `jperl` per test file without adding
 `lib/` or `blib/lib/` to `@INC`, the **bundled shim from the jar** wins

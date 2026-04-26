@@ -90,20 +90,25 @@ comment: |
 match:
   distribution: "^ETHER/Moose-"
 disabled: 0
+# Cross-platform commandlines: each phase invokes `jperl` (which is on
+# PATH thanks to jcpan/jcpan.bat prepending SCRIPT_DIR) with -M to load
+# a small Perl helper. We avoid POSIX-only shell constructs (||, ;,
+# `touch`, /dev/null, $VAR) because CPAN.pm's commandline runs through
+# Perl's system(), which on Windows hands off to cmd.exe.
+#
+# We also avoid CPAN's `depends:` block: it would force CPAN to resolve
+# Moose's full upstream prereq tree (Package::Stash::XS,
+# MooseX::NonMoose, ...), most of which is XS and unsatisfiable on
+# PerlOnJava. The pl-phase helper installs only the one thing the
+# Moose-as-Moo shim genuinely needs: Moo itself.
 pl:
-  # The Moose shim delegates to Moo at runtime. Auto-install Moo if it
-  # isn't already loadable, then create a stub Makefile so CPAN's "no
-  # Makefile created" fallback path doesn't kick in. We avoid the
-  # `depends:` block here because CPAN would then try to resolve
-  # Moose's full upstream prereq tree (Package::Stash::XS,
-  # MooseX::NonMoose, ...), most of which is XS and unsatisfiable.
-  commandline: '"$JPERL_BIN" -e "require Moo; 1" >/dev/null 2>&1 || "$JCPAN_BIN" Moo; touch Makefile'
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::bootstrap_pl_phase()"'
 make:
-  commandline: "true"
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
 test:
-  commandline: 'prove --exec "$JPERL_BIN" -r t/'
+  commandline: 'prove --exec jperl -r t/'
 install:
-  commandline: "true"
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
 YAML
     );
 

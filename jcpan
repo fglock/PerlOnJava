@@ -58,13 +58,17 @@ export JPERL_TEST_TIMEOUT="${JPERL_TEST_TIMEOUT:-300}"
 
 # Expose the jperl launcher AND the jcpan launcher itself so distroprefs
 # (e.g. Moose.yml) can run upstream tests against the bundled shims with
-# `prove --exec "$JPERL_BIN"`, and bootstrap missing helper modules with
-# `"$JCPAN_BIN" SomeModule`.
+# `prove --exec jperl`, and bootstrap missing helper modules with
+# `jcpan SomeModule`. We also prepend SCRIPT_DIR to PATH so shell-spawned
+# subprocesses (CPAN's distroprefs commandlines, prove --exec, ...) find
+# `jperl` and `jcpan` cross-platform without needing $JPERL_BIN tokens
+# that don't expand in Windows cmd.exe.
 export JPERL_BIN="$SCRIPT_DIR/jperl"
 export JCPAN_BIN="${BASH_SOURCE[0]}"
 case "$JCPAN_BIN" in
     /*) ;;                       # already absolute
     *)  JCPAN_BIN="$SCRIPT_DIR/jcpan" ;;
 esac
+export PATH="$SCRIPT_DIR:$PATH"
 
 exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "${ARGS[@]}"
