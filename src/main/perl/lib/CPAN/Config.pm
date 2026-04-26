@@ -57,6 +57,59 @@ pl:
   env:
     PARAMS_VALIDATE_IMPLEMENTATION: PP
 YAML
+        'Moose.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for Moose.
+
+  Modern Moose ships 13 .xs files plus mop.c. PerlOnJava cannot compile
+  XS, so a normal install/test cycle fails at Makefile.PL with
+  "This distribution requires a working compiler".
+
+  PerlOnJava bundles a pure-Perl Moose-as-Moo shim at
+  src/main/perl/lib/Moose.pm (loaded from the jar via PERL5LIB), so we
+  don't need to build or install the upstream distribution at all. We
+  just need to run its tests against the shim. This distropref:
+
+    - Skips Makefile.PL (would die on the compiler check).
+    - Skips make (nothing to build).
+    - Runs the upstream t/ tree with jperl directly via prove --exec,
+      so the bundled shim from the jar wins over the unpacked
+      lib/Moose.pm.
+    - Skips install (the shim is already on @INC via the jar).
+
+  Required: jcpan / jcpan.bat exports JPERL_BIN pointing at the right
+  jperl launcher. See bin/jcpan.
+
+  Expected result on `jcpan -t Moose`: most upstream tests fail to load
+  because they require Class::MOP, Moose::Meta::Class, etc. that the
+  shim doesn't provide. The shim-supported subset (basic attributes,
+  roles, BUILD/BUILDARGS, immutable round-trips, method modifiers,
+  cookbook recipes) does pass. See dev/modules/moose_support.md for
+  the baseline numbers and the plan for improving them.
+match:
+  distribution: "^ETHER/Moose-"
+disabled: 0
+# Cross-platform commandlines: each phase invokes `jperl` (which is on
+# PATH thanks to jcpan/jcpan.bat prepending SCRIPT_DIR) with -M to load
+# a small Perl helper. We avoid POSIX-only shell constructs (||, ;,
+# `touch`, /dev/null, $VAR) because CPAN.pm's commandline runs through
+# Perl's system(), which on Windows hands off to cmd.exe.
+#
+# We also avoid CPAN's `depends:` block: it would force CPAN to resolve
+# Moose's full upstream prereq tree (Package::Stash::XS,
+# MooseX::NonMoose, ...), most of which is XS and unsatisfiable on
+# PerlOnJava. The pl-phase helper installs only the one thing the
+# Moose-as-Moo shim genuinely needs: Moo itself.
+pl:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::bootstrap_pl_phase()"'
+make:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
+test:
+  commandline: 'prove --exec jperl -r t/'
+install:
+  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
+YAML
     );
 
     # Check if any files need to be written
