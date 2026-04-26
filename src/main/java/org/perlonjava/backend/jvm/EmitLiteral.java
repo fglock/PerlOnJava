@@ -129,22 +129,32 @@ public class EmitLiteral {
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         // Stack: [RuntimeScalar]  (the array reference we'll return)
 
-        // Restore previous suppressFlush state and (if flush was previously
-        // allowed) drain any deferred decrements that accumulated during the
-        // literal-build. Keep the return value on the stack throughout.
+        // Restore previous suppressFlush state. We deliberately do NOT call
+        // MortalList.flush() here: doing so would drain the entire pending
+        // list including outer-scope mortals that should survive to the
+        // statement boundary (matches Perl's FREETMPS-at-nextstate model).
+        //
+        // The statement-boundary `MortalList.flushAboveMark()` emitted by
+        // EmitBlock at every statement separator handles drainage at the
+        // right time:
+        //   - DBIC: `bless { ... }, "Schema"` mortal lives until end of
+        //     `my $schema = ...;` — flushAboveMark fires after $schema
+        //     captures the ref, so schema stays alive.
+        //   - sort/grep/postfixderef leak tests: comparator/block
+        //     temporaries also flush at statement boundary, matching
+        //     real Perl semantics.
+        //
+        // History: an earlier `flush()` here drained sibling mortals
+        // mid-statement and broke DBIC; a `pushMark`+`popAndFlush`
+        // attempt also broke DBIC because it *removed* above-mark
+        // entries before statement-end could see them. Letting the
+        // existing statement-boundary mechanism do its job is the
+        // simplest correct answer.
         mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/MortalList",
                 "suppressFlush", "(Z)Z", false);
         mv.visitInsn(Opcodes.POP);
-
-        mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
-        org.objectweb.asm.Label skipFlush = new org.objectweb.asm.Label();
-        mv.visitJumpInsn(Opcodes.IFNE, skipFlush);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/MortalList",
-                "flush", "()V", false);
-        mv.visitLabel(skipFlush);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }
