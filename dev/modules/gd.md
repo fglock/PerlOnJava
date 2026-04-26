@@ -121,13 +121,25 @@ each image uses and dispatch accordingly.
 
 ### Headless Mode
 
-Set in `GD.java`'s `initialize()` method:
+Set in `GD.java`'s `initialize()` method, **before any `BufferedImage`
+or `Graphics2D` is touched** (AWT latches the headless flag on first
+use):
 
 ```java
 System.setProperty("java.awt.headless", "true");
 ```
 
 This ensures `Graphics2D` and `ImageIO` work on servers without X11.
+
+### Module Loading Convention
+
+PerlOnJava's existing native-XS modules (`DateTime`, `HTMLParser`,
+`Compress::Zlib`, `Digest::SHA`, `DBI`, …) **do not** use `XSLoader` or
+`bootstrap`. The Java class registers Perl-visible symbols in its
+`initialize()` method, and the matching `.pm` file calls those symbols
+directly. `GD` should follow the same pattern — drop the upstream
+`bootstrap GD` line entirely rather than rewriting it as
+`XSLoader::load('GD', $VERSION)`.
 
 ---
 
@@ -292,12 +304,62 @@ Exported via `AUTOLOAD` and `constant()` XS function:
 
 ---
 
+## Risk-Rated Effort Breakdown
+
+| Area | Risk | Effort | Notes |
+|---|---|---|---|
+| Image create / PNG-JPEG-GIF I/O | Low | hours | `BufferedImage` + `ImageIO`; GIF write has been in stock JDK since Java 6 (LZW patent expired) — no extra deps |
+| Drawing primitives (line, rect, arc, polygon) | Low | days | direct `Graphics2D` |
+| Color (truecolor) | Low | hours | pack ARGB int |
+| Color (palette / `IndexColorModel`) | Medium | days | Java's palette is immutable — need a `List<Color>` + rebuild on `colorAllocate`; trickiest piece for full GD::Graph parity |
+| Flood fill | Low | ~30 lines | BFS on pixel array |
+| Brush / Style / Tile / AntiAliased magic colors | Medium | days | must intercept negative color sentinels and switch rendering mode |
+| Built-in bitmap fonts (Tiny/Small/.../Giant) | Medium | day | embed GD's static font byte arrays — see "Bitmap Fonts Decision" below |
+| `stringFT` (FreeType TTF) | Low | hours | `Font.createFont(TRUETYPE_FONT)` |
+| `copy*` / `copyResampled` / `copyMerge` | Low | day | `Graphics2D.drawImage` + `AlphaComposite` |
+| Filters (`gaussianBlur`, `emboss`, …) | Low | day | `ConvolveOp` + standard kernels |
+| Rotate / flip / transpose | Low | hours | `AffineTransformOp` |
+| GIF animation | Medium | day | `IIOMetadata` DOM is verbose but textbook |
+| TIFF / WebP | Low (optional) | hours | drop in TwelveMonkeys jar |
+| HEIF / AVIF / `.gd` / `.gd2` / XPM | n/a | — | stub: die with clear error |
+
+Net: Phase 1 ≈ 1 focused work-day, Phase 1.5 ≈ 1 day, Phase 2 ≈ 2 days,
+Phase 3 ≈ 2-3 days. Phase 1 + 1.5 + the brush/style slice of Phase 2 is
+enough to unblock `Chart` and `GD::Graph`.
+
+### Bitmap Fonts Decision
+
+The 5 GD bitmap fonts (`gdTiny/Small/MediumBold/Large/Giant`) **must** be
+implemented by embedding GD's static byte arrays (extracted from libgd's
+`gdfontt.c`, `gdfonts.c`, …) and rendering manually via `setRGB`. The
+"approximate with `java.awt.Font("Monospaced", PLAIN, n)`" alternative
+mentioned earlier in this doc was rejected because:
+
+- `GD::Graph` and `Chart` use these fonts for axis labels and legends;
+  off-by-one pixel sizes break image-diff tests and visibly misalign
+  glyphs against grid lines.
+- The total embedded data is small (~5-10 KB across all five fonts).
+- Java's `Monospaced` is host-dependent (different fonts on Linux/macOS/
+  Windows), making cross-platform output non-deterministic.
+
+The bitmap data can be transcribed from libgd's BSD-licensed C sources
+(license-compatible with PerlOnJava's MIT/Apache stack) into a Java
+`static final byte[]` per font.
+
+---
+
 ## Implementation Plan
 
-### Phase 1: Core MVP
+### Phase 1: Truecolor Core MVP
 
-**Goal:** `GD::Image->new()`, draw shapes, output PNG/JPEG/GIF. Enough
-for `GD::Graph`, `GD::Barcode`, and `PDF::API2::...::GD`.
+**Goal:** `GD::Image->new($w, $h, 1)` (truecolor), draw shapes, output
+PNG/JPEG/GIF. Enough for the majority of modern `GD::Graph`, `Chart`,
+`GD::Barcode`, and `GD::SecurityImage` usage — they all default to
+truecolor.
+
+**Scope deliberately excludes palette-mode images** (deferred to Phase
+1.5). `colorAllocate` returns packed ARGB ints; palette tracking,
+`IndexColorModel` rebuild, and `colorDeallocate` are stubbed out.
 
 **Files to create:**
 
@@ -357,14 +419,23 @@ Built-in fonts:
 - `nchars()`, `offset()`, `width()`, `height()`
 
 **Verify:**
+
+Primary target — the upstream `GD` distribution's own test suite, which
+exercises exactly the API surface implemented in this phase:
+
 ```bash
-make dev
+make
+./jcpan -t GD
+```
+
+Smoke test:
+```bash
 ./jperl -e '
     use GD;
-    my $im = GD::Image->new(100, 100);
+    my $im = GD::Image->new(100, 100, 1);   # 1 = truecolor
     my $white = $im->colorAllocate(255, 255, 255);
     my $black = $im->colorAllocate(0, 0, 0);
-    my $red = $im->colorAllocate(255, 0, 0);
+    my $red   = $im->colorAllocate(255, 0, 0);
     $im->rectangle(0, 0, 99, 99, $black);
     $im->arc(50, 50, 95, 75, 0, 360, $red);
     $im->fill(50, 50, $red);
@@ -373,6 +444,23 @@ make dev
 ' > /tmp/test.png
 open /tmp/test.png  # macOS
 ```
+
+### Phase 1.5: Palette Mode
+
+**Goal:** Support `GD::Image->new($w, $h)` (palette default), making
+`colorAllocate` return palette indices, `colorsTotal`, `colorDeallocate`,
+`palettecopy`, and palette-aware `transparent`. Required for older
+`GD::Graph` defaults and any code that assumes 8-bit GIF semantics.
+
+**Implementation:**
+- Companion `GDImageState` tracks `List<Color> palette` + a pixel buffer
+  in palette indices.
+- `colorAllocate` adds to the list (capped at 256), returns the index.
+- On output (`png()`/`gif()`), build a fresh `IndexColorModel` from the
+  current palette and a `BufferedImage(TYPE_BYTE_INDEXED)` view.
+- Drawing operations stay in truecolor backing store; quantize-on-output
+  to keep the immutability of `IndexColorModel` from leaking into the
+  hot path.
 
 ### Phase 2: Copy, Merge, and Full Drawing
 
@@ -537,16 +625,38 @@ Modules that depend on GD and would become usable:
 ### Current Status: Not started
 
 ### Phases
-- [ ] Phase 1: Core MVP (image create, draw, color, PNG/JPEG/GIF output)
+- [ ] Phase 1: Truecolor MVP (image create, draw, color, PNG/JPEG/GIF output)
+- [ ] Phase 1.5: Palette mode (`IndexColorModel` + `colorAllocate` indices)
 - [ ] Phase 2: Copy, merge, full drawing, brushes, style
 - [ ] Phase 3: Filters, transforms, GIF animation, extra formats
 
 ### Next Steps
-1. Create `GD.java` with Phase 1 functions
-2. Copy and adapt `GD.pm` and pure Perl files from CPAN
-3. Write `basic.t` test
-4. Run `make` to verify no regressions
-5. Test with `GD::Graph` as validation target
+1. Create feature branch `feature/gd-phase1`.
+2. Create `GD.java` with Phase 1 truecolor functions; register symbols
+   in `initialize()` (no `XSLoader`/`bootstrap`); set
+   `java.awt.headless=true` before any AWT class touches a
+   `BufferedImage`.
+3. Copy and adapt `GD.pm` and pure Perl files (`GD/Image.pm`,
+   `GD/Polygon.pm`, `GD/Polyline.pm`, `GD/Simple.pm`, `GD/Group.pm`)
+   from the CPAN distribution.
+4. Embed the 5 GD bitmap fonts as `static final byte[]` constants.
+5. Run `make` (must pass — never use `make dev`).
+6. Validate with `./jcpan -t GD` (Phase 1 acceptance).
+7. Integration check: `./jcpan -t Chart` (Phase 1.5 + Phase 2 brushes
+   acceptance).
+
+---
+
+## Alternatives Considered
+
+| Option | Verdict | Reason |
+|---|---|---|
+| **Java AWT (this plan)** | ✅ Chosen | 1-to-1 mapping with libgd, zero new Maven deps, headless-compatible |
+| CLI wrapper around `gdtopng`/etc. | ❌ Rejected | libgd has no drawing CLI; format converters can't replace `setPixel`/`drawLine`/etc. |
+| JNI / Project Panama FFI to libgd | ❌ Rejected | Breaks "single-jar, no native deps" promise; per-platform native binaries; defeats the JVM portability story |
+| SVG-only charting (skip GD) | ❌ Rejected | Doesn't fix `Chart`, `GD::Graph`, `GD::Barcode`, `GD::SecurityImage`, `Bio::Graphics`, or `PDF::API2`'s GD resource class — they all `use GD` directly |
+| Stub `GD.pm` with `die`s | ❌ Rejected | Misleading; downstream modules `use GD` at compile time, so they wouldn't even load |
+| `jcpan -t` skip-list for missing-XS | ⚠️ Complementary | Worth doing as a UX fix regardless, but does not unblock actual chart output |
 
 ---
 
