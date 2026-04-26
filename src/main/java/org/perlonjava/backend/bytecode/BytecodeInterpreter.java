@@ -206,16 +206,112 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_HASH -> {
-                                // Scope-exit cleanup for a my-hash register
+                                // Scope-exit cleanup for a my-hash register.
+                                //
+                                // !!! DO NOT REMOVE THE `instanceof` CHECK BELOW !!!
+                                //
+                                // Reverting to a blind `(RuntimeHash) registers[reg]`
+                                // cast WILL bring back the bug fixed by this code:
+                                // a `ClassCastException: RuntimeScalar cannot be
+                                // cast to RuntimeHash` thrown at scope/sub exit.
+                                //
+                                // Why a register slot for a `my %h` can hold a
+                                // RuntimeScalar:
+                                //
+                                //   1. The JIT (JVM) backend can fall back to the
+                                //      bytecode interpreter for individual subs
+                                //      that use features it doesn't support — e.g.
+                                //      dynamic `goto $coderef` / `goto \&sub`. See
+                                //      SubroutineParser interpreter-fallback path
+                                //      and JPERL_SHOW_FALLBACK=1 for diagnostics.
+                                //
+                                //   2. The same register file is shared across
+                                //      every basic block in the sub. The compiler
+                                //      reuses (recycles) registers between
+                                //      independent statements, so a slot that the
+                                //      compiler later reserves for `my %h` may
+                                //      previously have been used as the
+                                //      destination of an unrelated CREATE_LIST,
+                                //      assignment or arithmetic op which leaves a
+                                //      RuntimeScalar in it.
+                                //
+                                //   3. Any control-flow path that *skips* the
+                                //      MY_HASH initialisation for that slot
+                                //      (e.g. an early `return`, `last`, `goto`,
+                                //      or a short-circuited `&&`/`||` guarding
+                                //      the `my %h = (...)` declaration) will
+                                //      leave the stale RuntimeScalar behind.
+                                //
+                                //   4. SCOPE_EXIT_CLEANUP_HASH runs
+                                //      unconditionally for every declared
+                                //      my-hash, regardless of whether step 3 was
+                                //      taken. With a blind cast this throws
+                                //      ClassCastException and unwinds out of the
+                                //      sub even when the user's logic completed
+                                //      normally.
+                                //
+                                // Why ignoring the slot is correct:
+                                //
+                                //   The user can never have observed `%h` on a
+                                //   path that skipped its initialisation, so
+                                //   there is nothing user-visible to clean up.
+                                //   `MortalList.scopeExitCleanupHash` only has
+                                //   real work to do on actual RuntimeHash
+                                //   instances (releasing tied magic, decrementing
+                                //   tracked-element ref counts, etc.); a non-hash
+                                //   slot simply has no cleanup obligation.
+                                //
+                                // Minimal regression test (must keep passing):
+                                //
+                                //   sub t {
+                                //       my %h = (a=>1);   # SCOPE_EXIT_CLEANUP_HASH emitted
+                                //       print "ok\n";
+                                //       return;            # exits before goto -> JIT fallback
+                                //       my $f = sub {1};
+                                //       goto $f;           # forces interpreter fallback
+                                //   }
+                                //   t();
+                                //
+                                // Originally surfaced by `use Moose;` ->
+                                // Sub::Exporter::Progressive::import (uses
+                                // `goto \&Exporter::import`).
                                 int reg = bytecode[pc++];
-                                MortalList.scopeExitCleanupHash((RuntimeHash) registers[reg]);
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeHash rh) {
+                                    MortalList.scopeExitCleanupHash(rh);
+                                }
                                 registers[reg] = null;
                             }
 
                             case Opcodes.SCOPE_EXIT_CLEANUP_ARRAY -> {
-                                // Scope-exit cleanup for a my-array register
+                                // Scope-exit cleanup for a my-array register.
+                                //
+                                // !!! DO NOT REMOVE THE `instanceof` CHECK BELOW !!!
+                                //
+                                // See the long comment on SCOPE_EXIT_CLEANUP_HASH
+                                // above — the exact same reasoning applies here,
+                                // just with RuntimeArray instead of RuntimeHash.
+                                // Reverting to a blind `(RuntimeArray) registers[reg]`
+                                // cast will reintroduce ClassCastException at
+                                // sub/scope exit for any my-array whose
+                                // initialisation was skipped by control flow on
+                                // an interpreter-fallback sub.
+                                //
+                                // Minimal regression test (must keep passing):
+                                //
+                                //   sub t {
+                                //       my @a = ('x');     # SCOPE_EXIT_CLEANUP_ARRAY emitted
+                                //       print "ok\n";
+                                //       return;
+                                //       my $f = sub {1};
+                                //       goto $f;            # forces JIT->interpreter fallback
+                                //   }
+                                //   t();
                                 int reg = bytecode[pc++];
-                                MortalList.scopeExitCleanupArray((RuntimeArray) registers[reg]);
+                                RuntimeBase slot = registers[reg];
+                                if (slot instanceof RuntimeArray ra) {
+                                    MortalList.scopeExitCleanupArray(ra);
+                                }
                                 registers[reg] = null;
                             }
 
