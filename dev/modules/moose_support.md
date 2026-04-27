@@ -315,28 +315,62 @@ install" scenario — define a distroprefs entry that overrides `pl` /
 
 ### Quick-path baseline (Moose 2.4000)
 
-Snapshot from `./jcpan -t Moose` against the current shim:
+Snapshot history from `./jcpan -t Moose` against the current shim:
 
-| Metric | Value |
-|---|---|
-| Test files executed | 478 |
-| Individual assertions executed | 616 |
-| Fully passing files | ~29 |
-| Partially passing files | ~44 |
-| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 |
-| Assertions ok | 370 |
-| Assertions fail | 246 |
+| Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) |
+|---|---|---|---|
+| Test files executed | 478 | 478 | 478 |
+| Individual assertions executed | 616 | 616 | **667** |
+| Fully passing files | ~29 | 35 | **36** |
+| Partially passing files | ~44 | 94 | **98** |
+| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | **~344** |
+| Assertions ok | 370 | 372 | **419** |
+| Assertions fail | 246 | 244 | **248** |
 
-The 29 fully-passing files cover BUILDARGS / BUILD chains, immutable
-round-trips, anonymous role creation, several Moo↔Moose bug regressions,
-the cookbook recipes for basic attribute / inheritance / subtype use,
-and the Type::Tiny integration test. The 44 partials include
-high-value chunks such as `basics/import_unimport.t` (31/48),
+The initial 29 fully-passing files covered BUILDARGS / BUILD chains,
+immutable round-trips, anonymous role creation, several Moo↔Moose bug
+regressions, the cookbook recipes for basic attribute / inheritance /
+subtype use, and the Type::Tiny integration test. The 44 partials
+included high-value chunks such as `basics/import_unimport.t` (31/48),
 `basics/wrapped_method_cxt_propagation.t` (6/7), and
 `recipes/basics_point_attributesandsubclassing.t` (28/31).
 
-Phases C/D (real `Class::MOP` and `Moose` ports) should move these
-numbers; record the new totals here whenever they shift.
+The refcount/DESTROY merge (PRs #565, #566, plus weaken/destroy work)
+moved the structural picture meaningfully even though the assertion
+total only nudged: ~56 files that previously failed at compile/load
+time now run subtests. Most ended up partial rather than fully green
+(partials roughly doubled, 44 → 94), but six more files are fully
+passing (29 → 35). The shim's per-test infrastructure (BUILD chains,
+DEMOLISH ordering, weak refs) is now solid; the remaining failures
+are dominated by missing `Class::MOP::*` and `Moose::Meta::*`
+introspection APIs.
+
+**Phase A + Phase C-mini** (this PR) added two pieces:
+
+- `ExtUtils::HasCompiler` deterministic stub
+  (`src/main/perl/lib/ExtUtils/HasCompiler.pm`) — always reports "no
+  compiler", instead of relying on `$Config{usedl}` happening to be
+  empty.
+- `Class::MOP` shim (`src/main/perl/lib/Class/MOP.pm`) — provides
+  `class_of`, `get_metaclass_by_name`, `store_metaclass_by_name`,
+  `remove_metaclass_by_name`, `does_metaclass_exist`,
+  `get_all_metaclasses` (and friends), `get_code_info`,
+  `is_class_loaded`, `load_class`, `load_first_existing_class`. Returns
+  "no metaclass" everywhere, which is the correct answer under the
+  Moose-as-Moo shim. The previous behavior was a hard "Undefined
+  subroutine &Class::MOP::class_of called" the moment Moo's
+  `_Utils::_load_module` hit a not-installed dependency on a class
+  that already had `Moose.pm` loaded.
+
+Net effect of Phase A + C-mini: **+51 individual assertions now
+execute** (616 → 667), **+47 newly pass** (372 → 419), and one more
+file goes fully green (35 → 36). The four extra failures are
+upstream tests that previously bailed before reaching their assertion
+phase and now reach it; none are real regressions.
+
+Phases C-full / D (real `Class::MOP::Class` instances and a pure-Perl
+`Moose` port) should move these numbers further; record the new
+totals here whenever they shift.
 
 ---
 
@@ -427,17 +461,21 @@ isn't `Class::MOP` itself loads cleanly today.
 ### Current Status
 
 - **Phase 1 — DONE.** B-module subroutine name/stash introspection works.
-- **Quick path — not started.** Highest leverage: ships `Moose.pm` shim, immediately unblocks ANSI::Unicode-class modules.
-- **Phase A — not started.** Trivial; replace upstream `ExtUtils::HasCompiler` with deterministic stub.
-- **Phase B — not started.** Strip XS keys in `WriteMakefile`.
-- **Phase C — not started.** Java `Class::MOP::get_code_info` + helpers.
-- **Phase D — not started.** Bundle pure-Perl `Class::MOP` and `Moose`.
+- **Quick path — DONE.** `Moose.pm` shim ships, ANSI::Unicode-class modules unblocked.
+- **Phase A — DONE.** `ExtUtils::HasCompiler` deterministic stub ships at `src/main/perl/lib/ExtUtils/HasCompiler.pm`.
+- **Phase B — not started.** Strip XS keys in `WriteMakefile`. (Lower priority while we're not yet trying to install upstream Moose.)
+- **Phase C-mini — DONE.** `Class::MOP` shim with `class_of` / `get_metaclass_by_name` / `get_code_info` / `is_class_loaded` and friends; ships at `src/main/perl/lib/Class/MOP.pm`.
+- **Phase C-full — not started.** Real `Class::MOP::Class` instances backed by Java helpers (`org.perlonjava.runtime.perlmodule.ClassMOP`).
+- **Phase D — not started.** Bundle pure-Perl `Class::MOP::*` and `Moose::*` distributions.
 - **Phase E — deferred.** Export-flag MAGIC.
 
 ### Completed
 
 - [x] Phase 1: B-module subroutine name introspection
 - [x] Verified working dependency tree (Apr 2026)
+- [x] Quick path: `Moose.pm` / `Moose::Role` / `Moose::Object` / `Moose::Util::TypeConstraints` shims
+- [x] Phase A: `ExtUtils::HasCompiler` deterministic stub
+- [x] Phase C-mini: `Class::MOP` shim (no metaclass instances; just enough surface to keep Moo happy)
 
 ### Decision needed
 
