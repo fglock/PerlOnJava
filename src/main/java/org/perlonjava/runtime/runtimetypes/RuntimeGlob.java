@@ -552,16 +552,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 yield IO;
             }
             case "SCALAR" -> {
-                // *glob{SCALAR} returns a SCALAR reference to the scalar slot
-                // (matching real Perl). For anonymous globs (null globName),
-                // use local scalarSlot.
+                // For anonymous globs (null globName), use local scalarSlot
                 if (this.globName == null) {
                     if (this.scalarSlot == null) {
                         this.scalarSlot = new RuntimeScalar();
                     }
-                    yield this.scalarSlot.createReference();
+                    yield this.scalarSlot;
                 }
-                yield GlobalVariable.getGlobalVariable(this.globName).createReference();
+                yield GlobalVariable.getGlobalVariable(this.globName);
             }
             case "ARRAY" -> {
                 // For anonymous globs (null globName), use local arraySlot

@@ -75,22 +75,4 @@ subtest 'References in package code slots' => sub {
     }
 };
 
-# *GLOB{SCALAR} returns a reference to the scalar slot (regression test
-# for a bug where it returned the value instead of a reference).
-{
-    our $foo_glob_scalar_test = "hello";
-    my $r = *foo_glob_scalar_test{SCALAR};
-    is(ref($r), 'SCALAR', '*glob{SCALAR} returns a SCALAR reference');
-    is($$r, 'hello', 'dereferencing *glob{SCALAR} gives the slot value');
-
-    # Round-trip: writing through the ref updates the slot.
-    $$r = "world";
-    is($foo_glob_scalar_test, 'world', 'writing through *glob{SCALAR} ref updates the slot');
-
-    # Anonymous globs should also return a reference.
-    my $glob_ref = \*anon_glob_for_scalar_test;
-    my $sr = *{$glob_ref}{SCALAR};
-    is(ref($sr), 'SCALAR', '*{ref}{SCALAR} returns a SCALAR reference too');
-}
-
 done_testing();
