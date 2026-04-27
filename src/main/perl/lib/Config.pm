@@ -226,6 +226,7 @@ $os_name =~ s/\s+/_/g;
     perlpath => $^X,  # Path to the perl interpreter (jperl)
     startperl => '#!' . $^X,  # Shebang line for Perl scripts
     sharpbang => '#!',  # Shebang prefix
+    eunicefix => ':',   # No-op fixer (only used on EUNICE)
 
     # Version info
     version => '5.42.0',
