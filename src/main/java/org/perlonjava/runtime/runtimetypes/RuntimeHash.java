@@ -1292,47 +1292,50 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * Uses Perl tie methods FIRSTKEY and NEXTKEY for iteration.
      */
     private class RuntimeTiedHashIterator implements Iterator<RuntimeScalar> {
-        private RuntimeScalar currentKey;
-        private RuntimeScalar nextKey;
-        private boolean returnKey;
-        private boolean initialized;
+        private RuntimeScalar currentKey;   // last key returned by FIRSTKEY/NEXTKEY (passed to next NEXTKEY)
+        private RuntimeScalar pendingKey;   // key fetched by hasNext() but not yet consumed by next()
+        private boolean returnKey;          // true: next() returns a key; false: next() returns the value
+        private boolean started;            // whether FIRSTKEY has been called
 
         /**
          * Constructs a RuntimeTiedHashIterator for iterating over tied hash elements.
          */
         public RuntimeTiedHashIterator() {
             this.returnKey = true;
-            this.initialized = false;
+            this.started = false;
             this.currentKey = null;
-            this.nextKey = null;
-        }
-
-        /**
-         * Initializes the iterator by calling FIRSTKEY if not already initialized.
-         */
-        private void initialize() {
-            if (!initialized) {
-                nextKey = TieHash.tiedFirstKey(RuntimeHash.this);
-                initialized = true;
-            }
+            this.pendingKey = null;
         }
 
         /**
          * Checks if there are more elements to iterate over.
+         * <p>
+         * Lazily calls FIRSTKEY (first time) or NEXTKEY (subsequent times) to fetch
+         * the upcoming key. The fetch happens here — not eagerly at the end of the
+         * previous next() — so that mutations to the tied hash between each() calls
+         * (e.g. {@code delete $h{$k}} during {@code while (each %h)}) are observed
+         * by the next NEXTKEY call, matching real Perl's semantics.
          *
          * @return True if there are more elements, false otherwise.
          */
         @Override
         public boolean hasNext() {
-            initialize();
-
-            // If we're about to return a value and have a current key, we have a next element
-            if (currentKey != null && !returnKey) {
+            // Mid-pair: a key was returned, value is still pending
+            if (!returnKey) {
                 return true;
             }
 
-            // If we're about to return a key, check if nextKey is defined (not undef)
-            return returnKey && nextKey != null && nextKey.getDefinedBoolean();
+            // Need a fresh key — fetch it lazily if we don't already have one cached
+            if (pendingKey == null) {
+                if (!started) {
+                    pendingKey = TieHash.tiedFirstKey(RuntimeHash.this);
+                    started = true;
+                } else {
+                    pendingKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
+                }
+            }
+
+            return pendingKey != null && pendingKey.getDefinedBoolean();
         }
 
         /**
@@ -1348,17 +1351,16 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
             if (returnKey) {
                 // Return the key and prepare to return its value next
-                currentKey = nextKey;
+                currentKey = pendingKey;
+                pendingKey = null;
                 returnKey = false;
                 return new RuntimeScalar(currentKey);
             } else {
-                // Return the value and prepare for the next key
+                // Return the value (FETCH happens lazily through the proxy).
+                // Do NOT pre-fetch the next key here — that would race with
+                // user-visible mutations between each() calls.
                 RuntimeScalar value = RuntimeHash.this.get(currentKey);
-
-                // Get the next key for the next iteration
-                nextKey = TieHash.tiedNextKey(RuntimeHash.this, currentKey);
                 returnKey = true;
-
                 return value;
             }
         }

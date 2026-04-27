@@ -355,6 +355,27 @@ our @EXPORT_OK = qw(
     XN_FLAG_SPC_EQ
 );
 
+# High-level HTTP/HTTPS helpers and utility subs.  In real Net::SSLeay these
+# are autoloaded Perl subs that callers can import — e.g. Net::HTTPS::Any does
+# `use Net::SSLeay qw(get_https post_https make_headers make_form)`.  Add them
+# to @EXPORT_OK so `use` with an explicit import list doesn't fail at compile
+# time even though the underlying OpenSSL operations themselves aren't
+# implemented (they die at call time via _not_implemented).
+push @EXPORT_OK, qw(
+    do_https
+    get_http get_http4
+    get_https get_https3 get_https4
+    get_httpx get_httpx4
+    post_http post_http4
+    post_https post_https3 post_https4
+    post_httpx post_httpx4
+    sslcat tcpcat tcpxcat
+    make_form make_headers
+    dump_peer_certificate
+    set_cert_and_key set_server_cert_and_key
+    die_if_ssl_error die_now print_errs
+);
+
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -391,17 +412,17 @@ sub print_errs {
     return $errs;
 }
 
-sub do_https   { _not_implemented("do_https") }
+sub do_https   { _do_https_request(@_) }
 sub get_http   { _not_implemented("get_http") }
 sub get_http4  { _not_implemented("get_http4") }
-sub get_https  { _not_implemented("get_https") }
+sub get_https  { _https_get_or_post('GET', @_) }
 sub get_https3 { _not_implemented("get_https3") }
 sub get_https4 { _not_implemented("get_https4") }
 sub get_httpx  { _not_implemented("get_httpx") }
 sub get_httpx4 { _not_implemented("get_httpx4") }
 sub post_http  { _not_implemented("post_http") }
 sub post_http4 { _not_implemented("post_http4") }
-sub post_https { _not_implemented("post_https") }
+sub post_https { _https_get_or_post('POST', @_) }
 sub post_https3 { _not_implemented("post_https3") }
 sub post_https4 { _not_implemented("post_https4") }
 sub post_httpx  { _not_implemented("post_httpx") }
@@ -413,6 +434,89 @@ sub tcpxcat     { _not_implemented("tcpxcat") }
 sub dump_peer_certificate      { _not_implemented("dump_peer_certificate") }
 sub set_cert_and_key           { _not_implemented("set_cert_and_key") }
 sub set_server_cert_and_key    { _not_implemented("set_server_cert_and_key") }
+
+# ---- HTTPS request shim backed by HTTP::Tiny --------------------------------
+#
+# PerlOnJava ships no OpenSSL backend, but it does ship HTTP::Tiny, which talks
+# HTTPS via the JVM's TLS stack.  These shims map the Net::SSLeay HTTP helper
+# API onto HTTP::Tiny so modules like Net::HTTPS::Any work out of the box.
+#
+# Net::SSLeay return convention (for get_https/post_https/do_https):
+#     ($page, $response, @headers)
+# where:
+#   - $page     is the response body
+#   - $response is the HTTP status line, e.g. "HTTP/1.1 200 OK"
+#   - @headers  is a flat (name => value, ...) list
+
+sub _https_get_or_post {
+    my ($method, $host, $port, $path, $headers_str, $content, $content_type) = @_;
+    my $body = $method eq 'POST' ? $content : undef;
+    return _do_https_request(
+        $host, $port, $path, $method, $headers_str, $body, $content_type,
+    );
+}
+
+sub _do_https_request {
+    my ($host, $port, $path, $method, $headers_str, $content, $content_type,
+        # cert/key/password are accepted for API parity but unused
+        undef, undef, undef) = @_;
+
+    require HTTP::Tiny;
+
+    $port   ||= 443;
+    $method ||= 'GET';
+    $path = '/' . $path if defined $path && $path !~ m{^/};
+    $path = '/' unless defined $path;
+
+    my $url = "https://$host:$port$path";
+
+    # Parse headers string (as produced by make_headers) into a hashref.
+    my %hdrs;
+    if (defined $headers_str && length $headers_str) {
+        for my $line (split /\r?\n/, $headers_str) {
+            next unless $line =~ /^([^:\s]+)\s*:\s*(.*)$/;
+            my ($k, $v) = ($1, $2);
+            # HTTP::Tiny rejects Host (it sets it itself); skip and let it manage.
+            next if lc($k) eq 'host';
+            if (exists $hdrs{$k}) {
+                $hdrs{$k} = [ $hdrs{$k} ] unless ref $hdrs{$k};
+                push @{ $hdrs{$k} }, $v;
+            } else {
+                $hdrs{$k} = $v;
+            }
+        }
+    }
+
+    my %opts = (headers => \%hdrs);
+    if (defined $content && length $content) {
+        $opts{content} = $content;
+        $hdrs{'Content-Type'} ||= ($content_type || 'application/x-www-form-urlencoded');
+    }
+
+    my $resp = HTTP::Tiny->new->request($method, $url, \%opts);
+
+    # HTTP::Tiny synthesises status 599 when the request couldn't be made.
+    # Mirror that as a status line so callers' regexes still see something.
+    my $proto  = $resp->{protocol} || 'HTTP/1.1';
+    my $status = $resp->{status}   // 599;
+    my $reason = $resp->{reason}   // ($status == 599 ? 'Internal Exception' : '');
+    my $status_line = "$proto $status" . (length $reason ? " $reason" : '');
+
+    my @hdr_pairs;
+    if (ref $resp->{headers} eq 'HASH') {
+        for my $k (sort keys %{ $resp->{headers} }) {
+            my $v = $resp->{headers}{$k};
+            if (ref $v eq 'ARRAY') {
+                push @hdr_pairs, ($k, $_) for @$v;
+            } else {
+                push @hdr_pairs, ($k, $v);
+            }
+        }
+    }
+
+    my $page = defined $resp->{content} ? $resp->{content} : '';
+    return ($page, $status_line, @hdr_pairs);
+}
 
 sub make_form {
     my @pairs;
