@@ -57,6 +57,7 @@ my $pass_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-pass.dat
 my $fail_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-fail.dat');
 my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat');
 my $log_dir      = '/tmp/cpan_random_logs';
+my $KILL_AFTER   = 10;  # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 
 # CPAN package index
 my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
@@ -499,7 +500,6 @@ sub parse_all_module_results {
 #      `timeout.exe` there is a sleep-with-countdown, NOT GNU coreutils.
 #   2. Fallback: fork + setpgrp + kill(-$pid) for platforms without
 #      coreutils (and for Windows, where it degrades to a plain alarm).
-my $KILL_AFTER = 10;  # seconds between SIGTERM and SIGKILL
 sub run_with_timeout {
     my ($cmd, $secs) = @_;
 
