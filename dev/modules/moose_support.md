@@ -896,55 +896,91 @@ PerlOnJava's refcount model has many subsystems (`MortalList`,
 `WeakRefRegistry`, `ScalarRefRegistry`, `ReachabilityWalker`,
 `MyVarCleanupStack`, `DestroyDispatch`).
 
-###### Step W3 — surgical fix attempted, reverted (2026-04-27)
+###### Step W3 — surgical fix attempts, both reverted (2026-04-27)
 
-A "skip destroy when weak refs exist" guard was tried in
+**Attempt 1**: "Skip destroy when weak refs exist" guard in
 `MortalList.flush()`:
 
 ```java
 } else if (WeakRefRegistry.hasWeakRefsTo(base)) {
-    // Skip destroy: weak refs imply something recently held a strong
-    // ref, and our cooperative refCount may be drifting under heavy
-    // reference shuffling.
+    // skip destroy
 }
 ```
 
-**Result**: this fix made the bundled `use Class::MOP;` succeed for the
-simple case, but broke 5+ existing weaken / destroy unit tests
+Result: broke 5+ existing weaken / destroy unit tests
 (`unit/refcount/weaken_destroy.t`, `weaken_edge_cases.t`,
-`weaken_basic.t`, `destroy_anon_containers.t`). The trade-off was too
-aggressive — there are legitimate cases where refCount==0 with weak
-refs DOES mean "really destroyed".
+`weaken_basic.t`, `destroy_anon_containers.t`,
+`unit/weaken_via_sub.t` Case 5). Reverted.
 
-The fix was reverted. The right approach is to find the asymmetric
-+/- in the refcount accounting itself, not to paper over it at the
-destroy path.
+**Attempt 2**: Same guard, but tightened to "blessed object with
+weak refs" only:
+
+```java
+} else if (WeakRefRegistry.hasWeakRefsTo(base) && base.blessId != 0) {
+    // skip destroy
+}
+```
+
+Applied at both `MortalList.flush()` and `setLargeRefCounted()`'s
+overwrite-decrement path (line 1192-1200).
+
+Result: still broke the cycle-breaking-via-weaken tests
+(`weaken_destroy.t`, `weaken_edge_cases.t`, `destroy_anon_containers.t`)
+because those tests use blessed objects in cycles, and rely on
+DESTROY firing when the last external strong reference goes away
+(letting weaken's cycle-breaking actually free the cycle). With the
+guard, the cycle stays alive forever. Reverted.
+
+**Lesson**: there's no simple predicate that distinguishes
+"transient refCount drift during heavy reference shuffling" from
+"genuine end-of-life with weak refs about to clear". The cooperative
+refCount system doesn't carry enough information at the destroy gate
+to make this call. The fix has to be in the **accounting itself**,
+not at the destroy gate.
 
 ###### Step W3-next (TODO when refcount audit is resumed)
 
-Concrete starting points for a future investigation:
+The fix has to make refCount **accurate** for blessed objects under
+heavy reference shuffling (Class::MOP self-bootstrap pattern). Two
+viable architectural directions:
 
-1. **`@_` aliasing**: when `attach($attr, $REG{x})` is called, does
-   the `@_` slot get its own +1 (for being aliased to the caller's
-   slot) AND the `my (..., $class) = @_;` list-copy ALSO get +1? If
-   yes, only ONE of those should decrement at scope exit, not both.
-   Check `RuntimeArray.setFromList` and the args-binding path in
-   `RuntimeCode.apply`.
-2. **`$h->{key} = $foo` followed by `$h->{key} = $bar`**: the
-   overwrite path in `setLargeRefCounted` decrements `oldBase` AND
-   has a separate flush. Verify that exactly one of those fires per
-   overwrite.
-3. **`my ($attr, $class) = @_;` list assignment**: confirm whether
-   list assignment goes through `setLargeRefCounted` per element or
-   through a list-copy bulk path that may double-count.
-4. **`Sub::Install` method-installation closures**: each closure
-   captures `$method`, `$package`, etc. Each closure scope-exit
-   should decrement only its own captures, not the caller's.
+(a) **Make the walker aware of `my` lexical containers**, so a
+    blessed object held by `our %METAS` (or any `my %hash` in an
+    active scope) is found as reachable by the auto-sweep. Then
+    refCount==0 events that happen during transient drift are
+    "false alarms" the walker can correct.
 
-A focused 2-3 day refcount audit on these four sites would likely
-land the fix. The test gate is the existing
-`weaken_via_sub.t` suite plus `./jcpan -t DBIx::Class` zero-regression
-guarantee.
+(b) **Fix the underlying refCount accounting asymmetry.** Captured
+    PJ_RC=1 trace showed 55 increments vs 87 effective decrements for
+    the failing object — a real asymmetry. Audit candidate sites:
+
+    1. `@_` aliasing increment/decrement symmetry on sub call/return
+       (`RuntimeArray.setFromList` and the args-binding path in
+       `RuntimeCode.apply`).
+    2. `$h->{key} = $foo` overwrite path in `setLargeRefCounted` —
+       check it doesn't double-decrement when the slot already has
+       a pending entry from a prior scope-exit.
+    3. `my (...) = @_` list-assignment refcount handling — verify
+       per-element vs bulk-copy behavior.
+    4. `Sub::Install` closure captures — each closure's scope-exit
+       decrements only its own captures.
+
+(b) is the right fix because it preserves observable Perl semantics
+without heuristics. (a) would also work but is a larger architectural
+change.
+
+The test gate for any future fix:
+
+```bash
+./jperl src/test/resources/unit/weaken_via_sub.t                 # 20/20 ok
+./jperl src/test/resources/unit/refcount/weaken_basic.t          # all ok
+./jperl src/test/resources/unit/refcount/weaken_destroy.t        # all ok (cycle break)
+./jperl src/test/resources/unit/refcount/weaken_edge_cases.t     # all ok
+./jperl src/test/resources/unit/refcount/destroy_anon_containers.t  # all ok
+./jperl -e 'use Class::MOP; print "ok\n"'                        # ok
+make                                                              # green
+./jcpan -t DBIx::Class                                            # 11 green / 876 ok / 2 fail (baseline)
+```
 
 ###### Verification (Step W6) — the fix that *did* land
 
