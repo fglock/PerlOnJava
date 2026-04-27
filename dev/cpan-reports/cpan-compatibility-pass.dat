@@ -92,7 +92,7 @@ CAM::PDF	PASS	215	215		2026-04-25		1d5def215
 CCCP::SQLiteWrap	PASS	1	1		2026-04-26		1d5def215
 CDDB::File	PASS	36	36		2026-04-26		1d5def215
 CDR::Parser::SI3000	PASS	17	17		2026-04-12		c1942aad0
-CGI::Application	PASS	190	190		2026-04-26		1d5def215
+CGI::Application	PASS	190	190		2026-04-27		12fb0165d
 CGI::Application::Plugin::AbstractCallback	PASS	2	2		2026-04-12		cc5efa220
 CGI::Application::Plugin::Config::Any	PASS	9	9		2026-04-25		1d5def215
 CGI::Application::Plugin::ConfigAuto	PASS	12	12		2026-04-21		3f3336774
@@ -105,6 +105,7 @@ CGI::Application::Plugin::LogDispatch	PASS	25	25		2026-04-21		3f3336774
 CGI::Application::Plugin::MessageStack	PASS	9	9		2026-04-12		c1942aad0
 CGI::Application::Plugin::Redirect	PASS	9	9		2026-04-21		3f3336774
 CGI::Application::Plugin::SuperForm	PASS	9	9		2026-04-21		3f3336774
+CGI::Application::Plugin::View::HTML::Template	PASS	2	2		2026-04-27		12fb0165d
 CGI::Auth::Auto	PASS	1	1		2026-04-12		c1942aad0
 CGI::BrowserDetect	PASS	5	5		2026-04-21		3f3336774
 CGI::FormBuilder::Mail::FormatMultiPart	PASS	21	21		2026-04-21		3f3336774
