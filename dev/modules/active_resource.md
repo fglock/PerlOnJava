@@ -194,22 +194,34 @@ combine with these fixes.
 
 ## Progress Tracking
 
-### Current Status: starting
+### Current Status: fixes #1 and #2 landed; #3 (Want) deferred
 
 ### Completed Steps
-- [ ] Plan written
-- [ ] Encode `%EXPORT_TAGS` fix
-- [ ] SAX empty-element repro & fix
-- [ ] Regression test(s)
-- [ ] PR opened
+- [x] Plan written
+- [x] Encode `%EXPORT_TAGS` fix (commit 76eeee938)
+- [x] SAX `current_element` push/pop timing fix (commit 5c28802d4)
+- [x] Regression tests added:
+  - `src/test/resources/unit/encode_export_tags.t` (8 subtests)
+  - `src/test/resources/unit/xml_parser_current_element.t` (12 subtests)
+- [x] PR opened (#568)
+- [ ] Re-run `jcpan -t XML::SemanticDiff` end-to-end
+- [ ] PR review and merge
+- [ ] Follow-up: design doc + ticket for `Want` shim/port
+
+### Verification Results
+- `make` passes (all unit tests).
+- Bundled `XML::Parser` test suite: 45 files / 434 tests, all pass
+  (no regression from the Context timing change).
+- `XML::SemanticDiff` standalone: 18/18 files, 47/47 tests now pass
+  (2 previously-failing subtests in t/16zero_to_empty_str_cmp.t fixed).
 
 ### Open Questions
-- For #2: is the empty-element discrepancy in `XML::SAX::PurePerl` (pure
-  Perl, easy to patch) or in the Java-backed SAX driver?
-- For #3 (future PR): is option A (Perl shim) sufficient for the modules we
-  care about, or do we need a real Want port?
+- For #3 (future PR): is option A (Pure-Perl Want shim) sufficient for
+  the modules we care about, or do we need a real Want port?
 
 ### Next Steps
-1. Create feature branch `feature/active-resource-deps`.
-2. Land fix #1 with regression test.
-3. Build SAX repro to scope fix #2.
+1. Re-run `jcpan -t XML::SemanticDiff`, then `Test::XML`, then `XML::Hash`
+   end-to-end to confirm the dependency chain (sans Want) is now clear.
+2. Land this PR.
+3. Open a follow-up issue/design doc for `Want` (Class::Accessor::Lvalue
+   blocker) so ActiveResource itself can eventually be reached.
