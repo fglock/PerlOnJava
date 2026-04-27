@@ -1031,51 +1031,77 @@ would still fire prematurely. That's where Path 2 comes in.
 
 **Estimated effort**: 1 day (small, contained change, easy to test).
 
-####### Path 2: gate `MortalList.flush()` destroy on walker confirmation
+####### Path 2: gate `MortalList.flush()` destroy on walker confirmation — DONE (2026-04-27)
 
 The current flush-destroy gate is: `if refCount==0 and !localBindingExists, fire DESTROY`.
 The Class::MOP bootstrap shows this is too eager — refCount can hit 0
 transiently while the object is still reachable through an unwalked
 path.
 
-**Fix**: when the flush gate would fire DESTROY on a blessed object,
-do a **scoped reachability check first**: walk from the immediate
-roots (globals + ScalarRefRegistry container elements per Path 1) to
-verify the object really is unreachable. If reachable, treat as
-transient drift (keep refCount at 0, don't fire DESTROY).
+**Fix shipped**: when the flush gate (or the matching gate in
+`setLargeRefCounted`'s overwrite path) would fire DESTROY on a
+blessed object, do a **scoped reachability check first** via the new
+`ReachabilityWalker.isReachableFromRoots(base)` query. Skip DESTROY
+only when the walker confirms the object is still reachable from
+package globals or `MyVarCleanupStack`-tracked live `my` lexicals.
 
-Concrete patch sketch:
+Critical detail: the walker seeds from `MyVarCleanupStack.snapshotLiveVars()`
+(my-vars whose declaration scope is still active), NOT from
+`ScalarRefRegistry` directly. `ScalarRefRegistry` holds stale entries
+(scope-exited scalars not yet JVM-GC'd), which would falsely consider
+cycle-broken-via-weaken cycles reachable through their own lexicals.
+By gating on `MyVarCleanupStack`, the walker correctly distinguishes:
 
-```java
-// MortalList.flush(), inner if-else:
-if (base.localBindingExists) {
-    // existing skip
-} else if (base.blessId != 0
-        && ReachabilityWalker.isReachableFromRoots(base)) {
-    // blessed object still reachable via container element or
-    // global — refCount drift, not real end-of-life.
-    // Don't fire DESTROY; refCount will recover on next assignment.
-} else {
-    base.refCount = Integer.MIN_VALUE;
-    DestroyDispatch.callDestroy(base);
-}
-```
+- **Class::MOP bootstrap**: `our %METAS` is in `MyVarCleanupStack`
+  while Class::MOP.pm loads. Walker traverses %METAS, finds the
+  metaclass via `$METAS{HasMethods}`, returns true. → Skip DESTROY.
+- **Cycle-break-via-weaken**: lexicals in inner block exit, leave
+  `MyVarCleanupStack`. The cycle has no path to roots through
+  any live my-var. Walker returns false. → Fire DESTROY normally,
+  cycle freed.
 
-`ReachabilityWalker.isReachableFromRoots(base)` is a new lightweight
-"is this single object reachable" query — much cheaper than the full
-`sweepWeakRefs()` walk because it short-circuits as soon as the
-target is found.
+Files changed:
+- `src/main/java/org/perlonjava/runtime/runtimetypes/ReachabilityWalker.java`
+  — new `isReachableFromRoots(target)` method, BFS with hard step
+  cap (50K visits) and short-circuit on target found.
+- `src/main/java/org/perlonjava/runtime/runtimetypes/MyVarCleanupStack.java`
+  — new `snapshotLiveVars()` helper.
+- `src/main/java/org/perlonjava/runtime/runtimetypes/MortalList.java`
+  — gate at `flush()`'s destroy path.
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
+  — mirror gate at `setLargeRefCounted()`'s overwrite-decrement
+  path.
 
-**Verification gates**: same test gate as the rejected Attempt 2 fix,
-plus the cycle-break tests (`weaken_destroy.t`,
-`weaken_edge_cases.t`, `destroy_anon_containers.t`). The walker
-correctly says "unreachable" in the cycle-break case (the cycle is
-isolated; nothing outside points at it), so DESTROY still fires.
+Verification:
+- `weaken_via_sub.t` (20 assertions) — all pass.
+- `unit/refcount/weaken_basic.t` (34) — all pass.
+- `unit/refcount/weaken_destroy.t` (24, includes cycle-break) — all pass.
+- `unit/refcount/weaken_edge_cases.t` (42) — all pass.
+- `unit/refcount/destroy_anon_containers.t` (21) — all pass.
+- `make` (full unit suite) — green.
+- `./jcpan -t DBIx::Class` — IDENTICAL to baseline
+  (314 files / 878 tests / 303 failed files / 2 failing assertions).
+  **Zero regressions** in the most refcount-heavy CPAN distribution
+  we test.
 
-**Estimated effort**: 2 days (the per-object reachability query
-needs to be written carefully — re-use `ReachabilityWalker.walk()`
-with an early-exit on first target hit, with a depth limit to avoid
-walking the entire heap on every flush).
+The original Class::MOP bootstrap failure ("Can't call method
+get_method on undefined value") is **resolved**: with the fix, the
+metaclass survives the bootstrap, attribute back-references stay
+defined, and `use Class::MOP` proceeds to a deeper layer
+(`Class/MOP/Class/Immutable/Trait.pm` line 59) which is a separate
+issue unrelated to refcount — Phase D will hit it next, but the
+refcount blocker that prevented even *trying* the bundled Moose is
+gone.
+
+####### Path 3 (deferred — not needed for the immediate Class::MOP bootstrap)
+
+Path 1 + Path 2 together make refCount drift benign for blessed
+objects in Class::MOP-style heavy-shuffling scenarios. The 55-vs-87
+trace asymmetry observed earlier is now harmless: when refCount
+dips to 0 transiently, the walker confirms reachability and DESTROY
+is correctly skipped. If a future scenario requires the trace to be
+genuinely symmetric (vs just "drift-tolerant"), the Path 3 audit
+still applies — see the original write-up below.
 
 ####### Path 3 (deepest fix): refcount accounting symmetry audit
 
