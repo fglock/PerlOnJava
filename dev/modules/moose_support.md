@@ -517,23 +517,209 @@ isn't `Class::MOP` itself loads cleanly today.
 - [x] Phase C-mini: `Class::MOP` shim (no metaclass instances; just enough surface to keep Moo happy)
 - [x] Phase 2 stubs: `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Exporter` / friends, and standard-type stubs in `Moose::Util::TypeConstraints` to suppress upstream `BAIL_OUT`.
 
-### Decision needed
+### Lessons learned (post-Phase-2)
 
-Pick one to pursue first:
+The two iterative shim PRs (#570, #572) turned the formal phase plan
+above on its head: paths C-full / D were originally framed as the
+"real fix", but in practice **incremental shim widening has paid out
+much faster than a full pure-Perl port** would have. Concrete
+takeaways:
 
-1. **Quick path (Moose-as-Moo shim).** ~1–2 days. Unblocks ANSI::Unicode and similar. Won't unblock anything that depends on real MOP introspection.
-2. **Phases A → B → D.** ~1–2 weeks. Lets `jcpan -t Moose` actually run upstream Moose. Bigger payoff, bigger risk.
-3. **Phase C standalone (Java helpers only).** Unblocks nothing on its own but is a prerequisite for path 2 and a strict superset of what the shim needs.
+1. **Compile-time stubs are the highest-leverage move.** Each round
+   of "let `require X` succeed" cleared dozens of files at once
+   (Phase 2 alone: 344 → 238 files that fail before any subtest).
+2. **Pre-loading is as important as having the stub.** Once
+   `Moose.pm` set `$INC{Moose.pm}`, Moo's runtime probes called
+   `Class::MOP::class_of` from random call sites. Adding
+   `use Class::MOP ()` at the top of `Moose.pm` / `Moose/Role.pm`
+   killed ~50+ runtime errors that would otherwise have masked any
+   shim widening.
+3. **One BAIL_OUT can hide an arbitrary number of test files.**
+   `t/type_constraints/util_std_type_constraints.t` calling
+   `BAIL_OUT("No such type ...")` was costing us ~7 trailing files
+   per run. Pre-populating standard type-constraint stubs cleanly
+   contained that — but the lesson is general: any new failure mode
+   that hits `BAIL_OUT` should be treated as a high-priority block.
+4. **The Moose-as-Moo gap is mostly method surface, not metaclass
+   semantics.** A large fraction of upstream tests just want
+   `$meta->add_attribute`, `$meta->get_method`, `$meta->is_mutable`
+   to exist and return a sensible-shaped value. They rarely care
+   that the metaclass is "real". Ergo: enriching `Moose::_FakeMeta`
+   is high-leverage and low-risk.
+5. **Stub objects must `isa` the right things.** Upstream tests do
+   `isa_ok($meta, 'Moose::Meta::Class')` and
+   `isa_ok($attr, 'Moose::Meta::Attribute')`. Returning a plain
+   blessed hashref isn't enough; the stub needs `@ISA` set to the
+   real upstream class names so `isa` checks pass.
 
-Recommendation: **(1) first to ship value quickly, then (3) → (2)** as the real fix.
+### Recommended next phases
+
+In priority order. All are incremental shim widenings that follow the
+same playbook as Phases A / C-mini / 2.
+
+#### Phase 3 — Rich `Moose::_FakeMeta` and the next batch of stubs
+
+Estimated payoff: similar to Phase 2 (+15–25 fully-green files,
++200–500 newly-passing assertions). Estimated effort: ~1 day.
+
+3a. **Enrich `Moose::_FakeMeta`** so `isa_ok($meta, 'Moose::Meta::Class')`
+    passes and the methods upstream tests reach for actually exist:
+
+    | Method                  | Failure count in last run |
+    |-------------------------|---------------------------|
+    | `add_attribute`         | 24                        |
+    | `get_attribute`         | 8                         |
+    | `new_object`            | 4                         |
+    | `is_mutable`            | 3                         |
+    | `get_method`            | 3                         |
+    | `meta`                  | 4                         |
+    | (FakeMeta isa Class::MOP::Class) | 6                |
+    | (FakeMeta isa Moose::Meta::Class) | 4               |
+
+    Fix: add `our @ISA = ('Class::MOP::Class', 'Moose::Meta::Class');`
+    to `Moose::_FakeMeta`, and implement the missing methods either
+    as pass-throughs to the underlying Moo metaclass (via
+    `Moo->_constructor_maker_for($class)->all_attribute_specs`) or as
+    minimal "remember what `has` declared" tracking inside
+    `Moose.pm`'s `import`.
+
+3b. **Add the next batch of compile-time `.pm` stubs** for the most
+    common "Can't locate" failures:
+
+    | Stub                                      | Errors |
+    |-------------------------------------------|--------|
+    | `Moose::Meta::Attribute`                  | 8      |
+    | `Moose::Meta::Role`                       | 6      |
+    | `Moose::Meta::Role::Composite`            | 7      |
+    | `Class::MOP::Method`                      | 7      |
+    | `Class::MOP::Instance`                    | 4      |
+    | `Moose::Util::MetaRole` (with `apply_metaroles` no-op) | 4 + 9 calls |
+    | `Moose::Meta::TypeConstraint`             | 3      |
+    | `Moose::Exception` (and the most-thrown subclasses) | 3 + many `throw_exception` calls |
+
+    Each is the same shape as the existing skeleton stubs:
+    `package X; require Y; our @ISA = (Y); sub new { bless {...} } 1;`.
+
+3c. **Bless `Moose::Util::TypeConstraints::_Stub` into
+    `Moose::Meta::TypeConstraint`** so `isa_ok($t,
+    'Moose::Meta::TypeConstraint')` passes (5 errors today).
+
+3d. **Add the missing methods on `Moose::Util::TypeConstraints`**:
+
+    | Method                           | Errors |
+    |----------------------------------|--------|
+    | `export_type_constraints_as_functions` | 5  |
+    | `find_or_parse_type_constraint`        | 3  |
+
+3e. **`Moose::Meta::Role->create_anon_role`** as a no-op returning
+    a `_FakeRole` (4 errors).
+
+#### Phase 4 — Real attribute introspection on top of Moo
+
+Estimated payoff: medium-high (+100–300 newly-passing assertions,
+mostly under `t/basics/`, `t/attributes/`, `t/cmop/attribute*`).
+Estimated effort: ~2 days.
+
+By Phase 3, `$meta->add_attribute(name => ..., is => 'rw')` exists
+but is a no-op. To make `$meta->get_attribute_list` / `$meta->get_attribute(...)`
+return useful values, hook into Moo's actual attribute store:
+
+```perl
+sub get_attribute_list {
+    my $self = shift;
+    my $name = $self->name;
+    require Moo::_Utils;
+    return keys %{ Moo->_constructor_maker_for($name)->all_attribute_specs // {} };
+}
+```
+
+Same trick for `get_attribute`, `find_attribute_by_name`, etc.; wrap
+each Moo attribute spec in a `Class::MOP::Attribute` stub. This makes
+`Test::Moose::has_attribute_ok` actually test what users mean.
+
+#### Phase 5 — `Moose::Util::MetaRole` real apply
+
+Estimated payoff: low-medium (most MooseX::* extensions need it; few
+upstream Moose tests do). Estimated effort: ~1 day.
+
+`Moose::Util::MetaRole::apply_metaroles` is what
+`MooseX::*` extensions use to install custom metaclass roles. A real
+implementation needs to compose roles into the metaclass at
+install-time — under the shim, "compose into Moo metaclass" is a no-op
+that just records the role list, which is enough for most consumers.
+
+#### Phase 6 — `Moose::Exporter` proper sugar installation
+
+Estimated payoff: medium (unlocks every "extends Moose with custom
+sugar" module: `MooseX::SimpleConfig`, `MooseX::Getopt`, ...).
+Estimated effort: ~2–3 days.
+
+The current `Moose::Exporter` stub only forwards to `Moose->import`.
+A more complete version would install the caller's `with_caller` /
+`with_meta` / `as_is` exports onto consumers.
+
+#### Phase B (deferred) — strip XS in `WriteMakefile`
+
+Only relevant once we attempt to install upstream Moose. With
+shim-based testing via `prove --exec jperl`, we don't need it. Keep
+in the plan but don't pursue until either:
+- A user actually wants `cpan -i Moose` to succeed end-to-end, or
+- Phase D is in play.
+
+#### Phase C-full / Phase D — real `Class::MOP` / `Moose` port
+
+Status updated: previously labeled "the real fix"; now the **last
+recourse** rather than the next move.
+
+Why deferred:
+- Phase 3 alone is expected to recover another ~15–25 fully-green
+  files for ~1 day of work.
+- Phase 4 hooks into Moo internals to give us real attribute
+  introspection without bundling Moose at all.
+- A full pure-Perl Moose port is hundreds of files and thousands of
+  lines, and would still need ~all of the shim infrastructure
+  (Class::MOP, B, etc.) to work.
+
+Reconsider Phase D when **either** the iterative shim has plateaued
+(Phases 3–6 stop adding ≥10 files per round) **or** a specific
+high-value distribution (e.g. Catalyst, DBIx::Class roles, ...) needs
+something the shim categorically cannot provide.
+
+#### Phase E (deferred) — Export-flag MAGIC
+
+Same status as before. Affects `Moose::Exporter` re-export tracking
+only; lowest priority.
 
 ### Open work items
 
-- [ ] Decide path (above).
-- [ ] If path 1: write `src/main/perl/lib/Moose.pm`, `Moose/Role.pm`, `Moose/Object.pm`, `Moose/Util/TypeConstraints.pm`.
-- [ ] If path 2: write Phase A stub, Phase B MakeMaker patch, Phase C Java module, Phase D bundle.
-- [ ] In either case: add `./jcpan -t ANSI::Unicode` to a smoke test list.
-- [ ] Each time we **bundle** a Moose-ecosystem distribution (Moose itself, Class::MOP, MooseX::Types, …), snapshot its upstream `t/` under `src/test/resources/module/{Distribution}/t/` so `make test-bundled-modules` guards against regressions. Do not snapshot tests for non-bundled downstream consumers; those remain `./jcpan -t` smoke checks.
+- [ ] Phase 3a: enrich `Moose::_FakeMeta` (target: `Moose::_FakeMeta isa
+      Moose::Meta::Class`, plus `add_attribute` / `get_attribute` /
+      `new_object` / `is_mutable` / `get_method`).
+- [ ] Phase 3b: add next batch of compile-time `.pm` stubs
+      (`Moose::Meta::Attribute`, `Moose::Meta::Role`,
+      `Moose::Meta::Role::Composite`, `Class::MOP::Method`,
+      `Class::MOP::Instance`, `Moose::Util::MetaRole`,
+      `Moose::Meta::TypeConstraint`, `Moose::Exception`).
+- [ ] Phase 3c: bless `_Stub` into `Moose::Meta::TypeConstraint`.
+- [ ] Phase 3d: add `export_type_constraints_as_functions` and
+      `find_or_parse_type_constraint` to `Moose::Util::TypeConstraints`.
+- [ ] Phase 3e: add `Moose::Meta::Role->create_anon_role`.
+- [ ] Phase 4: hook into Moo's attribute store from
+      `Moose::_FakeMeta->get_attribute*` methods.
+- [ ] Phase 5: real-ish `Moose::Util::MetaRole::apply_metaroles`.
+- [ ] Phase 6: full `Moose::Exporter` sugar installation.
+- [ ] Each time we **bundle** a Moose-ecosystem distribution (Moose
+      itself, Class::MOP, MooseX::Types, …), snapshot its upstream
+      `t/` under `src/test/resources/module/{Distribution}/t/` so
+      `make test-bundled-modules` guards against regressions. Do not
+      snapshot tests for non-bundled downstream consumers; those
+      remain `./jcpan -t` smoke checks.
+- [ ] Phase B (deferred): patch `ExtUtils::MakeMaker::WriteMakefile`
+      to scrub `OBJECT` / `XS` / `C` keys when running on PerlOnJava.
+      Only needed once we try to install upstream Moose.
+- [ ] Phase C-full / Phase D (deferred): bundle pure-Perl
+      `Class::MOP` / `Moose`. Reconsider only if the iterative shim
+      plateaus.
 
 ---
 
