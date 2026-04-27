@@ -39,6 +39,14 @@ sub create_anon_class {
     return $class->create($name, %opts);
 }
 
+# Class::MOP::Class itself can be introspected — return a metaclass for it.
+sub meta {
+    my $self = shift;
+    require Moose;
+    my $name = ref($self) || $self;
+    return Moose::_FakeMeta->_for($name);
+}
+
 {
     my $next = 0;
     sub _next_anon_id { ++$next }

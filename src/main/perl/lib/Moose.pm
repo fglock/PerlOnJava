@@ -72,6 +72,23 @@ use Class::MOP ();
 # error. Under our shim it's a no-op.
 use Moose::Util::MetaRole ();
 
+# Pre-load all the Moose::Meta::* skeleton classes so tests that do
+# `use Moose;` and then call e.g. Moose::Meta::Class->initialize(...) /
+# Moose::Meta::Role->create_anon_role(...) / Moose::Meta::Attribute->new(...)
+# find their methods. Without these requires, the package exists in
+# @INC but isn't loaded, and callers get "Can't locate object method ...
+# via package Moose::Meta::Class".
+use Moose::Meta::Class ();
+use Moose::Meta::Role ();
+use Moose::Meta::Attribute ();
+use Moose::Meta::Method ();
+use Moose::Meta::Method::Delegation ();
+use Moose::Meta::TypeConstraint ();
+use Moose::Exporter ();
+use Moose::Exception ();
+use Moose::Util ();
+use Moose::Util::TypeConstraints ();
+
 # ---------------------------------------------------------------------------
 # Type constraint name -> validator coderef. Returns a Moo-compatible
 # isa-checker that croaks on validation failure.
@@ -499,6 +516,53 @@ sub remove_method           { 1 }
 sub add_role                { push @{ $_[0]->{roles} ||= [] }, $_[1]; $_[0] }
 sub _add_meta_method        { 1 }
 sub add_method_modifier     { 1 }   # Moo's `before`/`after`/`around` already installed
+
+# Aliases / minor extras.
+sub find_method_by_name     { goto &get_method }
+sub get_method_map          { my $self = shift; +{ map { $_ => $self->get_method($_) } $self->get_method_list } }
+sub attribute_metaclass     { 'Moose::Meta::Attribute' }
+sub method_metaclass        { 'Moose::Meta::Method' }
+sub instance_metaclass      { 'Class::MOP::Instance' }
+sub constructor_class       { 'Moose::Meta::Method::Constructor' }
+sub destructor_class        { 'Moose::Meta::Method::Destructor' }
+sub rebless_instance        {
+    my ($self, $instance, %args) = @_;
+    bless $instance, $self->{name};
+    $instance->$_($args{$_}) for grep { $instance->can($_) } keys %args;
+    return $instance;
+}
+sub rebless_instance_back   { my ($self, $instance) = @_; bless $instance, $self->{name}; $instance }
+sub get_package_symbol      {
+    my ($self, $name) = @_;
+    no strict 'refs';
+    return *{"$self->{name}::$name"};
+}
+sub list_all_package_symbols {
+    my ($self, $type) = @_;
+    no strict 'refs';
+    return grep { !/::\z/ } keys %{"$self->{name}::"};
+}
+sub is_pristine             { 0 }   # Moose-using classes are by definition not pristine
+sub _is_compatible_with     { 1 }
+sub _check_metaclass_compatibility { 1 }
+sub immutable_options       { () }
+
+# Method modifiers — Moo's `before`/`after`/`around` already installed
+# the wrappers; these are the metaclass hooks tests poke at.
+sub add_before_method_modifier { my ($self, $name, $code) = @_;
+    require Class::Method::Modifiers;
+    Class::Method::Modifiers::install_modifier($self->{name}, 'before', $name, $code);
+}
+sub add_after_method_modifier  { my ($self, $name, $code) = @_;
+    require Class::Method::Modifiers;
+    Class::Method::Modifiers::install_modifier($self->{name}, 'after',  $name, $code);
+}
+sub add_around_method_modifier { my ($self, $name, $code) = @_;
+    require Class::Method::Modifiers;
+    Class::Method::Modifiers::install_modifier($self->{name}, 'around', $name, $code);
+}
+sub add_override_method_modifier { add_around_method_modifier(@_) }
+sub add_augment_method_modifier  { add_around_method_modifier(@_) }
 
 1;
 

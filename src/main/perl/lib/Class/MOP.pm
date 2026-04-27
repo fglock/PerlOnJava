@@ -32,6 +32,21 @@ our $VERSION = '2.2207';  # Match a recent upstream version.
 
 use Scalar::Util ();
 
+# Pre-load the submodules so `use Class::MOP;` is enough to call
+# Class::MOP::Class->initialize, Class::MOP::Attribute->new, etc.
+# Upstream Moose's Class::MOP.pm pulls these in via XSLoader::load
+# (which boot-loads Class::MOP::Mixin::*, Class::MOP::Method::*,
+# Class::MOP::Instance, Class::MOP::Package, ...). Without these
+# requires, tests that say `use Class::MOP;` and then call
+# `Class::MOP::Class->initialize(...)` get "Can't locate object method
+# initialize via package Class::MOP::Class".
+require Class::MOP::Class;
+require Class::MOP::Attribute;
+require Class::MOP::Method;
+require Class::MOP::Method::Accessor;
+require Class::MOP::Instance;
+require Class::MOP::Package;
+
 # ---------------------------------------------------------------------------
 # Metaclass registry. Stays empty under the shim — we never construct real
 # Class::MOP::Class instances — but accept stores so consumers that try to

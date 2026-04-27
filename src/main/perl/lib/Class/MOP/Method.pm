@@ -32,6 +32,12 @@ sub fully_qualified_name {
 }
 sub is_stub           { 0 }
 
+sub execute {
+    my $self = shift;
+    my $body = $self->{body} or return;
+    return $body->(@_);
+}
+
 1;
 __END__
 =head1 NAME

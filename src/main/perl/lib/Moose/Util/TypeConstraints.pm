@@ -359,6 +359,40 @@ sub export_type_constraints_as_functions {
     return;
 }
 
+# ---------------------------------------------------------------------------
+# Registry façade. Some upstream code reaches for the registry object
+# directly; we return a stub that exposes the bits needed.
+# ---------------------------------------------------------------------------
+
+{
+    package Moose::Util::TypeConstraints::Registry;
+    sub new { bless {}, shift }
+    sub has_type_constraint { defined Moose::Util::TypeConstraints::find_type_constraint($_[1]) ? 1 : 0 }
+    sub get_type_constraint { Moose::Util::TypeConstraints::find_type_constraint($_[1]) }
+    sub add_type_constraint { Moose::Util::TypeConstraints::register_type_constraint($_[1]) }
+}
+
+my $_REGISTRY;
+sub get_type_constraint_registry {
+    return $_REGISTRY ||= Moose::Util::TypeConstraints::Registry->new;
+}
+
+# Heuristic: does `$name` look like a parameterized type? (Foo[Bar],
+# Foo|Bar, Maybe[Foo]). Used by Moose internals.
+sub _detect_parameterized_type_constraint {
+    my ($name) = @_;
+    return 0 unless defined $name;
+    return $name =~ /\[/ || $name =~ /\|/ ? 1 : 0;
+}
+
+# Parse "Foo[Bar]" -> ("Foo", "Bar"). Returns () if not parameterized.
+sub _parse_parameterized_type_constraint {
+    my ($name) = @_;
+    return unless defined $name;
+    return unless $name =~ /\A([^\[]+)\[(.+)\]\z/;
+    return ($1, $2);
+}
+
 1;
 
 __END__

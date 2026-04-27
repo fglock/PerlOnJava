@@ -12,7 +12,7 @@ for defining classes, attributes, roles, and method modifiers.
 except `t/todo_tests/moose_and_threads.t` (already TODO upstream;
 PerlOnJava does not implement `threads`).
 
-**Today**: 65 / 478 fully-green via the Moose-as-Moo shim (after Phase 3).
+**Today**: 71 / 478 fully-green via the Moose-as-Moo shim (after Phase 3).
 
 The path from 56 to 477:
 
@@ -340,12 +340,12 @@ Snapshot history from `./jcpan -t Moose` against the current shim:
 | Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) | After Phase 2 stubs (Apr 2026) | After Phase 3 (Apr 2026) |
 |---|---|---|---|---|---|
 | Test files executed | 478 | 478 | 478 | 478 | 478 |
-| Individual assertions executed | 616 | 616 | 667 | 1419 | **2226** |
-| Fully passing files | ~29 | 35 | 36 | 56 | **65** |
-| Partially passing files | ~44 | 94 | 98 | 184 | **240** |
-| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | ~344 | ~238 | **~173** |
-| Assertions ok | 370 | 372 | 419 | 953 | **1423** |
-| Assertions fail | 246 | 244 | 248 | 466 | **803** |
+| Individual assertions executed | 616 | 616 | 667 | 1419 | **2450** |
+| Fully passing files | ~29 | 35 | 36 | 56 | **71** |
+| Partially passing files | ~44 | 94 | 98 | 184 | **259** |
+| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | ~344 | ~238 | **~148** |
+| Assertions ok | 370 | 372 | 419 | 953 | **1562** |
+| Assertions fail | 246 | 244 | 248 | 466 | **888** |
 
 The initial 29 fully-passing files covered BUILDARGS / BUILD chains,
 immutable round-trips, anonymous role creation, several Moo↔Moose bug
@@ -461,15 +461,21 @@ inherited Moo attributes) which would only be fixed by Phase D
   that call `apply_metaroles` without an explicit `use` line don't
   fail with "Undefined subroutine".
 
-Net effect of Phase 3: **+807 individual assertions now execute**
-(1419 → 2226), **+470 newly pass** (953 → 1423), **+9 fully-green
-files** (56 → 65), and -65 files now compile that previously errored
-out at compile time. The +337 newly-failing assertions are again
+Net effect of Phase 3: **+1031 individual assertions now execute**
+(1419 → 2450), **+609 newly pass** (953 → 1562), **+15 fully-green
+files** (56 → 71), and -90 files now compile that previously errored
+out at compile time. The +422 newly-failing assertions are again
 mostly tests that hadn't reached their assertion phase before.
 
 Cumulative across this PR (master baseline → end of Phase 3):
-**+30 fully-green files (35 → 65)**, **+1610 assertions executed**
-(616 → 2226), **+1051 newly passing** (372 → 1423).
+**+36 fully-green files (35 → 71)**, **+1834 assertions executed**
+(616 → 2450), **+1190 newly passing** (372 → 1562).
+
+Phase 3 hit clear diminishing returns toward the end (the last
+iteration added only +2 fully-green files while +90 files now compile
+that previously didn't), confirming the doc's call: shim widening is
+losing leverage, and Phase D (bundle pure-Perl Moose) is the next
+move that meaningfully advances the pass count.
 
 Phases 4 → 6 (more shim widening) and Phase D (bundle pure-Perl
 Moose) should move these numbers further; record the new totals
@@ -572,7 +578,7 @@ and PerlOnJava doesn't implement `threads`). Today: **56 / 478**.
 - **Phase A — DONE.** `ExtUtils::HasCompiler` deterministic stub ships at `src/main/perl/lib/ExtUtils/HasCompiler.pm`.
 - **Phase C-mini — DONE.** `Class::MOP` shim with `class_of` / `get_metaclass_by_name` / `get_code_info` / `is_class_loaded` and friends; ships at `src/main/perl/lib/Class/MOP.pm`.
 - **Phase 2 stubs — DONE.** `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, plus skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Meta::TypeConstraint::Parameterized` / `Moose::Meta::Role::Application::RoleSummation` / `Moose::Exporter`. Pre-populated standard type-constraint stubs to avoid `BAIL_OUT` in upstream test suite.
-- **Phase 3 — DONE.** Rich `Moose::_FakeMeta` (with `@ISA` and full method surface), attribute-tracking via `has` wrapper, plus the next batch of compile-time stubs (`Class::MOP::Method` / `::Instance` / `::Method::Accessor` / `::Package`, `Moose::Meta::Method` / `::Attribute` / `::Role` / `::Role::Composite` / `::TypeConstraint` / `::TypeConstraint::Enum`, `Moose::Util::MetaRole`, `Moose::Exception`), `_Stub` blessed into `Moose::Meta::TypeConstraint`, `find_or_parse_type_constraint` + `export_type_constraints_as_functions`. **65 / 478 fully-green.**
+- **Phase 3 — DONE.** Rich `Moose::_FakeMeta` (with `@ISA` and full method surface), attribute-tracking via `has` wrapper, plus the next batch of compile-time stubs (`Class::MOP::Method` / `::Instance` / `::Method::Accessor` / `::Package`, `Moose::Meta::Method` / `::Method::Constructor` / `::Method::Destructor` / `::Method::Accessor` / `::Method::Delegation` / `::Attribute` / `::Role` / `::Role::Composite` / `::TypeConstraint` / `::TypeConstraint::Enum`, `Moose::Util::MetaRole`, `Moose::Exception`), `_Stub` blessed into `Moose::Meta::TypeConstraint`, `find_or_parse_type_constraint` + `export_type_constraints_as_functions` + `_parse_parameterized_type_constraint` + `get_type_constraint_registry`, method-modifier hooks on `_FakeMeta`, `Class::MOP.pm` pre-loads its submodules, `Moose.pm` pre-loads `Moose::Meta::*` and `Moose::Util*`. **71 / 478 fully-green.**
 - **Phases 4 / 5 / 6 — not started.** Incremental shim widening. Ship value (~110–130 fully-green) but do not pass all tests on their own.
 - **Phase D — not started.** Bundle pure-Perl Moose. **This is the phase that gets us to 477 / 478.** Now sized at ~5 days (was previously framed as much larger). See "Phase D plan" below.
 - **Phase B — deferred.** Strip XS keys in `WriteMakefile`. Not on the Moose pass-all-tests critical path; the bundled Moose ships from the JAR.
