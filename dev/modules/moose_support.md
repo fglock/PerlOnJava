@@ -557,6 +557,58 @@ takeaways:
 In priority order. All are incremental shim widenings that follow the
 same playbook as Phases A / C-mini / 2.
 
+#### Realistic ceiling
+
+Before listing the phases, an honest projection. Today's number
+is **56 fully-green files / 478 (~12%)**. Phases 3 → 6 are projected
+to bring this to:
+
+| Phase | Projected fully-green | Notes |
+|-------|-----------------------|-------|
+| Today | 56 / 478 (~12%) | |
+| After Phase 3 | ~75–80 / 478 | Many newly-running tests become *partial*, not fully green. |
+| After Phase 4 | ~85–100 / 478 | Real attribute introspection helps `t/attributes/`, `t/cmop/attribute*`. |
+| After Phases 5–6 | ~110–130 / 478 (~25–28%) | Diminishing returns. |
+| **Shim ceiling** | **~150 / 478 (~30%)** optimistically | The shim categorically cannot pass the rest. |
+
+Whole test areas that the shim **cannot** pass without a real
+`Class::MOP` / `Moose` port:
+
+- **`make_immutable` inlining** (`t/immutable/`, `t/cmop/*immutable*`).
+  Upstream generates Perl source at runtime for immutable constructors
+  and accessors and tests inspect the generated code. Our shim makes
+  `make_immutable` a no-op.
+- **MOP introspection symmetry** (`t/cmop/method.t`, etc.).
+  Tests check that `$class->meta->get_method($name)->body ==
+  \&{"${class}::${name}"}` — exact-identity invariants the shim can't
+  recreate without tracking every sub installation.
+- **Role composition conflicts** (`t/roles/method_resolution_order.t`,
+  `t/roles/role_conflict_*.t`). Moose's role engine emits specific
+  conflict messages and timing that differ from Moo::Role's.
+- **Native attribute traits** (`t/native_traits/`). `traits =>
+  ['Array']`, `['Hash']`, `['Counter']`, ... with delegated mutator
+  methods are a Moose-specific subsystem; Moo does not have it.
+- **Type-constraint coercion graphs** (`t/type_constraints/coerce_*`),
+  **inlined check generation** (`_inline_check`),
+  **method-modifier timing** under MOP — all depend on real Moose
+  internals.
+- **`Class::MOP` self-bootstrap** (`t/cmop/0*`). Tests assert that
+  `Class::MOP::Class` is itself a `Class::MOP::Class` instance.
+
+If "pass all Moose tests" is a hard requirement, the only credible
+path is **Phase D (bundle pure-Perl Moose)** plus whatever Java-side
+support the bundled code actually needs at runtime. Even then expect
+5–10% real platform differences (`fork`, threads, weaken edge cases,
+IO::Handle subtleties).
+
+If "ship value to real-world Moose-using CPAN modules" is the goal,
+Phases 3 → 6 are the right move: they don't pass every Moose
+self-test, but they unblock most ordinary Moose consumers (which
+mostly use attributes, roles, and method modifiers — exactly the
+Moo-coverable subset).
+
+In priority order:
+
 #### Phase 3 — Rich `Moose::_FakeMeta` and the next batch of stubs
 
 Estimated payoff: similar to Phase 2 (+15–25 fully-green files,
