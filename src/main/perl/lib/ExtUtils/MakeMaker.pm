@@ -63,15 +63,27 @@ sub WriteMakefile {
     print "PerlOnJava MakeMaker: $name v$version\n";
     print "=" x 60, "\n";
     
-    # Check prerequisites first
-    if ($args{PREREQ_PM}) {
-        my @missing = _check_prereqs($args{PREREQ_PM});
-        if (@missing) {
-            print "\nMissing dependencies:\n";
-            print "  - $_\n" for @missing;
-            print "\nPlease install these modules first.\n";
-            print "(PerlOnJava uses bundled modules or pure Perl CPAN modules)\n\n";
-            # Continue anyway - let the module fail at runtime if needed
+    # Check prerequisites. Mirrors upstream ExtUtils::MakeMaker (5.42 / 7.76):
+    # use a static filesystem search + parse_version (no `require`), warn per
+    # missing prereq via STDERR, and only die when PREREQ_FATAL is set.
+    # See ExtUtils::MakeMaker::_installed_file_for_module + the prereq loop in
+    # WriteMakefile (lines ~579-647 of system MakeMaker).
+    if ($args{PREREQ_PM} || $args{BUILD_REQUIRES} || $args{CONFIGURE_REQUIRES} || $args{TEST_REQUIRES}) {
+        my %prereqs;
+        for my $key (qw(PREREQ_PM BUILD_REQUIRES CONFIGURE_REQUIRES TEST_REQUIRES)) {
+            next unless my $h = $args{$key};
+            $prereqs{$_} = $h->{$_} for keys %$h;
+        }
+        my %unsatisfied = _check_prereqs(\%prereqs);
+        if (%unsatisfied && $args{PREREQ_FATAL}) {
+            my $failed = join "\n", map {"    $_ $unsatisfied{$_}"}
+                                    sort { lc $a cmp lc $b } keys %unsatisfied;
+            die <<"END";
+MakeMaker FATAL: prerequisites not found.
+$failed
+
+Please install these modules first and rerun 'perl Makefile.PL'.
+END
         }
     }
     
@@ -86,27 +98,45 @@ sub WriteMakefile {
     return _install_pure_perl($name, $version, \%args);
 }
 
+sub _installed_file_for_module {
+    my ($module) = @_;
+    my $file = $module;
+    $file =~ s{::}{/}g;
+    $file .= '.pm';
+    for my $dir (@INC) {
+        next if ref $dir;  # skip code/array refs and blessed @INC hooks
+        my $candidate = File::Spec->catfile($dir, $file);
+        return $candidate if -r $candidate;
+    }
+    return;
+}
+
 sub _check_prereqs {
     my ($prereqs) = @_;
-    my @missing;
-    
+    my %unsatisfied;
+
     for my $module (sort keys %$prereqs) {
-        my $version = $prereqs->{$module};
+        my $required = $prereqs->{$module};
         # 'perl' is a special key meaning minimum perl version, not a module
         next if $module eq 'perl';
-        my $found = eval "require $module; 1";
-        if (!$found) {
-            push @missing, "$module (>= $version)";
-        } elsif ($version) {
-            # Check version
-            my $installed = eval "\$${module}::VERSION" || 0;
-            if (_version_compare($installed, $version) < 0) {
-                push @missing, "$module (>= $version, have $installed)";
-            }
+
+        my $installed_file = _installed_file_for_module($module);
+        if (!$installed_file) {
+            warn "Warning: prerequisite $module $required not found.\n";
+            $unsatisfied{$module} = 'not installed';
+            next;
+        }
+        next unless $required;
+
+        my $have = eval { MM->parse_version($installed_file) };
+        $have = 0 if !defined $have || $have eq 'undef' || $@;
+        if (_version_compare($have, $required) < 0) {
+            warn "Warning: prerequisite $module $required not found. We have $have.\n";
+            $unsatisfied{$module} = $required || 'unknown version';
         }
     }
-    
-    return @missing;
+
+    return %unsatisfied;
 }
 
 sub _version_compare {
