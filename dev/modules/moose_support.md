@@ -764,20 +764,116 @@ A more complete version would install the caller's `with_caller` /
 #### Phase D — Bundle pure-Perl Moose (the destination)
 
 This is the phase that gets us to **477 / 478 passing** (everything
-except the threads-only TODO test). It's now much smaller than the
-original "real fix" framing suggested — three reasons:
+except the threads-only TODO test).
 
-1. PerlOnJava core now implements `weaken` / `isweak` / `DESTROY`
-   correctly (see `dev/architecture/weaken-destroy.md`). Was the
-   biggest unknown last time this was scoped.
-2. Moose's XS surface is only **710 lines total** (sum of `xs/*.xs`
-   plus `mop.c`). Most of it is generic hashref accessors that pure-
-   Perl replaces trivially.
-3. `Package::Stash::PP` already exists upstream as a pure-Perl
-   replacement for `Package::Stash::XS`; PerlOnJava's existing
-   `Package::Stash` works.
+**Phase D status (Apr 2026)**: started but **paused on a core PerlOnJava
+refcount bug**. Findings recorded here so the next attempt picks up
+where this one left off.
 
-Sub-phases:
+##### Pre-Phase-D plan-review findings
+
+Before trying to bundle Moose, the plan was reviewed for hidden
+problems. Two real issues surfaced; one is fixed, one remains.
+
+1. **`*GLOB{SCALAR}` returned the value instead of a SCALAR reference.**
+   PerlOnJava core bug: `*x{SCALAR}` yielded the scalar's value where
+   real Perl yields a SCALAR ref. Fixed in the same PR
+   (`RuntimeGlob.java` line 554-565: now calls `createReference()` like
+   the ARRAY/HASH/GLOB cases). Regression test in
+   `src/test/resources/unit/typeglob.t`. This unblocked
+   `Class::Load::PP::_is_class_loaded`, `Package::Stash::PP::get_symbol`,
+   and many other modules that read `$VERSION` via the symbol table.
+
+2. **`prove --not` does not exist.** Workaround when Phase D resumes:
+   use a small `--exec` wrapper that returns
+   `1..0 # SKIP threads not implemented` for
+   `t/todo_tests/moose_and_threads.t` and runs `jperl` for every other
+   file. ~10 lines of Perl, easy to ship.
+
+##### Active blocker: weaken refcount bug
+
+When weaken is called on a hash slot inside a sub, with the target
+also held by other strong refs in the caller, the slot becomes undef
+immediately. Minimal reproduction:
+
+```perl
+require Scalar::Util;
+my $m = bless {}, "M";
+my %REG = (x => $m);
+
+sub attach {
+    my ($attr, $class) = @_;
+    $attr->{ac} = $class;
+    Scalar::Util::weaken($attr->{ac});
+}
+
+my @arr = ({}, {}, {});
+for my $attr (@arr) {
+    attach($attr, $REG{x});
+}
+
+# Real Perl: all three $arr[i]->{ac} are still defined (weak refs to
+# $m, which has a strong ref via %REG).
+# PerlOnJava: all three become undef immediately.
+```
+
+Class::MOP's bootstrap relies on this pattern pervasively
+(`weaken($self->{associated_class} = $class)` in
+`Class::MOP::Attribute::attach_to_class`, called for every attribute
+during `Class::MOP.pm`'s self-bootstrap). Without this fix Phase D
+cannot proceed — `use Class::MOP;` itself dies in the bootstrap.
+
+The bug is in PerlOnJava's `Scalar::Util::weaken` / refcount
+interaction with `my $local = $passed_in;` inside subs: weaken seems
+to clear the reference even when other strong refs exist. The relevant
+code paths are in:
+- `src/main/java/org/perlonjava/runtime/runtimetypes/WeakRefRegistry.java`
+- the `refCountOwned` flag handling in `RuntimeScalar` setters
+
+Suspected root cause: `refCountOwned` is being set to `true` on the
+hash slot when assigned via `$attr->{ac} = $class`, but the assignment
+didn't actually increment the referent's `refCount` — so weaken's
+`--base.refCount` decrements past where it should, prematurely
+firing destruction. (The `if (--base.refCount == 0)` branch at
+`WeakRefRegistry.java:101` then nulls the weak refs.)
+
+**Phase D cannot resume until this is fixed**. A standalone unit test
+covering the minimal reproduction above should land in
+`src/test/resources/unit/weaken_via_sub.t` as part of the fix.
+
+##### Phase D resumption checklist (when weaken is fixed)
+
+The previous Phase D attempt got as far as:
+
+- D1 (bundle upstream `.pm` files): branch `feature/moose-phase-d`
+  copied `Moose-2.4000/lib/{Class,Moose,Test/Moose.pm,metaclass.pm,oose.pm}`
+  into `src/main/perl/lib/`. **Branch was deleted** when Phase D paused;
+  redo from `~/.cpan/build/Moose-2.4000-*/lib/`.
+- D2 (`Class::MOP.pm` XSLoader patch): exact patch worked out.
+  Replace the `XSLoader::load('Moose', $VERSION)` block at
+  `Class::MOP.pm` line 31 with:
+  ```perl
+  XSLoader::load('Moose', $VERSION) if 0;
+  {
+      require Config;
+      if ($ENV{MOOSE_PUREPERL} || !$Config::Config{usedl}) {
+          require Class::MOP::PurePerl;
+      }
+      else {
+          require XSLoader;
+          XSLoader::load('Moose', $VERSION);
+      }
+  }
+  ```
+- D3 (`Class::MOP::PurePerl` skeleton): drafted in this attempt.
+  Replicates the simple-reader installation from each of the 13 .xs
+  files plus mop.c. Survived as a dead file in the deleted branch but
+  the design is now well-known. The full inventory of what each .xs
+  installs is documented above. Total replacement is < 500 lines.
+- D4 (prereq verification), D5 (distroprefs), D6 (snapshot tests):
+  not yet attempted.
+
+##### Phase D — sub-phases (unchanged from earlier draft)
 
 ##### D1 — Bundle the upstream `.pm` files
 
