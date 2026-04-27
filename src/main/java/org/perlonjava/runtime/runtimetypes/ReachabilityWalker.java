@@ -1,10 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 /**
  * Phase 4 (refcount_alignment_plan.md): On-demand reachability walker.
@@ -298,147 +297,6 @@ public class ReachabilityWalker {
         if (reachable.add(b)) {
             todo.addLast(b);
         }
-    }
-
-    /**
-     * Lightweight per-object reachability query: walk from Perl-visible
-     * roots and return {@code true} as soon as {@code target} is found,
-     * without enumerating the full live set.
-     * <p>
-     * Used by {@link MortalList#flush} to avoid prematurely firing
-     * DESTROY on a blessed object whose cooperative refCount dipped to
-     * 0 transiently while the object is still held by a container the
-     * walker can see (globals, hash/array elements registered in
-     * {@link ScalarRefRegistry}). Concrete failure mode without this
-     * check: Class::MOP self-bootstrap weakens ~10 attribute back-refs
-     * to a single metaclass; refCount drift under heavy reference
-     * shuffling drops the count to 0; flush fires DESTROY; weak refs
-     * clear; bootstrap dies.
-     * <p>
-     * BFS with a hard step cap so the cost stays bounded (the worst
-     * case is the same nodes-visited bound as a full sweep, which is
-     * fine because flush is already O(pending) per call).
-     *
-     * @param target the object to check for reachability
-     * @return true iff target is reachable from roots through strong refs
-     */
-    public static boolean isReachableFromRoots(RuntimeBase target) {
-        if (target == null) return false;
-        // Hard cap to prevent pathological worst-case walks. Class::MOP
-        // bootstrap touches ~thousands of nodes; pick a generous limit
-        // that still bounds cost.
-        final int MAX_VISITS = 50_000;
-
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
-
-        // Seed: package globals (scalars, arrays, hashes, code refs).
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
-        }
-        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
-        }
-        // Seed: ScalarRefRegistry-tracked scalars whose declaration
-        // scope is still live (per MyVarCleanupStack). This is what
-        // makes hash elements like $METAS{HasMethods} act as roots —
-        // their enclosing my %METAS hash is on the live-vars stack.
-        //
-        // The MyVarCleanupStack filter is critical: ScalarRefRegistry
-        // alone holds stale entries (scope-exited scalars that haven't
-        // been JVM-GC'd yet). Without filtering, cycle-broken-via-weaken
-        // tests would falsely consider the cycle members reachable
-        // through their own (scope-exited) scalars.
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-            if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
-            if (sc.scopeExited) continue;
-            seedTarget(sc, target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        // Seed: live my-vars themselves (RuntimeHash / RuntimeArray /
-        // RuntimeScalar instances currently registered in
-        // MyVarCleanupStack). Walking INTO these picks up hash/array
-        // elements that hold strong refs to the target — e.g.
-        // `our %METAS = ();` registers the RuntimeHash, and walking
-        // its values surfaces the metaclass.
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeBase rb) {
-                if (rb == target) return true;
-                if (seen.add(rb)) todo.addLast(rb);
-            } else if (liveVar instanceof RuntimeScalar sc) {
-                seedTarget(sc, target, seen, todo);
-                if (seen.contains(target)) return true;
-            }
-        }
-        // Seed: rescued objects.
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-            if (rescued == target) return true;
-            if (seen.add(rescued)) todo.addLast(rescued);
-        }
-
-        // BFS, short-circuiting on target.
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            if (cur == target) return true;
-            if (cur instanceof RuntimeHash h) {
-                for (RuntimeScalar v : h.elements.values()) {
-                    if (followScalar(v, target, seen, todo)) return true;
-                }
-            } else if (cur instanceof RuntimeArray a) {
-                for (RuntimeScalar v : a.elements) {
-                    if (followScalar(v, target, seen, todo)) return true;
-                }
-            }
-            // Note: we deliberately don't follow RuntimeCode.capturedScalars
-            // here — closure captures are NOT considered strong reachability
-            // edges for this query (matches the default of
-            // ReachabilityWalker.walk() which has walkCodeCaptures=false
-            // for the second-phase BFS).
-        }
-        return false;
-    }
-
-    private static void seedTarget(RuntimeScalar s, RuntimeBase target,
-                                   Set<RuntimeBase> seen,
-                                   java.util.ArrayDeque<RuntimeBase> todo) {
-        if (s == null) return;
-        if (WeakRefRegistry.isweak(s)) return;
-        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && s.value instanceof RuntimeBase b) {
-            if (b == target) {
-                seen.add(target);
-                return;
-            }
-            if (seen.add(b)) todo.addLast(b);
-        }
-    }
-
-    private static boolean followScalar(RuntimeScalar s, RuntimeBase target,
-                                        Set<RuntimeBase> seen,
-                                        java.util.ArrayDeque<RuntimeBase> todo) {
-        if (s == null) return false;
-        if (WeakRefRegistry.isweak(s)) return false;
-        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && s.value instanceof RuntimeBase b) {
-            if (b == target) return true;
-            if (seen.add(b)) todo.addLast(b);
-        }
-        return false;
     }
 
     /**
