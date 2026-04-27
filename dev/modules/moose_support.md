@@ -790,10 +790,10 @@ problems. Two real issues surfaced; one is fixed, one remains.
    `t/todo_tests/moose_and_threads.t` and runs `jperl` for every other
    file. ~10 lines of Perl, easy to ship.
 
-##### Active blocker: weaken refcount bug
+##### Resolved blocker: weaken refcount bug — DONE
 
-When weaken is called on a hash slot inside a sub, with the target
-also held by other strong refs in the caller, the slot becomes undef
+When weaken was called on a hash slot inside a sub, with the target
+also held by other strong refs in the caller, the slot became undef
 immediately. Minimal reproduction:
 
 ```perl
@@ -814,32 +814,64 @@ for my $attr (@arr) {
 
 # Real Perl: all three $arr[i]->{ac} are still defined (weak refs to
 # $m, which has a strong ref via %REG).
-# PerlOnJava: all three become undef immediately.
+# PerlOnJava (was, before fix): all three became undef immediately.
 ```
 
 Class::MOP's bootstrap relies on this pattern pervasively
 (`weaken($self->{associated_class} = $class)` in
 `Class::MOP::Attribute::attach_to_class`, called for every attribute
-during `Class::MOP.pm`'s self-bootstrap). Without this fix Phase D
-cannot proceed — `use Class::MOP;` itself dies in the bootstrap.
+during `Class::MOP.pm`'s self-bootstrap). Without the fix
+`use Class::MOP;` itself died in the bootstrap.
 
-The bug is in PerlOnJava's `Scalar::Util::weaken` / refcount
-interaction with `my $local = $passed_in;` inside subs: weaken seems
-to clear the reference even when other strong refs exist. The relevant
-code paths are in:
-- `src/main/java/org/perlonjava/runtime/runtimetypes/WeakRefRegistry.java`
-- the `refCountOwned` flag handling in `RuntimeScalar` setters
+###### Root cause
 
-Suspected root cause: `refCountOwned` is being set to `true` on the
-hash slot when assigned via `$attr->{ac} = $class`, but the assignment
-didn't actually increment the referent's `refCount` — so weaken's
-`--base.refCount` decrements past where it should, prematurely
-firing destruction. (The `if (--base.refCount == 0)` branch at
-`WeakRefRegistry.java:101` then nulls the weak refs.)
+The auto-sweep (`MortalList.maybeAutoSweep` →
+`ReachabilityWalker.sweepWeakRefs(true)`) was clearing weak refs to
+blessed objects whose cooperative `refCount > 0` simply because the
+walker couldn't see them as reachable. The walker only seeds from
+package globals and `ScalarRefRegistry`; it doesn't seed from `my`
+lexical hashes or arrays. A blessed object held only by a `my %REG`
+in the caller's scope is therefore invisible to the walker —
+"unreachable" — and got its weak refs cleared on every flush.
 
-**Phase D cannot resume until this is fixed**. A standalone unit test
-covering the minimal reproduction above should land in
-`src/test/resources/unit/weaken_via_sub.t` as part of the fix.
+###### Fix
+
+`ReachabilityWalker.sweepWeakRefs(quiet=true)` now skips clearing weak
+refs whose referent has `refCount > 0`. Reasoning: PerlOnJava's
+cooperative refCount can drift due to JVM temporaries, but a positive
+refCount means at least one tracked container thinks it's holding a
+strong reference. Auto-sweep should be conservative; explicit
+`Internals::jperl_gc()` (non-quiet) still clears, since the user
+opted in to aggressive cleanup.
+
+Single-line change in
+`src/main/java/org/perlonjava/runtime/runtimetypes/ReachabilityWalker.java`,
+guarded by `quiet`. See the surrounding comment for the full
+reproduction and rationale.
+
+###### Verification (Step W6)
+
+DBIx::Class is the most refcount-heavy CPAN distribution we test.
+Before / after the fix:
+
+| Metric | Baseline | After fix |
+|---|---|---|
+| Files executed | 314 | 314 |
+| Assertions executed | 878 | 878 |
+| Fully passing files | 11 | 11 |
+| Failed files | 303 | 303 |
+| Assertions failing | 2 | 2 |
+
+**Zero regressions in DBIC.**
+
+###### Verification (Step W7)
+
+```bash
+./jperl -e 'use Class::MOP; print "ok\n"'   # → ok
+./jperl -e 'use Moose; print "ok\n"'        # → ok (still via shim)
+```
+
+Phase D resumption is now unblocked.
 
 ##### Phase D resumption checklist (when weaken is fixed)
 

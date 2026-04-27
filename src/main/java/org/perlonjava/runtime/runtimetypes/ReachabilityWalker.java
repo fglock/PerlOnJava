@@ -354,6 +354,38 @@ public class ReachabilityWalker {
                         && referent.localBindingExists) {
                     continue;
                 }
+                // In quiet (auto-sweep) mode, skip clearing weak refs to
+                // any referent whose cooperative refCount is still
+                // positive. PerlOnJava's refCount can drift due to JVM
+                // temporaries, but a refCount > 0 means at least one
+                // tracked container thinks it's holding a strong ref.
+                // The walker, however, doesn't seed from `my` lexical
+                // hashes/arrays — so a blessed object held only by a
+                // `my %REG` is invisible to the walker (looks
+                // unreachable) but is in fact still alive. Clearing
+                // its weak refs eats them while strong refs still
+                // exist.
+                //
+                // Concrete reproducer (Class::MOP attach_to_class):
+                //   my $m = bless {}, "M";
+                //   my %REG = (x => $m);
+                //   sub attach { my (..., $class) = @_;
+                //       $attr->{ac} = $class;
+                //       weaken($attr->{ac});  # base.refCount > 0 here
+                //   }
+                //   for my $a (@arr) { attach($a, $REG{x}); }
+                //   # Without this guard, auto-sweep nukes every
+                //   # $a->{ac} on the next flush because the walker
+                //   # sees $m as unreachable (via `my %REG`).
+                //
+                // The non-quiet (explicit `Internals::jperl_gc()`)
+                // path still proceeds — that's the user opting in to
+                // aggressive cleanup.
+                //
+                // See dev/modules/moose_support.md, Phase D / Step W.
+                if (quiet && referent.refCount > 0) {
+                    continue;
+                }
                 // Phase I (52leaks/60core): skip clearing weak refs to
                 // scalars that hold CODE refs, or scalars that are already
                 // UNDEF. These are commonly Sub::Quote/Sub::Defer
