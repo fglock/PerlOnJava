@@ -267,8 +267,15 @@ sub _next {
                         next if $!{EINTR};
                         if ($_test_timeout && time() > $_deadline) {
                             warn "# Test timed out after ${_test_timeout}s\n";
-                            kill 9, $self->{pid}
-                                if defined $self->{pid};
+                            if (defined $self->{pid}) {
+                                # Kill the process group, not just the immediate
+                                # child. The child may be a shell wrapper (e.g.
+                                # ./jperl) that spawned a JVM without exec — a
+                                # plain `kill 9 $pid` only kills the wrapper and
+                                # orphans the JVM. Negative PID = process group.
+                                kill 9, -$self->{pid};
+                                kill 9,  $self->{pid};
+                            }
                             last;
                         }
                         next if $_test_timeout;

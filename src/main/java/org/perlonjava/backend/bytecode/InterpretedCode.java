@@ -30,6 +30,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int maxRegisters;         // Number of registers needed
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
+    // `our` declarations visible at compile time, kept so that eval STRING can
+    // inherit the caller's `our` aliases (name → declaring package). Without
+    // this, eval STRING with an inner `package Foo;` loses the outer `our`
+    // binding and resolves the name to $Foo::... instead of the original one.
+    public Map<String, String> ourVariableRegistry;
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
     public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strictOptions, featureFlags]
 
@@ -80,6 +85,38 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final int sourceLine;           // Source line number
     public final TreeMap<Integer, Integer> pcToTokenIndex;  // Map bytecode PC to tokenIndex for error reporting (TreeMap for floorEntry lookup)
     public final ErrorMessageUtil errorUtil; // For converting token index to line numbers
+
+    // BitSet of register indices that are actual "my" variables (not temporaries).
+    // Computed from SCOPE_EXIT_CLEANUP opcodes in the bytecode.
+    // Used by exception propagation cleanup to avoid calling scopeExitCleanup
+    // on temporaries that may alias hash/array elements (which would incorrectly
+    // decrement refCounts and cause premature DESTROY).
+    public final BitSet myVarRegisters;
+
+    /**
+     * Scan bytecodes for SCOPE_EXIT_CLEANUP, SCOPE_EXIT_CLEANUP_HASH, and
+     * SCOPE_EXIT_CLEANUP_ARRAY opcodes to identify which registers hold actual
+     * "my" variables. These are the only registers that should get
+     * scopeExitCleanup during exception propagation.
+     * <p>
+     * Uses a simple scan: looks for the specific opcode values and reads the
+     * next int as the register index. Since SCOPE_EXIT_CLEANUP opcodes have
+     * high values (463, 466, 467) that are unlikely to appear as register
+     * indices, false positives are extremely rare.
+     */
+    private static BitSet scanMyVarRegisters(int[] bytecode) {
+        BitSet result = new BitSet();
+        for (int i = 0; i < bytecode.length - 1; i++) {
+            int opcode = bytecode[i];
+            if (opcode == Opcodes.SCOPE_EXIT_CLEANUP
+                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_HASH
+                    || opcode == Opcodes.SCOPE_EXIT_CLEANUP_ARRAY) {
+                result.set(bytecode[i + 1]);
+                i++; // skip the operand
+            }
+        }
+        return result;
+    }
 
     /**
      * Constructor for InterpretedCode.
@@ -155,6 +192,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (this.packageName == null && compilePackage != null) {
             this.packageName = compilePackage;
         }
+        // Scan bytecodes to find registers used by SCOPE_EXIT_CLEANUP opcodes.
+        // These are the actual "my" variable registers that need cleanup during
+        // exception propagation. Temporaries (hash element aliases, method return
+        // values) are NOT in this set and should NOT get scopeExitCleanup.
+        this.myVarRegisters = scanMyVarRegisters(bytecode);
         // Register with WarningBitsRegistry for caller()[9] support
         if (warningBitsString != null) {
             String registryKey = "interpreter:" + System.identityHashCode(this);

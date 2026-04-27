@@ -205,10 +205,14 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // First, fully materialize the right-hand side list BEFORE clearing
                 // This is critical for self-referential assignments like: %h = (new_stuff, %h)
                 // We must capture the current hash contents before clearing.
+                // Use direct element addition (not push()) to avoid spurious refCount
+                // increments on the temporary materialized list — push() calls
+                // incrementRefCountForContainerStore, which would create unmatched
+                // refCounts that prevent DESTROY from firing.
                 RuntimeArray materializedList = new RuntimeArray();
                 Iterator<RuntimeScalar> iterator = value.iterator();
                 while (iterator.hasNext()) {
-                    materializedList.push(new RuntimeScalar(iterator.next()));
+                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
                 // Store the original list size for scalar context
@@ -272,10 +276,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 // First, fully materialize the right-hand side list
                 // This is important for cases like %t1 = (@t2{'a','b'})
                 // where @t2 is also tied and we need to fetch values before clearing
+                // Use direct element addition (not push()) — see PLAIN_HASH comment.
                 RuntimeArray materializedList = new RuntimeArray();
                 Iterator<RuntimeScalar> iterator = value.iterator();
                 while (iterator.hasNext()) {
-                    materializedList.push(new RuntimeScalar(iterator.next()));
+                    materializedList.elements.add(new RuntimeScalar(iterator.next()));
                 }
 
                 // Now clear and repopulate from the materialized list
@@ -382,6 +387,48 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
         // Lazy autovivification
         return new RuntimeHashProxyEntry(this, key);
+    }
+
+    /**
+     * Retrieves a value by key, always returning a RuntimeHashProxyEntry.
+     * Used by {@code local $hash{key}} to ensure the save/restore mechanism
+     * can survive hash reassignment ({@code %hash = (...)}), which clears
+     * {@code elements} and creates new RuntimeScalar objects. The proxy
+     * holds parent + key references so {@code dynamicRestoreState()} can
+     * write back to the hash by key instead of through a stale lvalue pointer.
+     *
+     * @param key The string key for the hash entry.
+     * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
+     */
+    public RuntimeScalar getForLocal(String key) {
+        RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key);
+        RuntimeScalar existing = elements.get(key);
+        if (existing != null) {
+            proxy.initLvalue(existing);
+        }
+        return proxy;
+    }
+
+    /**
+     * Retrieves a value by key, always returning a RuntimeHashProxyEntry.
+     * Used by {@code local $hash{key}} to ensure the save/restore mechanism
+     * can survive hash reassignment ({@code %hash = (...)}), which clears
+     * {@code elements} and creates new RuntimeScalar objects. The proxy
+     * holds parent + key references so {@code dynamicRestoreState()} can
+     * write back to the hash by key instead of through a stale lvalue pointer.
+     *
+     * @param keyScalar The RuntimeScalar representing the key for the hash entry.
+     * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
+     */
+    public RuntimeScalar getForLocal(RuntimeScalar keyScalar) {
+        String key = keyScalar.toString();
+        boolean isByteKey = keyScalar.type == BYTE_STRING;
+        RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key, isByteKey);
+        RuntimeScalar existing = elements.get(key);
+        if (existing != null) {
+            proxy.initLvalue(existing);
+        }
+        return proxy;
     }
 
     /**
@@ -564,10 +611,46 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeScalar representing the hash reference.
      */
     public RuntimeScalar createReference() {
-        // No birth tracking here. Named hashes (\%h) have a JVM local variable
-        // holding them that isn't counted in refCount, so starting at 0 would
-        // undercount. Birth tracking for anonymous hashes ({}) happens in
-        // createReferenceWithTrackedElements() where refCount IS complete.
+        // Opt into refCount tracking when a reference to a named hash is created.
+        // Named hashes start at refCount=-1 (untracked). When \%hash creates a
+        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // and set localBindingExists=true to indicate a JVM local variable slot
+        // holds a strong reference not counted in refCount.
+        // This allows setLargeRefCounted to properly count references, and
+        // scopeExitCleanupHash to skip element cleanup when external refs exist.
+        // Without this, scope exit of `my %hash` would destroy elements even when
+        // \%hash is stored elsewhere (e.g., $obj->{data} = \%hash).
+        if (this.refCount == -1) {
+            this.refCount = 0;
+            this.localBindingExists = true;
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = HASHREFERENCE;
+        result.value = this;
+        return result;
+    }
+
+    /**
+     * Creates a reference to a fresh anonymous hash (no backing named variable).
+     * Unlike {@link #createReference()}, this does NOT set localBindingExists=true,
+     * so callDestroy will fire when refCount reaches 0.
+     * <p>
+     * Used by Storable::dclone, deserializers, and other places that produce a
+     * brand-new anonymous hash whose only references come from the returned
+     * scalar (and eventually from whatever variable/slot stores it). Using the
+     * plain {@link #createReference()} on these would spuriously mark them as
+     * named-bound, suppressing DESTROY / weak-ref clearing. See DBIC
+     * t/52leaks.t test 18 (Storable::dclone of $base_collection).
+     *
+     * @return A RuntimeScalar representing the hash reference.
+     */
+    public RuntimeScalar createAnonymousReference() {
+        // Birth-track the anonymous hash (same as {...} constructor path).
+        // refCount=0 means tracked with zero counted containers; setLargeRefCounted
+        // will bump to 1 when this reference is assigned to a variable.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = HASHREFERENCE;
         result.value = this;
@@ -981,16 +1064,71 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
+        // Fast path: if no value could possibly fire a DESTROY, use the
+        // old one-shot path (one flush total instead of N flushes). The
+        // slow progressive path below is only required when at least one
+        // value is a blessed reference whose destructor might inspect
+        // the remaining hash entries (op/undef.t 19-35, bug 3096).
+        //
+        // Without this fast path, large schema-style hashes paid
+        // O(N) flushes + auto-sweep checks per `undef %hash`, which under
+        // parallel-load DBIC tests pushed t/cdbi/68 / t/96 / t/debug/core
+        // past their 300s harness timeout.
+        if (!hasDestroyableValues()) {
+            MortalList.deferDestroyForContainerClear(this.elements.values());
+            if (this.type == PLAIN_HASH) {
+                this.elements = new StableHashMap<>();
+            } else {
+                this.elements.clear();
+            }
+            this.byteKeys = null;
+            MortalList.flush();
+            return this;
+        }
+
+        // Slow path: fire DESTROYs one-at-a-time so each destructor sees
+        // the remaining entries of the (progressively shrinking) hash.
+        // Matches Perl's semantics for `undef %hash` on blessed values —
+        // op/undef.t 19-35 (bug 3096): destructors expect keys/values/each
+        // to be consistent with what has not yet been destroyed, and may
+        // re-insert entries (which will then be destroyed in subsequent
+        // iterations).
+        while (!this.elements.isEmpty()) {
+            Iterator<Map.Entry<String, RuntimeScalar>> it = this.elements.entrySet().iterator();
+            Map.Entry<String, RuntimeScalar> entry = it.next();
+            String key = entry.getKey();
+            RuntimeScalar value = entry.getValue();
+            it.remove();
+            if (this.byteKeys != null) this.byteKeys.remove(key);
+            // Defer DESTROY for this one value, then flush so it runs now.
+            MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(value));
+            MortalList.flush();
+        }
         // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
-        MortalList.deferDestroyForContainerClear(this.elements.values());
         if (this.type == PLAIN_HASH) {
             this.elements = new StableHashMap<>();
-        } else {
-            this.elements.clear();
         }
         this.byteKeys = null;
-        MortalList.flush();
         return this;
+    }
+
+    /**
+     * Quick scan: does this hash contain any value whose DESTROY could be
+     * triggered by undef %hash? Only blessed references qualify — plain
+     * scalars (strings, ints, undef) and unblessed refs never have a
+     * destructor. Used by undefine() to take a fast path that avoids
+     * O(N) MortalList flushes for the common case (e.g. DBIC schema
+     * hashes that hold plain SQL strings or unblessed result-source
+     * structures).
+     */
+    private boolean hasDestroyableValues() {
+        for (RuntimeScalar v : this.elements.values()) {
+            if (v == null) continue;
+            if ((v.type & RuntimeScalarType.REFERENCE_BIT) == 0) continue;
+            if (!(v.value instanceof RuntimeBase b)) continue;
+            if (b.blessId != 0) return true;
+        }
+        return false;
     }
 
     /**
@@ -1055,6 +1193,27 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!dynamicStateStack.isEmpty()) {
             // Restore the elements map and blessId from the most recent saved state
             RuntimeHash previousState = dynamicStateStack.pop();
+            // Before discarding the current (local scope's) elements, defer
+            // refCount decrements for any tracked blessed references they own.
+            // Without this, `local %hash = (key => $obj)` where $obj is tracked
+            // would leak refCounts because the local elements are replaced without
+            // ever going through scopeExitCleanup.
+            MortalList.deferDestroyForContainerClear(this.elements.values());
+            // Real Perl semantics: a `local %h` that gets `bless`ed during the
+            // local scope must fire DESTROY when restored — the local'd
+            // temporary is conceptually freed. PerlOnJava reuses the same HV,
+            // so we fire DESTROY explicitly. See RuntimeArray.dynamicRestoreState
+            // for the equivalent fix for arrays.
+            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+                int savedBlessId = this.blessId;
+                int savedRefCount = this.refCount;
+                boolean savedDestroyFired = this.destroyFired;
+                this.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(this);
+                this.destroyFired = savedDestroyFired;
+                this.refCount = savedRefCount;
+                this.blessId = savedBlessId;
+            }
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;

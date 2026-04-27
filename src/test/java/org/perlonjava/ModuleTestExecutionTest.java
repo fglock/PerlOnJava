@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -55,6 +56,19 @@ public class ModuleTestExecutionTest {
     private String originalUserDir;
 
     /**
+     * Test files that are explicitly skipped from the bundled module test
+     * suite. Each entry should carry a brief rationale in the comment.
+     *
+     * Keep this list small and well-justified — if a real bug gets hidden
+     * here, it can affect user programs.
+     */
+    private static final Set<String> SKIPPED_MODULE_TESTS = Set.of(
+        // Pod coverage author-test — depends on Test::Pod::Coverage,
+        // which is not packaged. Not a real functional failure.
+        "module/Net-SSLeay/t/local/01_pod.t"
+    );
+
+    /**
      * Provides a stream of module test file paths (relative to resources root).
      * Discovers all .t files under module test directories.
      */
@@ -79,6 +93,9 @@ public class ModuleTestExecutionTest {
                 .filter(path -> path.toString().endsWith(".t"))
                 .map(resourcesRoot::relativize)
                 .map(Path::toString)
+                // Normalize to forward slashes so the skip list works on Windows too.
+                .map(s -> s.replace('\\', '/'))
+                .filter(s -> !SKIPPED_MODULE_TESTS.contains(s))
                 .sorted()
                 .collect(Collectors.toList());
 

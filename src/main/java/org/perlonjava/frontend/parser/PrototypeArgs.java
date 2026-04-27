@@ -966,6 +966,48 @@ public class PrototypeArgs {
                 }
             }
 
+            // For groups like \[$@%*] (used by tie/untie/tied), reject a
+            // bareword IdentifierNode that wasn't auto-converted to a glob.
+            // Real Perl: `tie FH, 'main'` parses FH as a function call which
+            // returns a constant, then rejects with "Can't modify constant
+            // item in tie ... near 'main';". We emit the same error.
+            //
+            // Valid forms: `tie *FH, 'main'` (glob), `tie $s, 'main'`
+            // (scalar lvalue), etc. Only the bare `tie FH, 'main'` is
+            // rejected, and only inside a `\[...]` group prototype.
+            //
+            // To match Perl's error position ("near 'main';" rather than
+            // "near , 'main'"), advance the parser past the rest of the
+            // statement before throwing. Parser state is irrelevant — we're
+            // about to throw a fatal compile error anyway.
+            if (isGroup && referenceArg instanceof IdentifierNode idNode) {
+                // Build the "near" text manually from the upcoming tokens so
+                // the error matches real Perl's format exactly:
+                //   "Can't modify constant item in tie at - line 3, near \"'main';\""
+                StringBuilder nearSb = new StringBuilder();
+                int peekIdx = parser.tokenIndex;
+                int nonWs = 0;
+                while (peekIdx < parser.tokens.size() && nonWs < 6) {
+                    org.perlonjava.frontend.lexer.LexerToken tok = parser.tokens.get(peekIdx++);
+                    if (tok.type == org.perlonjava.frontend.lexer.LexerTokenType.EOF
+                            || tok.type == org.perlonjava.frontend.lexer.LexerTokenType.NEWLINE) break;
+                    if (tok.text.equals("{") || tok.text.equals("}")) break;
+                    if (tok.type != org.perlonjava.frontend.lexer.LexerTokenType.WHITESPACE) {
+                        nonWs++;
+                    }
+                    nearSb.append(tok.text);
+                }
+                String nearText = nearSb.toString().replaceAll("^\\s+", "").replaceAll("^,\\s*", "");
+                org.perlonjava.runtime.runtimetypes.ErrorMessageUtil.SourceLocation loc =
+                        parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+                String opName = parser.ctx.symbolTable.getCurrentSubroutine();
+                if (opName == null || opName.isEmpty()) opName = "tie";
+                String fullMessage = "Can't modify constant item in " + opName
+                        + " at " + loc.fileName() + " line " + loc.lineNumber()
+                        + ", near \"" + nearText + "\"\n";
+                throw new org.perlonjava.runtime.runtimetypes.PerlCompilerException(fullMessage);
+            }
+
             Node refNode = new OperatorNode("\\", referenceArg, referenceArg.getIndex());
             // References are evaluated in SCALAR context
             refNode.setAnnotation("context", "SCALAR");

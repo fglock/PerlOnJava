@@ -1538,6 +1538,25 @@ public class EmitVariable {
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
 
+                    // Register my-variables on the cleanup stack so DESTROY fires
+                    // if die propagates through this subroutine without eval.
+                    // State/our variables are excluded: state persists across calls,
+                    // our is global.  register() is a no-op until the first bless().
+                    //
+                    // Phase R (classic_experiment_finding.md): skip emission when
+                    // CleanupNeededVisitor proved the enclosing sub has no
+                    // bless/weaken/user-sub-calls — no tracked ref can ever land
+                    // in this my-var, so register/unregister pair is dead code.
+                    if (operator.equals("my")
+                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                                "register",
+                                "(Ljava/lang/Object;)V",
+                                false);
+                    }
+
                     // Emit runtime attribute dispatch for my/state variables.
                     // For 'our', attributes were already dispatched at compile time.
                     if (!operator.equals("our") && node.annotations != null

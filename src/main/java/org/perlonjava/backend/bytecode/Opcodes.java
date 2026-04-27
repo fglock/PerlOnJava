@@ -2292,6 +2292,35 @@ public class Opcodes {
     public static final short POW_NO_OVERLOAD = 479;
     public static final short NEG_NO_OVERLOAD = 480;
 
+    /**
+     * Perl wait() builtin: rd = wait for any child process.
+     * Format: WAIT_OP rd
+     */
+    public static final short WAIT_OP = 481;
+
+    /**
+     * Hash element access for local(): rd = hash_reg.getForLocal(key_reg)
+     * Like HASH_GET but always returns a RuntimeHashProxyEntry (never a bare scalar).
+     * This ensures local $hash{key} can survive hash reassignment (%hash = (...))
+     * because the proxy re-resolves the key in the parent hash on restore.
+     * Format: HASH_GET_FOR_LOCAL rd hashReg keyReg
+     */
+    public static final short HASH_GET_FOR_LOCAL = 482;
+
+    /**
+     * Hash dereference + string key + fetch for local() context.
+     * Like HASH_DEREF_FETCH but calls hashDerefGetForLocal() to return a RuntimeHashProxyEntry.
+     * Format: HASH_DEREF_FETCH_FOR_LOCAL rd hashref_reg key_string_index
+     */
+    public static final short HASH_DEREF_FETCH_FOR_LOCAL = 483;
+
+    /**
+     * Hash dereference + string key + fetch for local() context (non-strict refs).
+     * Like HASH_DEREF_FETCH_NONSTRICT but calls hashDerefGetForLocalNonStrict().
+     * Format: HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL rd hashref_reg key_string_index pkg_string_idx
+     */
+    public static final short HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL = 484;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -24,6 +24,53 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int refCount = -1;
 
     /**
+     * True if this container (hash or array) was created as a named variable
+     * ({@code my %hash} or {@code my @array}) and a reference to it was created
+     * via the {@code \} operator. This flag indicates that a JVM local variable
+     * slot holds a strong reference that is NOT counted in {@code refCount}.
+     * <p>
+     * When {@code refCount} reaches 0, this flag prevents premature destruction:
+     * the local variable may still be alive, so the container is not truly
+     * unreferenced. The flag is cleared by {@code scopeExitCleanupHash/Array}
+     * when the local variable's scope ends, allowing subsequent refCount==0
+     * to correctly trigger callDestroy.
+     */
+    public boolean localBindingExists = false;
+
+    /**
+     * True once DESTROY has been called for this object. Perl 5 semantics:
+     * if an object is resurrected by DESTROY (stored somewhere during DESTROY),
+     * and its refCount later reaches 0 again, DESTROY is NOT called a second time.
+     * The object is simply freed with weak ref clearing and cascading cleanup.
+     * This prevents infinite DESTROY cycles from self-referential patterns like
+     * Schema::DESTROY re-attaching to a ResultSource.
+     */
+    public boolean destroyFired = false;
+
+    /**
+     * Phase 3 (refcount_alignment_plan.md): True while DESTROY is actively
+     * running on this object. Used as a re-entry guard: when refCount drops
+     * to 0 during the DESTROY body (via deferred decrements from MortalList
+     * flush, closure releases, etc.), the caller transitions refCount to
+     * MIN_VALUE and calls callDestroy. callDestroy detects
+     * {@code currentlyDestroying == true} and restores refCount to 0 (so
+     * subsequent stores can still track refs) then returns without entering
+     * the Perl DESTROY body a second time.
+     */
+    public boolean currentlyDestroying = false;
+
+    /**
+     * Phase 3 (refcount_alignment_plan.md): True when a previous DESTROY
+     * body left the object with a strong reference count > 0 (resurrection
+     * via an escaped strong ref). Matches Perl 5's semantics for
+     * re-invoking DESTROY when the resurrected object is finally released.
+     * Checked in callDestroy to decide whether to invoke Perl DESTROY a
+     * second time. Required for DBIC detected_reinvoked_destructor pattern
+     * (t/storage/txn_scope_guard.t test 18).
+     */
+    public boolean needsReDestroy = false;
+
+    /**
      * Global flag: true once any object has been blessed (blessId set to non-zero).
      * Used by MortalList.scopeExitCleanupArray/Hash to skip expensive container
      * walks when no blessed objects have ever been created in this JVM instance.

@@ -1,5 +1,17 @@
 # Plan: DBI Test Suite Parity
 
+> **Branch status note (2026-04-24):** on `perf/dbic-safe-port`
+> (PR #552), the architectural switch to upstream DBI 1.647 +
+> DBI::PurePerl (described in Phase 9 / Phase 9b below) has been
+> REVERTED back to the pre-merge minimal DBI.pm because the upstream
+> PurePerl broke DBIx::Class (cascading "DBI Connection failed"
+> errors). DBI parity work should continue on a separate branch that
+> fixes the PurePerl incompatibility properly. See
+> [dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md)
+> for details. The numbers and phase descriptions below still
+> describe the upstream-DBI direction as it was measured, but that
+> code is not currently shipped on `perf/dbic-safe-port`.
+
 This document tracks the work needed to make `jcpan -t DBI` (the bundled
 DBI test suite, 200 test files) pass on PerlOnJava.
 

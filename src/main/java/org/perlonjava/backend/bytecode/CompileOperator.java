@@ -647,6 +647,7 @@ public class CompileOperator {
             case "defined" -> visitDefined(bytecodeCompiler, node);
             case "wantarray" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WANTARRAY); bytecodeCompiler.emitReg(rd); bytecodeCompiler.emitReg(2); bytecodeCompiler.lastResultReg = rd; }
             case "time" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.TIME_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
+            case "wait" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emit(Opcodes.WAIT_OP); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "getppid" -> { int rd = bytecodeCompiler.allocateOutputRegister(); bytecodeCompiler.emitWithToken(Opcodes.GETPPID, node.getIndex()); bytecodeCompiler.emitReg(rd); bytecodeCompiler.lastResultReg = rd; }
             case "open" -> visitOpen(bytecodeCompiler, node);
             case "matchRegex" -> visitMatchRegex(bytecodeCompiler, node);
@@ -1151,8 +1152,19 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(operandReg);
                 }
                 int undefReg = bytecodeCompiler.allocateRegister();
-                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                bytecodeCompiler.emitReg(undefReg);
+                if (bytecodeCompiler.currentCallContext == RuntimeContextType.LIST) {
+                    // In LIST context, emit the cached read-only undef so
+                    // `for my $i (@a, undef, @b) { ++$i }` throws at the undef
+                    // slot. See BytecodeCompiler.visit(NumberNode) for the
+                    // symmetric integer treatment. Fixes op/for.t 130-133.
+                    int constIdx = bytecodeCompiler.addToConstantPool(RuntimeScalarCache.scalarUndef);
+                    bytecodeCompiler.emit(Opcodes.LOAD_CONST);
+                    bytecodeCompiler.emitReg(undefReg);
+                    bytecodeCompiler.emit(constIdx);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(undefReg);
+                }
                 bytecodeCompiler.lastResultReg = undefReg;
             }
             case "unaryMinus" -> {

@@ -66,6 +66,33 @@ public class EmitLiteral {
             return;
         }
 
+        // Suppress MortalList.flush() during anon-array-literal construction.
+        //
+        // Without this guard, an inner expression in a later element (e.g.
+        // `bless {...}` returning a new scalar through setLargeRefCounted)
+        // can trigger a mid-construction flush that DESTROYs an already-added
+        // element whose refCount hasn't yet been finalised by
+        // createReferenceWithTrackedElements. Repro: `[ Foo->new(1), Foo->new(2) ]`
+        // prematurely destroying Foo-1 while building Foo-2. This manifests in
+        // Template-Toolkit t/chomp.t / t/directive.t as
+        // "Can't call method clone on undef".
+        //
+        // Strategy: wrap the whole literal-build in suppressFlush(true), then
+        // after createReferenceWithTrackedElements has pinned each element's
+        // refCount via container-store accounting, restore the previous
+        // suppressFlush state and flush any deferred decrements that
+        // accumulated during the build. c8f669b14 tried to solve this by
+        // per-element incref; we prefer the suppress-then-flush envelope
+        // because it keeps refcount accounting symmetric — see the long
+        // note on RuntimeScalar.addToArray for why per-element incref had
+        // DBIC TxnScopeGuard regressions.
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "suppressFlush", "(Z)Z", false);
+        int wasFlushingSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ISTORE, wasFlushingSlot);
+
         // Create a new RuntimeArray instance
         mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeArray");
         mv.visitInsn(Opcodes.DUP);
@@ -100,6 +127,34 @@ public class EmitLiteral {
         // preventing premature destruction of referents stored in anonymous arrays.
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                 "createReferenceWithTrackedElements", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        // Stack: [RuntimeScalar]  (the array reference we'll return)
+
+        // Restore previous suppressFlush state. We deliberately do NOT call
+        // MortalList.flush() here: doing so would drain the entire pending
+        // list including outer-scope mortals that should survive to the
+        // statement boundary (matches Perl's FREETMPS-at-nextstate model).
+        //
+        // The statement-boundary `MortalList.flushAboveMark()` emitted by
+        // EmitBlock at every statement separator handles drainage at the
+        // right time:
+        //   - DBIC: `bless { ... }, "Schema"` mortal lives until end of
+        //     `my $schema = ...;` — flushAboveMark fires after $schema
+        //     captures the ref, so schema stays alive.
+        //   - sort/grep/postfixderef leak tests: comparator/block
+        //     temporaries also flush at statement boundary, matching
+        //     real Perl semantics.
+        //
+        // History: an earlier `flush()` here drained sibling mortals
+        // mid-statement and broke DBIC; a `pushMark`+`popAndFlush`
+        // attempt also broke DBIC because it *removed* above-mark
+        // entries before statement-end could see them. Letting the
+        // existing statement-boundary mechanism do its job is the
+        // simplest correct answer.
+        mv.visitVarInsn(Opcodes.ILOAD, wasFlushingSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "suppressFlush", "(Z)Z", false);
+        mv.visitInsn(Opcodes.POP);
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("visit(ArrayLiteralNode) end");
     }

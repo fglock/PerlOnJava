@@ -29,6 +29,26 @@ public class Overload {
     private static final boolean TRACE_OVERLOAD = false;
 
     /**
+     * Per-thread guard against infinite recursion in stringification when an
+     * overloaded {@code ""} method returns an object whose {@code ""} overload
+     * also returns an overloaded object (directly or transitively).
+     * <p>
+     * Perl handles this by falling back to the default reference stringification
+     * ({@code CLASS=HASH(0x...)}) instead of recursing. We do the same: if we
+     * re-enter {@code stringify} while already processing one, the nested call
+     * returns the default stringification immediately.
+     * <p>
+     * Uses a per-thread depth counter to allow legitimate stringification of
+     * overloaded objects inside overload methods (e.g., an overload that
+     * stringifies a DIFFERENT overloaded object).
+     */
+    private static final ThreadLocal<Integer> stringifyDepth =
+            ThreadLocal.withInitial(() -> 0);
+
+    /** Maximum {@code stringify} recursion before we give up and return default. */
+    private static final int STRINGIFY_MAX_DEPTH = 10;
+
+    /**
      * Converts a {@link RuntimeScalar} object to its string representation following
      * Perl's stringification rules.
      *
@@ -36,30 +56,48 @@ public class Overload {
      * @return the string representation based on overloading rules
      */
     public static RuntimeScalar stringify(RuntimeScalar runtimeScalar) {
-        // Prepare overload context and check if object is eligible for overloading
-        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-        if (blessId < 0) {
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try primary overload method
-                RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
-                if (result != null) return result;
-                // Try fallback
-                result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
-                if (result != null) return result;
-                // Try nomethod
-                result = ctx.tryOverloadNomethod(runtimeScalar, "\"\"");
-                if (result != null) return result;
+        // Recursion guard — see STRINGIFY_MAX_DEPTH javadoc.
+        int depth = stringifyDepth.get();
+        if (depth >= STRINGIFY_MAX_DEPTH) {
+            // Skip overload dispatch and return the raw reference form directly.
+            if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
+                return new RuntimeScalar(runtimeScalar.toStringRef());
             }
+            if (runtimeScalar.value instanceof RuntimeBase base) {
+                return new RuntimeScalar(base.toStringRef());
+            }
+            return new RuntimeScalar("");
         }
 
-        // Default string conversion for non-blessed or non-overloaded objects
-        // For REFERENCE type, use the REFERENCE's toStringRef() to get "REF(...)" format
-        // For other reference types, use the value's toStringRef()
-        if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
-            return new RuntimeScalar(runtimeScalar.toStringRef());
+        stringifyDepth.set(depth + 1);
+        try {
+            // Prepare overload context and check if object is eligible for overloading
+            int blessId = RuntimeScalarType.blessedId(runtimeScalar);
+            if (blessId < 0) {
+                OverloadContext ctx = OverloadContext.prepare(blessId);
+                if (ctx != null) {
+                    // Try primary overload method
+                    RuntimeScalar result = ctx.tryOverload("(\"\"", new RuntimeArray(runtimeScalar));
+                    if (result != null) return result;
+                    // Try fallback
+                    result = ctx.tryOverloadFallback(runtimeScalar, "(0+", "(bool");
+                    if (result != null) return result;
+                    // Try nomethod
+                    result = ctx.tryOverloadNomethod(runtimeScalar, "\"\"");
+                    if (result != null) return result;
+                }
+            }
+
+            // Default string conversion for non-blessed or non-overloaded objects
+            // For REFERENCE type, use the REFERENCE's toStringRef() to get "REF(...)" format
+            // For other reference types, use the value's toStringRef()
+            if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
+                return new RuntimeScalar(runtimeScalar.toStringRef());
+            }
+            return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).toStringRef());
+        } finally {
+            stringifyDepth.set(depth);
         }
-        return new RuntimeScalar(((RuntimeBase) runtimeScalar.value).toStringRef());
     }
 
     /**

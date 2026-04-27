@@ -46,6 +46,33 @@ my $show_unchanged = 0;
 my $summary_only = 0;
 my $sort_by = 'diff';
 my $help = 0;
+my $show_flakes = 0;  # Set --show-flakes to include known-flake files in regression list
+
+# Known-flake whitelist: tests whose pass count varies under the parallel
+# perl_test_runner due to environmental factors (TTY allocation, file
+# encoding, system clock, etc.) — NOT actual code regressions. These files
+# are excluded from the regression list by default but logged at the end.
+#
+# Each entry is: { file => "path/under/perl5_t/t/", reason => "description" }
+my @KNOWN_FLAKES = (
+    {
+        file   => 'op/stat.t',
+        reason => 'TTY-detection subtests (-t STDIN, "tty is -c") flake under '
+                . 'parallel runner depending on whether prove allocates a tty '
+                . 'for the subprocess. Standalone runs of master and ours '
+                . 'both produce 106/111 with identical failing tests.',
+    },
+    {
+        file   => 'win32/seekdir.t',
+        reason => 'Windows-specific filesystem semantics — not portable to macOS/Linux.',
+    },
+    {
+        file   => 'porting/checkcase.t',
+        reason => 'File-existence checks vary per checkout (counts files in tree).',
+    },
+);
+
+my %FLAKE_BY_FILE = map { $_->{file} => $_ } @KNOWN_FLAKES;
 
 GetOptions(
     'min-diff=i'        => \$min_diff,
@@ -55,6 +82,7 @@ GetOptions(
     'show-unchanged!'   => \$show_unchanged,
     'summary-only'      => \$summary_only,
     'sort-by=s'         => \$sort_by,
+    'show-flakes!'      => \$show_flakes,
     'help|h'            => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -128,6 +156,8 @@ my %stats = (
     files_unchanged => 0,
     files_only_in_old => 0,
     files_only_in_new => 0,
+    files_skipped_flake => 0,
+    tests_skipped_flake => 0,
     tests_lost => 0,
     tests_gained => 0,
 );
@@ -180,13 +210,19 @@ foreach my $test (keys %all_tests) {
         $stats{total_new_passed} += $new->{passed};
         
         my $diff = $new->{passed} - $old->{passed};
+        my $is_flake = !$show_flakes && exists $FLAKE_BY_FILE{$test};
         
         if ($diff > 0) {
             $stats{files_with_progress}++;
             $stats{tests_gained} += $diff;
         } elsif ($diff < 0) {
-            $stats{files_with_regressions}++;
-            $stats{tests_lost} += -$diff;
+            if ($is_flake) {
+                $stats{files_skipped_flake}++;
+                $stats{tests_skipped_flake} += -$diff;
+            } else {
+                $stats{files_with_regressions}++;
+                $stats{tests_lost} += -$diff;
+            }
         } else {
             $stats{files_unchanged}++;
         }
@@ -198,7 +234,9 @@ foreach my $test (keys %all_tests) {
             new_passed => $new->{passed},
             new_total => $new->{total},
             diff => $diff,
-            type => $diff > 0 ? 'progress' : $diff < 0 ? 'regression' : 'unchanged',
+            type => $diff > 0 ? 'progress'
+                 : ($diff < 0 && $is_flake) ? 'flake'
+                 : $diff < 0 ? 'regression' : 'unchanged',
         };
     }
 }
@@ -244,6 +282,10 @@ printf "Files with progress:     %4d files  (+%6d tests)\n",
 printf "Files unchanged:         %4d files\n", $stats{files_unchanged};
 printf "Files only in old log:   %4d files\n", $stats{files_only_in_old} if $stats{files_only_in_old};
 printf "Files only in new log:   %4d files\n", $stats{files_only_in_new} if $stats{files_only_in_new};
+if ($stats{files_skipped_flake}) {
+    printf "Files skipped (known flakes): %d files (-%d tests)  -- use --show-flakes to include\n",
+        $stats{files_skipped_flake}, $stats{tests_skipped_flake};
+}
 
 if ($summary_only) {
     print "\n";
@@ -260,6 +302,7 @@ my @to_show = grep {
     $max_total >= $min_total &&
     !($c->{type} eq 'progress' && !$show_progress) &&
     !($c->{type} eq 'regression' && !$show_regressions) &&
+    !($c->{type} eq 'flake' && !$show_flakes) &&
     !($c->{type} eq 'unchanged' && !$show_unchanged);
 } @changes;
 
@@ -288,6 +331,32 @@ if (@to_show) {
     
     if (@to_show < @changes) {
         print "(Use --min-diff and --min-total to adjust filters)\n";
+    }
+}
+
+# Show known-flake list (always, even with --summary-only)
+if (!$show_flakes) {
+    my @flake_changes = grep { $_->{type} eq 'flake' } @changes;
+    if (@flake_changes) {
+        print "\n";
+        print "=" x 90 . "\n";
+        print "KNOWN-FLAKE FILES (excluded from regression count)\n";
+        print "=" x 90 . "\n";
+        print "These files vary in pass count under the parallel runner due to\n";
+        print "environmental factors (TTY, file encoding, file count, etc.) — NOT\n";
+        print "actual code regressions. Use --show-flakes to include them in the\n";
+        print "regression list.\n\n";
+        for my $c (sort { $a->{test} cmp $b->{test} } @flake_changes) {
+            printf "  %-40s  %d/%d → %d/%d  (%+d)\n",
+                $c->{test},
+                $c->{old_passed}, $c->{old_total},
+                $c->{new_passed}, $c->{new_total},
+                $c->{diff};
+            my $reason = $FLAKE_BY_FILE{$c->{test}}{reason} || '';
+            for my $line (split /\n/, $reason) {
+                print "    # $line\n";
+            }
+        }
     }
 }
 

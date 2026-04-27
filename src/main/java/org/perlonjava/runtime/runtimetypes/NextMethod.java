@@ -142,8 +142,9 @@ public class NextMethod {
      * Find the next method in the hierarchy with explicit search class
      */
     private static RuntimeScalar findNextMethod(RuntimeArray args, String callerPackage, String methodName, String searchClass) {
-        // Get the linearized inheritance hierarchy using the appropriate MRO
-        List<String> linearized = InheritanceResolver.linearizeHierarchy(searchClass);
+        // Get the linearized inheritance hierarchy always using C3.
+        // In Perl 5, next::method always uses C3 regardless of the class's MRO setting.
+        List<String> linearized = InheritanceResolver.linearizeC3Always(searchClass);
 
         if (DEBUG_NEXT_METHOD) {
             System.out.println("DEBUG: linearization = " + linearized);

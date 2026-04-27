@@ -93,26 +93,55 @@ public class EmitStatement {
         java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
         java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
 
-        // Only emit pushMark/popAndFlush when there are variables that need cleanup.
-        // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
-        // skip this entirely, eliminating 2 method calls per loop iteration.
-        boolean needsCleanup = flush
-                && (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty());
-
-        // Phase 0: Push mark so popAndFlush only drains entries added by
-        // scopeExitCleanup in Phase 1. Entries from method returns within
-        // the block that are below the mark will be processed by the next
-        // setLarge() or undefine() flush, or by the enclosing scope's exit.
-        if (needsCleanup) {
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "pushMark",
-                    "()V",
-                    false);
+        // Record my-variable indices for eval exception cleanup.
+        // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
+        // we record all my-variable local indices so the catch handler can emit cleanup
+        // for variables whose normal SCOPE_EXIT_CLEANUP was skipped by die.
+        if (ctx.javaClassInfo.evalCleanupLocals != null) {
+            ctx.javaClassInfo.evalCleanupLocals.addAll(scalarIndices);
+            ctx.javaClassInfo.evalCleanupLocals.addAll(hashIndices);
+            ctx.javaClassInfo.evalCleanupLocals.addAll(arrayIndices);
         }
-        // Phase 1: Eagerly unregister fd numbers on scalar variables holding
-        // anonymous filehandle globs. This makes the fd available for reuse
-        // without waiting for non-deterministic GC.
+
+        // Fast path: when CleanupNeededVisitor proved the sub has no
+        // bless / weaken / local / nested-sub / defer / user-sub-call
+        // activity, the MyVarCleanupStack.unregister emission (Phase E)
+        // is dead code — MyVarCleanupStack is only populated when
+        // WeakRefRegistry.weakRefsExist is true, which only ever
+        // becomes true after a weaken() is called somewhere. If this
+        // sub couldn't have weakened anything (the visitor proved it),
+        // skip the per-variable unregister loop.
+        //
+        // We deliberately DO NOT skip Phase 1 (scopeExitCleanup on
+        // scalars) or Phase 1b (scopeExitCleanupHash/Array): those fire
+        // DESTROY for blessed refs that entered this sub via @_ params
+        // or via return values. Skipping them breaks DBIC txn_scope_guard,
+        // tie_scalar DESTROY-on-untie, and other legitimate patterns
+        // where the sub receives a blessed ref it doesn't know about
+        // statically.
+        //
+        // JPERL_FORCE_CLEANUP=1 forces cleanupNeeded=true at the
+        // EmitterMethodCreator level for correctness debugging.
+        //
+        // Phase R (classic_experiment_finding.md): we EXTEND the existing
+        // skipMyVarCleanup gate to also suppress MyVarCleanupStack.register
+        // emission on `my` declarations in EmitVariable. We deliberately
+        // leave Phase 1/1b (scopeExitCleanup, cleanupHash/Array) and Phase 3
+        // (MortalList.flush) emitting unconditionally, per the safety note
+        // above — those fire DESTROY for refs that entered via @_ even if
+        // the sub's AST has no bless/weaken/user-sub-call and was marked
+        // cleanupNeeded=false.
+        boolean skipMyVarCleanup = !ctx.javaClassInfo.cleanupNeeded;
+
+        // Only emit flush when there are variables that need cleanup.
+        // Scopes with no my-variables (e.g., while/for loop bodies with no declarations)
+        // skip the Phase 1/1b cleanup but still flush: pending entries from inner sub
+        // scope exits (e.g., Foo->new()->method() chain temporaries) may need processing.
+        boolean needsCleanup = !scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty();
+
+        // Phase 1: Run scopeExitCleanup for scalar variables.
+        // This defers refCount decrements for blessed references with DESTROY,
+        // and handles IO fd recycling for anonymous filehandle globs.
         for (int idx : scalarIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -144,18 +173,55 @@ public class EmitStatement {
         // For anonymous filehandle globs, this makes them unreachable so the
         // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.
         java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
+        // Phase E (refcount_alignment_52leaks_plan.md): deregister each
+        // my-variable from MyVarCleanupStack before nulling the local slot.
+        // Without this, the static stack holds strong references to
+        // block-scoped scalars until the enclosing subroutine returns,
+        // preventing JVM GC and keeping their RuntimeBase targets alive
+        // past their Perl-level scope. The reachability walker would then
+        // treat the scalar as a live lexical and mark its referent as
+        // reachable, causing false-positive leaks (basic rerefrozen in
+        // DBIC's t/52leaks.t).
+        //
+        // When skipMyVarCleanup is true (CleanupNeededVisitor proved this
+        // sub never uses bless/weaken/user-sub-calls/etc.), the stack is
+        // guaranteed empty for this sub's lexicals, so the unregister
+        // loop is dead code. Skipping it is the win this fast path buys.
+        if (!skipMyVarCleanup) {
+            for (int idx : allIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
+                        "unregister",
+                        "(Ljava/lang/Object;)V",
+                        false);
+            }
+        }
         for (int idx : allIndices) {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
             ctx.mv.visitVarInsn(Opcodes.ASTORE, idx);
         }
-        // Phase 3: Pop mark and flush only entries added since Phase 0.
-        // This triggers DESTROY for blessed objects whose last strong reference was
-        // in a lexical that just went out of scope. Only entries added by Phase 1
-        // are processed; older pending entries from outer scopes are preserved.
-        if (needsCleanup) {
+        // Phase 3: Full flush of ALL pending mortal decrements.
+        // Unlike the previous pushMark/popAndFlush approach, this processes ALL
+        // pending entries — including deferred decrements from subroutine scope
+        // exits that occurred within this block. Those entries were previously
+        // "orphaned" below the mark and never processed, causing:
+        //   - Memory leaks (DESTROY never fires)
+        //   - Premature DESTROY (deferred entries flushed at wrong time by
+        //     setLargeRefCounted, which processes ALL pending entries)
+        //
+        // Full flush is safe here because by the time a scope exits:
+        //   1. All return values from inner method calls have been captured
+        //      (via setLargeRefCounted, which already flushes) or discarded.
+        //   2. The pending entries are only deferred decrements that should
+        //      have been processed earlier (Perl 5 FREETMPS at statement
+        //      boundaries), not entries that need to be preserved.
+        // Flush when requested (non-sub, non-do blocks) even without my-variables,
+        // because pending entries may exist from inner sub scope exits.
+        if (flush) {
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
-                    "popAndFlush",
+                    "flush",
                     "()V",
                     false);
         }

@@ -31,6 +31,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public List<RuntimeScalar> elements;
     // For hash assignment in scalar context: %h = (1,2,3,4) should return 4, not 2
     public Integer scalarContextSize;
+    // True if elements have been stored with refCount tracking (via push/setFromList
+    // calling incrementRefCountForContainerStore). False for @_ which uses aliasing
+    // (setArrayOfAlias) without refCount increments. Checked by pop/shift to decide
+    // whether to mortal-ize removed elements.
+    public boolean elementsOwned;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
 
@@ -105,6 +110,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
+                    // If this element owned a refCount (stored via push or array assignment),
+                    // defer the decrement so the caller can capture the value first.
+                    // This matches Perl 5's sv_2mortal on popped values.
+                    // Only do this for arrays that own their elements (elementsOwned=true).
+                    // @_ uses aliasing (setArrayOfAlias) without refCount increments,
+                    // so its elements must NOT be mortal-ized on shift/pop — doing so
+                    // would corrupt the caller's refCount tracking.
+                    if (runtimeArray.elementsOwned && result.refCountOwned
+                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && result.value instanceof RuntimeBase base
+                            && base.refCount > 0) {
+                        result.refCountOwned = false;
+                        MortalList.deferDecrement(base);
+                    }
                     yield result;
                 }
                 yield scalarUndef;
@@ -134,6 +153,15 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
+                    // If this element owned a refCount, defer the decrement.
+                    // See pop() for rationale and elementsOwned guard.
+                    if (runtimeArray.elementsOwned && result.refCountOwned
+                            && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && result.value instanceof RuntimeBase base
+                            && base.refCount > 0) {
+                        result.refCountOwned = false;
+                        MortalList.deferDecrement(base);
+                    }
                     yield result;
                 }
                 yield scalarUndef;
@@ -171,7 +199,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public static RuntimeScalar push(RuntimeArray runtimeArray, RuntimeBase value) {
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
+                int sizeBefore = runtimeArray.elements.size();
                 value.addToArray(runtimeArray);
+                // Increment refCount for tracked references stored by push.
+                // addToArray creates copies via copy constructor (no refCount increment),
+                // so we must account for the container store here, matching the behavior
+                // of array assignment (setFromList) which also calls this.
+                for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
+                    RuntimeScalar.incrementRefCountForContainerStore(runtimeArray.elements.get(i));
+                }
+                runtimeArray.elementsOwned = true;
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -274,7 +311,33 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     public void add(RuntimeScalar value) {
-        elements.add(new RuntimeScalar(value));
+        // Incref immediately on anon-array-literal add so intermediate
+        // MortalList.flush() calls from subsequent expressions (e.g., another
+        // `bless {...}` assignment) do not drop a pending-mortal referent to
+        // refCount=0 before createReferenceWithTrackedElements finalizes the
+        // array. incrementRefCountForContainerStore is idempotent, so the
+        // final pass in createReferenceWithTrackedElements is a no-op for
+        // these. See tt_arr2.pl / TT directive.t repro.
+        //
+        // NOTE: This method is ONLY called from the anon-array-literal
+        // emit path (EmitLiteral -> addElementToArray -> INVOKEVIRTUAL
+        // "add(LRuntimeScalar;)V"), which is *always* followed by
+        // `createReferenceWithTrackedElements` at the end of the literal.
+        // That final call walks the array's elements and pairs each
+        // incref here with a corresponding refCount-owning reference,
+        // so the accounting balances.
+        //
+        // Do NOT port this incref into {@link RuntimeScalar#addToArray}:
+        // that sister method is also used for arg-list construction
+        // (`f($g)` -> args.addToArray), where no matching decref exists,
+        // and the leaked +1 would break DBIC
+        // t/storage/txn_scope_guard.t#18 (zombie-ref double-DESTROY
+        // detection). See the long comment on
+        // {@link RuntimeScalar#addToArray} for the full analysis and
+        // minimal repro.
+        RuntimeScalar copy = new RuntimeScalar(value);
+        elements.add(copy);
+        RuntimeScalar.incrementRefCountForContainerStore(copy);
     }
 
     public void add(RuntimeArray value) {
@@ -704,6 +767,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 for (RuntimeScalar elem : this.elements) {
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
+                this.elementsOwned = true;
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -721,9 +785,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             case TIED_ARRAY -> {
                 // First, fully materialize the right-hand side list
                 // This is important when the right-hand side contains tied variables
+                // Use direct element addition (not push()) to avoid spurious refCount
+                // increments on the temporary materialized list.
                 RuntimeArray materializedList = new RuntimeArray();
                 for (RuntimeScalar element : list) {
-                    materializedList.push(new RuntimeScalar(element));
+                    materializedList.elements.add(new RuntimeScalar(element));
                 }
 
                 // Now clear and repopulate from the materialized list
@@ -752,11 +818,85 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Set this array's contents from a list without incrementing the
+     * referents' refCounts — i.e., the stored elements are <em>aliases</em>,
+     * not counted strong references. This matches Perl's semantics for
+     * {@code @_} and {@code @DB::args}, whose entries are aliases to the
+     * caller's args and do not affect the referent's refcount.
+     * <p>
+     * Part of Phase 2 of {@code dev/design/refcount_alignment_plan.md}.
+     * Used by {@link RuntimeCode} when populating {@code @DB::args} from
+     * {@code caller()} so that a user's {@code push @kept, @DB::args}
+     * creates real counted refs in {@code @kept} while the alias slots
+     * in {@code @DB::args} stay non-counting.
+     * <p>
+     * Behavior:
+     * <ol>
+     *   <li>Defer-decrement any existing counted elements (like normal {@code setFromList}).</li>
+     *   <li>Copy new elements in without incrementing their referents' refCounts.</li>
+     *   <li>Mark {@code elementsOwned=false} so {@link #shift(RuntimeArray)}
+     *       and other removal paths don't defer a spurious decrement.</li>
+     * </ol>
+     */
+    public RuntimeArray setFromListAliased(RuntimeList list) {
+        if (type != PLAIN_ARRAY) {
+            // Fallback to normal setFromList for non-plain arrays; the
+            // refcount-inflation risk is lower there.
+            return setFromList(list);
+        }
+        MortalList.deferDestroyForContainerClear(this.elements);
+        this.elements.clear();
+        list.addToArray(this);
+        // Elements are aliases: mark as non-owning. setLarge in later
+        // overwrites will still work correctly because setLarge checks
+        // refCountOwned before decrementing.
+        for (RuntimeScalar elem : this.elements) {
+            if (elem != null) elem.refCountOwned = false;
+        }
+        this.elementsOwned = false;
+        return this;
+    }
+
+    /**
      * Creates a reference to the array.
      *
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReference() {
+        // Opt into refCount tracking when a reference to a named array is created.
+        // Named arrays start at refCount=-1 (untracked). When \@array creates a
+        // reference, we transition to refCount=0 (tracked, zero external refs)
+        // and set localBindingExists=true to indicate a JVM local variable slot
+        // holds a strong reference not counted in refCount.
+        // This allows setLargeRefCounted to properly count references, and
+        // scopeExitCleanupArray to skip element cleanup when external refs exist.
+        // Without this, scope exit of `my @array` would destroy elements even when
+        // \@array is stored elsewhere.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+            this.localBindingExists = true;
+        }
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.ARRAYREFERENCE;
+        result.value = this;
+        return result;
+    }
+
+    /**
+     * Creates a reference to a fresh anonymous array (no backing named variable).
+     * Unlike {@link #createReference()}, this does NOT set localBindingExists=true,
+     * so callDestroy will fire when refCount reaches 0.
+     * <p>
+     * Used by Storable::dclone, deserializers, and other places that produce a
+     * brand-new anonymous array. See {@link RuntimeHash#createAnonymousReference()}
+     * for details.
+     *
+     * @return A scalar representing the array reference.
+     */
+    public RuntimeScalar createAnonymousReference() {
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
         RuntimeScalar result = new RuntimeScalar();
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;
@@ -771,6 +911,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return A scalar representing the array reference.
      */
     public RuntimeScalar createReferenceWithTrackedElements() {
+        // Birth-track anonymous arrays: set refCount=0 so setLarge() can
+        // accurately count strong references. Anonymous arrays are only
+        // reachable through references (no lexical variable slot), so
+        // refCount is complete and reaching 0 means truly no strong refs.
+        if (this.refCount == -1) {
+            this.refCount = 0;
+        }
         for (RuntimeScalar elem : this.elements) {
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
@@ -1246,6 +1393,36 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (!dynamicStateStack.isEmpty()) {
             // Pop the most recent saved state from the stack
             RuntimeArray previousState = dynamicStateStack.pop();
+            // Before discarding the current (local scope's) elements, defer
+            // refCount decrements for any tracked blessed references they own.
+            // Without this, `local @_ = ($obj)` where $obj is tracked would
+            // leak refCounts because the local elements are replaced without
+            // ever going through scopeExitCleanup.
+            MortalList.deferDestroyForContainerClear(this.elements);
+            // Real Perl semantics: `local @arr` creates a fresh temporary AV
+            // for the scope; `bless \@arr, 'X'` blesses that temporary; at
+            // local-restore, the temporary is freed and DESTROY fires for
+            // class X. PerlOnJava reuses the same AV across local/restore,
+            // so we need to fire DESTROY explicitly when the current state
+            // was blessed but the previous state was not (or vice-versa
+            // changed bless class). Test: postfixderef.t #38 "no stooges
+            // outlast their scope".
+            if (this.blessId != 0 && this.blessId != previousState.blessId) {
+                int savedBlessId = this.blessId;
+                int savedRefCount = this.refCount;
+                int savedType = this.type;
+                boolean savedDestroyFired = this.destroyFired;
+                // callDestroy contract: caller sets refCount = MIN_VALUE.
+                this.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(this);
+                // Restore for safe state replacement below. Reset
+                // destroyFired so subsequent local/restore cycles can
+                // also fire DESTROY.
+                this.destroyFired = savedDestroyFired;
+                this.refCount = savedRefCount;
+                this.type = savedType;
+                this.blessId = savedBlessId;
+            }
             // Restore the elements from the saved state
             this.elements = previousState.elements;
             // Restore the type from the saved state (important for tied arrays)

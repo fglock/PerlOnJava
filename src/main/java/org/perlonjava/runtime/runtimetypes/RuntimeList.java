@@ -450,6 +450,35 @@ public class RuntimeList extends RuntimeBase {
         return result;
     }
 
+    /**
+     * Apply Perl's distributive {@code \(LIST)} semantics for the refgen
+     * operator. When the list has exactly one element which is an array,
+     * hash, or range, flatten that element so the subsequent
+     * {@link #createListReference()} produces a per-element reference for
+     * each scalar of the array/hash/range. When the list has multiple
+     * top-level elements (or its single element is itself a scalar), do
+     * NOT flatten -- backslash distributes over the top-level items only,
+     * matching:
+     * <pre>
+     *   \(@a)        → (\$a[0], \$a[1], …)            // flatten @a
+     *   \(@a, @b)    → (\@a, \@b)                     // no flatten
+     *   \(1, @a)     → (\1, \@a)                      // no flatten
+     *   \my (\@f, @g) → (\\@f, \@g)                   // no flatten
+     * </pre>
+     * <p>
+     * Fixes op/decl-refs.t {@code 2nd retval of my (\@f, @g) is @g}
+     * (and the parallel state/our/local + scalar-and-hash variants).
+     */
+    public RuntimeList flattenForRefgen() {
+        if (elements.size() == 1) {
+            RuntimeBase only = elements.get(0);
+            if (only instanceof RuntimeArray || only instanceof RuntimeHash || only instanceof PerlRange) {
+                return flattenElements();
+            }
+        }
+        return this;
+    }
+
     public RuntimeList createListReference() {
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> resultList = result.elements;
@@ -479,30 +508,43 @@ public class RuntimeList extends RuntimeBase {
                 }
             }
             if (allSimpleScalars) {
-                List<RuntimeScalar> rhsElements = rhsArray.elements;
-                int rhsSize = rhsElements.size();
-                int lhsSize = elements.size();
-                
-                // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
-                RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
-                for (int i = 0; i < rhsValues.length; i++) {
-                    RuntimeScalar elem = rhsElements.get(i);
-                    // Handle null elements (from delete $array[i])
-                    rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
-                }
-                
-                RuntimeArray result = new RuntimeArray(lhsSize);
-                result.scalarContextSize = rhsSize;
-                for (int i = 0; i < lhsSize; i++) {
-                    RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
-                    if (i < rhsValues.length) {
-                        lhs.set(rhsValues[i]);
-                    } else {
-                        lhs.set(new RuntimeScalar());
+                // Suppress MortalList.flush() during LHS assignments, matching
+                // the slow path below. Without this, a blessed return value
+                // (e.g., Holler->new()) passed as an argument following a
+                // reference-typed arg can fire DESTROY mid-assignment when
+                // an earlier lhs.set() triggers setLargeRefCounted → flush()
+                // before the blessed value's own lhs.set() captures it.
+                // Repros: t/tt_leak.t tests 5, 9 (TT stash updates with
+                // blessed temps as values).
+                boolean wasFlushing = MortalList.suppressFlush(true);
+                try {
+                    List<RuntimeScalar> rhsElements = rhsArray.elements;
+                    int rhsSize = rhsElements.size();
+                    int lhsSize = elements.size();
+
+                    // Copy RHS values first to handle aliasing (e.g., ($a,$b) = ($b,$a))
+                    RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+                    for (int i = 0; i < rhsValues.length; i++) {
+                        RuntimeScalar elem = rhsElements.get(i);
+                        // Handle null elements (from delete $array[i])
+                        rhsValues[i] = (elem == null) ? new RuntimeScalar() : new RuntimeScalar(elem);
                     }
-                    result.elements.add(lhs);
+
+                    RuntimeArray result = new RuntimeArray(lhsSize);
+                    result.scalarContextSize = rhsSize;
+                    for (int i = 0; i < lhsSize; i++) {
+                        RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                        if (i < rhsValues.length) {
+                            lhs.set(rhsValues[i]);
+                        } else {
+                            lhs.set(new RuntimeScalar());
+                        }
+                        result.elements.add(lhs);
+                    }
+                    return result;
+                } finally {
+                    MortalList.suppressFlush(wasFlushing);
                 }
-                return result;
             }
         }
 
@@ -531,6 +573,14 @@ public class RuntimeList extends RuntimeBase {
                 }
             }
         }
+
+        // Suppress flushing during materialization and LHS assignments.
+        // Return values from chained method calls (e.g., shift->clone->connection(@_))
+        // may have pending decrements from their inner scope exits. Flushing during
+        // materialization would process those decrements before the LHS variables
+        // (like $self) capture the return values, causing premature DESTROY.
+        // The pending entries are processed later when the next unsuppressed flush fires.
+        boolean wasFlushing = MortalList.suppressFlush(true);
 
         // Materialize the RHS once into a flat list.
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
@@ -562,6 +612,17 @@ public class RuntimeList extends RuntimeBase {
                 result.elements.add(useAlias ? rhsAlias : rhsValue);
 
                 if (rhsIndex < rhsSize) {
+                    // Undo the materialized copy's refCount increment for the consumed
+                    // RHS value (mirrors the corresponding fix in the assigned-scalar
+                    // branch below). Without this, `my (undef, $name) = @_;` patterns
+                    // leak +1 refCount per call on the discarded first arg — visible
+                    // in op/inccode.t "no leaks" tests #61, #63 (bug perl #92252).
+                    if (rhsValue != null && rhsValue.refCountOwned
+                            && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                            && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.refCount--;
+                        rhsValue.refCountOwned = false;
+                    }
                     rhsIndex++;
                 }
             } else if (elem instanceof RuntimeScalar runtimeScalar) {
@@ -642,6 +703,11 @@ public class RuntimeList extends RuntimeBase {
                 rhsIndex = rhsSize; // Consume the rest
             }
         }
+
+        // Restore previous flushing state. Now that all LHS variables hold references
+        // to the return values, it's safe to process pending decrements.
+        MortalList.suppressFlush(wasFlushing);
+
         return result;
     }
 

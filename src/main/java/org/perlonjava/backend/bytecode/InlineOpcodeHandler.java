@@ -23,6 +23,7 @@ public class InlineOpcodeHandler {
      * These cannot be mutated in place.
      */
     static boolean isImmutableProxy(RuntimeBase val) {
+        if (val instanceof ReadOnlyAlias) return false;
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 
@@ -1265,8 +1266,13 @@ public class InlineOpcodeHandler {
         if (value == null) {
             registers[rd] = RuntimeScalarCache.scalarUndef;
         } else if (value instanceof RuntimeList list) {
-            // \(LIST) semantics: create individual refs for each element
-            registers[rd] = list.createListReference();
+            // \(LIST) semantics: create individual refs for each element.
+            // Use flattenForRefgen() — Perl's distributive rule: flatten only
+            // a single-array/hash/range; multi-element lists distribute over
+            // top-level items without flattening embedded arrays.
+            // Fixes op/ref.t 113-117 (single array case) and op/decl-refs.t
+            // 2nd-retval-of-my-(\@f, @g) (multi-element case).
+            registers[rd] = list.flattenForRefgen().createListReference();
         } else {
             registers[rd] = value.createReference();
         }

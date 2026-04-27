@@ -22,6 +22,18 @@ public class WeakRefRegistry {
             new IdentityHashMap<>();
 
     /**
+     * Fast-path flag: has {@code weaken()} ever been called in this JVM?
+     * Once true, stays true (conservative but safe).
+     * <p>
+     * Used by {@link MortalList#scopeExitCleanupHash} /
+     * {@link MortalList#scopeExitCleanupArray} to decide whether the
+     * "no blessed objects" fast-exit is safe. Even without blessed objects,
+     * unblessed containers may have weak refs that need clearing on scope
+     * exit, so those sites must walk elements when weak refs exist.
+     */
+    public static volatile boolean weakRefsExist = false;
+
+    /**
      * Special refCount value for objects that have weak refs but whose strong
      * refs can't be counted accurately. Used in two cases:
      * <p>
@@ -68,16 +80,36 @@ public class WeakRefRegistry {
         referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
+        // Flip the fast-path flag so scopeExit cascades don't bail out
+        // via the !blessedObjectExists shortcut when unblessed data has
+        // weak refs that need clearing.
+        weakRefsExist = true;
 
-        if (base.refCount > 0) {
-            // Tracked object: decrement strong count (weak ref doesn't count).
+        if (base.refCount > 0 && ref.refCountOwned) {
+            // Tracked object with a properly-counted reference:
+            // decrement strong count (weak ref doesn't count).
+            // Only decrement if refCountOwned=true, meaning the hash element
+            // or variable's creation incremented the referent's refCount via
+            // setLargeRefCounted or incrementRefCountForContainerStore.
+            // If refCountOwned=false (e.g., element in an untracked anonymous
+            // hash like `{ weakref => $target }`), the store never incremented
+            // refCount, so weaken must not decrement either — otherwise we
+            // get a double-decrement that causes premature destruction.
             // Clear refCountOwned because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             if (--base.refCount == 0) {
-                // No strong refs remain — trigger DESTROY + clear weak refs.
-                base.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(base);
+                if (base.localBindingExists) {
+                    // Named container (my %hash / my @array): the local variable
+                    // slot holds a strong reference not counted in refCount.
+                    // Don't call callDestroy — the container is still alive.
+                    // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else {
+                    // No local binding: refCount==0 means truly no strong refs.
+                    // Trigger DESTROY + clear weak refs.
+                    base.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(base);
+                }
             }
             // Note: we do NOT transition unblessed tracked objects to WEAKLY_TRACKED
             // here anymore. The previous transition (base.blessId == 0 → WEAKLY_TRACKED)
@@ -179,6 +211,57 @@ public class WeakRefRegistry {
             weak.type = RuntimeScalarType.UNDEF;
             weak.value = null;
             weakScalars.remove(weak);
+        }
+    }
+
+    /**
+     * Clear weak refs for ALL blessed, non-CODE objects in the registry.
+     * Called after flushDeferredCaptures() — at this point the main script
+     * has returned and all lexical scopes have exited. Objects with inflated
+     * cooperative refCounts (due to JVM temporaries, method-call argument
+     * copies, etc.) may still appear "alive" even though no Perl code holds
+     * a reference. Clearing their weak refs allows DBIC's leak tracer
+     * (which runs in an END block) to see them as "collected".
+     * <p>
+     * This is safe because:
+     * 1. Only weak refs are cleared — the Java objects remain alive
+     * 2. CODE refs are excluded (they may still be called from stashes)
+     * 3. END blocks that check for leaks run AFTER this method
+     */
+    /**
+     * Phase 4 (refcount_alignment_plan.md): snapshot all referents currently
+     * in the weak-ref registry. Used by {@link ReachabilityWalker} to iterate
+     * safely (the registry may be modified by concurrent DESTROY / weak-ref
+     * clearing during the walk).
+     */
+    public static java.util.List<RuntimeBase> snapshotWeakRefReferents() {
+        return new java.util.ArrayList<>(referentToWeakRefs.keySet());
+    }
+
+    public static void clearAllBlessedWeakRefs() {
+        // Snapshot the keys to avoid ConcurrentModificationException,
+        // since clearWeakRefsTo modifies referentToWeakRefs.
+        java.util.List<RuntimeBase> referents =
+                new java.util.ArrayList<>(referentToWeakRefs.keySet());
+        for (RuntimeBase referent : referents) {
+            if (referent instanceof RuntimeCode) continue;
+            // Phase H3: skip unblessed containers (ARRAY/HASH) at pre-END
+            // time. Sub::Defer's $deferred_info and Sub::Quote's
+            // $quoted_info are reachable only via closure captures not
+            // traversed by `clearAllBlessedWeakRefs`. Clearing them
+            // breaks END-block leak-tracer dispatch loops that call
+            // Moo accessors to stringify weak-registry slots.
+            if (referent.blessId == 0 && !(referent instanceof RuntimeScalar)) continue;
+            // Phase I: skip clearing weak refs to scalars that hold CODE
+            // refs or are UNDEF (Sub::Quote/Sub::Defer slot scalars).
+            if (referent instanceof RuntimeScalar s) {
+                if (s.type == RuntimeScalarType.UNDEF) continue;
+                if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && s.value instanceof RuntimeCode) {
+                    continue;
+                }
+            }
+            clearWeakRefsTo(referent);
         }
     }
 }

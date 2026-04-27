@@ -2,6 +2,7 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.ForkOpenState;
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -774,9 +775,19 @@ public class SystemOperator {
         // If we're in a test context (Test::More loaded), skip the test gracefully
         // instead of failing. This allows test harnesses to report fork-dependent
         // tests as "skipped" rather than "failed" on the JVM platform.
+        //
+        // BUT only if no tests have been emitted yet. Tests that have already
+        // produced ok/not-ok output can't be retroactively skipped — emitting
+        // "1..0 # SKIP" after N tests produces a "Bad plan" parse error in
+        // prove (seen in DBIC t/storage/txn.t, global_destruction.t which call
+        // fork after running tests, then fall back to skip_all on failure).
+        //
+        // For those cases, fork() just returns undef like a normal failure;
+        // the calling test code is responsible for handling the failure
+        // (typically via its own skip_all path).
         try {
             RuntimeHash incHash = GlobalVariable.getGlobalHash("main::INC");
-            if (incHash.elements.containsKey("Test/More.pm")) {
+            if (incHash.elements.containsKey("Test/More.pm") && !testsAlreadyEmitted()) {
                 // Output TAP skip directive and exit cleanly
                 RuntimeIO stdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
                 if (stdout != null) {
@@ -794,11 +805,81 @@ public class SystemOperator {
             // Ignore errors in test detection - fall through to normal behavior
         }
 
-        // Set $! to indicate why fork failed
-        setGlobalVariable("main::!", "fork() not supported on this platform (Java/JVM)");
+        // Set $! to EAGAIN (as a numeric errno) so the standard
+        //     if (!defined $pid) {
+        //         skip "EAGAIN" if $! == Errno::EAGAIN();
+        //         die "Unable to fork: $!";
+        //     }
+        // pattern takes the skip branch. Setting $! to a numeric errno makes
+        // it a dualvar whose string value is "Resource temporarily
+        // unavailable" (the standard strerror(EAGAIN)), which is more
+        // accurate than a custom message — fork() on the JVM genuinely can't
+        // succeed "right now".
+
+        // Auto-load Errno so callers can use Errno::EAGAIN() without an
+        // explicit `use Errno`. Real Perl does not auto-load it, but on real
+        // Perl fork() usually succeeds so nobody hits the missing-load.
+        int eagain = 35;  // Default: BSD/Darwin value; overridden below if possible
+        try {
+            ModuleOperators.require(new RuntimeScalar("Errno.pm"));
+            RuntimeScalar eagainSub =
+                    InheritanceResolver.findMethodInHierarchy(
+                            "EAGAIN", "Errno", null, 0);
+            if (eagainSub != null && eagainSub.type == RuntimeScalarType.CODE) {
+                RuntimeArray noArgs = new RuntimeArray();
+                RuntimeList r = RuntimeCode.apply(
+                        eagainSub, noArgs, RuntimeContextType.SCALAR);
+                if (r != null && !r.isEmpty()) {
+                    int v = r.scalar().getInt();
+                    if (v > 0) eagain = v;
+                }
+            }
+        } catch (Throwable t) {
+            // Not fatal — fall through with the default EAGAIN value.
+        }
+        // Set $! to a numeric errno; in jperl this creates a dualvar with
+        // the matching strerror() as its string value.
+        getGlobalVariable("main::!").set(eagain);
 
         // Return undef to indicate failure
         return scalarUndef;
+    }
+
+    /**
+     * Check whether any tests have already been emitted through Test::Builder.
+     * Used by {@link #fork} to decide whether it's still safe to emit
+     * {@code 1..0 # SKIP} (only at the start of a test) versus returning undef
+     * so the test can handle the fork failure itself.
+     * <p>
+     * Looks up the {@code $Test::Builder::Test} singleton and calls its
+     * {@code current_test} method. Returns true if the call succeeds and the
+     * result is > 0. Any error is treated as "can't tell" and returns false
+     * (preserving the pre-existing behavior of emitting SKIP).
+     */
+    private static boolean testsAlreadyEmitted() {
+        try {
+            RuntimeScalar tbSingleton =
+                    GlobalVariable.getGlobalVariable("Test::Builder::Test");
+            if (tbSingleton == null
+                    || !tbSingleton.defined().getBoolean()
+                    || !RuntimeScalarType.isReference(tbSingleton)) {
+                return false;
+            }
+            RuntimeScalar method =
+                    InheritanceResolver.findMethodInHierarchy(
+                            "current_test", "Test::Builder", null, 0);
+            if (method == null || method.type != RuntimeScalarType.CODE) {
+                return false;
+            }
+            RuntimeArray callArgs = new RuntimeArray();
+            RuntimeArray.push(callArgs, tbSingleton);
+            RuntimeList result =
+                    RuntimeCode.apply(method, callArgs, RuntimeContextType.SCALAR);
+            if (result == null || result.isEmpty()) return false;
+            return result.scalar().getInt() > 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

@@ -336,8 +336,20 @@ public class Universal extends PerlModuleBase {
             }
         }
 
-        // Get the linearized inheritance hierarchy using C3
+        // Get the linearized inheritance hierarchy using C3.
+        // Also compute the canonical (stash-alias-resolved) form of the
+        // object's class and linearise that too. We have to check BOTH
+        // because — unlike real Perl — we do not canonicalise the class
+        // name at `bless` time (doing so broke DBIx::Class; see
+        // dev/design/perf-dbic-safe-port.md). An object can therefore
+        // end up blessed under either the user-provided name OR its
+        // canonical alias target; `isa()` must answer correctly for
+        // both regardless of which one was passed at bless time.
         List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
+        String canonicalClassName = GlobalVariable.resolveStashAlias(perlClassName);
+        List<String> canonicalLinearized = canonicalClassName.equals(perlClassName)
+                ? null
+                : InheritanceResolver.linearizeHierarchy(canonicalClassName);
 
         // Normalize the argument: main::Foo -> Foo, ::Foo -> Foo, Foo'Bar -> Foo::Bar
         // This is needed because isa("main::Foo") should match a class blessed as "Foo"
@@ -349,12 +361,31 @@ public class Universal extends PerlModuleBase {
         } else if (normalizedArg.startsWith("::")) {
             normalizedArg = normalizedArg.substring(2);
         }
-        // Canonicalise through stash aliases (`*Foo:: = *Bar::;`): an argument
-        // like "Dummy::True" must still match an object blessed into "JSON::PP::Boolean"
-        // if the two package names are aliases.
-        normalizedArg = GlobalVariable.resolveStashAlias(normalizedArg);
 
-        return new RuntimeScalar(linearizedClasses.contains(normalizedArg)).getList();
+        // Direct match first (most common path — no aliasing involved).
+        if (linearizedClasses.contains(normalizedArg)) {
+            return new RuntimeScalar(true).getList();
+        }
+        if (canonicalLinearized != null && canonicalLinearized.contains(normalizedArg)) {
+            return new RuntimeScalar(true).getList();
+        }
+
+        // Fallback for `*Dst:: = *Src::` stash aliases: canonicalise the
+        // argument through the alias chain and re-check. Covers both
+        // directions: $x (blessed as canonical)->isa("alias") and
+        // $x (blessed as alias)->isa("canonical"). Without mutating the
+        // bless id.
+        String canonicalArg = GlobalVariable.resolveStashAlias(normalizedArg);
+        if (!canonicalArg.equals(normalizedArg)) {
+            if (linearizedClasses.contains(canonicalArg)) {
+                return new RuntimeScalar(true).getList();
+            }
+            if (canonicalLinearized != null && canonicalLinearized.contains(canonicalArg)) {
+                return new RuntimeScalar(true).getList();
+            }
+        }
+
+        return new RuntimeScalar(false).getList();
     }
 
     /**

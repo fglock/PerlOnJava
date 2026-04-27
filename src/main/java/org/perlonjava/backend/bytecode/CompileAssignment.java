@@ -19,6 +19,8 @@ public class CompileAssignment {
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
             bc.compileNode(binOp, -1, rhsContext);
+            // Patch HASH_GET → HASH_GET_FOR_LOCAL so local $hash{key} survives hash reassignment
+            bc.patchLastHashGetForLocal();
             int elemReg = bc.lastResultReg;
             bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
             bc.emitReg(elemReg);
@@ -277,6 +279,25 @@ public class CompileAssignment {
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
                 bc.lastResultReg = elemReg;
+                return true;
+            }
+            // Single-element list with a glob: `local(*foo) = *bar` — previously fell
+            // through the main loop which only handled `$` and binary-op lvalues, so
+            // the assignment was a silent no-op (op/ref.t 1).
+            if (element instanceof OperatorNode globOp && globOp.operator.equals("*")
+                    && globOp.operand instanceof IdentifierNode globId) {
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
+                String globalVarName = NameNormalizer.normalizeVariableName(globId.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                bc.emit(Opcodes.STORE_GLOB);
+                bc.emitReg(localReg);
+                bc.emitReg(valueReg);
+                bc.lastResultReg = localReg;
                 return true;
             }
         }
@@ -1445,7 +1466,13 @@ public class CompileAssignment {
                                     bytecodeCompiler.emitReg(hashReg);
                                     bytecodeCompiler.emit(nameIdx);
                                 }
-                            } else if (hashOp.operand instanceof OperatorNode) {
+                            } else if (hashOp.operand instanceof OperatorNode
+                                    || hashOp.operand instanceof BlockNode) {
+                                // Handles both:
+                                //   @$ref{keys}   — hashOp.operand is OperatorNode("$", ...)
+                                //   @{EXPR}{keys} — hashOp.operand is BlockNode wrapping an
+                                //                   expression that evaluates to a hashref
+                                // Compile the operand to a scalar ref, then deref as hash.
                                 bytecodeCompiler.compileNode(hashOp.operand, -1, rhsContext);
                                 int scalarRefReg = bytecodeCompiler.lastResultReg;
                                 hashReg = bytecodeCompiler.allocateRegister();

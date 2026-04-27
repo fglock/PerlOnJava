@@ -46,6 +46,29 @@ public class EmitterMethodCreator implements Opcodes {
             System.getenv("JPERL_DISABLE_INTERPRETER_FALLBACK") == null;
     private static final boolean SHOW_FALLBACK =
             System.getenv("JPERL_SHOW_FALLBACK") != null;
+    /**
+     * When true, bypass {@link org.perlonjava.frontend.analysis.CleanupNeededVisitor}
+     * and always emit the full scope-exit cleanup sequence. Escape hatch
+     * for debugging suspected correctness regressions introduced by the
+     * cleanup-skip fast path. Set {@code JPERL_FORCE_CLEANUP=1} to enable.
+     */
+    private static final boolean FORCE_CLEANUP =
+            System.getenv("JPERL_FORCE_CLEANUP") != null;
+    // Cache additional compile-time debug env vars. These were previously
+    // read with System.getenv() on every method compilation; the native
+    // lookup is ~200ns per call and added up across thousands of compiled
+    // subs during module load.
+    private static final boolean ASM_DEBUG =
+            System.getenv("JPERL_ASM_DEBUG") != null;
+    private static final String ASM_DEBUG_CLASS_FILTER =
+            System.getenv("JPERL_ASM_DEBUG_CLASS");
+    private static final String BYTECODE_SIZE_DEBUG =
+            System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+    private static final int SPILL_SLOT_COUNT;
+    static {
+        String s = System.getenv("JPERL_SPILL_SLOTS");
+        SPILL_SLOT_COUNT = (s != null) ? Integer.parseInt(s) : 16;
+    }
     // Number of local variables to skip when processing a closure (this, @_, wantarray)
     public static int skipVariables = 3;
     // Counter for generating unique class names
@@ -574,10 +597,23 @@ public class EmitterMethodCreator implements Opcodes {
             TempLocalCountVisitor tempCountVisitor =
                     new TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 64;  // Optimized: removed min-128 baseline
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 256;  // Buffer for uncounted allocations
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
+            }
+
+            // Determine whether this sub needs full scope-exit cleanup emission
+            // or can use a minimal null-store fast path. See CleanupNeededVisitor
+            // and JavaClassInfo.cleanupNeeded. JPERL_FORCE_CLEANUP=1 bypasses the
+            // analysis (forces cleanupNeeded=true) as an escape hatch.
+            if (FORCE_CLEANUP) {
+                ctx.javaClassInfo.cleanupNeeded = true;
+            } else {
+                org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
+                        new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
+                ast.accept(cleanupVisitor);
+                ctx.javaClassInfo.cleanupNeeded = cleanupVisitor.needsCleanup();
             }
 
             // Manual frames removed - using COMPUTE_FRAMES for automatic frame computation
@@ -652,6 +688,10 @@ public class EmitterMethodCreator implements Opcodes {
             Label catchBlock = null;
             Label endCatch = null;
 
+            // Recorded my-variable local indices for eval exception cleanup.
+            // Populated during ast.accept(visitor) when useTryCatch is true.
+            java.util.List<Integer> evalCleanupLocals = null;
+
             if (useTryCatch) {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("useTryCatch");
 
@@ -687,7 +727,18 @@ public class EmitterMethodCreator implements Opcodes {
                         "setGlobalVariable",
                         "(Ljava/lang/String;Ljava/lang/String;)V", false);
 
+                // Record the first user-code local variable index.
+                // Locals from this index onward are Perl my-variables and temporaries
+                // allocated during eval body compilation. These need scope-exit cleanup
+                // when die unwinds through the eval (exception handler).
+                // Enable recording of my-variable indices for eval exception cleanup.
+                ctx.javaClassInfo.evalCleanupLocals = new java.util.ArrayList<>();
+
                 ast.accept(visitor);
+
+                // Snapshot and disable recording of my-variable indices.
+                evalCleanupLocals = ctx.javaClassInfo.evalCleanupLocals;
+                ctx.javaClassInfo.evalCleanupLocals = null;
 
                 // Normal fallthrough return: spill and jump with empty operand stack.
                 mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);
@@ -877,6 +928,37 @@ public class EmitterMethodCreator implements Opcodes {
                         "catchEval",
                         "(Ljava/lang/Throwable;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 mv.visitInsn(Opcodes.POP);
+
+                // Scope-exit cleanup for lexical variables allocated inside the eval body.
+                // When die throws a PerlDieException, Java exception handling jumps directly
+                // to this catch handler, skipping the emitScopeExitNullStores calls that
+                // would normally run at each block exit. This loop ensures DESTROY fires
+                // for blessed objects that went out of scope during die.
+                // Note: DestroyDispatch.doCallDestroy saves/restores $@ around DESTROY,
+                // so this is safe to do before the $@ snapshot below.
+                if (evalCleanupLocals != null && !evalCleanupLocals.isEmpty()) {
+                    // De-duplicate indices while preserving order.
+                    // A variable may appear in multiple nested scopes - we want the last
+                    // occurrence (from the innermost scope) to win, and cleanup should
+                    // happen in reverse order (LIFO) to match Perl's DESTROY semantics.
+                    java.util.List<Integer> uniqueLocals = new java.util.ArrayList<>(
+                            new java.util.LinkedHashSet<>(evalCleanupLocals));
+                    // Reverse to get LIFO order (innermost scope first)
+                    java.util.Collections.reverse(uniqueLocals);
+                    for (int localIdx : uniqueLocals) {
+                        mv.visitVarInsn(Opcodes.ALOAD, localIdx);
+                        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/MortalList",
+                                "evalExceptionScopeCleanup",
+                                "(Ljava/lang/Object;)V", false);
+                        mv.visitInsn(Opcodes.ACONST_NULL);
+                        mv.visitVarInsn(Opcodes.ASTORE, localIdx);
+                    }
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/MortalList",
+                            "flush",
+                            "()V", false);
+                }
 
                 // Save a snapshot of $@ so we can re-set it after DVM teardown
                 // (DVM pop may restore `local $@` from a callee, clobbering $@)
@@ -1630,6 +1712,11 @@ public class EmitterMethodCreator implements Opcodes {
                 return new CompiledCode(null, null, null, generatedClass, ctx);
             }
 
+        } catch (VerifyError ve) {
+            // VerifyError at this point means deferred verification failed during
+            // constructor.newInstance() for classes with no captured variables.
+            // Propagate as-is so createRuntimeCode() catch at line 1583 can handle it.
+            throw ve;
         } catch (Exception e) {
             throw new PerlCompilerException(
                     "Failed to wrap compiled class: " + e.getMessage());
@@ -1649,7 +1736,7 @@ public class EmitterMethodCreator implements Opcodes {
      */
     private static boolean needsInterpreterFallback(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause()) {
-            if (t instanceof ClassFormatError) {
+            if (t instanceof ClassFormatError || t instanceof VerifyError) {
                 return true;
             }
             String msg = t.getMessage();
@@ -1672,7 +1759,7 @@ public class EmitterMethodCreator implements Opcodes {
         return msg != null ? msg.split("\n")[0] : e.getClass().getSimpleName();
     }
 
-    private static InterpretedCode compileToInterpreter(
+    public static InterpretedCode compileToInterpreter(
             Node ast, EmitterContext ctx, boolean useTryCatch) {
 
         // Create bytecode compiler
