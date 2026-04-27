@@ -241,7 +241,7 @@
 - Uses Internal VM — DEBUG opcodes at each statement
 
 **Slide 34 — Current Limitations & Roadmap**
-- JVM-incompatible: fork, DESTROY (non-deterministic GC), threading
+- JVM-incompatible: fork, threading
 - Partially implemented: some regex features, taint checks
 - In progress: Internal VM optimization, eval STRING performance
 - Next: more compatible regex engine, GraalVM native images, Android DEX
