@@ -170,9 +170,10 @@ C. **Defer ActiveResource** — accept that ActiveResource is unreachable for
 
 **Plan for this PR**: Option C. Document the `Want` blocker, link to a
 follow-up ticket, and ship the two cheap wins. Want is too large to
-combine with these fixes.
+combine with these fixes. The detailed Want port plan lives in
+[`dev/modules/want.md`](want.md).
 
-**Priority**: deferred (own design doc / PR).
+**Priority**: deferred (own design doc / PR — see `dev/modules/want.md`).
 
 ---
 
@@ -223,5 +224,6 @@ combine with these fixes.
 1. Re-run `jcpan -t XML::SemanticDiff`, then `Test::XML`, then `XML::Hash`
    end-to-end to confirm the dependency chain (sans Want) is now clear.
 2. Land this PR.
-3. Open a follow-up issue/design doc for `Want` (Class::Accessor::Lvalue
-   blocker) so ActiveResource itself can eventually be reached.
+3. Begin work on `Want` per [`dev/modules/want.md`](want.md) so
+   `Class::Accessor::Lvalue` and therefore `ActiveResource` itself can
+   eventually be reached.
