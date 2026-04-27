@@ -871,9 +871,89 @@ Before / after the fix:
 ./jperl -e 'use Moose; print "ok\n"'        # → ok (still via shim)
 ```
 
-Phase D resumption is now unblocked.
+Phase D resumption is now unblocked **for the simple case**.
 
-##### Phase D resumption checklist (when weaken is fixed)
+##### Active blocker (discovered while attempting D1-D3): `MortalList.flush()` destroys the metaclass during Class::MOP bootstrap
+
+When the bundled upstream Moose 2.4000 was tried in
+`feature/moose-phase-d`, `use Class::MOP;` died at the third
+`add_attribute(...)` call in the Class::MOP.pm self-bootstrap with:
+
+```
+Can't call method "name" on an undefined value at .../Attribute.pm line 433
+```
+
+Diagnosis: The bootstrap calls `attach_to_class($meta)` ten+ times,
+each storing a weak back-reference from the attribute to the
+metaclass. The first eight succeed; the ninth `weaken()` enters with
+`base.refCount == Integer.MIN_VALUE` (already destroyed) and
+immediately UNDEFs the slot. Stack trace shows the destroy fires
+from:
+
+```
+DestroyDispatch.callDestroy
+  ← MortalList.flush               (line 558)
+  ← RuntimeScalar.setLargeRefCounted  (line 1236)
+  ← assignment in Sub::Install
+```
+
+So between iterations, an ordinary reference assignment (in
+Sub::Install method-installation, called by Class::MOP's bootstrap)
+flushes mortals, which decrements the metaclass's refCount to 0
+and fires DESTROY — even though it's still referenced by `%METAS`,
+by the lexical `$meta`, by the attribute `$self->{associated_class}`
+slot, etc.
+
+Per-iteration refCount trace from PJ_WEAKEN_TRACE=1:
+
+```
+DBG weaken called: base=metaclass refCount=6   # iter 1
+DBG weaken called: base=metaclass refCount=7   # iter 2
+DBG weaken called: base=metaclass refCount=7   # iter 3
+DBG weaken called: base=metaclass refCount=5   # iter 4 (drop!)
+DBG weaken called: base=metaclass refCount=6   # iter 5
+DBG weaken called: base=metaclass refCount=6   # iter 6
+DBG weaken called: base=metaclass refCount=-2147483648  # iter 9: ALREADY DESTROYED
+```
+
+The refcount is unstable across flushes. The Phase 3 weaken-auto-sweep
+fix prevents the auto-sweep from racing the bootstrap, but the
+per-flush DESTROY in `MortalList.flush()` itself decrements
+prematurely.
+
+###### Step W2 — root cause investigation (TODO)
+
+Hypothesis: `setLargeRefCounted` is double-counting an "owned"
+ref-store somewhere. Each store of the metaclass into a hash should
+be balanced by exactly one decrement at scope exit. The trace
+suggests scope-exit cleanup is running while a hash-element store
+is still live — both decrement.
+
+Investigation steps when resuming:
+
+1. Add a refCount-history print to `setLargeRefCounted` and
+   `MortalList.flush` for `blessId != 0` referents. Run
+   `JPERL_NO_AUTO_GC=1 ./jperl -e 'use Class::MOP'` and capture
+   every increment/decrement on the metaclass.
+2. Cross-check against the same trace under `perl` (real Perl,
+   instrumented refcount) for the same Class::MOP.pm bootstrap.
+   Diff to find which assignment is asymmetric.
+3. Most likely culprit: the `MortalList.deferDecrementIfTracked`
+   path adds the base to `pending` even for hash-store assignments
+   that are themselves followed by `MortalList.flush()` — so the
+   base gets decremented twice (once at the next flush, once at the
+   eventual scope exit).
+4. Alternative culprit: per-statement flush is being called when
+   the tracked owner is a closure capture (Sub::Install installs
+   methods via closures), which over-counts ownership transitions.
+
+###### Step W3 — fix and verify (TODO)
+
+Apply the fix surgically. Re-run the W6 (DBIC zero regressions) and
+W7 (Class::MOP loads) gates. The minimal-repro + unit-test gate
+already passes (Step W2 unit tests).
+
+##### Phase D resumption checklist (when both W blockers fixed)
 
 The previous Phase D attempt got as far as:
 
