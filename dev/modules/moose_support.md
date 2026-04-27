@@ -849,10 +849,107 @@ Single-line change in
 guarded by `quiet`. See the surrounding comment for the full
 reproduction and rationale.
 
-###### Verification (Step W6)
+###### Step W2 — root cause investigation (2026-04-27 update)
+
+Investigation completed under PJ_RC=1 instrumentation: the metaclass
+DOES NOT get destroyed (its refCount oscillates 0↔7 but never reaches
+`Integer.MIN_VALUE` — a small `localBindingExists=true` guard on the
+flush path correctly skips destroy). The actual destroy that triggers
+the failure is on a **different** blessed object — likely an interim
+object held briefly by Sub::Install during method installation.
+
+Captured trace excerpt (`PJ_RC=1`):
+
+```
+RC -1 MortalList.flush b=1677207406 1->0 (refCount>0=true)
+RC +1 incrementRefCountForContainerStore b=1677207406 0->1
+RC +1 setLargeRefCounted-INC nb=1677207406 1->2
+RC +1 setLargeRefCounted-INC nb=1677207406 2->3
+RC defer-decrement b=1677207406 refCount=3 (will -1 on flush)
+RC defer-decrement b=1677207406 refCount=3 (will -1 on flush)
+RC clearWeakRefsTo b=1677207406 (clearing 4 weak refs)   # <-- bang
+```
+
+The clearing fires from `MortalList.flush` → `DestroyDispatch.callDestroy`
+during a routine reference assignment in
+`Class::MOP::Mixin::HasAttributes`'s `_post_add_attribute` chain.
+
+Stack of the destroy trigger:
+
+```
+WeakRefRegistry.clearWeakRefsTo
+  ← DestroyDispatch.doCallDestroy
+  ← DestroyDispatch.callDestroy
+  ← MortalList.flush          (line 566)
+  ← anon1205.apply (Class/MOP/Class.pm line 260)
+```
+
+Total events for object 1677207406 over its lifecycle:
+- 55 increments
+- 45 immediate decrements (`MortalList.flush`)
+- 42 deferred decrements queued
+
+The decrement count exceeds the increment count, indicating a real
+asymmetry — but pinpointing **which** assignment is asymmetric requires
+deeper instrumentation than fits in this debugging round, since
+PerlOnJava's refcount model has many subsystems (`MortalList`,
+`WeakRefRegistry`, `ScalarRefRegistry`, `ReachabilityWalker`,
+`MyVarCleanupStack`, `DestroyDispatch`).
+
+###### Step W3 — surgical fix attempted, reverted (2026-04-27)
+
+A "skip destroy when weak refs exist" guard was tried in
+`MortalList.flush()`:
+
+```java
+} else if (WeakRefRegistry.hasWeakRefsTo(base)) {
+    // Skip destroy: weak refs imply something recently held a strong
+    // ref, and our cooperative refCount may be drifting under heavy
+    // reference shuffling.
+}
+```
+
+**Result**: this fix made the bundled `use Class::MOP;` succeed for the
+simple case, but broke 5+ existing weaken / destroy unit tests
+(`unit/refcount/weaken_destroy.t`, `weaken_edge_cases.t`,
+`weaken_basic.t`, `destroy_anon_containers.t`). The trade-off was too
+aggressive — there are legitimate cases where refCount==0 with weak
+refs DOES mean "really destroyed".
+
+The fix was reverted. The right approach is to find the asymmetric
++/- in the refcount accounting itself, not to paper over it at the
+destroy path.
+
+###### Step W3-next (TODO when refcount audit is resumed)
+
+Concrete starting points for a future investigation:
+
+1. **`@_` aliasing**: when `attach($attr, $REG{x})` is called, does
+   the `@_` slot get its own +1 (for being aliased to the caller's
+   slot) AND the `my (..., $class) = @_;` list-copy ALSO get +1? If
+   yes, only ONE of those should decrement at scope exit, not both.
+   Check `RuntimeArray.setFromList` and the args-binding path in
+   `RuntimeCode.apply`.
+2. **`$h->{key} = $foo` followed by `$h->{key} = $bar`**: the
+   overwrite path in `setLargeRefCounted` decrements `oldBase` AND
+   has a separate flush. Verify that exactly one of those fires per
+   overwrite.
+3. **`my ($attr, $class) = @_;` list assignment**: confirm whether
+   list assignment goes through `setLargeRefCounted` per element or
+   through a list-copy bulk path that may double-count.
+4. **`Sub::Install` method-installation closures**: each closure
+   captures `$method`, `$package`, etc. Each closure scope-exit
+   should decrement only its own captures, not the caller's.
+
+A focused 2-3 day refcount audit on these four sites would likely
+land the fix. The test gate is the existing
+`weaken_via_sub.t` suite plus `./jcpan -t DBIx::Class` zero-regression
+guarantee.
+
+###### Verification (Step W6) — the fix that *did* land
 
 DBIx::Class is the most refcount-heavy CPAN distribution we test.
-Before / after the fix:
+Before / after the auto-sweep weaken fix (commit `ca3af1ad3`):
 
 | Metric | Baseline | After fix |
 |---|---|---|
@@ -863,6 +960,9 @@ Before / after the fix:
 | Assertions failing | 2 | 2 |
 
 **Zero regressions in DBIC.**
+
+The MortalList.flush bug is a separate, unrelated bug — its fix is
+still pending.
 
 ###### Verification (Step W7)
 
