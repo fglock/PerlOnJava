@@ -212,6 +212,7 @@ Config::Frontend	PASS	136	136		2026-04-12		c1942aad0
 Config::General::Match	PASS	269	269		2026-04-26		1d5def215
 Config::INI::Serializer	PASS	9	9		2026-04-21		3f3336774
 Config::Settings	PASS	20	20		2026-04-22		3f3336774
+Config::YAML	PASS	33	33		2026-04-27		12fb0165d
 Config::ZOMG	PASS	97	97		2026-04-22		3f3336774
 ConfigReader::Simple	PASS	204	204		2026-04-26		1d5def215
 ConstantCalculus::CircleConstant	PASS	1	1		2026-04-22		3f3336774
@@ -539,6 +540,7 @@ Linux::usermod	PASS	10	10		2026-04-12		c1942aad0
 List::Categorize	PASS	20	20		2026-04-22		3f3336774
 List::Cycle	PASS	33	33		2026-04-25		1d5def215
 List::Uniq	PASS	37	37		2026-04-26		1d5def215
+Locale::Currency::Format	PASS	28	28		2026-04-27		12fb0165d
 Locale::SubCountry	PASS	15	15		2026-04-25		1d5def215
 Log::Any::Adapter::Callback	PASS	2	2		2026-04-21		3f3336774
 Log::Any::Adapter::Screen	PASS	1	1		2026-04-25		1d5def215

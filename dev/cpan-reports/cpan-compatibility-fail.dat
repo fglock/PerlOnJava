@@ -243,13 +243,16 @@ AutoReloader	FAIL			No parseable output	2026-04-22
 AutoXS	FAIL	1	0	1/1 subtests failed	2026-04-25		
 AxKit2	FAIL			No parseable output	2026-04-22		
 AxKit::XSP::Cookie	FAIL			Missing: Apache/AxKit/Language/XSP.pm	2026-04-21		
+AxKit::XSP::Currency	FAIL				2026-04-27		
 AxKit::XSP::Exception	FAIL			Missing: Apache/AxKit/Language/XSP.pm	2026-04-26		
 AxKit::XSP::L10N	FAIL	34	33	1/34 subtests failed	2026-04-25		
 AxKit::XSP::MD5	FAIL			Missing: Apache/AxKit/Language/XSP.pm	2026-04-21		
 Axis	FAIL			No parseable output	2026-04-21		
 B::BUtils	FAIL			TIMEOUT (>300s)	2026-04-21		
 B::COW	FAIL	2	1	1/2 subtests failed	2026-04-26		
+B::CallChecker	FAIL			No parseable output	2026-04-27		
 B::Deobfuscate	FAIL				2026-04-12		
+B::DeparseTree::Common	FAIL			No parseable output	2026-04-27		
 B::Generate	FAIL			Configure failed	2026-04-25		
 B::Graph	FAIL				2026-04-21		
 B::Hooks::EndOfScope	FAIL	24	17	7/24 subtests failed	2026-04-21		
@@ -259,9 +262,11 @@ B::Keywords	FAIL	15	15		2026-04-12
 B::Lint	FAIL			Unknown test outcome	2026-04-12		
 B::Lint::Plugin::Test	FAIL			No parseable output	2026-04-12		
 B::Module::Info	FAIL	111	73	38/111 subtests failed	2026-04-25		
+B::OP	FAIL			No parseable output	2026-04-27		
 B::Utils1	FAIL	12	0	27/12 subtests failed	2026-04-25		
 BBS::UserInfo::SOB	FAIL	1	0	1/1 subtests failed	2026-04-12		
 BIE::Data::HDF5	FAIL			Configure failed	2026-04-12		
+BIND::SDB::LDAP::Helper	FAIL			No parseable output	2026-04-27		
 BSD::Jail::Object	FAIL			Configure failed	2026-04-21		
 BSD::Process::Affinity	FAIL			Configure failed	2026-04-21		
 BSD::Resource	FAIL			Configure failed	2026-04-26		
@@ -274,12 +279,12 @@ BaseLib	FAIL				2026-04-12
 BeePack	FAIL			No parseable output	2026-04-21		
 BenchmarkAnything::Config	FAIL	2	2		2026-04-26		
 BenchmarkAnything::Reporter	FAIL	2	2		2026-04-21		
-BenchmarkAnything::Schema	FAIL	3	3	Missing: JSON/Hyper.pm	2026-04-21		
+BenchmarkAnything::Schema	FAIL			No parseable output	2026-04-27		
 BenchmarkAnything::Storage::Backend::SQL	FAIL			Unknown test outcome	2026-04-21		
 BenchmarkAnything::Storage::Frontend::Lib	FAIL	1	0	1/1 subtests failed	2026-04-21		
 BenchmarkAnything::Storage::Frontend::Tools	FAIL			Unknown test outcome	2026-04-21		
 Bencode	FAIL	1	0	1/1 subtests failed	2026-04-21		
-BerkeleyDB	FAIL	3	3		2026-04-12		
+BerkeleyDB	FAIL			No parseable output	2026-04-27		
 BibliConverter	FAIL			Unknown test outcome	2026-04-26		
 Bifcode	FAIL				2026-04-25		
 Binding	FAIL			Configure failed	2026-04-12		
@@ -298,17 +303,24 @@ Bluesky	FAIL			Missing: At.pm	2026-04-12
 Bootylicious	FAIL	134	0	135/134 subtests failed	2026-04-26		
 BorderStyle	FAIL			PerlOnJava: register limit exceeded	2026-04-12		
 Bot::BasicBot	FAIL	2	0	2/2 subtests failed	2026-04-21		
+Box2D::b2ContactListener	FAIL			No parseable output	2026-04-27		
 Brickyard	FAIL			Missing: Role/Basic.pm	2026-04-22		
 BridgeAPI	FAIL			No parseable output	2026-04-21		
 Bryar	FAIL			No parseable output	2026-04-22		
+Buscador	FAIL			No parseable output	2026-04-27		
 Business::ISBN	FAIL	32	20	12/32 subtests failed	2026-04-22		
 Business::OnlinePayment	FAIL	81	80	1/81 subtests failed	2026-04-25		
 BuzzSaw::Cmd	FAIL			No parseable output	2026-04-21		
 ByteCache	FAIL			Unknown test outcome	2026-04-12		
 Bytes::Random::Secure	FAIL	207	195	12/207 subtests failed	2026-04-12		
 C::Scan::Constants	FAIL	21	17	4/21 subtests failed	2026-04-25		
+C::TCC	FAIL			No parseable output	2026-04-27		
 CACertOrg::CA	FAIL			No parseable output	2026-04-22		
+CAD::AutoCAD::Detect	FAIL			No parseable output	2026-04-27		
 CAD::Calc	FAIL			Unknown test outcome	2026-04-12		
+CAD::Drawing::IO::OpenDWG	FAIL			No parseable output	2026-04-27		
+CAD::Drawing::IO::PostScript	FAIL			No parseable output	2026-04-27		
+CAD::Drawing::IO::Tk	FAIL			No parseable output	2026-04-27		
 CAD::OpenSCAD::GearMaker	FAIL			Missing: Object/Pad.pm	2026-04-25		
 CAM::EmailTemplate::SMTP	FAIL			Missing: CAM/Template.pm	2026-04-12		
 CAM::Template::Cache	FAIL			No parseable output	2026-04-25		
@@ -323,11 +335,13 @@ CDB_File::Generator	FAIL			Missing: CDB_File.pm	2026-04-25
 CDB_File_Thawed	FAIL	10	0	36/10 subtests failed	2026-04-25		
 CDDB::Fake	FAIL			No parseable output	2026-04-21		
 CDMIUtils	FAIL			Unknown test outcome	2026-04-26		
+CEFACT::Unit	FAIL			No parseable output	2026-04-27		
 CGI::AppBuilder	FAIL			Configure failed	2026-04-26		
 CGI::AppBuilder::Log	FAIL			Configure failed	2026-04-21		
 CGI::AppBuilder::MapDisp2	FAIL			No parseable output	2026-04-22		
 CGI::AppBuilder::MapForms	FAIL			Configure failed	2026-04-21		
 CGI::AppBuilder::Message	FAIL			Configure failed	2026-04-26		
+CGI::AppBuilder::TaskLoads	FAIL			No parseable output	2026-04-27		
 CGI::AppBuilder::Tasks	FAIL			Configure failed	2026-04-21		
 CGI::Application::Dispatch	FAIL	28	10	18/28 subtests failed	2026-04-21		
 CGI::Application::Dispatch::Server	FAIL			Unknown test outcome	2026-04-21		
@@ -336,6 +350,7 @@ CGI::Application::Plugin::AJAXUpload	FAIL	4	0	35/4 subtests failed	2026-04-25
 CGI::Application::Plugin::AutoRunmode	FAIL	74	71	3/74 subtests failed	2026-04-12		
 CGI::Application::Plugin::CHI	FAIL	12	0	42/12 subtests failed	2026-04-26		
 CGI::Application::Plugin::Config::General	FAIL	152	150	2/152 subtests failed	2026-04-26		
+CGI::Application::Plugin::Config::YAML	FAIL	1	0	1/1 subtests failed	2026-04-27		
 CGI::Application::Plugin::Feedback	FAIL			Missing: CGI/Session.pm	2026-04-21		
 CGI::Application::Plugin::FormState	FAIL			No parseable output	2026-04-22		
 CGI::Application::Plugin::Header	FAIL			No parseable output	2026-04-22		
@@ -1200,6 +1215,7 @@ File::chmod	FAIL	39	30	9/39 subtests failed	2026-04-12
 Filter::Template	FAIL	13	0	19/13 subtests failed	2026-04-22		
 Filter::signatures	FAIL	10	0	59/10 subtests failed	2026-04-12		
 Filter::tee	FAIL	7	0	34/7 subtests failed	2026-04-26		
+Finance::Currency::Convert::WebserviceX	FAIL	1	0	18/1 subtests failed	2026-04-27		
 FindBin::libs	FAIL			Configure failed	2026-04-22		
 Fl_Align_Group	FAIL			No parseable output	2026-04-22		
 FlightRecorder	FAIL				2026-04-21		
@@ -3046,7 +3062,7 @@ lexical::underscore	FAIL	7	6	1/7 subtests failed	2026-04-21
 lib::abs	FAIL	32	0	126/32 subtests failed	2026-04-21		
 lib::projectroot	FAIL	22	15	7/22 subtests failed	2026-04-22		
 local::lib	FAIL	245	132	113/245 subtests failed	2026-04-22		
-mod_perl	FAIL			Configure failed	2026-04-25		
+mod_perl	FAIL			Configure failed	2026-04-27		
 mod_perl2	FAIL			Configure failed	2026-04-27		
 namespace::autoclean	FAIL	66	60	6/66 subtests failed	2026-04-21		
 next::XS	FAIL			Configure failed	2026-04-26		
