@@ -265,7 +265,12 @@ public class SubroutineParser {
                     // pair is the real indirect-object call. So reject the outer form.
                     // Example: `myfunc new Foo (4,5)` should parse as `myfunc(Foo->new(4,5))`,
                     // NOT as `new->myfunc(Foo(4,5))`.
-                    || (isPackage == null && !isKnownSub && token.type == LexerTokenType.IDENTIFIER)) {
+                    // Only reject when the outer `subName` is itself a known sub — otherwise we'd
+                    // wrongly reject the legitimate top-level case
+                    // `new HTTP::Request GET => $url` where `subName=new` is not declared and
+                    // `packageName=HTTP::Request` followed by IDENTIFIER `GET` is just the
+                    // method's first list-arg.
+                    || (subExists && isPackage == null && !isKnownSub && token.type == LexerTokenType.IDENTIFIER)) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax
