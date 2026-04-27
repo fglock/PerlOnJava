@@ -74,6 +74,18 @@ _install_reader('Class::MOP::Mixin::HasMethods', 'wrapped_method_metaclass');
 # Class::MOP::Method
 _install_readers('Class::MOP::Method', qw(name package_name body));
 
+# is_stub: true when method body is undef / not a real coderef.
+{
+    no strict 'refs';
+    *{'Class::MOP::Method::is_stub'} = sub {
+        my $self = $_[0];
+        my $body = $self->{body};
+        return 1 unless defined $body;
+        return 0 if ref $body eq 'CODE';
+        return 1;
+    };
+}
+
 # Class::MOP::Method::Generated
 _install_readers('Class::MOP::Method::Generated', qw(is_inline definition_context));
 
@@ -173,11 +185,12 @@ _install_readers('Class::MOP::Attribute', qw(associated_class associated_methods
 }
 
 # ---------------------------------------------------------------------------
-# Moose::Util::TypeConstraints::Builtins / Moose::Exporter export-flag
-# magic — stubs. Real impl uses MAGIC_set; we don't need it for
-# correctness, only for warning shape.
+# Moose::Exporter export-flag magic — stubs. Real impl uses MAGIC_set;
+# we don't need it for correctness, only for warning shape.
 {
     no strict 'refs';
+    *{'Moose::Exporter::_flag_as_reexport'} = sub { } unless defined &Moose::Exporter::_flag_as_reexport;
+    *{'Moose::Exporter::_export_is_flagged'} = sub { 0 } unless defined &Moose::Exporter::_export_is_flagged;
     *{'Moose::Exporter::_make_unimport_hooks'} = sub { } unless defined &Moose::Exporter::_make_unimport_hooks;
 }
 

@@ -38,7 +38,11 @@ sub new {
     # we don't want this creating
     # a cycle in the code, if not
     # needed
-    weaken($self->{'attribute'});
+    # PerlOnJava: weaken disabled — cooperative refCount is too fragile
+    # to keep the attribute alive across the Method::Accessor's
+    # _initialize_body call. Loses cycle detection at global destruction
+    # but we accept the leak since our DESTROY semantics differ anyway.
+    # weaken($self->{'attribute'});
 
     $self->_initialize_body;
 
