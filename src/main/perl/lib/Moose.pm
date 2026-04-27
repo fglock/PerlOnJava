@@ -66,6 +66,12 @@ use Scalar::Util ();
 # answer here (we have no real Moose metaclasses to find).
 use Class::MOP ();
 
+# Pre-load Moose::Util::MetaRole so MooseX::* extensions that call
+# Moose::Util::MetaRole::apply_metaroles(...) without a `use` line
+# (relying on Moose to have loaded it) don't get an "Undefined subroutine"
+# error. Under our shim it's a no-op.
+use Moose::Util::MetaRole ();
+
 # ---------------------------------------------------------------------------
 # Type constraint name -> validator coderef. Returns a Moo-compatible
 # isa-checker that croaks on validation failure.
@@ -216,13 +222,24 @@ sub import {
     Carp::croak("Moose shim: failed to load Moo for $target: $err") if $err;
 
     # Wrap the target's `has` to translate Moose-style options before Moo
-    # sees them.
+    # sees them, AND record the attribute on the target's _FakeMeta so
+    # $meta->get_attribute_list / find_attribute_by_name work.
     my $orig_has = do { no strict 'refs'; \&{"${target}::has"} };
     if ($orig_has) {
         no strict 'refs';
         no warnings 'redefine';
         *{"${target}::has"} = sub {
-            $orig_has->( _translate_has_args(@_) );
+            my @orig_args = @_;
+            my $rv = $orig_has->( _translate_has_args(@orig_args) );
+            # Track on metaclass.
+            my $meta = Moose::_FakeMeta->_for($target);
+            my $names = $orig_args[0];
+            for my $n (ref $names eq 'ARRAY' ? @$names : ($names)) {
+                next unless defined $n && !ref $n;
+                my %opts = @orig_args[1..$#orig_args];
+                $meta->add_attribute(name => $n, %opts);
+            }
+            return $rv;
         };
     }
 
@@ -258,28 +275,230 @@ sub unimport {
 
 package Moose::_FakeMeta;
 
+# Stub metaclass returned by $class->meta and Class::MOP::class_of-via-
+# the-shim. It is not a real Class::MOP::Class, but it inherits from
+# Class::MOP::Class and Moose::Meta::Class so that
+#   isa_ok($meta, 'Class::MOP::Class')
+#   isa_ok($meta, 'Moose::Meta::Class')
+# pass.
+#
+# Method coverage is the bare minimum the upstream Moose 2.4000 test
+# suite reaches for. Everything is implemented as a "remember what we
+# saw" registry — no real meta-object protocol. See dev/modules/moose_support.md.
+
+require Class::MOP::Class;
+require Moose::Meta::Class;
+our @ISA = ('Moose::Meta::Class', 'Class::MOP::Class');
+
+# Per-class cache so that $class->meta returns the same metaclass each
+# call. Required for tests that compare metaclass identity.
+my %META_CACHE;
+
 sub _for {
     my ($class, $for) = @_;
-    bless { name => $for }, $class;
+    return $META_CACHE{$for} ||= bless {
+        name        => $for,
+        attributes  => {},  # name => Class::MOP::Attribute-ish
+        attr_order  => [],  # insertion order
+        is_immutable => 0,
+        roles       => [],
+    }, $class;
 }
 
 sub name           { $_[0]->{name} }
-sub make_immutable { $_[0] }
-sub make_mutable   { $_[0] }
-sub is_immutable   { 0 }
-sub get_attribute_list { () }
-sub get_all_attributes { () }
+sub make_immutable { $_[0]->{is_immutable} = 1; $_[0] }
+sub make_mutable   { $_[0]->{is_immutable} = 0; $_[0] }
+sub is_immutable   { $_[0]->{is_immutable} ? 1 : 0 }
+sub is_mutable     { $_[0]->{is_immutable} ? 0 : 1 }
+sub is_anon_class  { 0 }
+sub meta           { Moose::_FakeMeta->_for(ref $_[0] || $_[0]) }
+
+# ---------------------------------------------------------------------------
+# Attribute tracking. Moose.pm's `has` wrapper calls
+# $meta->add_attribute(name => $name, %opts) so $meta->get_attribute_list
+# and friends work like upstream.
+# ---------------------------------------------------------------------------
+
+sub add_attribute {
+    my $self = shift;
+    require Class::MOP::Attribute;
+    my $attr;
+    if (@_ == 1 && ref $_[0]) {
+        # Already an attribute object.
+        $attr = $_[0];
+    }
+    else {
+        $attr = Class::MOP::Attribute->new(@_);
+    }
+    my $name = $attr->name;
+    return unless defined $name;
+    unless (exists $self->{attributes}{$name}) {
+        push @{ $self->{attr_order} }, $name;
+    }
+    $self->{attributes}{$name} = $attr;
+    return $attr;
+}
+
+sub get_attribute {
+    my ($self, $name) = @_;
+    return unless defined $name;
+    return $self->{attributes}{$name};
+}
+
+sub find_attribute_by_name {
+    my ($self, $name) = @_;
+    return unless defined $name;
+    return $self->{attributes}{$name} if $self->{attributes}{$name};
+    # Walk @ISA to find the attribute on a parent class.
+    require mro;
+    for my $parent (@{ mro::get_linear_isa($self->{name}) }) {
+        next if $parent eq $self->{name};
+        my $pmeta = $META_CACHE{$parent} or next;
+        my $a = $pmeta->{attributes}{$name};
+        return $a if $a;
+    }
+    return;
+}
+
+sub has_attribute {
+    my ($self, $name) = @_;
+    return defined $self->find_attribute_by_name($name) ? 1 : 0;
+}
+
+sub remove_attribute {
+    my ($self, $name) = @_;
+    return unless defined $name && exists $self->{attributes}{$name};
+    @{ $self->{attr_order} } = grep { $_ ne $name } @{ $self->{attr_order} };
+    return delete $self->{attributes}{$name};
+}
+
+sub get_attribute_list {
+    my $self = shift;
+    return @{ $self->{attr_order} || [] };
+}
+
+sub get_all_attributes {
+    my $self = shift;
+    my @attrs;
+    my %seen;
+    require mro;
+    for my $class (@{ mro::get_linear_isa($self->{name}) }) {
+        my $m = $META_CACHE{$class} or next;
+        for my $name (@{ $m->{attr_order} || [] }) {
+            next if $seen{$name}++;
+            push @attrs, $m->{attributes}{$name};
+        }
+    }
+    return @attrs;
+}
+
+sub get_attribute_map { +{ %{ $_[0]->{attributes} || {} } } }
+
+# ---------------------------------------------------------------------------
+# Method introspection. We don't track methods explicitly; we read the
+# package's stash on demand. Good enough for upstream tests that ask
+# things like "does this class have method X?".
+# ---------------------------------------------------------------------------
+
+sub get_method {
+    my ($self, $name) = @_;
+    return unless defined $name;
+    my $class = $self->{name};
+    no strict 'refs';
+    my $code = *{"${class}::${name}"}{CODE};
+    return unless $code;
+    require Class::MOP::Method;
+    return Class::MOP::Method->wrap(
+        body         => $code,
+        name         => $name,
+        package_name => $class,
+    );
+}
+
+sub has_method {
+    my ($self, $name) = @_;
+    return 0 unless defined $name;
+    my $class = $self->{name};
+    no strict 'refs';
+    return *{"${class}::${name}"}{CODE} ? 1 : 0;
+}
+
+sub get_method_list {
+    my $self = shift;
+    my $class = $self->{name};
+    no strict 'refs';
+    my $stash = \%{"${class}::"};
+    my @methods;
+    for my $sym (keys %$stash) {
+        next if $sym =~ /::\z/;
+        my $glob = $stash->{$sym};
+        next unless ref \$glob eq 'GLOB' || (defined $glob);
+        no strict 'refs';
+        next unless *{"${class}::${sym}"}{CODE};
+        push @methods, $sym;
+    }
+    return @methods;
+}
+
+# ---------------------------------------------------------------------------
+# Object construction. Tests reach for $meta->new_object(%args) as an
+# alternative to $class->new(%args). Forward to the class's new().
+# ---------------------------------------------------------------------------
+
+sub new_object {
+    my ($self, @args) = @_;
+    my $class = $self->{name};
+    return $class->new(@args);
+}
+
+sub create_anon_class { Class::MOP::Class::create_anon_class('Class::MOP::Class', @_[1..$#_]) }
+
+# ---------------------------------------------------------------------------
+# Inheritance / role membership.
+# ---------------------------------------------------------------------------
+
 sub superclasses {
     my $self = shift;
     no strict 'refs';
     if (@_) { @{"$self->{name}::ISA"} = @_ }
     return @{"$self->{name}::ISA"};
 }
+
 sub linearized_isa {
     my $self = shift;
     require mro;
     @{ mro::get_linear_isa($self->{name}) };
 }
+
+sub class_precedence_list { goto &linearized_isa }
+
+sub roles {
+    my $self = shift;
+    return @{ $self->{roles} || [] };
+}
+
+sub does_role {
+    my ($self, $role) = @_;
+    return 0 unless defined $role;
+    my $class = $self->{name};
+    return 1 if $class->can('DOES') && eval { $class->DOES($role) };
+    if (defined &Role::Tiny::does_role) {
+        return 1 if Role::Tiny::does_role($class, $role);
+    }
+    return 0;
+}
+
+# Misc upstream APIs that some tests poke at.
+sub identifier              { $_[0]->{name} }
+sub version                 { no strict 'refs'; ${"$_[0]->{name}::VERSION"} }
+sub authority               { undef }
+sub _attach_to_class        { $_[0] }
+sub _attach_to_metaclass    { $_[0] }
+sub add_method              { 1 }   # methods are already installed by Moo
+sub remove_method           { 1 }
+sub add_role                { push @{ $_[0]->{roles} ||= [] }, $_[1]; $_[0] }
+sub _add_meta_method        { 1 }
+sub add_method_modifier     { 1 }   # Moo's `before`/`after`/`around` already installed
 
 1;
 

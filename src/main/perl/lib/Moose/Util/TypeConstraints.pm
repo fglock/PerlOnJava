@@ -32,6 +32,8 @@ our @EXPORT = qw(
     class_type role_type duck_type
     find_type_constraint register_type_constraint
     create_type_constraint_union
+    find_or_parse_type_constraint
+    list_all_type_constraints list_all_builtin_type_constraints
 );
 our @EXPORT_OK = @EXPORT;
 
@@ -46,8 +48,12 @@ my %STANDARD_TYPES;
 
 sub _store {
     my $def = shift;
-    $TYPES{ $def->{name} } = $def;
-    return $def;
+    # Bless into _Stub so callers can use ->name / ->check / ->isa.
+    # The _Stub class is defined further down in this file; we forward-
+    # require it here just to avoid a load-order dance.
+    my $obj = bless { %$def }, 'Moose::Util::TypeConstraints::_Stub';
+    $TYPES{ $obj->{name} } = $obj if defined $obj->{name};
+    return $obj;
 }
 
 # subtype 'Name', as 'Parent', where { ... }, message { ... };
@@ -187,6 +193,8 @@ sub create_type_constraint_union   { union(@_) }
 
 {
     package Moose::Util::TypeConstraints::_Stub;
+    require Moose::Meta::TypeConstraint;
+    our @ISA = ('Moose::Meta::TypeConstraint');
     sub new {
         my ($class, %opts) = @_;
         $opts{constraint} ||= sub { 1 };
@@ -287,6 +295,68 @@ sub _stub_type {
 sub list_all_builtin_type_constraints { keys %STANDARD_TYPES }
 sub list_all_type_constraints {
     return ( keys(%STANDARD_TYPES), keys %TYPES );
+}
+
+# ---------------------------------------------------------------------------
+# Find-or-parse: tries the registry first, then handles the "Foo|Bar" /
+# "Maybe[Foo]" / "ArrayRef[Foo]" parameterized name-syntax. We stop short
+# of a full type-name parser; for unknown shapes we just return undef.
+# ---------------------------------------------------------------------------
+
+sub find_or_parse_type_constraint {
+    my ($name) = @_;
+    return undef unless defined $name;
+    my $t = find_type_constraint($name);
+    return $t if $t;
+    # Union: 'Foo | Bar'
+    if ($name =~ /\|/) {
+        my @members = map { find_or_parse_type_constraint($_) }
+                      map { my $x = $_; $x =~ s/\A\s+|\s+\z//g; $x }
+                      split /\|/, $name;
+        return undef if grep { !defined } @members;
+        return _stub_type(name => $name, parent => 'Any',
+                          constraint => sub {
+                              for my $m (@members) {
+                                  return 1 if $m->check($_[0]);
+                              }
+                              return 0;
+                          });
+    }
+    # Maybe[Foo]
+    if ($name =~ /\AMaybe\[(.+)\]\z/) {
+        my $inner = find_or_parse_type_constraint($1);
+        return undef unless $inner;
+        return _stub_type(name => $name, parent => 'Item',
+                          constraint => sub {
+                              return 1 if !defined $_[0];
+                              $inner->check($_[0]);
+                          });
+    }
+    # ArrayRef[Foo] / HashRef[Foo] — drop parameterization for now.
+    if ($name =~ /\A(ArrayRef|HashRef|ScalarRef)\[/) {
+        my $base = find_type_constraint($1);
+        return $base;
+    }
+    return undef;
+}
+
+# ---------------------------------------------------------------------------
+# Bulk-export every registered type-constraint as a sub in the caller's
+# package. Used by Moose::Util::TypeConstraints itself in some idioms,
+# and occasionally by downstream code that builds wrapper modules.
+# ---------------------------------------------------------------------------
+
+sub export_type_constraints_as_functions {
+    my $caller = caller;
+    no strict 'refs';
+    for my $name (list_all_type_constraints()) {
+        next unless defined $name;
+        my $t = find_type_constraint($name);
+        next unless $t;
+        next if defined &{"${caller}::${name}"};
+        *{"${caller}::${name}"} = sub { $t->check(@_) };
+    }
+    return;
 }
 
 1;

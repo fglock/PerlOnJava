@@ -35,13 +35,23 @@ sub import {
     Carp::croak("Moose::Role shim: failed to load Moo::Role for $target: $err")
         if $err;
 
-    # Wrap target's `has` to translate Moose-style options.
+    # Wrap target's `has` to translate Moose-style options AND record
+    # the attribute on the target's _FakeMeta.
     my $orig_has = do { no strict 'refs'; \&{"${target}::has"} };
     if ($orig_has) {
         no strict 'refs';
         no warnings 'redefine';
         *{"${target}::has"} = sub {
-            $orig_has->( Moose::_translate_has_args(@_) );
+            my @orig_args = @_;
+            my $rv = $orig_has->( Moose::_translate_has_args(@orig_args) );
+            my $meta = Moose::_FakeMeta->_for($target);
+            my $names = $orig_args[0];
+            for my $n (ref $names eq 'ARRAY' ? @$names : ($names)) {
+                next unless defined $n && !ref $n;
+                my %opts = @orig_args[1..$#orig_args];
+                $meta->add_attribute(name => $n, %opts);
+            }
+            return $rv;
         };
     }
 

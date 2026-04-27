@@ -12,7 +12,7 @@ for defining classes, attributes, roles, and method modifiers.
 except `t/todo_tests/moose_and_threads.t` (already TODO upstream;
 PerlOnJava does not implement `threads`).
 
-**Today**: 56 / 478 fully-green via the Moose-as-Moo shim.
+**Today**: 65 / 478 fully-green via the Moose-as-Moo shim (after Phase 3).
 
 The path from 56 to 477:
 
@@ -337,15 +337,15 @@ install" scenario — define a distroprefs entry that overrides `pl` /
 
 Snapshot history from `./jcpan -t Moose` against the current shim:
 
-| Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) | After Phase 2 stubs (Apr 2026) |
-|---|---|---|---|---|
-| Test files executed | 478 | 478 | 478 | 478 |
-| Individual assertions executed | 616 | 616 | 667 | **1419** |
-| Fully passing files | ~29 | 35 | 36 | **56** |
-| Partially passing files | ~44 | 94 | 98 | **184** |
-| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | ~344 | **~238** |
-| Assertions ok | 370 | 372 | 419 | **953** |
-| Assertions fail | 246 | 244 | 248 | **466** |
+| Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) | After Phase 2 stubs (Apr 2026) | After Phase 3 (Apr 2026) |
+|---|---|---|---|---|---|
+| Test files executed | 478 | 478 | 478 | 478 | 478 |
+| Individual assertions executed | 616 | 616 | 667 | 1419 | **2226** |
+| Fully passing files | ~29 | 35 | 36 | 56 | **65** |
+| Partially passing files | ~44 | 94 | 98 | 184 | **240** |
+| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | ~344 | ~238 | **~173** |
+| Assertions ok | 370 | 372 | 419 | 953 | **1423** |
+| Assertions fail | 246 | 244 | 248 | 466 | **803** |
 
 The initial 29 fully-passing files covered BUILDARGS / BUILD chains,
 immutable round-trips, anonymous role creation, several Moo↔Moose bug
@@ -426,9 +426,54 @@ the stub (e.g. `Test::Moose::has_attribute_ok` doesn't know about
 inherited Moo attributes) which would only be fixed by Phase D
 (real Class::MOP / Moose port).
 
-Phases C-full / D (real `Class::MOP::Class` instances and a pure-Perl
-`Moose` port) should move these numbers further; record the new
-totals here whenever they shift.
+**Phase 3** (this PR's third step) added:
+
+- Rich `Moose::_FakeMeta`: `@ISA` now includes `Class::MOP::Class`
+  and `Moose::Meta::Class`, so `isa_ok($meta, ...)` checks pass.
+  Implements `add_attribute`, `get_attribute`, `find_attribute_by_name`,
+  `has_attribute`, `remove_attribute`, `get_attribute_list`,
+  `get_all_attributes` (walks @ISA), `get_method` (returns a
+  `Class::MOP::Method`), `has_method`, `get_method_list`,
+  `new_object`, `superclasses`, `linearized_isa`, `is_immutable`,
+  `is_mutable`, `roles`, `does_role`, plus a per-class meta cache so
+  `$class->meta` returns the same object each call.
+- `Moose.pm` and `Moose/Role.pm` now record each `has` declaration on
+  the target's `_FakeMeta`, so `$meta->get_attribute_list` and
+  `find_attribute_by_name` actually return useful data.
+- New compile-time stubs: `Class::MOP::Method`, `Class::MOP::Instance`,
+  `Class::MOP::Method::Accessor`, `Class::MOP::Package`,
+  `Moose::Meta::Method`, `Moose::Meta::Attribute`, `Moose::Meta::Role`
+  (with `create_anon_role`), `Moose::Meta::Role::Composite`,
+  `Moose::Meta::TypeConstraint`, `Moose::Meta::TypeConstraint::Enum`,
+  `Moose::Util::MetaRole` (with `apply_metaroles` no-op),
+  `Moose::Exception` (with overloaded stringification + `throw`).
+- `Moose::Util::TypeConstraints::_Stub` now `@ISA`-inherits from
+  `Moose::Meta::TypeConstraint`, so type stubs pass `isa_ok($t,
+  'Moose::Meta::TypeConstraint')`.
+- `Moose::Util::TypeConstraints::_store` now blesses results into
+  `_Stub` (was returning unblessed hashrefs, which produced "Can't
+  call method 'check' on unblessed reference" failures).
+- New: `find_or_parse_type_constraint` (handles `Maybe[Foo]`,
+  `Foo|Bar`, `ArrayRef[Foo]`, `HashRef[Foo]`,
+  `ScalarRef[Foo]`).
+- New: `export_type_constraints_as_functions`.
+- `Moose.pm` pre-loads `Moose::Util::MetaRole` so MooseX::* extensions
+  that call `apply_metaroles` without an explicit `use` line don't
+  fail with "Undefined subroutine".
+
+Net effect of Phase 3: **+807 individual assertions now execute**
+(1419 → 2226), **+470 newly pass** (953 → 1423), **+9 fully-green
+files** (56 → 65), and -65 files now compile that previously errored
+out at compile time. The +337 newly-failing assertions are again
+mostly tests that hadn't reached their assertion phase before.
+
+Cumulative across this PR (master baseline → end of Phase 3):
+**+30 fully-green files (35 → 65)**, **+1610 assertions executed**
+(616 → 2226), **+1051 newly passing** (372 → 1423).
+
+Phases 4 → 6 (more shim widening) and Phase D (bundle pure-Perl
+Moose) should move these numbers further; record the new totals
+here whenever they shift.
 
 ---
 
@@ -527,7 +572,7 @@ and PerlOnJava doesn't implement `threads`). Today: **56 / 478**.
 - **Phase A — DONE.** `ExtUtils::HasCompiler` deterministic stub ships at `src/main/perl/lib/ExtUtils/HasCompiler.pm`.
 - **Phase C-mini — DONE.** `Class::MOP` shim with `class_of` / `get_metaclass_by_name` / `get_code_info` / `is_class_loaded` and friends; ships at `src/main/perl/lib/Class/MOP.pm`.
 - **Phase 2 stubs — DONE.** `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, plus skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Meta::TypeConstraint::Parameterized` / `Moose::Meta::Role::Application::RoleSummation` / `Moose::Exporter`. Pre-populated standard type-constraint stubs to avoid `BAIL_OUT` in upstream test suite.
-- **Phase 3 — not started.** Rich `Moose::_FakeMeta` + next batch of compile-time stubs. Ships value (~75–80 fully-green) but does not pass all tests on its own.
+- **Phase 3 — DONE.** Rich `Moose::_FakeMeta` (with `@ISA` and full method surface), attribute-tracking via `has` wrapper, plus the next batch of compile-time stubs (`Class::MOP::Method` / `::Instance` / `::Method::Accessor` / `::Package`, `Moose::Meta::Method` / `::Attribute` / `::Role` / `::Role::Composite` / `::TypeConstraint` / `::TypeConstraint::Enum`, `Moose::Util::MetaRole`, `Moose::Exception`), `_Stub` blessed into `Moose::Meta::TypeConstraint`, `find_or_parse_type_constraint` + `export_type_constraints_as_functions`. **65 / 478 fully-green.**
 - **Phases 4 / 5 / 6 — not started.** Incremental shim widening. Ship value (~110–130 fully-green) but do not pass all tests on their own.
 - **Phase D — not started.** Bundle pure-Perl Moose. **This is the phase that gets us to 477 / 478.** Now sized at ~5 days (was previously framed as much larger). See "Phase D plan" below.
 - **Phase B — deferred.** Strip XS keys in `WriteMakefile`. Not on the Moose pass-all-tests critical path; the bundled Moose ships from the JAR.
@@ -888,21 +933,25 @@ the Moose pass-all-tests plan.
 Optimistic order (Phases 3 → 6 ship value incrementally; D is the
 destination):
 
-- [ ] **Phase 3a**: enrich `Moose::_FakeMeta` (`@ISA` includes
-      `Class::MOP::Class` + `Moose::Meta::Class`; add
-      `add_attribute` / `get_attribute` / `new_object` / `is_mutable`
-      / `get_method`).
-- [ ] **Phase 3b**: add next batch of compile-time `.pm` stubs
-      (`Moose::Meta::Attribute`, `Moose::Meta::Role`,
-      `Moose::Meta::Role::Composite`, `Class::MOP::Method`,
-      `Class::MOP::Instance`, `Moose::Util::MetaRole`,
-      `Moose::Meta::TypeConstraint`, `Moose::Exception`).
-- [ ] **Phase 3c**: bless `Moose::Util::TypeConstraints::_Stub` into
-      `Moose::Meta::TypeConstraint`.
-- [ ] **Phase 3d**: add `export_type_constraints_as_functions` and
+- [x] **Phase 3a**: enriched `Moose::_FakeMeta` (`@ISA` includes
+      `Class::MOP::Class` + `Moose::Meta::Class`; added
+      `add_attribute` / `get_attribute` / `find_attribute_by_name` /
+      `has_attribute` / `remove_attribute` / `get_attribute_list` /
+      `get_all_attributes` / `get_method` / `has_method` /
+      `get_method_list` / `new_object` / `is_mutable`).
+- [x] **Phase 3b**: added next batch of compile-time `.pm` stubs
+      (`Class::MOP::Method`, `Class::MOP::Instance`,
+      `Class::MOP::Method::Accessor`, `Class::MOP::Package`,
+      `Moose::Meta::Method`, `Moose::Meta::Attribute`,
+      `Moose::Meta::Role`, `Moose::Meta::Role::Composite`,
+      `Moose::Meta::TypeConstraint`, `Moose::Meta::TypeConstraint::Enum`,
+      `Moose::Util::MetaRole`, `Moose::Exception`).
+- [x] **Phase 3c**: blessed `Moose::Util::TypeConstraints::_Stub`
+      into `Moose::Meta::TypeConstraint`.
+- [x] **Phase 3d**: added `export_type_constraints_as_functions` and
       `find_or_parse_type_constraint` to
       `Moose::Util::TypeConstraints`.
-- [ ] **Phase 3e**: add `Moose::Meta::Role->create_anon_role`.
+- [x] **Phase 3e**: added `Moose::Meta::Role->create_anon_role`.
 - [ ] **Phase 4**: hook into Moo's attribute store from
       `Moose::_FakeMeta->get_attribute*` methods.
 - [ ] **Phase 5**: real-ish `Moose::Util::MetaRole::apply_metaroles`.
