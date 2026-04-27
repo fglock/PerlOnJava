@@ -593,6 +593,38 @@ and PerlOnJava doesn't implement `threads`). Today: **56 / 478**.
 - [x] Phase C-mini: `Class::MOP` shim (no metaclass instances; just enough surface to keep Moo happy)
 - [x] Phase 2 stubs: `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Exporter` / friends, and standard-type stubs in `Moose::Util::TypeConstraints` to suppress upstream `BAIL_OUT`.
 
+### Lessons learned: core-runtime fixes that were reverted (Apr 2026)
+
+During the Phase 3 → Phase D push, two "core fixes" were attempted to
+unblock Class::Load / Class::MOP bootstrap, both later reverted:
+
+1. **`*GLOB{SCALAR}` returns a SCALAR reference, not the value**
+   (commit `880bf65c7`, reverted in `3d02203dc`). Motivation:
+   Class::Load::PP line 38 does `${ *{...}{SCALAR} }` and our impl
+   returned a copy. The "fix" returned a fresh `\$value` reference
+   each call. **This silently broke Path::Class** (and DBIC by
+   extension) because Path::Class's overload code does
+   `*$sym = \&nil; $$sym = $arg{$_};` — assignments through the
+   glob deref expect to land on the package's actual SV slot, not a
+   throwaway reference. Lesson: any change to typeglob slot semantics
+   must be validated against the full DBIC suite, which exercises
+   Path::Class heavily.
+2. **Auto-sweep weaken / walker-gated destroy**
+   (commits `ca3af1ad3` + `ecb5c6400`, reverted in `f8ef367e4` /
+   `d3743a11c`). Motivation: Class::MOP bootstrap died because the
+   metaclass was being destroyed mid-construction. The "fix" coupled
+   destroy timing to the reachability walker's view of refcount. It
+   passed targeted refcount unit tests but introduced regressions in
+   DBIC's `t/52leaks.t` that the unit tests didn't catch. Reverted
+   pending a more disciplined design (see "Refcount fix plan" later
+   in this document).
+
+**Common failure mode: my measurement methodology was wrong.** I was
+running partial DBIC subsets and treating "fast-fail at compile time"
+as "no regression". The correct gate is the full `./jcpan -t
+DBIx::Class` (~24 min, 314 files / ~13858 assertions). After both
+reverts, DBIC is back at master parity.
+
 ### Lessons learned (post-Phase-2)
 
 The two iterative shim PRs (#570, #572) turned the formal phase plan
