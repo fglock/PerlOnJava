@@ -2890,8 +2890,22 @@ public class IOOperator {
         } else {
             // First duplication — wrap both original and duplicate in DupIOHandles
             // so they share a refcount and get distinct filenos.
-            // Get the original's fd from the registry, or from the IOHandle itself
-            // (e.g. StandardIO.fileno() returns 0/1/2 for stdin/stdout/stderr).
+
+            // If the original is a LayeredIOHandle (e.g. STDOUT after
+            // `binmode :encoding(utf8)`), we must preserve the layers on both
+            // sides of the dup. Otherwise PerlIO::get_layers loses the layers
+            // on the original and Test2::Util::clone_io drops them on the
+            // duplicate, leading to spurious "Wide character in print"
+            // warnings. We do this by dup'ing the LayeredIOHandle's inner
+            // delegate and re-wrapping each side in its own LayeredIOHandle
+            // that shares the same active layers.
+            LayeredIOHandle layeredWrapper = null;
+            IOHandle dupTarget = original.ioHandle;
+            if (original.ioHandle instanceof LayeredIOHandle lh) {
+                layeredWrapper = lh;
+                dupTarget = lh.getDelegate();
+            }
+
             int origFd = original.getAssignedFileno();
             if (origFd < 0) {
                 // Not in the registry — ask the IOHandle directly
@@ -2902,9 +2916,19 @@ public class IOOperator {
                 // Still no fd — assign a new one
                 origFd = original.assignFileno();
             }
-            DupIOHandle[] pair = DupIOHandle.createPair(original.ioHandle, origFd);
-            original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
-            duplicate.ioHandle = pair[1]; // New handle with unique fd
+            DupIOHandle[] pair = DupIOHandle.createPair(dupTarget, origFd);
+
+            if (layeredWrapper != null) {
+                LayeredIOHandle origLayered = new LayeredIOHandle(pair[0]);
+                origLayered.activeLayers.addAll(layeredWrapper.activeLayers);
+                LayeredIOHandle dupLayered = new LayeredIOHandle(pair[1]);
+                dupLayered.activeLayers.addAll(layeredWrapper.activeLayers);
+                original.ioHandle = origLayered;
+                duplicate.ioHandle = dupLayered;
+            } else {
+                original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
+                duplicate.ioHandle = pair[1]; // New handle with unique fd
+            }
         }
 
         // Register the duplicate's fd in RuntimeIO's fileno registry
