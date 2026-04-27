@@ -161,6 +161,37 @@ public abstract class PerlModuleBase {
     }
 
     /**
+     * Define the conventional :default and :all export tags.
+     *
+     * :default mirrors @EXPORT, :all mirrors @EXPORT + @EXPORT_OK
+     * (parity with core modules like Encode.pm). Call this AFTER all
+     * defineExport(EXPORT,...) / defineExport(EXPORT_OK,...) calls so the
+     * tag arrays capture the final lists.
+     */
+    protected void defineDefaultAndAllTags() {
+        RuntimeHash exportTags = GlobalVariable.getGlobalHash(moduleName + "::EXPORT_TAGS");
+        RuntimeArray exportArray = GlobalVariable.getGlobalArray(moduleName + "::EXPORT");
+        RuntimeArray exportOkArray = GlobalVariable.getGlobalArray(moduleName + "::EXPORT_OK");
+
+        // :default = @EXPORT
+        RuntimeArray defaultTag = new RuntimeArray();
+        for (int i = 0; i < exportArray.size(); i++) {
+            RuntimeArray.push(defaultTag, new RuntimeScalar(exportArray.get(i).toString()));
+        }
+        exportTags.put("default", defaultTag.createReference());
+
+        // :all = @EXPORT + @EXPORT_OK
+        RuntimeArray allTag = new RuntimeArray();
+        for (int i = 0; i < exportArray.size(); i++) {
+            RuntimeArray.push(allTag, new RuntimeScalar(exportArray.get(i).toString()));
+        }
+        for (int i = 0; i < exportOkArray.size(); i++) {
+            RuntimeArray.push(allTag, new RuntimeScalar(exportOkArray.get(i).toString()));
+        }
+        exportTags.put("all", allTag.createReference());
+    }
+
+    /**
      * Requires a Perl module and adds it to this module's @ISA.
      * This allows the current module to inherit methods from the parent module.
      * The parent module is loaded via require if not already loaded.

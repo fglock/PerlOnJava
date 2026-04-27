@@ -174,6 +174,10 @@ public class Encode extends PerlModuleBase {
                 "LEAVE_SRC", "DIE_ON_ERR", "WARN_ON_ERR", "RETURN_ON_ERR",
                 "PERLQQ", "HTMLCREF", "XMLCREF",
                 "STOP_AT_PARTIAL", "ONLY_PRAGMA_WARNINGS");
+        // :default and :all — parity with core Encode.pm.
+        // Built from the @EXPORT / @EXPORT_OK lists already pushed above so
+        // any module doing `use Encode qw(:all)` or qw(:default) works.
+        encode.defineDefaultAndAllTags();
         try {
             encode.registerMethod("encode", null);
             encode.registerMethod("decode", null);
