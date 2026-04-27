@@ -62,7 +62,7 @@ our %EXPORT_TAGS = (
 
 ---
 
-### 2. SAX empty-element text reported as `''` instead of `undef`  (MEDIUM EFFORT)
+### 2. `XML::Parser::Expat::current_element` push/pop timing  (MEDIUM EFFORT)
 
 `XML::SemanticDiff/t/16zero_to_empty_str_cmp.t` has 2 failing subtests:
 
@@ -72,24 +72,65 @@ our %EXPORT_TAGS = (
 #     expected: undef
 ```
 
-The test compares `<el>0</el>` against `<el></el>` and `<el />`. Real Perl
-yields `undef` for the new empty/self-closing element's text content;
-PerlOnJava yields `''`.
+The test compares `<el2>0</el2>` against `<el2></el2>` and `<el2 />`. Real
+Perl yields `undef` for the new (empty/self-closing) element's accumulated
+text; PerlOnJava yields `''`.
 
-**Suspected root cause**: PerlOnJava's XML::SAX (likely the bundled
-`XML::SAX::PurePerl`, or a Java-backed parser) emits a zero-length
-`characters` event for empty elements, or stores `''` where real Perl leaves
-the field unset, so `XML::SemanticDiff`'s `keepdata` walk sees `''` instead
-of `undef`.
+**Root cause** (verified): PerlOnJava's SAX bridge updates
+`@{ $expat->{Context} }` at the wrong time, so `current_element` returns
+the element being started/ended instead of its parent. Trace from a small
+repro using `Style => 'Stream'`:
+
+```
+=== system perl ===                     === jperl ===
+[StartTag root]   current=  depth=0     [StartTag root]  current=root depth=1
+[Text]            current=root          [Text]           current=el2
+[StartTag el2]    current=root depth=1  [StartTag el2]   current=el2  depth=2
+[EndTag el2]      current=root depth=1  [EndTag el2]     current=el2  depth=2
+[Text]            current=root          [Text]           current=root
+[EndTag root]     current=undef         [EndTag root]    current=root
+```
+
+Effect on `XML::SemanticDiff`:
+
+- `XML::Parser::Style::Stream::Start` calls `doText`, which fires the
+  user `Text` handler with `$_ = $expat->{Text}`. In real Perl this Text
+  is attributed to the parent element (`current_element = root`); in
+  PerlOnJava it's attributed to the just-started element (`el2`).
+- `XML::SemanticDiff::Text` does
+  `$char_accumulator->{$current_element} .= $char` (after stripping
+  whitespace). For the inter-tag `\n`, $char becomes `''`, so on jperl
+  `char_accumulator->{el2}` becomes `''`; on real Perl it stays `undef`.
+- At `</el2>`, `EndElement` reads `$text = char_accumulator->{el2}` →
+  `'' ` vs `undef`, and stores it in `CData`, which surfaces as
+  `new_value`.
+
+**Fix**: in `src/main/java/org/perlonjava/runtime/perlmodule/XMLParserExpat.java`,
+match libexpat's actual behaviour (which differs from the current code's
+comment claim):
+
+- `startElement`: push to `Context` AFTER the user `startHandler` returns
+  (currently happens BEFORE, around line 1237–1243).
+- `endElement`: pop from `Context` BEFORE the user `endHandler` runs
+  (currently happens AFTER, around line 1457–1465).
+
+**Risk**: this changes a semantic that any handler reading
+`current_element` from inside Start/End would notice. Existing PerlOnJava
+test files using `current_element` are:
+
+- `src/test/resources/module/XML-Parser/t/parament.t` — only reads
+  `current_element` from the Char handler (unaffected by Start/End
+  timing).
+- `src/test/resources/module/XML-Parser/t/partial.t` — same, Char only.
+- `src/test/resources/module/XML-Parser/t/astress.t` — uses `depth`/
+  `element_index` from Char/End handlers; will need re-running.
 
 **Plan**:
-1. Build a 5-line repro: parse `<el></el>` and `<el>0</el>` with
-   `XML::SAX::ParserFactory`, dump the events.
-2. Diff the event stream against system `perl`.
-3. Fix the divergence in whichever of XML::SAX::PurePerl or the Java SAX
-   bridge is responsible. Prefer fixing the parser, not XML::SemanticDiff.
-4. Re-run `t/16zero_to_empty_str_cmp.t` (and the rest of XML-SemanticDiff to
-   make sure no regressions).
+1. Move push/pop in `XMLParserExpat.java`.
+2. Run all `src/test/resources/module/XML-Parser/t/*.t` tests under jperl.
+3. Run `t/16zero_to_empty_str_cmp.t` from XML-SemanticDiff to confirm fix.
+4. Run `make` for full unit coverage.
+5. If regressions, narrow further (e.g. only adjust pop timing, etc.).
 
 **Priority**: MEDIUM (unblocks XML::SemanticDiff → Test::XML → XML::Hash).
 

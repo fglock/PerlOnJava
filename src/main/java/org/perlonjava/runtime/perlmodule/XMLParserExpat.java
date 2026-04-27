@@ -1234,13 +1234,18 @@ public class XMLParserExpat extends PerlModuleBase {
                 elementNameScalar = new RuntimeScalar(qName);
             }
 
-            // Update Perl's Context array: push @{$self->{Context}}, $elementName
+            // NOTE: Per real libexpat behaviour, Context is updated AFTER the
+            // user's Start handler returns (and BEFORE the End handler runs in
+            // endElement, see below). This means current_element() inside the
+            // Start handler returns the *parent* element, matching Perl's
+            // XML::Parser::Expat. Verified against system perl with
+            // Style => 'Stream' (XML::SemanticDiff relies on this — its Text
+            // accumulator gets attributed to the parent for inter-element
+            // whitespace).
+            //
+            // The push is performed at the end of this method (and on the
+            // skip path below) so it always balances the pop in endElement.
             RuntimeHash selfHash = state.selfRef.hashDeref();
-            RuntimeScalar contextRef = selfHash.get("Context");
-            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
-                RuntimeArray context = contextRef.arrayDeref();
-                RuntimeArray.push(context, elementNameScalar);
-            }
 
             // Separate specified from defaulted attributes for specifiedAttributeCount
             List<Integer> specifiedIndices = new ArrayList<>();
@@ -1314,6 +1319,7 @@ public class XMLParserExpat extends PerlModuleBase {
 
             // Skip if skip_until is active
             if (state.skipUntilIndex >= 0 && state.elementIndex < state.skipUntilIndex) {
+                pushContext(selfHash, elementNameScalar);
                 return;
             }
 
@@ -1351,6 +1357,33 @@ public class XMLParserExpat extends PerlModuleBase {
                     while (newPrefixes.size() > 0) {
                         RuntimeArray.pop(newPrefixes);
                     }
+                }
+            }
+
+            // Push Context AFTER user start handler — see top-of-method note.
+            pushContext(selfHash, elementNameScalar);
+        }
+
+        /**
+         * push @{$self->{Context}}, $name  (no-op if Context is undef/missing).
+         */
+        private static void pushContext(RuntimeHash selfHash, RuntimeScalar name) {
+            RuntimeScalar contextRef = selfHash.get("Context");
+            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
+                RuntimeArray context = contextRef.arrayDeref();
+                RuntimeArray.push(context, name);
+            }
+        }
+
+        /**
+         * pop @{$self->{Context}}  (no-op if Context is undef/missing/empty).
+         */
+        private static void popContext(RuntimeHash selfHash) {
+            RuntimeScalar contextRef = selfHash.get("Context");
+            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
+                RuntimeArray context = contextRef.arrayDeref();
+                if (context.size() > 0) {
+                    RuntimeArray.pop(context);
                 }
             }
         }
@@ -1425,14 +1458,7 @@ public class XMLParserExpat extends PerlModuleBase {
 
             if (state.skipUntilIndex >= 0 && state.elementIndex < state.skipUntilIndex) {
                 // Pop Context even when skipping
-                RuntimeHash selfHash = state.selfRef.hashDeref();
-                RuntimeScalar contextRef = selfHash.get("Context");
-                if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
-                    RuntimeArray context = contextRef.arrayDeref();
-                    if (context.size() > 0) {
-                        RuntimeArray.pop(context);
-                    }
-                }
+                popContext(state.selfRef.hashDeref());
                 return;
             }
 
@@ -1440,6 +1466,14 @@ public class XMLParserExpat extends PerlModuleBase {
             if (state.skipUntilIndex >= 0 && state.elementIndex >= state.skipUntilIndex) {
                 state.skipUntilIndex = -1;
             }
+
+            // Pop Perl's Context array BEFORE the end handler — real libexpat
+            // calls the end handler with the closing element no longer in
+            // Context (so current_element() returns its parent). Verified
+            // against system perl with Style => 'Stream'. Without this,
+            // XML::SemanticDiff misattributes Text accumulation and reports
+            // empty-element CData as '' instead of undef.
+            popContext(state.selfRef.hashDeref());
 
             if (state.endHandler != null) {
                 RuntimeArray callArgs = new RuntimeArray();
@@ -1452,16 +1486,6 @@ public class XMLParserExpat extends PerlModuleBase {
                 }
             } else if (state.defaultHandler != null) {
                 fireDefault(state, state.recognizedString);
-            }
-
-            // Pop Perl's Context array AFTER the end handler (matches libexpat behavior)
-            RuntimeHash selfHash = state.selfRef.hashDeref();
-            RuntimeScalar contextRef = selfHash.get("Context");
-            if (contextRef != null && contextRef.type != RuntimeScalarType.UNDEF) {
-                RuntimeArray context = contextRef.arrayDeref();
-                if (context.size() > 0) {
-                    RuntimeArray.pop(context);
-                }
             }
         }
 
