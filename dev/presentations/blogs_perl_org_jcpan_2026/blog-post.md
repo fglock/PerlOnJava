@@ -118,11 +118,11 @@ Short-lived programs (like individual test files) won't see this benefit - the J
 ## Current limitations
 
 - `fork` - not available (use native `perl` for fork-heavy tests)
-- `weaken` / `DESTROY` - not implemented
+- `threads` - not available (use Java threading via inline Java)
 - XS modules without Java implementations or pure Perl fallbacks won't work
 - JVM startup overhead - short programs are slower than Perl
 - Test suites run slower due to per-file JVM startup
-- Some module tests fail due to unimplemented features (Moo's `weaken` tests, for example)
+- Some module tests fail due to unimplemented features
 - Spurious warnings: PerlOnJava currently emits `Argument "..." isn't numeric` warnings for test description strings - this will be fixed
 
 ---

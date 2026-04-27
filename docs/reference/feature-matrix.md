@@ -784,7 +784,7 @@ The DBI module provides seamless integration with JDBC drivers:
 ## Features Incompatible with JVM
 
 - ❌  **`fork` operator**: `fork` is not implemented. Calling `fork` will always fail and return `undef`.
-- ✅  **`DESTROY`**: Implemented with cooperative reference counting on top of JVM GC. Supports cascading destruction, closure capture tracking, `weaken`/`isweak`/`unweaken`, and global destruction phase.
+- ✅  **`DESTROY`**: Implemented with cooperative reference counting on top of JVM GC. Supports cascading destruction, closure capture tracking, `weaken`/`isweak`/`unweaken`, global destruction phase, and `Internals::SvREFCNT` introspection.
 - ❌  **Perl `XS` code**: XS code interfacing with C is not supported on the JVM.
 - ❌  **Auto-close files**: File auto-close depends on handling of object destruction, may be incompatible with JVM garbage collection. All files are closed before the program ends.
 - ❌  **Keywords related to the control flow of the Perl program**: `dump` operator.

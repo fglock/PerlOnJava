@@ -40,6 +40,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add modules: `Filter::Simple` with `FILTER` and `FILTER_ONLY` support.
 - Add `DESTROY` method support with cooperative reference counting on blessed objects, cascading destruction, closure capture tracking, and global destruction phase.
 - Add `Scalar::Util` functions: `weaken`, `isweak`, `unweaken`.
+- Add `Internals::SvREFCNT` for compatibility with reference-counting introspection (e.g. Sub::Quote, Moo, DBIx::Class internals).
 
 - Work in Progress
   - [Multiplicity — per-runtime isolation for concurrent Perl interpreters](https://github.com/fglock/PerlOnJava/pull/480): `PerlRuntime` with `ThreadLocal`-based isolation; all mutable state (globals, I/O, regex, caller stack, method caches) moved to per-runtime instances; 122/126 concurrent interpreter tests pass; pending closure/method dispatch optimization

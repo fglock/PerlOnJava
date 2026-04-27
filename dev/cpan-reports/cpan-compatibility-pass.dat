@@ -1,12 +1,16 @@
+A1z::HTML5::Template	PASS	6	6		2026-04-27		12fb0165d
 AAAA::Crypt::DH	PASS	2	2		2026-04-21		3f3336774
 AAAA::Mail::SpamAssassin	PASS	1	1		2026-04-21		3f3336774
 AAAAAAAAA	PASS	1	1		2026-04-21		3f3336774
 ABI	PASS	15	15		2026-04-26		1d5def215
 ACL::Lite	PASS	31	31		2026-04-25		1d5def215
+ACME::MyFirstModule::SETHS	PASS	1	1		2026-04-27		12fb0165d
 ACME::THEDANIEL::Utils	PASS	7	7		2026-04-25		1d5def215
+AI::CBR	PASS	49	49		2026-04-27		12fb0165d
 AI::CRM114	PASS	2	2		2026-04-25		1d5def215
 AI::Calibrate	PASS	44	44		2026-04-21		3f3336774
 AI::Chat	PASS	7	7		2026-04-21		3f3336774
+AI::CleverbotIO	PASS	1	1		2026-04-27		12fb0165d
 AI::ConfusionMatrix	PASS	19	19		2026-04-25		1d5def215
 AI::NaiveBayes1	PASS	52	52		2026-04-22		e228c2529
 AI::NeuralNet::SOM::Hexa	PASS	136	136		2026-04-25		1d5def215
@@ -15,8 +19,11 @@ AI::Prolog	PASS	460	460		2026-04-22		e228c2529
 AIX::LVM	PASS	17	17		2026-04-26		1d5def215
 API::CPanel	PASS	61	61		2026-04-12		c1942aad0
 API::DirectAdmin	PASS	34	34		2026-04-26		1d5def215
+APR::Emulate::PSGI	PASS	38	38		2026-04-27		12fb0165d
 ARGV::ENV	PASS	2	2		2026-04-22		e228c2529
+AWS::SQS::Simple	PASS	2	2		2026-04-27		12fb0165d
 AWS::Signature::V2	PASS	2	2		2026-04-25		1d5def215
+Ac_me::Local	PASS	1	1		2026-04-27		12fb0165d
 Algorithm::Diff	PASS	1004	1004		2026-04-12		cc5efa220
 Algorithm::Merge	PASS	66	66		2026-04-21		73edc8aba
 Algorithm::NaiveBayes	PASS	23	23		2026-04-26		1d5def215
@@ -42,6 +49,7 @@ App::Cmd::Plugin::Prompt	PASS	2	2		2026-04-26		1d5def215
 App::Prove::Plugin::Count	PASS	17	17		2026-04-26		1d5def215
 App::Rad	PASS	180	180		2026-04-21		3f3336774
 App::Spec	PASS	79	79		2026-04-21		3f3336774
+AppConfig::Exporter	PASS	8	8		2026-04-27		12fb0165d
 Array::Compare	PASS	37	37		2026-04-26		1d5def215
 Array::Utils	PASS	17	17		2026-04-12		cc5efa220
 ArrayData::Lingua::Word::ID::KBBI::Proverb	PASS	1	1		2026-04-21		73edc8aba
@@ -216,7 +224,7 @@ Crypt::SysRandom	PASS	4	4		2026-04-12		c1942aad0
 Cucumber::TagExpressions	PASS	68	68		2026-04-26		1d5def215
 Cwalitee::Common	PASS	1	1		2026-04-26		1d5def215
 Cwd::Ext	PASS	31	31		2026-04-12		c1942aad0
-Cwd::Guard	PASS	6	6		2026-04-26		1d5def215
+Cwd::Guard	PASS	6	6		2026-04-27		12fb0165d
 D64::Disk::Layout::Base	PASS	23	23		2026-04-12		c1942aad0
 DB::Tutorial::DBIx::Class::PT::BR	PASS	1	1		2026-04-21		73edc8aba
 DBD::AnyData2	PASS	1	1		2026-04-25		1d5def215
@@ -298,7 +306,7 @@ DateTime::Functions	PASS	2	2		2026-04-12		c1942aad0
 DateTime::HiRes	PASS	7	7		2026-04-26		1d5def215
 DateTime::Incomplete	PASS	218	218		2026-04-25		1d5def215
 DateTime::Moonpig	PASS	22	22		2026-04-12		c1942aad0
-DateTime::Set	PASS	959	959		2026-04-26		1d5def215
+DateTime::Set	PASS	959	959		2026-04-27		12fb0165d
 DateTime::Span	PASS	959	959		2026-04-26		1d5def215
 DateTime::TimeZone::Alias	PASS	2453	2453		2026-04-12		c1942aad0
 DateTime::TimeZone::Catalog::Extend	PASS	355	355		2026-04-12		c1942aad0
@@ -422,7 +430,7 @@ HTML::Template::Filter::TT2	PASS	37	37		2026-04-21		73edc8aba
 HTML::Tiny	PASS	2299	2299		2026-04-26		1d5def215
 HTML::Truncate	PASS	129	129		2026-04-22		3f3336774
 HTML::Widgets::Table	PASS	1	1		2026-04-25		1d5def215
-HTTP::AcceptLanguage	PASS	23	23		2026-04-25		1d5def215
+HTTP::AcceptLanguage	PASS	23	23		2026-04-27		12fb0165d
 HTTP::BrowserDetect	PASS	2601	2601		2026-04-12		c1942aad0
 HTTP::BrowserDetect::isRobot	PASS	17	17		2026-04-26		1d5def215
 HTTP::Engine::FirePHP	PASS	1	1		2026-04-25		1d5def215
@@ -507,6 +515,7 @@ LEOCHARRE::CLI	PASS	22	22		2026-04-25		1d5def215
 LEOCHARRE::DEBUG	PASS	10	10		2026-04-26		1d5def215
 LWP::UserAgent::Patch::Delay	PASS	1	1		2026-04-22		3f3336774
 LWP::UserAgent::Plugin::Delay	PASS	1	1		2026-04-26		1d5def215
+LWPx::ParanoidAgent	PASS	1	1		2026-04-27		12fb0165d
 Limper	PASS	1	1		2026-04-22		e228c2529
 Limper::Engine::PSGI	PASS	9	9		2026-04-22		e228c2529
 Limper::SendFile	PASS	1	1		2026-04-22		e228c2529
@@ -520,11 +529,11 @@ Lingua::GL::Stemmer	PASS	12	12		2026-04-12		c1942aad0
 Lingua::Han::Utils	PASS	11	11		2026-04-26		1d5def215
 Lingua::Identify::Any	PASS	1	1		2026-04-26		1d5def215
 Lingua::PT::Abbrev	PASS	7	7		2026-04-22		3f3336774
-Lingua::Stem	PASS	7	7		2026-04-26		1d5def215
+Lingua::Stem	PASS	7	7		2026-04-27		12fb0165d
 Lingua::Stem::Fr	PASS	16	16		2026-04-12		c1942aad0
 Lingua::Stem::It	PASS	98	98		2026-04-12		c1942aad0
-Lingua::Stem::Snowball::No	PASS	20633	20633		2026-04-26		1d5def215
-Lingua::Stem::Snowball::Se	PASS	30628	30628		2026-04-26		1d5def215
+Lingua::Stem::Snowball::No	PASS	20633	20633		2026-04-27		12fb0165d
+Lingua::Stem::Snowball::Se	PASS	30628	30628		2026-04-27		12fb0165d
 Lingua::StopWords	PASS	85	85		2026-04-22		3f3336774
 Linux::usermod	PASS	10	10		2026-04-12		c1942aad0
 List::Categorize	PASS	20	20		2026-04-22		3f3336774
@@ -558,7 +567,9 @@ Math::Round	PASS	10	10		2026-04-22		3f3336774
 Math::Round::Var	PASS	10	10		2026-04-12		c1942aad0
 Math::SparseMatrix	PASS	45	45		2026-04-26		1d5def215
 Math::String	PASS	667	667		2026-04-25		1d5def215
+Math::Vector::Real::MultiNormalMixture	PASS	1	1		2026-04-27		12fb0165d
 Math::Vector::Similarity	PASS	27	27		2026-04-26		1d5def215
+Math::nSphere	PASS	39	39		2026-04-27		12fb0165d
 MathML::Entities	PASS	12	12		2026-04-26		1d5def215
 MealMaster	PASS	85	85		2026-04-25		1d5def215
 MediaWiki::Bot::Plugin::Steward	PASS	6	6		2026-04-26		1d5def215
@@ -575,6 +586,7 @@ Module::Build::WithXSpp	PASS	1	1		2026-04-12		c1942aad0
 Module::Depends	PASS	20	20		2026-04-22		e228c2529
 Module::Optional	PASS	19	19		2026-04-26		1d5def215
 Module::Pluggable::Fast	PASS	6	6		2026-04-12		cc5efa220
+Module::Runtime::Conflicts	PASS	2	2		2026-04-27		12fb0165d
 MooX	PASS	9	9		2026-04-25		1d5def215
 MooX::ChainedAttributes	PASS	9	9		2026-04-25		1d5def215
 MooX::Role::SEOTags	PASS	21	21		2026-04-26		1d5def215
@@ -695,7 +707,7 @@ Plack::Middleware::Header	PASS	7	7		2026-04-21		73edc8aba
 Plack::Middleware::MethodOverride	PASS	36	36		2026-04-21		73edc8aba
 Plack::Middleware::ReverseProxy	PASS	40	40		2026-04-21		73edc8aba
 Plack::Middleware::Timeout	PASS	12	12		2026-04-25		1d5def215
-Plack::Session	PASS	532	532		2026-04-26		1d5def215
+Plack::Session	PASS	532	532		2026-04-27		12fb0165d
 Plack::Test::ExternalServer	PASS	1	1		2026-04-21		73edc8aba
 PlayStation::MemoryCard	PASS	1	1		2026-04-12		cc5efa220
 Pod::Constants	PASS	20	20		2026-04-21		73edc8aba
@@ -708,7 +720,7 @@ Pod::Simpler::Aoh	PASS	11	11		2026-04-22		3f3336774
 Pod::Xhtml	PASS	43	43		2026-04-21		3f3336774
 Preloaded	PASS	55	55		2026-04-22		3f3336774
 Probe::Perl	PASS	19	19		2026-04-21		73edc8aba
-Proc::Find	PASS	5	5		2026-04-26		1d5def215
+Proc::Find	PASS	5	5		2026-04-27		12fb0165d
 Progress::Any	PASS	6	6		2026-04-21		73edc8aba
 Properties	PASS	9	9		2026-04-26		1d5def215
 Protocol::Notifo	PASS	40	40		2026-04-12		c1942aad0
@@ -748,7 +760,7 @@ Role::TinyCommons::Iterator::Resettable	PASS	12	12		2026-04-21		73edc8aba
 Role::TinyCommons::Tree::NodeMethods	PASS	21	21		2026-04-22		3f3336774
 Rose::DateTime	PASS	5554	5554		2026-04-22		3f3336774
 Rose::ObjectX::CAF	PASS	10	10		2026-04-22		3f3336774
-Router::Generic	PASS	81	81		2026-04-26		1d5def215
+Router::Generic	PASS	81	81		2026-04-27		12fb0165d
 Router::Simple	PASS	43	43		2026-04-25		1d5def215
 RowFunc	PASS	1	1		2026-04-26		1d5def215
 SIL::Encode_all	PASS	2	2		2026-04-21		73edc8aba
@@ -833,7 +845,7 @@ Template::Provider::FromDATA	PASS	49	49		2026-04-26		1d5def215
 Template::Timer	PASS	5	5		2026-04-21		73edc8aba
 Term::CallEditor	PASS	16	16		2026-04-22		3f3336774
 Term::Encoding	PASS	8	8		2026-04-22		3f3336774
-Term::ReadKey	PASS	1	1		2026-04-26		1d5def215
+Term::ReadKey	PASS	1	1		2026-04-27		12fb0165d
 Term::Screen	PASS	29	29		2026-04-12		c1942aad0
 Term::UI	PASS	36	36		2026-04-22		3f3336774
 Test2::Plugin::FauxHomeDir	PASS	9	9		2026-04-26		1d5def215
