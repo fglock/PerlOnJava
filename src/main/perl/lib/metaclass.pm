@@ -1,55 +1,155 @@
 package metaclass;
-
-# PerlOnJava `metaclass` pragma stub.
-#
-# Upstream metaclass installs a Class::MOP::Class for the calling package
-# and gives it a `meta` method. PerlOnJava cannot host real Class::MOP::Class
-# instances (yet), but the import is treated as a no-op: callers that try
-# `use metaclass;` or `use metaclass 'My::Meta';` keep compiling, and they
-# get a `meta` method that returns the same Moose::_FakeMeta stub the Moose
-# shim already installs in `use Moose;`.
-#
-# See dev/modules/moose_support.md.
+our $VERSION = '2.4000';
 
 use strict;
 use warnings;
 
-our $VERSION = '2.4000';
+use Module::Runtime 'use_package_optimistically', 'use_module';
+use Class::MOP;
 
 sub import {
-    my ($pragma, @args) = @_;
+    my ( $class, @args ) = @_;
 
-    my $target = caller;
+    unshift @args, "metaclass" if @args % 2 == 1;
+    my %options = @args;
 
-    # Drop alternate metaclass / meta_name / *_metaclass / *_class options.
-    # Under the shim they're all advisory.
-    @args = () if @args;
+    my $meta_name = exists $options{meta_name} ? $options{meta_name} : 'meta';
+    my $metaclass = delete $options{metaclass};
 
-    no strict 'refs';
-    unless (defined &{"${target}::meta"}) {
-        my $name = $target;
-        *{"${target}::meta"} = sub {
-            require Moose;
-            Moose::_FakeMeta->_for($name);
-        };
+    unless ( defined $metaclass ) {
+        $metaclass = "Class::MOP::Class";
+    } else {
+        use_package_optimistically($metaclass);
     }
 
-    return;
+    ($metaclass->isa('Class::MOP::Class'))
+        || die use_module('Moose::Exception::MetaclassMustBeDerivedFromClassMOPClass')->new( class_name => $metaclass );
+
+    # make sure the custom metaclasses get loaded
+    foreach my $key (grep { /_(?:meta)?class$/ } keys %options) {
+        unless ( ref( my $class = $options{$key} ) ) {
+            use_package_optimistically($class)
+        }
+    }
+
+    my $package = caller();
+
+    # create a meta object so we can install &meta
+    my $meta = $metaclass->initialize($package => %options);
+    $meta->_add_meta_method($meta_name)
+        if defined $meta_name;
 }
 
 1;
 
+# ABSTRACT: a pragma for installing and using Class::MOP metaclasses
+
 __END__
+
+=pod
+
+=encoding UTF-8
 
 =head1 NAME
 
-metaclass - PerlOnJava stub for the C<metaclass> pragma.
+metaclass - a pragma for installing and using Class::MOP metaclasses
+
+=head1 VERSION
+
+version 2.4000
+
+=head1 SYNOPSIS
+
+  package MyClass;
+
+  # use Class::MOP::Class
+  use metaclass;
+
+  # ... or use a custom metaclass
+  use metaclass 'MyMetaClass';
+
+  # ... or use a custom metaclass
+  # and custom attribute and method
+  # metaclasses
+  use metaclass 'MyMetaClass' => (
+      'attribute_metaclass' => 'MyAttributeMetaClass',
+      'method_metaclass'    => 'MyMethodMetaClass',
+  );
+
+  # ... or just specify custom attribute
+  # and method classes, and Class::MOP::Class
+  # is the assumed metaclass
+  use metaclass (
+      'attribute_metaclass' => 'MyAttributeMetaClass',
+      'method_metaclass'    => 'MyMethodMetaClass',
+  );
+
+  # if we'd rather not install a 'meta' method, we can do this
+  use metaclass meta_name => undef;
+  # or if we'd like it to have a different name,
+  use metaclass meta_name => 'my_meta';
 
 =head1 DESCRIPTION
 
-Upstream this pragma wires a class up with a custom L<Class::MOP::Class>.
-Under the PerlOnJava Moose-as-Moo shim there is no real metaclass, so this
-module just installs a C<meta> method on the caller (returning the same
-fake metaclass our Moose shim installs).
+This is a pragma to make it easier to use a specific metaclass
+and a set of custom attribute and method metaclasses. It also
+installs a C<meta> method to your class as well, unless C<undef>
+is passed to the C<meta_name> option.
+
+Note that if you are using Moose, you most likely do B<not> want
+to be using this - look into L<Moose::Util::MetaRole> instead.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Stevan Little <stevan@cpan.org>
+
+=item *
+
+Dave Rolsky <autarch@urth.org>
+
+=item *
+
+Jesse Luehrs <doy@cpan.org>
+
+=item *
+
+Shawn M Moore <sartak@cpan.org>
+
+=item *
+
+יובל קוג'מן (Yuval Kogman) <nothingmuch@woobling.org>
+
+=item *
+
+Karen Etheridge <ether@cpan.org>
+
+=item *
+
+Florian Ragwitz <rafl@debian.org>
+
+=item *
+
+Hans Dieter Pearcey <hdp@cpan.org>
+
+=item *
+
+Chris Prather <chris@prather.org>
+
+=item *
+
+Matt S Trout <mstrout@cpan.org>
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2006 by Infinity Interactive, Inc.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 
 =cut

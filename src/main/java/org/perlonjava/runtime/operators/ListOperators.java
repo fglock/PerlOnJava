@@ -233,9 +233,12 @@ public class ListOperators {
 
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
-                        // If the result is non-zero, add the element to the filtered list
-                        // We need to clone, otherwise we would be adding an alias to the original element
-                        filteredElements.add(element.clone());
+                        // Perl semantics: grep returns aliases to the original
+                        // elements (not copies). This is required for patterns
+                        // like `for (grep { !ref } $a, $b) { $_ = ... }` which
+                        // modifies $a and $b. Cloning here would silently
+                        // break that aliasing — see Class::MOP::MiniTrait.
+                        filteredElements.add(element);
                     }
                 } catch (PerlNonLocalReturnException e) {
                     throw e;  // Don't wrap non-local returns

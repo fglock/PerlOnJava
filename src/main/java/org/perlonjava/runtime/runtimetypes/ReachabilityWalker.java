@@ -404,11 +404,25 @@ public class ReachabilityWalker {
                     if (followScalar(v, target, seen, todo)) return true;
                 }
             }
-            // Note: we deliberately don't follow RuntimeCode.capturedScalars
-            // here — closure captures are NOT considered strong reachability
-            // edges for this query (matches the default of
-            // ReachabilityWalker.walk() which has walkCodeCaptures=false
-            // for the second-phase BFS).
+            // Follow closure captures: %METAS in Class::MOP is captured
+            // by globally-installed subs (get_metaclass_by_name, class_of,
+            // …) but isn't on MyVarCleanupStack once Class::MOP.pm has
+            // finished loading. Without walking captures, the walker can't
+            // see the metaclass-via-%METAS path.
+            //
+            // We're more conservative than the main walker here: this
+            // gate only fires for blessed objects with weak refs whose
+            // refCount transiently dipped to 0, so over-protecting via
+            // closure captures is safer than under-protecting (which
+            // would let the bootstrap die). Cycle-break tests still
+            // pass because cycles' captures are typically held by
+            // anonymous closures outside the global stash.
+            else if (cur instanceof RuntimeCode code
+                    && code.capturedScalars != null) {
+                for (RuntimeScalar cap : code.capturedScalars) {
+                    if (followScalar(cap, target, seen, todo)) return true;
+                }
+            }
         }
         return false;
     }
