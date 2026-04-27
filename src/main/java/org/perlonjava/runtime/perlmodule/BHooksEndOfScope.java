@@ -74,19 +74,36 @@ public class BHooksEndOfScope extends PerlModuleBase {
             stack.pop();
         }
         
-        // Fire callbacks registered for this file in LIFO order
+        // Fire callbacks registered for this file in LIFO order.
+        //
+        // Save and restore $@ / $! around the callback execution: callbacks
+        // such as namespace::autoclean's cleanup routine internally use
+        // `eval { ... }` blocks, which Perl resets `$@` to "" on success.
+        // If a `use Foo;` inside the file being loaded threw a
+        // "Can't locate Foo.pm in @INC" error, doFile's catch block has
+        // already stored that message in $@ and we must NOT let scope-end
+        // hooks clobber it - otherwise the outer `require` reports a
+        // misleading "Can't locate <outer-file>.pm" instead of the real
+        // inner cause. (Reproducible with `jcpan -t Text::WordCounter`.)
         Deque<RuntimeScalar> callbacks = fileCallbacks.remove(fileName);
         if (callbacks != null) {
-            while (!callbacks.isEmpty()) {
-                RuntimeScalar codeRef = callbacks.pop();
-                try {
-                    if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
-                        code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+            String savedErr = GlobalVariable.getGlobalVariable("main::@").toString();
+            String savedBang = GlobalVariable.getGlobalVariable("main::!").toString();
+            try {
+                while (!callbacks.isEmpty()) {
+                    RuntimeScalar codeRef = callbacks.pop();
+                    try {
+                        if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code) {
+                            code.apply(new RuntimeArray(), RuntimeContextType.VOID);
+                        }
+                    } catch (Exception e) {
+                        // Log but don't propagate - callbacks shouldn't break file loading
+                        System.err.println("Warning: on_scope_end callback error: " + e.getMessage());
                     }
-                } catch (Exception e) {
-                    // Log but don't propagate - callbacks shouldn't break file loading
-                    System.err.println("Warning: on_scope_end callback error: " + e.getMessage());
                 }
+            } finally {
+                GlobalVariable.setGlobalVariable("main::@", savedErr);
+                GlobalVariable.setGlobalVariable("main::!", savedBang);
             }
         }
     }
