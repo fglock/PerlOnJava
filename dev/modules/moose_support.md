@@ -941,35 +941,196 @@ not at the destroy gate.
 ###### Step W3-next (TODO when refcount audit is resumed)
 
 The fix has to make refCount **accurate** for blessed objects under
-heavy reference shuffling (Class::MOP self-bootstrap pattern). Two
-viable architectural directions:
+heavy reference shuffling (Class::MOP self-bootstrap pattern). Below
+is the detailed plan for getting the count "accurate enough", in
+priority order — the cheapest, lowest-risk option first.
 
-(a) **Make the walker aware of `my` lexical containers**, so a
-    blessed object held by `our %METAS` (or any `my %hash` in an
-    active scope) is found as reachable by the auto-sweep. Then
-    refCount==0 events that happen during transient drift are
-    "false alarms" the walker can correct.
+####### Path 1 (recommended): walker awareness of hash-element seeds
 
-(b) **Fix the underlying refCount accounting asymmetry.** Captured
-    PJ_RC=1 trace showed 55 increments vs 87 effective decrements for
-    the failing object — a real asymmetry. Audit candidate sites:
+**Why this is the right starting point**: PerlOnJava already tracks
+hash/array element scalars via `incrementRefCountForContainerStore`,
+which registers them in `ScalarRefRegistry`. The walker iterates
+`ScalarRefRegistry` as roots — but **filters out scalars whose
+declaration scope has exited** (via the `MyVarCleanupStack` check at
+`ReachabilityWalker.java` lines 110-126).
 
-    1. `@_` aliasing increment/decrement symmetry on sub call/return
-       (`RuntimeArray.setFromList` and the args-binding path in
-       `RuntimeCode.apply`).
-    2. `$h->{key} = $foo` overwrite path in `setLargeRefCounted` —
-       check it doesn't double-decrement when the slot already has
-       a pending entry from a prior scope-exit.
-    3. `my (...) = @_` list-assignment refcount handling — verify
-       per-element vs bulk-copy behavior.
-    4. `Sub::Install` closure captures — each closure's scope-exit
-       decrements only its own captures.
+That filter is correct for `my $x` lexicals (when the scope ends,
+the scalar is logically dead). But it's **wrong for hash/array
+element scalars**: they have no declaration scope of their own —
+their lifetime is tied to the enclosing container. A `$METAS{HasMethods}`
+scalar should remain a walker seed as long as `%METAS` exists.
 
-(b) is the right fix because it preserves observable Perl semantics
-without heuristics. (a) would also work but is a larger architectural
-change.
+**Fix**: in the walker's lexical-seed loop, skip the
+`MyVarCleanupStack` check for scalars marked as hash/array elements
+(`refCountOwned == true && registered via incrementRefCountForContainerStore`).
+Use the enclosing container's `localBindingExists` as the liveness
+signal instead.
 
-The test gate for any future fix:
+Concrete patch sketch:
+
+```java
+// ReachabilityWalker.java, around the useLexicalSeeds loop:
+for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+    if (sc.captureCount > 0) continue;
+    if (WeakRefRegistry.isweak(sc)) continue;
+    // EXISTING check: skip if not in any active scope.
+    boolean inActiveScope = MyVarCleanupStack.isAlive(sc);
+    // NEW: hash/array element scalars don't have their own scope —
+    // treat them as live as long as some container references them.
+    boolean isContainerElement = sc.refCountOwned
+            && ScalarRefRegistry.isContainerElement(sc);
+    if (!inActiveScope && !isContainerElement) continue;
+    // Now seed
+    visitScalarPath(sc, ...);
+}
+```
+
+`ScalarRefRegistry.isContainerElement(sc)` is new — it returns true
+if `sc` was last registered via `incrementRefCountForContainerStore`
+(which means it's currently a hash/array slot value). Track this
+via a side-set or by exposing a getter on the existing registration.
+
+**Verification**: with the walker now seeing `$METAS{HasMethods}`
+as a root, the metaclass it points at is reachable, so the auto-sweep
+won't try to clear weak refs to it. The transient `refCount==0`
+events during bootstrap are then "false alarms" the walker corrects
+on the next sweep cycle — but the `MortalList.flush()` destroy gate
+would still fire prematurely. That's where Path 2 comes in.
+
+**Estimated effort**: 1 day (small, contained change, easy to test).
+
+####### Path 2: gate `MortalList.flush()` destroy on walker confirmation
+
+The current flush-destroy gate is: `if refCount==0 and !localBindingExists, fire DESTROY`.
+The Class::MOP bootstrap shows this is too eager — refCount can hit 0
+transiently while the object is still reachable through an unwalked
+path.
+
+**Fix**: when the flush gate would fire DESTROY on a blessed object,
+do a **scoped reachability check first**: walk from the immediate
+roots (globals + ScalarRefRegistry container elements per Path 1) to
+verify the object really is unreachable. If reachable, treat as
+transient drift (keep refCount at 0, don't fire DESTROY).
+
+Concrete patch sketch:
+
+```java
+// MortalList.flush(), inner if-else:
+if (base.localBindingExists) {
+    // existing skip
+} else if (base.blessId != 0
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // blessed object still reachable via container element or
+    // global — refCount drift, not real end-of-life.
+    // Don't fire DESTROY; refCount will recover on next assignment.
+} else {
+    base.refCount = Integer.MIN_VALUE;
+    DestroyDispatch.callDestroy(base);
+}
+```
+
+`ReachabilityWalker.isReachableFromRoots(base)` is a new lightweight
+"is this single object reachable" query — much cheaper than the full
+`sweepWeakRefs()` walk because it short-circuits as soon as the
+target is found.
+
+**Verification gates**: same test gate as the rejected Attempt 2 fix,
+plus the cycle-break tests (`weaken_destroy.t`,
+`weaken_edge_cases.t`, `destroy_anon_containers.t`). The walker
+correctly says "unreachable" in the cycle-break case (the cycle is
+isolated; nothing outside points at it), so DESTROY still fires.
+
+**Estimated effort**: 2 days (the per-object reachability query
+needs to be written carefully — re-use `ReachabilityWalker.walk()`
+with an early-exit on first target hit, with a depth limit to avoid
+walking the entire heap on every flush).
+
+####### Path 3 (deepest fix): refcount accounting symmetry audit
+
+**Use this only if Paths 1+2 don't close the gap.** Captured
+PJ_RC=1 trace from the Class::MOP bootstrap showed 55 increments vs
+87 effective decrements for the failing object — a real asymmetry
+beyond walker-blindness. That asymmetry has to come from at least
+one code path where `++base.refCount` and `--base.refCount` aren't
+symmetric.
+
+Audit candidate sites in priority order:
+
+1. **`@_` aliasing on sub call entry** (`RuntimeCode.apply`).
+   When `attach($attr, $REG{x})` is called, the elements of `@_`
+   alias the caller's expression results. Real Perl uses RC++ on
+   each alias setup, RC-- on @_ teardown at sub exit. Verify:
+   ```java
+   // entry: each @_ slot whose value is a tracked ref → refCount++
+   // exit:  each @_ slot whose refCountOwned=true → refCount--
+   ```
+   Trace: with the test
+   ```perl
+   my $obj = bless {}, "M";
+   sub f { 1 }
+   for (1..10) { f($obj) }
+   ```
+   verify `$obj`'s refCount lands at the same value before and
+   after the loop. If not, that's site #1.
+
+2. **List-assignment from `@_`** (`my (...) = @_;`). The list-copy
+   path may double-count if it goes through both
+   `setLargeRefCounted` AND a bulk `setFromList` path that also
+   touches refcounts. Audit: verify `RuntimeArray.setFromList` and
+   list-copy bytecode emit only ONE increment per assigned slot.
+
+3. **Hash element store on overwrite**:
+   `$h->{key} = $a; $h->{key} = $b;`
+   The first assignment is a fresh slot (one `++a.refCount`). The
+   second overwrites — should be one `++b.refCount` AND one
+   `--a.refCount`. Audit: confirm `RuntimeHash.put` and
+   `setLargeRefCounted`'s overwrite path don't double-decrement
+   when both fire on the same overwrite.
+
+4. **Sub::Install closure captures**. Each closure binding captures
+   `$method`, `$package`, etc. The closure's CODE object's
+   `capturedScalars` array holds these. Verify per-closure
+   scope-exit decrements only the closure's captures, not the
+   caller's locals. Already-suspicious site: `RuntimeCode.apply`
+   line 546 calls `MortalList.deferDecrementIfTracked(s)` on
+   captured scalars — may double-fire across nested closures.
+
+**Methodology**: write a unit test for each candidate site that
+asserts `base.refCount` post-operation. Use the test as a regression
+guard before applying the fix at that site. Like:
+
+```perl
+# t/refcount_audit_at_calls.t
+use Test::More;
+use Internals qw(SvREFCNT);   # PerlOnJava-only helper if needed
+my $obj = bless {}, "M";
+my $rc0 = SvREFCNT($obj);
+sub f { 1 }
+for (1..10) { f($obj) }
+is(SvREFCNT($obj), $rc0,
+    'refCount unchanged after 10 sub calls passing $obj');
+```
+
+If `SvREFCNT` isn't exposed, instrument via the `PJ_RC=1` env trace
+and post-process the log: count increments and decrements for the
+target object's id, assert equality.
+
+**Estimated effort**: 3-4 days (each candidate site is its own
+investigation + fix + test).
+
+####### Why this order
+
+- Path 1 alone might solve the bootstrap (walker corrects the
+  transient drift before it causes harm). If yes, ship.
+- Path 2 closes the gap if the walker is now right but flush-destroy
+  fires before the next walker cycle. If yes, ship Path 1+2.
+- Path 3 is only needed if real refcount asymmetry exists beyond
+  walker-blindness. The 55-vs-87 trace data suggests it does, but
+  the asymmetry might be benign once the walker correctly identifies
+  reachable objects (refCount drift is fine if `localBindingExists`
+  + walker say "still alive").
+
+The test gate is unchanged from the previous round:
 
 ```bash
 ./jperl src/test/resources/unit/weaken_via_sub.t                 # 20/20 ok
@@ -981,6 +1142,29 @@ The test gate for any future fix:
 make                                                              # green
 ./jcpan -t DBIx::Class                                            # 11 green / 876 ok / 2 fail (baseline)
 ```
+
+####### What success looks like
+
+After Paths 1 and 2 land:
+
+- **Class::MOP self-bootstrap loads cleanly.** The metaclass's
+  refCount can still drift to 0 transiently, but the walker correctly
+  reports it as reachable via `our %METAS` and the flush-destroy gate
+  defers to that.
+- **Existing weak-ref / cycle-break tests still pass.** When the
+  walker correctly says "this object is unreachable" (e.g. cycle
+  isolated from external refs), the flush-destroy gate fires DESTROY
+  as before.
+- **Phase D unblocks**: bundled Moose loads. Then D1-D6 mechanical
+  steps complete and 477/478 Moose tests pass.
+
+####### What success does NOT mean
+
+The cooperative refCount may still over-count in some cases (objects
+hold refCount > 0 after they're truly dead). That's acceptable: the
+existing auto-sweep will reap them on the next walker cycle. The
+problematic direction — under-counting that fires DESTROY too early
+— is what Paths 1+2 fix.
 
 ###### Verification (Step W6) — the fix that *did* land
 
