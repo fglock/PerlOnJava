@@ -19,6 +19,33 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runEndBlocks;
  */
 public class WarnDie {
 
+    /**
+     * Returns true when a %SIG slot holds one of Perl 5's reserved string
+     * values ("DEFAULT" or "IGNORE") rather than a real handler. In that
+     * case Perl 5 does NOT invoke any handler when the corresponding event
+     * fires; trying to dispatch on the string would otherwise look up a
+     * sub by that literal name (e.g. `&main::DEFAULT`) and croak with
+     * "Undefined subroutine".
+     *
+     * Real-world repro: URI::Find::find() does
+     *     local $SIG{__DIE__} = 'DEFAULT';
+     * and then calls URI->new(...) which internally does
+     *     eval "require URI::git";
+     * If `URI::git` is missing, the eval-string failure dispatched
+     * through this handler tried to call `&main::DEFAULT` and clobbered
+     * $@ inside _is_uri, making `git://` and `svn+ssh://` URIs
+     * undetectable (URI-Find t/Find.t tests 355, 364).
+     */
+    private static boolean isReservedSigString(RuntimeScalar sig) {
+        if (sig == null || !sig.getDefinedBoolean()) return false;
+        // Only treat plain strings as reserved; CODE refs / globs are real handlers.
+        if (RuntimeScalarType.isReference(sig)) return false;
+        if (sig.type == RuntimeScalarType.CODE) return false;
+        if (sig.type == RuntimeScalarType.GLOB || sig.type == RuntimeScalarType.GLOBREFERENCE) return false;
+        String s = sig.toString();
+        return "DEFAULT".equals(s) || "IGNORE".equals(s);
+    }
+
     private static Throwable unwrapException(Throwable throwable) {
         Throwable current = throwable;
 
@@ -67,7 +94,7 @@ public class WarnDie {
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
-        if (sig.getDefinedBoolean()) {
+        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
             RuntimeArray args = new RuntimeArray();
             RuntimeArray.push(args, new RuntimeScalar(err));
 
@@ -174,7 +201,7 @@ public class WarnDie {
             }
         }
 
-        if (sig.getDefinedBoolean()) {
+        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
             RuntimeArray args = new RuntimeArray();
             RuntimeArray.push(args, finalMessage);
 
@@ -202,6 +229,16 @@ public class WarnDie {
             DynamicVariableManager.popToLocalLevel(level);
 
             return new RuntimeScalar(1);  // Perl's warn() always returns 1
+        }
+
+        // $SIG{__WARN__} = 'IGNORE' suppresses the warning entirely; 'DEFAULT'
+        // (and the unset case) falls through to writing on STDERR.
+        if (sig.getDefinedBoolean() && "IGNORE".equals(sig.toString())
+                && !RuntimeScalarType.isReference(sig)
+                && sig.type != RuntimeScalarType.CODE
+                && sig.type != RuntimeScalarType.GLOB
+                && sig.type != RuntimeScalarType.GLOBREFERENCE) {
+            return new RuntimeScalar(1);
         }
 
         // Get the RuntimeIO for STDERR and write the message
@@ -395,7 +432,7 @@ public class WarnDie {
         // System.out.println("die :" + errVariable);
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");
-        if (sig.getDefinedBoolean()) {
+        if (sig.getDefinedBoolean() && !isReservedSigString(sig)) {
             RuntimeScalar sigHandler = new RuntimeScalar(sig);
 
             // Undefine $SIG{__DIE__} before calling the handler to avoid infinite recursion
