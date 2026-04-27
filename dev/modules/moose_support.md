@@ -8,33 +8,53 @@ for defining classes, attributes, roles, and method modifiers.
 
 ## Current Status
 
-Phase 1 (B-module subroutine introspection) is **complete**. The remaining
-work is split between:
+**Goal**: pass **477 / 478** Moose 2.4000 test files, i.e. everything
+except `t/todo_tests/moose_and_threads.t` (already TODO upstream;
+PerlOnJava does not implement `threads`).
 
-1. **Quick path** — ship a pure-Perl `Moose.pm` shim that delegates to Moo so
-   simple consumers like `ANSI::Unicode` work today.
-2. **Real path** — bundle a pure-Perl `Class::MOP` + `Moose` so existing
-   Moose distributions install through `jcpan` without patching.
+**Today**: 56 / 478 fully-green via the Moose-as-Moo shim.
 
-The single biggest blocker for the real path is **not** the missing C compiler.
-Modern Moose (2.4000) has 13 `.xs` files plus `mop.c`; even with the compiler
-check bypassed, `ExtUtils::MakeMaker` would still try to build them. We must
-either replace `Moose.pm` outright or intercept `WriteMakefile` to drop the XS
-declarations.
+The path from 56 to 477:
+
+1. **Phases 3 → 6** (incremental shim widening, ~1 week total) take
+   us to ~110–130 fully-green files. Ships immediate value to
+   real-world Moose-using CPAN modules without bundling upstream
+   Moose.
+2. **Phase D** (bundle pure-Perl Moose, ~5 days) takes us from
+   ~110–130 to **477 / 478**. Replaces the shim with the real
+   upstream Moose distribution plus a single new file
+   (`Class::MOP::PurePerl`, ~500 lines) that implements what
+   Moose's 710 lines of XS would have provided.
+
+The original "Quick path vs. real path" framing in earlier revisions
+of this doc is now obsolete: we **did** the Quick path, **and** we
+will do the real port — they're complementary, not alternatives.
 
 ### Out of scope
 
-- **`DESTROY` / `DEMOLISH` timing** and **`weaken` / `isweak`** semantics
-  are being addressed on a separate branch (see
-  `dev/architecture/weaken-destroy.md`). This plan assumes those primitives
-  are available and does **not** track their implementation. Moose's
-  `DEMOLISH` chain falls out of having `DESTROY` work correctly; nothing
-  Moose-specific is needed here.
-- Real JVM-level class generation (Byte Buddy / Javassist / additional ASM
-  use beyond what PerlOnJava already does). `Class::MOP` operates on Perl
-  stashes, not `java.lang.Class`, so no third-party bytecode library is
-  required for correctness. The optional "make_immutable inlining"
-  optimization can reuse the existing ASM infrastructure if/when pursued.
+- **`threads`-only Moose tests** (1 file: `t/todo_tests/moose_and_threads.t`,
+  already TODO upstream). PerlOnJava does not implement Perl threads;
+  this test will be added to the distroprefs skip list during Phase D.
+- **`fork` semantics**. Zero Moose tests use `fork`; not relevant here.
+- Real JVM-level class generation (Byte Buddy / Javassist / additional
+  ASM use beyond what PerlOnJava already does). `Class::MOP` operates
+  on Perl stashes, not `java.lang.Class`, so no third-party bytecode
+  library is required for correctness. The optional "make_immutable
+  inlining" optimization can reuse the existing ASM infrastructure
+  if/when pursued.
+
+### Already covered in core PerlOnJava
+
+These are listed only because they were "out of scope" / "blockers" in
+earlier revisions of this document; they no longer are:
+
+- **`weaken` / `isweak`** — implemented in core (cooperative reference
+  counting on top of JVM GC). See `dev/architecture/weaken-destroy.md`.
+- **`DESTROY` / `DEMOLISH` timing** — implemented in core; fires
+  deterministically for tracked blessed objects. Moose's `DEMOLISH`
+  chain falls out of `DESTROY` working correctly; nothing
+  Moose-specific is needed.
+- **`B` module subroutine name/stash introspection** — done (Phase 1).
 
 ### Verified status (run on master, Apr 2026)
 
@@ -498,15 +518,20 @@ isn't `Class::MOP` itself loads cleanly today.
 
 ### Current Status
 
+Goal: pass **477 / 478** Moose 2.4000 test files (everything except
+`t/todo_tests/moose_and_threads.t`, which is already TODO upstream
+and PerlOnJava doesn't implement `threads`). Today: **56 / 478**.
+
 - **Phase 1 — DONE.** B-module subroutine name/stash introspection works.
 - **Quick path — DONE.** `Moose.pm` shim ships, ANSI::Unicode-class modules unblocked.
 - **Phase A — DONE.** `ExtUtils::HasCompiler` deterministic stub ships at `src/main/perl/lib/ExtUtils/HasCompiler.pm`.
-- **Phase B — not started.** Strip XS keys in `WriteMakefile`. (Lower priority while we're not yet trying to install upstream Moose.)
 - **Phase C-mini — DONE.** `Class::MOP` shim with `class_of` / `get_metaclass_by_name` / `get_code_info` / `is_class_loaded` and friends; ships at `src/main/perl/lib/Class/MOP.pm`.
 - **Phase 2 stubs — DONE.** `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, plus skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Meta::TypeConstraint::Parameterized` / `Moose::Meta::Role::Application::RoleSummation` / `Moose::Exporter`. Pre-populated standard type-constraint stubs to avoid `BAIL_OUT` in upstream test suite.
-- **Phase C-full — not started.** Real `Class::MOP::Class` instances backed by Java helpers (`org.perlonjava.runtime.perlmodule.ClassMOP`).
-- **Phase D — not started.** Bundle pure-Perl `Class::MOP::*` and `Moose::*` distributions.
-- **Phase E — deferred.** Export-flag MAGIC.
+- **Phase 3 — not started.** Rich `Moose::_FakeMeta` + next batch of compile-time stubs. Ships value (~75–80 fully-green) but does not pass all tests on its own.
+- **Phases 4 / 5 / 6 — not started.** Incremental shim widening. Ship value (~110–130 fully-green) but do not pass all tests on their own.
+- **Phase D — not started.** Bundle pure-Perl Moose. **This is the phase that gets us to 477 / 478.** Now sized at ~5 days (was previously framed as much larger). See "Phase D plan" below.
+- **Phase B — deferred.** Strip XS keys in `WriteMakefile`. Not on the Moose pass-all-tests critical path; the bundled Moose ships from the JAR.
+- **Phase E — deferred.** Export-flag MAGIC. Affects warnings only.
 
 ### Completed
 
@@ -554,60 +579,35 @@ takeaways:
 
 ### Recommended next phases
 
-In priority order. All are incremental shim widenings that follow the
-same playbook as Phases A / C-mini / 2.
+The goal is to **pass all 478 Moose 2.4000 test files except the
+threads-only test** (`t/todo_tests/moose_and_threads.t`, already a
+TODO upstream). PerlOnJava does not implement `fork` or `threads`, but
+the Moose suite is forgiving: zero tests use `fork`, and only that one
+file uses `threads`. Everything else is in scope.
 
-#### Realistic ceiling
+#### Strategy: incremental shim now, real port for the long tail
 
-Before listing the phases, an honest projection. Today's number
-is **56 fully-green files / 478 (~12%)**. Phases 3 → 6 are projected
-to bring this to:
+Phases 3 → 6 below are incremental shim widening. They ship value
+quickly and are projected to take us from today's 56 / 478 fully-green
+files to roughly 110–130 / 478 (~25–28%) — covering ordinary Moose
+consumers (attributes, roles, method modifiers).
 
-| Phase | Projected fully-green | Notes |
-|-------|-----------------------|-------|
-| Today | 56 / 478 (~12%) | |
-| After Phase 3 | ~75–80 / 478 | Many newly-running tests become *partial*, not fully green. |
-| After Phase 4 | ~85–100 / 478 | Real attribute introspection helps `t/attributes/`, `t/cmop/attribute*`. |
-| After Phases 5–6 | ~110–130 / 478 (~25–28%) | Diminishing returns. |
-| **Shim ceiling** | **~150 / 478 (~30%)** optimistically | The shim categorically cannot pass the rest. |
+To pass the **rest** of the suite (immutable inlining, MOP self-tests,
+role conflict messages, native traits, type-constraint coercion
+graphs, `Class::MOP` self-bootstrap, ...) we then do **Phase D — bundle
+pure-Perl Moose**. With weaken/DESTROY now in core PerlOnJava and only
+710 lines of XS to replace (most of it generic hashref accessors),
+Phase D is much smaller than its earlier "the real fix" framing
+suggested. See "Phase D plan" below for the concrete breakdown.
 
-Whole test areas that the shim **cannot** pass without a real
-`Class::MOP` / `Moose` port:
+Target outcome:
+- **Phases 3 → 6**: ~110–130 / 478 fully-green files. Ships value
+  to real-world Moose-using CPAN modules immediately.
+- **Phase D (bundle + XS replacement)**: 477 / 478 fully-green files
+  (everything except `moose_and_threads.t`). Anything still failing
+  is a real bug in PerlOnJava core, not in the Moose port.
 
-- **`make_immutable` inlining** (`t/immutable/`, `t/cmop/*immutable*`).
-  Upstream generates Perl source at runtime for immutable constructors
-  and accessors and tests inspect the generated code. Our shim makes
-  `make_immutable` a no-op.
-- **MOP introspection symmetry** (`t/cmop/method.t`, etc.).
-  Tests check that `$class->meta->get_method($name)->body ==
-  \&{"${class}::${name}"}` — exact-identity invariants the shim can't
-  recreate without tracking every sub installation.
-- **Role composition conflicts** (`t/roles/method_resolution_order.t`,
-  `t/roles/role_conflict_*.t`). Moose's role engine emits specific
-  conflict messages and timing that differ from Moo::Role's.
-- **Native attribute traits** (`t/native_traits/`). `traits =>
-  ['Array']`, `['Hash']`, `['Counter']`, ... with delegated mutator
-  methods are a Moose-specific subsystem; Moo does not have it.
-- **Type-constraint coercion graphs** (`t/type_constraints/coerce_*`),
-  **inlined check generation** (`_inline_check`),
-  **method-modifier timing** under MOP — all depend on real Moose
-  internals.
-- **`Class::MOP` self-bootstrap** (`t/cmop/0*`). Tests assert that
-  `Class::MOP::Class` is itself a `Class::MOP::Class` instance.
-
-If "pass all Moose tests" is a hard requirement, the only credible
-path is **Phase D (bundle pure-Perl Moose)** plus whatever Java-side
-support the bundled code actually needs at runtime. Even then expect
-5–10% real platform differences (`fork`, threads, weaken edge cases,
-IO::Handle subtleties).
-
-If "ship value to real-world Moose-using CPAN modules" is the goal,
-Phases 3 → 6 are the right move: they don't pass every Moose
-self-test, but they unblock most ordinary Moose consumers (which
-mostly use attributes, roles, and method modifiers — exactly the
-Moo-coverable subset).
-
-In priority order:
+Phases in priority order:
 
 #### Phase 3 — Rich `Moose::_FakeMeta` and the next batch of stubs
 
@@ -710,68 +710,226 @@ The current `Moose::Exporter` stub only forwards to `Moose->import`.
 A more complete version would install the caller's `with_caller` /
 `with_meta` / `as_is` exports onto consumers.
 
+#### Phase D — Bundle pure-Perl Moose (the destination)
+
+This is the phase that gets us to **477 / 478 passing** (everything
+except the threads-only TODO test). It's now much smaller than the
+original "real fix" framing suggested — three reasons:
+
+1. PerlOnJava core now implements `weaken` / `isweak` / `DESTROY`
+   correctly (see `dev/architecture/weaken-destroy.md`). Was the
+   biggest unknown last time this was scoped.
+2. Moose's XS surface is only **710 lines total** (sum of `xs/*.xs`
+   plus `mop.c`). Most of it is generic hashref accessors that pure-
+   Perl replaces trivially.
+3. `Package::Stash::PP` already exists upstream as a pure-Perl
+   replacement for `Package::Stash::XS`; PerlOnJava's existing
+   `Package::Stash` works.
+
+Sub-phases:
+
+##### D1 — Bundle the upstream `.pm` files
+
+Drop `Moose-2.4000/lib/Class/MOP*` and `Moose-2.4000/lib/Moose*` and
+`Moose-2.4000/lib/metaclass.pm` and `Moose-2.4000/lib/Test/Moose.pm`
+into `src/main/perl/lib/`. Replace our existing shim files (`Moose.pm`,
+`Moose/Role.pm`, `Moose/Object.pm`, `Moose/Util/TypeConstraints.pm`,
+`Class/MOP.pm`, `Test/Moose.pm`, `metaclass.pm`, and the various
+skeleton `.pm` stubs from Phase 2). Snapshot upstream `Moose-2.4000/t/`
+into `src/test/resources/module/Moose/t/` for regression coverage
+(this is what AGENTS.md's "lock in progress" rule asks for).
+
+Effort: ~½ day (mostly mechanical).
+
+##### D2 — Patch `Class::MOP.pm` to skip `XSLoader::load`
+
+Upstream `Class::MOP.pm` does an unconditional
+`XSLoader::load('Moose', $VERSION)` at line 31. On PerlOnJava the
+loader fails with "Can't load shared library on this platform" and
+the whole module won't compile. Replace the `XSLoader::load` block
+with:
+
+```perl
+if ($ENV{MOOSE_PUREPERL} || !$Config{usedl}) {
+    require Class::MOP::PurePerl;
+}
+else {
+    XSLoader::load('Moose', $VERSION);
+}
+```
+
+PerlOnJava's `Config::usedl` is empty, so this routes to the
+PurePerl module unconditionally. (The env var is for forcing PP on
+real Perl during development.)
+
+This is the only modification to upstream Moose code. Document it
+prominently so future sync-ups with upstream don't drop it.
+
+Effort: ~½ day.
+
+##### D3 — Implement `Class::MOP::PurePerl`
+
+The XS provides accessor methods on a handful of mixin classes.
+None of them do anything clever — they all read/write hash slots
+on the metaclass / attribute / method instances. The breakdown
+(by `xs/*.xs` file):
+
+| .xs file              | Lines | What it provides | PP replacement |
+|-----------------------|-------|------------------|----------------|
+| `Attribute.xs`        | 9     | BOOT only — pulls in shared accessor table | trivial |
+| `AttributeCore.xs`    | 18    | Mixin readers: name / accessor / reader / writer / predicate / clearer / builder / init_arg / initializer / definition_context / insertion_order | one-liners over `$_[0]->{...}` |
+| `Class.xs`            | 12    | BOOT only | trivial |
+| `Generated.xs`        | 9     | BOOT only | trivial |
+| `HasAttributes.xs`    | 9     | Mixin: `_attribute_map` reader | one-liner |
+| `HasMethods.xs`       | 89    | `_method_map`, `add_package_symbol`-tied method install | pure-Perl `Package::Stash`-based |
+| `Inlined.xs`          | 8     | BOOT only | trivial |
+| `Instance.xs`         | 8     | BOOT only | trivial |
+| `MOP.xs`              | 22    | `is_class_loaded`, `_inline_check_constraint`, etc. | already in our shim |
+| `Method.xs`           | 23    | `body`, `name`, `package_name` accessors | one-liners |
+| `Moose.xs`            | 148   | `Moose::Util::throw_exception_class_callback` and friends, init_meta hooks | most can defer to existing pure-Perl |
+| `Package.xs`          | 8     | BOOT only | trivial |
+| `ToInstance.xs`       | 63    | `Class::MOP::class_of` fast path, blessed-arg checks | one-liner with blessed/ref |
+| `mop.c`               | 284   | Shared accessor-generation framework: `mop_install_simple_accessor`, `mop_class_check`, `mop_check_package_cache_flag` | ~150 lines of pure Perl |
+
+Total Perl replacement: well under 500 lines. Most of it is
+literally `sub name { $_[0]->{name} }`-shaped.
+
+The actual implementation lives in **one new file**:
+`src/main/perl/lib/Class/MOP/PurePerl.pm`. It walks the mixin packages
+(`Class::MOP::Mixin::AttributeCore`, `Class::MOP::Mixin::HasAttributes`,
+`Class::MOP::Mixin::HasMethods`, `Class::MOP::Method`, `Class::MOP::Package`,
+`Class::MOP::Class`, `Class::MOP::Attribute`, `Class::MOP::Instance`)
+and installs the accessors that upstream's XS would have installed,
+plus the few non-accessor helpers (`_inline_check_constraint`,
+`Class::MOP::class_of` PP version, etc.).
+
+Reference: this is exactly what `Class::MOP::PurePerl.pm` would have
+been before XS was added. The upstream commit that introduced the
+XS (`bf38c2e9`, 2010) is a useful guide — its diff shows exactly
+which Perl was replaced.
+
+Effort: ~3 days. Most time goes to implementing & testing the
+accessor packs, not architectural decisions.
+
+##### D4 — Bundle pure-Perl Package::Stash and other prereqs
+
+`Class::MOP::Package` does `use Package::Stash;`. Upstream
+`Package::Stash` tries `Package::Stash::XS` first, falls back to
+`Package::Stash::PP` if XS unavailable — this works as-is on
+PerlOnJava (we've verified `use Package::Stash` succeeds today).
+
+Other prereqs already verified working on PerlOnJava (per the
+existing dependency-graph table earlier in this doc):
+`Try::Tiny`, `Module::Runtime`, `Devel::GlobalDestruction`,
+`Devel::StackTrace`, `Devel::OverloadInfo`, `Sub::Exporter`,
+`Sub::Install`, `Sub::Identify`, `Data::OptList`, `Class::Load`,
+`Eval::Closure`, `Params::Util`, `B::Hooks::EndOfScope`,
+`Package::DeprecationManager`, `Dist::CheckConflicts`.
+
+Effort: ~½ day to verify nothing regressed when we move from shim
+to real `Class::MOP`.
+
+##### D5 — Update distroprefs to skip the threads-only TODO test
+
+Today's `Moose.yml` distropref runs `prove --exec jperl -r t/`. Add
+an exclusion for `t/todo_tests/moose_and_threads.t`:
+
+```yaml
+test:
+  commandline: 'prove --exec jperl -r t/ --not t/todo_tests/moose_and_threads.t'
+```
+
+(or, equivalent, use a `prove` ignore-file.)
+
+Effort: ~10 minutes.
+
+##### D6 — Snapshot tests under `module/Moose/t/`
+
+Per AGENTS.md's bundled-modules rule, copy `Moose-2.4000/t/` (minus
+the threads file) into `src/test/resources/module/Moose/t/`. Add the
+new directory to `make test-bundled-modules`. From then on,
+regressions in any of the 477 passing files are caught by `make`.
+
+Effort: ~½ day.
+
+##### Phase D total
+
+| Sub-phase | Effort |
+|-----------|--------|
+| D1: bundle upstream `.pm` files | ½ day |
+| D2: patch `Class::MOP.pm` XSLoader skip | ½ day |
+| D3: implement `Class::MOP::PurePerl` | 3 days |
+| D4: prereq verification | ½ day |
+| D5: distroprefs threads-test exclusion | 10 min |
+| D6: snapshot tests under `module/Moose/` | ½ day |
+| **Total** | **~5 days** |
+
+**Outcome**: 477 / 478 fully-green files
+(everything except `t/todo_tests/moose_and_threads.t`). Anything
+still failing after Phase D is a real bug in PerlOnJava core (not in
+the Moose port) and gets fixed in core.
+
 #### Phase B (deferred) — strip XS in `WriteMakefile`
 
-Only relevant once we attempt to install upstream Moose. With
-shim-based testing via `prove --exec jperl`, we don't need it. Keep
-in the plan but don't pursue until either:
-- A user actually wants `cpan -i Moose` to succeed end-to-end, or
-- Phase D is in play.
-
-#### Phase C-full / Phase D — real `Class::MOP` / `Moose` port
-
-Status updated: previously labeled "the real fix"; now the **last
-recourse** rather than the next move.
-
-Why deferred:
-- Phase 3 alone is expected to recover another ~15–25 fully-green
-  files for ~1 day of work.
-- Phase 4 hooks into Moo internals to give us real attribute
-  introspection without bundling Moose at all.
-- A full pure-Perl Moose port is hundreds of files and thousands of
-  lines, and would still need ~all of the shim infrastructure
-  (Class::MOP, B, etc.) to work.
-
-Reconsider Phase D when **either** the iterative shim has plateaued
-(Phases 3–6 stop adding ≥10 files per round) **or** a specific
-high-value distribution (e.g. Catalyst, DBIx::Class roles, ...) needs
-something the shim categorically cannot provide.
+After Phase D the bundled Moose ships from the JAR; users don't run
+`cpan -i Moose`. Phase B becomes useful only when somebody wants to
+install a *different* XS distribution that has a pure-Perl fallback
+the way Moose does. Not part of the Moose plan.
 
 #### Phase E (deferred) — Export-flag MAGIC
 
-Same status as before. Affects `Moose::Exporter` re-export tracking
-only; lowest priority.
+Affects `Moose::Exporter` re-export-tracking warnings only. The
+real Moose's `Moose::Exporter` will surface a warning instead of
+hard-failing when this magic is missing — acceptable. Not part of
+the Moose pass-all-tests plan.
 
 ### Open work items
 
-- [ ] Phase 3a: enrich `Moose::_FakeMeta` (target: `Moose::_FakeMeta isa
-      Moose::Meta::Class`, plus `add_attribute` / `get_attribute` /
-      `new_object` / `is_mutable` / `get_method`).
-- [ ] Phase 3b: add next batch of compile-time `.pm` stubs
+Optimistic order (Phases 3 → 6 ship value incrementally; D is the
+destination):
+
+- [ ] **Phase 3a**: enrich `Moose::_FakeMeta` (`@ISA` includes
+      `Class::MOP::Class` + `Moose::Meta::Class`; add
+      `add_attribute` / `get_attribute` / `new_object` / `is_mutable`
+      / `get_method`).
+- [ ] **Phase 3b**: add next batch of compile-time `.pm` stubs
       (`Moose::Meta::Attribute`, `Moose::Meta::Role`,
       `Moose::Meta::Role::Composite`, `Class::MOP::Method`,
       `Class::MOP::Instance`, `Moose::Util::MetaRole`,
       `Moose::Meta::TypeConstraint`, `Moose::Exception`).
-- [ ] Phase 3c: bless `_Stub` into `Moose::Meta::TypeConstraint`.
-- [ ] Phase 3d: add `export_type_constraints_as_functions` and
-      `find_or_parse_type_constraint` to `Moose::Util::TypeConstraints`.
-- [ ] Phase 3e: add `Moose::Meta::Role->create_anon_role`.
-- [ ] Phase 4: hook into Moo's attribute store from
+- [ ] **Phase 3c**: bless `Moose::Util::TypeConstraints::_Stub` into
+      `Moose::Meta::TypeConstraint`.
+- [ ] **Phase 3d**: add `export_type_constraints_as_functions` and
+      `find_or_parse_type_constraint` to
+      `Moose::Util::TypeConstraints`.
+- [ ] **Phase 3e**: add `Moose::Meta::Role->create_anon_role`.
+- [ ] **Phase 4**: hook into Moo's attribute store from
       `Moose::_FakeMeta->get_attribute*` methods.
-- [ ] Phase 5: real-ish `Moose::Util::MetaRole::apply_metaroles`.
-- [ ] Phase 6: full `Moose::Exporter` sugar installation.
-- [ ] Each time we **bundle** a Moose-ecosystem distribution (Moose
-      itself, Class::MOP, MooseX::Types, …), snapshot its upstream
-      `t/` under `src/test/resources/module/{Distribution}/t/` so
-      `make test-bundled-modules` guards against regressions. Do not
-      snapshot tests for non-bundled downstream consumers; those
-      remain `./jcpan -t` smoke checks.
-- [ ] Phase B (deferred): patch `ExtUtils::MakeMaker::WriteMakefile`
-      to scrub `OBJECT` / `XS` / `C` keys when running on PerlOnJava.
-      Only needed once we try to install upstream Moose.
-- [ ] Phase C-full / Phase D (deferred): bundle pure-Perl
-      `Class::MOP` / `Moose`. Reconsider only if the iterative shim
-      plateaus.
+- [ ] **Phase 5**: real-ish `Moose::Util::MetaRole::apply_metaroles`.
+- [ ] **Phase 6**: full `Moose::Exporter` sugar installation.
+- [ ] **Phase D1**: drop upstream `Moose-2.4000/lib/{Class/MOP*,Moose*,
+      metaclass.pm,Test/Moose.pm}` into `src/main/perl/lib/`,
+      replacing the shim files.
+- [ ] **Phase D2**: patch `src/main/perl/lib/Class/MOP.pm`'s
+      `XSLoader::load` block to fall back to
+      `Class::MOP::PurePerl` when `!$Config{usedl}`.
+- [ ] **Phase D3**: implement `src/main/perl/lib/Class/MOP/PurePerl.pm`
+      (~500 lines pure Perl; replaces `xs/*.xs` + `mop.c`). Mining
+      reference: upstream Moose pre-XS commit `bf38c2e9`.
+- [ ] **Phase D4**: verify all `Class::MOP` runtime dependencies
+      still load cleanly with the bundled (vs shim) `Class::MOP`.
+- [ ] **Phase D5**: edit `src/main/perl/lib/CPAN/Config.pm`'s
+      `Moose.yml` distropref to skip
+      `t/todo_tests/moose_and_threads.t`.
+- [ ] **Phase D6**: snapshot `Moose-2.4000/t/` (minus the threads
+      test) into `src/test/resources/module/Moose/t/` so
+      `make test-bundled-modules` enforces no regressions.
+- [ ] After Phase D: write a one-line note at the top of this doc
+      saying "passes 477/478 of upstream Moose 2.4000". Update
+      `dev/modules/cpan_compatibility.md` if it tracks Moose.
+
+Phases B / E remain deferred as before — they're not on the Moose
+"pass all tests" critical path.
 
 ---
 
