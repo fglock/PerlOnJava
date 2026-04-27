@@ -494,19 +494,24 @@ sub parse_all_module_results {
 #
 # Strategy (borrowed from perl_test_runner.pl):
 #   1. Prefer external `timeout` / `gtimeout` — they send SIGTERM to the
-#      process group and handle cleanup natively.
+#      process group and follow up with SIGKILL (-k) if the child (e.g.
+#      a wedged JVM) ignores SIGTERM. Skipped on Windows because
+#      `timeout.exe` there is a sleep-with-countdown, NOT GNU coreutils.
 #   2. Fallback: fork + setpgrp + kill(-$pid) for platforms without
-#      coreutils.
+#      coreutils (and for Windows, where it degrades to a plain alarm).
+my $KILL_AFTER = 10;  # seconds between SIGTERM and SIGKILL
 sub run_with_timeout {
     my ($cmd, $secs) = @_;
 
     # --- Strategy 1: external timeout command ---
     my $timeout_cmd = _find_timeout_cmd();
     if ($timeout_cmd) {
-        my $full = "$timeout_cmd ${secs}s $cmd 2>&1";
+        my $full = "$timeout_cmd -k ${KILL_AFTER}s ${secs}s $cmd 2>&1";
         my $output = `$full`;
         my $exit_code = $? >> 8;
-        my $timed_out = ($exit_code == 124);  # timeout exits 124
+        # 124 = SIGTERM sent and child exited, 137 = 128+SIGKILL (hard-killed
+        # by -k), 143 = 128+SIGTERM (child exited due to SIGTERM).
+        my $timed_out = ($exit_code == 124 || $exit_code == 137 || $exit_code == 143);
         return ($output // '', $timed_out);
     }
 
@@ -572,6 +577,11 @@ sub run_with_timeout {
     sub _find_timeout_cmd {
         return $_timeout_cmd if $_checked;
         $_checked = 1;
+        # Windows ships a `timeout.exe` that is a sleep-with-countdown
+        # (NOT GNU coreutils) — skip detection there. The fallback path
+        # (alarm + kill) handles Windows; setpgrp/kill(-$pid) are no-ops
+        # but the alarm still bounds runtime.
+        return undef if $^O eq 'MSWin32';
         for my $candidate (qw(timeout gtimeout)) {
             if (system("which $candidate >/dev/null 2>&1") == 0) {
                 $_timeout_cmd = $candidate;
