@@ -315,13 +315,23 @@ sub run_single_test {
     my $abs_jperl = File::Spec->rel2abs($jperl_path, $old_dir);
     my $test_name = File::Spec->abs2rel($test_file, $local_test_dir || '.');
 
-    # Try to use system timeout command if available
+    # Try to use system timeout command if available.
+    # Use --kill-after (-k) so a SIGTERM that the JVM ignores is followed
+    # by SIGKILL after a grace period; otherwise wedged jperl processes
+    # outlive the timeout. GNU coreutils `timeout` (Linux, macOS via
+    # homebrew/gtimeout) supports -k. Windows ships a `timeout.exe` that is
+    # NOT GNU timeout (it's a sleep-with-countdown), so we skip detection
+    # there and fall back to the alarm-based path.
     my $timeout_cmd = '';
-    if (system('which timeout >/dev/null 2>&1') == 0) {
-        $timeout_cmd = "timeout ${timeout}s ";
-    } elsif (system('which gtimeout >/dev/null 2>&1') == 0) {
-        # macOS with coreutils
-        $timeout_cmd = "gtimeout ${timeout}s ";
+    my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys');
+    my $kill_after = 10;  # seconds between SIGTERM and SIGKILL
+    if (!$is_windows) {
+        if (system('which timeout >/dev/null 2>&1') == 0) {
+            $timeout_cmd = "timeout -k ${kill_after}s ${timeout}s ";
+        } elsif (system('which gtimeout >/dev/null 2>&1') == 0) {
+            # macOS with coreutils
+            $timeout_cmd = "gtimeout -k ${kill_after}s ${timeout}s ";
+        }
     }
 
     my $cmd = "${timeout_cmd}$abs_jperl $test_name 2>&1";
@@ -358,8 +368,11 @@ sub run_single_test {
     # Restore directory
     chdir($old_dir);
 
-    # Check if it was a timeout
-    if ($exit_code == 124) {
+    # Check if it was a timeout.
+    # 124 = GNU timeout sent SIGTERM and child exited.
+    # 137 = 128 + SIGKILL (9), child was hard-killed by `timeout -k`.
+    # 143 = 128 + SIGTERM (15), child exited due to SIGTERM.
+    if ($exit_code == 124 || $exit_code == 137 || $exit_code == 143) {
         return {
             status => 'timeout',
             ok_count => 0, not_ok_count => 0, total_tests => 0,
