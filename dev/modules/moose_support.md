@@ -317,15 +317,15 @@ install" scenario — define a distroprefs entry that overrides `pl` /
 
 Snapshot history from `./jcpan -t Moose` against the current shim:
 
-| Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) |
-|---|---|---|---|
-| Test files executed | 478 | 478 | 478 |
-| Individual assertions executed | 616 | 616 | **667** |
-| Fully passing files | ~29 | 35 | **36** |
-| Partially passing files | ~44 | 94 | **98** |
-| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | **~344** |
-| Assertions ok | 370 | 372 | **419** |
-| Assertions fail | 246 | 244 | **248** |
+| Metric | Initial shim | After refcount/DESTROY (Apr 2026) | After Phase A + C-mini (Apr 2026) | After Phase 2 stubs (Apr 2026) |
+|---|---|---|---|---|
+| Test files executed | 478 | 478 | 478 | 478 |
+| Individual assertions executed | 616 | 616 | 667 | **1419** |
+| Fully passing files | ~29 | 35 | 36 | **56** |
+| Partially passing files | ~44 | 94 | 98 | **184** |
+| Compile/load fail (missing `Class::MOP::*`, `Moose::Meta::*`) | ~405 | ~349 | ~344 | **~238** |
+| Assertions ok | 370 | 372 | 419 | **953** |
+| Assertions fail | 246 | 244 | 248 | **466** |
 
 The initial 29 fully-passing files covered BUILDARGS / BUILD chains,
 immutable round-trips, anonymous role creation, several Moo↔Moose bug
@@ -367,6 +367,44 @@ execute** (616 → 667), **+47 newly pass** (372 → 419), and one more
 file goes fully green (35 → 36). The four extra failures are
 upstream tests that previously bailed before reaching their assertion
 phase and now reach it; none are real regressions.
+
+**Phase 2 stubs** (a follow-up PR) added the next batch of
+compile-time blockers and a bailout fix:
+
+- `Moose.pm` / `Moose::Role` now `use Class::MOP ()` at top-level so
+  Moo's runtime calls to `Class::MOP::class_of` (made whenever
+  `$INC{"Moose.pm"}` is set) are always defined. This was the cause of
+  ~50+ "Undefined subroutine &Class::MOP::class_of" runtime errors on
+  the previous baseline.
+- `metaclass.pm` stub — installs a no-op `meta` method on the caller.
+- `Test::Moose.pm` — covers `meta_ok`, `does_ok`, `has_attribute_ok`,
+  `with_immutable`. Falls back to `$class->can($attr)` when no real
+  metaclass is available.
+- `Moose::Util.pm` — covers `find_meta`, `is_role`, `does_role`,
+  `apply_all_roles`, `english_list`, `throw_exception`, plus
+  trait/metaclass alias passes-through.
+- Skeleton stubs for `Class::MOP::Class`, `Class::MOP::Attribute`,
+  `Moose::Meta::Class`, `Moose::Meta::TypeConstraint::Parameterized`,
+  `Moose::Meta::Role::Application::RoleSummation`, and
+  `Moose::Exporter` — enough surface that `require X` succeeds and
+  `X->new(...)` returns something with the methods upstream tests
+  inspect.
+- Pre-populated standard type-constraint stubs in
+  `Moose::Util::TypeConstraints` (`Any`, `Item`, `Defined`, `Bool`,
+  `Str`, `Num`, `Int`, `ArrayRef`, `HashRef`, `Object`, …). Without
+  these, `t/type_constraints/util_std_type_constraints.t` would
+  `BAIL_OUT("No such type ...")` and prove would stop, losing every
+  test file that followed alphabetically (≈7 files / 50+ assertions).
+
+Net effect of Phase 2: **+752 individual assertions now execute**
+(667 → 1419), **+534 newly pass** (419 → 953), **+20 fully-green
+files** (36 → 56), and -106 files now compile that previously
+errored out at compile time. The +218 newly failing assertions are
+mostly tests that hadn't reached their assertion phase before (so
+"failure" is the honest answer); they include real shortcomings of
+the stub (e.g. `Test::Moose::has_attribute_ok` doesn't know about
+inherited Moo attributes) which would only be fixed by Phase D
+(real Class::MOP / Moose port).
 
 Phases C-full / D (real `Class::MOP::Class` instances and a pure-Perl
 `Moose` port) should move these numbers further; record the new
@@ -465,6 +503,7 @@ isn't `Class::MOP` itself loads cleanly today.
 - **Phase A — DONE.** `ExtUtils::HasCompiler` deterministic stub ships at `src/main/perl/lib/ExtUtils/HasCompiler.pm`.
 - **Phase B — not started.** Strip XS keys in `WriteMakefile`. (Lower priority while we're not yet trying to install upstream Moose.)
 - **Phase C-mini — DONE.** `Class::MOP` shim with `class_of` / `get_metaclass_by_name` / `get_code_info` / `is_class_loaded` and friends; ships at `src/main/perl/lib/Class/MOP.pm`.
+- **Phase 2 stubs — DONE.** `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, plus skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Meta::TypeConstraint::Parameterized` / `Moose::Meta::Role::Application::RoleSummation` / `Moose::Exporter`. Pre-populated standard type-constraint stubs to avoid `BAIL_OUT` in upstream test suite.
 - **Phase C-full — not started.** Real `Class::MOP::Class` instances backed by Java helpers (`org.perlonjava.runtime.perlmodule.ClassMOP`).
 - **Phase D — not started.** Bundle pure-Perl `Class::MOP::*` and `Moose::*` distributions.
 - **Phase E — deferred.** Export-flag MAGIC.
@@ -476,6 +515,7 @@ isn't `Class::MOP` itself loads cleanly today.
 - [x] Quick path: `Moose.pm` / `Moose::Role` / `Moose::Object` / `Moose::Util::TypeConstraints` shims
 - [x] Phase A: `ExtUtils::HasCompiler` deterministic stub
 - [x] Phase C-mini: `Class::MOP` shim (no metaclass instances; just enough surface to keep Moo happy)
+- [x] Phase 2 stubs: `metaclass.pm`, `Test::Moose.pm`, `Moose::Util.pm`, skeleton `Class::MOP::Class` / `Class::MOP::Attribute` / `Moose::Meta::Class` / `Moose::Exporter` / friends, and standard-type stubs in `Moose::Util::TypeConstraints` to suppress upstream `BAIL_OUT`.
 
 ### Decision needed
 

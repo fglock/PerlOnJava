@@ -39,6 +39,11 @@ our @EXPORT_OK = @EXPORT;
 #   { name => $name, parent => $parent, constraint => $coderef, message => $coderef }
 my %TYPES;
 
+# Pre-populated standard type constraints (filled in below). Forward
+# declared here so subs that reference it (find_type_constraint, the _Stub
+# class) compile without warnings.
+my %STANDARD_TYPES;
+
 sub _store {
     my $def = shift;
     $TYPES{ $def->{name} } = $def;
@@ -158,9 +163,131 @@ sub duck_type {
     });
 }
 
-sub find_type_constraint           { $TYPES{ $_[0] } }
+sub find_type_constraint           {
+    my ($name) = @_;
+    return undef unless defined $name;
+    return $TYPES{$name} if $TYPES{$name};
+    return $STANDARD_TYPES{$name};
+}
 sub register_type_constraint       { _store({ %{ $_[0] } }) }
 sub create_type_constraint_union   { union(@_) }
+
+# ---------------------------------------------------------------------------
+# Standard-type registry. Pre-populated so that
+# `find_type_constraint('Int')` etc. return a stub object instead of
+# undef. Without this, Moose's own t/type_constraints/util_std_*.t test
+# bails out (`BAIL_OUT("No such type ...")`) — which kills prove and
+# loses every test file that follows alphabetically.
+#
+# The stubs are intentionally minimal: enough method surface that the
+# upstream tests can call ->name / ->has_parent / ->constraint /
+# ->_compile_type / ->can_be_inlined and not die. The tests will then
+# fail subtests in the usual way, but won't BAIL_OUT.
+# ---------------------------------------------------------------------------
+
+{
+    package Moose::Util::TypeConstraints::_Stub;
+    sub new {
+        my ($class, %opts) = @_;
+        $opts{constraint} ||= sub { 1 };
+        return bless { %opts }, $class;
+    }
+    sub name              { $_[0]->{name} }
+    sub parent            { $_[0]->{parent} }
+    sub has_parent        { defined $_[0]->{parent} ? 1 : 0 }
+    sub constraint        { $_[0]->{constraint} }
+    sub message           { $_[0]->{message} }
+    sub has_message       { defined $_[0]->{message} ? 1 : 0 }
+    sub coercion          { undef }
+    sub has_coercion      { 0 }
+    sub can_be_inlined    { 0 }
+    sub inline_environment { {} }
+    sub _inline_check     { 'do { 1 }' }
+    sub _compile_type     { $_[0]->{constraint} }
+    sub _compile_subtype  { $_[0]->{constraint} }
+    sub check {
+        my ($self, $value) = @_;
+        my $c = $self->{constraint};
+        return $c ? $c->($value) : 1;
+    }
+    sub assert_valid {
+        my ($self, $value) = @_;
+        return 1 if $self->check($value);
+        require Carp;
+        Carp::croak("Validation failed for '" . $self->name . "'");
+    }
+    sub validate {
+        my ($self, $value) = @_;
+        return undef if $self->check($value);
+        return "Validation failed for '" . ($self->name // 'Anon') . "'";
+    }
+    sub is_subtype_of {
+        my ($self, $name) = @_;
+        my $p = $self->{parent};
+        while (defined $p) {
+            return 1 if $p eq $name;
+            my $pp = $STANDARD_TYPES{$p};
+            $p = $pp ? $pp->{parent} : undef;
+        }
+        return 0;
+    }
+    sub equals {
+        my ($self, $other) = @_;
+        my $a = ref $self  ? $self->name  : $self;
+        my $b = ref $other ? $other->name : $other;
+        return defined $a && defined $b && $a eq $b;
+    }
+    sub is_a_type_of {
+        my ($self, $name) = @_;
+        return 1 if $self->equals($name);
+        return $self->is_subtype_of($name);
+    }
+}
+
+sub _stub_type {
+    my (%opts) = @_;
+    return Moose::Util::TypeConstraints::_Stub->new(%opts);
+}
+
+%STANDARD_TYPES = (
+    Any        => _stub_type(name => 'Any',     constraint => sub { 1 }),
+    Item       => _stub_type(name => 'Item',    parent => 'Any',  constraint => sub { 1 }),
+    Defined    => _stub_type(name => 'Defined', parent => 'Item', constraint => sub { defined $_[0] }),
+    Undef      => _stub_type(name => 'Undef',   parent => 'Item', constraint => sub { !defined $_[0] }),
+    Bool       => _stub_type(name => 'Bool',    parent => 'Item', constraint => sub {
+                      !defined $_[0] || $_[0] eq '' || $_[0] eq '0' || $_[0] eq '1' }),
+    Value      => _stub_type(name => 'Value',   parent => 'Defined', constraint => sub {
+                      defined $_[0] && !ref $_[0] }),
+    Ref        => _stub_type(name => 'Ref',     parent => 'Defined', constraint => sub { ref $_[0] ? 1 : 0 }),
+    Str        => _stub_type(name => 'Str',     parent => 'Value',   constraint => sub {
+                      defined $_[0] && !ref $_[0] }),
+    Num        => _stub_type(name => 'Num',     parent => 'Str', constraint => sub {
+                      defined $_[0] && !ref $_[0]
+                          && $_[0] =~ /\A-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?\z/ }),
+    Int        => _stub_type(name => 'Int',     parent => 'Num', constraint => sub {
+                      defined $_[0] && !ref $_[0] && $_[0] =~ /\A-?\d+\z/ }),
+    ScalarRef  => _stub_type(name => 'ScalarRef', parent => 'Ref', constraint => sub {
+                      ref $_[0] eq 'SCALAR' || ref $_[0] eq 'REF' }),
+    ArrayRef   => _stub_type(name => 'ArrayRef',  parent => 'Ref', constraint => sub { ref $_[0] eq 'ARRAY' }),
+    HashRef    => _stub_type(name => 'HashRef',   parent => 'Ref', constraint => sub { ref $_[0] eq 'HASH' }),
+    CodeRef    => _stub_type(name => 'CodeRef',   parent => 'Ref', constraint => sub { ref $_[0] eq 'CODE' }),
+    RegexpRef  => _stub_type(name => 'RegexpRef', parent => 'Ref', constraint => sub { ref $_[0] eq 'Regexp' }),
+    GlobRef    => _stub_type(name => 'GlobRef',   parent => 'Ref', constraint => sub { ref $_[0] eq 'GLOB' }),
+    FileHandle => _stub_type(name => 'FileHandle', parent => 'Ref', constraint => sub {
+                      ref $_[0] eq 'GLOB'
+                          || (Scalar::Util::blessed($_[0]) && $_[0]->isa('IO::Handle')) }),
+    Object     => _stub_type(name => 'Object',    parent => 'Ref', constraint => sub {
+                      Scalar::Util::blessed($_[0]) ? 1 : 0 }),
+    ClassName  => _stub_type(name => 'ClassName', parent => 'Str', constraint => sub {
+                      defined $_[0] && !ref $_[0] && $_[0] =~ /\A[A-Za-z_][\w:]*\z/ }),
+    RoleName   => _stub_type(name => 'RoleName',  parent => 'ClassName', constraint => sub {
+                      defined $_[0] && !ref $_[0] && $_[0] =~ /\A[A-Za-z_][\w:]*\z/ }),
+);
+
+sub list_all_builtin_type_constraints { keys %STANDARD_TYPES }
+sub list_all_type_constraints {
+    return ( keys(%STANDARD_TYPES), keys %TYPES );
+}
 
 1;
 

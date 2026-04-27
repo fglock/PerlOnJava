@@ -57,6 +57,15 @@ use Moo ();
 use Carp ();
 use Scalar::Util ();
 
+# Make sure Class::MOP's helpers are defined BEFORE Moo's role-composition
+# code runs. Moo's _Utils / Moo::Role call `Class::MOP::class_of` whenever
+# `$INC{"Moose.pm"}` is set — and that is *always* set under this shim,
+# because we are Moose.pm. Without this require, those calls die with
+# "Undefined subroutine &Class::MOP::class_of called". The shim's
+# Class::MOP returns "no metaclass" for everything, which is the correct
+# answer here (we have no real Moose metaclasses to find).
+use Class::MOP ();
+
 # ---------------------------------------------------------------------------
 # Type constraint name -> validator coderef. Returns a Moo-compatible
 # isa-checker that croaks on validation failure.

@@ -15,6 +15,8 @@ use Moo::Role ();
 use Carp ();
 use Scalar::Util ();
 use Moose ();   # for _make_isa_check / _translate_has_args
+use Class::MOP ();   # ensure Class::MOP::class_of is defined before
+                     # Moo::Role's setup_role calls into it
 
 sub import {
     my ($class, @args) = @_;
