@@ -258,7 +258,14 @@ public class SubroutineParser {
             if ((isPackage != null && !isPackage)
                     || (isPackage == null && !isKnownSub && token.text.equals("(") && !packageName.contains("::") && subExists)
                     || (subExists && packageName.contains("::") && token.text.equals("(")
-                        && !(isPackage != null && isPackage))) {
+                        && !(isPackage != null && isPackage))
+                    // If packageName is not a known class and the next token is itself a
+                    // bareword identifier, then `packageName` is more likely a method name
+                    // (e.g. `new`) rather than a class — and the inner `packageName IDENT`
+                    // pair is the real indirect-object call. So reject the outer form.
+                    // Example: `myfunc new Foo (4,5)` should parse as `myfunc(Foo->new(4,5))`,
+                    // NOT as `new->myfunc(Foo(4,5))`.
+                    || (isPackage == null && !isKnownSub && token.type == LexerTokenType.IDENTIFIER)) {
                 parser.tokenIndex = currentIndex2;
             } else {
                 // Not a known subroutine, check if it's valid indirect object syntax
