@@ -1195,6 +1195,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else if (oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && ReachabilityWalker.isReachableFromRoots(oldBase)) {
+                    // Phase D / Step W3-Path 2: mirror of the gate in
+                    // MortalList.flush(). Blessed object with outstanding
+                    // weak refs whose cooperative refCount dipped to 0
+                    // under an overwrite, but the walker says it's still
+                    // reachable from roots (e.g. held by `our %METAS`).
+                    // Treat as transient refCount drift; don't fire
+                    // DESTROY; don't clear weak refs.
+                    //
+                    // See MortalList.flush() for full rationale and
+                    // dev/modules/moose_support.md (Phase D / Step W).
                 } else {
                     oldBase.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(oldBase);

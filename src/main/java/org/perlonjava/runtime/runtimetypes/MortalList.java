@@ -553,6 +553,29 @@ public class MortalList {
                         // leak-tracing scenarios; those scenarios now use
                         // createAnonymousReference() (localBindingExists stays false)
                         // so the clear is no longer needed and broke #76716.
+                    } else if (base.blessId != 0
+                            && WeakRefRegistry.hasWeakRefsTo(base)
+                            && ReachabilityWalker.isReachableFromRoots(base)) {
+                        // Phase D / Step W3-Path 2: blessed object with
+                        // outstanding weak refs whose cooperative refCount
+                        // dipped to 0 under deferred-decrement flush, BUT
+                        // the walker can still reach it from package globals
+                        // or hash/array element seeds. Treat as transient
+                        // refCount drift — leave at 0; the next assignment
+                        // that writes a tracked ref will bump it back up.
+                        //
+                        // Don't fire DESTROY, don't clear weak refs.
+                        //
+                        // The walker correctly distinguishes this case from
+                        // the cycle-break-via-weaken case: an isolated
+                        // cycle has no path to roots, so isReachableFromRoots
+                        // returns false and the cycle is properly destroyed.
+                        //
+                        // The hasWeakRefsTo gate keeps this safeguard cheap
+                        // for the overwhelmingly common case of objects
+                        // without weak refs (no walker call needed).
+                        //
+                        // See dev/modules/moose_support.md (Phase D / Step W).
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);

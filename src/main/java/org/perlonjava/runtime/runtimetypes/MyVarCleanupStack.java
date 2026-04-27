@@ -50,6 +50,19 @@ public class MyVarCleanupStack {
     }
 
     /**
+     * Snapshot the currently-live my-variables. Used by the
+     * reachability walker's per-object query
+     * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from
+     * still-in-scope lexical containers (e.g. {@code my %METAS}
+     * declared at file scope of a still-loading module). The
+     * live-counts map keys are stable identity references to
+     * RuntimeScalar / RuntimeArray / RuntimeHash instances.
+     */
+    public static java.util.List<Object> snapshotLiveVars() {
+        return new java.util.ArrayList<>(liveCounts.keySet());
+    }
+
+    /**
      * Called at subroutine entry (in {@code RuntimeCode.apply()}).
      * Returns a mark position for later {@link #popMark(int)} or
      * {@link #unwindTo(int)}.
