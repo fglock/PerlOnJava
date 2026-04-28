@@ -244,6 +244,10 @@ my @copy = @{$z};         # ERROR
 - ✅  **Field inheritance**: Parent class fields are inherited.
 - 🟡  **`__CLASS__`**: Compile-time evaluation only, not runtime.
 - 🟡  **Argument validation**: Limited by operator implementation issues.
+- ✅  **Moose / Class::MOP**: Moose 2.4000 is bundled.
+  Upstream Moose tests pass ~99%; DBIx::Class (installed via `jcpan`)
+  passes 100%. See
+  [bundled modules](bundled-modules.md#moose--classmop).
 - ✅  **`DESTROY`**: Destructor methods with cooperative reference counting.
 
 ---

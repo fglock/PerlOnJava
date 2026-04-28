@@ -70,6 +70,74 @@ See the design document for implementation details:
 
 ---
 
+## Moose / Class::MOP
+
+PerlOnJava bundles upstream **Moose 2.4000** in the JAR — `use Moose;`
+works out of the box, no extra install needed.
+
+```perl
+use Moose;
+
+has name => (is => 'ro', isa => 'Str', required => 1);
+has age  => (is => 'rw', isa => 'Int', default  => 0);
+
+__PACKAGE__->meta->make_immutable;
+```
+
+### Status
+
+The bundled stack passes the bulk of the upstream test suites:
+
+| Suite | Files | Asserts | Result |
+|-------|-------|--------:|--------|
+| **Moose 2.4000 own tests** | ≥396/478 | ≥13413/13550 (~99%) | Mostly green |
+| **DBIx::Class 0.082843** (depends on `Moo`; both installed via `jcpan`) | 314/314 | 13858/13858 | **PASS** |
+
+Run the full Moose test suite locally with:
+
+```bash
+./jcpan -t Moose
+```
+
+DBIx::Class itself depends on `Moo`, not Moose. Both are pure-Perl
+modules — `jcpan` will install them from CPAN before running the test
+suite:
+
+```bash
+./jcpan -t DBIx::Class
+```
+
+### Known limitations
+
+The remaining ~80 failing test files cluster around features that are
+deliberately out of scope or genuinely unimplemented:
+
+- **`threads` / `fork`** — PerlOnJava has neither.  The handful of
+  tests that exercise `share`, `lock`, or fork-based DEMOLISH timing
+  cannot pass and are expected to fail.
+- **Numeric warning messages** (`Argument "x" isn't numeric in addition`)
+  — PerlOnJava does not emit these specific warning categories yet.
+- **Stack-trace shape** — frames inside generated method modifiers
+  may stringify as `__ANON__` rather than `Pkg::method`.
+- **`Moose::Exception` attributes named `INC`** — attribute name
+  collision with the `@INC` global.
+- **Anonymous metaclass GC timing** — depends on the JVM's reachability
+  walker scheduler; deterministic only for hierarchies in the
+  Class::MOP / Moose / Moo class set.
+- **Native trait Hash `coerce` + `delete`** — corner cases in the
+  generated coercion path.
+
+For the up-to-date list and design rationale, see
+[dev/modules/moose_support.md](../../dev/modules/moose_support.md).
+
+### Performance
+
+The bundled Moose stack runs the DBIx::Class test suite in
+~29 minutes on this hardware (single-job mode).  No formal comparison
+to CPAN-Perl + XS is published yet.
+
+---
+
 ## Module Categories
 
 ### Core / Pragmas
@@ -260,6 +328,9 @@ These are loaded automatically or via `use`:
 | `Attribute::Handlers` | Perl | |
 | `Devel::Cycle` | Perl | |
 | `Devel::Peek` | Perl | |
+| `Class::MOP` | Perl | Upstream 2.4000 source |
+| `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass (no threads). See note below. |
+| `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |
 
 ### Testing
 
