@@ -352,6 +352,27 @@ public class ReachabilityWalker {
      * @return true iff target is reachable from roots through strong refs
      */
     public static boolean isReachableFromRoots(RuntimeBase target) {
+        return isReachableFromRoots(target, false);
+    }
+
+    /**
+     * Phase D-W2c: distinguish reachability via package globals
+     * (`our %METAS`, `our @ISA`, `our $...`, `&Class::MOP::class_of`)
+     * from reachability via local lexicals (`my $x`, MyVarCleanupStack
+     * entries, `ScalarRefRegistry`).
+     *
+     * The walker gate uses {@code globalOnly=true}: an object is
+     * "really" reachable only if a package global path leads to it.
+     * Stack-local my-vars don't count — those are transient holders
+     * that should release at scope exit. This matches Perl 5
+     * semantics: `weaken($foo)` clears when no STRONG package-level
+     * or lexical-still-holding-strong path exists, and cycle-break
+     * tests rely on stack-local refs releasing properly.
+     *
+     * The default {@code globalOnly=false} is preserved for
+     * diagnostic / debugging callers.
+     */
+    public static boolean isReachableFromRoots(RuntimeBase target, boolean globalOnly) {
         if (target == null) return false;
         // Hard cap to prevent pathological worst-case walks. Class::MOP
         // bootstrap touches ~thousands of nodes; pick a generous limit
@@ -388,34 +409,36 @@ public class ReachabilityWalker {
         // been JVM-GC'd yet). Without filtering, cycle-broken-via-weaken
         // tests would falsely consider the cycle members reachable
         // through their own (scope-exited) scalars.
-        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-            if (sc == null) continue;
-            if (sc.captureCount > 0) continue;
-            if (WeakRefRegistry.isweak(sc)) continue;
-            if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
-            if (sc.scopeExited) continue;
-            seedTarget(sc, target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        // Seed: live my-vars themselves (RuntimeHash / RuntimeArray /
-        // RuntimeScalar instances currently registered in
-        // MyVarCleanupStack). Walking INTO these picks up hash/array
-        // elements that hold strong refs to the target — e.g.
-        // `our %METAS = ();` registers the RuntimeHash, and walking
-        // its values surfaces the metaclass.
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            // Order matters: RuntimeScalar IS a RuntimeBase, so the
-            // RuntimeScalar branch must come first to walk through its
-            // reference bit. Otherwise we'd add the scalar to todo but
-            // the BFS only follows hashes/arrays, missing the scalar's
-            // referent (e.g. `my $schema = DBICTest->init_schema()`).
-            if (liveVar instanceof RuntimeScalar sc) {
-                if (sc == target) return true;
+        if (!globalOnly) {
+            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+                if (sc == null) continue;
+                if (sc.captureCount > 0) continue;
+                if (WeakRefRegistry.isweak(sc)) continue;
+                if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
+                if (sc.scopeExited) continue;
                 seedTarget(sc, target, seen, todo);
                 if (seen.contains(target)) return true;
-            } else if (liveVar instanceof RuntimeBase rb) {
-                if (rb == target) return true;
-                if (seen.add(rb)) todo.addLast(rb);
+            }
+            // Seed: live my-vars themselves (RuntimeHash / RuntimeArray /
+            // RuntimeScalar instances currently registered in
+            // MyVarCleanupStack). Walking INTO these picks up hash/array
+            // elements that hold strong refs to the target — e.g.
+            // `our %METAS = ();` registers the RuntimeHash, and walking
+            // its values surfaces the metaclass.
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                // Order matters: RuntimeScalar IS a RuntimeBase, so the
+                // RuntimeScalar branch must come first to walk through its
+                // reference bit. Otherwise we'd add the scalar to todo but
+                // the BFS only follows hashes/arrays, missing the scalar's
+                // referent (e.g. `my $schema = DBICTest->init_schema()`).
+                if (liveVar instanceof RuntimeScalar sc) {
+                    if (sc == target) return true;
+                    seedTarget(sc, target, seen, todo);
+                    if (seen.contains(target)) return true;
+                } else if (liveVar instanceof RuntimeBase rb) {
+                    if (rb == target) return true;
+                    if (seen.add(rb)) todo.addLast(rb);
+                }
             }
         }
         // Seed: rescued objects.
