@@ -87,7 +87,8 @@ public class CoreOperatorResolver {
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);
-            case "chomp", "chop", "splice", "mkdir" -> OperatorParser.parseReverse(parser, token, currentIndex);
+            case "chomp", "chop" -> OperatorParser.parseChompChop(parser, token, currentIndex);
+            case "splice", "mkdir" -> OperatorParser.parseReverse(parser, token, currentIndex);
             case "die", "warn" -> OperatorParser.parseDieWarn(parser, token, currentIndex);
             case "system", "exec" -> OperatorParser.parseSystem(parser, token, currentIndex);
             case "readline", "eof", "tell" -> OperatorParser.parseReadline(parser, token, currentIndex);

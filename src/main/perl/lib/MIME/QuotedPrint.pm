@@ -11,8 +11,13 @@ package MIME::QuotedPrint;
 # The implementation is in: src/main/java/org/perlonjava/perlmodule/MimeQuotedPrint.java
 #
 
+our $VERSION = '3.16';
+
 use XSLoader;
 XSLoader::load( 'MIME::QuotedPrint' );
+
+*encode = \&encode_qp;
+*decode = \&decode_qp;
 
 1;
 

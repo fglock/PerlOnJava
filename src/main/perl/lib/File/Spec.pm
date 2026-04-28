@@ -28,6 +28,28 @@ our $VERSION = '3.95';  # Match perl5 PathTools version
 # but File::Spec::Unix must also be loaded for compatibility.
 require File::Spec::Unix;
 
+# Set @ISA to the platform-specific File::Spec subclass, matching the
+# behaviour of the upstream PathTools File::Spec.pm.  Some CPAN modules
+# (Directory::Scratch, Path::Class helpers, etc.) inspect
+# C<$File::Spec::ISA[0]> to discover the current platform; without this
+# they get C<Exporter> and break.
+my %_module_for = (
+    MacOS   => 'Mac',
+    MSWin32 => 'Win32',
+    os2     => 'OS2',
+    VMS     => 'VMS',
+    epoc    => 'Epoc',
+    NetWare => 'Win32',
+    symbian => 'Win32',
+    dos     => 'OS2',
+    cygwin  => 'Cygwin',
+    amigaos => 'AmigaOS',
+);
+
+my $_module = $_module_for{$^O} || 'Unix';
+require "File/Spec/$_module.pm";
+our @ISA = ("File::Spec::$_module");
+
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/perlmodule/FileSpec.java
 

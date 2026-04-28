@@ -23,6 +23,16 @@ public class ReferenceOperators {
      */
     public static RuntimeScalar bless(RuntimeScalar runtimeScalar, RuntimeScalar className) {
         if (RuntimeScalarType.isReference(runtimeScalar)) {
+            // Match Perl's diagnostics for `bless`:
+            //   - undef class name produces "Use of uninitialized value $class in bless"
+            //   - empty class name produces "Explicit blessing to '' (assuming package main)"
+            // Both are emitted before defaulting to package "main".
+            if (!className.getDefinedBoolean()) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Use of uninitialized value $class in bless"),
+                        RuntimeScalarCache.scalarEmptyString,
+                        "uninitialized");
+            }
             // Use toString() which invokes "" overloading for blessed objects.
             // Perl 5 throws "Attempt to bless into a reference" for non-overloaded
             // refs, but callers like IO::Handle already handle this via
@@ -30,6 +40,10 @@ public class ReferenceOperators {
             String str = className.toString();
             // Default to "main" if className is empty
             if (str.isEmpty()) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Explicit blessing to '' (assuming package main)"),
+                        RuntimeScalarCache.scalarEmptyString,
+                        "misc");
                 str = "main";
             }
             // Canonicalise the class-name argument through
