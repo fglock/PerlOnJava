@@ -315,7 +315,7 @@ test pass rates. None regress from today.
 
 ### Phase 7 — Interpreter backend parity (1–2 weeks, runs in parallel)
 
-The interpreter backend (`./jperl --int`) has different refcount
+The interpreter backend (`./jperl --interpreter`) has different refcount
 code paths (AST walker instead of bytecode) and must be updated in
 lockstep. For each Phase 1–5 change:
 
