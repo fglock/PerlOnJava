@@ -109,6 +109,15 @@ public class ListOperators {
      * @throws RuntimeException If the Perl comparator subroutine throws an exception.
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
+        return sort(runtimeList, perlComparatorClosure, null, packageName);
+    }
+
+    /**
+     * Sorts the elements of this RuntimeArray using a Perl comparator subroutine,
+     * passing the outer {@code @_} so the comparator block can access {@code $_[0]} etc.
+     * (Real Perl's sort BLOCK shares the surrounding subroutine's @_.)
+     */
+    public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, RuntimeArray outerArgs, String packageName) {
 
         // Check each element to ensure it's not an undefined array reference
         runtimeList.validateNoAutovivification();
@@ -147,11 +156,15 @@ public class ListOperators {
                 varA.set(a);
                 varB.set(b);
 
-                // For $$-prototyped comparators, pass elements via @_
-                RuntimeArray comparatorArgs = new RuntimeArray();
+                // For $$-prototyped comparators, pass elements via @_;
+                // otherwise inherit the outer @_ so the block can use $_[N].
+                RuntimeArray comparatorArgs;
                 if (stackedComparator) {
+                    comparatorArgs = new RuntimeArray();
                     comparatorArgs.push(a);
                     comparatorArgs.push(b);
+                } else {
+                    comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
                 }
 
                 // Apply the Perl comparator subroutine with the arguments
