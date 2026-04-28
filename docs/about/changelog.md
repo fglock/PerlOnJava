@@ -41,6 +41,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add `DESTROY` method support with cooperative reference counting on blessed objects, cascading destruction, closure capture tracking, and global destruction phase.
 - Add `Scalar::Util` functions: `weaken`, `isweak`, `unweaken`.
 - Add `Internals::SvREFCNT` for compatibility with reference-counting introspection (e.g. Sub::Quote, Moo, DBIx::Class internals).
+- **Bundled Moose 2.4000 and Class::MOP 2.4000**: the upstream Moose source tree is shipped in `src/main/perl/lib/{Moose,Class/MOP}/`. Tested by installing `DBIx::Class` 0.082843 via `jcpan` (DBIx::Class itself uses `Moo`, fetched from CPAN) and running its test suite — it passes 100% (314 files / 13858 asserts). Upstream Moose's own test suite passes ~99% (≥396/478 files, ≥13413/13550 asserts). See [bundled modules](../reference/bundled-modules.md#moose--classmop) and [dev/modules/moose_support.md](../../dev/modules/moose_support.md) for the full status and the small set of remaining failure clusters (numeric-arg warnings, anon-class GC timing, threads/fork tests).
 
 - Work in Progress
   - [Multiplicity — per-runtime isolation for concurrent Perl interpreters](https://github.com/fglock/PerlOnJava/pull/480): `PerlRuntime` with `ThreadLocal`-based isolation; all mutable state (globals, I/O, regex, caller stack, method caches) moved to per-runtime instances; 122/126 concurrent interpreter tests pass; pending closure/method dispatch optimization

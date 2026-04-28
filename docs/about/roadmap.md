@@ -36,6 +36,7 @@ These capabilities are implemented and available in the current release:
 
 - **Dual Compilation Backends** — JVM bytecode (via ASM) and a fast register-based interpreter that share the same runtime. The interpreter handles large code blocks and fast eval-string compilation. See `dev/design/interpreter.md`.
 - **CPAN Client (`jcpan`)** — Install, test, and manage pure-Perl CPAN modules. Working with DateTime (99.7% tests), Log::Log4perl (98.9% tests), Moo, Template, DBIx::Class, and many others. See `dev/design/cpan_client.md`.
+- **Bundled Moose 2.4000 and Class::MOP** — the upstream Moose source tree ships in the JAR. Used as the runtime dependency for installing CPAN modules — for example `DBIx::Class` 0.082843 (which uses `Moo`, fetched from CPAN) passes 100% of its test suite under PerlOnJava. Upstream Moose's own tests pass ~99%. See [bundled modules](../reference/bundled-modules.md#moose--classmop) and `dev/modules/moose_support.md`.
 - **Java XS Fallback Mechanism** — `XSLoader::load` transparently loads Java implementations for modules that normally use C XS code (e.g., DateTime, DBI, Digest::MD5, Digest::SHA). See `dev/design/xs_fallback.md`.
 - **Perl Debugger (`-d`)** — Interactive debugger with breakpoints, step/next/return, stack traces, expression evaluation. See [Feature Matrix — Perl Debugger](../reference/feature-matrix.md#perl-debugger).
 - **`class` Keyword** — Full support for `class`, `method`, `field`, `:param`, `:reader`, `:isa`, `ADJUST` blocks, lexical method calls.
