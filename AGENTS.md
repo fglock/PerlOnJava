@@ -1,5 +1,65 @@
 # PerlOnJava Agent Guidelines
 
+> **Read this file before touching the working tree.**
+> The two warning blocks below are not decorative — they document
+> real incidents in which agents silently destroyed user work.
+> If you skip them you will eventually be the next incident.
+
+## ⚠️⚠️⚠️ MANDATORY PRE-FLIGHT FOR ANY DIRTY TREE ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   IF `git status` SHOWS *ANY* MODIFIED OR UNTRACKED FILES YOU DID NOT        ║
+║   CREATE IN THIS SESSION, RUN THIS BEFORE DOING ANYTHING ELSE:               ║
+║                                                                              ║
+║       ts=$(date +%Y%m%d-%H%M%S)                                              ║
+║       git diff           > /tmp/wip-unstaged-$ts.patch                       ║
+║       git diff --cached  > /tmp/wip-staged-$ts.patch                         ║
+║       git status -s      > /tmp/wip-status-$ts.txt                           ║
+║                                                                              ║
+║   Then put the changes into a real commit on a WIP branch:                   ║
+║                                                                              ║
+║       git checkout -b wip/<topic>-$ts                                        ║
+║       git add -A && git commit -m "wip: snapshot before <action>"            ║
+║                                                                              ║
+║   Only AFTER both backups exist may you run anything that touches the        ║
+║   working tree (rebase, checkout, restore, reset, clean, stash, …).          ║
+║                                                                              ║
+║   The user's unstaged edits are NOT in git's object database. A single       ║
+║   wrong `git checkout <path>` overwrites them with no possible recovery.     ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+## ⚠️⚠️⚠️ FORBIDDEN COMMANDS ON A DIRTY TREE ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   The following commands SILENTLY DESTROY unstaged user work.                ║
+║   Do NOT run them on a dirty tree, even "just to clean up":                  ║
+║                                                                              ║
+║     git checkout <path>          ← overwrites working tree from index        ║
+║     git checkout -- <path>       ← same thing, no safer                      ║
+║     git restore <path>           ← overwrites working tree from index        ║
+║     git restore --staged <path>  ← only safe if you've snapshot-ed           ║
+║     git reset --hard             ← nukes everything unstaged                 ║
+║     git clean -fd                ← deletes untracked files permanently       ║
+║     git stash / git stash pop    ← see warning below; can lose data          ║
+║                                                                              ║
+║   If you really need to drop a single file's changes:                        ║
+║     1. Do the pre-flight backup above.                                       ║
+║     2. `mv path/to/file /tmp/discarded-$ts` instead of `git checkout`.       ║
+║     3. Re-create from HEAD with `git show HEAD:path > path` if needed.       ║
+║                                                                              ║
+║   When the user asks "open a PR with these changes", your FIRST action       ║
+║   is `git checkout -b <branch> && git add -A && git commit -m wip`.          ║
+║   Branch first, snapshot second, polish third. Never reorder these.          ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
 ## ⚠️⚠️⚠️ CRITICAL WARNING: NEVER USE `git stash` ⚠️⚠️⚠️
 
 ```
@@ -17,6 +77,15 @@
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
+
+## Incident Log (do not delete — this is why the rules above exist)
+
+| Date       | What was lost                                  | Root cause                                        |
+|------------|------------------------------------------------|---------------------------------------------------|
+| 2026-04-28 | ~600 cpan-tester module results (4736 → 4139)  | Agent ran `git checkout dev/cpan-reports/` on an unstaged refresh; concurrent `cpan_random_tester.pl` instances also race on `.dat` files (separate bug). |
+
+When you cause a new incident, append a row here in the same commit
+that fixes it. Future agents need to see that these warnings are real.
 
 ---
 
