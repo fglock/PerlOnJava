@@ -79,6 +79,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 Map<String, Integer> namedGroups = matcher.pattern().namedGroups();
                 // Collect entries by decoded Perl name so that duplicate-name
                 // captures (e.g. `(?<y>a)|(?<y>b)`) merge into a single key.
+                // Note: Java's Pattern.namedGroups() returns an unordered map
+                // (ImmutableCollections.MapN), so we must explicitly sort each
+                // bucket by group number so that the *leftmost* alternative
+                // wins (Perl semantics for $+{name}).
                 java.util.Map<String, java.util.List<String>> byPerlName = new java.util.LinkedHashMap<>();
                 for (String name : namedGroups.keySet()) {
                     if (CaptureNameEncoder.isInternalCapture(name)) {
@@ -86,6 +90,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                     }
                     String perlName = CaptureNameEncoder.decodeGroupName(name);
                     byPerlName.computeIfAbsent(perlName, k -> new java.util.ArrayList<>()).add(name);
+                }
+                for (java.util.List<String> jns : byPerlName.values()) {
+                    jns.sort(java.util.Comparator.comparingInt(namedGroups::get));
                 }
                 for (Map.Entry<String, java.util.List<String>> e : byPerlName.entrySet()) {
                     String perlName = e.getKey();
@@ -288,6 +295,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 out.add(jn);
             }
         }
+        // Java's Pattern.namedGroups() doesn't preserve insertion order, so sort
+        // by group number to match Perl's source order. This makes `$+{name}`
+        // return the *leftmost* alternative for duplicate-named captures.
+        out.sort(java.util.Comparator.comparingInt(namedGroups::get));
         return out;
     }
 
