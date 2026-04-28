@@ -34,7 +34,13 @@ public class HttpTiny extends PerlModuleBase {
     public static void initialize() {
         HttpTiny httpTiny = new HttpTiny();
         httpTiny.initializeExporter();
-        httpTiny.defineExport("EXPORT", "new", "get", "post", "request");
+        // HTTP::Tiny does not export anything in real Perl. `new`, `get`, `post`,
+        // and `request` are object methods, not importable subs. Adding them to
+        // @EXPORT polluted callers (`use HTTP::Tiny;` in `package Foo;` would
+        // alias `Foo::new` to `HTTP::Tiny::new`), which broke any Moo-based
+        // class that did `use HTTP::Tiny;` — Moo's assert_constructor saw a
+        // pre-existing `new` and bailed with "Unknown constructor for Foo
+        // already exists" before it could install its own constructor.
         try {
             httpTiny.registerMethod("request", null);
             httpTiny.registerMethod("mirror", null);

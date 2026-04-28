@@ -565,6 +565,29 @@ public class StatementParser {
     }
 
     /**
+     * Returns true if the given AST node is a syntactically empty list — that is,
+     * a ListNode whose elements are themselves all syntactically empty lists
+     * (or which has no elements at all). Examples that match: `()`, `qw()`,
+     * `((), qw())`. Examples that do not match: `@list`, `(1)`, `qw(a)`.
+     *
+     * Used by `use` parsing to detect `use Foo qw()` and similar forms, which
+     * Perl treats as "skip import" — distinct from `use Foo` (no list at all,
+     * imports defaults) and `use Foo @empty` (calls import even if @empty is
+     * runtime-empty).
+     */
+    private static boolean isStaticallyEmptyList(Node node) {
+        if (!(node instanceof ListNode listNode)) {
+            return false;
+        }
+        for (Node child : listNode.elements) {
+            if (!isStaticallyEmptyList(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Parses a use or no declaration.
      *
      * @param parser The Parser instance
@@ -681,7 +704,19 @@ public class StatementParser {
 
         // Parse the parameter list
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
+        int listStartIndex = parser.tokenIndex;
         Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        // Detect a syntactically empty list expression after the module name
+        // (e.g. `use Foo qw()` — `use Foo ()` is already covered by hasParentheses).
+        // Perl treats this as "skip import", distinct from `use Foo` (no list at all)
+        // which calls import() with no arguments and triggers default exports.
+        // We require both: (a) the parser actually consumed tokens for a list
+        // expression (so this isn't `use Foo;`) and (b) the resulting AST is
+        // statically empty (so this isn't `use Foo @list` where @list happens
+        // to be empty at runtime — real Perl still calls import() in that case).
+        boolean hasEmptyLiteralList = !hasParentheses
+                && parser.tokenIndex > listStartIndex
+                && isStaticallyEmptyList(list);
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         StatementResolver.parseStatementTerminator(parser);
@@ -772,7 +807,7 @@ public class StatementParser {
                 RuntimeList args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
 
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list: " + args);
-                if (hasParentheses && args.isEmpty()) {
+                if ((hasParentheses || hasEmptyLiteralList) && args.isEmpty()) {
                     // do not import
                 } else {
                     // fetch the method using `can` operator
