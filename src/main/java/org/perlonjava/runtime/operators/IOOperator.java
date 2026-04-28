@@ -558,28 +558,56 @@ public class IOOperator {
         RuntimeScalar fileHandle = (RuntimeScalar) args[0];
         if (args.length < 2) {
             // 1-argument open: open FILEHANDLE
-            // Uses $_ as the filename (with embedded mode prefix parsed from it)
-            String fileName = getGlobalVariable("main::_").toString();
+            // Per Perl semantics, the global scalar variable of the same name as the
+            // filehandle holds the filename (which may include a leading mode prefix).
+            // For example: `open MYFH` reads filename from $main::MYFH, `open 0` reads
+            // from $main::0 (which is the script name $0).
+            String filehandleName = null;
+            RuntimeGlob existingGlob = null;
+            if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
+                existingGlob = glob;
+                filehandleName = glob.globName;
+            } else {
+                // Otherwise, derive the name from the scalar value. This covers both
+                // bareword-as-string ("MYFH") and constants like `open 0` where the
+                // filehandle is named "0".
+                String name = fileHandle.toString();
+                if (name != null && !name.isEmpty()) {
+                    filehandleName = name.contains("::") ? name : ("main::" + name);
+                }
+            }
+
+            // Resolve the filename from the global scalar of the same name.
+            String fileName = filehandleName != null
+                    ? getGlobalVariable(filehandleName).toString()
+                    : "";
             RuntimeIO oneFh = RuntimeIO.open(fileName);
             if (oneFh == null) {
                 return scalarUndef;
             }
-            // Assign the IO handle to the filehandle glob (reuse the existing assignment logic below)
-            RuntimeGlob targetGlob = null;
-            if ((fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) && fileHandle.value instanceof RuntimeGlob glob) {
-                targetGlob = glob;
-            } else if ((fileHandle.type == RuntimeScalarType.STRING || fileHandle.type == RuntimeScalarType.BYTE_STRING) && fileHandle.value instanceof String name) {
-                if (!name.isEmpty() && name.matches("^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*$")) {
-                    String fullName = name.contains("::") ? name : ("main::" + name);
-                    targetGlob = GlobalVariable.getGlobalIO(fullName);
-                    RuntimeScalar newGlob = new RuntimeScalar();
-                    newGlob.type = RuntimeScalarType.GLOBREFERENCE;
-                    newGlob.value = targetGlob;
-                    fileHandle.set(newGlob);
-                }
+
+            RuntimeGlob targetGlob = existingGlob;
+            if (targetGlob == null && filehandleName != null) {
+                targetGlob = GlobalVariable.getGlobalIO(filehandleName);
             }
             if (targetGlob != null) {
                 targetGlob.setIO(oneFh);
+                // If args[0] is a writable scalar (not readonly), update it to point
+                // at the glob. We must NOT call set() on a readonly scalar (e.g. when
+                // args[0] is a numeric literal like in `open 0`).
+                if (!(fileHandle instanceof RuntimeScalarReadOnly)
+                        && fileHandle.type != RuntimeScalarType.GLOB
+                        && fileHandle.type != RuntimeScalarType.GLOBREFERENCE) {
+                    try {
+                        RuntimeScalar newGlob = new RuntimeScalar();
+                        newGlob.type = RuntimeScalarType.GLOBREFERENCE;
+                        newGlob.value = targetGlob;
+                        fileHandle.set(newGlob);
+                    } catch (RuntimeException ignored) {
+                        // Read-only / unsettable scalar - the IO has already been
+                        // registered on the global glob, so callers can find it by name.
+                    }
+                }
             } else {
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;

@@ -142,6 +142,21 @@ our @EXPORT_OK = qw(
 
     # Constants - access (for access() function)
     F_OK R_OK W_OK X_OK
+
+    # Constants - termios (termios_h)
+    BRKINT
+    CS5 CS6 CS7 CS8 CSIZE CSTOPB CREAD PARENB PARODD HUPCL CLOCAL
+    ECHO ECHOE ECHOK ECHONL
+    ICANON IEXTEN ISIG
+    ICRNL INPCK ISTRIP IXON IXOFF IGNBRK IGNCR IGNPAR INLCR IXANY PARMRK
+    OPOST
+    TCSADRAIN TCSAFLUSH TCSANOW
+    VEOF VEOL VERASE VINTR VKILL VMIN VQUIT VSTART VSTOP VSUSP VTIME
+
+    # Constants - sysconf (subset, used by POE etc.)
+    _SC_ARG_MAX _SC_CHILD_MAX _SC_CLK_TCK _SC_NGROUPS_MAX _SC_OPEN_MAX
+    _SC_JOB_CONTROL _SC_SAVED_IDS _SC_VERSION _SC_PAGESIZE _SC_PAGE_SIZE
+    _SC_NPROCESSORS_CONF _SC_NPROCESSORS_ONLN
 );
 
 our %EXPORT_TAGS = (
@@ -573,6 +588,53 @@ for my $const (qw(
 )) {
     no strict 'refs';
     *{$const} = eval "sub () { POSIX::_const_$const() }";
+}
+
+# sysconf() variable name constants and stub implementation.
+# Real POSIX sysconf() returns system-dependent runtime limits. PerlOnJava
+# does not implement true sysconf(), but many CPAN modules (POE, Proc::Daemon,
+# etc.) call sysconf(_SC_OPEN_MAX) etc. for sensible defaults. Provide the
+# common _SC_* names as constants and have sysconf() return reasonable values.
+BEGIN {
+    my %sc = (
+        _SC_ARG_MAX           => 0,
+        _SC_CHILD_MAX         => 1,
+        _SC_CLK_TCK           => 2,
+        _SC_NGROUPS_MAX       => 3,
+        _SC_OPEN_MAX          => 4,
+        _SC_JOB_CONTROL       => 5,
+        _SC_SAVED_IDS         => 6,
+        _SC_VERSION           => 7,
+        _SC_PAGESIZE          => 8,
+        _SC_PAGE_SIZE         => 8,   # alias of _SC_PAGESIZE
+        _SC_NPROCESSORS_CONF  => 9,
+        _SC_NPROCESSORS_ONLN  => 10,
+    );
+    no strict 'refs';
+    for my $name (keys %sc) {
+        my $value = $sc{$name};
+        *{"POSIX::$name"} = sub () { $value };
+    }
+}
+
+sub sysconf {
+    my $name = shift;
+    return undef unless defined $name;
+    if    ($name == 0)  { return 4096 * 1024; }   # _SC_ARG_MAX
+    elsif ($name == 1)  { return 1024; }          # _SC_CHILD_MAX
+    elsif ($name == 2)  { return 100; }           # _SC_CLK_TCK
+    elsif ($name == 3)  { return 16; }            # _SC_NGROUPS_MAX
+    elsif ($name == 4)  { return 1024; }          # _SC_OPEN_MAX
+    elsif ($name == 5)  { return 1; }             # _SC_JOB_CONTROL
+    elsif ($name == 6)  { return 1; }             # _SC_SAVED_IDS
+    elsif ($name == 7)  { return 200809; }        # _SC_VERSION
+    elsif ($name == 8)  { return 4096; }          # _SC_PAGESIZE
+    elsif ($name == 9 || $name == 10) {           # _SC_NPROCESSORS_*
+        my $n = eval { 0 + (`getconf _NPROCESSORS_ONLN 2>/dev/null` || 1) };
+        $n = 1 if !$n || $n < 1;
+        return $n;
+    }
+    return undef;
 }
 
 # Locale category constants - defined directly since XS _const_ may not exist
