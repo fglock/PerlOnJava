@@ -557,28 +557,43 @@ public class MortalList {
                         // so the clear is no longer needed and broke #76716.
                     } else if (base.blessId != 0
                             && WeakRefRegistry.hasWeakRefsTo(base)
-                            && DestroyDispatch.classNeedsWalkerGate(base.blessId)
-                            && ReachabilityWalker.isReachableFromRoots(base)) {
-                        // Phase D / Step W3-Path 2: blessed object with
-                        // outstanding weak refs whose cooperative refCount
-                        // dipped to 0 under deferred-decrement flush, BUT
-                        // the walker can still reach it from package globals
-                        // or hash/array element seeds. Treat as transient
-                        // refCount drift — leave at 0; the next assignment
-                        // that writes a tracked ref will bump it back up.
+                            && ReachabilityWalker.isReachableFromRoots(base, /*globalOnly=*/ true)) {
+                        // Phase D-W5: blessed object with outstanding weak
+                        // refs whose cooperative refCount dipped to 0 under
+                        // a deferred-decrement flush, BUT the walker can
+                        // reach it via *package globals* (not local
+                        // lexicals). Treat as transient refCount drift —
+                        // leave at 0; the next assignment that writes a
+                        // tracked ref will bump it back up.
                         //
                         // Don't fire DESTROY, don't clear weak refs.
                         //
-                        // The walker correctly distinguishes this case from
-                        // the cycle-break-via-weaken case: an isolated
-                        // cycle has no path to roots, so isReachableFromRoots
-                        // returns false and the cycle is properly destroyed.
+                        // The `globalOnly=true` flag is what cleanly
+                        // separates the two patterns we have to support:
                         //
-                        // The hasWeakRefsTo gate keeps this safeguard cheap
-                        // for the overwhelmingly common case of objects
-                        // without weak refs (no walker call needed).
+                        //   - Moose / Class::MOP: metaclasses are held in
+                        //     `our %ALL_METACLASSES` (a package global),
+                        //     so they ARE reachable globalOnly=true → gate
+                        //     fires → destruction is deferred until the
+                        //     real refCount drop. This is what Moose
+                        //     bootstrap relies on.
                         //
-                        // See dev/modules/moose_support.md (Phase D / Step W).
+                        //   - DBIx::Class / Class::DBI: rows are tracked
+                        //     in `live_object_index` via WEAK refs, so
+                        //     they are NOT reachable globalOnly=true →
+                        //     gate doesn't fire → row dies at refCount=0
+                        //     so a later `find()` reloads from the DB.
+                        //
+                        // The hasWeakRefsTo gate keeps this safeguard
+                        // cheap for the overwhelmingly common case of
+                        // objects without weak refs (no walker call).
+                        //
+                        // The walker correctly distinguishes this case
+                        // from cycle-break-via-weaken: an isolated cycle
+                        // has no path to globals, so the gate doesn't
+                        // fire and the cycle is properly destroyed.
+                        //
+                        // See dev/modules/moose_support.md (Phase D-W5).
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);

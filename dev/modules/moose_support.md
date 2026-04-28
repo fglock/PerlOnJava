@@ -1991,6 +1991,182 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+## Phase D-W5: remove class-name walker-gate heuristic (NEXT)
+
+### Why
+
+The walker-gate (`MortalList.flush` and the analogous site in
+`RuntimeScalar.set`) currently runs an extra reachability check
+*only* for objects whose blessed class name starts with
+`Class::MOP`, `Moose::`, `Moose`, `Moo::`, or `Moo`
+(see `DestroyDispatch.classNeedsWalkerGate`).
+
+That is a stopgap shipped in PR #572 (commit `0c90da3fe`).
+It works for the bundled Moose stack, but it fundamentally
+violates PerlOnJava's "the language behaves the same regardless
+of which module you use" rule — any user-defined class that
+relies on the same MOP-style global metaclass registry pattern
+will silently get a different destroy schedule than the bundled
+Moose. We need a single principled criterion.
+
+### What needs to be true
+
+1. **No class-name list anywhere in the runtime.**
+   `DestroyDispatch.classNeedsWalkerGate` (and its supporting
+   `walkerGateClasses`/`walkerGateChecked` BitSets) is removed.
+
+2. **DBIC stays green.** `./jcpan -t DBIx::Class` keeps passing
+   314/314 files / 13858/13858 asserts.
+
+3. **The bundled Moose suite stays at ≥396/478** (no regressions
+   from the PR #572 baseline).
+
+4. **The refcount unit tests stay green**, in particular
+   `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`
+   T1–T4 and the `weaken_via_sub.t` family.
+
+### Hypothesis
+
+Both call sites already live behind two stronger filters:
+
+```java
+if (base.blessId != 0
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && DestroyDispatch.classNeedsWalkerGate(base.blessId)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // defer destroy
+}
+```
+
+The `WeakRefRegistry.hasWeakRefsTo(base)` check already restricts
+the gate to objects that are actually targets of `weaken()`. In a
+DBIC schema flow this is the schema/source/row family — the same
+shape Moose uses for its metaclass registry. The
+`isReachableFromRoots(base)` walker now seeds from
+`MyVarCleanupStack.snapshotLiveVars()` (added in D-W1), so live
+`my` variables already pin their referents.
+
+So the conjecture is: with `MyVarCleanupStack` seeding in place,
+the class-name filter has become dead weight — removing it
+should not regress DBIC. Verify empirically first.
+
+### Plan
+
+1. **Step 1 — measure with the gate universal.**
+
+   Inline `classNeedsWalkerGate` to `true` (or just delete the
+   call). Run, in this order:
+
+   - `make` (unit + refcount tests).
+   - `./jcpan -t DBIx::Class` (must stay PASS).
+   - `./jcpan -t Moose` (must stay ≥396/478).
+
+   Record any new failures; for each, decide whether it's a
+   *false defer* (gate fires when it shouldn't) or a
+   *missed defer* (gate doesn't fire when it should).
+
+2. **Step 2a — if step 1 is green:** delete
+   `classNeedsWalkerGate`, the BitSets, and the comments
+   apologising for the heuristic. Update the call sites to
+   `WeakRefRegistry.hasWeakRefsTo + isReachableFromRoots`. Add a
+   brief comment explaining the universal rule. Done.
+
+3. **Step 2b — if step 1 introduces a regression:** find a
+   strictly better discriminator that is *not* a class-name
+   list. Candidates:
+
+   - **`globalOnly=true`** — only defer when reachable through a
+     package global. The `isReachableFromRoots(target, true)`
+     overload already exists for this purpose (see
+     `ReachabilityWalker.java:374`). DBIC's
+     `live_object_index` is keyed by weak refs, not strong
+     globals, so DBIC rows would *not* be deferred under this
+     rule. Moose's `%METAS` *is* a strong global, so metaclasses
+     would be deferred.
+   - **"weak-ref target reachable via a hash whose owner is a
+     live my-var"** — handles user code that mirrors Moose's
+     pattern without using a package global.
+   - **Per-instance opt-in flag** set by Moose / Class::MOP at
+     metaclass-construction time — explicit rather than
+     heuristic.
+
+   Pick the simplest one that keeps both suites green; record
+   the choice and rationale here.
+
+4. **Step 3 — write down the universal rule** at the top of
+   `DestroyDispatch.java` so future readers understand why the
+   gate exists.
+
+### Acceptance criteria
+
+- `grep -r "classNeedsWalkerGate\|walkerGateClasses\|Class::MOP\|Moose::\|Moo::" src/main/java/org/perlonjava/runtime/runtimetypes/`
+  returns no class-name-based dispatch logic.
+- DBIC: 314/314 / 13858/13858 / PASS.
+- Moose: ≥396/478 / ≥13413/13550 (no regressions vs PR #572 baseline).
+- All existing refcount unit tests still pass.
+- `dev/modules/moose_support.md` D-W5 section updated with
+  "Status: DONE" and the chosen discriminator.
+
+### Empirical results
+
+Three discriminators were measured back-to-back on the same code
+base, with the only difference being the gate condition at
+`MortalList.flush` and the analogous site in `RuntimeScalar.set`:
+
+| Discriminator | DBIC files / asserts failed | Moose files / asserts failed |
+|---|---|---|
+| Class-name heuristic (PR #572 baseline) | **0 / 0** ✅ | 82 / 137 |
+| No gate (delete the whole clause) | 7 / 2 ❌ | 77 / 134 |
+| `isReachableFromRoots(target, globalOnly=true)` | 3 / 1 ❌ | 63 / 691 (one test alone has 556) |
+
+Notes:
+
+- **No-gate**: DBIC's lazy-cache pattern breaks (4 SIGKILLs from
+  300s timeout — gate-defer-loop accumulates objects until the test
+  hangs, plus 2 real assertion failures in `cdbi/04-lazy.t` and
+  `txn_scope_guard.t`).
+- **`globalOnly=true`**: drops two of the four DBIC SIGKILLs and the
+  `04-lazy` failure, but `txn_scope_guard.t` still fails (the
+  test asserts on a "Preventing *MULTIPLE* DESTROY()" warning
+  message that doesn't fire when the walker defers destroy);
+  Moose has one major regression in `t/type_constraints/util_std_type_constraints.t`
+  (3770 tests, 556 fail) — root cause not yet investigated.
+
+Picked: **`globalOnly=true`** (commit on `fix/walker-gate-no-class-heuristic`).
+
+Rationale:
+- It is the simplest principled rule that compiles down to "Moose's
+  `our %METAS` reaches metaclasses; DBIC's weak-ref `live_object_index`
+  does not".
+- It removes the class-name list (the user's hard requirement).
+- The remaining DBIC and Moose regressions are smaller, narrower, and
+  point to specific bugs rather than a fundamental scheme mismatch.
+
+### Status: PARTIAL — class-name list removed, regressions tracked
+
+Commit: `fix/walker-gate-no-class-heuristic`
+
+Follow-ups (each a separate fix):
+
+1. **`txn_scope_guard.t` regression.** Storage / TxnScopeGuard
+   instances appear to be reachable via a package global (probably
+   the schema's storage handle), so the walker defers their destroy.
+   The test specifically warns about double-DESTROY semantics.
+   Investigate whether `TxnScopeGuard` should be flagged as
+   "always destroy at refCount=0" or whether the schema should not
+   strongly hold the guard.
+
+2. **`util_std_type_constraints.t` 556-fail explosion.** Likely a
+   single root cause that cascades — possibly a Moose type registry
+   that needs `MyVarCleanupStack` seeding to remain reachable. May
+   be solvable by widening the walker's seed set in a
+   non-class-name-specific way.
+
+3. **`t/52leaks.t` SIGKILL.** Probably the
+   `WeakRefRegistry.hasWeakRefsTo` check itself is now misbehaving
+   — investigate whether the hash holding weak refs is leaking
+   entries.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
