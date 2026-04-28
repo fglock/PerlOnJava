@@ -112,6 +112,11 @@ public class SubUtil extends PerlModuleBase {
         String pkg = code.packageName;
         String sub = code.subName;
         if (sub == null || sub.isEmpty()) {
+            // Anonymous sub: real Perl returns "Package::__ANON__" where Package
+            // is the compile-time package (CvSTASH).
+            if (pkg != null && !pkg.isEmpty()) {
+                return new RuntimeScalar(pkg + "::__ANON__").getList();
+            }
             return new RuntimeScalar("__ANON__").getList();
         }
         if (pkg != null && !pkg.isEmpty()) {
