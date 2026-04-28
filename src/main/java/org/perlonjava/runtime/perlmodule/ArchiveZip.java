@@ -34,6 +34,23 @@ public class ArchiveZip extends PerlModuleBase {
     private static final String FILENAME_KEY = "_filename";
     private static final String COMMENT_KEY = "_zipfileComment";
 
+    /**
+     * Resolve a path string against Perl's notion of the current working
+     * directory (System "user.dir"), since Java's Paths.get does not honor
+     * Perl chdir() updates to user.dir.
+     */
+    private static Path resolvePath(String name) {
+        Path p = Paths.get(name);
+        if (p.isAbsolute()) return p;
+        return Paths.get(System.getProperty("user.dir")).resolve(p);
+    }
+
+    private static Path resolvePath(String first, String... more) {
+        Path p = Paths.get(first, more);
+        if (p.isAbsolute()) return p;
+        return Paths.get(System.getProperty("user.dir")).resolve(p);
+    }
+
     // Constants (matching Archive::Zip)
     public static final int AZ_OK = 0;
     public static final int AZ_STREAM_END = 1;
@@ -90,6 +107,7 @@ public class ArchiveZip extends PerlModuleBase {
             az.registerMethod("versionNeededToExtract", null);
             az.registerMethod("bitFlag", null);
             az.registerMethod("fileComment", null);
+            az.registerMethod("extractToFileNamed", null);
 
             // Constants
             az.registerMethod("AZ_OK", null);
@@ -203,16 +221,17 @@ public class ArchiveZip extends PerlModuleBase {
             RuntimeArray members = getMembers(self);
             members.undefine(); // Clear existing members
 
-            Path path = Paths.get(filename);
+            Path path = resolvePath(filename);
             if (!Files.exists(path)) {
                 return new RuntimeScalar(AZ_IO_ERROR).getList();
             }
+            String resolvedName = path.toString();
 
             // Extract raw DOS timestamps from central directory
             // (Java's ZipEntry uses extended timestamps when available)
-            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestamps(filename);
+            java.util.Map<String, Long> rawDosTimestamps = extractRawDosTimestamps(resolvedName);
 
-            try (ZipFile zipFile = new ZipFile(filename)) {
+            try (ZipFile zipFile = new ZipFile(resolvedName)) {
                 // Store the zipfile comment
                 String comment = zipFile.getComment();
                 if (comment != null) {
@@ -399,7 +418,7 @@ public class ArchiveZip extends PerlModuleBase {
         try {
             RuntimeArray members = getMembers(self);
 
-            try (FileOutputStream fos = new FileOutputStream(filename);
+            try (FileOutputStream fos = new FileOutputStream(resolvePath(filename).toFile());
                  ZipOutputStream zos = new ZipOutputStream(fos)) {
 
                 for (int i = 0; i < members.size(); i++) {
@@ -577,7 +596,7 @@ public class ArchiveZip extends PerlModuleBase {
         String memberName = args.size() > 2 ? args.get(2).toString() : filename;
 
         try {
-            Path path = Paths.get(filename);
+            Path path = resolvePath(filename);
             if (!Files.exists(path)) {
                 return scalarUndef.getList();
             }
@@ -704,13 +723,13 @@ public class ArchiveZip extends PerlModuleBase {
                     RuntimeScalar isDir = member.get("_isDirectory");
                     if (isDir != null && isDir.getBoolean()) {
                         // Create directory
-                        Path path = Paths.get(destName);
+                        Path path = resolvePath(destName);
                         Files.createDirectories(path);
                     } else {
                         // Extract file
                         RuntimeScalar contents = member.get("_contents");
                         if (contents != null) {
-                            Path path = Paths.get(destName);
+                            Path path = resolvePath(destName);
                             // Create parent directories if needed
                             Path parent = path.getParent();
                             if (parent != null) {
@@ -776,7 +795,7 @@ public class ArchiveZip extends PerlModuleBase {
 
             RuntimeScalar contents = member.get("_contents");
             if (contents != null) {
-                Path destPath = Paths.get(destDir, baseName);
+                Path destPath = resolvePath(destDir, baseName);
                 Path parent = destPath.getParent();
                 if (parent != null) {
                     Files.createDirectories(parent);
@@ -787,6 +806,42 @@ public class ArchiveZip extends PerlModuleBase {
 
             return new RuntimeScalar(AZ_OK).getList();
 
+        } catch (IOException e) {
+            return new RuntimeScalar(AZ_IO_ERROR).getList();
+        }
+    }
+
+    /**
+     * Member method: extract this member to a specified file name.
+     * Usage: $status = $member->extractToFileNamed($filename);
+     */
+    public static RuntimeList extractToFileNamed(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            return new RuntimeScalar(AZ_ERROR).getList();
+        }
+
+        RuntimeHash member = args.get(0).hashDeref();
+        String destName = args.get(1).toString();
+
+        try {
+            RuntimeScalar isDir = member.get("_isDirectory");
+            if (isDir != null && isDir.getBoolean()) {
+                Path path = resolvePath(destName);
+                Files.createDirectories(path);
+                return new RuntimeScalar(AZ_OK).getList();
+            }
+
+            RuntimeScalar contents = member.get("_contents");
+            Path path = resolvePath(destName);
+            Path parent = path.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            byte[] data = contents != null
+                    ? contents.toString().getBytes(StandardCharsets.ISO_8859_1)
+                    : new byte[0];
+            Files.write(path, data);
+            return new RuntimeScalar(AZ_OK).getList();
         } catch (IOException e) {
             return new RuntimeScalar(AZ_IO_ERROR).getList();
         }
@@ -826,7 +881,7 @@ public class ArchiveZip extends PerlModuleBase {
                     destName = memberName.substring(root.length());
                 }
 
-                Path destPath = Paths.get(dest, destName);
+                Path destPath = resolvePath(dest, destName);
 
                 RuntimeScalar isDir = member.get("_isDirectory");
                 if (isDir != null && isDir.getBoolean()) {
