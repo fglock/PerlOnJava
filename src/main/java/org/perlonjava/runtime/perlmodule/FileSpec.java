@@ -528,6 +528,11 @@ public class FileSpec extends PerlModuleBase {
         }
         
         String relPath = baseObj.relativize(pathObj).toString();
+        // Perl's File::Spec->abs2rel returns "." (curdir) when path equals base,
+        // but Java's Path.relativize returns an empty string in that case.
+        if (relPath.isEmpty()) {
+            relPath = ".";
+        }
         return new RuntimeScalar(relPath).getList();
     }
 
