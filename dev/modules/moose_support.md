@@ -1730,58 +1730,81 @@ Moose stays at 412/478, refcount unit tests stay green.
    passes (20/20). All refcount unit tests stay green. Moose
    suite stays at **412/478**.
 
-3. **D-W2** (NEXT — performance regression): the broader walker
-   coverage exposed a quadratic perf issue. With the gate now
-   firing more often (because more weak-ref'd objects hit
-   refCount=0), and each gate call iterating into stash hashes
-   (`RuntimeStash` whose `elements` is a `HashSpecialVariable`),
-   the walker times out on `t/sqlmaker/dbihacks_internals.t`
-   (a torture test with ~11K lines of test code per file).
+3. **D-W2** (DONE — Apr 2026): RuntimeStash skip in walker BFS.
 
-   **Stack trace from `jstack`:**
-   ```
-   at HashSpecialVariable.entrySet(HashSpecialVariable.java:122)
-       — eagerly copies all global keys into a Set<String>
-   at AbstractMap$ValueIterator.<init>(...)
-   at AbstractMap$2.iterator(...)
-   at ReachabilityWalker.isReachableFromRoots(...:426)
-       — iterates h.elements.values() of a RuntimeStash
-   at MortalList.flush(...:560)
-   at RuntimeCode.apply(...:2938)
-   at anon0.apply(t/sqlmaker/dbihacks_internals.t:11089)
-   ```
+   Stash hashes (RuntimeStash whose `elements` is a HashSpecialVariable)
+   eagerly copy all global keys via `entrySet()` on every visit —
+   O(globals) per visit, quadratic when the walker is called repeatedly.
 
-   So every gate call walks ALL stash entries (RuntimeStash's
-   `elements` is the `HashSpecialVariable` view that lazily lists
-   all globals in the package). For a script that has loaded
-   hundreds of packages, each gate call is O(stash-entries × packages).
+   Fix: `if (cur instanceof RuntimeStash) continue;` in
+   `ReachabilityWalker.bfs()` and `isReachableFromRoots()`. Stash
+   entries are already directly seeded from
+   `GlobalVariable.global*Refs`, so iterating them via
+   `stash.elements` is redundant work.
 
-   **Fix:** skip iterating into `RuntimeStash` instances during
-   the BFS in `isReachableFromRoots()` and `walk()`. Stash entries
-   themselves (the RuntimeScalar / RuntimeArray / RuntimeHash held
-   in package globals) are already directly seeded via
-   `GlobalVariable.globalCodeRefs / globalVariables / globalArrays /
-   globalHashes` — the BFS doesn't need to re-discover them via
-   stash iteration. Skipping is correctness-preserving and saves
-   the entrySet copy.
+   Empirical impact (`t/sqlmaker/dbihacks_internals.t`):
+   - Before D-W2: never finished (>10 minutes wall-clock, still running)
+   - After D-W2:  ALL 6492 tests pass in 30 seconds
 
-   Acceptance criteria: D-W0 reproducer continues to pass,
-   `t/sqlmaker/dbihacks_internals.t` finishes within timeout, full
-   DBIC suite drops to ≤2 failed files / 0 failed asserts.
+4. **D-W2b** (NEXT — outstanding perf regression): even with the
+   stash skip, the walker gate still has a measurable per-test cost
+   that adds up across the suite.
 
-4. **D-W3**: re-run full DBIC + Moose suites with fix:
-   ```bash
-   ./jcpan --jobs 1 -t DBIx::Class       # ≤2 failed files, 0 failed asserts
-   ./jcpan --jobs 1 -t Moose              # ≥412/478
-   make                                    # full unit suite
-   ./jperl src/test/resources/unit/refcount/*.t
-   ./jperl src/test/resources/unit/weaken_via_sub.t
-   ```
-   If green, move D-W0's reproducer from `dev/sandbox/` to
-   `src/test/resources/unit/refcount/walker_gate_dbic_minimal.t`.
+   **Empirical (Apr 2026):**
+   - Master DBIC suite (`/tmp/dbic_master2.txt`): 314 files /
+     13858 tests / **PASS / 1410 wallclock seconds (23.5 min)**.
+   - Feature branch DBIC suite at D-W2: still completing tests
+     but at roughly 4x slower per test in serial mode (76 of 314
+     done in 23 min). At this rate the suite would take 90+ min,
+     vs master's 23.
 
-5. **D-W4**: continue Phase 4-6 shim widening to lift Moose from
-   412 → 477/478 fully green files.
+   **Per-test profile (`t/cdbi/68-inflate_has_a.t`)**: master and
+   feature branch are BOTH slow standalone (>20 min) — but master
+   completes that test inside the harness in seconds. So the
+   slowness is environmental for that particular test.
+
+   **General `jstack` of feature-branch jperl in DBIC:** dominated
+   by `RuntimeCode.applyImpl` + `RuntimeArray.setArrayOfAlias` +
+   `ArrayList.<init>`. The walker stack frames do NOT appear in
+   sampled profiles, suggesting the per-call walker cost is amortised
+   away — but the gate may still fire frequently enough to show up
+   in aggregate.
+
+   **Fix candidates (in expected impact order):**
+
+   a. **Cache the walker's live-set per flush.** A single
+      `MortalList.flush()` may decrement-to-zero many blessed-with-
+      weak-refs objects in a row. Each currently triggers a fresh
+      `ReachabilityWalker.isReachableFromRoots()` BFS over all
+      globals + my-vars. Compute the live set ONCE per flush
+      (lazy + invalidated when a destroy/weaken/scope-change
+      happens between gate calls).
+
+   b. **Bypass walker for "no weak refs to me, anywhere" fast
+      path.** `WeakRefRegistry.hasWeakRefsTo(base)` is already O(1).
+      But `WeakRefRegistry.weakRefsExist` is an over-approximation —
+      true if ANY weaken has happened in the program. Add a
+      per-class `classHasWeakRefs` cache, so DBIC's BlockRunner
+      (which has weak refs) hits the gate but the millions of
+      transient blessed objects without weak refs skip it.
+
+   c. **Coalesce gate calls.** Instead of one walker call per
+      flush per blessed-with-weak object, queue them and process
+      in a single walker pass at flush end.
+
+   d. **Eager liveness via increments, not BFS.** Maintain a
+      `weakRefRoots` shadow refCount that ALSO counts weak-from-
+      live-lexical edges. Decrement only when ALL such edges are
+      gone. Walker becomes a slow-path verification.
+
+   Acceptance criteria for D-W2b: full `./jcpan --jobs 1 -t
+   DBIx::Class` completes in ≤30 min (master baseline + 30%
+   tolerance), 0 failing assertions, ≤2 failed files.
+
+5. **D-W3** (BLOCKED on D-W2b): re-run full suites, drop reproducer
+   into `src/test/resources/unit/refcount/`.
+
+6. **D-W4** (LATER): Phase 4-6 shim widening for Moose 412→477 / 478.
 
 ### Hard constraint moving forward
 
