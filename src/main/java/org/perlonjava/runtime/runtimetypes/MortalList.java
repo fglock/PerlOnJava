@@ -557,41 +557,37 @@ public class MortalList {
                         // so the clear is no longer needed and broke #76716.
                     } else if (base.blessId != 0
                             && WeakRefRegistry.hasWeakRefsTo(base)
-                            && ReachabilityWalker.isReachableFromRoots(base, /*globalOnly=*/ true)) {
+                            && ReachabilityWalker.isReachableFromRoots(base)) {
                         // Phase D-W5: blessed object with outstanding weak
                         // refs whose cooperative refCount dipped to 0 under
                         // a deferred-decrement flush, BUT the walker can
-                        // reach it via *package globals* (not local
-                        // lexicals). Treat as transient refCount drift —
-                        // leave at 0; the next assignment that writes a
-                        // tracked ref will bump it back up.
+                        // still reach it from a strong root — either a
+                        // package global, a live `my` variable, or a
+                        // ScalarRefRegistry-tracked scalar whose enclosing
+                        // scope is still on `MyVarCleanupStack`. Treat as
+                        // transient refCount drift; the next assignment
+                        // that writes a tracked ref will bump refCount
+                        // back up.
                         //
                         // Don't fire DESTROY, don't clear weak refs.
                         //
-                        // The `globalOnly=true` flag is what cleanly
-                        // separates the two patterns we have to support:
+                        // The cooperative refCount is known to drop to 0
+                        // transiently in MOP-style code where blessed
+                        // objects bounce through hash slots and closures
+                        // (Moose / Class::MOP / DBIx::Class). The walker
+                        // is the principled cross-check: if any strong
+                        // path still leads to the object from a *live*
+                        // root (global, live my-var, etc.), the cooperative
+                        // count is wrong and we must NOT destroy yet.
                         //
-                        //   - Moose / Class::MOP: metaclasses are held in
-                        //     `our %ALL_METACLASSES` (a package global),
-                        //     so they ARE reachable globalOnly=true → gate
-                        //     fires → destruction is deferred until the
-                        //     real refCount drop. This is what Moose
-                        //     bootstrap relies on.
-                        //
-                        //   - DBIx::Class / Class::DBI: rows are tracked
-                        //     in `live_object_index` via WEAK refs, so
-                        //     they are NOT reachable globalOnly=true →
-                        //     gate doesn't fire → row dies at refCount=0
-                        //     so a later `find()` reloads from the DB.
+                        // Weak refs are not strong roots. An isolated
+                        // cycle whose only paths are through weakened
+                        // scalars therefore correctly returns false from
+                        // the walker and is destroyed.
                         //
                         // The hasWeakRefsTo gate keeps this safeguard
-                        // cheap for the overwhelmingly common case of
-                        // objects without weak refs (no walker call).
-                        //
-                        // The walker correctly distinguishes this case
-                        // from cycle-break-via-weaken: an isolated cycle
-                        // has no path to globals, so the gate doesn't
-                        // fire and the cycle is properly destroyed.
+                        // cheap for the common case of objects without
+                        // weak refs (no walker call at all).
                         //
                         // See dev/modules/moose_support.md (Phase D-W5).
                     } else {

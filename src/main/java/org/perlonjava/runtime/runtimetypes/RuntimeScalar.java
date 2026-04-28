@@ -1197,7 +1197,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && ReachabilityWalker.isReachableFromRoots(oldBase, /*globalOnly=*/ true)) {
+                        && ReachabilityWalker.isReachableFromRoots(oldBase)) {
                     // Phase D / Step W3-Path 2: mirror of the gate in
                     // MortalList.flush(). Blessed object with outstanding
                     // weak refs whose cooperative refCount dipped to 0
