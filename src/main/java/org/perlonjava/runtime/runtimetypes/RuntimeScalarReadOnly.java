@@ -114,7 +114,13 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
      */
     @Override
     void vivify() {
-        throw new RuntimeException("Modification of a read-only value attempted");
+        // Use PerlCompilerException so stringifyException() short-circuits and
+        // appends "at FILE line N." to the message. Throwing a plain
+        // RuntimeException produces a multi-line stack-trace style message
+        // (e.g. for `\do{45}; $$r = 99`) that doesn't match Perl's canonical
+        // "Modification of a read-only value attempted at FILE line N." form
+        // and breaks Const::Fast / Test::Fatal-style regex matches.
+        throw new PerlCompilerException("Modification of a read-only value attempted");
     }
 
     /**

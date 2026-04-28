@@ -24,6 +24,12 @@ public class Internals extends PerlModuleBase {
         try {
             internals.registerMethod("SvREADONLY", "svReadonly", "\\[$@%];$");
             internals.registerMethod("SvREFCNT", "svRefcount", "$;$");
+            // Clear placeholder slots in a restricted hash. PerlOnJava doesn't
+            // implement Perl's restricted-hash placeholder machinery (used by
+            // Hash::Util / fields), so this is a safe no-op. Modules like
+            // Const::Fast call it when sealing a hash readonly; failing here
+            // breaks loading the whole module.
+            internals.registerMethod("hv_clear_placeholders", "hvClearPlaceholders", "\\%");
             // Phase 0 diagnostic: expose PerlOnJava-internal refcount state
             // (refCount, flags, tracking mode) for differential testing
             // against native Perl. See dev/design/refcount_alignment_plan.md.
@@ -70,6 +76,20 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList stack_refcounted(RuntimeArray args, int ctx) {
         return new RuntimeScalar(1).getList();
+    }
+
+    /**
+     * Clear placeholder slots in a restricted hash.
+     *
+     * PerlOnJava does not implement Perl's restricted-hash placeholder
+     * machinery (used by {@code Hash::Util} / pseudo-hashes / fields). The
+     * actual op only matters for hashes that have had keys "locked" via
+     * {@code lock_keys}, where calling {@code keys %h} can leave behind
+     * placeholder slots. We don't have those slots, so there is nothing
+     * to do — returning an empty list matches the behavior callers expect.
+     */
+    public static RuntimeList hvClearPlaceholders(RuntimeArray args, int ctx) {
+        return new RuntimeList();
     }
 
     /**
