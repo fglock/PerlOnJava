@@ -163,7 +163,7 @@ In `RuntimeRegex.java`:
 
    ```bash
    ./jperl       t/regex_multiline_global.t
-   ./jperl --int t/regex_multiline_global.t
+   ./jperl --interpreter t/regex_multiline_global.t
    ```
 
    The interpreter and JVM backends share `RuntimeRegex` so both
@@ -283,7 +283,7 @@ deviation. Track separately if/when somebody cares.
       `RuntimeRegex.matchRegexDirect`.
 - [ ] Add `matcher.useAnchoringBounds(false)` to every
       `matcher.region(...)` site in `RuntimeRegex.java`.
-- [ ] Verify both backends (`./jperl` and `./jperl --int`) pass.
+- [ ] Verify both backends (`./jperl` and `./jperl --interpreter`) pass.
 - [ ] `make` green.
 
 **Phase 1 — Bundle Pod::Html.**

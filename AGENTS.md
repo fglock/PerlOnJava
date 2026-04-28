@@ -179,7 +179,7 @@ running tests, which let regressions sneak into commits.  Always use
 - For interpreter changes, test with both backends:
   ```bash
   ./jperl -e 'code'           # JVM backend
-  ./jperl --int -e 'code'     # Interpreter
+  ./jperl --interpreter -e 'code'     # Interpreter
   ```
 
 ### Perl Test Runner
