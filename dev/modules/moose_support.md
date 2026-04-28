@@ -1918,6 +1918,79 @@ Phases B / E remain deferred as before — they're not on the Moose
 
 ---
 
+## Phase D-W3: Sub::Util / sort BLOCK fixes (2026-04-28)
+
+Two bytecode/runtime bugs found while triaging the Moose 412/478
+plateau:
+
+### D-W3a: `Sub::Util::subname` of anonymous subs
+
+`B::svref_2object($code)->GV->STASH->NAME` (used by
+`Class::MOP::get_code_info` and `Class::MOP::Mixin::HasMethods::
+_code_is_mine`) returned `main` for any anon sub created in a
+non-main package. Real Perl returns the compile-time package
+(CvSTASH).
+
+The CvSTASH is recorded on `RuntimeCode.packageName`. Fixed by:
+- `Sub::Util::subname` now returns `Pkg::__ANON__` when the sub has
+  no name but a known package.
+- `Sub::Util::subname` honors the `explicitlyRenamed` flag for
+  `set_subname("", $code)` (returns empty string, not `__ANON__`).
+- `B.pm`'s `_introspect` accepts `Pkg::__ANON__`, `Pkg::` and bare
+  renames.
+
+This fix unblocks immutable metaclass trait application (the
+`Class::MOP::Class::Immutable::Trait::add_method` etc. were being
+rejected by `_code_is_mine` and so didn't take effect).
+
+Tests fixed (full file pass, `failing_count -> 0`):
+- `t/cmop/make_mutable.t` (12)
+- `t/cmop/numeric_defaults.t` (12)
+- `t/cmop/subclasses.t` (6)
+- `t/cmop/method.t` (5)
+- `t/cmop/method_modifiers.t` (3)
+- `t/cmop/anon_class.t` (3)
+- `t/cmop/immutable_metaclass.t` (5 -> 1)
+- `t/cmop/add_method_debugmode.t` (10 -> remaining timing-only)
+- `t/exceptions/class-mop-class-immutable-trait.t` (2)
+- `t/cmop/get_code_info.t` (3 -> 1, MODIFY_CODE_ATTRIBUTES name remains)
+
+### D-W3b: sort BLOCK comparator @_
+
+`sort { $_[0]->($a, $b) } @list` is the idiom Moose's native Array
+trait emits for the `sort($cmp)` accessor. Real Perl exposes the
+surrounding sub's `@_` inside the sort BLOCK, but PerlOnJava was
+creating a fresh empty `@_`.
+
+Fixed in the same way map/grep already worked: pass slot 1 (`@_`) to
+`ListOperators.sort` from both the JVM emitter
+(`EmitOperator.handleMapOperator`) and the interpreter
+(`InlineOpcodeHandler.executeSort`), and forward it as the
+comparator's args (unless the comparator has a `$$` prototype, in
+which case the existing `(a, b)` semantics still apply).
+
+Bytecode descriptor for the SORT op was widened to include
+`RuntimeArray` (the outer @_).
+
+Tests fixed:
+- `t/native_traits/trait_array.t` (6 sort-with-fn failures)
+
+### Status after D-W3
+
+- DBIC: still PASS (314/314, 13858/13858) — verified locally.
+- Moose: 396/478 files pass (was 391/478). 137 failed asserts
+  (was 145). Remaining failures cluster around:
+  - Numeric/string warning categories not implemented
+    (`always_strict_warnings.t`, etc.)
+  - Native trait Hash coerce + delete corner cases.
+  - Anonymous metaclass GC timing (depends on weak-ref / walker
+    scheduling).
+  - `Moose::Exception::CannotLocatePackageInINC` etc. — `INC`
+    attribute name handling.
+  - Stack-trace shape (`__ANON__` in stringified frames, etc.).
+  - A handful of cmop/method introspection edge cases (constants,
+    forward declarations, eval-defined subs).
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
