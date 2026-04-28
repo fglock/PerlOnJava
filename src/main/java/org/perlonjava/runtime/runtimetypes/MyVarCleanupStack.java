@@ -50,6 +50,19 @@ public class MyVarCleanupStack {
     }
 
     /**
+     * Snapshot the currently-live my-variables. Used by the
+     * reachability walker's per-object query
+     * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from
+     * still-in-scope lexical containers (e.g. {@code my %METAS}
+     * declared at file scope of a still-loading module). The
+     * live-counts map keys are stable identity references to
+     * RuntimeScalar / RuntimeArray / RuntimeHash instances.
+     */
+    public static java.util.List<Object> snapshotLiveVars() {
+        return new java.util.ArrayList<>(liveCounts.keySet());
+    }
+
+    /**
      * Called at subroutine entry (in {@code RuntimeCode.apply()}).
      * Returns a mark position for later {@link #popMark(int)} or
      * {@link #unwindTo(int)}.
@@ -73,13 +86,31 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack.add(var);
-        // liveCounts is only consulted by ReachabilityWalker.sweepWeakRefs,
-        // which runs only when WeakRefRegistry.weakRefsExist is true. For
-        // scripts that never weaken(), this merge() is pure overhead —
-        // HashMap.merge with a lambda is one of the hotter per-`my`-var
-        // costs. See ScalarRefRegistry.registerRef for the parallel fix.
+        // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
+        // .isReachableFromRoots. We populate it lazily — only after the
+        // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
+        // Tests that never weaken pay zero per-`my` cost; tests that do
+        // weaken trigger a one-time backfill via
+        // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
+        // which seeds liveCounts with all already-registered my-vars.
         if (var != null && WeakRefRegistry.weakRefsExist) {
             liveCounts.merge(var, 1, Integer::sum);
+        }
+    }
+
+    /**
+     * Phase D-W2b (perf): one-time backfill of {@link #liveCounts} with
+     * all my-vars currently on {@link #stack}. Called by
+     * {@link WeakRefRegistry#registerWeakRef} the first time
+     * {@code weakRefsExist} flips to true. Without this, my-vars
+     * declared before the first {@code weaken()} would never be
+     * inserted into {@code liveCounts} and the walker would miss them.
+     */
+    public static synchronized void snapshotStackToLiveCounts() {
+        for (Object var : stack) {
+            if (var != null) {
+                liveCounts.merge(var, 1, Integer::sum);
+            }
         }
     }
 

@@ -1068,7 +1068,9 @@ public class InlineOpcodeHandler {
         RuntimeList list = listBase.getList();
         RuntimeScalar closure = (RuntimeScalar) registers[closureReg];
         String packageName = code.stringPool[packageIdx];
-        RuntimeList result = ListOperators.sort(list, closure, packageName);
+        // Pass outer @_ (register 1) so sort blocks can access $_[0], $_[1], etc.
+        RuntimeArray outerArgs = (registers[1] instanceof RuntimeArray) ? (RuntimeArray) registers[1] : null;
+        RuntimeList result = ListOperators.sort(list, closure, outerArgs, packageName);
         registers[rd] = result;
         return pc;
     }

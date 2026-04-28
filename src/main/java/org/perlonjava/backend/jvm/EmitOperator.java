@@ -623,6 +623,9 @@ public class EmitOperator {
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
         if (operator.equals("sort")) {
+            // Push outer @_ so sort blocks can access $_[0], $_[1], etc.
+            // (real Perl's sort BLOCK shares the surrounding sub's @_).
+            mv.visitVarInsn(Opcodes.ALOAD, 1);
             emitterVisitor.pushCurrentPackage();
         } else {
             // For map, grep, all, any: push the outer @_ so blocks can access $_[0], $_[1] etc.

@@ -83,7 +83,16 @@ public class WeakRefRegistry {
         // Flip the fast-path flag so scopeExit cascades don't bail out
         // via the !blessedObjectExists shortcut when unblessed data has
         // weak refs that need clearing.
-        weakRefsExist = true;
+        // Phase D-W2b (perf): the very first weaken() also has to
+        // backfill `MyVarCleanupStack.liveCounts` so that already-live
+        // my-vars become visible to the walker. We gate the per-`my`
+        // merge cost on weakRefsExist; without backfill, my-vars
+        // declared before the first weaken would never appear in
+        // liveCounts and the walker would miss them.
+        if (!weakRefsExist) {
+            weakRefsExist = true;
+            MyVarCleanupStack.snapshotStackToLiveCounts();
+        }
 
         if (base.refCount > 0 && ref.refCountOwned) {
             // Tracked object with a properly-counted reference:

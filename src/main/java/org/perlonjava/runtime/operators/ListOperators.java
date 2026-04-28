@@ -109,6 +109,15 @@ public class ListOperators {
      * @throws RuntimeException If the Perl comparator subroutine throws an exception.
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, String packageName) {
+        return sort(runtimeList, perlComparatorClosure, null, packageName);
+    }
+
+    /**
+     * Sorts the elements of this RuntimeArray using a Perl comparator subroutine,
+     * passing the outer {@code @_} so the comparator block can access {@code $_[0]} etc.
+     * (Real Perl's sort BLOCK shares the surrounding subroutine's @_.)
+     */
+    public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, RuntimeArray outerArgs, String packageName) {
 
         // Check each element to ensure it's not an undefined array reference
         runtimeList.validateNoAutovivification();
@@ -147,11 +156,15 @@ public class ListOperators {
                 varA.set(a);
                 varB.set(b);
 
-                // For $$-prototyped comparators, pass elements via @_
-                RuntimeArray comparatorArgs = new RuntimeArray();
+                // For $$-prototyped comparators, pass elements via @_;
+                // otherwise inherit the outer @_ so the block can use $_[N].
+                RuntimeArray comparatorArgs;
                 if (stackedComparator) {
+                    comparatorArgs = new RuntimeArray();
                     comparatorArgs.push(a);
                     comparatorArgs.push(b);
+                } else {
+                    comparatorArgs = outerArgs != null ? outerArgs : new RuntimeArray();
                 }
 
                 // Apply the Perl comparator subroutine with the arguments
@@ -233,9 +246,12 @@ public class ListOperators {
 
                     // Check the result of the filter subroutine
                     if (result.getFirst().getBoolean()) {
-                        // If the result is non-zero, add the element to the filtered list
-                        // We need to clone, otherwise we would be adding an alias to the original element
-                        filteredElements.add(element.clone());
+                        // Perl semantics: grep returns aliases to the original
+                        // elements (not copies). This is required for patterns
+                        // like `for (grep { !ref } $a, $b) { $_ = ... }` which
+                        // modifies $a and $b. Cloning here would silently
+                        // break that aliasing — see Class::MOP::MiniTrait.
+                        filteredElements.add(element);
                     }
                 } catch (PerlNonLocalReturnException e) {
                     throw e;  // Don't wrap non-local returns
