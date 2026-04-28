@@ -108,31 +108,6 @@ public class DestroyDispatch {
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
 
-        // Phase D (Step W3-Path 2 unification): walker-gated destroy.
-        // Some callDestroy entry points (overwriteDecrement, scopeExit
-        // cleanups, undef on blessed) bypass the gate that MortalList.flush()
-        // applies. If a blessed object with outstanding weak refs is about
-        // to be destroyed but the reachability walker can still reach it
-        // from a package global / live my-var / closure capture, the
-        // refCount==0 transition was a transient drift — un-MIN_VALUE
-        // it and return without firing DESTROY or clearing weak refs.
-        //
-        // Cycle-break is preserved: cycles whose lexicals have exited
-        // their scope have no path to any root, so the walker returns
-        // false and the destroy proceeds normally.
-        //
-        // Cost: only fires for blessed objects with weak refs.
-        if (referent.refCount == Integer.MIN_VALUE
-                && referent.blessId != 0
-                && !referent.currentlyDestroying
-                && !referent.destroyFired
-                && WeakRefRegistry.weakRefsExist
-                && WeakRefRegistry.hasWeakRefsTo(referent)
-                && ReachabilityWalker.isReachableFromRoots(referent)) {
-            referent.refCount = 0;
-            return;
-        }
-
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient
         // decrement-to-0 (local temp release, deferred MortalList flush,
