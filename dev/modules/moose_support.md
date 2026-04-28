@@ -1747,55 +1747,82 @@ Moose stays at 412/478, refcount unit tests stay green.
    - After D-W2:  ALL 6492 tests pass in 30 seconds
 
 4. **D-W2b** (NEXT — outstanding perf regression): even with the
-   stash skip, the walker gate still has a measurable per-test cost
-   that adds up across the suite.
+   stash skip, the suite-level wallclock cost is higher than master.
 
    **Empirical (Apr 2026):**
    - Master DBIC suite (`/tmp/dbic_master2.txt`): 314 files /
      13858 tests / **PASS / 1410 wallclock seconds (23.5 min)**.
-   - Feature branch DBIC suite at D-W2: still completing tests
-     but at roughly 4x slower per test in serial mode (76 of 314
-     done in 23 min). At this rate the suite would take 90+ min,
-     vs master's 23.
+   - Feature branch DBIC suite at D-W2: in 15 minutes elapsed,
+     59 ok + 29 skipped = 88/314 done. Projected ~50 min total.
+     **Roughly 1.5–2× slower** than master, not 4×.
 
-   **Per-test profile (`t/cdbi/68-inflate_has_a.t`)**: master and
-   feature branch are BOTH slow standalone (>20 min) — but master
-   completes that test inside the harness in seconds. So the
-   slowness is environmental for that particular test.
+   **Per-test direct comparison (master jperl JAR vs feature jperl JAR,
+   same .t files, no harness):**
 
-   **General `jstack` of feature-branch jperl in DBIC:** dominated
-   by `RuntimeCode.applyImpl` + `RuntimeArray.setArrayOfAlias` +
-   `ArrayList.<init>`. The walker stack frames do NOT appear in
-   sampled profiles, suggesting the per-call walker cost is amortised
-   away — but the gate may still fire frequently enough to show up
-   in aggregate.
+   | Test                  | Master | Feature | Ratio    |
+   |-----------------------|--------|---------|----------|
+   | t/05components.t      | 6.25s  | 4.85s   | 0.78×    |
+   | t/52leaks.t           | 40.15s | 9.43s   | **0.23×** |
+   | t/76joins.t           |  9.79s | 6.90s   | 0.71×    |
+   | t/86might_have.t      |  9.66s | 9.86s   | 1.02×    |
+
+   On individual tests the feature branch is OFTEN FASTER (the
+   walker gate prevents some unnecessary destroy cascades that
+   master pays for). The aggregate suite slowdown is therefore
+   coming from a smaller subset of tests — not yet identified.
+
+   **Per-test profile (`t/cdbi/68-inflate_has_a.t`)**: BOTH master
+   and feature branch hang on this test standalone (>20 min, >35
+   min observed in tests). Yet master's harness run shows it
+   passes — likely the harness produces enough output that no-
+   output-timeout doesn't kill it, and the wallclock just gets
+   absorbed into the 23.5 min total. Investigation needed for
+   what's specific about how `timeout(...)` behaves in standalone
+   vs harness mode.
+
+   **General `jstack` of feature-branch jperl in DBIC** (sampled):
+   dominated by `RuntimeCode.applyImpl` + `RuntimeArray.setArrayOfAlias`
+   + `ArrayList.<init>`. The walker stack frames do NOT appear in
+   sampled profiles — gate cost is <1% of runtime. The gate's
+   per-call cost is dominated by `WeakRefRegistry.hasWeakRefsTo()`
+   (a single HashMap lookup), which is already O(1).
+
+   **Hypothesis:** the slowdown is in some non-walker code path
+   that my D-W1 change made hotter. Most likely the always-populate
+   `MyVarCleanupStack.liveCounts` (one HashMap.merge per `my`)
+   accumulating across N=thousands of `my` declarations per test
+   becomes measurable in aggregate — even though no individual
+   call is slow.
 
    **Fix candidates (in expected impact order):**
 
-   a. **Cache the walker's live-set per flush.** A single
-      `MortalList.flush()` may decrement-to-zero many blessed-with-
-      weak-refs objects in a row. Each currently triggers a fresh
-      `ReachabilityWalker.isReachableFromRoots()` BFS over all
-      globals + my-vars. Compute the live set ONCE per flush
-      (lazy + invalidated when a destroy/weaken/scope-change
-      happens between gate calls).
+   a. **Lazy live-counts.** Restore the `weakRefsExist` gate on
+      `MyVarCleanupStack.liveCounts` population, but on the
+      first `weaken()` call snapshot the existing
+      `MyVarCleanupStack.stack` into `liveCounts` so already-
+      registered my-vars become visible. Cost reverts to pre-D-W1
+      for tests that never weaken; D-W1 reproducer still passes
+      because tests with weaken populate liveCounts on the first
+      weaken().
 
-   b. **Bypass walker for "no weak refs to me, anywhere" fast
-      path.** `WeakRefRegistry.hasWeakRefsTo(base)` is already O(1).
-      But `WeakRefRegistry.weakRefsExist` is an over-approximation —
-      true if ANY weaken has happened in the program. Add a
-      per-class `classHasWeakRefs` cache, so DBIC's BlockRunner
-      (which has weak refs) hits the gate but the millions of
-      transient blessed objects without weak refs skip it.
+   b. **Bench-disable walker to confirm root cause.** Replace
+      `ReachabilityWalker.isReachableFromRoots(base)` with `false`
+      and re-time the same five tests. If runtimes are unchanged,
+      the walker isn't the bottleneck — confirms (a). If they
+      drop dramatically, the walker is the issue and we need
+      caching.
 
-   c. **Coalesce gate calls.** Instead of one walker call per
-      flush per blessed-with-weak object, queue them and process
-      in a single walker pass at flush end.
+   c. **Per-class hasWeakRefs filter.** Track which classes have
+      ever had `weaken()` called on instances of them. Skip the
+      walker call for classes never weakened (most blessed
+      objects in DBIC's data layer have no weak refs).
 
-   d. **Eager liveness via increments, not BFS.** Maintain a
-      `weakRefRoots` shadow refCount that ALSO counts weak-from-
-      live-lexical edges. Decrement only when ALL such edges are
-      gone. Walker becomes a slow-path verification.
+   d. **Cache the walker's live-set per flush.** A single
+      `MortalList.flush()` may decrement-to-zero many blessed-
+      with-weak-refs objects in a row. Compute live set once.
+
+   e. **Coalesce gate calls.** Queue them and process in a
+      single walker pass at flush end.
 
    Acceptance criteria for D-W2b: full `./jcpan --jobs 1 -t
    DBIx::Class` completes in ≤30 min (master baseline + 30%
