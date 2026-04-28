@@ -422,8 +422,7 @@ public class ReachabilityWalker {
             // the Moose bootstrap), we don't need closure-capture walking
             // because %METAS is declared `our %METAS` (package global) so
             // it appears directly in GlobalVariable.globalHashes.
-        }
-        return false;
+        }        return false;
     }
 
     private static void seedTarget(RuntimeScalar s, RuntimeBase target,

@@ -1649,47 +1649,115 @@ The single-most-impactful debugging step is to instrument the gate
 fire for `DBICTest::Schema` and answer hypothesis A / B / C above
 with data, not theory. Concretely:
 
-1. **D-W1** Re-add the `_gateTrace` env-gated trace (using a
+1. **D-W0** (PREREQUISITE — write reproducer first). The wide-net
+   unit tests we now ship at
+   `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`
+   model the documented DBIC pattern (script-level `my $schema`,
+   weak back-refs from sources, closure-wrapped method chains,
+   nested classes) and **all 21 currently pass**. So the failure
+   mode is **NOT** any of:
+     - simple weak ref to schema
+     - closure captures of schema
+     - deep call chains
+     - DBIC-style source registry
+
+   The unit test must be expanded to ACTUALLY reproduce what real
+   DBIC does. Steps:
+
+   a. With `PJ_GATE_TRACE=1` and the existing instrumentation in
+      `ReachabilityWalker.isReachableFromRoots`, capture the gate
+      fire for `DBICTest::Schema` while running the failing test:
+      ```bash
+      cd /Users/fglock/.cpan/build/DBIx-Class-0.082844-9
+      PJ_GATE_TRACE=1 /Users/fglock/projects/PerlOnJava2/jperl \
+          -Iblib/lib -Ilib -It/lib t/prefetch/incomplete.t 2>&1 \
+          | grep "GATE-FALSE: DBICTest::Schema"
+      ```
+      **Observed (Apr 2026):**
+      ```
+      GATE-FALSE: DBICTest::Schema visits=7193 liveVars=65
+                  directHit=0 scalarRef=0 hashHit=0
+      ```
+      The walker visited 7193 nodes from 65 live my-vars and
+      ~7000 ScalarRefRegistry entries and ~270 globalHashes. *Zero*
+      direct hits on the schema. This rules out hypotheses A and C
+      (the live my-vars genuinely don't contain the schema in any
+      slot we can see).
+
+   b. The schema must therefore be held by either:
+      i. A path the walker doesn't follow (closure captures —
+         currently disabled in `isReachableFromRoots`).
+      ii. A global variable / hash / array that *contains*
+          something that *references* the schema, but the BFS
+          terminates before reaching it (>50K visit cap, or some
+          intermediate slot we don't follow — e.g. RuntimeCode
+          captures, IO handles, tied data, RuntimeBaseProxy).
+      iii. The schema's strong reference is in fact gone (the
+          `my $schema = …` lexical's storage scalar still exists
+          but its value field was overwritten by some intermediate
+          assignment **before** the gate fires).
+
+   c. Build a focused reproducer in
+      `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`:
+      - Test 6: closure that holds the schema as its only strong
+        ref (mimicking `lives_ok(sub { ... }, ...)` with `$schema`
+        captured but no outer my-var pointing at it).
+      - Test 7: schema held only via a chained anonymous-hash
+        global (e.g. `$DBICTest::SCHEMAS{name} = $schema`).
+      - Test 8: blessed object that registers itself in a class
+        method (mimics how DBIC's `Schema->connect` may store the
+        schema in `__PACKAGE__::__INSTANCE`).
+      - Test 9: `bless` swap that orphans the original blessed
+        identity while keeping the same RuntimeHash.
+      - Each test must FAIL with the current walker; one of them
+        must reproduce the actual DBIC `directHit=0` situation.
+
+   d. Once a test fails identically, the fix below has a binding
+      regression target.
+
+2. **D-W1** Re-add the `_gateTrace` env-gated trace (using
    `static final boolean` to avoid `System.getenv` on the hot
    path). Print: target identity hash, classname, refCount before
    decrement, list of (live-var class, identity, REFERENCE_BIT,
    `value == target?`) pairs from MyVarCleanupStack, and the
    weak-ref-source list from `WeakRefRegistry.referentToWeakRefs`.
-   Run on the minimal-repro `t/prefetch/incomplete.t` and capture
-   the first DBICTest::Schema gate fire. **30 minutes of work, no
-   risk.**
+   Run on the *unit* reproducer from D-W0(c) — much faster
+   iteration than the full DBIC test. **30 minutes of work, no
+   risk to landing.**
 
-2. **D-W2** Based on D-W1 output, classify which hypothesis (A, B
-   or C above) is the actual cause, and tackle that head-on:
+3. **D-W2** Based on D-W1 output, classify which hypothesis (A, B
+   or C above, or some new one D-W0(c) surfaces) is the actual
+   cause, and tackle that head-on:
 
-   - If **A**: find the assignment site inside DBIC's bootstrap that
-     overwrites `$schema`'s storage slot. Likely candidate:
-     `Schema->connect` returning a NEW Schema instance distinct
-     from the one constructed via `Schema->compose_namespace`,
-     and the `bless(...)` reusing the rvalue scalar. Look for
-     places where setLargeRefCounted's old-value-decrement could
-     race the new-value-increment.
+   - If **closure-captured-only schema** (the most likely after
+     D-W0(b)(i)): re-enable closure-capture walking in
+     `isReachableFromRoots` but ONLY from globally-installed
+     RuntimeCode (so DBIC's leak detector remains correct for
+     anonymous closures whose declaration scope has exited).
+     This gates the closure walk by `code.isInGlobalStash()`
+     (a new flag on RuntimeCode set when assigned to a stash
+     entry). Re-validates: 412/478 Moose green stays, DBIC
+     baseline restored, refcount unit tests stay green.
 
-   - If **B**: trace where the second instance is born. Likely
-     the `_register_source` path, `class_mappings` reverse map, or
-     a `BlockRunner` that captures schema-via-closure. Verify by
-     printing the identity of every DBICTest::Schema instance from
-     `init_schema` through the destroy event.
+   - If **deep transitive global reachability** (D-W0(b)(ii)):
+     raise the BFS visit cap (the 50K is currently hit in some
+     pathological cases) OR adjust seeding to cover the missing
+     edge-type (RuntimeCode captures, RuntimeBaseProxy, IO).
 
-   - If **C**: the JVM-emitted bytecode is the issue. Find where
-     EmitVariable inserts the local copy and adjust so the same
-     RuntimeScalar instance sits in both the JVM local slot AND
-     MyVarCleanupStack. (This is the most invasive fix and has
-     the largest blast radius.)
+   - If **Schema lexical genuinely lost its value mid-execution**
+     (D-W0(b)(iii)): trace the assignment site that overwrote
+     `$schema`. Likely setLargeRefCounted's old-value-decrement
+     path firing on a blessed-with-DESTROY in the rvalue chain.
+     Fix at the bytecode emit level.
 
-3. **D-W3** Once D-W2's fix lands, re-run the full DBIC suite
+4. **D-W3** Once D-W2's fix lands, re-run the full DBIC suite
    (must drop `failing-assertions` to 0 and `failing-files` to ≤2,
    matching master baseline) AND re-run Moose's own test suite
    (must stay ≥ 412 / 478 fully green; ideally improve, since
    walker tightening should help upstream tests that rely on
    accurate refcount semantics for cycle-break edges).
 
-4. **D-W4** Only then continue with shim widening / Phase 4-6
+5. **D-W4** Only then continue with shim widening / Phase 4-6
    work to move from 412 → 477 / 478 Moose green files.
 
 ### Hard constraint moving forward
