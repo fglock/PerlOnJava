@@ -160,6 +160,14 @@ public class ReachabilityWalker {
     private void bfs(java.util.ArrayDeque<RuntimeBase> todo, boolean walkCaptures) {
         while (!todo.isEmpty()) {
             RuntimeBase cur = todo.removeFirst();
+            // Phase D-W2 (perf): skip RuntimeStash. A stash's `elements`
+            // is a HashSpecialVariable that eagerly copies all global
+            // keys via entrySet() — O(globals) per visit, quadratic
+            // in number of packages × per-flush gate fires.
+            // Stash entries (the per-package code/var/array/hash) are
+            // already directly seeded from GlobalVariable.global*Refs,
+            // so iterating them here is redundant work.
+            if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
                 for (RuntimeScalar v : h.elements.values()) {
                     visitScalar(v, todo);
@@ -422,6 +430,8 @@ public class ReachabilityWalker {
             RuntimeBase cur = todo.removeFirst();
             visits++;
             if (cur == target) return true;
+            // Phase D-W2 (perf): skip RuntimeStash — see bfs().
+            if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
                 for (RuntimeScalar v : h.elements.values()) {
                     if (followScalar(v, target, seen, todo)) return true;
