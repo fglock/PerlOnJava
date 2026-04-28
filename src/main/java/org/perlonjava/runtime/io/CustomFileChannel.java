@@ -7,6 +7,7 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -86,6 +87,19 @@ public class CustomFileChannel implements IOHandle {
             new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
+     * Cleaner used to drop any flock() we still hold when this channel is GC'd
+     * without an explicit Perl-level {@code close($fh)}. Path::Tiny's
+     * {@code slurp}/{@code append} idiom returns from a sub while the locked
+     * filehandle is still in scope, then immediately reopens the same path and
+     * tries to take an EXCLUSIVE lock — which previously failed with
+     * {@code Resource deadlock avoided} because the SHARED lock entry from the
+     * abandoned channel was still in {@link #sharedLockRegistry}. The Cleaner
+     * action releases registry/native locks deterministically once the JVM
+     * notices the {@link CustomFileChannel} is unreachable.
+     */
+    private static final Cleaner LOCK_CLEANER = Cleaner.create();
+
+    /**
      * State for a JVM-wide shared flock() on a file path. Contains the owning
      * FileLock (from the first acquirer) and a count of how many channels in this
      * JVM currently hold the shared lock.
@@ -110,6 +124,56 @@ public class CustomFileChannel implements IOHandle {
      * directly.
      */
     private boolean holdsSharedLockViaRegistry;
+
+    /**
+     * Mutable state shared with this channel's Cleaner action. Lives in a
+     * separate object so the Cleaner can run it without retaining a reference
+     * to {@code this} (a Cleaner action that captured the outer instance would
+     * never trigger). Updated whenever this channel acquires or releases a
+     * lock; the Cleaner runs at most once, when the channel is GC'd.
+     */
+    private final CleanupState cleanupState = new CleanupState();
+
+    private final Cleaner.Cleanable cleanable = LOCK_CLEANER.register(this, cleanupState);
+
+    /**
+     * Cleaner action: runs when the {@link CustomFileChannel} becomes
+     * unreachable without an explicit Perl-level {@code close($fh)}. Releases
+     * any flock() entry the channel still owns so Path::Tiny's
+     * {@code slurp}-then-{@code append({truncate=>1})} pattern doesn't get
+     * stuck on a stale SHARED lock from the abandoned read handle.
+     */
+    private static final class CleanupState implements Runnable {
+        volatile String lockKey;
+        volatile boolean viaRegistry;
+        volatile FileLock nioLock;
+
+        @Override
+        public void run() {
+            try {
+                if (viaRegistry && lockKey != null) {
+                    synchronized (sharedLockRegistry) {
+                        SharedLockState state = sharedLockRegistry.get(lockKey);
+                        if (state != null) {
+                            state.refCount--;
+                            if (state.refCount <= 0) {
+                                if (state.nioLock != null && state.nioLock.isValid()) {
+                                    state.nioLock.release();
+                                }
+                                sharedLockRegistry.remove(lockKey);
+                            }
+                        }
+                    }
+                } else if (nioLock != null && nioLock.isValid()) {
+                    nioLock.release();
+                }
+            } catch (IOException ignored) {
+                // Best-effort cleanup; nothing useful to do on failure.
+            }
+            viaRegistry = false;
+            nioLock = null;
+        }
+    }
 
     /**
      * The underlying Java NIO FileChannel for actual I/O operations
@@ -497,6 +561,9 @@ public class CustomFileChannel implements IOHandle {
                             // shared lock on this file — piggyback on it.
                             state.refCount++;
                             holdsSharedLockViaRegistry = true;
+                            cleanupState.lockKey = lockKey;
+                            cleanupState.viaRegistry = true;
+                            cleanupState.nioLock = null;
                             return scalarTrue;
                         }
                         // No existing shared lock. Acquire one on our channel and
@@ -515,6 +582,9 @@ public class CustomFileChannel implements IOHandle {
                             sharedLockRegistry.put(lockKey, newState);
                             currentLock = lock;
                             holdsSharedLockViaRegistry = true;
+                            cleanupState.lockKey = lockKey;
+                            cleanupState.viaRegistry = true;
+                            cleanupState.nioLock = null;
                             return scalarTrue;
                         } catch (OverlappingFileLockException e) {
                             // Same JVM already holds a lock on this region that
@@ -535,8 +605,29 @@ public class CustomFileChannel implements IOHandle {
                         return RuntimeScalarCache.scalarFalse;
                     }
                 } else {
-                    currentLock = fileChannel.lock(0, Long.MAX_VALUE, isShared);
+                    try {
+                        currentLock = fileChannel.lock(0, Long.MAX_VALUE, isShared);
+                    } catch (OverlappingFileLockException e) {
+                        // The same JVM already holds a lock on this region — most
+                        // commonly a SHARED lock from a sibling CustomFileChannel
+                        // whose Perl-level handle has gone out of scope but whose
+                        // underlying RuntimeIO/lock hasn't been released yet
+                        // (Path::Tiny's slurp() pattern: returns from a sub while
+                        // the locked $fh is still in scope, then immediately calls
+                        // append({truncate=>1}) which wants LOCK_EX). Try to clean
+                        // up abandoned handles via the existing fd-recycling
+                        // pathway, then retry once.
+                        if (lockKey != null
+                                && reclaimAbandonedSharedLock(lockKey)) {
+                            currentLock = fileChannel.lock(0, Long.MAX_VALUE, isShared);
+                        } else {
+                            throw e;
+                        }
+                    }
                 }
+                cleanupState.lockKey = null;
+                cleanupState.viaRegistry = false;
+                cleanupState.nioLock = currentLock;
                 return scalarTrue;
             }
 
@@ -551,6 +642,43 @@ public class CustomFileChannel implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "flock failed");
         }
+    }
+
+    /**
+     * Try to reclaim a SHARED-lock registry entry whose holder has been
+     * abandoned at the Perl level. Triggers the IO fd-recycling sweep
+     * ({@link org.perlonjava.runtime.runtimetypes.RuntimeIO#processAbandonedGlobs()})
+     * — and, if that doesn't drop the entry, gives the JVM a hint via
+     * {@code System.gc()} so any pending {@link Cleaner} actions and
+     * {@link java.lang.ref.PhantomReference}s for unreachable handles get
+     * processed before we retry the lock acquisition.
+     *
+     * @return {@code true} if the registry entry for {@code key} was removed
+     *     (so the caller should retry); {@code false} otherwise.
+     */
+    private static boolean reclaimAbandonedSharedLock(String key) {
+        org.perlonjava.runtime.runtimetypes.RuntimeIO.processAbandonedGlobs();
+        if (!sharedLockRegistry.containsKey(key)) {
+            return true;
+        }
+        // Nudge the JVM to clean up any handles that are unreachable but
+        // haven't yet been enqueued for collection (e.g. a Path::Tiny `slurp`
+        // returned but its lexical $fh hasn't been GC'd in this microbench
+        // window). System.gc() is a hint; on a normal JVM this is enough to
+        // let the Cleaner action and PhantomReference for the abandoned
+        // handle run before we retry. We block briefly to give those
+        // background mechanisms a chance to actually fire.
+        System.gc();
+        for (int i = 0; i < 5 && sharedLockRegistry.containsKey(key); i++) {
+            try {
+                Thread.sleep(2);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            org.perlonjava.runtime.runtimetypes.RuntimeIO.processAbandonedGlobs();
+        }
+        return !sharedLockRegistry.containsKey(key);
     }
 
     /**
@@ -578,6 +706,8 @@ public class CustomFileChannel implements IOHandle {
             // way, we must not call release() on it ourselves a second time.
             currentLock = null;
             holdsSharedLockViaRegistry = false;
+            cleanupState.viaRegistry = false;
+            cleanupState.nioLock = null;
             return;
         }
         if (currentLock != null) {
@@ -586,6 +716,8 @@ public class CustomFileChannel implements IOHandle {
             }
             currentLock = null;
         }
+        cleanupState.viaRegistry = false;
+        cleanupState.nioLock = null;
     }
 
     @Override

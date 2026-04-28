@@ -38,15 +38,23 @@ public class Operator {
             return new RuntimeScalar(0);
         }
 
+        // Flatten remaining args into a list of scalars. Without this, an
+        // unflattened RuntimeArray (e.g., `chmod $mode, @paths`) would end up
+        // as a single element whose toString() looks like "ARRAY(0x...)".
+        // UnlinkOperator/UtimeOperator do the same.
         int mode = runtimeList.elements.getFirst().scalar().getInt();
+        RuntimeList fileList = new RuntimeList();
+        for (int i = 1; i < runtimeList.elements.size(); i++) {
+            runtimeList.elements.get(i).addToList(fileList);
+        }
         int successCount = 0;
 
         // Detect platform
         boolean isWindows = NativeUtils.IS_WINDOWS;
 
-        // Process each file in the list
-        for (int i = 1; i < runtimeList.size(); i++) {
-            String fileName = runtimeList.elements.get(i).toString();
+        // Process each file in the flattened list
+        for (RuntimeScalar fileScalar : fileList) {
+            String fileName = fileScalar.toString();
             Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
             if (resolved == null) {
                 continue;

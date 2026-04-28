@@ -1198,6 +1198,34 @@ public class OperatorParser {
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
+    /**
+     * Parse {@code chomp} / {@code chop}.  Both behave like list operators
+     * <em>with parentheses</em> (any number of args) but as named-unary
+     * operators <em>without parentheses</em> (one term, stop at the comma).
+     * That mirrors upstream Perl, where {@code is(chomp @a, 3, "ok")} parses
+     * as {@code is(chomp(@a), 3, "ok")} rather than gobbling the rest of the
+     * comma-separated list.
+     */
+    static OperatorNode parseChompChop(Parser parser, LexerToken token, int currentIndex) {
+        ListNode operand;
+        LexerToken next = TokenUtils.peek(parser);
+        if (next.text.equals("(")) {
+            // Parenthesized form: chomp(LIST)
+            TokenUtils.consume(parser);
+            operand = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+        } else if (next.type == org.perlonjava.frontend.lexer.LexerTokenType.EOF
+                || ListParser.isListTerminator(parser, next)
+                || next.text.equals(",")) {
+            // No argument: chomp / chop without args means chomp $_
+            operand = new ListNode(parser.tokenIndex);
+        } else {
+            // Bareword form without parens: take exactly one expression and
+            // stop before any "," at the same precedence level.
+            operand = ListNode.makeList(parser.parseExpression(parser.getPrecedence(",") + 1));
+        }
+        return new OperatorNode(token.text, operand, currentIndex);
+    }
+
     static OperatorNode parseDieWarn(Parser parser, LexerToken token, int currentIndex) {
         int dieKeywordIndex = currentIndex;  // Capture token position BEFORE parsing args
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);

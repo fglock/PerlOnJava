@@ -80,6 +80,13 @@ public class Readline {
         boolean isSlurp = (rs != null && rs.isSlurpMode()) ||
                 (rs == null && rsScalar.type == RuntimeScalarType.UNDEF);
         if (isSlurp) {
+            // Match Perl's semantics: a slurp call on a fresh handle returns
+            // the file contents (possibly the empty string) and leaves the
+            // handle at EOF; the *next* call returns undef. If we are already
+            // at EOF on entry, this is that "next" call -> undef.
+            if (runtimeIO.eof().getBoolean()) {
+                return scalarUndef;
+            }
             StringBuilder content = new StringBuilder();
             boolean isByteData = true;
             RuntimeScalar chunk;
@@ -91,19 +98,13 @@ public class Readline {
                 content.append(chunkStr);
             }
 
-            if (content.length() > 0) {
-                String contentStr = content.toString();
-                // In Perl 5, slurp mode increments $. by 1 (not per line)
-                runtimeIO.currentLineNumber++;
-                RuntimeScalar result = new RuntimeScalar(contentStr);
-                if (isByteData) {
-                    result.type = RuntimeScalarType.BYTE_STRING;
-                }
-                return result;
-            } else if (runtimeIO.eof().getBoolean()) {
-                return scalarUndef;
+            // In Perl 5, slurp mode increments $. by 1 (not per line)
+            runtimeIO.currentLineNumber++;
+            RuntimeScalar result = new RuntimeScalar(content.toString());
+            if (isByteData) {
+                result.type = RuntimeScalarType.BYTE_STRING;
             }
-            return new RuntimeScalar(content.toString());
+            return result;
         }
 
         if (rs != null && rs.isParagraphMode()) {
