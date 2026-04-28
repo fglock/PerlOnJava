@@ -297,6 +297,26 @@ public class InheritanceResolver {
      * @return RuntimeScalar representing the found method, or null if not found
      */
     public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex) {
+        return findMethodInHierarchy(methodName, perlClassName, cacheKey, startFromIndex, true);
+    }
+
+    /**
+     * Like {@link #findMethodInHierarchy(String, String, String, int)} but without the
+     * AUTOLOAD fallback. Pass {@code checkAutoload=false} for callers that need
+     * Perl's {@code gv_fetchmethod_autoload(..., FALSE)} semantics — for example,
+     * Storable's STORABLE_freeze / STORABLE_thaw / STORABLE_attach hook lookup,
+     * which must NOT promote an inherited AUTOLOAD into the hook (the AUTOLOAD
+     * would be invoked with {@code $AUTOLOAD = "Pkg::STORABLE_freeze"}, which the
+     * AUTOLOAD typically isn't expecting and just dies on).
+     *
+     * @param methodName     method name to find
+     * @param perlClassName  starting class
+     * @param cacheKey       cache key (null = default)
+     * @param startFromIndex starting index in linearized hierarchy
+     * @param checkAutoload  whether to fall back to AUTOLOAD when method is not directly defined
+     * @return RuntimeScalar representing the found method, or null if not found
+     */
+    public static RuntimeScalar findMethodInHierarchy(String methodName, String perlClassName, String cacheKey, int startFromIndex, boolean checkAutoload) {
         if (TRACE_METHOD_RESOLUTION) {
             System.err.println("TRACE InheritanceResolver.findMethodInHierarchy:");
             System.err.println("  methodName: '" + methodName + "'");
@@ -308,6 +328,11 @@ public class InheritanceResolver {
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
             cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+        }
+        // Use a separate cache slot for no-AUTOLOAD lookups so they don't
+        // pollute (or get polluted by) normal lookups which DO promote AUTOLOAD.
+        if (!checkAutoload) {
+            cacheKey = cacheKey + "\0noautoload";
         }
 
         if (TRACE_METHOD_RESOLUTION) {
@@ -368,7 +393,7 @@ public class InheritanceResolver {
         // Second pass — method not found anywhere, check AUTOLOAD in class hierarchy.
         // This matches Perl semantics: AUTOLOAD is only tried after the full MRO
         // search (including UNIVERSAL) fails to find the method.
-        if (autoloadEnabled && !methodName.startsWith("(")) {
+        if (autoloadEnabled && checkAutoload && !methodName.startsWith("(")) {
             for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
                 String className = linearizedClasses.get(i);
                 String effectiveClassName = GlobalVariable.resolveStashAlias(className);

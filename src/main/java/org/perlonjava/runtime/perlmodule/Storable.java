@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -176,7 +177,7 @@ public class Storable extends PerlModuleBase {
 
             // Check for STORABLE_freeze hook
             RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
-                    "STORABLE_freeze", className, null, 0);
+                    "STORABLE_freeze", className, null, 0, false);
 
             if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
                 // Call STORABLE_freeze($self, $cloning=0)
@@ -195,10 +196,26 @@ public class Storable extends PerlModuleBase {
                     // Track for circular reference detection before emitting
                     if (scalar.value != null) seen.put(scalar.value, seen.size());
 
-                    // Emit SX_HOOK + class name + serialized string + extra refs
+                    // Emit SX_HOOK + class name + ref-type byte + serialized string + extra refs
+                    // The ref-type byte tells SX_HOOK reader what kind of empty
+                    // reference to create before passing to STORABLE_thaw
+                    // (required because hooks like URI's bless a SCALAR ref —
+                    // creating a HASH ref would make `$$self = $str` croak).
                     sb.append((char) SX_HOOK);
                     appendInt(sb, className.length());
                     sb.append(className);
+
+                    // Encode the original reference type so SX_HOOK reader can
+                    // recreate the same kind of reference.
+                    char refTypeByte;
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                        refTypeByte = 'A';
+                    } else if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        refTypeByte = 'S';
+                    } else {
+                        refTypeByte = 'H'; // hash ref (default)
+                    }
+                    sb.append(refTypeByte);
 
                     // Serialized string (first element of freeze result)
                     String serialized = freezeArray.get(0).toString();
@@ -321,6 +338,11 @@ public class Storable extends PerlModuleBase {
                 String hookClass = data.substring(pos[0], pos[0] + classLen);
                 pos[0] += classLen;
 
+                // Reference type byte (matches what serializeBinary emitted):
+                // 'A'=array, 'S'=scalar, 'H'=hash. Created in 2026 to fix
+                // STORABLE_thaw on scalar-ref-blessed classes like URI.
+                char refTypeByte = data.charAt(pos[0]++);
+
                 // Read serialized string
                 int serLen = readInt(data, pos);
                 String serialized = data.substring(pos[0], pos[0] + serLen);
@@ -333,15 +355,24 @@ public class Storable extends PerlModuleBase {
                     extraRefs.add(deserializeBinary(data, pos, refList));
                 }
 
-                // Create new blessed object
-                RuntimeHash newHash = new RuntimeHash();
-                result = newHash.createAnonymousReference();
+                // Create new blessed object of the same reference type as the
+                // original. URI etc. expect a scalar ref, others expect a hash
+                // or array ref.
+                if (refTypeByte == 'A') {
+                    result = new RuntimeArray().createAnonymousReference();
+                } else if (refTypeByte == 'S') {
+                    result = new RuntimeScalar().createReference();
+                } else {
+                    RuntimeHash newHash = new RuntimeHash();
+                    result = newHash.createAnonymousReference();
+                }
+                requireClassForBlessOnRetrieve(hookClass);
                 ReferenceOperators.bless(result, new RuntimeScalar(hookClass));
                 refList.add(result);
 
                 // Call STORABLE_thaw($new_obj, $cloning=0, $serialized, @extra_refs)
                 RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
-                        "STORABLE_thaw", hookClass, null, 0);
+                        "STORABLE_thaw", hookClass, null, 0, false);
                 if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
                     RuntimeArray thawArgs = new RuntimeArray();
                     RuntimeArray.push(thawArgs, result);
@@ -408,6 +439,7 @@ public class Storable extends PerlModuleBase {
         }
 
         if (blessClass != null) {
+            requireClassForBlessOnRetrieve(blessClass);
             ReferenceOperators.bless(result, new RuntimeScalar(blessClass));
         }
         return result;
@@ -550,6 +582,32 @@ public class Storable extends PerlModuleBase {
      *
      * @param args the temporary args array to release
      */
+    /**
+     * Best-effort attempt to load a class before blessing a retrieved object
+     * into it. Without this, blessing into a not-yet-loaded class causes the
+     * blessId to be allocated as "non-overloaded" (positive ID) — and once
+     * cached, that ID stays positive forever, so even after the class is later
+     * loaded with `use overload`, both the retrieved object AND every
+     * subsequent {@code Class->new} for the same class will skip overload
+     * dispatch (URI's stringification, comparison, etc. silently break).
+     *
+     * Failure to load is silently ignored: many recorded objects bless into
+     * pure-data packages that have no .pm file, and that's fine — they just
+     * don't have overload anyway.
+     */
+    private static void requireClassForBlessOnRetrieve(String className) {
+        if (className == null || className.isEmpty()) return;
+        if (className.equals("main") || className.equals("UNIVERSAL")) return;
+        String filename = className.replace("::", "/").replace("'", "/") + ".pm";
+        RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+        if (inc.exists(new RuntimeScalar(filename)).getBoolean()) return;
+        try {
+            ModuleOperators.require(new RuntimeScalar(filename));
+        } catch (Exception ignore) {
+            // Class isn't a loadable module — fine, no overload to register.
+        }
+    }
+
     private static void releaseApplyArgs(RuntimeArray args) {
         if (args == null || args.elements == null) return;
         for (RuntimeScalar elem : args.elements) {
@@ -581,7 +639,7 @@ public class Storable extends PerlModuleBase {
         if (blessId != 0) {
             String className = NameNormalizer.getBlessStr(blessId);
             RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
-                    "STORABLE_freeze", className, null, 0);
+                    "STORABLE_freeze", className, null, 0, false);
 
             if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
                 // Call STORABLE_freeze($self, $cloning=1)
@@ -619,7 +677,7 @@ public class Storable extends PerlModuleBase {
 
                     // Call STORABLE_thaw($new_obj, $cloning=1, $serialized, @extra_refs)
                     RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
-                            "STORABLE_thaw", className, null, 0);
+                            "STORABLE_thaw", className, null, 0, false);
                     if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
                         RuntimeArray thawArgs = new RuntimeArray();
                         RuntimeArray.push(thawArgs, newObj);
@@ -816,7 +874,7 @@ public class Storable extends PerlModuleBase {
 
             // Check for STORABLE_freeze hook
             RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
-                    "STORABLE_freeze", className, null, 0);
+                    "STORABLE_freeze", className, null, 0, false);
             if (freezeMethod != null && freezeMethod.type == RuntimeScalarType.CODE) {
                 // Call STORABLE_freeze($self, $cloning=0) for serialization
                 RuntimeArray freezeArgs = new RuntimeArray();
@@ -831,11 +889,23 @@ public class Storable extends PerlModuleBase {
                 // Per Perl 5 Storable: empty return from STORABLE_freeze cancels the
                 // hook and falls through to default !!perl/hash: serialization
                 if (freezeArray.size() > 0) {
-                    // Store serialized data with class tag
+                    // Store serialized data with class tag.
+                    // The tag encodes the original reference type so the
+                    // reader can recreate a reference of the right kind
+                    // before calling STORABLE_thaw — required for hooks like
+                    // URI's that expect a scalar ref ($$self = $str).
+                    String tagPrefix;
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                        tagPrefix = "!!perl/freezeA:";
+                    } else if (scalar.type == RuntimeScalarType.REFERENCE) {
+                        tagPrefix = "!!perl/freezeS:";
+                    } else {
+                        tagPrefix = "!!perl/freeze:"; // hash ref (also legacy)
+                    }
                     Map<String, Object> taggedObject = new LinkedHashMap<>();
                     // STORABLE_freeze returns (serialized_string, @extra_refs)
                     // Store the serialized string directly
-                    taggedObject.put("!!perl/freeze:" + className, freezeArray.get(0).toString());
+                    taggedObject.put(tagPrefix + className, freezeArray.get(0).toString());
                     return taggedObject;
                 }
                 // Empty return — fall through to default !!perl/hash: serialization
@@ -929,19 +999,33 @@ public class Storable extends PerlModuleBase {
                         String className = key.substring("!!perl/hash:".length());
                         RuntimeScalar obj = convertFromYAMLWithTags(entry.getValue(), seen);
                         if (RuntimeScalarType.isReference(obj)) {
+                            requireClassForBlessOnRetrieve(className);
                             ReferenceOperators.bless(obj, new RuntimeScalar(className));
                         }
                         yield obj;
-                    } else if (key.startsWith("!!perl/freeze:")) {
-                        // Handle STORABLE_freeze/thaw hooks
-                        String className = key.substring("!!perl/freeze:".length());
-                        RuntimeHash newHash = new RuntimeHash();
-                        RuntimeScalar newObj = newHash.createAnonymousReference();
+                    } else if (key.startsWith("!!perl/freeze:") || key.startsWith("!!perl/freezeS:") || key.startsWith("!!perl/freezeA:")) {
+                        // Handle STORABLE_freeze/thaw hooks. Tag encodes the
+                        // original reference type so we can build a value the
+                        // hook's STORABLE_thaw expects (URI's hook does
+                        // `$$self = $str`, so $self must be a scalar ref).
+                        String className;
+                        RuntimeScalar newObj;
+                        if (key.startsWith("!!perl/freezeS:")) {
+                            className = key.substring("!!perl/freezeS:".length());
+                            newObj = new RuntimeScalar().createReference();
+                        } else if (key.startsWith("!!perl/freezeA:")) {
+                            className = key.substring("!!perl/freezeA:".length());
+                            newObj = new RuntimeArray().createAnonymousReference();
+                        } else {
+                            className = key.substring("!!perl/freeze:".length());
+                            newObj = new RuntimeHash().createAnonymousReference();
+                        }
+                        requireClassForBlessOnRetrieve(className);
                         ReferenceOperators.bless(newObj, new RuntimeScalar(className));
 
                         // Call STORABLE_thaw($new_obj, $cloning=0, $serialized_string)
                         RuntimeScalar thawMethod = InheritanceResolver.findMethodInHierarchy(
-                                "STORABLE_thaw", className, null, 0);
+                                "STORABLE_thaw", className, null, 0, false);
                         if (thawMethod != null && thawMethod.type == RuntimeScalarType.CODE) {
                             RuntimeArray thawArgs = new RuntimeArray();
                             RuntimeArray.push(thawArgs, newObj);

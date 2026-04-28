@@ -197,13 +197,22 @@ public class SocketIO implements IOHandle {
                     return scalarUndef;
                 }
 
-                // Auto-bind if not already bound so getsockname() returns local address
-                // even before the connection completes (Java NIO doesn't expose the
-                // local address until finishConnect() without this).
-                // Bind to the same IP as the target so getsockname() returns the
-                // correct local address (matching Perl's kernel behavior).
+                // Auto-bind to the wildcard address if not already bound so
+                // getsockname() returns *some* local address even before the
+                // connection completes (Java NIO doesn't expose the local
+                // address until finishConnect() otherwise).
+                // We bind to the wildcard (0.0.0.0:0) instead of the target's
+                // IP because we cannot bind to an address we don't own — doing
+                // so fails with "Can't assign requested address" for any
+                // remote target. The kernel will pick the proper source
+                // address based on routing once the connect proceeds.
                 if (socketChannel.getLocalAddress() == null) {
-                    socketChannel.bind(new InetSocketAddress(target.getAddress(), 0));
+                    try {
+                        socketChannel.bind(new InetSocketAddress(0));
+                    } catch (IOException ignore) {
+                        // If even wildcard bind fails, fall through to connect
+                        // and let it surface the real error.
+                    }
                 }
                 boolean connected = socketChannel.connect(target);
                 if (!connected) {
