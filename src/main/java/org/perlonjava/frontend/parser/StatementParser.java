@@ -748,21 +748,24 @@ public class StatementParser {
             }
         }
 
-        // Parse the parameter list
+        // Parse the parameter list.
+        // Real Perl wraps the use's arg list in an implicit BEGIN block, so
+        // `our` declarations inside `use if (not our $x), 'M'` get their own
+        // lexical scope and do not collide with the surrounding script's
+        // `our` declarations. Mirror that by entering a new symbol-table
+        // scope for the parse, otherwise repeated patterns like
+        //   use if (not our $__mx_is_compiled), 'Moose::Meta::Class';
+        //   use if (not our $__mx_is_compiled), metaclass => 'Moose::Meta::Class';
+        // (idiomatic in Moose/Object.pm) emit spurious "our variable
+        // redeclared" warnings.
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
-        int listStartIndex = parser.tokenIndex;
-        Node list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
-        // Detect a syntactically empty list expression after the module name
-        // (e.g. `use Foo qw()` — `use Foo ()` is already covered by hasParentheses).
-        // Perl treats this as "skip import", distinct from `use Foo` (no list at all)
-        // which calls import() with no arguments and triggers default exports.
-        // We require both: (a) the parser actually consumed tokens for a list
-        // expression (so this isn't `use Foo;`) and (b) the resulting AST is
-        // statically empty (so this isn't `use Foo @list` where @list happens
-        // to be empty at runtime — real Perl still calls import() in that case).
-        boolean hasEmptyLiteralList = !hasParentheses
-                && parser.tokenIndex > listStartIndex
-                && isStaticallyEmptyList(list);
+        int useArgScope = parser.ctx.symbolTable.enterScope();
+        Node list;
+        try {
+            list = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        } finally {
+            parser.ctx.symbolTable.exitScope(useArgScope);
+        }
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         StatementResolver.parseStatementTerminator(parser);
