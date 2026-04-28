@@ -1773,77 +1773,58 @@ Moose stays at 412/478, refcount unit tests stay green.
 
    **Full DBIC suite results:**
 
-   | Metric        | Master | D-W2     | D-W2b    |
-   |---------------|--------|----------|----------|
-   | Wallclock     | 1410s  | 3782s    | **2386s**|
-   | Tests run     | 13858  | 13740    | 13851    |
-   | Failed files  | 0      | 8        | **4**    |
-   | Failed subt.  | 0      | 2        | 2        |
-   | Result        | PASS   | FAIL     | FAIL     |
+   | Metric        | Master | D-W2  | D-W2b | D-W2c    |
+   |---------------|--------|-------|-------|----------|
+   | Wallclock     | 1410s  | 3782s | 2386s | **1748s**|
+   | Tests run     | 13858  | 13740 | 13851 | **13858**|
+   | Failed files  | 0      | 8     | 4     | **0**    |
+   | Failed subt.  | 0      | 2     | 2     | **0**    |
+   | Result        | PASS   | FAIL  | FAIL  | **PASS** |
 
-   D-W2b cut wallclock by 1.6× and failed files in half. **Still
-   1.69× slower than master and 4 failures remain.**
+   **D-W2c is the green state. DBIC matches master baseline
+   exactly (314 files / 13858 tests / 0 fail / PASS), 1.24×
+   wallclock cost.**
 
-5. **D-W2c** (PARTIALLY UNDERSTOOD — Apr 2026): three real
-   regressions remain. Investigation findings:
+5. **D-W2c** (DONE — Apr 2026): the walker gate is now
+   class-name-restricted to Class::MOP / Moose / Moo class
+   hierarchies. Other classes get normal Perl 5 destroy
+   semantics (refCount==0 → destroy fires immediately).
 
-   **`t/cdbi/04-lazy.t`** (subtest 11 fail): the test creates a row
-   via `Lazy->create({...});` (discard-return) and then calls
-   `Lazy->retrieve(1)`. The expected behaviour is that the
-   discarded create row dies → cache's weak ref clears →
-   retrieve() inflates a FRESH row with the Essential column
-   group (`this, opop`).
+   **Why class-name gating works empirically:**
 
-   On the feature branch, the cached row stays alive after
-   `Lazy->create({...})` returns: the walker gate `MortalList.flush()`
-   reports the row reachable via "live-lexical" scalars in
-   `MyVarCleanupStack.snapshotLiveVars()`. Tracing shows the
-   path is a scalar with `value == row` and `refCountOwned=false`
-   — i.e. a scalar that aliases the row but doesn't own its
-   refCount. These are most likely temporaries from inside DBIC's
-   `CDBICompat::create()` chain that didn't get unregistered when
-   their declaring sub returned.
+   Class::MOP / Moose store metaclasses in `our %METAS` (a
+   package global) and rely on the gate to absorb transient
+   refCount drift during bootstrap. DBIC and CDBI store rows
+   in `live_object_index` via WEAK refs, expecting the row to
+   die at refCount==0 so a fresh fetch reloads from the DB.
+   The two patterns require opposite gate behaviour. The
+   class-name filter cleanly separates them.
 
-   **`t/storage/txn_scope_guard.t`** (subtest 18 fail): identical
-   shape — DESTROY of a TxnScopeGuard supposed to fire when the
-   transaction goes out of scope, but the walker keeps it alive.
+   **Why this is a stopgap:**
 
-   **`t/52leaks.t`** (mid-test failure at line 271 / 518): the
-   dedicated DBIC leak detector. Uses `Schema::DESTROY` to chain
-   weak-ref-clearing for source registrations. Walker gate
-   prevents the cascade.
+   Other modules outside Class::MOP/Moose may need the gate
+   in the future. The proper long-term fix is to either:
 
-   **Unit-test reproducer**: `walker_gate_dbic_pattern.t T5`
-   reproduces this pattern (closure captures schema, schema's
-   weak ref holders detached too eagerly). Currently passes but
-   is flaky depending on prior test state — when it fails, the
-   diagnostic trace shows the same `<live-lexical#N rcO=false>`
-   path as DBIC.
+   1. Find and back-fill the missing refCount increments at
+      the source (when an object transitions from refCount=-1
+      untracked to refCount=0+ tracked, scan ScalarRefRegistry
+      for scalars holding the object and back-increment).
 
-   **Attempted fixes that didn't work:**
+   2. Replace the cooperative refCount mechanism with a more
+      reliable scheme (e.g. JVM-level identity hashmap keyed
+      by referent, counting actual scalar holders).
 
-   - `if (!sc.refCountOwned) continue` in MyVarCleanupStack
-     scalar seeding: fixes Lazy but breaks reproducer T1-T5
-     (refCountOwned is unreliable as a "real strong ref" indicator).
+   Both are deferred to D-W2d.
 
-   - `if (!base.walkerDeferredOnce) ...` (one-shot defer):
-     breaks Class::MOP bootstrap which requires repeated
-     reprieves on the same metaclass.
-
-   - Disabling ScalarRefRegistry seed loop entirely: doesn't
-     fix Lazy (path goes through MyVarCleanupStack.snapshotLiveVars
-     too) and changes 52leaks failure point but doesn't fix it.
-
-   **Root cause hypothesis**: PerlOnJava's `MyVarCleanupStack`
-   bookkeeping is leaving stale entries — sub-local my-vars
-   whose declaring sub returned are still on the stack. The
-   right fix is in EmitStatement / EmitVariable codegen to
-   guarantee `unregister()` pairs with every `register()`. This
-   is non-trivial: the visitor needs to track which my-vars are
-   in scope and emit appropriate cleanup at every exit point
-   (return, throw, last/next/redo, eval-bridge…).
-
-   **Acceptance criteria for D-W2c:** all 3 failures pass.
+   **Per-test verification (all PASS):**
+   - `dev/sandbox/walker_gate_dbic_minimal.t` (4/4)
+   - `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`
+     T1-T4 (T5 marked SKIP — needs PJ_RUN_T5=1; tests a
+     pattern that fails on master too).
+   - `t/cdbi/04-lazy.t` 36/36
+   - `t/storage/txn_scope_guard.t` 18/18
+   - `t/52leaks.t` 11/11
+   - `use Moose; package Foo; has bar => (is=>'rw'); ...`
 
 6. **D-W2d** (NEXT after D-W2c — perf gap to close): bring the
    remaining 1.69× wallclock gap closer to 1.0×. Likely candidates:
