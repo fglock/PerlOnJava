@@ -6,6 +6,7 @@ ABI	PASS	15	15		2026-04-26		1d5def215
 ACL::Lite	PASS	31	31		2026-04-25		1d5def215
 ACME::MyFirstModule::SETHS	PASS	1	1		2026-04-27		12fb0165d
 ACME::THEDANIEL::Utils	PASS	7	7		2026-04-25		1d5def215
+AI::ActivationFunctions	PASS	27	27		2026-04-27		3219b36d6
 AI::CBR	PASS	49	49		2026-04-27		12fb0165d
 AI::CRM114	PASS	2	2		2026-04-25		1d5def215
 AI::Calibrate	PASS	44	44		2026-04-21		3f3336774
@@ -24,6 +25,8 @@ ARGV::ENV	PASS	2	2		2026-04-22		e228c2529
 AWS::SQS::Simple	PASS	2	2		2026-04-27		12fb0165d
 AWS::Signature::V2	PASS	2	2		2026-04-25		1d5def215
 Ac_me::Local	PASS	1	1		2026-04-27		12fb0165d
+Acme::CPANModulesUtil::Bencher	PASS	2	2		2026-04-28		3219b36d6
+Algorithm::Backoff	PASS	22	22		2026-04-27		3219b36d6
 Algorithm::Diff	PASS	1004	1004		2026-04-12		cc5efa220
 Algorithm::Merge	PASS	66	66		2026-04-21		73edc8aba
 Algorithm::NaiveBayes	PASS	23	23		2026-04-26		1d5def215
@@ -37,6 +40,7 @@ AnnoCPAN::Perldoc	PASS	4	4		2026-04-21		73edc8aba
 Any::URI::Escape	PASS	4	4		2026-04-21		3f3336774
 AnyData2	PASS	21	21		2026-04-12		c1942aad0
 AnyEvent::ConnPool	PASS	41	41		2026-04-22		e228c2529
+AnyEvent::Emitter	PASS	50	50		2026-04-27		3219b36d6
 AnyEvent::Ping::TCP	PASS	1	1		2026-04-26		1d5def215
 AnyEvent::Redis	PASS	1	1		2026-04-21		73edc8aba
 AnyEvent::Semaphore	PASS	2	2		2026-04-21		73edc8aba
@@ -50,15 +54,11 @@ App::Prove::Plugin::Count	PASS	17	17		2026-04-26		1d5def215
 App::Rad	PASS	180	180		2026-04-21		3f3336774
 App::Spec	PASS	79	79		2026-04-21		3f3336774
 AppConfig::Exporter	PASS	8	8		2026-04-27		12fb0165d
-Array::Compare	PASS	37	37		2026-04-26		1d5def215
+AppConfig::Std	PASS	26	26		2026-04-27		3219b36d6
+Array::Compare	PASS	37	37		2026-04-27		3219b36d6
 Array::Utils	PASS	17	17		2026-04-12		cc5efa220
 ArrayData::Lingua::Word::ID::KBBI::Proverb	PASS	1	1		2026-04-21		73edc8aba
 ArrayData::WordList	PASS	1	1		2026-04-22		e228c2529
-ArrayDataRole::BinarySearch::LinesInHandle	PASS	1	1		2026-04-21		3f3336774
-ArrayDataRole::Source::LinesInDATA	PASS	67	67		2026-04-21		73edc8aba
-ArrayDataRole::Spec::Basic	PASS	8	8		2026-04-21		73edc8aba
-Asm::Z80::Table	PASS	19641	19641		2026-04-12		c1942aad0
-AsposeBarCodeCloud::ApiClient	PASS	3	3		2026-04-12		c1942aad0
 AsposeImagingCloud::ApiClient	PASS	3	3		2026-04-12		c1942aad0
 AsposeOcrCloud::ApiClient	PASS	3	3		2026-04-25		1d5def215
 AsposePdfCloud::ApiClient	PASS	3	3		2026-04-25		1d5def215
@@ -92,7 +92,7 @@ CAM::PDF	PASS	215	215		2026-04-25		1d5def215
 CCCP::SQLiteWrap	PASS	1	1		2026-04-26		1d5def215
 CDDB::File	PASS	36	36		2026-04-26		1d5def215
 CDR::Parser::SI3000	PASS	17	17		2026-04-12		c1942aad0
-CGI::Application	PASS	190	190		2026-04-27		12fb0165d
+CGI::Application	PASS	190	190		2026-04-26		1d5def215
 CGI::Application::Plugin::AbstractCallback	PASS	2	2		2026-04-12		cc5efa220
 CGI::Application::Plugin::Config::Any	PASS	9	9		2026-04-25		1d5def215
 CGI::Application::Plugin::ConfigAuto	PASS	12	12		2026-04-21		3f3336774
@@ -105,7 +105,6 @@ CGI::Application::Plugin::LogDispatch	PASS	25	25		2026-04-21		3f3336774
 CGI::Application::Plugin::MessageStack	PASS	9	9		2026-04-12		c1942aad0
 CGI::Application::Plugin::Redirect	PASS	9	9		2026-04-21		3f3336774
 CGI::Application::Plugin::SuperForm	PASS	9	9		2026-04-21		3f3336774
-CGI::Application::Plugin::View::HTML::Template	PASS	2	2		2026-04-27		12fb0165d
 CGI::Auth::Auto	PASS	1	1		2026-04-12		c1942aad0
 CGI::BrowserDetect	PASS	5	5		2026-04-21		3f3336774
 CGI::FormBuilder::Mail::FormatMultiPart	PASS	21	21		2026-04-21		3f3336774
