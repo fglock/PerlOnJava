@@ -711,7 +711,17 @@ public class ModuleOperators {
         // Notify B::Hooks::EndOfScope that we're starting to load a file
         // This enables on_scope_end callbacks to know which file they belong to
         BHooksEndOfScope.beginFileLoad(parsedArgs.fileName);
-        
+
+        // Source filters installed in the caller's file must not leak into
+        // the file being required/do'd, and filters installed inside the
+        // required file must not leak back to the caller.  Real Perl scopes
+        // filters per compilation unit (PL_compiling / PL_rsfp_filters);
+        // we mirror that by snapshotting the outer state and starting with
+        // a clean slate, restored unconditionally in the finally below.
+        org.perlonjava.runtime.perlmodule.FilterUtilCall.FilterStateSnapshot
+                filterSnapshot = org.perlonjava.runtime.perlmodule.FilterUtilCall
+                        .saveAndResetFilterState();
+
         try {
             featureManager = new FeatureFlags();
             
@@ -755,6 +765,11 @@ public class ModuleOperators {
             // Restore the caller's hints hash
             hintHash.elements.clear();
             hintHash.elements.putAll(savedHintHash);
+
+            // Restore the caller's source-filter state (filters installed
+            // inside the required file must not leak back to the caller).
+            org.perlonjava.runtime.perlmodule.FilterUtilCall
+                    .restoreFilterState(filterSnapshot);
         }
 
         // Return result based on context

@@ -439,7 +439,13 @@ public class FilterUtilCall extends PerlModuleBase {
         String beginPart = sourceCode.substring(0, pos);
         String remainingPart = sourceCode.substring(pos);
 
-        // Execute the BEGIN part to install any filters
+        // Execute the BEGIN part to install any filters.  The BEGIN
+        // block's filter_add must persist *past* this nested call so
+        // applyFilters() below can apply it to the parent file's
+        // remaining source.  This nested executePerlCode does not go
+        // through ModuleOperators.do_file (which is where filter state
+        // is scoped per compilation unit), so the filter install
+        // naturally survives to the caller — exactly what we want here.
         try {
             CompilerOptions options = new CompilerOptions();
             options.fileName = "<filter-install>";
@@ -466,6 +472,63 @@ public class FilterUtilCall extends PerlModuleBase {
         context.filterStack = new RuntimeList();
         context.sourceLines = null;
         context.currentLine = 0;
+    }
+
+    /**
+     * Snapshot of filter state (stack + "installed during use" flag).
+     * <p>
+     * Source filters are scoped to the file/compilation unit in which
+     * they were installed.  Real Perl tracks this via {@code PL_compiling}
+     * / {@code PL_rsfp_filters}: each {@code require} / {@code do FILE}
+     * starts with its own initially-empty filter chain, and the outer
+     * chain is restored when the nested compilation finishes.
+     * <p>
+     * Use {@link #saveAndResetFilterState()} on entry to a nested
+     * compilation and {@link #restoreFilterState(FilterStateSnapshot)}
+     * on exit (in a {@code finally} block).
+     */
+    public static class FilterStateSnapshot {
+        final RuntimeList filterStack;
+        final boolean installedDuringUse;
+
+        FilterStateSnapshot(RuntimeList filterStack, boolean installedDuringUse) {
+            this.filterStack = filterStack;
+            this.installedDuringUse = installedDuringUse;
+        }
+    }
+
+    /**
+     * Save the current filter state and reset to a clean state.
+     * <p>
+     * Call this before compiling a new file (require/do); pair with
+     * {@link #restoreFilterState(FilterStateSnapshot)}.
+     *
+     * @return a snapshot to pass back to {@link #restoreFilterState(FilterStateSnapshot)}
+     */
+    public static FilterStateSnapshot saveAndResetFilterState() {
+        FilterContext context = filterContext.get();
+        FilterStateSnapshot snapshot =
+                new FilterStateSnapshot(context.filterStack, filterInstalledDuringUse.get());
+        context.filterStack = new RuntimeList();
+        context.sourceLines = null;
+        context.currentLine = 0;
+        filterInstalledDuringUse.set(false);
+        return snapshot;
+    }
+
+    /**
+     * Restore filter state previously captured by
+     * {@link #saveAndResetFilterState()}.
+     *
+     * @param snapshot snapshot returned by {@link #saveAndResetFilterState()}.
+     */
+    public static void restoreFilterState(FilterStateSnapshot snapshot) {
+        if (snapshot == null) return;
+        FilterContext context = filterContext.get();
+        context.filterStack = snapshot.filterStack;
+        context.sourceLines = null;
+        context.currentLine = 0;
+        filterInstalledDuringUse.set(snapshot.installedDuringUse);
     }
 
     /**

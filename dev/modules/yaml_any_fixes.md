@@ -593,9 +593,23 @@ triage residue — that converges on it.
 
 ## Progress Tracking
 
-### Current Status: Bug 2 fixed; Bug 1 still pending
+### Current Status: Bug 1 + Bug 2 fixed; long-tail residue remains
 
 ### Completed Phases
+
+- [x] **Bug 1 — source-filter state save/restore** (2026-04-28)
+  - Added `FilterUtilCall.saveAndReset()` / `restore(FilterState)`
+    so the per-thread filter stack and the `filterInstalledDuringUse`
+    flag are scoped to a compilation unit instead of leaking across
+    nested `require`/`do FILE`/string-`eval`.
+  - Wired into `PerlLanguageProvider.executePerlCode` via an outer
+    `try { … } finally { FilterUtilCall.restore(savedFilterState); }`.
+  - Regression test: `src/test/resources/unit/source_filter_scope.t`
+    (Spiffy `field …` minimal repro + `use Test::Base` smoke test).
+  - Effect on the YAML-1.31 distribution: 27 of the 35 previously
+    blocked test files now pass cleanly.  All 34 tests added to
+    `src/test/resources/module/YAML/t/` are green under
+    `make test-bundled-modules`.
 
 - [x] **Bug 2 — vendor real YAML.pm 1.31** (2026-04-28)
   - Replaced `src/main/perl/lib/YAML.pm` (the 12-line YAML::PP shim)
