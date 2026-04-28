@@ -1784,34 +1784,66 @@ Moose stays at 412/478, refcount unit tests stay green.
    D-W2b cut wallclock by 1.6× and failed files in half. **Still
    1.69× slower than master and 4 failures remain.**
 
-5. **D-W2c** (NEXT — outstanding suite-mode failures): three real
-   regressions need separate investigation. All pass STANDALONE on
-   the feature branch (and in the master harness):
+5. **D-W2c** (PARTIALLY UNDERSTOOD — Apr 2026): three real
+   regressions remain. Investigation findings:
 
-   - **`t/52leaks.t`** — exits 255 with "Target is not a reference
-     at line 518" mid-test. Possibly leak detector triggering
-     differently due to walker gate behaviour.
+   **`t/cdbi/04-lazy.t`** (subtest 11 fail): the test creates a row
+   via `Lazy->create({...});` (discard-return) and then calls
+   `Lazy->retrieve(1)`. The expected behaviour is that the
+   discarded create row dies → cache's weak ref clears →
+   retrieve() inflates a FRESH row with the Essential column
+   group (`this, opop`).
 
-   - **`t/cdbi/04-lazy.t`** — fails subtest 11 ("Gets other
-     essential" via `_attribute_exists('opop')`). Possibly some
-     lazy-load state being cleared by intermediate destroy that
-     should have been deferred.
+   On the feature branch, the cached row stays alive after
+   `Lazy->create({...})` returns: the walker gate `MortalList.flush()`
+   reports the row reachable via "live-lexical" scalars in
+   `MyVarCleanupStack.snapshotLiveVars()`. Tracing shows the
+   path is a scalar with `value == row` and `refCountOwned=false`
+   — i.e. a scalar that aliases the row but doesn't own its
+   refCount. These are most likely temporaries from inside DBIC's
+   `CDBICompat::create()` chain that didn't get unregistered when
+   their declaring sub returned.
 
-   - **`t/cdbi/68-inflate_has_a.t`** — exits 137 (OOM) only in
-     suite mode. Standalone passes in 6s. Heap accumulates from
-     prior tests in the same harness JVM(?).
+   **`t/storage/txn_scope_guard.t`** (subtest 18 fail): identical
+   shape — DESTROY of a TxnScopeGuard supposed to fire when the
+   transaction goes out of scope, but the walker keeps it alive.
 
-   - **`t/storage/txn_scope_guard.t`** — fails subtest 18.
+   **`t/52leaks.t`** (mid-test failure at line 271 / 518): the
+   dedicated DBIC leak detector. Uses `Schema::DESTROY` to chain
+   weak-ref-clearing for source registrations. Walker gate
+   prevents the cascade.
 
-   For each, the immediate next step is to diff the destroy trace
-   on master vs feature branch to see what the gate is changing.
-   Then either narrow the gate or fix the underlying refcount
-   asymmetry.
+   **Unit-test reproducer**: `walker_gate_dbic_pattern.t T5`
+   reproduces this pattern (closure captures schema, schema's
+   weak ref holders detached too eagerly). Currently passes but
+   is flaky depending on prior test state — when it fails, the
+   diagnostic trace shows the same `<live-lexical#N rcO=false>`
+   path as DBIC.
 
-   **Acceptance criteria for D-W2c:** `./jcpan --jobs 1 -t
-   DBIx::Class` produces 0 failed assertions, ≤2 failed files
-   (matching the 2 failed files of master baseline modulo minor
-   environmental differences).
+   **Attempted fixes that didn't work:**
+
+   - `if (!sc.refCountOwned) continue` in MyVarCleanupStack
+     scalar seeding: fixes Lazy but breaks reproducer T1-T5
+     (refCountOwned is unreliable as a "real strong ref" indicator).
+
+   - `if (!base.walkerDeferredOnce) ...` (one-shot defer):
+     breaks Class::MOP bootstrap which requires repeated
+     reprieves on the same metaclass.
+
+   - Disabling ScalarRefRegistry seed loop entirely: doesn't
+     fix Lazy (path goes through MyVarCleanupStack.snapshotLiveVars
+     too) and changes 52leaks failure point but doesn't fix it.
+
+   **Root cause hypothesis**: PerlOnJava's `MyVarCleanupStack`
+   bookkeeping is leaving stale entries — sub-local my-vars
+   whose declaring sub returned are still on the stack. The
+   right fix is in EmitStatement / EmitVariable codegen to
+   guarantee `unregister()` pairs with every `register()`. This
+   is non-trivial: the visitor needs to track which my-vars are
+   in scope and emit appropriate cleanup at every exit point
+   (return, throw, last/next/redo, eval-bridge…).
+
+   **Acceptance criteria for D-W2c:** all 3 failures pass.
 
 6. **D-W2d** (NEXT after D-W2c — perf gap to close): bring the
    remaining 1.69× wallclock gap closer to 1.0×. Likely candidates:
