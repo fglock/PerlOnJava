@@ -174,6 +174,12 @@ package B::CV {
                     if (exists $Sub::Name::{_is_renamed}) {
                         $renamed = Sub::Name::_is_renamed($self->{ref}) ? 1 : 0;
                     }
+                    # Phase D-W2c: PerlOnJava's set_subname comes from
+                    # Sub::Util (not Sub::Name). Also consult
+                    # Sub::Util::_is_renamed for the same flag.
+                    if (!$renamed && exists $Sub::Util::{_is_renamed}) {
+                        $renamed = Sub::Util::_is_renamed($self->{ref}) ? 1 : 0;
+                    }
                     if ($renamed || defined &{"$fqn"}) {
                         $self->{_pkg_name} = $pkg;
                         $self->{_sub_name} = $name;

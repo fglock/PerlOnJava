@@ -31,6 +31,13 @@ public class SubUtil extends PerlModuleBase {
             subUtil.registerMethod("set_prototype", null);  // No prototype to allow @_ passing
             subUtil.registerMethod("subname", "$");
             subUtil.registerMethod("set_subname", null);  // No prototype to allow @_ passing
+            // Phase D-W2c: B.pm consults `Sub::Name::_is_renamed` to know
+            // whether to honor a Sub::Util::set_subname rename in
+            // `B::CV->GV->NAME`. Expose `Sub::Util::_is_renamed` (and
+            // alias `Sub::Name::_is_renamed`) so set_subname is reflected
+            // by Class::MOP::get_code_info even if the renamed sub was
+            // never installed into the target package's stash.
+            subUtil.registerMethod("_is_renamed", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Sub::Util method: " + e.getMessage());
         }
@@ -146,5 +153,20 @@ public class SubUtil extends PerlModuleBase {
         // honors the assigned name even when no matching stash entry exists.
         code.explicitlyRenamed = true;
         return codeRef.getList();
+    }
+
+    /**
+     * Phase D-W2c: returns true if {@code set_subname} has been called on
+     * the given coderef. Used by {@code B::CV->_introspect} to decide
+     * whether to honor the renamed name.
+     */
+    public static RuntimeList _is_renamed(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for _is_renamed()");
+        }
+        RuntimeScalar codeRef = args.get(0);
+        if (codeRef.type != CODE) return new RuntimeScalar(0).getList();
+        RuntimeCode code = (RuntimeCode) codeRef.value;
+        return new RuntimeScalar(code.explicitlyRenamed ? 1 : 0).getList();
     }
 }
