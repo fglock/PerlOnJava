@@ -129,6 +129,27 @@ public class ReachabilityWalker {
                 }
                 visitScalar(sc, todo);
             }
+
+            // Phase D-W1 (walker_gate_dbic_minimal.t): seed from live
+            // my-vars themselves (RuntimeArray / RuntimeHash that the
+            // user declared with `my @arr` / `my %hash`). Without this,
+            // the auto-sweep's reachability check misses top-level
+            // arrays/hashes — their elements end up flagged unreachable
+            // and DESTROY fires on still-held blessed objects.
+            //
+            // Mirrors the seeding already in `isReachableFromRoots()`.
+            // Order matters: RuntimeScalar IS-A RuntimeBase, so the
+            // RuntimeScalar branch must come first to walk through its
+            // reference bit. Otherwise the BFS only steps into hashes
+            // and arrays, missing the scalar's referent.
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                if (liveVar instanceof RuntimeScalar sc) {
+                    if (WeakRefRegistry.isweak(sc)) continue;
+                    visitScalar(sc, todo);
+                } else if (liveVar instanceof RuntimeBase rb) {
+                    addReachable(rb, todo);
+                }
+            }
         }
 
         bfs(todo, walkCodeCaptures);

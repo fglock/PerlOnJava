@@ -1718,10 +1718,58 @@ Moose stays at 412/478, refcount unit tests stay green.
 1. **D-W0** (DONE): reliable reproducer at
    `dev/sandbox/walker_gate_dbic_minimal.t` consistently fails.
 
-2. **D-W1** (NEXT): apply the two fixes above to
-   `ReachabilityWalker.walk()`. Make D-W0's reproducer pass.
+2. **D-W1** (DONE — Apr 2026): added two seeding fixes to
+   `ReachabilityWalker.walk()`:
+   - Seed from `MyVarCleanupStack.snapshotLiveVars()` so top-level
+     `my @arr` / `my %hash` lexicals are visible to the auto-sweep.
+   - Order RuntimeScalar before RuntimeBase in the seed handler so
+     scalar reference bits get followed.
 
-3. **D-W2**: re-run full DBIC + Moose suites:
+   Result: `dev/sandbox/walker_gate_dbic_minimal.t` passes. The
+   per-test failing reproducer `t/prefetch/incomplete.t`
+   passes (20/20). All refcount unit tests stay green. Moose
+   suite stays at **412/478**.
+
+3. **D-W2** (NEXT — performance regression): the broader walker
+   coverage exposed a quadratic perf issue. With the gate now
+   firing more often (because more weak-ref'd objects hit
+   refCount=0), and each gate call iterating into stash hashes
+   (`RuntimeStash` whose `elements` is a `HashSpecialVariable`),
+   the walker times out on `t/sqlmaker/dbihacks_internals.t`
+   (a torture test with ~11K lines of test code per file).
+
+   **Stack trace from `jstack`:**
+   ```
+   at HashSpecialVariable.entrySet(HashSpecialVariable.java:122)
+       — eagerly copies all global keys into a Set<String>
+   at AbstractMap$ValueIterator.<init>(...)
+   at AbstractMap$2.iterator(...)
+   at ReachabilityWalker.isReachableFromRoots(...:426)
+       — iterates h.elements.values() of a RuntimeStash
+   at MortalList.flush(...:560)
+   at RuntimeCode.apply(...:2938)
+   at anon0.apply(t/sqlmaker/dbihacks_internals.t:11089)
+   ```
+
+   So every gate call walks ALL stash entries (RuntimeStash's
+   `elements` is the `HashSpecialVariable` view that lazily lists
+   all globals in the package). For a script that has loaded
+   hundreds of packages, each gate call is O(stash-entries × packages).
+
+   **Fix:** skip iterating into `RuntimeStash` instances during
+   the BFS in `isReachableFromRoots()` and `walk()`. Stash entries
+   themselves (the RuntimeScalar / RuntimeArray / RuntimeHash held
+   in package globals) are already directly seeded via
+   `GlobalVariable.globalCodeRefs / globalVariables / globalArrays /
+   globalHashes` — the BFS doesn't need to re-discover them via
+   stash iteration. Skipping is correctness-preserving and saves
+   the entrySet copy.
+
+   Acceptance criteria: D-W0 reproducer continues to pass,
+   `t/sqlmaker/dbihacks_internals.t` finishes within timeout, full
+   DBIC suite drops to ≤2 failed files / 0 failed asserts.
+
+4. **D-W3**: re-run full DBIC + Moose suites with fix:
    ```bash
    ./jcpan --jobs 1 -t DBIx::Class       # ≤2 failed files, 0 failed asserts
    ./jcpan --jobs 1 -t Moose              # ≥412/478
@@ -1732,7 +1780,7 @@ Moose stays at 412/478, refcount unit tests stay green.
    If green, move D-W0's reproducer from `dev/sandbox/` to
    `src/test/resources/unit/refcount/walker_gate_dbic_minimal.t`.
 
-4. **D-W3**: continue Phase 4-6 shim widening to lift Moose from
+5. **D-W4**: continue Phase 4-6 shim widening to lift Moose from
    412 → 477/478 fully green files.
 
 ### Hard constraint moving forward
