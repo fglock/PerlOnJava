@@ -75,6 +75,44 @@ public class DestroyDispatch {
      * @param className the Perl class name
      * @return true if DESTROY (or AUTOLOAD) is defined in the class hierarchy
      */
+    /**
+     * Phase D-W2c: walker-gated destroy is restricted to known-needed
+     * class hierarchies (Class::MOP and Moose / Moo). The gate is
+     * essential for those modules' bootstrap (their metaclasses and
+     * %METAS rely on transient refCount drift being absorbed by the
+     * walker), but it actively breaks DBIC's lazy-cache pattern and
+     * other CDBI / DBIx::Class flows where rows are MEANT to be
+     * destroyed at refCount=0 even when stack-local my-vars
+     * transiently reference them.
+     *
+     * The gate applies if and only if the class is in the
+     * Class::MOP / Moose family. The check is fast: a per-blessId
+     * BitSet lookup after the first miss-and-resolve.
+     *
+     * Patterns outside this family (e.g. user weak-ref cycles
+     * documented in dev/sandbox/walker_gate_dbic_minimal.t) do NOT
+     * get the gate; they were already broken on master and need a
+     * separate fix path.
+     */
+    private static final java.util.BitSet walkerGateClasses = new java.util.BitSet();
+    private static final java.util.BitSet walkerGateChecked = new java.util.BitSet();
+
+    public static boolean classNeedsWalkerGate(int blessId) {
+        int idx = Math.abs(blessId);
+        if (walkerGateChecked.get(idx)) return walkerGateClasses.get(idx);
+        String cn = NameNormalizer.getBlessStr(blessId);
+        boolean needs = cn != null && (
+                cn.startsWith("Class::MOP")
+             || cn.startsWith("Moose::")
+             || cn.equals("Moose")
+             || cn.startsWith("Moo::")
+             || cn.equals("Moo")
+        );
+        walkerGateChecked.set(idx);
+        if (needs) walkerGateClasses.set(idx);
+        return needs;
+    }
+
     public static boolean classHasDestroy(int blessId, String className) {
         int idx = Math.abs(blessId);
         if (destroyClasses.get(idx)) return true;

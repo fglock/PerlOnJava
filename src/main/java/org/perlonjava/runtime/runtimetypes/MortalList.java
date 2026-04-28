@@ -557,6 +557,7 @@ public class MortalList {
                         // so the clear is no longer needed and broke #76716.
                     } else if (base.blessId != 0
                             && WeakRefRegistry.hasWeakRefsTo(base)
+                            && DestroyDispatch.classNeedsWalkerGate(base.blessId)
                             && ReachabilityWalker.isReachableFromRoots(base)) {
                         // Phase D / Step W3-Path 2: blessed object with
                         // outstanding weak refs whose cooperative refCount

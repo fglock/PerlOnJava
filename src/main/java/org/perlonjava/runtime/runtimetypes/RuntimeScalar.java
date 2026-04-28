@@ -1197,6 +1197,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && DestroyDispatch.classNeedsWalkerGate(oldBase.blessId)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {
                     // Phase D / Step W3-Path 2: mirror of the gate in
                     // MortalList.flush(). Blessed object with outstanding
