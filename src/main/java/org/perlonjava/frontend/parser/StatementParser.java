@@ -474,17 +474,59 @@ public class StatementParser {
         BlockNode whenBlock = ParseBlock.parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Create smartmatch condition: $_ ~~ whenCondition
-        Node dollarUnderscore = new OperatorNode("$",
-                new IdentifierNode("_", index),
-                index);
-        Node smartmatchCondition = new BinaryOperatorNode("~~",
-                dollarUnderscore,
-                whenCondition,
-                index);
+        // After a successful when match, Perl implicitly breaks out of the
+        // enclosing given block. Append `last;` to the when block so that
+        // execution leaves the surrounding bare-block (which acts as a
+        // single-iteration loop) once the matching block has run.
+        whenBlock.elements.add(new OperatorNode("last", new ListNode(index), index));
+
+        // Determine whether to smart-match against $_ or use the value directly.
+        // Per perlsyn, when(EXPR) skips the implicit `$_ ~~` and uses EXPR
+        // as a boolean for these exceptional forms:
+        //   - comparison operators (==, !=, <, >, <=, >=, <=>, eq, ne, lt, gt, le, ge, cmp)
+        //   - boolean combinators (&&, ||, //, and, or, xor)
+        //   - regex bind/no-bind (=~, !~) or a bare m// at top level
+        //   - negation (!EXPR, not EXPR)
+        //   - defined / exists
+        Node ifCondition;
+        if (whenIsBoolean(whenCondition)) {
+            ifCondition = whenCondition;
+        } else {
+            // Create smartmatch condition: $_ ~~ whenCondition
+            Node dollarUnderscore = new OperatorNode("$",
+                    new IdentifierNode("_", index),
+                    index);
+            ifCondition = new BinaryOperatorNode("~~",
+                    dollarUnderscore,
+                    whenCondition,
+                    index);
+        }
 
         // Return as an if statement
-        return new IfNode("if", smartmatchCondition, whenBlock, null, index);
+        return new IfNode("if", ifCondition, whenBlock, null, index);
+    }
+
+    /**
+     * Returns true when the given when-expression should be treated as a
+     * plain boolean test rather than a smart-match against $_.
+     */
+    private static boolean whenIsBoolean(Node node) {
+        if (node instanceof BinaryOperatorNode b) {
+            return switch (b.operator) {
+                case "==", "!=", "<", ">", "<=", ">=", "<=>",
+                     "eq", "ne", "lt", "gt", "le", "ge", "cmp",
+                     "&&", "||", "//", "and", "or", "xor",
+                     "=~", "!~" -> true;
+                default -> false;
+            };
+        }
+        if (node instanceof OperatorNode o) {
+            return switch (o.operator) {
+                case "!", "not", "defined", "exists" -> true;
+                default -> false;
+            };
+        }
+        return false;
     }
 
     /**
@@ -560,6 +602,10 @@ public class StatementParser {
         statements.addAll(blockContent.elements);
 
         BlockNode givenBlock = new BlockNode(statements, index, parser);
+        // Mark as a loop block so that the implicit `last` emitted by each
+        // when-clause breaks out of this given-block instead of escaping
+        // to an outer loop or the program top level.
+        givenBlock.isLoop = true;
         givenBlock.setAnnotation("postBlockHintHashId", postBlockHintHashId);
         return givenBlock;
     }
