@@ -2160,31 +2160,47 @@ Commits on `fix/walker-gate-no-class-heuristic`:
 Follow-ups (each non-class-name):
 
 1. **`t/cdbi/04-lazy.t` test 11 — `_attribute_exists('opop')`.**
-   Class::DBI's "Essential" column group implicitly includes the
-   Primary key columns; the SELECT issued by `retrieve()` should
-   include both. With our gate active, the SELECT appears to drop
-   `opop`. Root cause: probably a stale cached column-group set
-   that our gate is keeping alive. Investigate
-   `Class::DBI::ColumnGrouper` lifecycle.
+   The SELECT issued by `Lazy->retrieve(1)` correctly fetches both
+   `this` and `opop` (verified via `storage->debug(1)`), but only
+   `this` ends up in `$obj->{_column_data}`. On master with the
+   heuristic, both end up in `_column_data`. The deletion happens
+   somewhere inside DBIC's `_construct_results` row-build path,
+   suggesting a transient blessed object whose DESTROY is firing
+   prematurely is taking the column data with it. Needs deep
+   instrumentation of DBIC's row construction.
 
 2. **`t/storage/txn_scope_guard.t` test 18 — "Preventing *MULTIPLE*
-   DESTROY()" warning not emitted.** The walker is deferring
-   DESTROY long enough that the second DESTROY doesn't fire while
-   the first is still running. Investigate whether
-   `DBIx::Class::Storage::TxnScopeGuard` should opt out (it's
-   genuinely supposed to die at refCount=0 with no defer).
+   DESTROY()" warning not emitted.** This is an inherent semantic
+   difference: the test relies on Perl 5's exact refcount timing,
+   where a `Devel::StackTrace`-style `@DB::args` capture creates a
+   second strong ref AFTER the first DESTROY has fired. With the
+   walker correctly seeing the captured ref via my-var seeding,
+   only one DESTROY fires (which is arguably more correct).
+   May not be fixable without precise refcount semantics.
 
-3. **`t/52leaks.t` exits 255 (bailed).** The leak tracer itself
-   relies on objects being destroyed at the expected point.
-   Confirm whether the test was passing on PR #572 baseline.
+3. **`t/52leaks.t` bails with "Target is not a reference" at line
+   518.** The test populates `@circreffed` with self-referential
+   resultsets that Perl 5 cannot collect (intentional leak), then
+   weakens them and asserts they exist. Our walker correctly
+   detects the cycle and destroys them, so `$r` is undef when the
+   test tries to register it in the weak registry. This is again
+   inherent to PerlOnJava having proper cycle collection where
+   Perl 5 leaks. Fixing it would mean disabling cycle detection
+   for these objects, which would be a regression for everyone
+   else.
 
 4. **`util_std_type_constraints.t` "no plan" tail.** Universal
-   walker reaches test 3770 (vs ~test 4 with `globalOnly`) but
-   the test still bails at the end with "Tests were run but no
-   plan was declared and done_testing() was not seen". The test
-   ran to the end of the data tables. Likely a separate issue
-   unrelated to the gate (e.g., the test's cleanup phase trips
-   on something).
+   walker reaches all 3770 tests (vs ~test 4 with `globalOnly`),
+   but the test bails at done_testing. Likely a separate issue
+   unrelated to the gate.
+
+5. **Performance.** Universal walker's wallclock is *better* than
+   the heuristic on both suites:
+   - Moose: 1506s (was 1748s with heuristic; ~14% faster)
+   - DBIC: 1650s (was 1748s; ~6% faster)
+   The walker BFS terminates early when the target is found, and
+   the cheap `WeakRefRegistry.hasWeakRefsTo` gate keeps it off the
+   common path entirely.
 
 ## Related Documents
 
