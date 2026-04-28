@@ -87,12 +87,30 @@ public class MyVarCleanupStack {
     public static void register(Object var) {
         stack.add(var);
         // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
-        // .isReachableFromRoots. Always populate it: if a `my` is declared
-        // BEFORE any weaken() has happened in the program, but a weak ref
-        // is later created (e.g. inside the value's class), we still need
-        // the my-var to count as a root. Cost: one HashMap.merge per `my`.
-        if (var != null) {
+        // .isReachableFromRoots. We populate it lazily — only after the
+        // first weaken() call (which sets WeakRefRegistry.weakRefsExist).
+        // Tests that never weaken pay zero per-`my` cost; tests that do
+        // weaken trigger a one-time backfill via
+        // {@link #snapshotStackToLiveCounts()} from WeakRefRegistry,
+        // which seeds liveCounts with all already-registered my-vars.
+        if (var != null && WeakRefRegistry.weakRefsExist) {
             liveCounts.merge(var, 1, Integer::sum);
+        }
+    }
+
+    /**
+     * Phase D-W2b (perf): one-time backfill of {@link #liveCounts} with
+     * all my-vars currently on {@link #stack}. Called by
+     * {@link WeakRefRegistry#registerWeakRef} the first time
+     * {@code weakRefsExist} flips to true. Without this, my-vars
+     * declared before the first {@code weaken()} would never be
+     * inserted into {@code liveCounts} and the walker would miss them.
+     */
+    public static synchronized void snapshotStackToLiveCounts() {
+        for (Object var : stack) {
+            if (var != null) {
+                liveCounts.merge(var, 1, Integer::sum);
+            }
         }
     }
 
