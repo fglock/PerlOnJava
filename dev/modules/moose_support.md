@@ -1645,120 +1645,95 @@ fix-level work:
 
 ### Next-step plan: make the walker's reachability oracle tight
 
-The single-most-impactful debugging step is to instrument the gate
-fire for `DBICTest::Schema` and answer hypothesis A / B / C above
-with data, not theory. Concretely:
+#### Reproducer (Apr 2026, ~UPDATED~)
 
-1. **D-W0** (PREREQUISITE — write reproducer first). The wide-net
-   unit tests we now ship at
-   `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`
-   model the documented DBIC pattern (script-level `my $schema`,
-   weak back-refs from sources, closure-wrapped method chains,
-   nested classes) and **all 21 currently pass**. So the failure
-   mode is **NOT** any of:
-     - simple weak ref to schema
-     - closure captures of schema
-     - deep call chains
-     - DBIC-style source registry
+**A reliable failing reproducer now lives at**
+`dev/sandbox/walker_gate_dbic_minimal.t` (kept in sandbox until it
+passes, per project convention; move it to
+`src/test/resources/unit/refcount/` after the fix).
 
-   The unit test must be expanded to ACTUALLY reproduce what real
-   DBIC does. Steps:
+```perl
+my @objs;
+my @wrappers;
+for (1..5) {
+    my $o = T::Obj->new;
+    my $w = T::Wrapper->new($o);     # weakens $w->{obj}
+    $o->{wrapper} = $w;              # cycle: o -> w (strong), w -> o (weak)
+    push @objs, $o;
+    push @wrappers, $w;
+}
+# many ref operations, then:
+# T::Obj id=1 has been DESTROY'd even though @objs[0] still points to it.
+# wrapper[0]->{obj} cleared. -> 3/4 of the test's assertions fail.
+```
 
-   a. With `PJ_GATE_TRACE=1` and the existing instrumentation in
-      `ReachabilityWalker.isReachableFromRoots`, capture the gate
-      fire for `DBICTest::Schema` while running the failing test:
-      ```bash
-      cd /Users/fglock/.cpan/build/DBIx-Class-0.082844-9
-      PJ_GATE_TRACE=1 /Users/fglock/projects/PerlOnJava2/jperl \
-          -Iblib/lib -Ilib -It/lib t/prefetch/incomplete.t 2>&1 \
-          | grep "GATE-FALSE: DBICTest::Schema"
-      ```
-      **Observed (Apr 2026):**
-      ```
-      GATE-FALSE: DBICTest::Schema visits=7193 liveVars=65
-                  directHit=0 scalarRef=0 hashHit=0
-      ```
-      The walker visited 7193 nodes from 65 live my-vars and
-      ~7000 ScalarRefRegistry entries and ~270 globalHashes. *Zero*
-      direct hits on the schema. This rules out hypotheses A and C
-      (the live my-vars genuinely don't contain the schema in any
-      slot we can see).
+The test deliberately AVOIDS `use Test::More` — loading it creates
+enough additional globals/lexicals that the walker's reachable set
+becomes large enough to transitively cover `@objs`, masking the bug.
+The bare-`print`-TAP version reliably fails on every run.
 
-   b. The schema must therefore be held by either:
-      i. A path the walker doesn't follow (closure captures —
-         currently disabled in `isReachableFromRoots`).
-      ii. A global variable / hash / array that *contains*
-          something that *references* the schema, but the BFS
-          terminates before reaching it (>50K visit cap, or some
-          intermediate slot we don't follow — e.g. RuntimeCode
-          captures, IO handles, tied data, RuntimeBaseProxy).
-      iii. The schema's strong reference is in fact gone (the
-          `my $schema = …` lexical's storage scalar still exists
-          but its value field was overwritten by some intermediate
-          assignment **before** the gate fires).
+#### The actual root cause (data, not theory)
 
-   c. Build a focused reproducer in
-      `src/test/resources/unit/refcount/walker_gate_dbic_pattern.t`:
-      - Test 6: closure that holds the schema as its only strong
-        ref (mimicking `lives_ok(sub { ... }, ...)` with `$schema`
-        captured but no outer my-var pointing at it).
-      - Test 7: schema held only via a chained anonymous-hash
-        global (e.g. `$DBICTest::SCHEMAS{name} = $schema`).
-      - Test 8: blessed object that registers itself in a class
-        method (mimics how DBIC's `Schema->connect` may store the
-        schema in `__PACKAGE__::__INSTANCE`).
-      - Test 9: `bless` swap that orphans the original blessed
-        identity while keeping the same RuntimeHash.
-      - Each test must FAIL with the current walker; one of them
-        must reproduce the actual DBIC `directHit=0` situation.
+Stack trace from `PJ_DESTROY_TRACE=1` shows the destroy path:
 
-   d. Once a test fails identically, the fix below has a binding
-      regression target.
+```
+at DestroyDispatch.callDestroy(...)
+at ReachabilityWalker.sweepWeakRefs(...)
+at MortalList.maybeAutoSweep(...)
+at MortalList.flush(...)
+```
 
-2. **D-W1** Re-add the `_gateTrace` env-gated trace (using
-   `static final boolean` to avoid `System.getenv` on the hot
-   path). Print: target identity hash, classname, refCount before
-   decrement, list of (live-var class, identity, REFERENCE_BIT,
-   `value == target?`) pairs from MyVarCleanupStack, and the
-   weak-ref-source list from `WeakRefRegistry.referentToWeakRefs`.
-   Run on the *unit* reproducer from D-W0(c) — much faster
-   iteration than the full DBIC test. **30 minutes of work, no
-   risk to landing.**
+So the destroy fires from `sweepWeakRefs`, **not** from the
+walker-gated `MortalList.flush()` decrement path. The auto-sweep
+calls `ReachabilityWalker.walk()` to compute a "live" set; anything
+not in that set has its weak refs cleared and DESTROY fired.
 
-3. **D-W2** Based on D-W1 output, classify which hypothesis (A, B
-   or C above, or some new one D-W0(c) surfaces) is the actual
-   cause, and tackle that head-on:
+The walker's `walk()` method (the multi-phase one used by the
+sweep) seeds from:
 
-   - If **closure-captured-only schema** (the most likely after
-     D-W0(b)(i)): re-enable closure-capture walking in
-     `isReachableFromRoots` but ONLY from globally-installed
-     RuntimeCode (so DBIC's leak detector remains correct for
-     anonymous closures whose declaration scope has exited).
-     This gates the closure walk by `code.isInGlobalStash()`
-     (a new flag on RuntimeCode set when assigned to a stash
-     entry). Re-validates: 412/478 Moose green stays, DBIC
-     baseline restored, refcount unit tests stay green.
+- `GlobalVariable.globalCodeRefs` (with closure-capture walking)
+- `GlobalVariable.globalVariables / globalArrays / globalHashes`
+- `DestroyDispatch.snapshotRescuedForWalk()`
+- `ScalarRefRegistry.snapshot()` filtered by
+  `MyVarCleanupStack.isLive(sc) || sc.refCountOwned`
 
-   - If **deep transitive global reachability** (D-W0(b)(ii)):
-     raise the BFS visit cap (the 50K is currently hit in some
-     pathological cases) OR adjust seeding to cover the missing
-     edge-type (RuntimeCode captures, RuntimeBaseProxy, IO).
+It does **NOT** seed from `MyVarCleanupStack.snapshotLiveVars()`
+directly. That seeding was added only to the per-object query
+`isReachableFromRoots()` — the same fix needs to go into `walk()`.
 
-   - If **Schema lexical genuinely lost its value mid-execution**
-     (D-W0(b)(iii)): trace the assignment site that overwrote
-     `$schema`. Likely setLargeRefCounted's old-value-decrement
-     path firing on a blessed-with-DESTROY in the rvalue chain.
-     Fix at the bytecode emit level.
+So the fix is:
+1. Make `walk()` also seed from
+   `MyVarCleanupStack.snapshotLiveVars()` (RuntimeArray /
+   RuntimeHash / RuntimeScalar live my-vars), mirroring the
+   `isReachableFromRoots()` change.
+2. Apply the same RuntimeScalar-before-RuntimeBase ordering inside
+   the walk's seed-handler loop.
 
-4. **D-W3** Once D-W2's fix lands, re-run the full DBIC suite
-   (must drop `failing-assertions` to 0 and `failing-files` to ≤2,
-   matching master baseline) AND re-run Moose's own test suite
-   (must stay ≥ 412 / 478 fully green; ideally improve, since
-   walker tightening should help upstream tests that rely on
-   accurate refcount semantics for cycle-break edges).
+This is **D-W2**'s fix path. Estimated impact: D-W0(c) reproducer
+passes, DBIC drops from 23 failing assertions back to ≤2,
+Moose stays at 412/478, refcount unit tests stay green.
 
-5. **D-W4** Only then continue with shim widening / Phase 4-6
-   work to move from 412 → 477 / 478 Moose green files.
+#### Phases
+
+1. **D-W0** (DONE): reliable reproducer at
+   `dev/sandbox/walker_gate_dbic_minimal.t` consistently fails.
+
+2. **D-W1** (NEXT): apply the two fixes above to
+   `ReachabilityWalker.walk()`. Make D-W0's reproducer pass.
+
+3. **D-W2**: re-run full DBIC + Moose suites:
+   ```bash
+   ./jcpan --jobs 1 -t DBIx::Class       # ≤2 failed files, 0 failed asserts
+   ./jcpan --jobs 1 -t Moose              # ≥412/478
+   make                                    # full unit suite
+   ./jperl src/test/resources/unit/refcount/*.t
+   ./jperl src/test/resources/unit/weaken_via_sub.t
+   ```
+   If green, move D-W0's reproducer from `dev/sandbox/` to
+   `src/test/resources/unit/refcount/walker_gate_dbic_minimal.t`.
+
+4. **D-W3**: continue Phase 4-6 shim widening to lift Moose from
+   412 → 477/478 fully green files.
 
 ### Hard constraint moving forward
 
