@@ -1067,6 +1067,23 @@ public class BytecodeCompiler implements Visitor {
         // Visit each statement in the block
         int numStatements = node.elements.size();
 
+        // Bare/labeled blocks marked as `isLoop=true` (synthesized by the parser
+        // for things like `given { ... }`, `eval { ... }`, etc.) act as a single-
+        // iteration loop target so that `last/next/redo` inside the block stay
+        // inside the block instead of escaping to the enclosing real loop.
+        // The JVM backend handles this via EmitBlock; the interpreter backend
+        // must do the same here.
+        LoopInfo blockLoopInfo = null;
+        int blockLoopStartPc = -1;
+        if (node.isLoop) {
+            blockLoopStartPc = bytecode.size();
+            // For a bare block, `node.labelName` is null and the block is a
+            // valid target for unlabeled last/next/redo (matches JVM
+            // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
+            blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, true);
+            loopStack.push(blockLoopInfo);
+        }
+
         int lastMeaningfulIndex = -1;
         for (int i = numStatements - 1; i >= 0; i--) {
             Node elem = node.elements.get(i);
@@ -1168,6 +1185,23 @@ public class BytecodeCompiler implements Visitor {
             // Last statement didn't produce a result (e.g., for loop), initialize to undef
             emit(Opcodes.LOAD_UNDEF);
             emitReg(outerResultReg);
+        }
+
+        // Patch last/next/redo PCs for blocks marked isLoop=true.
+        // last/next jump to here (end of body, before exit-scope cleanup so locals are restored).
+        // redo jumps back to the start of the body.
+        if (blockLoopInfo != null) {
+            int blockEndPc = bytecode.size();
+            for (int pc : blockLoopInfo.breakPcs) {
+                patchJump(pc, blockEndPc);
+            }
+            for (int pc : blockLoopInfo.nextPcs) {
+                patchJump(pc, blockEndPc);
+            }
+            for (int pc : blockLoopInfo.redoPcs) {
+                patchJump(pc, blockLoopStartPc);
+            }
+            loopStack.pop();
         }
 
         if (regexSaveReg >= 0) {
