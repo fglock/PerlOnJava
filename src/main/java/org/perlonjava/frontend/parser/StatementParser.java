@@ -759,6 +759,7 @@ public class StatementParser {
         // (idiomatic in Moose/Object.pm) emit spurious "our variable
         // redeclared" warnings.
         boolean hasParentheses = TokenUtils.peek(parser).text.equals("(");
+        int listStartIndex = parser.tokenIndex;
         int useArgScope = parser.ctx.symbolTable.enterScope();
         Node list;
         try {
@@ -766,6 +767,17 @@ public class StatementParser {
         } finally {
             parser.ctx.symbolTable.exitScope(useArgScope);
         }
+        // Detect a syntactically empty list expression after the module name
+        // (e.g. `use Foo qw()` — `use Foo ()` is already covered by hasParentheses).
+        // Perl treats this as "skip import", distinct from `use Foo` (no list at all)
+        // which calls import() with no arguments and triggers default exports.
+        // We require both: (a) the parser actually consumed tokens for a list
+        // expression (so this isn't `use Foo;`) and (b) the resulting AST is
+        // statically empty (so this isn't `use Foo @list` where @list happens
+        // to be empty at runtime — real Perl still calls import() in that case).
+        boolean hasEmptyLiteralList = !hasParentheses
+                && parser.tokenIndex > listStartIndex
+                && isStaticallyEmptyList(list);
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Use statement list hasParentheses:" + hasParentheses + " ast:" + list);
 
         StatementResolver.parseStatementTerminator(parser);
