@@ -159,8 +159,20 @@ package B::CV {
             return if $@;  # Sub::Util not available, use defaults
             my $fqn = Sub::Util::subname($self->{ref});
             if (defined $fqn && $fqn ne '__ANON__') {
-                # Split "Package::Name::subname" into package and name
-                if ($fqn =~ /^(.+)::([^:]+)$/) {
+                # Phase D-W2c: PerlOnJava's set_subname comes from
+                # Sub::Util (not Sub::Name). Also consult
+                # Sub::Util::_is_renamed for the same flag.
+                no strict 'refs';
+                my $renamed = 0;
+                if (exists $Sub::Name::{_is_renamed}) {
+                    $renamed = Sub::Name::_is_renamed($self->{ref}) ? 1 : 0;
+                }
+                if (!$renamed && exists $Sub::Util::{_is_renamed}) {
+                    $renamed = Sub::Util::_is_renamed($self->{ref}) ? 1 : 0;
+                }
+                # Split "Package::Name::subname" into package and name.
+                # Allow empty subname (set_subname("") returns "").
+                if ($fqn =~ /^(.+)::([^:]*)$/) {
                     my ($pkg, $name) = ($1, $2);
                     # Verify the sub still exists in the stash. Stubs whose
                     # stash entry has been deleted/cleared/undefined should be
@@ -169,26 +181,20 @@ package B::CV {
                     # (or Sub::Util::set_subname) carry a private flag; in
                     # real Perl their CvGV points to a free-floating GV with
                     # the assigned name, and NAME should always reflect that.
-                    no strict 'refs';
-                    my $renamed = 0;
-                    if (exists $Sub::Name::{_is_renamed}) {
-                        $renamed = Sub::Name::_is_renamed($self->{ref}) ? 1 : 0;
-                    }
-                    # Phase D-W2c: PerlOnJava's set_subname comes from
-                    # Sub::Util (not Sub::Name). Also consult
-                    # Sub::Util::_is_renamed for the same flag.
-                    if (!$renamed && exists $Sub::Util::{_is_renamed}) {
-                        $renamed = Sub::Util::_is_renamed($self->{ref}) ? 1 : 0;
-                    }
                     if ($renamed || defined &{"$fqn"}) {
                         $self->{_pkg_name} = $pkg;
                         $self->{_sub_name} = $name;
-                        $self->{_is_anon}  = 0;
+                        $self->{_is_anon}  = ($name eq '__ANON__') ? 1 : 0;
                     } else {
                         # Stash entry gone — extract package for STASH but
                         # keep NAME as __ANON__ and CVf_ANON set
                         $self->{_pkg_name} = $pkg;
                     }
+                } elsif ($renamed) {
+                    # Bare rename like set_subname("foo", $code) — empty
+                    # package, set name explicitly.
+                    $self->{_sub_name} = $fqn;
+                    $self->{_is_anon}  = 0;
                 }
             }
         }

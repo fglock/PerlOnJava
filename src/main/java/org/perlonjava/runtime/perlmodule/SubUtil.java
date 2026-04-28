@@ -109,8 +109,17 @@ public class SubUtil extends PerlModuleBase {
             return new RuntimeScalar().getList(); // undef for non-CODE
         }
         RuntimeCode code = (RuntimeCode) codeRef.value;
-        String pkg = code.packageName;
         String sub = code.subName;
+        boolean renamed = code.explicitlyRenamed;
+        String pkg = code.packageName;
+        if (renamed) {
+            // Honor explicit rename; sub may be empty string.
+            if (sub == null) sub = "";
+            if (pkg != null && !pkg.isEmpty()) {
+                return new RuntimeScalar(pkg + "::" + sub).getList();
+            }
+            return new RuntimeScalar(sub).getList();
+        }
         if (sub == null || sub.isEmpty()) {
             // Anonymous sub: real Perl returns "Package::__ANON__" where Package
             // is the compile-time package (CvSTASH).
