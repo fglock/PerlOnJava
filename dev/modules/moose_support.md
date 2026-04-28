@@ -2118,6 +2118,7 @@ base, with the only difference being the gate condition at
 | Class-name heuristic (PR #572 baseline) | **0 / 0** ✅ | 82 / 137 |
 | No gate (delete the whole clause) | 7 / 2 ❌ | 77 / 134 |
 | `isReachableFromRoots(target, globalOnly=true)` | 3 / 1 ❌ | 63 / 691 (one test alone has 556) |
+| **Universal walker** (default `isReachableFromRoots`) | 4 / 2 | **61 / 133** ✅ |
 
 Notes:
 
@@ -2125,47 +2126,65 @@ Notes:
   300s timeout — gate-defer-loop accumulates objects until the test
   hangs, plus 2 real assertion failures in `cdbi/04-lazy.t` and
   `txn_scope_guard.t`).
-- **`globalOnly=true`**: drops two of the four DBIC SIGKILLs and the
-  `04-lazy` failure, but `txn_scope_guard.t` still fails (the
-  test asserts on a "Preventing *MULTIPLE* DESTROY()" warning
-  message that doesn't fire when the walker defers destroy);
-  Moose has one major regression in `t/type_constraints/util_std_type_constraints.t`
-  (3770 tests, 556 fail) — root cause not yet investigated.
+- **`globalOnly=true`** (skip my-var seeding): drops two of the
+  four DBIC SIGKILLs and the `04-lazy` failure, but
+  `txn_scope_guard.t` still fails. Moose has a major regression in
+  `t/type_constraints/util_std_type_constraints.t` (3770 tests, 556
+  fail) — anonymous metaclasses are held weakly in `our %METAS` and
+  *strongly* only via my-vars, so dropping my-var seeding makes the
+  walker think they're unreachable and DESTROY fires.
+- **Universal walker** (default seeding includes
+  `MyVarCleanupStack` and `ScalarRefRegistry`): strictly better
+  than the class-name heuristic for Moose (-21 failing files,
+  -4 asserts). Four DBIC regressions remain — none are timeouts;
+  all are real correctness issues.
 
-Picked: **`globalOnly=true`** (commit on `fix/walker-gate-no-class-heuristic`).
+Picked: **Universal walker** (commit `2f5490771` on `fix/walker-gate-no-class-heuristic`).
 
 Rationale:
-- It is the simplest principled rule that compiles down to "Moose's
-  `our %METAS` reaches metaclasses; DBIC's weak-ref `live_object_index`
-  does not".
-- It removes the class-name list (the user's hard requirement).
-- The remaining DBIC and Moose regressions are smaller, narrower, and
-  point to specific bugs rather than a fundamental scheme mismatch.
+- Removes the class-name list (the user's hard requirement).
+- Strictly improves Moose pass rate.
+- Simple, principled rule: "if any *live* strong root reaches the
+  object, the cooperative refCount drop to 0 is transient drift —
+  do not destroy".
+- The remaining DBIC regressions are smaller than the no-gate
+  failures and point to specific bugs, not a fundamental scheme
+  mismatch.
 
-### Status: PARTIAL — class-name list removed, regressions tracked
+### Status: PARTIAL — class-name list removed, 4 DBIC regressions tracked
 
-Commit: `fix/walker-gate-no-class-heuristic`
+Commits on `fix/walker-gate-no-class-heuristic`:
+- `d769faceb` — `globalOnly=true` (kept for the empirical record)
+- `2f5490771` — switch to universal walker
 
-Follow-ups (each a separate fix):
+Follow-ups (each non-class-name):
 
-1. **`txn_scope_guard.t` regression.** Storage / TxnScopeGuard
-   instances appear to be reachable via a package global (probably
-   the schema's storage handle), so the walker defers their destroy.
-   The test specifically warns about double-DESTROY semantics.
-   Investigate whether `TxnScopeGuard` should be flagged as
-   "always destroy at refCount=0" or whether the schema should not
-   strongly hold the guard.
+1. **`t/cdbi/04-lazy.t` test 11 — `_attribute_exists('opop')`.**
+   Class::DBI's "Essential" column group implicitly includes the
+   Primary key columns; the SELECT issued by `retrieve()` should
+   include both. With our gate active, the SELECT appears to drop
+   `opop`. Root cause: probably a stale cached column-group set
+   that our gate is keeping alive. Investigate
+   `Class::DBI::ColumnGrouper` lifecycle.
 
-2. **`util_std_type_constraints.t` 556-fail explosion.** Likely a
-   single root cause that cascades — possibly a Moose type registry
-   that needs `MyVarCleanupStack` seeding to remain reachable. May
-   be solvable by widening the walker's seed set in a
-   non-class-name-specific way.
+2. **`t/storage/txn_scope_guard.t` test 18 — "Preventing *MULTIPLE*
+   DESTROY()" warning not emitted.** The walker is deferring
+   DESTROY long enough that the second DESTROY doesn't fire while
+   the first is still running. Investigate whether
+   `DBIx::Class::Storage::TxnScopeGuard` should opt out (it's
+   genuinely supposed to die at refCount=0 with no defer).
 
-3. **`t/52leaks.t` SIGKILL.** Probably the
-   `WeakRefRegistry.hasWeakRefsTo` check itself is now misbehaving
-   — investigate whether the hash holding weak refs is leaking
-   entries.
+3. **`t/52leaks.t` exits 255 (bailed).** The leak tracer itself
+   relies on objects being destroyed at the expected point.
+   Confirm whether the test was passing on PR #572 baseline.
+
+4. **`util_std_type_constraints.t` "no plan" tail.** Universal
+   walker reaches test 3770 (vs ~test 4 with `globalOnly`) but
+   the test still bails at the end with "Tests were run but no
+   plan was declared and done_testing() was not seen". The test
+   ran to the end of the data tables. Likely a separate issue
+   unrelated to the gate (e.g., the test's cleanup phase trips
+   on something).
 
 ## Related Documents
 
