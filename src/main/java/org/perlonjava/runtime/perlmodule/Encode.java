@@ -222,18 +222,24 @@ public class Encode extends PerlModuleBase {
                     Encode.class, "encoding_decode", RuntimeCode.methodType);
             java.lang.invoke.MethodHandle nameHandle = RuntimeCode.lookup.findStatic(
                     Encode.class, "encoding_name", RuntimeCode.methodType);
+            java.lang.invoke.MethodHandle mimeNameHandle = RuntimeCode.lookup.findStatic(
+                    Encode.class, "encoding_mime_name", RuntimeCode.methodType);
             RuntimeCode encodeCode = new RuntimeCode(encodeHandle, null, null);
             encodeCode.isStatic = true;
             RuntimeCode decodeCode = new RuntimeCode(decodeHandle, null, null);
             decodeCode.isStatic = true;
             RuntimeCode nameCode = new RuntimeCode(nameHandle, null, null);
             nameCode.isStatic = true;
+            RuntimeCode mimeNameCode = new RuntimeCode(mimeNameHandle, null, null);
+            mimeNameCode.isStatic = true;
             GlobalVariable.getGlobalCodeRef("Encode::Encoding::encode").set(
                     new RuntimeScalar(encodeCode));
             GlobalVariable.getGlobalCodeRef("Encode::Encoding::decode").set(
                     new RuntimeScalar(decodeCode));
             GlobalVariable.getGlobalCodeRef("Encode::Encoding::name").set(
                     new RuntimeScalar(nameCode));
+            GlobalVariable.getGlobalCodeRef("Encode::Encoding::mime_name").set(
+                    new RuntimeScalar(mimeNameCode));
         } catch (NoSuchMethodException | IllegalAccessException e) {
             System.err.println("Warning: Missing Encode::Encoding method: " + e.getMessage());
         }
@@ -863,15 +869,31 @@ public class Encode extends PerlModuleBase {
 
         try {
             Charset charset = getCharset(encodingName);
-            // Create a blessed hash with the charset name
+            // Create a blessed hash with both the Perl-canonical Name
+            // (used by ->name) and the IANA MimeName (used by ->mime_name).
             RuntimeHash encObj = new RuntimeHash();
-            encObj.put("Name", new RuntimeScalar(charset.name()));
+            encObj.put("Name", new RuntimeScalar(perlCanonicalName(charset.name())));
+            encObj.put("MimeName", new RuntimeScalar(charset.name()));
             RuntimeScalar ref = encObj.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Encode::Encoding"));
             return ref.getList();
         } catch (Exception e) {
             // Return undef if encoding not found
             return scalarUndef.getList();
+        }
+    }
+
+    /**
+     * Maps a Java canonical charset name to Perl Encode's canonical
+     * encoding name (as returned by C<< $enc->name >>). For encodings
+     * we don't have a special mapping for, the Java name is returned
+     * unchanged.
+     */
+    private static String perlCanonicalName(String javaName) {
+        switch (javaName) {
+            case "US-ASCII":  return "ascii";
+            case "UTF-8":     return "utf-8-strict";
+            default:          return javaName;
         }
     }
 
@@ -1002,6 +1024,23 @@ public class Encode extends PerlModuleBase {
         RuntimeScalar self = args.get(0);
         RuntimeHash hash = (RuntimeHash) self.value;
         return hash.get("Name").getList();
+    }
+
+    /**
+     * Encode::Encoding->mime_name()
+     * Returns the IANA-registered MIME name of this encoding. Java's
+     * canonical Charset name matches the IANA preferred MIME name for
+     * the common encodings used here, so we reuse it.
+     */
+    public static RuntimeList encoding_mime_name(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            throw new IllegalStateException("Bad number of arguments for Encode::Encoding::mime_name");
+        }
+
+        RuntimeScalar self = args.get(0);
+        RuntimeHash hash = (RuntimeHash) self.value;
+        RuntimeScalar mime = hash.get("MimeName");
+        return (mime != null && mime.getDefinedBoolean() ? mime : hash.get("Name")).getList();
     }
 
     /**
