@@ -528,6 +528,8 @@ public class MortalList {
     private static final long AUTO_SWEEP_MIN_INTERVAL_NS = 5_000_000_000L;
     private static final boolean AUTO_GC_DISABLED =
             System.getenv("JPERL_NO_AUTO_GC") != null;
+    private static final boolean AUTO_GC_DEBUG =
+            System.getenv("JPERL_GC_DEBUG") != null;
     private static boolean inAutoSweep = false;
 
     public static void flush() {
@@ -610,7 +612,7 @@ public class MortalList {
             // Explicit Internals::jperl_gc() still fires DESTROY for
             // callers that want full cleanup.
             int cleared = ReachabilityWalker.sweepWeakRefs(true);
-            if (System.getenv("JPERL_GC_DEBUG") != null) {
+            if (AUTO_GC_DEBUG) {
                 System.err.println("DBG auto-sweep cleared=" + cleared);
             }
         } finally {

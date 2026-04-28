@@ -375,12 +375,18 @@ public class ReachabilityWalker {
         // `our %METAS = ();` registers the RuntimeHash, and walking
         // its values surfaces the metaclass.
         for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar instanceof RuntimeBase rb) {
-                if (rb == target) return true;
-                if (seen.add(rb)) todo.addLast(rb);
-            } else if (liveVar instanceof RuntimeScalar sc) {
+            // Order matters: RuntimeScalar IS a RuntimeBase, so the
+            // RuntimeScalar branch must come first to walk through its
+            // reference bit. Otherwise we'd add the scalar to todo but
+            // the BFS only follows hashes/arrays, missing the scalar's
+            // referent (e.g. `my $schema = DBICTest->init_schema()`).
+            if (liveVar instanceof RuntimeScalar sc) {
+                if (sc == target) return true;
                 seedTarget(sc, target, seen, todo);
                 if (seen.contains(target)) return true;
+            } else if (liveVar instanceof RuntimeBase rb) {
+                if (rb == target) return true;
+                if (seen.add(rb)) todo.addLast(rb);
             }
         }
         // Seed: rescued objects.
@@ -404,25 +410,18 @@ public class ReachabilityWalker {
                     if (followScalar(v, target, seen, todo)) return true;
                 }
             }
-            // Follow closure captures: %METAS in Class::MOP is captured
-            // by globally-installed subs (get_metaclass_by_name, class_of,
-            // …) but isn't on MyVarCleanupStack once Class::MOP.pm has
-            // finished loading. Without walking captures, the walker can't
-            // see the metaclass-via-%METAS path.
+            // Note: we deliberately don't follow RuntimeCode.capturedScalars
+            // here — closure captures are NOT considered strong reachability
+            // edges for this query (matches the default of
+            // ReachabilityWalker.walk() which has walkCodeCaptures=false
+            // for the second-phase BFS). Without this discipline, DBIC's
+            // leak detector (t/52leaks.t) reports false positives because
+            // the walker would keep things alive that user code released.
             //
-            // We're more conservative than the main walker here: this
-            // gate only fires for blessed objects with weak refs whose
-            // refCount transiently dipped to 0, so over-protecting via
-            // closure captures is safer than under-protecting (which
-            // would let the bootstrap die). Cycle-break tests still
-            // pass because cycles' captures are typically held by
-            // anonymous closures outside the global stash.
-            else if (cur instanceof RuntimeCode code
-                    && code.capturedScalars != null) {
-                for (RuntimeScalar cap : code.capturedScalars) {
-                    if (followScalar(cap, target, seen, todo)) return true;
-                }
-            }
+            // For Class::MOP's %METAS hash (which we also need to find for
+            // the Moose bootstrap), we don't need closure-capture walking
+            // because %METAS is declared `our %METAS` (package global) so
+            // it appears directly in GlobalVariable.globalHashes.
         }
         return false;
     }

@@ -1520,7 +1520,198 @@ real Moose's `Moose::Exporter` will surface a warning instead of
 hard-failing when this magic is missing — acceptable. Not part of
 the Moose pass-all-tests plan.
 
+## Refcount root-cause analysis (Apr 2026, updated)
+
+### Where we are
+
+- Phase D started: bundled upstream Moose 2.4000 in `src/main/perl/lib/`.
+- `use Class::MOP` and `use Moose` both succeed on PerlOnJava (with
+  walker-gated destroy + `our %METAS` + Package::Stash::PP slot patch
+  + grep aliasing fix + Method::Accessor weaken disable + a hand-rolled
+  type-name parser to bypass `(?(DEFINE)…)`).
+- Moose's own test suite (with `./jcpan -t Moose --jobs 1`) reaches
+  **412 / 478** fully-green files (was 71 / 478 with the old shim).
+- DBIC (`./jcpan -t DBIx::Class --jobs 1`) regressed from
+  master's `0 failing assertions / 2 failed files` to
+  **`23 failing assertions / 13 failed files`** with the walker gate.
+
+### The single offending commit
+
+`1c938a99d` (cherry-picked from `ecb5c6400`) "fix(refcount):
+walker-gated destroy resolves Class::MOP bootstrap blocker" is the
+sole DBIC regression source. Bisection: master passes
+`t/prefetch/incomplete.t`; `1c938a99d` alone fails it the same way
+the full Phase-D branch does ("Can't call method 'resultset' on an
+undefined value … source 'Track' is not associated with a schema").
+
+The walker gate is **necessary** for `use Class::MOP` to load.
+Without it, the metaclass for `Class::MOP::Mixin::HasMethods` is
+DESTROYed mid-bootstrap by a `MortalList.flush()` and weak refs to
+the metaclass clear before `_attach_attribute` finishes.
+
+The walker gate is **simultaneously** what breaks DBIC, because the
+walker reports `reach=false` for objects (e.g. `DBICTest::Schema`)
+that are clearly held by a script-level `my $schema =
+DBICTest->init_schema()`. With `reach=false`, the gate falls
+through to the destroy path, all weak refs from
+`ResultSource->{schema}` clear, and downstream method calls hit
+`undef`.
+
+So the same gate either over-protects (broken cycle break) or
+under-protects (broken DBIC bootstrap). The walker's reachability
+oracle is the ground-truth concept; refining the oracle is the
+work.
+
+### What the walker currently sees
+
+`ReachabilityWalker.isReachableFromRoots` seeds from:
+
+1. `GlobalVariable.globalCodeRefs` — package subs.
+2. `GlobalVariable.globalVariables` / `globalArrays` / `globalHashes`
+   — package globals.
+3. `ScalarRefRegistry.snapshot()` filtered by
+   `MyVarCleanupStack.isLive(sc) || sc.refCountOwned`,
+   `!WeakRefRegistry.isweak(sc)`, `!sc.scopeExited`,
+   `sc.captureCount == 0`.
+4. `MyVarCleanupStack.snapshotLiveVars()` — currently-registered
+   my-vars (RuntimeScalar, RuntimeHash, RuntimeArray instances).
+5. `DestroyDispatch.snapshotRescuedForWalk()` — DESTROY-rescued
+   objects.
+
+Then BFS over the seeds, walking RuntimeHash element values and
+RuntimeArray elements via `followScalar` (which honours
+`!WeakRefRegistry.isweak(s)` and the `REFERENCE_BIT`).
+
+### Why the walker says `DBICTest::Schema reach=false`
+
+The user-script's `my $schema = DBICTest->init_schema()` is a
+top-level lexical. Tracing showed:
+
+- The `$schema` RuntimeScalar IS registered in MyVarCleanupStack
+  during execution (after the fix to populate `liveCounts`
+  unconditionally — see "Fixes already landed in this branch" below).
+- But `seedTarget($schema, target, …)` returns `false` for the
+  schema target. That is, `$schema.value` does not point to the
+  blessed RuntimeHash that's being destroyed at the gate-fire moment.
+
+That can mean only one of:
+
+A. `$schema.value` was overwritten / cleared **before** the gate
+   fires (some intermediate call assigned `undef` to `$schema`'s
+   storage slot, even though the user's lexical view of `$schema`
+   is still live).
+B. There are **two** different `DBICTest::Schema` blessed instances
+   — `$schema` points to instance #1, the gate fires for instance #2,
+   and #2 is held only by closures / mortals / detached refs.
+C. `$schema` itself is not the lexical the walker thinks it is —
+   maybe the JVM bytecode emits a *copy* into a local slot (with
+   `refCountOwned=true`) and registers THAT in MyVarCleanupStack,
+   while the schema lives on the original.
+
+### Fixes already landed in this branch
+
+These are correct, useful, and needed regardless of the next
+fix-level work:
+
+1. **`MyVarCleanupStack.register` always populates `liveCounts`**
+   (Apr 2026). Was gated on `WeakRefRegistry.weakRefsExist`; meant
+   that `my` vars declared **before** any weaken() were invisible
+   to the walker. Cost: one HashMap.merge per `my`.
+
+2. **`ReachabilityWalker.snapshotLiveVars()` seeding**: walk
+   `RuntimeScalar` first (so its REFERENCE_BIT gets followed via
+   `seedTarget`), only then fall through to the generic
+   `RuntimeBase` branch. Otherwise the BFS adds the scalar to
+   `todo` but the BFS body only steps into hashes / arrays.
+
+3. **`our %METAS` in bundled Class::MOP.pm** so the walker finds
+   the metaclass cache as a global hash.
+
+4. **`grep` returns aliases** (Class::MOP::MiniTrait depends on
+   it).
+
+5. **Stub the XS-only Class::MOP / Moose accessors** in
+   `Class/MOP/PurePerl.pm`.
+
+6. **Patch Class::MOP::Method::Accessor** to skip
+   `weaken($self->{attribute})`. The cooperative refCount can't
+   keep the attribute alive across the brief window between
+   `weaken` and `_initialize_body`. Trade: leaks attribute objects
+   at global destruction.
+
+7. **Patch `~/.perlonjava/lib/Package/Stash/PP.pm`** to bypass
+   `*GLOB{SCALAR}` for the SCALAR slot (which our impl returns as
+   the value, not a SCALAR ref).
+
+### Next-step plan: make the walker's reachability oracle tight
+
+The single-most-impactful debugging step is to instrument the gate
+fire for `DBICTest::Schema` and answer hypothesis A / B / C above
+with data, not theory. Concretely:
+
+1. **D-W1** Re-add the `_gateTrace` env-gated trace (using a
+   `static final boolean` to avoid `System.getenv` on the hot
+   path). Print: target identity hash, classname, refCount before
+   decrement, list of (live-var class, identity, REFERENCE_BIT,
+   `value == target?`) pairs from MyVarCleanupStack, and the
+   weak-ref-source list from `WeakRefRegistry.referentToWeakRefs`.
+   Run on the minimal-repro `t/prefetch/incomplete.t` and capture
+   the first DBICTest::Schema gate fire. **30 minutes of work, no
+   risk.**
+
+2. **D-W2** Based on D-W1 output, classify which hypothesis (A, B
+   or C above) is the actual cause, and tackle that head-on:
+
+   - If **A**: find the assignment site inside DBIC's bootstrap that
+     overwrites `$schema`'s storage slot. Likely candidate:
+     `Schema->connect` returning a NEW Schema instance distinct
+     from the one constructed via `Schema->compose_namespace`,
+     and the `bless(...)` reusing the rvalue scalar. Look for
+     places where setLargeRefCounted's old-value-decrement could
+     race the new-value-increment.
+
+   - If **B**: trace where the second instance is born. Likely
+     the `_register_source` path, `class_mappings` reverse map, or
+     a `BlockRunner` that captures schema-via-closure. Verify by
+     printing the identity of every DBICTest::Schema instance from
+     `init_schema` through the destroy event.
+
+   - If **C**: the JVM-emitted bytecode is the issue. Find where
+     EmitVariable inserts the local copy and adjust so the same
+     RuntimeScalar instance sits in both the JVM local slot AND
+     MyVarCleanupStack. (This is the most invasive fix and has
+     the largest blast radius.)
+
+3. **D-W3** Once D-W2's fix lands, re-run the full DBIC suite
+   (must drop `failing-assertions` to 0 and `failing-files` to ≤2,
+   matching master baseline) AND re-run Moose's own test suite
+   (must stay ≥ 412 / 478 fully green; ideally improve, since
+   walker tightening should help upstream tests that rely on
+   accurate refcount semantics for cycle-break edges).
+
+4. **D-W4** Only then continue with shim widening / Phase 4-6
+   work to move from 412 → 477 / 478 Moose green files.
+
+### Hard constraint moving forward
+
+Per the user's instruction: **"Failing weaken/DESTROY is not
+accepted at all."** Every fix MUST be validated against:
+
+```bash
+./jcpan --jobs 1 -t DBIx::Class       # 0 failing assertions, ≤2 failed files
+./jcpan --jobs 1 -t Moose              # ≥ 412 / 478 fully green
+make                                    # full unit suite green
+./jperl src/test/resources/unit/refcount/*.t   # all pass
+./jperl src/test/resources/unit/weaken_via_sub.t  # 20/20
+```
+
+Parallel runs (`./jcpan -t …` without `--jobs 1`) OOM-crash on the
+local box for several DBIC tests; that is environmental, not a
+DESTROY regression. Always serialise the regression gate with
+`--jobs 1`.
+
 ### Open work items
+
 
 Optimistic order (Phases 3 → 6 ship value incrementally; D is the
 destination):

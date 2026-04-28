@@ -86,12 +86,12 @@ public class MyVarCleanupStack {
      */
     public static void register(Object var) {
         stack.add(var);
-        // liveCounts is only consulted by ReachabilityWalker.sweepWeakRefs,
-        // which runs only when WeakRefRegistry.weakRefsExist is true. For
-        // scripts that never weaken(), this merge() is pure overhead —
-        // HashMap.merge with a lambda is one of the hotter per-`my`-var
-        // costs. See ScalarRefRegistry.registerRef for the parallel fix.
-        if (var != null && WeakRefRegistry.weakRefsExist) {
+        // liveCounts is consulted by ReachabilityWalker.sweepWeakRefs and
+        // .isReachableFromRoots. Always populate it: if a `my` is declared
+        // BEFORE any weaken() has happened in the program, but a weak ref
+        // is later created (e.g. inside the value's class), we still need
+        // the my-var to count as a root. Cost: one HashMap.merge per `my`.
+        if (var != null) {
             liveCounts.merge(var, 1, Integer::sum);
         }
     }
