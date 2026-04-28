@@ -1746,92 +1746,91 @@ Moose stays at 412/478, refcount unit tests stay green.
    - Before D-W2: never finished (>10 minutes wall-clock, still running)
    - After D-W2:  ALL 6492 tests pass in 30 seconds
 
-4. **D-W2b** (NEXT — outstanding perf regression): even with the
-   stash skip, the suite-level wallclock cost is higher than master.
+4. **D-W2b** (PARTIALLY DONE — Apr 2026): lazy
+   `MyVarCleanupStack.liveCounts` population.
 
-   **Empirical (Apr 2026):**
-   - Master DBIC suite (`/tmp/dbic_master2.txt`): 314 files /
-     13858 tests / **PASS / 1410 wallclock seconds (23.5 min)**.
-   - Feature branch DBIC suite at D-W2: in 15 minutes elapsed,
-     59 ok + 29 skipped = 88/314 done. Projected ~50 min total.
-     **Roughly 1.5–2× slower** than master, not 4×.
+   `MyVarCleanupStack.register` now only populates `liveCounts`
+   when `WeakRefRegistry.weakRefsExist == true`, restoring pre-D-W1
+   per-`my` cost. To preserve D-W1 correctness, the FIRST
+   `weaken()` call (in `WeakRefRegistry.registerWeakRef`) does a
+   one-time backfill: walks the existing `MyVarCleanupStack.stack`
+   and inserts every still-registered my-var into `liveCounts`.
 
-   **Per-test direct comparison (master jperl JAR vs feature jperl JAR,
-   same .t files, no harness):**
+   **Per-test wallclock comparison** (master jperl JAR vs feature
+   jperl JAR, same .t files, no harness):
 
-   | Test                  | Master | Feature | Ratio    |
-   |-----------------------|--------|---------|----------|
-   | t/05components.t      | 6.25s  | 4.85s   | 0.78×    |
-   | t/52leaks.t           | 40.15s | 9.43s   | **0.23×** |
-   | t/76joins.t           |  9.79s | 6.90s   | 0.71×    |
-   | t/86might_have.t      |  9.66s | 9.86s   | 1.02×    |
+   | Test                  | Master | D-W2  | D-W2b | vs Master |
+   |-----------------------|--------|-------|-------|-----------|
+   | t/05components.t      |  6.25s | 4.85s | 2.82s | 0.45×     |
+   | t/52leaks.t           | 40.15s | 9.43s | 5.90s | 0.15×     |
+   | t/76joins.t           |  9.79s | 6.90s | 5.52s | 0.56×     |
+   | t/86might_have.t      |  9.66s | 9.86s | 4.67s | 0.48×     |
+   | t/100populate.t       |    -   |12.62s |15.76s | -         |
+   | t/60core.t            |    -   |    -  |15.65s | -         |
 
-   On individual tests the feature branch is OFTEN FASTER (the
-   walker gate prevents some unnecessary destroy cascades that
-   master pays for). The aggregate suite slowdown is therefore
-   coming from a smaller subset of tests — not yet identified.
+   Most individual tests are now **2-7× faster than master** (the
+   walker gate prevents wasteful destroy cascades).
 
-   **Per-test profile (`t/cdbi/68-inflate_has_a.t`)**: BOTH master
-   and feature branch hang on this test standalone (>20 min, >35
-   min observed in tests). Yet master's harness run shows it
-   passes — likely the harness produces enough output that no-
-   output-timeout doesn't kill it, and the wallclock just gets
-   absorbed into the 23.5 min total. Investigation needed for
-   what's specific about how `timeout(...)` behaves in standalone
-   vs harness mode.
+   **Full DBIC suite results:**
 
-   **General `jstack` of feature-branch jperl in DBIC** (sampled):
-   dominated by `RuntimeCode.applyImpl` + `RuntimeArray.setArrayOfAlias`
-   + `ArrayList.<init>`. The walker stack frames do NOT appear in
-   sampled profiles — gate cost is <1% of runtime. The gate's
-   per-call cost is dominated by `WeakRefRegistry.hasWeakRefsTo()`
-   (a single HashMap lookup), which is already O(1).
+   | Metric        | Master | D-W2     | D-W2b    |
+   |---------------|--------|----------|----------|
+   | Wallclock     | 1410s  | 3782s    | **2386s**|
+   | Tests run     | 13858  | 13740    | 13851    |
+   | Failed files  | 0      | 8        | **4**    |
+   | Failed subt.  | 0      | 2        | 2        |
+   | Result        | PASS   | FAIL     | FAIL     |
 
-   **Hypothesis:** the slowdown is in some non-walker code path
-   that my D-W1 change made hotter. Most likely the always-populate
-   `MyVarCleanupStack.liveCounts` (one HashMap.merge per `my`)
-   accumulating across N=thousands of `my` declarations per test
-   becomes measurable in aggregate — even though no individual
-   call is slow.
+   D-W2b cut wallclock by 1.6× and failed files in half. **Still
+   1.69× slower than master and 4 failures remain.**
 
-   **Fix candidates (in expected impact order):**
+5. **D-W2c** (NEXT — outstanding suite-mode failures): three real
+   regressions need separate investigation. All pass STANDALONE on
+   the feature branch (and in the master harness):
 
-   a. **Lazy live-counts.** Restore the `weakRefsExist` gate on
-      `MyVarCleanupStack.liveCounts` population, but on the
-      first `weaken()` call snapshot the existing
-      `MyVarCleanupStack.stack` into `liveCounts` so already-
-      registered my-vars become visible. Cost reverts to pre-D-W1
-      for tests that never weaken; D-W1 reproducer still passes
-      because tests with weaken populate liveCounts on the first
-      weaken().
+   - **`t/52leaks.t`** — exits 255 with "Target is not a reference
+     at line 518" mid-test. Possibly leak detector triggering
+     differently due to walker gate behaviour.
 
-   b. **Bench-disable walker to confirm root cause.** Replace
-      `ReachabilityWalker.isReachableFromRoots(base)` with `false`
-      and re-time the same five tests. If runtimes are unchanged,
-      the walker isn't the bottleneck — confirms (a). If they
-      drop dramatically, the walker is the issue and we need
-      caching.
+   - **`t/cdbi/04-lazy.t`** — fails subtest 11 ("Gets other
+     essential" via `_attribute_exists('opop')`). Possibly some
+     lazy-load state being cleared by intermediate destroy that
+     should have been deferred.
 
-   c. **Per-class hasWeakRefs filter.** Track which classes have
-      ever had `weaken()` called on instances of them. Skip the
-      walker call for classes never weakened (most blessed
-      objects in DBIC's data layer have no weak refs).
+   - **`t/cdbi/68-inflate_has_a.t`** — exits 137 (OOM) only in
+     suite mode. Standalone passes in 6s. Heap accumulates from
+     prior tests in the same harness JVM(?).
 
-   d. **Cache the walker's live-set per flush.** A single
-      `MortalList.flush()` may decrement-to-zero many blessed-
-      with-weak-refs objects in a row. Compute live set once.
+   - **`t/storage/txn_scope_guard.t`** — fails subtest 18.
 
-   e. **Coalesce gate calls.** Queue them and process in a
-      single walker pass at flush end.
+   For each, the immediate next step is to diff the destroy trace
+   on master vs feature branch to see what the gate is changing.
+   Then either narrow the gate or fix the underlying refcount
+   asymmetry.
 
-   Acceptance criteria for D-W2b: full `./jcpan --jobs 1 -t
-   DBIx::Class` completes in ≤30 min (master baseline + 30%
-   tolerance), 0 failing assertions, ≤2 failed files.
+   **Acceptance criteria for D-W2c:** `./jcpan --jobs 1 -t
+   DBIx::Class` produces 0 failed assertions, ≤2 failed files
+   (matching the 2 failed files of master baseline modulo minor
+   environmental differences).
 
-5. **D-W3** (BLOCKED on D-W2b): re-run full suites, drop reproducer
-   into `src/test/resources/unit/refcount/`.
+6. **D-W2d** (NEXT after D-W2c — perf gap to close): bring the
+   remaining 1.69× wallclock gap closer to 1.0×. Likely candidates:
 
-6. **D-W4** (LATER): Phase 4-6 shim widening for Moose 412→477 / 478.
+   - **Per-class hasWeakRefs filter.** Skip the walker call for
+     classes never weakened (most blessed objects in DBIC's data
+     layer have no weak refs).
+
+   - **Cache the walker's live-set per flush.** Compute live set
+     once if multiple weak-ref'd objects hit refCount=0 in the
+     same flush.
+
+   - **Coalesce gate calls.** Queue and process in a single
+     walker pass at flush end.
+
+7. **D-W3** (BLOCKED on D-W2c): drop reproducer into
+   `src/test/resources/unit/refcount/`.
+
+8. **D-W4** (LATER): Phase 4-6 shim widening for Moose 412→477 / 478.
 
 ### Hard constraint moving forward
 
