@@ -228,13 +228,15 @@ public class ErrnoVariable extends RuntimeScalar {
             int num = Integer.parseInt(value.trim());
             return set(num);
         } catch (NumberFormatException e) {
-            // Not a number and not a known message - store as message with errno 0
-            // Always maintain INTEGER type so numeric operations use the fast path
-            // and never trigger "isn't numeric" warnings via NumberParser.parseNumber()
+            // Not a number and not a known message - store as message with errno 0.
+            // Use DUALVAR so the string portion is preserved when $! is read or
+            // copied (e.g. `my $str = $!`). The numeric side of the dualvar is 0
+            // (a plain INTEGER scalar) so numeric ops don't go through
+            // NumberParser.parseNumber() and won't emit "isn't numeric" warnings.
             this.errno = 0;
             this.message = value;
-            this.type = RuntimeScalarType.INTEGER;
-            this.value = 0;
+            this.type = RuntimeScalarType.DUALVAR;
+            this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(value));
             return this;
         }
     }
