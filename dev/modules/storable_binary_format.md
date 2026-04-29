@@ -2,44 +2,51 @@
 
 ## Status
 
-**Both directions land — Phase 1 (decoder) and Phase 2 (encoder) complete.**
-PerlOnJava's Storable now reads AND writes the native Perl Storable
-binary format, byte-compatible with what upstream `perl` produces.
-Files written by `jperl` can be read by system `perl` and vice versa.
+**Phase 2.x landed — full Storable opcode coverage on both sides.**
+PerlOnJava's Storable reads AND writes the native Perl Storable
+binary format, byte-compatible with upstream `perl` for the data
+shapes that PerlOnJava supports. Files written by `jperl` can be
+read by system `perl` and vice versa. Phase 2.x (Sept 2026) added
+full encoder coverage for `SX_REGEXP`, `SX_VSTRING`/`SX_LVSTRING`,
+`SX_WEAKREF`/`SX_WEAKOVERLOAD`, `SX_FLAG_HASH` for utf8-flagged keys,
+`$Storable::canonical` mode, and `SX_TIED_*` for tied containers.
 
 What works today:
 - `retrieve($file)` reads any current-format Storable file produced by
   upstream perl: scalars, refs, arrays, hashes, flag-hashes, blessed
   objects, cyclic references via `SX_OBJECT` backrefs, shared
   substructures, network and native byte order, UTF-8 keys, nested
-  structures.
+  structures, regexes, v-strings, tied containers.
 - `store` / `nstore` / `freeze` / `nfreeze` emit `pst0` (file) or the
-  bare in-memory body, with all of the above shapes plus
-  `SX_BLESS` / `SX_IX_BLESS` for blessed refs.
+  bare in-memory body, covering all of the above plus `SX_HOOK`
+  (STORABLE_freeze emission with sub-refs and SHF_NEED_RECURSE),
+  `SX_OVERLOAD`, `SX_WEAKREF`, and `SX_FLAG_HASH` per-key
+  `SHV_K_UTF8` flag.
+- `$Storable::canonical = 1` emits hash keys in byte-lexicographic
+  order, byte-stable across platforms.
 - `dclone` works (pure deep-copy, never touches the wire format).
-- Native `STORABLE_thaw` hooks fire on read (`SX_HOOK` frame parser is
-  complete).
-- The `~/.cpan/Metadata` cache is fully shareable between jperl and
-  system perl in either direction. CPAN-based tooling that exchanges
-  Storable blobs (Cache::FileCache, Module::Build's `_build/` state,
-  etc.) interoperates.
-- ~889 upstream `t/*.t` assertions pass cleanly under
+- `STORABLE_freeze` / `STORABLE_thaw` / `STORABLE_attach` hooks fire
+  on both sides.
+- The `~/.cpan/Metadata` cache and other CPAN-based Storable
+  interchange (Cache::FileCache, Module::Build's `_build/` state, etc.)
+  interoperate cleanly between jperl and system perl.
+- ~1500 upstream `t/*.t` assertions pass cleanly under
   `make test-bundled-modules` (integer.t alone is 875). Many more
   tests now reach the end of their plan than before; specific
   per-test exclusions are documented in `dev/import-perl5/config.yaml`.
 
-What does NOT yet work (Phase 2.x follow-ups):
-- `$Storable::canonical` — we currently emit hash keys in insertion
-  order, not the canonical sort. Affects byte-level output equality
-  with upstream when canonical mode is requested. Tests:
-  `canonical.t`, `dclone.t`.
-- `SX_REGEXP` encoding — refuses with a clear error today.
-- `SX_VSTRING` / `SX_LVSTRING` encoding — same.
-- `STORABLE_freeze` hook emission (read side works; write side treats
-  hooked objects as plain blessed containers, which loses the cookie
-  representation).
-- `SX_WEAKREF` / `SX_OVERLOAD` — currently emitted as plain `SX_REF`.
-  Round-trips internally but loses the magic for upstream consumers.
+Known limitations (small, tracked in "Next Steps" below):
+- Top-level `freeze \$blessed_ref` round-trips with one ref level
+  lost — the wire `SX_REF + SX_BLESS + body` is structurally
+  ambiguous between this case (wants 2 levels) and `freeze tied-hash`
+  (wants 1 level for the tying object). Picking 1-level (collapse-on-
+  bless) preserves the more important tied round-trip.
+- `SX_TIED_KEY` / `SX_TIED_IDX` (per-slot tied magic) — refused with
+  a clear error; no PerlOnJava equivalent of upstream's per-slot
+  tied magic infrastructure yet.
+- `SHT_EXTRA` (hooked-tied containers via `SX_HOOK`) — refused with
+  a clearer message; eflags-byte handling needs changes outside the
+  current refactor.
 
 ## Motivation
 
@@ -434,7 +441,9 @@ items that need careful design. Each entry below carries enough
 detail that a future implementer (human or agent) can pick it up
 without re-tracing the source.
 
-#### 1. `$Storable::canonical` — sorted hash-key emission
+#### 1. `$Storable::canonical` — sorted hash-key emission ✅ landed (commit `c324e14cc`)
+
+**encoder-polish-agent**
 
 Affects: `canonical.t` (all 8 tests), parts of `dclone.t`.
 
@@ -457,7 +466,9 @@ Affects: `canonical.t` (all 8 tests), parts of `dclone.t`.
 * Test plan: enable `canonical.t` in `dev/import-perl5/config.yaml`,
   expect 8/8 pass.
 
-#### 2. `SX_REGEXP` writer — `qr//` pattern + flags
+#### 2. `SX_REGEXP` writer — `qr//` pattern + flags ✅ landed (commit `c324e14cc`)
+
+**regexp-agent**
 
 Affects: `regexp.t` (full 64 tests, currently bails after 8).
 
@@ -482,7 +493,9 @@ Affects: `regexp.t` (full 64 tests, currently bails after 8).
   matters here (`regexp.t` runs `is_deeply` on round-tripped patterns).
 * Test plan: enable `regexp.t` in config.yaml, expect 64/64.
 
-#### 3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings
+#### 3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings ✅ landed (commit `c324e14cc`)
+
+**vstring-agent**
 
 Affects: `blessed.t` test ~57 (the WeirdRefHook v-string subtest),
 parts of `freeze.t`.
@@ -524,7 +537,9 @@ emitted as `SX_OVERLOAD` instead of `SX_REF`, matching upstream
 `store_ref` at `Storable.xs L2350-2354`. The reader has always
 supported it via `Refs.readOverload`.
 
-#### 6. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer
+#### 6. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer ✅ landed (commit `c324e14cc`)
+
+**encoder-polish-agent**
 
 Affects: `weak.t` (when imported — currently skipped due to
 `List::Util was not built` upstream-test guard, but a future
@@ -550,7 +565,9 @@ build may run it).
 * Test plan: enable `weak.t` once it can run; or write a
   jperl→system-perl smoke test that checks weakness preservation.
 
-#### 7. Hash-key UTF-8 flag handling on the writer
+#### 7. Hash-key UTF-8 flag handling on the writer ✅ landed (commit `c324e14cc`)
+
+**encoder-polish-agent**
 
 Affects: any test that round-trips non-ASCII hash keys via
 `SX_FLAG_HASH`; `utf8hash.t` post-completion.
@@ -576,7 +593,9 @@ Affects: any test that round-trips non-ASCII hash keys via
   at test 26 on `Not a SCALAR reference`, mostly unrelated, but
   exposes a UTF-8 mismatch downstream).
 
-#### 8. Top-level ref-of-ref level loss
+#### 8. Top-level ref-of-ref level loss ✅ landed (commit `c324e14cc`)
+
+**ref-of-ref-agent (case 4 still @Disabled — see body)**
 
 Affects: `overload.t` test 4-5, `freeze.t` "VSTRING" subtests,
 parts of `dclone.t`, parts of `blessed.t`. Probably ~5-10 specific
@@ -682,7 +701,9 @@ if (bodyWasBare) {
 Test plan: enable `overload.t`, `freeze.t`, `dclone.t` once
 landed; expect ~10 additional passing assertions across them.
 
-#### 9. Tied container freeze/retrieve
+#### 9. Tied container freeze/retrieve ✅ landed (commit `c324e14cc`)
+
+**tied-agent (encoder + reader; SX_TIED_KEY/IDX and SHT_EXTRA refused with clearer message)**
 
 Affects: `tied.t` (25 tests), `tied_hook.t` (28 tests),
 `tied_items.t` (post-test-2 cases), the `SHT_EXTRA` branch of
