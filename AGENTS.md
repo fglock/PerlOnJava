@@ -60,6 +60,55 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
+## ⚠️⚠️⚠️ REBASE: `--ours` AND `--theirs` ARE REVERSED ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   During `git rebase`, the meaning of --ours / --theirs is FLIPPED           ║
+║   compared to `git merge`. This trips up agents and silently drops work.     ║
+║                                                                              ║
+║     During MERGE:                                                            ║
+║       --ours   = the branch you are ON (your work)                           ║
+║       --theirs = the branch being merged in                                  ║
+║                                                                              ║
+║     During REBASE:                                                           ║
+║       --ours   = the UPSTREAM target (e.g. master) ← NOT your work!          ║
+║       --theirs = the commit being replayed (your work)                       ║
+║                                                                              ║
+║   Why: rebase replays your commits onto upstream, so from rebase's POV       ║
+║   "ours" is the new base it is building on top of.                           ║
+║                                                                              ║
+║   FAILURE MODE: running `git checkout --ours <file>` during a rebase         ║
+║   conflict takes the upstream version, makes your replayed commit empty,     ║
+║   and rebase silently DROPS the now-empty commit. Your work disappears       ║
+║   from the branch with no error message.                                     ║
+║                                                                              ║
+║   SAFE PATTERN when you want to KEEP your branch's version of a file         ║
+║   during a rebase conflict:                                                  ║
+║                                                                              ║
+║       git checkout --theirs <file>     ← takes YOUR work during rebase       ║
+║       git add <file>                                                         ║
+║       git rebase --continue                                                  ║
+║                                                                              ║
+║   ALWAYS verify after `--continue`:                                          ║
+║                                                                              ║
+║       git log --oneline <upstream>..HEAD                                     ║
+║                                                                              ║
+║   If the output is empty, your commit was dropped — recover from reflog:     ║
+║                                                                              ║
+║       git reflog | head -20                                                  ║
+║       git reset --hard <sha-of-your-commit-before-rebase>                    ║
+║                                                                              ║
+║   If unsure which side is which, abort and inspect both versions first:      ║
+║                                                                              ║
+║       git show :2:<file> > /tmp/ours.txt    # "ours"   side of the conflict  ║
+║       git show :3:<file> > /tmp/theirs.txt  # "theirs" side of the conflict  ║
+║       diff /tmp/ours.txt /tmp/theirs.txt                                     ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
 ## ⚠️⚠️⚠️ CRITICAL WARNING: NEVER USE `git stash` ⚠️⚠️⚠️
 
 ```
@@ -83,6 +132,7 @@
 | Date       | What was lost                                  | Root cause                                        |
 |------------|------------------------------------------------|---------------------------------------------------|
 | 2026-04-28 | ~600 cpan-tester module results (4736 → 4139)  | Agent ran `git checkout dev/cpan-reports/` on an unstaged refresh; concurrent `cpan_random_tester.pl` instances also race on `.dat` files (separate bug). |
+| 2026-04-29 | cpan-reports refresh commit (briefly, on a feature branch — recovered from reflog) | Agent resolved a rebase conflict with `git checkout --ours` thinking it would keep the branch's version. During rebase, `--ours` means UPSTREAM, so the upstream files were taken, the replayed commit became empty, and rebase silently dropped it. Recovery: `git reset --hard <sha>` from `git reflog`, then re-rebase using `--theirs`. |
 
 When you cause a new incident, append a row here in the same commit
 that fixes it. Future agents need to see that these warnings are real.
