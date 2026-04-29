@@ -18,8 +18,9 @@ our @EXPORT = qw(
 );
 
 our @EXPORT_OK = qw(
-    store_fd fd_retrieve
+    store_fd nstore_fd fd_retrieve retrieve_fd
     lock_store lock_retrieve lock_nstore
+    file_magic read_magic
 );
 
 our %EXPORT_TAGS = (
@@ -133,5 +134,184 @@ PerlOnJava Project
 sub lock_store    { goto &store }
 sub lock_nstore   { goto &nstore }
 sub lock_retrieve { goto &retrieve }
+
+# Compatibility flag constants used by upstream Storable.pm and its tests
+# (lock.t, flags.t, retrieve.t). Values copied from
+# perl5/dist/Storable/lib/Storable.pm.
+sub BLESS_OK     () { 2 }
+sub TIE_OK       () { 4 }
+sub FLAGS_COMPAT () { BLESS_OK | TIE_OK }
+sub CAN_FLOCK    () { 1 }     # JVM provides advisory locking via FileChannel
+
+# `mretrieve` — retrieve from an in-memory frozen string. Upstream
+# Storable's XS exposes this; we expose it as a thin wrapper around
+# `thaw` that ignores the optional `flags` argument (we don't honor
+# BLESS_OK/TIE_OK gating yet).
+sub mretrieve {
+    my ($frozen, undef) = @_;
+    return thaw($frozen);
+}
+
+# Binary-format version constants used by upstream Storable.pm and
+# tests that introspect the wire format (file_magic.t etc.). Values
+# match the constants in src/main/java/.../storable/Opcodes.java.
+sub BIN_MAJOR        () { 2 }
+sub BIN_MINOR        () { 12 }
+sub BIN_WRITE_MINOR  () { 12 }
+sub BIN_VERSION_NV       { sprintf "%d.%03d", BIN_MAJOR(), BIN_MINOR() }
+sub BIN_WRITE_VERSION_NV { sprintf "%d.%03d", BIN_MAJOR(), BIN_WRITE_MINOR() }
+
+# File-handle variants of store / retrieve. Upstream's XS implements
+# these directly; for our purposes we serialize the value through
+# freeze/thaw and read/write the resulting bytes from/to the handle.
+sub store_fd {
+    my ($self, $fh) = @_;
+    require Carp;
+    Carp::croak("not a reference") unless ref($self);
+    Carp::croak("not a valid file descriptor") unless defined fileno($fh);
+    my $bytes = freeze($self);
+    # store_fd writes a `pst0` file, so prepend the file header. Easier:
+    # call our store() to a temp file, then slurp & write to the handle.
+    require File::Temp;
+    my ($th, $tmp) = File::Temp::tempfile();
+    close $th;
+    my $ok = store($self, $tmp) or do { unlink $tmp; return undef };
+    open my $rh, '<:raw', $tmp or do { unlink $tmp; return undef };
+    local $/;
+    my $data = <$rh>;
+    close $rh;
+    unlink $tmp;
+    binmode $fh;
+    print {$fh} $data;
+    return 1;
+}
+
+sub nstore_fd {
+    my ($self, $fh) = @_;
+    require Carp;
+    Carp::croak("not a reference") unless ref($self);
+    Carp::croak("not a valid file descriptor") unless defined fileno($fh);
+    require File::Temp;
+    my ($th, $tmp) = File::Temp::tempfile();
+    close $th;
+    my $ok = nstore($self, $tmp) or do { unlink $tmp; return undef };
+    open my $rh, '<:raw', $tmp or do { unlink $tmp; return undef };
+    local $/;
+    my $data = <$rh>;
+    close $rh;
+    unlink $tmp;
+    binmode $fh;
+    print {$fh} $data;
+    return 1;
+}
+
+sub fd_retrieve {
+    my ($fh, $flags) = @_;
+    require Carp;
+    Carp::croak("not a valid file descriptor") unless defined fileno($fh);
+    binmode $fh;
+    require File::Temp;
+    my ($th, $tmp) = File::Temp::tempfile();
+    binmode $th;
+    local $/;
+    my $data = <$fh>;
+    print {$th} $data;
+    close $th;
+    my $r = retrieve($tmp);
+    unlink $tmp;
+    return $r;
+}
+
+sub retrieve_fd { &fd_retrieve }    # backward-compat alias
+
+# file_magic / read_magic / show_file_magic — header introspection
+# helpers used by tests and a few CPAN modules. Logic ported verbatim
+# from perl5/dist/Storable/lib/Storable.pm so behavior matches upstream
+# exactly.
+sub file_magic {
+    my $file = shift;
+    open(my $fh, '<', $file) or die "Can't open '$file': $!";
+    binmode($fh);
+    defined(sysread($fh, my $buf, 32)) or die "Can't read from '$file': $!";
+    close($fh);
+    $file = "./$file" unless $file;
+    return read_magic($buf, $file);
+}
+
+sub read_magic {
+    my ($buf, $file) = @_;
+    my %info;
+    my $buflen = length($buf);
+    my $magic;
+    if ($buf =~ s/^(pst0|perl-store)//) {
+        $magic = $1;
+        $info{file} = $file || 1;
+    } else {
+        return undef if $file;
+        $magic = "";
+    }
+    return undef unless length($buf);
+
+    my $net_order;
+    if ($magic eq "perl-store" && ord(substr($buf, 0, 1)) > 1) {
+        $info{version} = -1;
+        $net_order = 0;
+    } else {
+        $buf =~ s/(.)//s;
+        my $major = (ord $1) >> 1;
+        return undef if $major > 4;
+        $info{major} = $major;
+        $net_order = (ord $1) & 0x01;
+        if ($major > 1) {
+            return undef unless $buf =~ s/(.)//s;
+            my $minor = ord $1;
+            $info{minor} = $minor;
+            $info{version} = "$major.$minor";
+            $info{version_nv} = sprintf "%d.%03d", $major, $minor;
+        } else {
+            $info{version} = $major;
+        }
+    }
+    $info{version_nv} ||= $info{version};
+    $info{netorder} = $net_order;
+
+    unless ($net_order) {
+        return undef unless $buf =~ s/(.)//s;
+        my $len = ord $1;
+        return undef unless length($buf) >= $len;
+        return undef unless $len == 4 || $len == 8;
+        @info{qw(byteorder intsize longsize ptrsize)}
+            = unpack "a${len}CCC", $buf;
+        (substr $buf, 0, $len + 3) = '';
+        if ($info{version_nv} >= 2.002) {
+            return undef unless $buf =~ s/(.)//s;
+            $info{nvsize} = ord $1;
+        }
+    }
+    $info{hdrsize} = $buflen - length($buf);
+    return \%info;
+}
+
+sub show_file_magic {
+    print <<"EOM";
+#
+# To recognize the data files of the Perl module Storable,
+# the following lines need to be added to the local magic(5) file,
+# usually either /usr/share/misc/magic or /etc/magic.
+#
+0       string  perl-store      perl Storable(v0.6) data
+>4      byte    >0              (net-order %d)
+>>4     byte    &01             (network-ordered)
+>>4     byte    =3              (major 1)
+>>4     byte    =2              (major 1)
+
+0       string  pst0            perl Storable(v0.7) data
+>4      byte    >0
+>>4     byte    &01             (network-ordered)
+>>4     byte    =5              (major 2)
+>>4     byte    =4              (major 2)
+>>5     byte    >0              (minor %d)
+EOM
+}
 
 1;

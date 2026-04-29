@@ -184,7 +184,7 @@ These are loaded automatically or via `use`:
 | `YAML::PP` | Java + Perl | |
 | `TOML` | Java | |
 | `Text::CSV` | Java | |
-| `Storable` | Java + Perl | `freeze`, `thaw`, `dclone` |
+| `Storable` | Java + Perl | `freeze`, `thaw`, `dclone`, `store`, `retrieve`, `nstore`, `nfreeze` — produces and consumes the native Perl `pst0` binary format, interoperable with system perl in both directions. See `dev/modules/storable_binary_format.md`. |
 | `Clone` | Java + Perl | Deep copy |
 | `Scalar::Util` | Java | `blessed`, `reftype`, `weaken`, `dualvar`, etc. |
 | `List::Util` | Java | `reduce`, `first`, `min`, `max`, `sum`, `mesh`/`zip`, etc. |
