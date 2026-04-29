@@ -360,24 +360,39 @@ public class ModuleOperators {
         // ===== STEP 3: Execute CODE reference as generator =====
         // This handles both array-extracted and direct code references
         if (codeRef != null) {
+            // Use the stringified code ref (e.g. "CODE(0x...)") as the
+            // filename so __FILE__ inside the do'd source resolves to a
+            // sensible non-null value.  Matches real Perl's behaviour;
+            // perl5_t/t/op/incfilter.t asserts qr/(?:GLOB|CODE)\(0x[0-9a-f]+\)/.
+            actualFileName = fileName;
+
+            // Save the caller's $_ slot (RuntimeScalar reference, not just value)
+            // so we can restore it at the end.  Real Perl does this via `local $_`
+            // around each generator call; we approximate by swapping the slot.
             RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
             StringBuilder accumulatedCode = new StringBuilder();
 
             try {
-                // Generator pattern: call repeatedly until false is returned
-                // Each call should populate $_ with a chunk of code
-                // State parameters (if any) are passed as @_
+                // Generator pattern: call repeatedly until false is returned.
+                // Each call should populate $_ with a chunk of code.
+                // State parameters (if any) are passed as @_.
                 boolean continueReading = true;
 
                 while (continueReading) {
-                    // Clear $_ before each call
-                    GlobalVariable.getGlobalVariable("main::_").set("");
+                    // Install a fresh, untied scalar in the $_ slot for this
+                    // iteration.  Using `set("")` on the existing slot would
+                    // call STORE on a tied scalar that the generator left
+                    // behind in a previous iteration (e.g. the test in
+                    // perl5_t/t/op/incfilter.t that ties $_ to a class with
+                    // only TIESCALAR/FETCH and no STORE).  Replacing the slot
+                    // matches Perl's `local $_` semantics for pp_require.
+                    GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(""));
 
-                    // Call the CODE reference with state arguments
-                    // The coderef should populate $_ with content
+                    // Call the CODE reference with state arguments.
+                    // The coderef should populate $_ with content.
                     RuntimeBase result = codeRef.apply(stateArgs, RuntimeContextType.SCALAR);
 
-                    // Get the content from $_
+                    // Get the content from $_ (via FETCH if the generator tied it).
                     RuntimeScalar defaultVar = GlobalVariable.getGlobalVariable("main::_");
                     String chunk = defaultVar.toString();
 
@@ -400,8 +415,10 @@ public class ModuleOperators {
                 code = null;
                 throw e; // Re-throw to maintain error handling
             } finally {
-                // Restore $_ to its previous value
-                GlobalVariable.getGlobalVariable("main::_").set(savedDefaultVar.toString());
+                // Restore the caller's $_ slot.  Note we restore by re-aliasing
+                // the original RuntimeScalar object, not by calling .set(...) —
+                // the caller's $_ may itself be tied and we must not invoke STORE.
+                GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
             }
         }
         // ===== STEP 4: Handle filehandle =====
@@ -411,6 +428,11 @@ public class ModuleOperators {
             // Enable source filter preprocessing for filehandle sources
             // This allows BEGIN blocks to install filters that transform the remaining source
             shouldApplyFilters = true;
+            // Use the stringified glob (e.g. "GLOB(0x...)") as the filename so
+            // __FILE__ resolves to a sensible non-null value.  Real Perl uses
+            // the same scheme — see perl5_t/t/op/incfilter.t which asserts
+            // qr/(?:GLOB|CODE)\(0x[0-9a-f]+\)/.
+            actualFileName = fileName;
         }
         // ===== STEP 4b: Handle scalar reference (do \$scalar) =====
         else if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
