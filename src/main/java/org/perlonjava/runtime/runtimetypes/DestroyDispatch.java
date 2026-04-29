@@ -17,6 +17,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DestroyDispatch {
 
+    /** Phase D-W6 debug: enable destroy tracing via -Dperlonjava.destroyTrace=1
+     *  or env PJ_DESTROY_TRACE=1. */
+    private static final boolean DESTROY_TRACE =
+            "1".equals(System.getProperty("perlonjava.destroyTrace"))
+            || "1".equals(System.getenv("PJ_DESTROY_TRACE"));
+
     // BitSet indexed by |blessId| — set if the class defines DESTROY (or AUTOLOAD)
     private static final BitSet destroyClasses = new BitSet();
 
@@ -145,6 +151,24 @@ public class DestroyDispatch {
      */
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
+
+        // Phase D-W6 debug: optional trace of every destroy call.
+        // Enable with -Dperlonjava.destroyTrace=1 (or env PJ_DESTROY_TRACE=1)
+        // to find refCount-drift sources.
+        if (DESTROY_TRACE) {
+            String klass = referent.blessId != 0
+                    ? NameNormalizer.getBlessStr(referent.blessId)
+                    : referent.getClass().getSimpleName();
+            String extra = "";
+            if (referent instanceof RuntimeCode rc) {
+                extra = " name=" + (rc.packageName != null ? rc.packageName : "?")
+                        + "::" + (rc.subName != null ? rc.subName : "(anon)");
+            }
+            System.err.println("[DESTROY] " + klass + "@"
+                    + System.identityHashCode(referent)
+                    + " refCount=" + referent.refCount + extra);
+            new RuntimeException("destroy trace").printStackTrace(System.err);
+        }
 
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient

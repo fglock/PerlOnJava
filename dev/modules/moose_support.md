@@ -1991,6 +1991,113 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+## Phase D-W6.2: refcount drift investigation log (2026-04-29)
+
+This investigation builds on PR #599's "no class-name dispatch" rule
+and PR #600's "remove the gate, find the drift sources" plan.
+
+### Reproducers shipped
+
+`src/test/resources/unit/refcount/drift/`:
+
+- **`sub_install.t`** — five sub-installation patterns (glob assign,
+  named sub, loop install, temp drop, nested install). All pass on
+  master AND with the walker gate disabled.
+- **`closure_capture.t`** — five closure-capture patterns (single,
+  two-, three-, five-layer wrap, plus a 20-closure chain). All pass
+  on master AND with the walker gate disabled.
+- **`hash_slot.t`** — four hash-slot patterns (direct, package
+  global, 50-entry registry, slot overwrite). All pass on master
+  AND with the walker gate disabled.
+
+`PJ_DESTROY_TRACE=1` is also wired into `DestroyDispatch.callDestroy`
+to print every destroy with `Pkg::subname` for `RuntimeCode` (and
+class name for blessed objects). Off by default; zero cost.
+
+### What the simple patterns prove
+
+The basic shapes of sub-install, closure-capture, and hash-slot all
+have correct cooperative refCount semantics in PerlOnJava — strong
+holds from package stashes, hash slots, and closure captures all
+keep their referents alive without the walker gate.
+
+### Where the drift actually is
+
+`PJ_DESTROY_TRACE=1 ./jperl -e 'use Class::MOP'` (gate disabled)
+fails with:
+
+```
+Can't call method "get_method" on an undefined value
+  at jar:PERL5LIB/Class/MOP/Attribute.pm line 475.
+```
+
+`Class::MOP::Attribute._remove_accessor` calls
+`$class->get_method($accessor)` where `$class = $self->associated_class()`.
+`associated_class` is a *weakened* ref. The weak ref reads as undef,
+which means the metaclass it pointed at was destroyed.
+
+The trace shows `Class::MOP::Class@1424108509` destroyed **twice**:
+
+```
+[DESTROY] Class::MOP::Class@1424108509 refCount=-2147483648
+  at MortalList.flush(line 585)
+  at anon1205.apply(.../Class/MOP/Class.pm:260)
+  ...
+[DESTROY] Class::MOP::Class@1424108509 refCount=-2147483648
+  at MortalList.drainPendingSince(line 659)
+  at DestroyDispatch.doCallDestroy(line 373)
+  at DestroyDispatch.callDestroy(line 266)
+  at MortalList.flush(line 585)
+  at anon1205.apply(.../Class/MOP/Class.pm:260)
+```
+
+Same identity-hash, two destroys. The metaclass instance was added
+to the deferred-decrement queue twice (or processed twice during
+cascading flush).
+
+### Conclusion
+
+D-W6.2 is **not** in the simple closure-capture path. The drift is
+specifically in the **metaclass-instance lifecycle during `Class::MOP`
+load**, where a Class::MOP::Class instance built up by
+`_construct_class_instance` ends up double-decremented when:
+
+1. its `attach_to_class` path weakens an attribute's `associated_class`
+   ref to itself, AND
+2. some intermediate scope-exit cleanup queues the instance for
+   deferred decrement that the cascading flush from another
+   destroy already drained.
+
+### Next concrete leads
+
+1. **Audit `MortalList.deferDecrementIfTracked`** for double-add: a
+   single `RuntimeBase` should never appear twice in the `pending`
+   list. Add an `IdentityHashMap`-based dedup at the deferred-add
+   point, or detect the second add and drop it.
+2. **Audit `MortalList.drainPendingSince`** — the second destroy of
+   `Class::MOP::Class@1424108509` came through this path. If the
+   pending list contains an entry whose refCount has already been
+   zeroed (or marked MIN_VALUE), `drainPendingSince` should skip it.
+3. **Audit `Class::MOP::Class.pm:260`** (the line emitting the
+   first destroy) — that's likely
+   `_construct_class_instance`'s last statement; figure out which
+   scope-exit puts the metaclass on the deferred queue.
+
+### What's deferred
+
+- D-W6.1 (sub-install drift): closed — the simple patterns work; the
+  observed Sub::Install destroys during bootstrap are *symptoms*,
+  not the root cause.
+- D-W6.2 (closure-capture drift): closed — the simple patterns work
+  here too.
+- **D-W6.4 (NEW) — pending-list double-add / metaclass lifecycle**:
+  the actual drift identified by the investigation. This is what
+  needs the next round of debugging.
+- D-W6.3 (`@_` argument promotion): still pending; reproducer not
+  yet written.
+
+
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
