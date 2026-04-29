@@ -15,7 +15,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [dbix_class.md](dbix_class.md) | DBIx::Class support (in progress) |
 | [dbi_test_parity.md](dbi_test_parity.md) | DBI test-suite parity (~13.5× more passes than master; Phases 1–4 done, incl. a tied-hash method-dispatch fix in the PerlOnJava runtime) |
 | [math_bigint_bignum.md](math_bigint_bignum.md) | Math::BigInt / BigFloat / BigRat / bignum support (in progress) |
-| [storable_binary_format.md](storable_binary_format.md) | Plan to replace the YAML-based Storable with the native Perl Storable binary format (interop with system perl) |
+| [storable_binary_format.md](storable_binary_format.md) | Storable native Perl binary format — read path landed (interop with system perl on retrieve); encoder pending |
 
 ## Module Status Overview
 

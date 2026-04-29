@@ -2,17 +2,45 @@
 
 ## Status
 
-**Not started.** This document is the plan for replacing PerlOnJava's
-YAML-based `Storable` implementation with one that reads/writes the
-native Perl Storable binary format.
+**Read path landed (Phase 1 complete).** PerlOnJava's `Storable::retrieve`
+now decodes native Perl Storable binary files (`pst0` magic) directly,
+matching upstream `perl`'s output byte-for-byte. The full plan was to
+replace the YAML-based implementation with the native binary format —
+that work is half done; the **encoder** (`store`/`nstore`/`freeze`/
+`nfreeze`) still emits YAML and is queued as Phase 2 (see "Progress
+Tracking" near the end of this document).
+
+What works today:
+- `retrieve($file)` reads any current-format Storable file produced by
+  upstream perl: scalars, refs, arrays, hashes, flag-hashes, blessed
+  objects, cyclic references via `SX_OBJECT` backrefs, shared
+  substructures, network and native byte order, UTF-8 keys, nested
+  structures.
+- Native `STORABLE_thaw` hooks fire (`SX_HOOK` frame parser is
+  complete).
+- The `~/.cpan/Metadata` cache written by system perl is now readable
+  by jperl, so switching between the two perls no longer invalidates
+  the CPAN index.
+- 875+ assertions from upstream `perl5/dist/Storable/t/integer.t` pass
+  unmodified, plus `lock.t`, `tied_reify.t`, `tied_store.t`,
+  `utf8hash.t`, etc. — see `dev/import-perl5/config.yaml` for the
+  curated list under `make test-bundled-modules`.
+
+What does NOT yet work:
+- `store`/`freeze`/`nstore`/`nfreeze` still write YAML. As a result,
+  files written by jperl can be read by jperl but not by system perl
+  (you get the "File is not a perl storable" error from upstream).
+  Tracking: Phase 2 in this doc.
+- `dclone` works (it's a pure deep-copy and never goes through the
+  wire format).
 
 ## Motivation
 
 PerlOnJava ships its own `Storable` module
 (`src/main/perl/lib/Storable.pm` + `src/main/java/org/perlonjava/runtime/perlmodule/Storable.java`)
-that, for `store`/`nstore`/`retrieve`, serializes data to **YAML** rather
-than the native Perl Storable binary format. The Java side declares this
-intentionally:
+that originally serialized to **YAML** rather
+than the native Perl Storable binary format. The Java side declared
+this intentionally:
 
 > Storable module implementation using YAML with type tags for blessed
 > objects. … This elegant approach leverages YAML's `!!` type tag system
@@ -23,32 +51,38 @@ The in-memory `freeze`/`thaw` path already grew a separate binary format
 
 This breaks every workflow that exchanges Storable data between `jperl`
 and a real `perl`. Concretely observed during `jcpan -t Toto`
-investigation (2026-04-29):
+investigation (2026-04-29). Note: items marked **fixed** below are
+resolved by the Phase-1 read path that has since landed; the
+underlying issue (jperl writes still aren't system-perl-readable)
+persists pending Phase 2.
 
 1. **CPAN.pm `~/.cpan/Metadata` cache.** CPAN persists its module index
-   with `Storable::nstore`. Switching between `perl` and `jperl`
-   always invalidates the cache:
+   with `Storable::nstore`. Before the read path landed, switching
+   between `perl` and `jperl` always invalidated the cache:
    - jperl-written file → system perl: `File is not a perl storable at
-     .../Storable.pm line 411`.
-   - perl-written file → jperl: `retrieve failed: …` (now improved to a
-     specific "native Perl Storable binary file" message).
-   Each side then re-reads `02packages.details.txt.gz` and overwrites
-   the cache, so a user alternating between the two perls pays the full
-   index-rebuild cost on every invocation.
+     .../Storable.pm line 411`. **Still happens** until Phase 2 makes
+     jperl write `pst0`.
+   - perl-written file → jperl: used to error with
+     `retrieve failed: …`. **Fixed** — jperl now decodes upstream
+     `pst0` files correctly, so reading a system-perl-written cache
+     no longer triggers a re-index.
 
 2. **distroprefs / persistent state.** CPAN.pm warns
    `'YAML' not installed, will not store persistent state` on system
    perl when only YAML metadata is present, then falls back further.
+   **Still happens** for caches that jperl wrote.
 
 3. **Other tooling.** Anything that hands a `freeze`d blob to / from a
    real perl breaks: `Cache::FileCache`, DBI-cached statement metadata,
    `DBM::Deep` Storable values, build-system caches (e.g. ExtUtils
    `.packlist` adjacent state, `Module::Build`'s `_build/` Storable
-   files), Sereal/Storable hybrid pipelines, etc.
+   files), Sereal/Storable hybrid pipelines, etc. **Half fixed:** the
+   real-perl → jperl direction now works; the jperl → real-perl
+   direction is still broken until Phase 2.
 
 4. **Cross-process IPC.** `Storable::freeze`/`thaw` is a common wire
    format between Perl processes. Mixed jperl/perl fleets cannot
-   interoperate today.
+   interoperate today. **Half fixed** as in (3).
 
 ## Goal
 
@@ -298,21 +332,88 @@ perl. Bidirectional CPAN cache sharing works.
 
 ## Progress Tracking
 
-### Current Status: Plan only — no implementation yet.
+### Current Status: Phase 1 (decoder) complete. Phase 2 (encoder) pending.
 
 ### Completed Phases
-_(none)_
 
-### Next Steps
+- [x] **Stage A — foundation** (2026-04-29, commit `20a3b3d96`)
+  - New package `org.perlonjava.runtime.perlmodule.storable` with
+    `Opcodes` (SX_* constants), `StorableContext` (cursor, seen-table,
+    classname-table, byte-order helpers), `Header` (`pst0` magic +
+    netorder/native + version/sizeof gates),
+    `StorableReader` (top-level dispatch switch), `OpcodeReader` SPI,
+    `StorableFormatException`, and group-helper stubs
+    (`Scalars`/`Refs`/`Containers`/`Blessed`/`Hooks`/`Misc`).
+  - Fixture generator at `dev/tools/storable_gen_fixtures.pl`,
+    37 binary fixtures committed under
+    `src/test/resources/storable_fixtures/` covering scalars, refs,
+    containers, blessed, hooks, regexp, native and network byte order.
+  - `StorableReaderTest` JUnit harness with 11 baseline tests.
+  - Canary opcodes implemented: SX_UNDEF, SX_SV_UNDEF, SX_SV_YES,
+    SX_SV_NO, SX_BOOLEAN_TRUE, SX_BOOLEAN_FALSE, SX_OBJECT (backref).
 
-1. Phase 1 task 1: `NativeReader` skeleton + `pst0` header parse.
-2. Decide on package layout: nest under
-   `org.perlonjava.runtime.perlmodule.storable` vs keep flat next to
-   `Storable.java`. Lean toward the subpackage so the existing
-   1100-line file doesn't keep growing.
-3. Build the fixture-generation harness so Phase 1 has real bytes to
-   parse from day one (don't write the parser blind against the XS
-   source).
+- [x] **Stage B — per-opcode implementations, in parallel** (2026-04-29,
+    commit `889e27b67`). Five subagents in parallel, each scoped to one
+    group helper file + a new test class:
+  - `Scalars.java` — SX_BYTE, SX_INTEGER, SX_NETINT, SX_DOUBLE,
+    SX_SCALAR, SX_LSCALAR, SX_UTF8STR, SX_LUTF8STR (+22 tests).
+  - `Refs.java` — SX_REF, SX_WEAKREF, SX_OVERLOAD, SX_WEAKOVERLOAD
+    (+9 tests, including backref-cycle and shared-substructure
+    synthetic streams).
+  - `Containers.java` — SX_ARRAY, SX_HASH, SX_FLAG_HASH (UTF-8-flagged
+    keys), SX_SVUNDEF_ELEM (+11 tests).
+  - `Blessed.java` — SX_BLESS, SX_IX_BLESS via the classname table
+    (+4 tests).
+  - `Hooks.java` — SX_HOOK frame parser (SHF_TYPE_MASK / LARGE_* /
+    IDX_CLASSNAME / NEED_RECURSE / HAS_LIST), recurse-chain handling,
+    `STORABLE_thaw` invocation (+7 tests).
+
+- [x] **Stage C — integration + Perl-level wiring** (2026-04-29, same
+    commit). `Storable::retrieve` in
+    `src/main/.../perlmodule/Storable.java` detects `pst0` magic and
+    routes through `StorableReader`, then wraps a bare top-level
+    scalar in a SCALARREFERENCE so the API matches upstream's
+    `do_retrieve → newRV_noinc` (Storable.xs L7601).
+    `StorableReaderTest` got real fixture round-trips replacing the
+    Stage-A stub assertions. `Storable.pm` grew the upstream-compat
+    constants and helpers the test suite expects: `BLESS_OK`,
+    `TIE_OK`, `FLAGS_COMPAT`, `CAN_FLOCK`, `mretrieve`.
+
+- [x] **Bonus parser fix** (same commit). Named-phaser sub syntax
+    `sub BEGIN { ... }` (used by upstream Storable tests for
+    `unshift @INC, 't/lib'`) now executes the body at compile time
+    via `SpecialBlockParser.runSpecialBlock`, matching upstream
+    perl. Five-line addition in
+    `SubroutineParser.handleNamedSubWithFilter`.
+
+- [x] **Upstream test import** (same commit).
+    `dev/import-perl5/config.yaml` adds an entry that runs
+    `dev/import-perl5/sync.pl` to populate
+    `src/test/resources/module/Storable/t/` from
+    `perl5/dist/Storable/t/`. 9 cleanly-passing tests imported
+    today (~1030 assertions, 0 failures); the rest are excluded with
+    per-file rationale in the YAML config (categories: legacy
+    formats, plans-then-bails, assertion-level failures awaiting
+    Phase 2 / specific fixes). `make test-bundled-modules` is green
+    for the storable subset.
+
+### Next Steps (Phase 2 — encoder)
+
+1. `NativeWriter` mirroring `NativeReader`. Write the `pst0` header,
+   pick integer width (SX_BYTE vs SX_INTEGER vs SX_NETINT) the same
+   way XS does. The new package already has `StorableContext`
+   write-side primitives (`writeByte`, `encoded()`); plumb them.
+2. `$Storable::canonical` honored for hash key ordering.
+3. SX_OBJECT shared-reference table keyed on identity (Java
+   `IdentityHashMap`).
+4. `STORABLE_freeze` hook emission.
+5. Default `store`/`nstore`/`freeze`/`nfreeze` to native binary;
+   keep the YAML reader as a one-release fallback for files that
+   don't start with `pst0` so upgraders don't lose their old caches.
+6. Re-enable upstream tests blocked on encoding: `freeze.t`,
+   `blessed.t` (round-trips through freeze), `regexp.t`, `malice.t`,
+   `dclone.t`, `recurse.t`, etc. Most of these come for free once
+   the writer is byte-compatible with upstream.
 
 ### Open Questions
 
@@ -332,7 +433,7 @@ _(none)_
   (2026-04-29). Companion fixes landed alongside this doc:
   - `IO::Socket::SSL` stub gained `SSL_WANT_READ` / `SSL_WANT_WRITE` /
     etc. (unblocked Mojolicious tests at compile time).
-  - `Storable::retrieve` now identifies native-binary input and
-    explains the incompatibility instead of returning a generic
-    YAML-parser error.
+  - `Storable::retrieve` originally got a clearer "native Perl
+    Storable binary file" error message; in the same PR the actual
+    decoder landed and that error path is now dead code.
 - `dev/modules/cpan_client.md` — overall jcpan status.
