@@ -223,6 +223,16 @@ public class XSLoader extends PerlModuleBase {
             if (inc != null && inc.exists(ppKey).getBoolean()) {
                 return scalarTrue.getList();
             }
+            // Last-ditch fallback: if PerlOnJava bundles a pure-Perl shim
+            // for this module under jar:PERL5LIB (src/main/perl/lib/...),
+            // eval it now. The shim is responsible for installing the subs
+            // the XS bootstrap would normally have provided. This is how
+            // we support XS-only CPAN modules whose dist .pm sits earlier
+            // in @INC and calls XSLoader::load before defining anything
+            // (e.g. Class::C3::XS).
+            if (loadJarShimOverrides(moduleName)) {
+                return scalarTrue.getList();
+            }
             // Error message matches pattern /object version|loadable object/ that many
             // CPAN modules (DateTime, JSON::XS, etc.) expect for pure Perl fallback
             return WarnDie.die(
@@ -322,12 +332,13 @@ public class XSLoader extends PerlModuleBase {
      * which installs any subroutine definitions into the already-loaded package namespace.
      *
      * @param moduleName The fully qualified Perl module name (e.g., "Template::Stash::XS")
+     * @return true if a jar shim was found and successfully eval'd, false otherwise.
      */
-    private static void loadJarShimOverrides(String moduleName) {
+    private static boolean loadJarShimOverrides(String moduleName) {
         // Guard against recursion: the shim code may call XSLoader::load() again
         // for the same module (e.g. Clone.pm's eval { XSLoader::load('Clone') })
         if (!shimLoadingInProgress.add(moduleName)) {
-            return; // Already loading this module's shim — break the cycle
+            return false; // Already loading this module's shim — break the cycle
         }
         try {
             // Convert module name to file path: Template::Stash::XS -> Template/Stash/XS.pm
@@ -337,7 +348,7 @@ public class XSLoader extends PerlModuleBase {
             // Check if a jar: version exists
             InputStream is = Jar.openInputStream(jarPath);
             if (is == null) {
-                return; // No jar: shim for this module
+                return false; // No jar: shim for this module
             }
             
             // Read the content
@@ -350,8 +361,10 @@ public class XSLoader extends PerlModuleBase {
             
             // Eval the code to install any method overrides into the package
             EvalStringHandler.evalString(code, new RuntimeBase[0], jarPath, 1);
+            return true;
         } catch (Exception e) {
             // Silently ignore - the module works via inheritance anyway
+            return false;
         } finally {
             shimLoadingInProgress.remove(moduleName);
         }
