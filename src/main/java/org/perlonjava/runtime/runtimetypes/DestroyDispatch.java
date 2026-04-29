@@ -17,6 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DestroyDispatch {
 
+    /** D-W6 debug flag for destroy tracing (PJ_DESTROY_TRACE=1). */
+    private static final boolean DESTROY_TRACE =
+            "1".equals(System.getProperty("perlonjava.destroyTrace"))
+            || "1".equals(System.getenv("PJ_DESTROY_TRACE"));
+
     // BitSet indexed by |blessId| — set if the class defines DESTROY (or AUTOLOAD)
     private static final BitSet destroyClasses = new BitSet();
 
@@ -145,6 +150,15 @@ public class DestroyDispatch {
      */
     public static void callDestroy(RuntimeBase referent) {
         // refCount is already MIN_VALUE (set by caller)
+
+        if (DESTROY_TRACE && referent.blessId != 0) {
+            String klass = NameNormalizer.getBlessStr(referent.blessId);
+            System.err.println("[DESTROY] " + klass + "@"
+                    + System.identityHashCode(referent)
+                    + " refCount=" + referent.refCount
+                    + " destroyFired=" + referent.destroyFired);
+            new RuntimeException("destroy trace").printStackTrace(System.err);
+        }
 
         // Phase 3 (refcount_alignment_plan.md): Re-entry guard.
         // If this object is already inside its own DESTROY body, a transient

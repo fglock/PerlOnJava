@@ -18,6 +18,13 @@ import java.util.Set;
  */
 public class MortalList {
 
+    /** Phase D-W6.4 debug: enable pending-list trace via -Dperlonjava.pendingTrace=1
+     *  or env PJ_PENDING_TRACE=1. Logs every flush() processing pass and
+     *  duplicate pending entries (same RuntimeBase identity twice). */
+    private static final boolean PENDING_TRACE =
+            "1".equals(System.getProperty("perlonjava.pendingTrace"))
+            || "1".equals(System.getenv("PJ_PENDING_TRACE"));
+
     // Always-on: refCount tracking for birth-tracked objects (anonymous hashes,
     // arrays, closures with captures) requires balanced increment/decrement.
     // The increment side fires unconditionally in setLarge() when refCount >= 0,
@@ -536,6 +543,23 @@ public class MortalList {
         if (!active || pending.isEmpty() || flushing) return;
         flushing = true;
         try {
+            // Phase D-W6.4 debug: log duplicate-add and refCount transitions.
+            if (PENDING_TRACE && pending.size() > 1) {
+                java.util.IdentityHashMap<RuntimeBase, Integer> dupCount =
+                        new java.util.IdentityHashMap<>();
+                for (RuntimeBase b : pending) dupCount.merge(b, 1, Integer::sum);
+                for (var e : dupCount.entrySet()) {
+                    if (e.getValue() > 1) {
+                        RuntimeBase b = e.getKey();
+                        String klass = b.blessId != 0
+                                ? NameNormalizer.getBlessStr(b.blessId)
+                                : b.getClass().getSimpleName();
+                        System.err.println("[PENDING-DUP] " + klass + "@"
+                                + System.identityHashCode(b) + " count="
+                                + e.getValue() + " refCount=" + b.refCount);
+                    }
+                }
+            }
             // Process list — DESTROY may add new entries, so use index-based loop
             for (int i = 0; i < pending.size(); i++) {
                 RuntimeBase base = pending.get(i);

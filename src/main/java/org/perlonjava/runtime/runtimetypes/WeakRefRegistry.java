@@ -204,6 +204,16 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
+        // D-W6.4 debug: log who clears weak refs to which blessed objects.
+        if ("1".equals(System.getenv("PJ_WEAKCLEAR_TRACE"))
+                && referent.blessId != 0) {
+            String klass = NameNormalizer.getBlessStr(referent.blessId);
+            System.err.println("[WEAK-CLEAR] " + klass + "@"
+                    + System.identityHashCode(referent)
+                    + " refCount=" + referent.refCount
+                    + " destroyFired=" + referent.destroyFired);
+            new RuntimeException("weak-clear trace").printStackTrace(System.err);
+        }
         // Skip clearing weak refs to CODE objects. CODE refs live in both
         // lexicals and the symbol table (stash), but stash assignments
         // (*Foo::bar = $coderef) bypass setLarge(), making the stash reference

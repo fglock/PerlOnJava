@@ -1991,6 +1991,94 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+## Phase D-W6.4 (continued, instrumentation pass): refCount transitions on Class::MOP::Class confirmed
+
+### Three new diagnostic env-flags
+
+- `PJ_DESTROY_TRACE=1` — print every `DestroyDispatch.callDestroy`
+  entry: class name, identity hash, refCount, destroyFired flag,
+  and a Java stack trace.
+- `PJ_PENDING_TRACE=1` — at every `MortalList.flush()` start, scan
+  `pending` for duplicate identities and print
+  `[PENDING-DUP] class@id count=N refCount=R`.
+- `PJ_WEAKCLEAR_TRACE=1` — log every `WeakRefRegistry.clearWeakRefsTo`
+  call for blessed objects, with caller stack.
+
+All three are off by default (zero cost in normal builds).
+
+### What the traces actually show
+
+Running `PJ_PENDING_TRACE=1 PJ_DESTROY_TRACE=1 PJ_WEAKCLEAR_TRACE=1
+./jperl -e 'use Class::MOP'`:
+
+1. **A `Class::MOP::Class` instance reaches refCount=0 in `MortalList.flush()`** — confirmed via the `[DESTROY]` line:
+   ```
+   [DESTROY] Class::MOP::Class@1887699190 refCount=-2147483648 destroyFired=false
+     at MortalList.flush(line 609)
+     at anon1205.apply(.../Class/MOP/Class.pm:260)
+   ```
+   So the metaclass IS destroyed during bootstrap (NOT a double-destroy of an already-MIN_VALUE object — the *first* destroy is what breaks things).
+
+2. **`pending` contains the same metaclass identity multiple times.**
+   `[PENDING-DUP]` reports the same `Class::MOP::Class@764826684`
+   queued 3× (with refCount=7), then 3× again (refCount=6), etc.
+   That is normal cooperative refcount behaviour when an object
+   genuinely has 7 strong holders; the duplicates only become a
+   problem if any one of them is bogus.
+
+3. **Weak refs are cleared during the destroy:**
+   ```
+   [WEAK-CLEAR] Class::MOP::Class@1887699190 refCount=0 destroyFired=true
+     at WeakRefRegistry.clearWeakRefsTo(line 215)
+     at DestroyDispatch.doCallDestroy(line 423)
+   ```
+   This is what makes `Class::MOP::Attribute::associated_class` (a
+   weakened ref) read as undef — and is the proximate cause of the
+   "Can't call method get_method on an undefined value" error.
+
+### What this rules in / out
+
+- **NOT a double-destroy.** The first destroy alone is enough to
+  clear the weak refs. The earlier "destroyed twice" framing was
+  imprecise — both events are normal callDestroy calls; the second
+  enters the `destroyFired` cleanup branch, but the damage was done
+  by the first.
+- **NOT auto-sweep.** `MortalList.maybeAutoSweep` is correctly
+  guarded by `ModuleInitGuard.inModuleInit()`, which is true during
+  `use Class::MOP`.
+- **The first destroy IS legitimate from the cooperative refcount's
+  perspective.** Some N pending decrements brought the metaclass's
+  refCount from N → 0. The decrements are real — the cooperative
+  count actually thinks no one holds the metaclass strongly any
+  more.
+
+So the real bug is upstream: **someone is queueing decrements on
+the Class::MOP::Class metaclass that they shouldn't be**, OR the
+strong holder (`our %METAS` in `Class::MOP`) is not being counted as
+a strong reference.
+
+### Concrete next leads (sharper than before)
+
+1. **Audit `RuntimeHash.put` and the package-global hash store
+   path.** `Class::MOP::store_metaclass_by_name($pkg, $meta)` does
+   `$METAS{$pkg} = $meta` from inside a function. That goes through
+   bytecode that calls `RuntimeHash.put(key, RuntimeScalar)` — does
+   THAT path bump `$meta`'s referent's refCount? `hash_slot.t`
+   exercises `$h{key} = $obj` from the *caller's* scope and works,
+   but the function-internal store path may differ.
+
+2. **Trace the exact decrement events** that bring
+   `Class::MOP::Class@1887699190.refCount` from N → 0. Add a third
+   trace: log every `setLargeRefCounted` / `MortalList.flush`
+   decrement of `refCount` for any `Class::MOP::Class` instance,
+   with a stack trace. The decrement that takes refCount from 1 →
+   0 is the smoking gun — its source scope is the leaker.
+
+3. **Compare the Class.pm bytecode line 260 source position** to
+   the Perl source. `anon1205.apply(.../Class/MOP/Class.pm:260)`
+   is a closure body somewhere inside Class.pm. Identifying which
+   `sub { ... }` it is will narrow the audit drastically.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
