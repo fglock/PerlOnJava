@@ -549,6 +549,101 @@ regression can be bisected. The walker code itself is left in
 place (only the gate call sites are simplified), so reintroducing
 the gate as a safety net during debugging is a one-line revert.
 
+### Empirical D-W6 progress (2026-04-29)
+
+#### What removing the gate fixes (commit 230a672dd)
+
+With the gate fully removed and cooperative refCount alone driving
+DESTROY, the three DBIC "Perl 5 semantics" tests pass:
+
+| Test | Before D-W6 | After D-W6 |
+|---|---|---|
+| `t/cdbi/04-lazy.t` test 11 | FAIL | **PASS** |
+| `t/storage/txn_scope_guard.t` 18/18 | FAIL | **PASS** |
+| `t/52leaks.t` 11/11 | bailed | **PASS** |
+
+The cycle-leak reproducer in `dev/sandbox/refcount_drift.pl` also
+confirms cycles leak naturally — cooperative refCount keeps cycle
+members at refCount ≥ 1 with no walker, exactly as Perl 5 does.
+
+#### What removing the gate breaks
+
+Moose bootstrap fails: `use Class::MOP::Class` dies with
+
+```
+Can't locate object method "initialize" via package "Class::MOP::Class"
+  at jar:PERL5LIB/Class/MOP/Mixin.pm line 12.
+```
+
+`PJ_DESTROY_TRACE=1 ./jperl -e 'use Class::MOP::Class'` shows ~15
+non-blessed `RuntimeCode` objects being destroyed inside
+`MortalList.flush` during `MiniTrait::apply`. Their stack traces
+all run through `org.perlonjava.anonNNN.apply(.../Class/MOP/MiniTrait.pm:...)`
+— i.e. the destroys fire *while* sub-installation is happening on
+Class::MOP::Class. By the time the bootstrap reaches
+`Class::MOP::Class->initialize(...)` the `initialize` slot is gone
+from the package stash.
+
+Confirmed drift source: **named-sub installation**. Patterns like:
+
+```perl
+package Class::MOP::Class;
+sub initialize { ... }   # <-- the sub object is briefly the only ref to itself
+                          #     before the package stash entry is created
+```
+
+cause the anonymous CV's cooperative refCount to transient-drop to 0,
+and DESTROY fires on a CV that should still be live.
+
+#### Hybrid attempt: only destroy blessed objects
+
+Tried: keep the gate-removal but skip `callDestroy` for non-blessed
+objects (since Perl 5 has no DESTROY semantics for non-blessed refs).
+
+Result:
+- Moose bootstrap: fixed (subs not destroyed).
+- `cmop/numeric_defaults.t`: regressed (12 fails) — anonymous metaclasses
+  use blessed objects whose refCount transient-drops to 0, and now they
+  ARE destroyed.
+- `t/52leaks.t`: regressed (4 fails) — `callDestroy` for non-blessed
+  containers does cascade-decrement of contained blessed children;
+  skipping it leaks DBIC rows transitively.
+
+So "only destroy blessed objects" is not the right shape either.
+
+#### Status: walker gate restored as safety net
+
+Until the cooperative refCount audit is complete (Step 1 + Step 2 of
+the plan above — multi-week effort), the universal walker gate from
+PR #599 is restored. PerlOnJava continues to differ from Perl 5 on
+the 4 documented DBIC tests, but Moose stays at ≥396/478 and DBIC
+stays at 4 known regressions.
+
+The new `PJ_DESTROY_TRACE=1` env-flag in
+`DestroyDispatch.callDestroy` is left in place as a debugging aid
+for the future audit.
+
+#### Next concrete steps
+
+1. **Sub installation drift.** Audit
+   `BytecodeCompiler.compileNamedSub` and the glob-assignment path
+   in `RuntimeGlob.setSlot`/`GlobalVariable.defineGlobalCodeRef`.
+   The sub's first refCount increment must happen *before* any
+   intermediate scalar in the bytecode emit chain releases its
+   transient hold.
+
+2. **Closure capture drift.** Audit
+   `RuntimeCode.cloneForClosure` and the `addToCapturedScalars` /
+   `setLargeRefCounted` paths to ensure captures bump refCount on
+   every captured blessed scalar.
+
+3. **Argument promotion drift.** Audit `RuntimeArray.push` and the
+   `@_` build path in `RuntimeCode.apply`.
+
+Each fix should ship with a tiny standalone reproducer in
+`src/test/resources/unit/refcount/drift/` and the ability to remove
+one branch of the temporary gate condition.
+
 ---
 
 ## Hard regression gate (every refcount/destroy change)
