@@ -103,7 +103,16 @@ public final class StorableWriter {
             return;
         }
 
-        // 2b. Plain blessed: SX_BLESS / SX_IX_BLESS wrapper around the body.
+        // 2b. Tied container detection. If the referent's underlying
+        // AV/HV/scalar carries tied magic, route through TiedEncoder
+        // which emits SX_TIED_ARRAY / SX_TIED_HASH / SX_TIED_SCALAR
+        // followed by the tying object. The tied agent fills in the
+        // body of TiedEncoder.tryEmit; foundation just delegates.
+        if (TiedEncoder.tryEmit(c, refScalar, this)) {
+            return;
+        }
+
+        // 2c. Plain blessed: SX_BLESS / SX_IX_BLESS wrapper around the body.
         if (className != null) {
             int existing = c.lookupWriteClass(className);
             if (existing >= 0) {
@@ -142,9 +151,10 @@ public final class StorableWriter {
             case RuntimeScalarType.CODE:
                 throw new StorableFormatException("Can't store CODE items");
             case RuntimeScalarType.REGEX:
-                // SX_REGEXP encoder is a real opcode; for now refuse so we
-                // don't silently emit garbage.
-                throw new StorableFormatException("storing regexes not yet supported by encoder");
+                // SX_REGEXP encoder. Foundation delegates to RegexpEncoder
+                // which the regexp agent fills in.
+                RegexpEncoder.write(c, refScalar);
+                break;
             case RuntimeScalarType.GLOBREFERENCE:
                 throw new StorableFormatException("Can't store GLOB items");
             default:
@@ -428,12 +438,19 @@ public final class StorableWriter {
             c.writeNativeNV(dv);
             return;
         }
+        // vstrings: SX_VSTRING / SX_LVSTRING + the embedded vstring magic
+        // followed by a regular scalar body (Storable.xs L5833). Foundation
+        // delegates to VStringEncoder which the vstring agent fills in.
+        if (v.type == RuntimeScalarType.VSTRING) {
+            VStringEncoder.write(c, v);
+            return;
+        }
         // strings
         String s = v.toString();
         if (v.type == RuntimeScalarType.BYTE_STRING) {
             writeStringBody(c, s.getBytes(StandardCharsets.ISO_8859_1), false);
         } else {
-            // STRING (utf8-flagged), VSTRING, etc. Encode as UTF-8 bytes.
+            // STRING (utf8-flagged), etc. Encode as UTF-8 bytes.
             writeStringBody(c, s.getBytes(StandardCharsets.UTF_8), true);
         }
     }
