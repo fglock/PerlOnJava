@@ -31,6 +31,27 @@ fi
 #   for native system calls (file operations, process management).
 JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
+# Set a sensible default max heap. JVM auto-defaults to 1/4 of system RAM
+# (e.g. 12 GB on a 48 GB machine), which causes severe memory pressure when
+# multiple jperl instances run concurrently (Test::Harness spawns one child
+# JVM per test file via IPC::Open3; with the auto-default each parent+child
+# pair would reserve 24 GB+, sending the OS into swap and producing what
+# looks like a 100% CPU "hang" in user code that's actually GC thrashing).
+#
+# Strategy: use -XX:SoftMaxHeapSize as a soft target the G1 GC tries to
+# stay under during normal operation, paired with a higher hard cap
+# (-Xmx) that allows occasional spikes (large strings, big test datasets)
+# without an OOM. This matches "2 GB normally, up to 4 GB if needed".
+#
+# Override either by setting `JPERL_OPTS="-Xmx<size>"` or
+# `JPERL_OPTS="-XX:SoftMaxHeapSize=<size>"` in the environment.
+if [[ "${JPERL_OPTS:-}" != *"-Xmx"* ]]; then
+    JVM_OPTS="$JVM_OPTS -Xmx4g"
+fi
+if [[ "${JPERL_OPTS:-}" != *"SoftMaxHeapSize"* ]]; then
+    JVM_OPTS="$JVM_OPTS -XX:SoftMaxHeapSize=2g"
+fi
+
 # Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 # warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
 JAVA_VERSION=$(java -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
