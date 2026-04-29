@@ -1991,6 +1991,103 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+## Phase D-W6.6: precise failure-stack diagnosis (2026-04-29)
+
+Installing a `$SIG{__DIE__}` probe before `use Class::MOP` (with the
+gate disabled) finally pinpoints WHERE the failure originates:
+
+```
+FAILURE at:
+  main::__ANON__         at .../Try/Tiny.pm:139
+  (eval)                 at .../Try/Tiny.pm:140
+  Try::Tiny::try         at .../Class/MOP/Class.pm:897
+  Class::MOP::Class::_post_add_attribute
+                         at .../Class/MOP/Mixin/HasAttributes.pm:41
+  Class::MOP::Mixin::HasAttributes::add_attribute
+                         at .../Class/MOP.pm:188
+```
+
+The chain inside the bootstrap:
+
+```perl
+# CMOP.pm:188 — bootstrap
+Class::MOP::Mixin::HasMethods->meta->add_attribute(
+    Class::MOP::Attribute->new('wrapped_method_metaclass' => (
+        reader => { 'wrapped_method_metaclass' => \&...wrapped_method_metaclass },
+        ...
+    ))
+);
+
+# HasAttributes.pm:41 — add_attribute body
+$self->_attach_attribute($attribute);   # weaken back-ref
+$self->{_attribute_map}{...} = $attr;
+$self->_post_add_attribute($attribute);
+
+# Class.pm:897 — _post_add_attribute body
+try {
+    local $SIG{__DIE__};
+    $attribute->install_accessors;     # ← dies inside here somewhere
+} catch {
+    $self->remove_attribute($attribute->name);   # ← then THIS dies because
+    die $_;                                       #   $attr->associated_class
+};                                                #   reads as undef
+```
+
+So `install_accessors` dies first — when `$self->associated_class`
+reads as undef inside `_process_accessors`. Then the catch block
+calls `remove_attribute` which calls `remove_accessors` which calls
+`_remove_accessor($accessor, $self->associated_class())` — and the
+weak ref is undef, so `$class->get_method($accessor)` dies.
+
+The visible "Can't call method 'get_method' on an undefined value at
+Attribute.pm line 475" is the SECOND failure; the first is hidden by
+Try::Tiny's `local $SIG{__DIE__}` and only manifests via the catch.
+
+### Reproducer
+
+`src/test/resources/unit/refcount/drift/cmop_add_attr_loop.t` — 11
+iterations of the exact `_attach_attribute` →
+`_attribute_map` insert → `_post_add_attribute` → `try {
+install_accessors } catch { remove_attribute }` shape, with
+`reader => { name => CV }` HASH-form readers (which is what triggers
+`install_accessors` to actually do `$self->associated_class->name`).
+
+**Both Perl 5 and PerlOnJava (gate disabled) pass this reproducer.**
+So the simple shape isn't enough to surface the drift.
+
+### What's still missing from the reproducer
+
+The real `Class::MOP` bootstrap differs from the reproducer in that
+`Class::MOP::Mixin::HasMethods->meta` returns a metaclass that is:
+
+- An instance of `Class::MOP::Class` (not bare-Perl Meta).
+- That metaclass itself has a multi-level `@ISA` chain (Module,
+  HasAttributes, HasMethods, HasOverloads).
+- Has been built up by *itself* — `meta` initialises a metaclass for
+  the package using the same `_construct_class_instance` →
+  `add_attribute` chain.
+- Has Class::MOP's own `add_method`, `attribute_metaclass`,
+  `method_metaclass`, etc. — each a CMOP-machine method.
+
+The bug is somewhere in **the recursive bootstrap**, where the
+metaclass's own add_attribute uses methods that themselves traverse
+the metaclass-method-map (which is being built simultaneously). The
+specific transient drift happens when `install_accessors` calls a
+method that walks `$class->linearized_isa` or `$class->_method_map`
+during the partial-build state.
+
+### Suggested next probe
+
+- Run with `PJ_DESTROY_TRACE=1 PJ_WEAKCLEAR_TRACE=1` and add a
+  `$SIG{__DIE__}` Perl-side probe that prints
+  `$self->associated_class // 'UNDEF'` immediately before each `die`.
+  The first die where `associated_class` is `'UNDEF'` reveals the
+  exact LAST PRIOR refCount-decrement step that took the metaclass
+  to 0.
+- That decrement's stack will identify the specific `linearized_isa`
+  / `_method_map` traversal inside `install_accessors` that loses
+  the metaclass strong hold.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
