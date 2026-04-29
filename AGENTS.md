@@ -104,6 +104,16 @@
 ║       git reflog | head -20                                                  ║
 ║       git reset --hard <sha-of-your-commit-before-rebase>                    ║
 ║                                                                              ║
+║   GITHUB SIDE-EFFECT: if you ever force-push the branch to a SHA that        ║
+║   equals the base branch's HEAD (which happens if rebase silently drops      ║
+║   your commit), GitHub will auto-CLOSE the PR. A subsequent force-push       ║
+║   back to the correct SHA does NOT auto-reopen it. You have to run:          ║
+║                                                                              ║
+║       gh pr reopen <number>                                                  ║
+║                                                                              ║
+║   So: after any force-push, check `gh pr view <n> --json state,files` to    ║
+║   make sure the PR is still OPEN and shows the expected files.               ║
+║                                                                              ║
 ║   If unsure which side is which, abort and inspect both versions first:      ║
 ║                                                                              ║
 ║       git show :2:<file> > /tmp/ours.txt    # "ours"   side of the conflict  ║
