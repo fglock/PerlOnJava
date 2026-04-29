@@ -522,18 +522,29 @@ public class Storable extends PerlModuleBase {
             String filename = args.get(0).toString();
             byte[] raw = Files.readAllBytes(new File(filename).toPath());
 
-            // Detect real-Perl Storable binary files (magic "pst0"). PerlOnJava's
-            // Storable currently writes YAML, so it can't read native binary
-            // Storable produced by upstream perl. Fail with a clear, actionable
-            // error rather than a confusing YAML parser message.
+            // Detect native-format Storable files by their "pst0" magic.
+            // These are written by upstream Perl (and now by jperl on the
+            // round-trip path). Read them with the native binary reader
+            // built in src/main/java/.../perlmodule/storable/.
             if (raw.length >= 4
                     && raw[0] == 'p' && raw[1] == 's' && raw[2] == 't' && raw[3] == '0') {
-                return WarnDie.die(new RuntimeScalar(
-                        "retrieve failed: '" + filename + "' is a native Perl"
-                                + " Storable binary file, which PerlOnJava's"
-                                + " Storable (YAML-based) cannot read. Delete the"
-                                + " file or regenerate it with jperl."),
-                        new RuntimeScalar("\n")).getList();
+                org.perlonjava.runtime.perlmodule.storable.StorableContext sCtx =
+                        new org.perlonjava.runtime.perlmodule.storable.StorableContext(raw);
+                org.perlonjava.runtime.perlmodule.storable.Header.parseFile(sCtx);
+                org.perlonjava.runtime.perlmodule.storable.StorableReader sReader =
+                        new org.perlonjava.runtime.perlmodule.storable.StorableReader();
+                RuntimeScalar data = sReader.dispatch(sCtx);
+                // Storable's `retrieve` always returns a reference (see
+                // do_retrieve -> newRV_noinc in Storable.xs around L7601).
+                // If the top-level opcode already produced a reference
+                // (SX_REF / SX_ARRAY / SX_HASH / SX_BLESS yields one), return
+                // it as-is. If it produced a bare scalar (SX_BYTE for nstore(\42)
+                // collapses to bare SX_BYTE on disk), wrap it in a SCALARREFERENCE
+                // so the caller can dereference uniformly.
+                if (!RuntimeScalarType.isReference(data)) {
+                    data = data.createReference();
+                }
+                return data.getList();
             }
 
             String yaml = new String(raw, StandardCharsets.UTF_8);

@@ -109,3 +109,13 @@ test-*.html
 
 # Ignore heap dumps
 *.hprof
+
+# Storable test artifacts: upstream tests write to relative paths like
+# `store$$`, `nstore`, `integer.$$`, `utfhash.po`. They run from the
+# project root when invoked outside ModuleTestExecutionTest's chdir,
+# leaving stray files behind.
+/store
+/nstore
+/store[0-9]*
+/integer.[0-9]*
+/utfhash.po

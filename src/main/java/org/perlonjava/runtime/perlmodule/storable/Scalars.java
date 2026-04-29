@@ -3,6 +3,8 @@ package org.perlonjava.runtime.perlmodule.storable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Scalar opcode readers/writers.
  * <p>
@@ -89,37 +91,70 @@ public final class Scalars {
     // binary.
 
     public static RuntimeScalar readByte(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_BYTE not yet implemented");
+        int b = c.readU8();
+        RuntimeScalar sv = new RuntimeScalar(b - 128);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readInteger(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_INTEGER not yet implemented");
+        long v = c.readNativeIV();
+        RuntimeScalar sv = new RuntimeScalar(v);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readNetint(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_NETINT not yet implemented");
+        int v = c.readNetInt();
+        RuntimeScalar sv = new RuntimeScalar(v);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readDouble(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_DOUBLE not yet implemented");
+        double v = c.readNativeNV();
+        RuntimeScalar sv = new RuntimeScalar(v);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readScalar(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_SCALAR not yet implemented");
+        int len = c.readU8();
+        byte[] bytes = c.readBytes(len);
+        RuntimeScalar sv = new RuntimeScalar(bytes);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readLScalar(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_LSCALAR not yet implemented");
+        long len = c.readU32Length();
+        if (len < 0 || len > Integer.MAX_VALUE) {
+            throw new StorableFormatException("SX_LSCALAR length " + len + " out of range");
+        }
+        byte[] bytes = c.readBytes((int) len);
+        RuntimeScalar sv = new RuntimeScalar(bytes);
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readUtf8Str(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_UTF8STR not yet implemented");
+        int len = c.readU8();
+        byte[] bytes = c.readBytes(len);
+        RuntimeScalar sv = new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
+        c.recordSeen(sv);
+        return sv;
     }
 
     public static RuntimeScalar readLUtf8Str(StorableReader r, StorableContext c) {
-        throw new StorableFormatException("scalars-agent: SX_LUTF8STR not yet implemented");
+        long len = c.readU32Length();
+        if (len < 0 || len > Integer.MAX_VALUE) {
+            throw new StorableFormatException("SX_LUTF8STR length " + len + " out of range");
+        }
+        byte[] bytes = c.readBytes((int) len);
+        RuntimeScalar sv = new RuntimeScalar(new String(bytes, StandardCharsets.UTF_8));
+        c.recordSeen(sv);
+        return sv;
     }
 
-    // Suppress "unused import" warning until the agent fills in real impls.
     @SuppressWarnings("unused") private static final Object _keepImport = RuntimeScalarCache.scalarTrue;
 }

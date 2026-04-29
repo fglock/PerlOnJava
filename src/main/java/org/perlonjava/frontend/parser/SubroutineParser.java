@@ -956,6 +956,33 @@ public class SubroutineParser {
     }
 
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
+        // `sub BEGIN { ... }` / `sub END { ... }` / etc.: phaser-named subs
+        // are treated like the corresponding `BEGIN { ... }` block — the body
+        // runs at compile time. This is what real perl does and what idioms
+        // like the upstream Storable test suite rely on
+        // (`sub BEGIN { unshift @INC, 't/lib' }`).
+        //
+        // We deliberately do NOT also install Pkg::BEGIN as a callable sub;
+        // perl does, but explicitly invoking BEGIN/END/etc. as a regular sub
+        // is vanishingly rare, and `runSpecialBlock` mutates the block AST
+        // (prepends `local ${^GLOBAL_PHASE}`), so re-using the same node for
+        // the global definition would be unsafe.
+        if (subName != null && block != null) {
+            switch (subName) {
+                case "BEGIN":
+                case "END":
+                case "CHECK":
+                case "INIT":
+                case "UNITCHECK":
+                    SpecialBlockParser.runSpecialBlock(parser, subName, block);
+                    ListNode noop = new ListNode(parser.tokenIndex);
+                    noop.setAnnotation("compileTimeOnly", true);
+                    return noop;
+                default:
+                    break;
+            }
+        }
+
         // Check if there's a lexical forward declaration (our/my/state sub name;) that this definition should fulfill
         String lexicalKey = "&" + subName;
         SymbolTable.SymbolEntry lexicalEntry = parser.ctx.symbolTable.getSymbolEntry(lexicalKey);

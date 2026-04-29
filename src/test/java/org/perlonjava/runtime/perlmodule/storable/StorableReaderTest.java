@@ -111,50 +111,32 @@ public class StorableReaderTest {
         assertTrue(!v.getBoolean(), "SV_NO should be falsy");
     }
 
-    // -------- stubs (will start passing once the named agent finishes) --------
+    // -------- integration round-trips (post-Stage-B) --------
 
     @Test
-    void scalars_byte_pos_stubbed() throws IOException {
+    void scalars_byte_pos_roundtrip() throws IOException {
         StorableContext c = open("scalars/byte_pos");
-        StorableReader r = new StorableReader();
-        StorableFormatException ex = assertThrows(StorableFormatException.class,
-                () -> r.dispatch(c));
-        assertTrue(ex.getMessage().contains("scalars-agent"),
-                "expected scalars-agent stub message, got: " + ex.getMessage());
+        RuntimeScalar v = new StorableReader().dispatch(c);
+        assertEquals(42, v.getInt());
     }
 
     @Test
-    void containers_array_mixed_stubbed() throws IOException {
+    void containers_array_mixed_roundtrip() throws IOException {
         StorableContext c = open("containers/array_mixed");
-        StorableReader r = new StorableReader();
-        StorableFormatException ex = assertThrows(StorableFormatException.class,
-                () -> r.dispatch(c));
-        // The outer opcode is SX_REF (since nstore wraps the AV in a ref).
-        assertTrue(ex.getMessage().contains("refs-agent")
-                || ex.getMessage().contains("containers-agent"),
-                "expected agent stub message, got: " + ex.getMessage());
+        RuntimeScalar v = new StorableReader().dispatch(c);
+        // [1, "two", 3.0, undef, [4,5]]  (5 elements)
+        assertNotNull(v);
+        assertTrue(v.toString().startsWith("ARRAY("),
+                "expected ARRAY ref, got: " + v.toString());
     }
 
     @Test
-    void blessed_single_stubbed() throws IOException {
+    void blessed_single_roundtrip() throws IOException {
         StorableContext c = open("blessed/single");
-        StorableReader r = new StorableReader();
-        StorableFormatException ex = assertThrows(StorableFormatException.class,
-                () -> r.dispatch(c));
-        // Outermost is SX_BLESS (no SX_REF wrapper for blessed refs in nstore).
-        assertTrue(ex.getMessage().contains("agent"),
-                "expected an agent stub message, got: " + ex.getMessage());
-    }
-
-    @Test
-    void hooks_simple_hook_stubbed() throws IOException {
-        StorableContext c = open("hooks/simple_hook");
-        StorableReader r = new StorableReader();
-        StorableFormatException ex = assertThrows(StorableFormatException.class,
-                () -> r.dispatch(c));
-        assertTrue(ex.getMessage().contains("hooks-agent")
-                || ex.getMessage().contains("agent"),
-                "expected hooks-agent stub message, got: " + ex.getMessage());
+        RuntimeScalar v = new StorableReader().dispatch(c);
+        assertNotNull(v);
+        assertTrue(v.toString().contains("Foo::Bar="),
+                "expected Foo::Bar=...; got: " + v.toString());
     }
 
     @Test

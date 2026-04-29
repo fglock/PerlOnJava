@@ -134,4 +134,21 @@ sub lock_store    { goto &store }
 sub lock_nstore   { goto &nstore }
 sub lock_retrieve { goto &retrieve }
 
+# Compatibility flag constants used by upstream Storable.pm and its tests
+# (lock.t, flags.t, retrieve.t). Values copied from
+# perl5/dist/Storable/lib/Storable.pm.
+sub BLESS_OK     () { 2 }
+sub TIE_OK       () { 4 }
+sub FLAGS_COMPAT () { BLESS_OK | TIE_OK }
+sub CAN_FLOCK    () { 1 }     # JVM provides advisory locking via FileChannel
+
+# `mretrieve` — retrieve from an in-memory frozen string. Upstream
+# Storable's XS exposes this; we expose it as a thin wrapper around
+# `thaw` that ignores the optional `flags` argument (we don't honor
+# BLESS_OK/TIE_OK gating yet).
+sub mretrieve {
+    my ($frozen, undef) = @_;
+    return thaw($frozen);
+}
+
 1;
