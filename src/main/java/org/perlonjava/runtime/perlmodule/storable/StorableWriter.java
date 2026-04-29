@@ -114,8 +114,10 @@ public final class StorableWriter {
                 writeHashBody(c, (RuntimeHash) refScalar.value);
                 break;
             case RuntimeScalarType.REFERENCE:
-                // Scalar ref. Emit SX_REF + child scalar.
-                c.writeByte(Opcodes.SX_REF);
+                // Scalar ref. The SX_REF byte was already written by our
+                // caller (either `dispatch` for an inner ref, or
+                // `emitTopLevel` which strips the outer ref entirely and
+                // dispatches the referent directly). Emit only the inner.
                 dispatch(c, (RuntimeScalar) refScalar.value);
                 break;
             case RuntimeScalarType.CODE:
