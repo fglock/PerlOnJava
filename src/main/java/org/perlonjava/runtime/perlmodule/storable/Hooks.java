@@ -86,7 +86,7 @@ public final class Hooks {
         // record it in the seen-table BEFORE recursing or thawing,
         // so backref tags inside the sub-object list resolve.
         RuntimeScalar placeholder = allocatePlaceholder(flags & SHF_TYPE_MASK);
-        c.recordSeen(placeholder);
+        int placeholderTag = c.recordSeen(placeholder);
 
         // Step 2: drain SHF_NEED_RECURSE chain. Each iteration retrieves
         // a sub-object (which records itself in the seen-table) and
@@ -130,13 +130,59 @@ public final class Hooks {
             }
         }
 
-        // Step 6: bless the placeholder into the class.
+        // Step 6a: if the class defines STORABLE_attach, prefer that over
+        // STORABLE_thaw. The attach hook is a CLASS method that returns a
+        // fully-formed object; we replace the placeholder with the
+        // returned object (preserving the tag). See retrieve_blessed in
+        // Storable.xs ~L5119-5172.
+        //
+        // Per upstream (L5140), STORABLE_attach must NOT be called when
+        // sub-refs are present — those imply the freeze hook returned
+        // refs, which attach can't reconstruct. In that case we fall
+        // through to STORABLE_thaw.
+        RuntimeScalar attachMethod = InheritanceResolver.findMethodInHierarchy(
+                "STORABLE_attach", classname, null, 0, false);
+        if (attachMethod != null
+                && attachMethod.type == RuntimeScalarType.CODE
+                && extraRefs.isEmpty()) {
+            RuntimeArray args = new RuntimeArray();
+            RuntimeArray.push(args, new RuntimeScalar(classname));
+            RuntimeArray.push(args, new RuntimeScalar(0)); // cloning = false
+            RuntimeArray.push(args, new RuntimeScalar(frozen));
+            org.perlonjava.runtime.runtimetypes.RuntimeList result =
+                    RuntimeCode.apply(attachMethod, args, RuntimeContextType.SCALAR);
+            RuntimeScalar attached = result.scalar();
+            if (attached == null
+                    || !RuntimeScalarType.isReference(attached)
+                    || !isInstanceOf(attached, classname)) {
+                throw new StorableFormatException(String.format(
+                        "STORABLE_attach did not return a %s object", classname));
+            }
+            // Replace the placeholder in the seen table with the attached
+            // object so any prior backref tag resolves to the right thing.
+            c.replaceSeen(placeholderTag, attached);
+            return attached;
+        }
+
+        // Step 6b: bless the placeholder into the class.
         ReferenceOperators.bless(placeholder, new RuntimeScalar(classname));
 
         // Step 7: invoke $obj->STORABLE_thaw($cloning=0, $frozen, @extraRefs).
         invokeThaw(classname, placeholder, frozen, extraRefs);
 
         return placeholder;
+    }
+
+    /** Returns true if {@code ref} is blessed into {@code classname} or a
+     *  class derived from it. Mirrors upstream's {@code sv_derived_from}
+     *  check on the value returned by STORABLE_attach. */
+    private static boolean isInstanceOf(RuntimeScalar ref, String classname) {
+        int blessId = RuntimeScalarType.blessedId(ref);
+        if (blessId == 0) return false;
+        String actual = org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(blessId);
+        if (actual == null) return false;
+        if (actual.equals(classname)) return true;
+        return InheritanceResolver.linearizeHierarchy(actual).contains(classname);
     }
 
     private static RuntimeScalar allocatePlaceholder(int objType) {

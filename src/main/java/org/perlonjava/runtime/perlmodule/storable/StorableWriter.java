@@ -1,7 +1,11 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
+import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -82,10 +86,17 @@ public final class StorableWriter {
             return;
         }
 
-        // 2. Blessed? Emit SX_BLESS / SX_IX_BLESS wrapper around the body.
+        // 2. Blessed?
         int blessId = RuntimeScalarType.blessedId(refScalar);
-        if (blessId != 0) {
-            String className = NameNormalizer.getBlessStr(blessId);
+        String className = blessId == 0 ? null : NameNormalizer.getBlessStr(blessId);
+
+        // 2a. Class with STORABLE_freeze hook → emit SX_HOOK frame.
+        if (className != null && tryEmitHook(c, refScalar, className)) {
+            return;
+        }
+
+        // 2b. Plain blessed: SX_BLESS / SX_IX_BLESS wrapper around the body.
+        if (className != null) {
             int existing = c.lookupWriteClass(className);
             if (existing >= 0) {
                 c.writeByte(Opcodes.SX_IX_BLESS);
@@ -133,6 +144,201 @@ public final class StorableWriter {
         }
     }
 
+    /** Mirrors {@code store_hook} (Storable.xs L3574). Returns true if we
+     *  emitted a {@code SX_HOOK} frame for this object; false to let the
+     *  caller fall through to the normal {@code SX_BLESS} path. False is
+     *  also returned when the class has no {@code STORABLE_freeze} method,
+     *  or when the freeze returned an empty list (signal to skip the hook).
+     *
+     *  Limitations vs. upstream: we currently only handle the case where
+     *  {@code STORABLE_freeze} returns a single scalar (the frozen
+     *  cookie). When it returns sub-refs we still emit them (with their
+     *  tag IDs) but recursion semantics around {@code SHF_NEED_RECURSE}
+     *  may differ from the C path; tested only against
+     *  {@code STORABLE_attach}-using classes.
+     */
+    private boolean tryEmitHook(StorableContext c, RuntimeScalar refScalar, String className) {
+        RuntimeScalar freezeMethod = InheritanceResolver.findMethodInHierarchy(
+                "STORABLE_freeze", className, null, 0, false);
+        if (freezeMethod == null || freezeMethod.type != RuntimeScalarType.CODE) {
+            return false;
+        }
+
+        // Call $obj->STORABLE_freeze($cloning=0) in LIST context.
+        RuntimeArray callArgs = new RuntimeArray();
+        RuntimeArray.push(callArgs, refScalar);
+        RuntimeArray.push(callArgs, new RuntimeScalar(0));
+        RuntimeList ret;
+        try {
+            ret = RuntimeCode.apply(freezeMethod, callArgs, RuntimeContextType.LIST);
+        } catch (Exception e) {
+            // Re-throw as-is so the caller's try/catch in Storable.java surfaces it.
+            throw e;
+        }
+        List<RuntimeScalar> items = retList(ret);
+
+        if (items.isEmpty()) {
+            // Class has decided to opt out of the hook for this serialization.
+            // Fall through to plain bless.
+            return false;
+        }
+
+        // First element is the frozen cookie; rest are sub-refs.
+        RuntimeScalar cookieSv = items.get(0);
+        byte[] frozen = cookieSv == null
+                ? new byte[0]
+                : cookieSv.toString().getBytes(StandardCharsets.UTF_8);
+        int subCount = items.size() - 1;
+
+        // Determine object kind from the bless target.
+        int objType;
+        switch (refScalar.type) {
+            case RuntimeScalarType.HASHREFERENCE:  objType = 2; break;  // SHT_HASH
+            case RuntimeScalarType.ARRAYREFERENCE: objType = 1; break;  // SHT_ARRAY
+            default:                               objType = 0; break;  // SHT_SCALAR
+        }
+
+        // STORABLE_attach is incompatible with sub-refs. Match upstream
+        // CROAK at Storable.xs L3735.
+        if (subCount > 0) {
+            RuntimeScalar attachMethod = InheritanceResolver.findMethodInHierarchy(
+                    "STORABLE_attach", className, null, 0, false);
+            if (attachMethod != null && attachMethod.type == RuntimeScalarType.CODE) {
+                throw new StorableFormatException(
+                        "Freeze cannot return references if " + className
+                                + " class is using STORABLE_attach");
+            }
+        }
+
+        // For a hooked object we don't go through SX_BLESS; the SX_HOOK
+        // frame carries the classname inline (or by index).
+        // Register the seen-tag for backref resolution. Upstream stores
+        // the eventual blessed object here; we use the input ref since
+        // that's what's identity-shared in our model.
+        c.recordWriteSeen(sharedKey(refScalar));
+
+        // If sub-refs are present we must serialize them first (recursing
+        // with SHF_NEED_RECURSE) so the receiver can resolve their tags
+        // before invoking the hook. Implement the simple case (no sub-refs)
+        // first; the multi-sub-ref path uses the recurse chain.
+        long[] subTags = new long[subCount];
+        boolean anyNew = false;
+        for (int i = 0; i < subCount; i++) {
+            RuntimeScalar rsv = items.get(i + 1);
+            if (rsv == null || !RuntimeScalarType.isReference(rsv)) {
+                throw new StorableFormatException(
+                        "Item #" + (i + 1) + " returned by STORABLE_freeze for "
+                                + className + " is not a reference");
+            }
+            Object subKey = sharedKey(rsv);
+            long existing = c.lookupSeenTag(subKey);
+            if (existing >= 0) {
+                subTags[i] = existing;
+                continue;
+            }
+            // Not yet stored — emit a recursion frame (SHF_NEED_RECURSE)
+            // and serialize the target.
+            int recurseFlags = SHF_NEED_RECURSE | objType;
+            if (!anyNew) {
+                c.writeByte(Opcodes.SX_HOOK);
+                c.writeByte(recurseFlags);
+            } else {
+                c.writeByte(recurseFlags);
+            }
+            anyNew = true;
+            // Recurse into the sub-ref. Do NOT pre-deref to its target —
+            // dispatch handles refs (it'll emit the right SX_REF wrapper
+            // and its inner). We pass the ref AS-IS so the receiver can
+            // reconstruct the same shape.
+            dispatch(c, rsv);
+            long newTag = c.lookupSeenTag(subKey);
+            if (newTag < 0) {
+                throw new StorableFormatException(
+                        "Could not serialize item #" + (i + 1) + " from hook in " + className);
+            }
+            subTags[i] = newTag;
+        }
+
+        // Now emit the main SX_HOOK frame (or just the trailing flags byte
+        // if we already emitted SX_HOOK during the recursion phase).
+        int classIdx = c.lookupWriteClass(className);
+        boolean idxClass = classIdx >= 0;
+        byte[] cb = className.getBytes(StandardCharsets.UTF_8);
+        int flags = objType;
+        if (idxClass) flags |= SHF_IDX_CLASSNAME;
+        long classNumOrLen = idxClass ? classIdx : cb.length;
+        if (classNumOrLen > Opcodes.LG_SCALAR) flags |= SHF_LARGE_CLASSLEN;
+        if (frozen.length > Opcodes.LG_SCALAR) flags |= SHF_LARGE_STRLEN;
+        if (subCount > 0) flags |= SHF_HAS_LIST;
+        if (subCount > Opcodes.LG_SCALAR + 1) flags |= SHF_LARGE_LISTLEN;
+
+        if (!anyNew) {
+            c.writeByte(Opcodes.SX_HOOK);
+        }
+        c.writeByte(flags);
+
+        // Classname or index
+        if (idxClass) {
+            if ((flags & SHF_LARGE_CLASSLEN) != 0) {
+                c.writeU32Length(classIdx);
+            } else {
+                c.writeByte(classIdx);
+            }
+        } else {
+            if ((flags & SHF_LARGE_CLASSLEN) != 0) {
+                c.writeU32Length(cb.length);
+            } else {
+                c.writeByte(cb.length);
+            }
+            c.writeBytes(cb);
+            c.recordWriteClass(className);
+        }
+
+        // Frozen string
+        if ((flags & SHF_LARGE_STRLEN) != 0) {
+            c.writeU32Length(frozen.length);
+        } else {
+            c.writeByte(frozen.length);
+        }
+        c.writeBytes(frozen);
+
+        // Sub-object tag list
+        if ((flags & SHF_HAS_LIST) != 0) {
+            if ((flags & SHF_LARGE_LISTLEN) != 0) {
+                c.writeU32Length(subCount);
+            } else {
+                c.writeByte(subCount);
+            }
+            for (long t : subTags) {
+                c.writeU32Length(t);
+            }
+        }
+        return true;
+    }
+
+    /** Drain a {@link RuntimeList} into a plain Java list of scalars. */
+    private static List<RuntimeScalar> retList(RuntimeList ret) {
+        List<RuntimeScalar> out = new ArrayList<>();
+        if (ret == null) return out;
+        for (var elem : ret.elements) {
+            if (elem instanceof RuntimeScalar s) {
+                out.add(s);
+            } else if (elem instanceof RuntimeArray av) {
+                out.addAll(av.elements);
+            }
+        }
+        return out;
+    }
+
+    // --- SX_HOOK flag constants (mirroring Hooks.java) ---
+    private static final int SHF_TYPE_MASK       = 0x03;
+    private static final int SHF_LARGE_CLASSLEN  = 0x04;
+    private static final int SHF_LARGE_STRLEN    = 0x08;
+    private static final int SHF_LARGE_LISTLEN   = 0x10;
+    private static final int SHF_IDX_CLASSNAME   = 0x20;
+    private static final int SHF_NEED_RECURSE    = 0x40;
+    private static final int SHF_HAS_LIST        = 0x80;
+
     /** Recursive entry: emit whatever {@code value} is. Bare scalars hit
      *  the SX_BYTE/INTEGER/DOUBLE/SCALAR/UTF8 logic. References go through
      *  {@link #dispatchReferent}. */
@@ -152,6 +358,14 @@ public final class StorableWriter {
                 return;
             }
             c.writeByte(Opcodes.SX_REF);
+            // Bump the write-side tag for the SX_REF placeholder so
+            // tags align with the read side, where `readRef` always
+            // records its placeholder before recursing into the body
+            // (Storable.xs `retrieve_ref` L5343). The key is unique
+            // per emission so it does NOT participate in future
+            // identity-shared lookups; outer-ref sharing falls back
+            // to the inner-key check above.
+            c.recordWriteSeen(new Object());
             dispatchReferent(c, value);
             return;
         }

@@ -319,6 +319,19 @@ public final class StorableContext {
         return seen.size() - 1;
     }
 
+    /** Replace an entry in the seen table. Used by {@code SX_HOOK} when
+     *  {@code STORABLE_attach} returns a fresh object, replacing the
+     *  placeholder we recorded earlier. The replacement must keep the
+     *  tag stable so any backref tag we already emitted resolves to the
+     *  new object. */
+    public void replaceSeen(int tag, RuntimeScalar sv) {
+        if (tag < 0 || tag >= seen.size()) {
+            throw new StorableFormatException(
+                    "replaceSeen: tag " + tag + " out of range (have " + seen.size() + ")");
+        }
+        seen.set(tag, sv);
+    }
+
     /** Look up a previously seen scalar by tagnum (used by SX_OBJECT). */
     public RuntimeScalar getSeen(long tag) {
         if (tag < 0 || tag >= seen.size()) {
