@@ -17,16 +17,31 @@ use constant SSL_VERIFY_PEER                 => 0x01;
 use constant SSL_VERIFY_FAIL_IF_NO_PEER_CERT => 0x02;
 use constant SSL_VERIFY_CLIENT_ONCE          => 0x04;
 
+# SSL non-blocking want-* state codes (match OpenSSL SSL_ERROR_WANT_* values).
+# Used by Mojo::IOLoop::TLS and other clients that drive non-blocking handshakes.
+# We don't actually surface these from this stub yet (configure() always blocks),
+# but they need to be defined as constants so callers using
+# `IO::Socket::SSL::SSL_WANT_READ()` at compile time don't fail.
+use constant SSL_WANT_READ         => 2;
+use constant SSL_WANT_WRITE        => 3;
+use constant SSL_WANT_X509_LOOKUP  => 4;
+use constant SSL_WANT_CONNECT      => 7;
+use constant SSL_WANT_ACCEPT       => 8;
+
 our $SSL_ERROR = '';
 
 our @EXPORT_OK = qw(
     SSL_VERIFY_NONE SSL_VERIFY_PEER
     SSL_VERIFY_FAIL_IF_NO_PEER_CERT SSL_VERIFY_CLIENT_ONCE
+    SSL_WANT_READ SSL_WANT_WRITE SSL_WANT_X509_LOOKUP
+    SSL_WANT_CONNECT SSL_WANT_ACCEPT
 );
 
 our %EXPORT_TAGS = (
     ssl => [qw(SSL_VERIFY_NONE SSL_VERIFY_PEER
-               SSL_VERIFY_FAIL_IF_NO_PEER_CERT SSL_VERIFY_CLIENT_ONCE)],
+               SSL_VERIFY_FAIL_IF_NO_PEER_CERT SSL_VERIFY_CLIENT_ONCE
+               SSL_WANT_READ SSL_WANT_WRITE SSL_WANT_X509_LOOKUP
+               SSL_WANT_CONNECT SSL_WANT_ACCEPT)],
 );
 
 # Error string accessor (class method)

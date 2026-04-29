@@ -520,12 +520,31 @@ public class Storable extends PerlModuleBase {
 
         try {
             String filename = args.get(0).toString();
-            String yaml = new String(Files.readAllBytes(new File(filename).toPath()), StandardCharsets.UTF_8);
+            byte[] raw = Files.readAllBytes(new File(filename).toPath());
 
+            // Detect real-Perl Storable binary files (magic "pst0"). PerlOnJava's
+            // Storable currently writes YAML, so it can't read native binary
+            // Storable produced by upstream perl. Fail with a clear, actionable
+            // error rather than a confusing YAML parser message.
+            if (raw.length >= 4
+                    && raw[0] == 'p' && raw[1] == 's' && raw[2] == 't' && raw[3] == '0') {
+                return WarnDie.die(new RuntimeScalar(
+                        "retrieve failed: '" + filename + "' is a native Perl"
+                                + " Storable binary file, which PerlOnJava's"
+                                + " Storable (YAML-based) cannot read. Delete the"
+                                + " file or regenerate it with jperl."),
+                        new RuntimeScalar("\n")).getList();
+            }
+
+            String yaml = new String(raw, StandardCharsets.UTF_8);
             RuntimeScalar data = deserializeFromYAML(yaml);
             return data.getList();
         } catch (Exception e) {
-            return WarnDie.die(new RuntimeScalar("retrieve failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
+            String msg = e.getMessage();
+            if (msg != null && msg.startsWith("retrieve failed:")) {
+                return WarnDie.die(new RuntimeScalar(msg), new RuntimeScalar("\n")).getList();
+            }
+            return WarnDie.die(new RuntimeScalar("retrieve failed: " + msg), new RuntimeScalar("\n")).getList();
         }
     }
 
