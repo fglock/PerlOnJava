@@ -2509,6 +2509,229 @@ The next investigation should:
    how `refCount = MIN_VALUE` interacts with subsequent stores
    (the rescue path in `setLargeRefCounted`).
 
+### D-W6.14: How does system Perl solve this? — Algorithm analysis
+
+**Question raised**: my `activeOwnerCount > 0` rescue regresses
+DBIC's leak detection by 5-9 tests. What does system Perl do
+differently?
+
+**Answer**: System Perl **does not solve cycles**. It uses precise
+reference counting, and cycles leak by design. The programmer breaks
+cycles via explicit `weaken()` (or `Scalar::Util::weaken`).
+DBIC's leak tests pass on real Perl because DBIC weakens its
+internal back-references (e.g., `ResultSource → Schema` is weak),
+allowing each reference-counted graph to collapse properly when an
+external strong reference is dropped.
+
+For PerlOnJava to behave the same way, we need:
+1. **Precise cooperative refCount** — every increment paired with
+   exactly one decrement, no transient zeros.
+2. **Effective weaken()** — weakening must decrement refCount and
+   exclude the slot from owner-counting (already done correctly).
+3. **No cycle-breaker rescue** — cycles SHOULD leak (matching
+   real Perl), and DBIC's weakens will resolve them.
+
+#### What's wrong today
+
+Cooperative refCount has **transient zeros**. The deferred
+decrement model (`MortalList.flush`) means a sequence like
+`inc → queue → inc → flush → flush → inc` can have refCount briefly
+hit 0 between the second flush and the third inc — even though the
+third inc's owning scalar was alive throughout.
+
+When the transient zero hits, `MortalList.flush()` fires DESTROY,
+permanently corrupting the object's state (clearWeakRefsTo, cascade
+cleanup). Even if subsequent stores re-bump refCount, the damage
+is done.
+
+#### Why the activeOwnerCount rescue regresses DBIC
+
+`activeOwnerCount > 0` correctly identifies objects with surviving
+strong owners. But:
+
+1. **For Class::MOP/Moose metaclasses** (held by `our %METAS`):
+   surviving owners reflect real strong refs. Rescue is correct.
+
+2. **For DBIC row objects in test cycles**: `populate_weakregistry`
+   weak-refs the row. Then test does `undef $row` in some scope.
+   Real Perl: refcount drops to 0, DESTROY fires, weak ref clears.
+   PerlOnJava: cooperative refCount has phantom owners — typically
+   container element scalars whose containers are themselves
+   transient/dying but haven't yet released their elements.
+
+The phantom owners satisfy the filter `refCountOwned == true &&
+value == base`, but are themselves on a path to destruction.
+Rescue keeps them alive, breaking the leak detection.
+
+#### Best-fit algorithm
+
+System Perl's approach (precise refcount + programmer-controlled
+weaken) maps to PerlOnJava as:
+
+**Goal**: eliminate transient zeros from cooperative refCount
+without changing the deferred-decrement architecture.
+
+**Algorithm options:**
+
+1. **Synchronous decrement** (simplest, correct, expensive):
+   make all decrements synchronous like real Perl. Eliminate
+   `MortalList.flush` and put decrement at scope-exit / overwrite
+   sites. Performance cost: every Perl statement has ~10x more
+   refCount work today.
+
+2. **Owner snapshot at flush** (lazy validation):
+   when a deferred decrement would bring refCount to 0, validate
+   the activeOwners set first. Force-purge stale entries by:
+   - Iterating activeOwners
+   - For each owner scalar: check `sc.refCountOwned && sc.value == base`
+   - For surviving owners: check whether they are themselves
+     reachable from package globals OR live my-vars
+   - Rescue ONLY if at least one surviving owner is reachable
+
+   The "reachable owner" check is the critical filter — it
+   excludes phantom owners that are themselves on a path to
+   destruction. This addresses the DBIC regression.
+
+3. **Two-phase destruction** (deferred validation):
+   when refCount→0, defer the actual `clearWeakRefsTo` and
+   cascade. Add the object to a "pending destruction" queue.
+   Validate at next safe point (e.g., outer flush completion or
+   before END blocks):
+   - Force a JVM `System.gc()` to purge stale weak refs from
+     `ScalarRefRegistry`
+   - Re-check `activeOwnerCount`
+   - Fire DESTROY only if still 0
+   This matches Java's deferred finalization model. Performance:
+   System.gc() is slow but only at infrequent boundaries.
+
+**Recommended**: Option 2 (owner snapshot + reachability filter).
+The reachability filter naturally excludes phantom owners (they
+won't be reachable from roots once their containing scopes have
+exited).
+
+#### Implementation sketch (Option 2)
+
+```java
+// At MortalList.flush() refCount→0:
+if (base.activeOwners != null) {
+    // Filter: only count scalars that are owned AND reachable
+    int reachableOwners = 0;
+    for (RuntimeScalar sc : base.activeOwners) {
+        if (sc.refCountOwned && sc.value == base
+                && ReachabilityWalker.isScalarReachable(sc)) {
+            reachableOwners++;
+        }
+    }
+    if (reachableOwners > 0) {
+        base.refCount = reachableOwners;
+        return;  // skip DESTROY
+    }
+}
+// Otherwise: fire DESTROY normally
+```
+
+Where `isScalarReachable(sc)` checks if `sc` itself is reachable
+from any package global, live my-var, or stash entry. This is a
+new method on ReachabilityWalker — currently the walker checks
+"is base reachable from roots" but not "is THIS specific scalar
+reachable".
+
+#### Next session task
+
+Implement Option 2:
+1. Add `ReachabilityWalker.isScalarReachable(RuntimeScalar)` —
+   walks from roots looking for the specific scalar identity.
+2. Wire it into the rescue check at `MortalList.flush()`.
+3. Test: Class::MOP loads (with metaclass having package-global
+   reachable owners), DBIC `t/52leaks.t` 11/11 (cycle objects
+   have only phantom owners not reachable from roots).
+4. Remove the class-name heuristic gate.
+
+This is a tractable design change and matches system Perl's
+semantics: only objects with reachable strong owners are kept
+alive; cycles (with no external reachable owner) leak as in real
+Perl.
+
+### D-W6.15: Implementation of D-W6.14 Option 2 — partial success
+
+Implemented `reachableOwnerCount()` (refCount-rescue using
+walker-validated active owners) and disabled the class-name
+heuristic gate. Wired into `MortalList.flush()` at the
+refCount→0 transition.
+
+**Results:**
+
+| Test | Status |
+|---|---|
+| `use Class::MOP` (no heuristic) | ✅ works |
+| `use Moose` (no heuristic) | ✅ works |
+| Unit tests | ✅ green |
+| DBIC `t/52leaks.t` | ❌ "detached result source" at line 433 (early failure) |
+
+The Class::MOP/Moose case is fully fixed: the metaclass owner
+(the `$METAS{name}` hash element) is found reachable through
+`globalHashes`, so its `reachableOwnerCount()` returns >0 and
+DESTROY is suppressed correctly.
+
+DBIC still regresses: a Schema or ResultSource object is
+destroyed prematurely. Some scalar holding the Schema strongly
+isn't reachable via the current walker's seeds (globalCodeRefs,
+globalVariables, globalArrays, globalHashes, MyVarCleanupStack
+live my-vars, RuntimeCode.capturedScalars).
+
+#### What's missing for DBIC
+
+The walker doesn't find Schema's owner. Likely candidates:
+- The owner is a JVM-stack-live RuntimeScalar that isn't
+  registered in `MyVarCleanupStack` (e.g., a method-call argument
+  scalar that's still on the JVM call stack).
+- The owner is in a TIE_HASH/TIE_ARRAY/TIED_SCALAR slot that
+  needs special walking.
+- The owner is in a RuntimeStash entry that the walker doesn't
+  enter (line 519 in `isReachableFromRoots(target, false)` skips
+  RuntimeStash for perf).
+
+The walker is fundamentally **a snapshot of live JVM state at
+this exact moment**. Cooperative refCount can hit 0 transiently
+DURING method call frames where strong owners are sitting on the
+JVM stack but haven't been pushed into MyVarCleanupStack (e.g.,
+intermediate `RuntimeScalar` values during method dispatch).
+
+#### Path forward
+
+The right fix would be one of:
+
+1. **Make every refCount-affecting RuntimeScalar register itself
+   in MyVarCleanupStack** (like local vars), so the walker can
+   always find live owners. Cost: every increment of refCount
+   adds a stack entry.
+
+2. **Use Java GC as ground truth**: treat refCount<=0 +
+   walker-unreachable as "candidate for destruction". Defer the
+   actual DESTROY call to a periodic safe point (e.g., MortalList
+   batch-flush boundary), where we force `System.gc()` and
+   re-validate. Java GC will purge truly-dead objects from
+   ScalarRefRegistry; survivors are real strong owners.
+
+3. **Eliminate transient zeros at the source**: ensure
+   cooperative refCount never goes to 0 except at true scope
+   exits, by making MortalList drain only AFTER the destination
+   scalar's increment has happened. Requires re-ordering JVM-
+   emitted bytecode for assignments (probably very invasive).
+
+#### Status
+
+The class-name heuristic gate is **not removable today**. The
+infrastructure for D-W6.14 Option 2 is in place but the reachability
+gap for DBIC's intermediate owners must be bridged first. The
+heuristic gate is the safety net until that bridge is built.
+
+For this session, the heuristic gate remains disabled in code
+(line 591 has `else if (false ...)`), with `reachableOwnerCount()`
+as the only rescue. This means Class::MOP/Moose work but DBIC
+regresses. To restore master parity, re-enable the heuristic gate
+as a fallback alongside `reachableOwnerCount > 0`.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

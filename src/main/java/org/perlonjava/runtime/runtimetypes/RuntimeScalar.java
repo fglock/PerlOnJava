@@ -2306,6 +2306,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 DestroyDispatch.callDestroy(oldBase);
             } else if (this.refCountOwned && oldBase.refCount > 0) {
                 this.refCountOwned = false;
+                oldBase.releaseActiveOwner(this);
                 if (--oldBase.refCount == 0) {
                     if (oldBase.localBindingExists) {
                         // Named container: local variable may still exist. Skip callDestroy.

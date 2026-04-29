@@ -47,14 +47,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public void activateOwnerTracking() {
         if (activeOwners == null) {
             activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            // Backfill from ScalarRefRegistry: scalars that already hold a
-            // counted strong reference to this base were registered there
-            // when their setLargeRefCounted increment fired.
-            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
-                if (sc != null && sc.refCountOwned && sc.value == this) {
-                    activeOwners.add(sc);
-                }
-            }
+            // Note: backfilling from ScalarRefRegistry.snapshot() was
+            // observed to cause DBIC leak-test regressions due to
+            // WeakHashMap.expungeStaleEntries() side-effects on JVM GC
+            // observability. We rely on incremental population via
+            // recordActiveOwner() from setLargeRefCounted; objects that
+            // had setLarge incs BEFORE activation will be missed, but
+            // that's a known limitation — the activation should fire on
+            // first weaken(), which usually precedes the relevant stores.
         }
     }
 
@@ -84,6 +84,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 count++;
             } else {
                 it.remove();
+            }
+        }
+        return count;
+    }
+
+    /**
+     * D-W6.14: count owners that are reachable from package globals or
+     * live my-vars. This is the strict version used by the production
+     * rescue at MortalList.flush refCount→0: only objects whose owners
+     * can be reached from real roots are kept alive. Phantom owners
+     * (scalars that should be dead but haven't been released yet) are
+     * excluded. Cycles with no external root → all owners unreachable
+     * → 0 → DESTROY fires (matching real Perl's cycle leak behavior
+     * resolved by user weaken()).
+     */
+    public int reachableOwnerCount() {
+        if (activeOwners == null) return 0;
+        int count = 0;
+        for (RuntimeScalar sc : activeOwners) {
+            if (sc != null && sc.refCountOwned && sc.value == this
+                    && ReachabilityWalker.isScalarReachable(sc)) {
+                count++;
             }
         }
         return count;

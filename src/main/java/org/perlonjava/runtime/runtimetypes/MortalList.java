@@ -231,6 +231,7 @@ public class MortalList {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDestroyForContainerClear (queued)");
                     }
+                    base.releaseActiveOwner(scalar);
                     pending.add(base);
                 } else if (base.blessId != 0 && base.refCount == 0) {
                     // Never-stored blessed object: bump to 1 so flush triggers DESTROY
@@ -459,6 +460,7 @@ public class MortalList {
                     if (base.refCountTrace) {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
                     }
+                    base.releaseActiveOwner(s);
                     pending.add(base);
                 }
                 // Walk into unblessed containers to find nested blessed refs
@@ -590,26 +592,9 @@ public class MortalList {
                             && WeakRefRegistry.hasWeakRefsTo(base)
                             && DestroyDispatch.classNeedsWalkerGate(base.blessId)
                             && ReachabilityWalker.isReachableFromRoots(base)) {
-                        // Phase D / Step W3-Path 2: blessed object with
-                        // outstanding weak refs whose cooperative refCount
-                        // dipped to 0 under deferred-decrement flush, BUT
-                        // the walker can still reach it from package globals
-                        // or hash/array element seeds. Treat as transient
-                        // refCount drift — leave at 0; the next assignment
-                        // that writes a tracked ref will bump it back up.
-                        //
-                        // Don't fire DESTROY, don't clear weak refs.
-                        //
-                        // The walker correctly distinguishes this case from
-                        // the cycle-break-via-weaken case: an isolated
-                        // cycle has no path to roots, so isReachableFromRoots
-                        // returns false and the cycle is properly destroyed.
-                        //
-                        // The hasWeakRefsTo gate keeps this safeguard cheap
-                        // for the overwhelmingly common case of objects
-                        // without weak refs (no walker call needed).
-                        //
-                        // See dev/modules/moose_support.md (Phase D / Step W).
+                        // D-W6.15: heuristic walker gate. To be replaced
+                        // by reachableOwnerCount() once the DBIC owner-
+                        // reachability gap is bridged.
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);

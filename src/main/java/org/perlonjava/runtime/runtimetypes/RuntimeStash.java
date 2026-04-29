@@ -214,6 +214,7 @@ public class RuntimeStash extends RuntimeHash {
             } else if (base.refCount > 0 && savedScalar.refCountOwned) {
                 // Tracked object: decrement refCount (the stash was holding a strong ref).
                 savedScalar.refCountOwned = false;
+                base.releaseActiveOwner(savedScalar);
                 if (--base.refCount == 0) {
                     base.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(base);
