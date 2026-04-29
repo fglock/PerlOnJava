@@ -23,6 +23,203 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // mean "tracked, zero containers" — silently breaking all unblessed objects).
     public int refCount = -1;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase D-W6.10: targeted refCount transition tracing.
+    // Activate at bless time for classes matching `classNeedsWalkerGate`
+    // when env-flag PJ_REFCOUNT_TRACE is set. Writes a stderr line for
+    // every increment/decrement, including a stack snippet, so we can
+    // pinpoint which path causes the metaclass refCount underflow on
+    // Class::MOP bootstrap (see dev/modules/moose_support.md D-W6.7).
+    // ─────────────────────────────────────────────────────────────────────
+    public boolean refCountTrace = false;
+
+    /**
+     * D-W6.18: marks objects whose lifetime is "module-global metadata":
+     * stored as the value of a package-global hash element (`$Foo::META{x}
+     * = $meta`). Such objects' cooperative refCount may transient-zero
+     * during the program run (mid-statement decrements before paired
+     * increments fire), but they should NOT be destroyed because their
+     * "real" lifetime is the duration of the package's existence.
+     * <p>
+     * Set in {@code RuntimeScalar.setLargeRefCounted} when the
+     * destination scalar is detected to be an element of a hash that
+     * appears in {@code GlobalVariable.globalHashes}. Once set, never
+     * cleared (the object remains a module-global anchor for the
+     * program's lifetime).
+     * <p>
+     * Replaces the class-name heuristic in
+     * {@code DestroyDispatch.classNeedsWalkerGate}: instead of
+     * approximating "module-global metadata" by hard-coded class names
+     * (Class::MOP, Moose, Moo), we capture the underlying property
+     * directly at store time.
+     */
+    public boolean storedInPackageGlobal = false;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // D-W6.13: production-grade ownership tracking.
+    // Active for blessed objects that have at least one weak reference
+    // (the only case where we care about precise refCount semantics).
+    // Stores the set of RuntimeScalars that hold a counted strong ref
+    // to this base (refCountOwned=true && value==this).
+    // At MortalList.flush() refCount→0, this is consulted: if non-empty,
+    // refCount is restored to the owner count and DESTROY is suppressed.
+    // ─────────────────────────────────────────────────────────────────────
+    public java.util.Set<RuntimeScalar> activeOwners = null;
+
+    public void activateOwnerTracking() {
+        if (activeOwners == null) {
+            activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            // Note: backfilling from ScalarRefRegistry.snapshot() was
+            // observed to cause DBIC leak-test regressions due to
+            // WeakHashMap.expungeStaleEntries() side-effects on JVM GC
+            // observability. We rely on incremental population via
+            // recordActiveOwner() from setLargeRefCounted; objects that
+            // had setLarge incs BEFORE activation will be missed, but
+            // that's a known limitation — the activation should fire on
+            // first weaken(), which usually precedes the relevant stores.
+        }
+    }
+
+    public void recordActiveOwner(RuntimeScalar scalar) {
+        if (activeOwners != null) {
+            activeOwners.add(scalar);
+        }
+    }
+
+    public void releaseActiveOwner(RuntimeScalar scalar) {
+        if (activeOwners != null) {
+            activeOwners.remove(scalar);
+        }
+    }
+
+    public int activeOwnerCount() {
+        if (activeOwners == null) return 0;
+        // Filter for actual still-owning scalars: refCountOwned=true and
+        // value==this. Stale entries (overwritten without going through a
+        // tracked release path, or scope-exited via untracked paths) are
+        // pruned and ignored.
+        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
+        int count = 0;
+        while (it.hasNext()) {
+            RuntimeScalar sc = it.next();
+            if (sc != null && sc.refCountOwned && sc.value == this) {
+                count++;
+            } else {
+                it.remove();
+            }
+        }
+        return count;
+    }
+
+    /**
+     * D-W6.14: count owners that are reachable from package globals or
+     * live my-vars. This is the strict version used by the production
+     * rescue at MortalList.flush refCount→0: only objects whose owners
+     * can be reached from real roots are kept alive. Phantom owners
+     * (scalars that should be dead but haven't been released yet) are
+     * excluded. Cycles with no external root → all owners unreachable
+     * → 0 → DESTROY fires (matching real Perl's cycle leak behavior
+     * resolved by user weaken()).
+     */
+    public int reachableOwnerCount() {
+        if (activeOwners == null) return 0;
+        int count = 0;
+        for (RuntimeScalar sc : activeOwners) {
+            if (sc != null && sc.refCountOwned && sc.value == this
+                    && ReachabilityWalker.isScalarReachable(sc)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static final boolean REFCOUNT_TRACE_ENV =
+            System.getenv("PJ_REFCOUNT_TRACE") != null;
+
+    static {
+        if (REFCOUNT_TRACE_ENV) {
+            Runtime.getRuntime().addShutdownHook(new Thread(RuntimeBase::dumpTraceOwners));
+        }
+    }
+
+    public static boolean refCountTraceEnabled() {
+        return REFCOUNT_TRACE_ENV;
+    }
+
+    public void traceRefCount(int delta, String reason) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        int after = this.refCount + delta;
+        StringBuilder sb = new StringBuilder();
+        sb.append("[REFCOUNT] base=").append(System.identityHashCode(this))
+          .append(" (").append(this.getClass().getSimpleName()).append(")")
+          .append(" blessId=").append(this.blessId)
+          .append(" ").append(this.refCount).append(" -> ").append(after)
+          .append("   ").append(reason);
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        for (int i = 1; i < Math.min(st.length, 6); i++) {
+            sb.append("\n      at ").append(st[i]);
+        }
+        System.err.println(sb);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // D-W6.11 Step 1: per-scalar ownership tracking (debug-only).
+    // When refCountTrace is on, every setLargeRefCounted increment records
+    // the owning RuntimeScalar identity. Every paired decrement removes it.
+    // At end of run, surviving owners are printed — if the count !=
+    // expected (e.g. metaclass should have 1 owner = $METAS slot but
+    // shows 0), we know the underflow site by elimination.
+    // ─────────────────────────────────────────────────────────────────────
+    private static final java.util.Map<RuntimeBase, java.util.LinkedHashMap<Integer, String>> traceOwners
+        = new java.util.IdentityHashMap<>();
+
+    public synchronized void recordOwner(RuntimeScalar owner, String site) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        traceOwners
+            .computeIfAbsent(this, k -> new java.util.LinkedHashMap<>())
+            .put(System.identityHashCode(owner), site);
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
+          .append(" owner=").append(System.identityHashCode(owner))
+          .append("   ").append(site);
+        for (int i = 1; i < Math.min(st.length, 5); i++) {
+            sb.append("\n      at ").append(st[i]);
+        }
+        System.err.println(sb);
+    }
+
+    public synchronized void releaseOwner(RuntimeScalar owner, String site) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        java.util.LinkedHashMap<Integer, String> owners = traceOwners.get(this);
+        if (owners == null) return;
+        String prev = owners.remove(System.identityHashCode(owner));
+        if (prev == null) {
+            System.err.println("[REFCOUNT-OWNER] *** UNPAIRED RELEASE *** base="
+                + System.identityHashCode(this)
+                + " owner=" + System.identityHashCode(owner)
+                + " release-site=" + site);
+            new Throwable().printStackTrace(System.err);
+        }
+    }
+
+    public static void dumpTraceOwners() {
+        if (!REFCOUNT_TRACE_ENV) return;
+        for (java.util.Map.Entry<RuntimeBase, java.util.LinkedHashMap<Integer, String>> e
+                : traceOwners.entrySet()) {
+            RuntimeBase b = e.getKey();
+            if (e.getValue().isEmpty()) continue;
+            System.err.println("[REFCOUNT-OWNERS] base=" + System.identityHashCode(b)
+                + " (" + b.getClass().getSimpleName() + ")"
+                + " blessId=" + b.blessId
+                + " refCount=" + b.refCount
+                + " owners=" + e.getValue().size());
+            for (java.util.Map.Entry<Integer, String> own : e.getValue().entrySet()) {
+                System.err.println("    owner=" + own.getKey() + " from " + own.getValue());
+            }
+        }
+    }
+
     /**
      * True if this container (hash or array) was created as a named variable
      * ({@code my %hash} or {@code my @array}) and a reference to it was created

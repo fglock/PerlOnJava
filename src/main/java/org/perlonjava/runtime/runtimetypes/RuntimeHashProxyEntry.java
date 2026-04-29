@@ -27,6 +27,11 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
         this(parent, key, false);
     }
 
+    /** D-W6.18: package-global flag propagation. */
+    public RuntimeHash getParent() {
+        return parent;
+    }
+
     /**
      * Constructs a RuntimeHashProxyEntry with key type tracking.
      *

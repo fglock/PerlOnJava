@@ -80,6 +80,11 @@ public class WeakRefRegistry {
         referentToWeakRefs
                 .computeIfAbsent(base, k -> Collections.newSetFromMap(new IdentityHashMap<>()))
                 .add(ref);
+        if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
+            System.err.println("[WEAKEN] ref=" + System.identityHashCode(ref)
+                + " referent=" + System.identityHashCode(base)
+                + " (" + base.getClass().getSimpleName() + ")");
+        }
         // Flip the fast-path flag so scopeExit cascades don't bail out
         // via the !blessedObjectExists shortcut when unblessed data has
         // weak refs that need clearing.
@@ -107,6 +112,9 @@ public class WeakRefRegistry {
             // Clear refCountOwned because weaken's DEC consumes the ownership —
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
+            base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
+            base.releaseOwner(ref, "weaken");
+            base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
                 if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
@@ -183,6 +191,12 @@ public class WeakRefRegistry {
      */
     public static boolean removeWeakRef(RuntimeScalar ref, RuntimeBase oldReferent) {
         if (!weakScalars.remove(ref)) return false;
+        if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
+            System.err.println("[WEAKREMOVE] ref=" + System.identityHashCode(ref)
+                + " oldReferent=" + System.identityHashCode(oldReferent)
+                + " (" + (oldReferent == null ? "null" : oldReferent.getClass().getSimpleName()) + ")");
+            new Throwable().printStackTrace(System.err);
+        }
         Set<RuntimeScalar> weakRefs = referentToWeakRefs.get(oldReferent);
         if (weakRefs != null) {
             weakRefs.remove(ref);
@@ -216,6 +230,12 @@ public class WeakRefRegistry {
         if (referent instanceof RuntimeCode) return;
         Set<RuntimeScalar> weakRefs = referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;
+        if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
+            System.err.println("[WEAKCLEAR] referent=" + System.identityHashCode(referent)
+                + " (" + referent.getClass().getSimpleName() + ") clearing "
+                + weakRefs.size() + " weak refs");
+            new Throwable().printStackTrace(System.err);
+        }
         for (RuntimeScalar weak : weakRefs) {
             weak.type = RuntimeScalarType.UNDEF;
             weak.value = null;

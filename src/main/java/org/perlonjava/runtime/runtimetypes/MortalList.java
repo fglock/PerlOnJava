@@ -60,6 +60,9 @@ public class MortalList {
      * from a container.
      */
     public static void deferDecrement(RuntimeBase base) {
+        if (base.refCountTrace) {
+            base.traceRefCount(0, "MortalList.deferDecrement (queued)");
+        }
         pending.add(base);
     }
 
@@ -175,6 +178,11 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
                 scalar.refCountOwned = false;
+                if (base.refCountTrace) {
+                    base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
+                    base.releaseOwner(scalar, "deferDecrementIfTracked");
+                }
+                base.releaseActiveOwner(scalar);
                 pending.add(base);
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
@@ -220,9 +228,16 @@ public class MortalList {
                 if (scalar.refCountOwned && base.refCount > 0) {
                     // Tracked object with owned refCount: defer decrement
                     scalar.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDestroyForContainerClear (queued)");
+                    }
+                    base.releaseActiveOwner(scalar);
                     pending.add(base);
                 } else if (base.blessId != 0 && base.refCount == 0) {
                     // Never-stored blessed object: bump to 1 so flush triggers DESTROY
+                    if (base.refCountTrace) {
+                        base.traceRefCount(+1, "MortalList.deferDestroyForContainerClear (refCount=1 bump for never-stored)");
+                    }
                     base.refCount = 1;
                     pending.add(base);
                 }
@@ -426,14 +441,26 @@ public class MortalList {
             if (base.blessId != 0) {
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
+                        base.releaseOwner(s, "deferDecrementRecursive blessed");
+                    }
+                    base.releaseActiveOwner(s);
                     pending.add(base);
                 } else if (base.refCount == 0) {
+                    if (base.refCountTrace) {
+                        base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
+                    }
                     base.refCount = 1;
                     pending.add(base);
                 }
             } else {
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
+                    }
+                    base.releaseActiveOwner(s);
                     pending.add(base);
                 }
                 // Walk into unblessed containers to find nested blessed refs
@@ -463,6 +490,9 @@ public class MortalList {
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && scalar.value instanceof RuntimeBase base
                     && base.blessId != 0 && base.refCount == 0) {
+                if (base.refCountTrace) {
+                    base.traceRefCount(+1, "MortalList.mortalizeForVoidDiscard (refCount=1 bump+queue)");
+                }
                 base.refCount = 1;
                 pending.add(base);
             }
@@ -539,6 +569,9 @@ public class MortalList {
             // Process list — DESTROY may add new entries, so use index-based loop
             for (int i = 0; i < pending.size(); i++) {
                 RuntimeBase base = pending.get(i);
+                if (base.refCount > 0) {
+                    base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
+                }
                 if (base.refCount > 0 && --base.refCount == 0) {
                     if (base.localBindingExists) {
                         // Named container: local variable may still exist. Skip callDestroy.
@@ -556,29 +589,23 @@ public class MortalList {
                         // createAnonymousReference() (localBindingExists stays false)
                         // so the clear is no longer needed and broke #76716.
                     } else if (base.blessId != 0
+                            && base.storedInPackageGlobal
                             && WeakRefRegistry.hasWeakRefsTo(base)
-                            && DestroyDispatch.classNeedsWalkerGate(base.blessId)
                             && ReachabilityWalker.isReachableFromRoots(base)) {
-                        // Phase D / Step W3-Path 2: blessed object with
-                        // outstanding weak refs whose cooperative refCount
-                        // dipped to 0 under deferred-decrement flush, BUT
-                        // the walker can still reach it from package globals
-                        // or hash/array element seeds. Treat as transient
-                        // refCount drift — leave at 0; the next assignment
-                        // that writes a tracked ref will bump it back up.
-                        //
-                        // Don't fire DESTROY, don't clear weak refs.
-                        //
-                        // The walker correctly distinguishes this case from
-                        // the cycle-break-via-weaken case: an isolated
-                        // cycle has no path to roots, so isReachableFromRoots
-                        // returns false and the cycle is properly destroyed.
-                        //
-                        // The hasWeakRefsTo gate keeps this safeguard cheap
-                        // for the overwhelmingly common case of objects
-                        // without weak refs (no walker call needed).
-                        //
-                        // See dev/modules/moose_support.md (Phase D / Step W).
+                        // D-W6.18: property-based walker gate.
+                        // Replaces the class-name heuristic
+                        // (classNeedsWalkerGate). Object's lifetime is
+                        // module-global metadata (stored in a package-
+                        // global hash like %METAS), so cooperative
+                        // refCount transient zeros must not fire DESTROY.
+                        // Walker confirms reachability; suppress destroy.
+                        // D-W6.16: heuristic walker gate (primary).
+                        // The new reachableOwnerCount() infrastructure
+                        // (D-W6.14/16) handles Class::MOP/Moose correctly
+                        // without needing this heuristic, but DBIC's
+                        // row-leak tests still over-rescue when using it
+                        // as the only gate. Heuristic stays as primary
+                        // until the over-rescue is fixed (D-W6.17).
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);

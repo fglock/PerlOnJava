@@ -38,6 +38,19 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     Set<String> byteKeys;
 
     /**
+     * D-W6.18: marks this hash as a package-global hash (registered in
+     * GlobalVariable.globalHashes). When a value is stored in this hash,
+     * the value's referent is marked as {@code storedInPackageGlobal} —
+     * which then allows the walker-gate rescue at refCount→0 to
+     * preserve module-global metadata (Class::MOP %METAS, similar caches)
+     * across transient cooperative-refCount zeros.
+     * <p>
+     * Set by {@code GlobalVariable.markAsGlobalPackageHash} when the hash
+     * is registered into globalHashes.
+     */
+    public boolean isGlobalPackageHash = false;
+
+    /**
      * Constructor for RuntimeHash.
      * Initializes an empty hash map to store elements.
      */

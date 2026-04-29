@@ -620,6 +620,8 @@ public class RuntimeList extends RuntimeBase {
                     if (rhsValue != null && rhsValue.refCountOwned
                             && (rhsValue.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && rhsValue.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.releaseOwner(rhsValue, "RuntimeList materialized-copy undo (undef-target)");
+                        base.releaseActiveOwner(rhsValue);
                         base.refCount--;
                         rhsValue.refCountOwned = false;
                     }
@@ -639,6 +641,8 @@ public class RuntimeList extends RuntimeBase {
                 if (assigned != null && assigned.refCountOwned
                         && (assigned.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && assigned.value instanceof RuntimeBase base && base.refCount > 0) {
+                    base.releaseOwner(assigned, "RuntimeList materialized-copy undo (scalar-target)");
+                    base.releaseActiveOwner(assigned);
                     base.refCount--;
                     assigned.refCountOwned = false;
                 }
@@ -663,6 +667,8 @@ public class RuntimeList extends RuntimeBase {
                     for (RuntimeScalar r : remaining) {
                         if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                            base.releaseOwner(r, "RuntimeList materialized-copy undo (array-target)");
+                            base.releaseActiveOwner(r);
                             base.refCount--;
                             r.refCountOwned = false;
                         }
@@ -696,6 +702,8 @@ public class RuntimeList extends RuntimeBase {
                 for (RuntimeScalar r : remainingArr.elements) {
                     if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && r.value instanceof RuntimeBase base && base.refCount > 0) {
+                        base.releaseOwner(r, "RuntimeList materialized-copy undo (hash-target)");
+                        base.releaseActiveOwner(r);
                         base.refCount--;
                         r.refCountOwned = false;
                     }

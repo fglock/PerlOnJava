@@ -929,6 +929,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.recordOwner(scalar, "incrementRefCountForContainerStore");
+            base.recordActiveOwner(scalar);
             scalar.refCountOwned = true;
             // Phase B1 (refcount_alignment_52leaks_plan.md): track the
             // container element so ReachabilityWalker can see it via
@@ -1130,6 +1132,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
             if (nb.refCount >= 0) {
+                nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
+                nb.recordOwner(this, "setLargeRefCounted store");
+                nb.recordActiveOwner(this);
                 nb.refCount++;
                 newOwned = true;
             }
@@ -1171,10 +1176,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // clearWeakRefsTo or cascade), keeping Schema's internals intact.
             // Proper cleanup happens at END time via clearRescuedWeakRefs.
             if (base.refCount == Integer.MIN_VALUE) {
+                base.traceRefCount(0, "RuntimeScalar.setLargeRefCounted (rescue MIN_VALUE -> 1)");
                 base.refCount = 1;
             } else if (base.refCount >= 0) {
+                base.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (rescue increment)");
                 base.refCount++;
             }
+            base.recordOwner(this, "rescue from currentDestroyTarget");
             newOwned = true;
         }
 
@@ -1189,6 +1197,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
+            if (oldBase.refCount > 0) {
+                oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
+                oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                oldBase.releaseActiveOwner(this);
+            }
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 if (oldBase.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
@@ -1196,9 +1209,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
+                        && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && DestroyDispatch.classNeedsWalkerGate(oldBase.blessId)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {
+                    // D-W6.18: property-based walker gate (mirror of
+                    // MortalList.flush). Replaces classNeedsWalkerGate
+                    // class-name heuristic with the storedInPackageGlobal
+                    // flag set at hash-store time.
                     // Phase D / Step W3-Path 2: mirror of the gate in
                     // MortalList.flush(). Blessed object with outstanding
                     // weak refs whose cooperative refCount dipped to 0
@@ -2293,6 +2310,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 DestroyDispatch.callDestroy(oldBase);
             } else if (this.refCountOwned && oldBase.refCount > 0) {
                 this.refCountOwned = false;
+                oldBase.releaseActiveOwner(this);
                 if (--oldBase.refCount == 0) {
                     if (oldBase.localBindingExists) {
                         // Named container: local variable may still exist. Skip callDestroy.

@@ -66,6 +66,22 @@ public class ReferenceOperators {
             RuntimeBase referent = (RuntimeBase) runtimeScalar.value;
             int newBlessId = NameNormalizer.getBlessId(str);
 
+            // Phase D-W6.10: arm targeted refCount tracing for classes
+            // matching the walker-gate heuristic (Class::MOP/Moose/Moo)
+            // when env-flag PJ_REFCOUNT_TRACE is set. Lets us pinpoint
+            // which specific increment/decrement site causes the
+            // metaclass refCount underflow during CMOP bootstrap.
+            if (RuntimeBase.refCountTraceEnabled()
+                    && org.perlonjava.runtime.runtimetypes.DestroyDispatch
+                            .classNeedsWalkerGate(newBlessId)) {
+                referent.refCountTrace = true;
+                System.err.println("[REFCOUNT] *** ARMED *** base="
+                    + System.identityHashCode(referent)
+                    + " (" + referent.getClass().getSimpleName() + ")"
+                    + " bless='" + str + "'"
+                    + " refCount=" + referent.refCount);
+            }
+
             if (referent.refCount >= 0) {
                 // Already-tracked referent (e.g., anonymous hash from `bless {}`).
                 // Always keep tracking — even classes without DESTROY need
@@ -120,6 +136,7 @@ public class ReferenceOperators {
                     // already holds a reference that was never counted (because
                     // tracking wasn't active at assignment time). Count it as 1.
                     referent.refCount = 1;
+                    referent.recordOwner(runtimeScalar, "rebless from untracked");
                     runtimeScalar.refCountOwned = true;
                 } else {
                     // First bless: start at refCount=1 and add to MortalList.

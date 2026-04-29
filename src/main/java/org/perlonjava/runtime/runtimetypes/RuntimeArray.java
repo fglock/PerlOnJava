@@ -122,6 +122,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        if (base.refCountTrace) {
+                            base.releaseOwner(result, "RuntimeArray.pop");
+                        }
+                        base.releaseActiveOwner(result);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
@@ -160,6 +164,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        if (base.refCountTrace) {
+                            base.releaseOwner(result, "RuntimeArray.shift");
+                        }
+                        base.releaseActiveOwner(result);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
