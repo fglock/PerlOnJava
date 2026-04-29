@@ -123,7 +123,15 @@ public class SubUtil extends PerlModuleBase {
         if (sub == null || sub.isEmpty()) {
             // Anonymous sub: real Perl returns "Package::__ANON__" where Package
             // is the compile-time package (CvSTASH).
+            // Honor `local *PKG::__ANON__ = 'name'` by consulting the package's
+            // *__ANON__ glob's nameOverride. See dev/modules/anon_sub_naming.md.
             if (pkg != null && !pkg.isEmpty()) {
+                org.perlonjava.runtime.runtimetypes.RuntimeGlob anonGlob =
+                        GlobalVariable.peekGlobalIO(pkg + "::__ANON__");
+                if (anonGlob != null && anonGlob.nameOverride != null
+                        && !anonGlob.nameOverride.isEmpty()) {
+                    return new RuntimeScalar(pkg + "::" + anonGlob.nameOverride).getList();
+                }
                 return new RuntimeScalar(pkg + "::__ANON__").getList();
             }
             return new RuntimeScalar("__ANON__").getList();

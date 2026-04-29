@@ -1,0 +1,13 @@
+1a (before rename) caller: main::__ANON__
+1b (before rename) Sub::Util::subname: main::__ANON__
+2a (after Sub::Name) caller: My::renamed
+2b (after Sub::Name) Sub::Util::subname: My::renamed
+3a (set_subname) caller: Other::name
+3b (set_subname) Sub::Util::subname: Other::name
+4a (plain) caller: main::__ANON__
+4b (plain) Sub::Util::subname: main::__ANON__
+5a (Foo::Bar) caller: Foo::Bar::__ANON__
+5b (Foo::Bar) Sub::Util::subname: Foo::Bar::__ANON__
+6 (Carp w/ Sub::Name): 
+7 (B GV NAME after set_subname): name
+7 (B GV STASH NAME): Other

@@ -2267,6 +2267,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (code.subName != null && !code.subName.isEmpty()) {
                         String codePkg = code.packageName != null ? code.packageName : "main";
                         subName = codePkg + "::" + code.subName;
+                    } else if (!code.explicitlyRenamed && code.packageName != null) {
+                        // Anonymous sub: honor `local *PKG::__ANON__ = 'name'`
+                        // by reading the package's *__ANON__ glob's nameOverride.
+                        // See dev/modules/anon_sub_naming.md.
+                        RuntimeGlob anonGlob = GlobalVariable.peekGlobalIO(
+                                code.packageName + "::__ANON__");
+                        if (anonGlob != null && anonGlob.nameOverride != null
+                                && !anonGlob.nameOverride.isEmpty()) {
+                            subName = code.packageName + "::" + anonGlob.nameOverride;
+                        }
                     }
                 }
                 
@@ -2284,6 +2294,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (frame > 0 && frame - 1 < stackTraceSize) {
                         String prevPkg = stackTrace.get(frame - 1).getFirst();
                         subName = (prevPkg != null && !prevPkg.isEmpty() ? prevPkg : "main") + "::__ANON__";
+                    }
+                }
+
+                // Honor `local *PKG::__ANON__ = 'name'` for any anonymous-sub
+                // frame, not just the innermost one. After both fallbacks,
+                // an anon frame ends up as "Pkg::__ANON__"; if the package's
+                // *__ANON__ glob currently has a name override active, swap
+                // it in. See dev/modules/anon_sub_naming.md.
+                if (subName != null && subName.endsWith("::__ANON__")) {
+                    String anonPkg = subName.substring(0,
+                            subName.length() - "::__ANON__".length());
+                    RuntimeGlob anonGlob = GlobalVariable.peekGlobalIO(
+                            anonPkg + "::__ANON__");
+                    if (anonGlob != null && anonGlob.nameOverride != null
+                            && !anonGlob.nameOverride.isEmpty()) {
+                        subName = anonPkg + "::" + anonGlob.nameOverride;
                     }
                 }
 
