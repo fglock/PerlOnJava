@@ -311,7 +311,26 @@ public class Storable extends PerlModuleBase {
         }
     }
 
-    private static void releaseApplyArgs(RuntimeArray args) {
+    /**
+     * Phase G (refcount_alignment_52leaks_plan.md): release the
+     * refCount bumps that {@link RuntimeArray#push} applied via
+     * {@link RuntimeScalar#incrementRefCountForContainerStore} for
+     * elements in an arg-passing array that's about to be discarded.
+     * <p>
+     * Storable's deepClone/freeze/thaw build temporary Java-side
+     * {@link RuntimeArray} objects to hand to Perl-side hook methods
+     * via {@link RuntimeCode#apply}. After the Perl call returns,
+     * the Java array goes out of scope — but its elements'
+     * {@code refCountOwned=true} flag keeps their referents'
+     * refCount permanently inflated, which prevents downstream
+     * cleanup (DESTROY, {@code clearWeakRefsTo}, and the 52leaks.t
+     * {@code basic result_source_handle} assertion).
+     * <p>
+     * Public so the encoder/decoder helpers in the {@code .storable}
+     * subpackage can drain their hook callsites the same way the
+     * dclone path does.
+     */
+    public static void releaseApplyArgs(RuntimeArray args) {
         if (args == null || args.elements == null) return;
         for (RuntimeScalar elem : args.elements) {
             if (elem == null) continue;

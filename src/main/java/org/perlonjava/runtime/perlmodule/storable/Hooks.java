@@ -149,8 +149,14 @@ public final class Hooks {
             RuntimeArray.push(args, new RuntimeScalar(classname));
             RuntimeArray.push(args, new RuntimeScalar(0)); // cloning = false
             RuntimeArray.push(args, new RuntimeScalar(frozen));
-            org.perlonjava.runtime.runtimetypes.RuntimeList result =
-                    RuntimeCode.apply(attachMethod, args, RuntimeContextType.SCALAR);
+            org.perlonjava.runtime.runtimetypes.RuntimeList result;
+            try {
+                result = RuntimeCode.apply(attachMethod, args, RuntimeContextType.SCALAR);
+            } finally {
+                // Drain RuntimeArray.push refCount bumps. See
+                // Storable.releaseApplyArgs javadoc.
+                org.perlonjava.runtime.perlmodule.Storable.releaseApplyArgs(args);
+            }
             RuntimeScalar attached = result.scalar();
             if (attached == null
                     || !RuntimeScalarType.isReference(attached)
@@ -263,6 +269,12 @@ public final class Hooks {
         for (RuntimeScalar ref : extraRefs) {
             RuntimeArray.push(args, ref);
         }
-        RuntimeCode.apply(thawMethod, args, RuntimeContextType.VOID);
+        try {
+            RuntimeCode.apply(thawMethod, args, RuntimeContextType.VOID);
+        } finally {
+            // Drain RuntimeArray.push refCount bumps. See
+            // Storable.releaseApplyArgs javadoc.
+            org.perlonjava.runtime.perlmodule.Storable.releaseApplyArgs(args);
+        }
     }
 }

@@ -961,11 +961,11 @@ imports:
       # the exclusion list — they're now imported and run by
       # `make test-bundled-modules`.
       #
-      # attach.t — was passing under the no-hook encoder; now fails 1 of 3
-      # because the encoder routes through STORABLE_attach (correct) but
-      # PerlOnJava's DESTROY count for the attached object is off by one.
-      # Pre-existing PerlOnJava DESTROY edge case, not Storable.
-      - attach.t
+      # attach.t flipped to clean pass after the STORABLE_freeze /
+      # STORABLE_attach / STORABLE_thaw call sites started draining
+      # the refCount bumps RuntimeArray.push imposes on their args
+      # (see Storable.releaseApplyArgs). Now imported and run.
+      #
       # attach_errors.t       — STORABLE_attach error wording (~1 fail of 40)
       - attach_errors.t
       # boolean.t             — boolean immortal vs RuntimeScalar(true) parity

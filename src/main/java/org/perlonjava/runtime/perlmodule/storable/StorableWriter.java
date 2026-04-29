@@ -207,6 +207,11 @@ public final class StorableWriter {
         } catch (Exception e) {
             // Re-throw as-is so the caller's try/catch in Storable.java surfaces it.
             throw e;
+        } finally {
+            // Drain RuntimeArray.push refCount bumps so the original
+            // blessed scalar can DESTROY when its lexical goes out
+            // of scope. See Storable.releaseApplyArgs javadoc.
+            org.perlonjava.runtime.perlmodule.Storable.releaseApplyArgs(callArgs);
         }
         List<RuntimeScalar> items = retList(ret);
 
