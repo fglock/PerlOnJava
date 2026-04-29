@@ -562,6 +562,23 @@ public class MortalList {
             System.getenv("JPERL_GC_DEBUG") != null;
     private static boolean inAutoSweep = false;
 
+    // D-W6.18 perf: cached reachable-set, valid for the duration of a
+    // single flush() invocation. The walker BFS is O(globals); without
+    // this cache, calling it once per pending target turns flush into
+    // O(targets × globals). DBIC stresses this hard because many
+    // blessed objects are stored-in-package-global AND have weak refs
+    // (Schema/ResultSource back-refs) — every flush would re-walk the
+    // full global graph for each one. Computed lazily on first need.
+    private static Set<RuntimeBase> flushReachableCache = null;
+
+    private static boolean isReachableCached(RuntimeBase base) {
+        if (flushReachableCache == null) {
+            ReachabilityWalker w = new ReachabilityWalker();
+            flushReachableCache = w.walk();
+        }
+        return flushReachableCache.contains(base);
+    }
+
     public static void flush() {
         if (!active || pending.isEmpty() || flushing) return;
         flushing = true;
@@ -591,7 +608,7 @@ public class MortalList {
                     } else if (base.blessId != 0
                             && base.storedInPackageGlobal
                             && WeakRefRegistry.hasWeakRefsTo(base)
-                            && ReachabilityWalker.isReachableFromRoots(base)) {
+                            && isReachableCached(base)) {
                         // D-W6.18: property-based walker gate.
                         // Replaces the class-name heuristic
                         // (classNeedsWalkerGate). Object's lifetime is
@@ -616,6 +633,7 @@ public class MortalList {
             marks.clear(); // All entries drained; marks are meaningless now
         } finally {
             flushing = false;
+            flushReachableCache = null;
         }
         // Phase B2a: guarded auto-sweep.
         maybeAutoSweep();
