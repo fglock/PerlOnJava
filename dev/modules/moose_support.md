@@ -2096,6 +2096,82 @@ load**, where a Class::MOP::Class instance built up by
 - D-W6.3 (`@_` argument promotion): still pending; reproducer not
   yet written.
 
+## Phase D-W6.4 (continued, 2026-04-29): weak-metaclass drift hunt
+
+### Reproducer landed
+
+`src/test/resources/unit/refcount/drift/weak_metaclass.t` —
+14 tests covering:
+
+- A: weakened single hash slot, my-var holds strong ref
+- B: weakened hash slot + outer `@keepalive` array
+- C: 20 weakened slots in a loop with all preserved by `@keepalive`
+- D: weak-ref → strong-ref "rescue" pattern (the Schema::DESTROY
+  shape)
+
+All 14 pass on master AND with the walker gate disabled. So the
+simple **`store strong → weaken in place → other strong holder`**
+pattern is also not the drift source.
+
+### What this means
+
+The `Class::MOP` bootstrap drift is something *more specific* than:
+- sub installation (D-W6.1 — works without the gate)
+- closure capture (D-W6.2 — works without the gate)
+- hash-slot tracking (D-W6.2 — works without the gate)
+- weakened-hash + multi-holder (D-W6.4 — works without the gate)
+
+It must involve a combination of these patterns *plus* one of:
+
+1. **Cascade clear during destroyFired branch.** When a metaclass's
+   refCount drops to 0 and DESTROY runs, weak refs are cleared at
+   the end. If the SAME object's refCount drops to 0 again later
+   (via a duplicate pending entry, or via cooperative refcount
+   drift in some unrelated path), the second `callDestroy` enters
+   the `destroyFired` branch (DestroyDispatch.java:212-229) which
+   *also* does `WeakRefRegistry.clearWeakRefsTo`. This is harmless
+   if weak refs were already cleared, but DOES cascade into hash
+   contents via `scopeExitCleanupHash`. That cascade can decrement
+   refCount on the metaclass's own attribute references, which
+   transitively …
+
+2. **`destroyFired` cascade re-running after weak-ref-target rescue.**
+   The first DESTROY may have set up a Schema-style rescue (added
+   to `rescuedObjects`). If a second `callDestroy` enters and the
+   object is *not* in `rescuedObjects` (maybe the rescue list was
+   cleaned up by `processRescuedObjects` already), the second call
+   hits `WeakRefRegistry.clearWeakRefsTo` and the weak refs go.
+
+3. **Resurrection-in-flight from `args.push(self)` in doCallDestroy.**
+   `doCallDestroy` does `args.push(self)` (refCount: MIN_VALUE → 1
+   via setLargeRefCounted special case), then runs DESTROY. The
+   rebalance walk decrements refCount: 1 → 0. But if anything in
+   DESTROY queued a deferred decrement on `self`, the
+   `drainPendingSince` after the rebalance walk could decrement
+   again, going 0 → -1. The next callDestroy on the same object
+   sees refCount as MIN_VALUE-ish and rejects.
+
+The trace shows the second destroy comes through
+`drainPendingSince` after the first destroy's body — so #3 is the
+strongest hypothesis.
+
+### Concrete next steps
+
+1. **Audit `args.push(self)` and the rebalance walk in
+   `doCallDestroy`.** Specifically: does the Perl DESTROY body's
+   first-line `my $self = shift` (which is what most DESTROY methods
+   do, including Class::MOP::Class) decrement refCount via
+   deferDecrementIfTracked? If yes, the rebalance walk's "still in
+   args.elements" check would falsely fire.
+
+2. **Add a guard to `drainPendingSince` that also checks
+   `referent.destroyFired`.** If destroyFired is true, skip the
+   entry — the cascading destroy already handled cleanup.
+
+3. **Instrument `pending.add` to log identity-hash + caller** when
+   the same `RuntimeBase` is added a second time. This surfaces
+   the duplicate-add path directly.
+
 
 
 ## Related Documents
