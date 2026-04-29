@@ -340,10 +340,14 @@ public class PackGroupHandler {
             if (stringCount >= 0) {
                 effectiveCount = stringCount;
             } else {
-                byte[] strBytes = byteMode
-                        ? str.getBytes(StandardCharsets.ISO_8859_1)
-                        : str.getBytes(StandardCharsets.UTF_8);
-                effectiveCount = strBytes.length;
+                // Match the byte/char count used by PackWriter.writeString:
+                // - byte mode (U0): raw bytes via ISO-8859-1
+                // - normal mode: one unit per Java character (writeString writes
+                //   one byte per ISO-8859-1 char, or one codepoint for high Unicode)
+                int unitCount = byteMode
+                        ? str.getBytes(StandardCharsets.ISO_8859_1).length
+                        : str.length();
+                effectiveCount = unitCount;
                 if (stringFormat == 'Z') {
                     effectiveCount++; // Include null terminator in count
                 }
