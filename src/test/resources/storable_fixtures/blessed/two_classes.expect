@@ -1,0 +1,9 @@
+[
+  bless( {
+    "v" => 1
+  }, 'Foo::Bar' ),
+  bless( {}, 'Other::Class' ),
+  bless( {
+    "v" => 2
+  }, 'Foo::Bar' )
+]
