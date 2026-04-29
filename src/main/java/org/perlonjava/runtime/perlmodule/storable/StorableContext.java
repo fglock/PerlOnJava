@@ -3,7 +3,10 @@ package org.perlonjava.runtime.perlmodule.storable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Mutable per-retrieve / per-store context.
@@ -68,6 +71,18 @@ public final class StorableContext {
      *  registers a classname here, {@code SX_IX_BLESS} indexes into it. */
     private final List<String> classes = new ArrayList<>();
 
+    // --- write-side state ---
+
+    /** Identity-keyed seen table for the encoder. Keyed on the underlying
+     *  container (RuntimeArray/RuntimeHash) for refs, on the RuntimeScalar
+     *  itself for shared scalar refs. Value is the assigned tag. Mirrors
+     *  upstream's hv_fetch-by-pointer in {@code store()}. */
+    private final IdentityHashMap<Object, Long> writeSeen = new IdentityHashMap<>();
+    /** Next write-side tag to allocate. */
+    private long nextWriteTag = 0;
+    /** Classname → index, for {@code SX_BLESS}/{@code SX_IX_BLESS} encoding. */
+    private final Map<String, Integer> writeClasses = new HashMap<>();
+
     /** Construct a read-only context wrapping a byte array. */
     public StorableContext(byte[] data) {
         this.buf = data;
@@ -80,6 +95,16 @@ public final class StorableContext {
         this.buf = null;
         this.pos = 0;
         this.out = new StringBuilder();
+    }
+
+    /** Construct a write context with the netorder flag set up front
+     *  (so {@link #writeU32Length(long)} and friends pick the right
+     *  byte order before {@link Header#writeFile} runs). */
+    public static StorableContext forWrite(boolean netorder) {
+        StorableContext c = new StorableContext();
+        c.netorder = netorder;
+        c.fileBigEndian = true;   // we always emit big-endian native too
+        return c;
     }
 
     // --- header-driven setters (called by Header.parseFile) ---
@@ -188,9 +213,95 @@ public final class StorableContext {
         out.append((char) (b & 0xFF));
     }
 
+    /** Append raw bytes (each as a 0..255 char in the underlying string). */
+    public void writeBytes(byte[] bytes) {
+        if (out == null) throw new IllegalStateException("read-only context");
+        for (byte by : bytes) out.append((char) (by & 0xFF));
+    }
+
+    /** Emit a U32 length using the file's byte order (network or native).
+     *  Mirrors {@link #readU32Length()}. */
+    public void writeU32Length(long len) {
+        if (len < 0 || len > 0xFFFFFFFFL) {
+            throw new StorableFormatException("U32 length out of range: " + len);
+        }
+        if (netorder || fileBigEndian) {
+            writeByte((int) ((len >>> 24) & 0xFF));
+            writeByte((int) ((len >>> 16) & 0xFF));
+            writeByte((int) ((len >>> 8)  & 0xFF));
+            writeByte((int) ( len         & 0xFF));
+        } else {
+            writeByte((int) ( len         & 0xFF));
+            writeByte((int) ((len >>> 8)  & 0xFF));
+            writeByte((int) ((len >>> 16) & 0xFF));
+            writeByte((int) ((len >>> 24) & 0xFF));
+        }
+    }
+
+    /** Emit a 32-bit big-endian signed I32 (always BE — for SX_NETINT). */
+    public void writeNetInt(int v) {
+        writeByte((v >>> 24) & 0xFF);
+        writeByte((v >>> 16) & 0xFF);
+        writeByte((v >>> 8)  & 0xFF);
+        writeByte( v         & 0xFF);
+    }
+
+    /** Emit a native IV (8 bytes, file byte order). Used for SX_INTEGER. */
+    public void writeNativeIV(long v) {
+        if (netorder || fileBigEndian) {
+            for (int i = 7; i >= 0; i--) writeByte((int) ((v >>> (8 * i)) & 0xFF));
+        } else {
+            for (int i = 0; i < 8; i++) writeByte((int) ((v >>> (8 * i)) & 0xFF));
+        }
+    }
+
+    /** Emit a native NV (8 bytes, file byte order). Used for SX_DOUBLE.
+     *  Per Storable.xs, doubles are NOT byte-swapped for netorder; for
+     *  netorder mode upstream actually serializes doubles as strings. We
+     *  always use native byte order here (matching {@link #readNativeNV()}). */
+    public void writeNativeNV(double d) {
+        long bits = Double.doubleToRawLongBits(d);
+        if (fileBigEndian) {
+            for (int i = 7; i >= 0; i--) writeByte((int) ((bits >>> (8 * i)) & 0xFF));
+        } else {
+            for (int i = 0; i < 8; i++) writeByte((int) ((bits >>> (8 * i)) & 0xFF));
+        }
+    }
+
     public String encoded() {
         if (out == null) throw new IllegalStateException("read-only context");
         return out.toString();
+    }
+
+    /** Look up an object's existing write tag, or {@code -1} if not yet
+     *  seen. Identity-keyed. */
+    public long lookupSeenTag(Object key) {
+        Long t = writeSeen.get(key);
+        return t == null ? -1 : t;
+    }
+
+    /** Register an object in the write seen-table at the next sequential
+     *  tag. Returns the assigned tag. Caller must call this for every
+     *  fresh value emitted, in the same order upstream's
+     *  {@code SEEN_NN}/{@code store()} would have. */
+    public long recordWriteSeen(Object key) {
+        long tag = nextWriteTag++;
+        writeSeen.put(key, tag);
+        return tag;
+    }
+
+    /** Look up a classname's index for {@code SX_IX_BLESS}, or {@code -1}
+     *  if this class hasn't been emitted via {@code SX_BLESS} yet. */
+    public int lookupWriteClass(String name) {
+        Integer ix = writeClasses.get(name);
+        return ix == null ? -1 : ix;
+    }
+
+    /** Register a classname, returning its assigned index. */
+    public int recordWriteClass(String name) {
+        int ix = writeClasses.size();
+        writeClasses.put(name, ix);
+        return ix;
     }
 
     // --- seen-table management ---

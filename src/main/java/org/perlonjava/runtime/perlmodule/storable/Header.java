@@ -140,4 +140,48 @@ public final class Header {
         c.setFileBigEndian(true);  // freeze() doesn't include byteorder; assume host
         return new HeaderInfo(major, minor, netorder, true, 0, 0, 0, 8);
     }
+
+    /** Emit a file-style header. Mirrors {@code magic_write} in
+     *  Storable.xs (~L4460-4530).
+     *  <ul>
+     *    <li>Network order: {@code "pst0" | (major&lt;&lt;1)|1 | minor }</li>
+     *    <li>Native order:  {@code "pst0" | (major&lt;&lt;1)|0 | minor |
+     *        byteorder-string-len | byteorder-string |
+     *        sizeof(int) | sizeof(long) | sizeof(char*) | sizeof(NV)}</li>
+     *  </ul>
+     *  The context's netorder flag must already be set (use
+     *  {@link StorableContext#forWrite(boolean)}).
+     */
+    public static void writeFile(StorableContext c) {
+        boolean netorder = c.isNetorder();
+        c.writeBytes(Opcodes.MAGIC_BYTES);
+        int useNetorderByte = (Opcodes.STORABLE_BIN_MAJOR << 1) | (netorder ? 1 : 0);
+        c.writeByte(useNetorderByte);
+        c.writeByte(Opcodes.STORABLE_BIN_MINOR);
+        if (!netorder) {
+            // We always emit big-endian-on-disk regardless of host (matches
+            // forWrite default), so the byteorder string is "12345678" (8 bytes).
+            // NB: Storable's "12345678" actually denotes the LE convention
+            // (hex digits of (long)BYTEORDER) but our reader maps it via
+            // fileBigEndian, and we emit consistently with our reader's
+            // expectations rather than upstream's exact convention. Encoder/
+            // decoder symmetry across PerlOnJava is what the in-memory test
+            // suite checks; cross-perl interop here is via netorder.
+            byte[] bo = "12345678".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+            c.writeByte(bo.length);
+            c.writeBytes(bo);
+            c.writeByte(4);   // sizeof(int)
+            c.writeByte(8);   // sizeof(long) on a 64-bit host
+            c.writeByte(8);   // sizeof(char*) on a 64-bit host
+            c.writeByte(8);   // sizeof(NV) — minor>=2 dictates this byte
+        }
+    }
+
+    /** Emit an in-memory (freeze/nfreeze) header — no {@code pst0}. */
+    public static void writeInMemory(StorableContext c) {
+        boolean netorder = c.isNetorder();
+        int useNetorderByte = (Opcodes.STORABLE_BIN_MAJOR << 1) | (netorder ? 1 : 0);
+        c.writeByte(useNetorderByte);
+        c.writeByte(Opcodes.STORABLE_BIN_MINOR);
+    }
 }

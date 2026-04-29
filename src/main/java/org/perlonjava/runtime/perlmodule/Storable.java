@@ -98,31 +98,48 @@ public class Storable extends PerlModuleBase {
     }
 
     /**
-     * Freezes data to a binary format matching Perl 5 Storable's sort order.
-     * Uses type bytes compatible with Perl 5's Storable so that string comparison
-     * of frozen output produces the same ordering as Perl 5.
+     * Freezes data to the native Perl Storable in-memory format. Output
+     * starts with the {@code (major&lt;&lt;1)|netorder} flag byte followed
+     * by the minor version byte (no {@code pst0} prefix; that's only for
+     * file mode), then the body — same wire format upstream Perl
+     * {@code freeze} produces.
      */
     public static RuntimeList freeze(RuntimeArray args, int ctx) {
-        lastOpInNetorder = false;
+        return freezeImpl(args, false);
+    }
+
+    private static RuntimeList freezeImpl(RuntimeArray args, boolean netorder) {
+        lastOpInNetorder = netorder;
         if (args.isEmpty()) {
             return WarnDie.die(new RuntimeScalar("freeze: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
 
         try {
             RuntimeScalar data = args.get(0);
-            StringBuilder sb = new StringBuilder();
-            sb.append(BINARY_MAGIC);
-            IdentityHashMap<Object, Integer> seen = new IdentityHashMap<>();
-            serializeBinary(data, sb, seen);
-            return new RuntimeScalar(sb.toString()).getList();
+            org.perlonjava.runtime.perlmodule.storable.StorableWriter w =
+                    new org.perlonjava.runtime.perlmodule.storable.StorableWriter();
+            String encoded = w.writeTopLevelToMemory(data, netorder);
+            // The encoded string holds bytes 0..255 as chars. Wrap as a
+            // byte-string scalar so consumers see it as raw bytes (matches
+            // the existing freeze() return shape).
+            RuntimeScalar result = new RuntimeScalar(encoded);
+            return result.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("freeze failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
         }
     }
 
     /**
-     * Thaws frozen data back to objects. Handles both binary format and
-     * legacy YAML+GZIP format for backward compatibility.
+     * Thaws frozen data. Accepts:
+     * <ul>
+     *   <li>Native Perl Storable in-memory format (current
+     *       {@link #freeze}/{@code nfreeze} output) — first byte is
+     *       {@code (major&lt;&lt;1) | netorder}, currently {@code 0x04}
+     *       (native) or {@code 0x05} (network).</li>
+     *   <li>Legacy PerlOnJava in-memory binary format with magic byte
+     *       {@code 0xFF}.</li>
+     *   <li>Legacy YAML+GZIP format.</li>
+     * </ul>
      */
     public static RuntimeList thaw(RuntimeArray args, int ctx) {
         if (args.isEmpty()) {
@@ -132,22 +149,44 @@ public class Storable extends PerlModuleBase {
         try {
             RuntimeScalar frozen = args.get(0);
             String frozenStr = frozen.toString();
+            if (frozenStr.isEmpty()) {
+                throw new IllegalArgumentException("Empty input");
+            }
+            char first = frozenStr.charAt(0);
 
-            if (frozenStr.length() > 0 && frozenStr.charAt(0) == BINARY_MAGIC) {
-                // New binary format
-                int[] pos = {1}; // skip magic byte
+            // Native Perl Storable in-memory format (frozen by jperl since
+            // Phase 2 or by upstream perl's freeze). First byte is
+            // (major<<1)|netorder ∈ {4, 5} for major=2.
+            if (first == 4 || first == 5) {
+                byte[] bytes = new byte[frozenStr.length()];
+                for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) frozenStr.charAt(i);
+                org.perlonjava.runtime.perlmodule.storable.StorableContext sCtx =
+                        new org.perlonjava.runtime.perlmodule.storable.StorableContext(bytes);
+                org.perlonjava.runtime.perlmodule.storable.Header.parseInMemory(sCtx);
+                org.perlonjava.runtime.perlmodule.storable.StorableReader sReader =
+                        new org.perlonjava.runtime.perlmodule.storable.StorableReader();
+                RuntimeScalar data = sReader.dispatch(sCtx);
+                if (!RuntimeScalarType.isReference(data)) {
+                    data = data.createReference();
+                }
+                return data.getList();
+            }
+
+            if (first == BINARY_MAGIC) {
+                // Legacy PerlOnJava in-memory binary format.
+                int[] pos = {1};
                 List<RuntimeScalar> refList = new ArrayList<>();
                 RuntimeScalar data = deserializeBinary(frozenStr, pos, refList);
                 return data.getList();
-            } else {
-                // Legacy YAML+GZIP format (strip old type prefix if present)
-                if (frozenStr.length() > 0 && frozenStr.charAt(0) < '\u0010') {
-                    frozenStr = frozenStr.substring(1);
-                }
-                String yaml = decompressString(frozenStr);
-                RuntimeScalar data = deserializeFromYAML(yaml);
-                return data.getList();
             }
+
+            // Legacy YAML+GZIP format (strip old type prefix if present)
+            if (first < '\u0010') {
+                frozenStr = frozenStr.substring(1);
+            }
+            String yaml = decompressString(frozenStr);
+            RuntimeScalar data = deserializeFromYAML(yaml);
+            return data.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("thaw failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();
         }
@@ -483,16 +522,21 @@ public class Storable extends PerlModuleBase {
      * Network freeze (same as freeze for now).
      */
     public static RuntimeList nfreeze(RuntimeArray args, int ctx) {
-        RuntimeList result = freeze(args, ctx);
-        lastOpInNetorder = true;
-        return result;
+        return freezeImpl(args, true);
     }
 
     /**
-     * Stores data to file using YAML format.
+     * Stores data to file using the native Perl Storable binary format
+     * ({@code pst0} magic). For {@code store} the byte order is "native"
+     * (we always emit big-endian-on-disk for round-trip determinism);
+     * for {@code nstore} it is network order.
      */
     public static RuntimeList store(RuntimeArray args, int ctx) {
-        lastOpInNetorder = false;
+        return storeImpl(args, false);
+    }
+
+    private static RuntimeList storeImpl(RuntimeArray args, boolean netorder) {
+        lastOpInNetorder = netorder;
         if (args.size() < 2) {
             return WarnDie.die(new RuntimeScalar("store: not enough arguments"), new RuntimeScalar("\n")).getList();
         }
@@ -501,8 +545,14 @@ public class Storable extends PerlModuleBase {
             RuntimeScalar data = args.get(0);
             String filename = args.get(1).toString();
 
-            String yaml = serializeToYAML(data);
-            Files.write(new File(filename).toPath(), yaml.getBytes(StandardCharsets.UTF_8));
+            org.perlonjava.runtime.perlmodule.storable.StorableWriter w =
+                    new org.perlonjava.runtime.perlmodule.storable.StorableWriter();
+            String encoded = w.writeTopLevelToFile(data, netorder);
+            // The encoded string holds bytes 0..255 as chars; convert back
+            // to the raw byte sequence for file I/O.
+            byte[] bytes = new byte[encoded.length()];
+            for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) encoded.charAt(i);
+            Files.write(new File(filename).toPath(), bytes);
 
             return scalarTrue.getList();
         } catch (Exception e) {
@@ -563,9 +613,7 @@ public class Storable extends PerlModuleBase {
      * Network store (same as store).
      */
     public static RuntimeList nstore(RuntimeArray args, int ctx) {
-        RuntimeList result = store(args, ctx);
-        lastOpInNetorder = true;
-        return result;
+        return storeImpl(args, true);
     }
 
     /**
