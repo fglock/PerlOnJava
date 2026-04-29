@@ -555,42 +555,18 @@ public class MortalList {
                         // leak-tracing scenarios; those scenarios now use
                         // createAnonymousReference() (localBindingExists stays false)
                         // so the clear is no longer needed and broke #76716.
-                    } else if (base.blessId != 0
-                            && WeakRefRegistry.hasWeakRefsTo(base)
-                            && ReachabilityWalker.isReachableFromRoots(base)) {
-                        // Phase D-W5: blessed object with outstanding weak
-                        // refs whose cooperative refCount dipped to 0 under
-                        // a deferred-decrement flush, BUT the walker can
-                        // still reach it from a strong root — either a
-                        // package global, a live `my` variable, or a
-                        // ScalarRefRegistry-tracked scalar whose enclosing
-                        // scope is still on `MyVarCleanupStack`. Treat as
-                        // transient refCount drift; the next assignment
-                        // that writes a tracked ref will bump refCount
-                        // back up.
-                        //
-                        // Don't fire DESTROY, don't clear weak refs.
-                        //
-                        // The cooperative refCount is known to drop to 0
-                        // transiently in MOP-style code where blessed
-                        // objects bounce through hash slots and closures
-                        // (Moose / Class::MOP / DBIx::Class). The walker
-                        // is the principled cross-check: if any strong
-                        // path still leads to the object from a *live*
-                        // root (global, live my-var, etc.), the cooperative
-                        // count is wrong and we must NOT destroy yet.
-                        //
-                        // Weak refs are not strong roots. An isolated
-                        // cycle whose only paths are through weakened
-                        // scalars therefore correctly returns false from
-                        // the walker and is destroyed.
-                        //
-                        // The hasWeakRefsTo gate keeps this safeguard
-                        // cheap for the common case of objects without
-                        // weak refs (no walker call at all).
-                        //
-                        // See dev/modules/moose_support.md (Phase D-W5).
                     } else {
+                        // Phase D-W6: cooperative refCount is the single
+                        // source of truth for DESTROY firing — no walker
+                        // gate. Matches Perl 5 semantics:
+                        //   - Cycles leak (cooperative refCount keeps
+                        //     cycle members at refCount ≥ 1).
+                        //   - DESTROY fires at every refCount=0
+                        //     transition (no deferral via reachability
+                        //     analysis).
+                        // Any drift in cooperative refCount must be
+                        // fixed at the source, not papered over here.
+                        // See dev/modules/moose_support.md (D-W6).
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);
                     }
