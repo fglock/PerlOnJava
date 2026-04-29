@@ -1991,6 +1991,96 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+## Phase D-W6.5: function-store + cmop-bootstrap reproducers (2026-04-29)
+
+Two more focused reproducers landed; both pass with the gate disabled
+on master.
+
+### `function_hash_store.t` (18 tests)
+
+Five patterns of the **`sub setit { $METAS{$_[0]} = $_[1] }`** shape
+that `Class::MOP::store_metaclass_by_name` uses:
+
+- A: direct `$_[N]` indexing in the setter sub.
+- B: `shift` into my-vars before assignment.
+- C: package-global hash + setter in same package (exact MOP shape).
+- D: 20-iteration loop (mimics bootstrap fillup).
+- E: setter returns the assignment value, with caller scope tracking.
+
+All 18 pass with the gate disabled. So the function-internal hash-store
+path is not the drift source either.
+
+### `cmop_bootstrap.t` (14 tests)
+
+The **exact** Class::MOP shape:
+`%Registry::METAS = ();` global + `Attr` class with weakened back-ref +
+`MetaClass` with DESTROY. Builds a metaclass, attaches an attribute
+that weak-refs back, drops the my-var, verifies %METAS keeps the
+metaclass alive, then clears %METAS and verifies DESTROY fires once.
+
+- A: single metaclass + single attribute.
+- B: 20-iteration bootstrap-fillup variant.
+- C: same shape with `MetaClass` having an explicit `DESTROY`.
+
+All 14 pass with the gate disabled.
+
+### What this rules out (cumulative across D-W6.1 through D-W6.5)
+
+PerlOnJava's cooperative refcount handles ALL of the following
+correctly, with the walker gate fully disabled:
+
+| Shape | Tests | All pass without gate |
+|---|---|---|
+| Sub installation (5 patterns) | `sub_install.t` | ✅ |
+| Closure capture, up to 5-layer wrap | `closure_capture.t` | ✅ |
+| Hash-slot tracking | `hash_slot.t` | ✅ |
+| Weakened-hash + outer keepalive | `weak_metaclass.t` | ✅ |
+| Function-internal hash store (incl. MOP shape) | `function_hash_store.t` | ✅ |
+| **cmop_bootstrap** — weak attr back-ref + %METAS + DESTROY | `cmop_bootstrap.t` | ✅ |
+
+So the actual `Class::MOP` bootstrap drift requires something MORE
+specific than any of these clean shapes. Likely candidates left:
+
+1. **Multi-level metaclass relationships** —
+   Class::MOP::Class extends Class::MOP::Module extends Class::MOP::Package
+   extends Class::MOP::Object extends Class::MOP::Mixin
+   extends Class::MOP::Mixin::HasMethods
+   extends Class::MOP::Mixin::HasAttributes
+   extends Class::MOP::Mixin::HasOverloads.
+   The metaclass has 7+ ancestors, each potentially with their own
+   attributes that weak-ref back to it.
+
+2. **Attribute->attach_to_class** is called many times from
+   different scopes — each `attach_to_class` does
+   `weaken($self->{associated_class} = $class)`. The combination of
+   "make slot strong, then weaken" might not properly preserve the
+   outer scope's strong holders.
+
+3. **Method modifiers** (`add_around_method_modifier` etc.)
+   wrap CV references in ways that may interact poorly with
+   refcount drift.
+
+4. **`use parent` / `@ISA` setup** — Class.pm uses
+   `use parent 'Class::MOP::Module', 'Class::MOP::Mixin::HasAttributes',
+   'Class::MOP::Mixin::HasMethods', 'Class::MOP::Mixin::HasOverloads';`
+   The `parent` pragma at compile time might create transient
+   references that need careful refcount tracking.
+
+### Suggestion for next session
+
+Stop trying to write reproducers from scratch. Instead, **bisect the
+real Class::MOP source**: take the working `cmop_bootstrap.t` and
+gradually add features from `Class::MOP::Class.pm` until something
+breaks. Specifically:
+
+1. Add `use parent` and a 7-deep ISA chain.
+2. Add multiple attributes per class.
+3. Add method modifiers.
+4. Add `use Class::MOP::MiniTrait::apply` semantics on the bootstrap.
+
+The first one of these that flips the test from green to red with
+the gate disabled is the smoking gun.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
