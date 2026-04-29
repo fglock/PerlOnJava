@@ -340,6 +340,13 @@ public class ErrnoVariable extends RuntimeScalar {
         errnoStack.push(new int[]{errno});
         messageStack.push(message);
         super.dynamicSaveState();
+        // After saving, reset to the default "no error" state so that
+        // `local $!;` actually clears the variable inside the dynamic scope,
+        // matching Perl's semantics.
+        this.errno = 0;
+        this.message = "";
+        this.type = RuntimeScalarType.DUALVAR;
+        this.value = new DualVar(new RuntimeScalar(0), new RuntimeScalar(""));
     }
 
     @Override

@@ -42,6 +42,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_getcwd", "getcwd", null);
             module.registerMethod("_strerror", "strerror", null);
             module.registerMethod("_access", "access", null);
+            module.registerMethod("_mkfifo", "posix_mkfifo", null);
             module.registerMethod("_dup2", "dup2", null);
             
             // Low-level FD operations
@@ -948,6 +949,28 @@ public class POSIX extends PerlModuleBase {
         }
         
         // Return "0 but true" for success - this is 0 numerically but true in boolean context
+        return new RuntimeScalar("0 but true").getList();
+    }
+
+    /**
+     * POSIX mkfifo() - create a named pipe (FIFO).
+     * Arguments: path, mode (e.g. 0700)
+     * Returns true on success, undef on failure (and sets $!).
+     */
+    public static RuntimeList posix_mkfifo(RuntimeArray args, int ctx) {
+        if (args.size() < 2) {
+            GlobalVariable.getGlobalVariable("main::!").set("Bad arguments to mkfifo");
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        String path = args.get(0).toString();
+        int mode = args.get(1).getInt();
+        var posix = FFMPosix.get();
+        int result = posix.mkfifo(path, mode);
+        if (result == -1) {
+            GlobalVariable.getGlobalVariable("main::!").set(posix.strerror(posix.errno()));
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        // Real Perl returns "0 but true" — true in boolean, 0 numerically.
         return new RuntimeScalar("0 but true").getList();
     }
 

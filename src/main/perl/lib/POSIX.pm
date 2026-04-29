@@ -361,6 +361,7 @@ sub unlink { POSIX::_unlink(@_) }
 sub link { POSIX::_link(@_) }
 sub rename { POSIX::_rename(@_) }
 sub mkdir { POSIX::_mkdir(@_) }
+sub mkfifo { POSIX::_mkfifo(@_) }
 sub rmdir { POSIX::_rmdir(@_) }
 sub getcwd { POSIX::_getcwd() }
 sub chdir { POSIX::_chdir(@_) }
