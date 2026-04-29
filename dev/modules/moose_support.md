@@ -3051,6 +3051,109 @@ The flag must propagate correctly:
 
 This is the next-session implementation task.
 
+### D-W6.19: Cached-walker DBIC `t/52leaks.t` regression — investigate
+
+**Status:** Open. Reported but not yet locally reproduced.
+
+**Symptom (user report on `fix/walker-gate-property-based`):**
+
+```
+DBIx::Class::ResultSource::schema(): Unable to perform storage-
+dependent operations with a detached result source (source 'CD'
+is not associated with a schema). at t/52leaks.t line 208
+t/52leaks.t .....................................
+Dubious, test returned 255 (wstat 65280, 0xff00)
+All 6 subtests passed
+# Tests were run but no plan was declared and done_testing() was
+# not seen.
+```
+
+t/52leaks.t:208 is:
+```perl
+my $pref_getcol_rs = $cds_with_stuff->get_column('me.cdid');
+```
+
+The `$cds_with_stuff` ResultSet's underlying `ResultSource` for `CD`
+became detached from its `Schema` between construction and use —
+i.e. the Schema (or the ResultSource registration on it) was
+destroyed while still in a live ResultSet held by the test.
+
+**Reproduction status (Apr 29, 2026):** The test passes locally on
+this branch in 5/5 standalone runs and via `prove --exec jperl` and
+`Test::Harness::runtests`. Need exact reproduction recipe (env, PRNG
+seed, Test::Most/Test::Aggregate ordering, test build dir) before
+we can debug.
+
+**Hypothesis: per-flush walker cache misses a transient root.**
+
+The D-W6.18 walker gate now uses a per-flush cache populated lazily
+on first `isReachableCached(base)` call. Between `flush()`
+invocations the cache is cleared, but **within** a single flush:
+
+1. Suppose `flush()` is called with pending = [Schema, CD_source].
+2. `Schema.refCount → 0`. We call `isReachableCached(Schema)` —
+   walker BFS runs, populates cache, `Schema` not reachable
+   (because `pending` decremented its refCount).
+3. `Schema.refCount = MIN_VALUE; DestroyDispatch.callDestroy(Schema)`.
+   DESTROY removes Schema from the global hash that registered it.
+4. `CD_source.refCount → 0`. We call `isReachableCached(CD_source)`.
+   The cache was built **before** Schema was removed from globals,
+   so it contains `CD_source` as reachable through Schema's source
+   table. Cache says "reachable", we suppress destroy.
+
+But Schema is now DESTROYed; its $self->{source_registrations}{CD}
+holds CD_source via a now-cleared hash. CD_source is *logically*
+detached but still alive (refCount restored). When the test later
+asks `$cds_with_stuff->get_column`, the ResultSource has no Schema
+back-pointer → "detached result source" error.
+
+**The pre-cache code didn't have this problem** because each gate
+call ran a fresh walker against the current global state — it would
+correctly observe CD_source as unreachable after Schema was
+destroyed in step 3.
+
+**Possible fixes:**
+
+1. **Invalidate cache after each DESTROY in flush.** Set
+   `flushReachableCache = null` after `DestroyDispatch.callDestroy`
+   so the next gate query rebuilds from current state. Trades back
+   some O(N×G) worst-case for correctness, but typical flushes
+   either rescue everything or destroy everything, so the
+   re-walks are bounded.
+
+2. **Process pending in two passes:** first compute reachable set
+   once, then loop through pending evaluating gate without further
+   walker calls. But this misses the dynamic-state issue too —
+   needs same invalidation discipline.
+
+3. **Track destroy-time edges:** when DESTROY removes the object's
+   registrations, surgically prune those edges from the cached set.
+   Most accurate but invasive — requires hooking DestroyDispatch.
+
+4. **Fall back to per-call walker when pending is small.** If
+   pending size < threshold (say 16), skip the cache entirely.
+   Heuristic, but fast and matches pre-cache behaviour for small
+   flushes.
+
+**Open question:** does the pre-cache (commit `7031bf8e9`) version
+of the branch actually pass `t/52leaks.t` under the user's
+conditions? If yes, the cache is to blame. If no, the bug pre-dates
+the perf fix and is in the property-based gate itself (perhaps
+`storedInPackageGlobal` not being set when CD source was registered
+on Schema).
+
+**Next steps for this phase:**
+1. Get exact reproduction recipe from user (test runner, env vars,
+   shell, PRNG seed if any).
+2. Reproduce locally; capture `JPERL_GC_DEBUG=1` output around
+   line 208 + DESTROY traces for Schema and CD_source.
+3. Determine whether the issue is cache staleness (fix candidate 1)
+   or a flag-propagation gap (Schema's source registrations don't
+   inherit `storedInPackageGlobal`). The fix differs accordingly.
+4. Add a regression test under
+   `src/test/resources/unit/refcount/drift/` that exercises the
+   detached-source scenario using a minimal DBIC-shaped mock.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
