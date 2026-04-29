@@ -2083,6 +2083,110 @@ The diagnostic env-flags `PJ_WEAKCLEAR_TRACE` (now wired up across
 `weaken`, `removeWeakRef`, `clearWeakRefsTo`) and `PJ_DESTROY_TRACE`
 should be retained.
 
+### D-W6.9: Walker-fix experiments (Apr 2026)
+
+Three concrete fix attempts on `fix/d-w6-precise-die-probe`:
+
+| Variant | DBIC 52leaks | Notes |
+|---------|--------------|-------|
+| Master (class-name heuristic) | 11/11 pass | baseline |
+| Universal walker (no heuristic) | 9/11 + die at line 518 | resultset that should leak is incorrectly rescued; downstream `weaken(my $r = shift @circreffed)` dies because `$r` is undef |
+| Hybrid (heuristic full + non-heuristic globalOnly) | same as universal — DBIC regression unchanged | |
+| Add walker gate to weaken's dec-to-0 path | times out (>120s) on `t/52leaks.t` | walker invocations on every weaken of Moose/CMOP-blessed objects is too expensive on DBIC's Moose-heavy schema construction |
+
+Conclusion: the class-name heuristic is the **best known compromise**
+until we either:
+- Fix the underlying `our %METAS` refCount-discipline bug (option 1)
+- Cache walker reachability results to make universal application
+  cheap enough not to time out
+
+Synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+do NOT trip the underflow with non-CMOP class names — proving that
+the bug is not just a generic `our %HASH` storage issue. Some
+specific shape of the recursive CMOP bootstrap (interaction between
+`HasMethods->meta` reentry and weakly-attached attributes) is
+required.
+
+Suggested next investigation: per-RuntimeBase refCount transition
+trace for the specific metaclass, surfacing each increment/decrement
+site during the failing `use Class::MOP`. With 22 decrement sites
+across the runtime, blanket instrumentation is infeasible, but a
+targeted tracer (turn on for blessed `Class::MOP::Class` only)
+should make the underflow source pinpointable.
+
+### D-W6.10: Targeted refCount tracer wired up + accounting result
+
+Implemented (this branch): a per-RuntimeBase `refCountTrace` flag
+that is armed at `bless` time when the bless target matches
+`classNeedsWalkerGate` (Class::MOP / Moose / Moo) and the env-flag
+`PJ_REFCOUNT_TRACE` is set. The flag-gated `traceRefCount(delta,
+reason)` method writes a stderr line for every transition with a
+short stack snippet. Wired into the four critical sites:
+
+- `WeakRefRegistry.weaken` (decrement on weakening)
+- `RuntimeScalar.setLargeRefCounted` (increment on store)
+- `RuntimeScalar.setLargeRefCounted` (decrement on overwrite)
+- `MortalList.flush` (deferred decrement)
+
+Cost when off: one `boolean &&` test per call site. Cost when on:
+all increments/decrements logged for matched objects only.
+
+**Findings on `use Class::MOP` (gate disabled):** the failing
+metaclass `RuntimeHash` (id `573487274` in one run) accumulated:
+
+- 50 increments via `setLargeRefCounted (increment on store)`
+- 45 decrements via `MortalList.flush (deferred decrement)`
+- 6 decrements via `WeakRefRegistry.weaken (decrement on weakening)`
+- 1 silent increment from `bless` itself (refCount++ at
+  `ReferenceOperators.java:83`)
+- 1 silent paired deferred decrement queued by `bless` from
+  `MortalList.deferDecrement(referent)` at line 84 (fires later
+  during a flush, counted in the 45)
+
+Net: **+1 + 50 - 51 = 0**, i.e. one extra decrement.
+
+The 1→0 transition occurs during `MortalList.flush()` triggered at
+the end of statement at `Class/MOP/Class.pm:260`
+(`my $super_meta = Class::MOP::get_metaclass_by_name(...)`). At
+that moment the metaclass should have refCount==1 (held by
+`our %METAS`), but the cooperative count goes to 0 because one of
+the 50 increment sites does **not** end up paired with the right
+decrement (one extra `pending.add(metaclass)` queued without a
+paired increment, or one increment lost without queueing a paired
+decrement).
+
+The full trace for the failing metaclass is preserved at
+`dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` (102
+lines, every transition with stack).
+
+**Best fix candidates given this data:**
+
+1. **Mortal-side rescue (cheap):** before `--base.refCount` brings
+   refCount to 0 inside `MortalList.flush`, consult the walker on a
+   *per-blessId* whitelist (currently the heuristic). Keep the
+   class-name heuristic — it's the most efficient mask.
+
+2. **Increment audit (correct, hard):** find the unpaired
+   increment/decrement. Likely candidates:
+   - The bless `pending.add(referent)` at `ReferenceOperators.java:84`:
+     if the bless is followed by `setLargeRefCounted` storing the same
+     referent, both happen, and the deferred-decrement's eventual
+     flush is paired with the storing increment — fine. But if the
+     bless is followed by a copy-and-store path that doesn't go
+     through `setLargeRefCounted`, the deferred decrement is unpaired.
+   - The `setLargeRefCounted` "rescue" path
+     (`currentDestroyTarget`) at line 1155 increments without a
+     paired decrement.
+
+3. **Walker as ground truth (medium):** the universal walker
+   (already attempted in D-W6.9) is the most general fix but
+   regresses DBIC. Without a smarter root-set definition, this is
+   not a viable replacement for the heuristic.
+
+The diagnostic env-flags and tracer are retained on this PR so the
+next session can pinpoint the unpaired site without re-bootstrapping
+the instrumentation.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

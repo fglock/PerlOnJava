@@ -1130,6 +1130,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
             if (nb.refCount >= 0) {
+                nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
                 nb.refCount++;
                 newOwned = true;
             }
@@ -1189,6 +1190,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
+            if (oldBase.refCount > 0) {
+                oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
+            }
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 if (oldBase.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable

@@ -539,6 +539,9 @@ public class MortalList {
             // Process list — DESTROY may add new entries, so use index-based loop
             for (int i = 0; i < pending.size(); i++) {
                 RuntimeBase base = pending.get(i);
+                if (base.refCount > 0) {
+                    base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
+                }
                 if (base.refCount > 0 && --base.refCount == 0) {
                     if (base.localBindingExists) {
                         // Named container: local variable may still exist. Skip callDestroy.

@@ -23,6 +23,39 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // mean "tracked, zero containers" — silently breaking all unblessed objects).
     public int refCount = -1;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase D-W6.10: targeted refCount transition tracing.
+    // Activate at bless time for classes matching `classNeedsWalkerGate`
+    // when env-flag PJ_REFCOUNT_TRACE is set. Writes a stderr line for
+    // every increment/decrement, including a stack snippet, so we can
+    // pinpoint which path causes the metaclass refCount underflow on
+    // Class::MOP bootstrap (see dev/modules/moose_support.md D-W6.7).
+    // ─────────────────────────────────────────────────────────────────────
+    public boolean refCountTrace = false;
+
+    private static final boolean REFCOUNT_TRACE_ENV =
+            System.getenv("PJ_REFCOUNT_TRACE") != null;
+
+    public static boolean refCountTraceEnabled() {
+        return REFCOUNT_TRACE_ENV;
+    }
+
+    public void traceRefCount(int delta, String reason) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        int after = this.refCount + delta;
+        StringBuilder sb = new StringBuilder();
+        sb.append("[REFCOUNT] base=").append(System.identityHashCode(this))
+          .append(" (").append(this.getClass().getSimpleName()).append(")")
+          .append(" blessId=").append(this.blessId)
+          .append(" ").append(this.refCount).append(" -> ").append(after)
+          .append("   ").append(reason);
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        for (int i = 1; i < Math.min(st.length, 6); i++) {
+            sb.append("\n      at ").append(st[i]);
+        }
+        System.err.println(sb);
+    }
+
     /**
      * True if this container (hash or array) was created as a named variable
      * ({@code my %hash} or {@code my @array}) and a reference to it was created
