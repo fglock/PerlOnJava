@@ -31,6 +31,16 @@ fi
 #   for native system calls (file operations, process management).
 JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
+# Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
+# That combination triggers an aggressive G1 GC cadence that interacts
+# pathologically with PerlOnJava's weak-ref / cooperative-refcount
+# machinery — DBIx-Class t/96_is_deteministic_value.t hangs at 100% CPU
+# under -XX:SoftMaxHeapSize=2g -Xmx4g while passing in seconds without
+# the soft cap (or with SoftMax >= Xmx). The JVM's auto-default
+# (MaxHeapSize = 1/4 of system RAM) is honored when nothing is set.
+# Override via `JPERL_OPTS="-Xmx<size>"` in the environment if needed
+# (e.g. memory-intensive tests like re/pat.t).
+
 # Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 # warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
 JAVA_VERSION=$(java -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')

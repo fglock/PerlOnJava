@@ -18,6 +18,14 @@ rem --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memo
 rem   for native system calls (file operations, process management).
 set JVM_OPTS=--enable-native-access=ALL-UNNAMED
 
+rem Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
+rem That combination triggers an aggressive G1 GC cadence that interacts
+rem pathologically with PerlOnJava's weak-ref / cooperative-refcount
+rem machinery (DBIx-Class t/96_is_deteministic_value.t hangs at 100% CPU
+rem under SoftMaxHeapSize=2g + Xmx=4g). The JVM auto-default
+rem (MaxHeapSize = 1/4 of system RAM) is honored when nothing is set.
+rem Override via `JPERL_OPTS=-Xmx<size>` in the environment if needed.
+
 rem Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 rem warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
 for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do (

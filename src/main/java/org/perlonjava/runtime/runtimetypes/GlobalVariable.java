@@ -514,6 +514,10 @@ public class GlobalVariable {
             } else {
                 var = new RuntimeHash();
             }
+            // D-W6.18: mark as package-global so values stored here
+            // get the storedInPackageGlobal flag (replaces class-name
+            // heuristic in walker gate).
+            var.isGlobalPackageHash = true;
             globalHashes.put(key, var);
         }
         return var;

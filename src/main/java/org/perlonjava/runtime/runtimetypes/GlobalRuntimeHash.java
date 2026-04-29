@@ -42,6 +42,7 @@ public class GlobalRuntimeHash implements DynamicState {
         // Install a fresh empty hash in the global map
         RuntimeHash newLocal = new RuntimeHash();
         GlobalVariable.globalHashes.put(fullName, newLocal);
+        newLocal.isGlobalPackageHash = true;
 
         // Update glob aliases so they all point to the new local hash
         java.util.List<String> aliasGroup = GlobalVariable.getGlobAliasGroup(fullName);

@@ -356,6 +356,103 @@ public class ReachabilityWalker {
     }
 
     /**
+     * D-W6.14: check if a specific RuntimeScalar instance is reachable
+     * from package globals or live lexical roots. Used at refCount→0
+     * transitions to verify that surviving "owner" scalars in the
+     * activeOwners set are actually live (not phantoms).
+     *
+     * Walks containers and verifies whether the specific scalar
+     * identity can be reached. Critical: walks INTO scalars (so
+     * a my-var holding a hash-ref leads us into the hash to find
+     * its element scalars).
+     */
+    public static boolean isScalarReachable(RuntimeScalar target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        // D-W6.16 strict: PACKAGE-GLOBAL ROOTS ONLY.
+        //
+        // The walker's purpose at MortalList.flush refCount→0 is to
+        // distinguish "object held by a real long-lived root" (e.g.,
+        // `our %METAS` cache, package method tables) from "object's
+        // reachability is via expiring lexicals or temporaries".
+        //
+        // Including my-vars / ScalarRefRegistry as seeds over-rescues
+        // DBIC row objects whose only owners are intermediate my-vars
+        // in DBIC's internal method dispatches (still in MyVarCleanupStack
+        // until the dispatch returns, but logically should be released
+        // for refcount accounting).
+        //
+        // Restricting seeds to package globals matches what
+        // Class::MOP/Moose actually need: their metaclasses live in
+        // `our %METAS`, accessible through globalHashes. DBIC's per-row
+        // cycles aren't reachable via package globals → not rescued
+        // → DESTROY fires correctly.
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+            if (e.getValue() == target) return true;
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
+            if (e.getValue() == target) return true;
+            if (e.getValue() != null && seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
+            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+
+        // D-W6.16: live my-vars (currently-active lexical scopes).
+        // These represent persistent scalar references in ACTIVE
+        // execution scopes — the "my $schema = ..." at file scope is
+        // here; transient method-call argument scalars are NOT
+        // (they get unwound when the method returns).
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar == target) return true;
+            if (liveVar instanceof RuntimeBase rb && seen.add(rb)) todo.addLast(rb);
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (cur instanceof RuntimeHash hash) {
+                for (RuntimeScalar val : hash.elements.values()) {
+                    if (val == null) continue;
+                    // Skip weak refs — they don't keep their referent alive.
+                    if (WeakRefRegistry.isweak(val)) continue;
+                    if (val == target) return true;
+                    if (seen.add(val)) todo.addLast(val);
+                }
+            } else if (cur instanceof RuntimeArray arr) {
+                for (RuntimeScalar elem : arr.elements) {
+                    if (elem == null) continue;
+                    if (WeakRefRegistry.isweak(elem)) continue;
+                    if (elem == target) return true;
+                    if (seen.add(elem)) todo.addLast(elem);
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                if (WeakRefRegistry.isweak(sc)) continue;
+                if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && sc.value instanceof RuntimeBase rb
+                        && seen.add(rb)) todo.addLast(rb);
+            } else if (cur instanceof RuntimeCode code && code.capturedScalars != null) {
+                for (RuntimeScalar cap : code.capturedScalars) {
+                    if (cap == null) continue;
+                    if (WeakRefRegistry.isweak(cap)) continue;
+                    if (cap == target) return true;
+                    if (seen.add(cap)) todo.addLast(cap);
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Phase D-W2c: distinguish reachability via package globals
      * (`our %METAS`, `our @ISA`, `our $...`, `&Class::MOP::class_of`)
      * from reachability via local lexicals (`my $x`, MyVarCleanupStack

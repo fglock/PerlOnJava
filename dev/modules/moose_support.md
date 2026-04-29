@@ -1991,6 +1991,1121 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+### D-W6.7: Pinpointed root cause — %METAS storage doesn't bump cooperative refCount
+
+**Date:** 2026-04-26
+**Branch:** `fix/d-w6-precise-die-probe`
+
+With the walker gate disabled in `MortalList.java:558` and a more
+granular probe added to `WeakRefRegistry` (env-flag
+`PJ_WEAKCLEAR_TRACE`), we instrumented `weaken`, `removeWeakRef`, and
+`clearWeakRefsTo` and ran `use Class::MOP` after wrapping
+`Class::MOP::Attribute::{attach_to_class, install_accessors}` from
+Perl with refaddr-printing logs.
+
+**Smoking gun trace** (`use Class::MOP`, gate disabled):
+
+```
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← _methods slot
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← method_metaclass slot
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← wrapped_method_metaclass slot
+[WEAKCLEAR] referent=1746570062 (RuntimeHash) clearing 4 weak refs
+   at WeakRefRegistry.clearWeakRefsTo(...)
+   at DestroyDispatch.callDestroy(...)
+   at MortalList.flush(...)
+   at jar:PERL5LIB/Class/MOP/Class.pm:260   ← inside Class::MOP::Class::initialize/_construct_class_instance
+   at jar:PERL5LIB/Class/MOP/Mixin.pm:104   ← Mixin::meta
+   at jar:PERL5LIB/Class/MOP.pm:2351        ← bootstrap statement
+attach_to_class attr=...  name=_methods                  class=1746570062
+   after_attach: assoc=1746570062  ← OK
+attach_to_class attr=...  name=method_metaclass          class=1746570062
+   after_attach: assoc=1746570062  ← OK
+attach_to_class attr=...  name=wrapped_method_metaclass  class=1746570062
+   after_attach: assoc=UNDEF       ← BUG
+install_accessors:                  assoc=UNDEF
+```
+
+**The bug:** the metaclass `RuntimeHash` (id=1746570062) is stored in
+`our %METAS` (`store_metaclass_by_name $METAS{$name} = $self`).
+Despite `%METAS` strongly holding it, the cooperative refCount drops
+to 0 at end-of-statement when the temporary returned by
+`HasMethods->meta` falls out of scope and `MortalList.flush()`
+processes its mortals. `clearWeakRefsTo` is called on the metaclass,
+which nulls all 4 attribute back-references including the freshly
+weakened `wrapped_method_metaclass`'s `associated_class` slot.
+
+The first failing `install_accessors` then sees `associated_class =
+UNDEF` and dies on `$class->add_method(...)`. That die is hidden by
+`local $SIG{__DIE__}` inside `try { install_accessors }` at
+`Class/MOP/Class.pm:897`. The catch block runs `remove_attribute →
+remove_accessors → _remove_accessor` at `Class/MOP/Attribute.pm:475`,
+which dies again with the visible `Can't call method "get_method" on
+an undefined value` message.
+
+**Root cause statement:** the cooperative refCount is failing to
+count the strong reference held by the package variable hash slot
+`$METAS{$package_name}`. When the temporary metaclass return-value
+from `->meta` expires, refCount goes from 1 → 0 even though `%METAS`
+still holds it.
+
+**Why the walker gate "fixes" it:** the gate at
+`MortalList.java:558-561` short-circuits the destroy cascade for
+metaclass-shaped names, so `clearWeakRefsTo` never gets a chance to
+null the attribute back-refs.
+
+**Why universal walker doesn't fix it:** the walker is consulted
+*after* refCount underflow. By the time `MortalList.flush()` decides
+to call DESTROY, the refCount is already 0; the walker would need to
+detect "refCount=0 but %METAS still references" — which is exactly
+what a graph walk from package globals could confirm. The "universal
+walker" experiments only checked direct lexical reachability, not
+package-variable-hash reachability.
+
+### D-W6.8: Next steps
+
+Two options for a real fix:
+
+1. **Fix the refCount discipline:** ensure `RuntimeHash.put()` /
+   slot-assignment increments the cooperative refCount of the
+   referent when storing a blessed/tracked RuntimeBase value. Find
+   why this doesn't happen for `$METAS{$name} = $meta`.
+
+2. **Walker as ground truth before `clearWeakRefsTo`:** when refCount
+   hits 0, before firing DESTROY, run a reachability walk from
+   package-variable roots; if reachable, leave refCount at 1 instead
+   of dropping to 0. (Replaces the heuristic gate with a precise
+   walker check.)
+
+Option 1 is the proper fix; option 2 is the safety net we already
+half-built.
+
+The diagnostic env-flags `PJ_WEAKCLEAR_TRACE` (now wired up across
+`weaken`, `removeWeakRef`, `clearWeakRefsTo`) and `PJ_DESTROY_TRACE`
+should be retained.
+
+### D-W6.9: Walker-fix experiments (Apr 2026)
+
+Three concrete fix attempts on `fix/d-w6-precise-die-probe`:
+
+| Variant | DBIC 52leaks | Notes |
+|---------|--------------|-------|
+| Master (class-name heuristic) | 11/11 pass | baseline |
+| Universal walker (no heuristic) | 9/11 + die at line 518 | resultset that should leak is incorrectly rescued; downstream `weaken(my $r = shift @circreffed)` dies because `$r` is undef |
+| Hybrid (heuristic full + non-heuristic globalOnly) | same as universal — DBIC regression unchanged | |
+| Add walker gate to weaken's dec-to-0 path | times out (>120s) on `t/52leaks.t` | walker invocations on every weaken of Moose/CMOP-blessed objects is too expensive on DBIC's Moose-heavy schema construction |
+
+Conclusion: the class-name heuristic is the **best known compromise**
+until we either:
+- Fix the underlying `our %METAS` refCount-discipline bug (option 1)
+- Cache walker reachability results to make universal application
+  cheap enough not to time out
+
+Synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+do NOT trip the underflow with non-CMOP class names — proving that
+the bug is not just a generic `our %HASH` storage issue. Some
+specific shape of the recursive CMOP bootstrap (interaction between
+`HasMethods->meta` reentry and weakly-attached attributes) is
+required.
+
+Suggested next investigation: per-RuntimeBase refCount transition
+trace for the specific metaclass, surfacing each increment/decrement
+site during the failing `use Class::MOP`. With 22 decrement sites
+across the runtime, blanket instrumentation is infeasible, but a
+targeted tracer (turn on for blessed `Class::MOP::Class` only)
+should make the underflow source pinpointable.
+
+### D-W6.10: Targeted refCount tracer wired up + accounting result
+
+Implemented (this branch): a per-RuntimeBase `refCountTrace` flag
+that is armed at `bless` time when the bless target matches
+`classNeedsWalkerGate` (Class::MOP / Moose / Moo) and the env-flag
+`PJ_REFCOUNT_TRACE` is set. The flag-gated `traceRefCount(delta,
+reason)` method writes a stderr line for every transition with a
+short stack snippet. Wired into the four critical sites:
+
+- `WeakRefRegistry.weaken` (decrement on weakening)
+- `RuntimeScalar.setLargeRefCounted` (increment on store)
+- `RuntimeScalar.setLargeRefCounted` (decrement on overwrite)
+- `MortalList.flush` (deferred decrement)
+
+Cost when off: one `boolean &&` test per call site. Cost when on:
+all increments/decrements logged for matched objects only.
+
+**Findings on `use Class::MOP` (gate disabled):** the failing
+metaclass `RuntimeHash` (id `573487274` in one run) accumulated:
+
+- 50 increments via `setLargeRefCounted (increment on store)`
+- 45 decrements via `MortalList.flush (deferred decrement)`
+- 6 decrements via `WeakRefRegistry.weaken (decrement on weakening)`
+- 1 silent increment from `bless` itself (refCount++ at
+  `ReferenceOperators.java:83`)
+- 1 silent paired deferred decrement queued by `bless` from
+  `MortalList.deferDecrement(referent)` at line 84 (fires later
+  during a flush, counted in the 45)
+
+Net: **+1 + 50 - 51 = 0**, i.e. one extra decrement.
+
+The 1→0 transition occurs during `MortalList.flush()` triggered at
+the end of statement at `Class/MOP/Class.pm:260`
+(`my $super_meta = Class::MOP::get_metaclass_by_name(...)`). At
+that moment the metaclass should have refCount==1 (held by
+`our %METAS`), but the cooperative count goes to 0 because one of
+the 50 increment sites does **not** end up paired with the right
+decrement (one extra `pending.add(metaclass)` queued without a
+paired increment, or one increment lost without queueing a paired
+decrement).
+
+The full trace for the failing metaclass is preserved at
+`dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` (102
+lines, every transition with stack).
+
+**Best fix candidates given this data:**
+
+1. **Mortal-side rescue (cheap):** before `--base.refCount` brings
+   refCount to 0 inside `MortalList.flush`, consult the walker on a
+   *per-blessId* whitelist (currently the heuristic). Keep the
+   class-name heuristic — it's the most efficient mask.
+
+2. **Increment audit (correct, hard):** find the unpaired
+   increment/decrement. Likely candidates:
+   - The bless `pending.add(referent)` at `ReferenceOperators.java:84`:
+     if the bless is followed by `setLargeRefCounted` storing the same
+     referent, both happen, and the deferred-decrement's eventual
+     flush is paired with the storing increment — fine. But if the
+     bless is followed by a copy-and-store path that doesn't go
+     through `setLargeRefCounted`, the deferred decrement is unpaired.
+   - The `setLargeRefCounted` "rescue" path
+     (`currentDestroyTarget`) at line 1155 increments without a
+     paired decrement.
+
+3. **Walker as ground truth (medium):** the universal walker
+   (already attempted in D-W6.9) is the most general fix but
+   regresses DBIC. Without a smarter root-set definition, this is
+   not a viable replacement for the heuristic.
+
+The diagnostic env-flags and tracer are retained on this PR so the
+next session can pinpoint the unpaired site without re-bootstrapping
+the instrumentation.
+
+### D-W6.11: Concrete fix plan — eliminate the class-name heuristic
+
+The user-stated requirement: **the class-name heuristic is not
+acceptable**. We must find and fix the actual unpaired
+increment/decrement in cooperative refCount discipline.
+
+#### What we know from the tracer
+
+For the failing CMOP metaclass, instrumented over `use Class::MOP`
+with the gate disabled:
+
+| Source | Count |
+|---|---|
+| `setLargeRefCounted` increments (line 1133) | 50 |
+| `bless` silent increment (`ReferenceOperators.java:83`) | 1 |
+| `MortalList.deferDecrement` queueings | 2 |
+|   ↳ from `bless` at `ReferenceOperators.java:100` | 1 |
+|   ↳ from `RuntimeArray.shift` at `RuntimeArray.java:163` | 1 |
+| `MortalList.deferDecrementIfTracked` queueings | 42 |
+| `MortalList.deferDecrementRecursive` queueings (blessed) | 4 |
+| `WeakRefRegistry.weaken` decrements | 6 |
+| (queueings flushed during run) | 45 |
+
+Total queueings (deferred decrements): 48
+Plus immediate weaken decrements: 6
+Total logical decrements at end: 54
+
+Total increments: 51 (50 setLargeRefCounted + 1 silent bless)
+
+**Net: 51 - 54 = -3** decrement excess, vs the expected **+1**
+(metaclass held by `our %METAS`). Discrepancy: **4 extra decrements
+unpaired with increments**.
+
+Trace artifact: `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt`
+(150 lines, full call-stack snippets).
+
+#### Fix plan
+
+**Step 1: Make the tracer track per-scalar ownership.**
+
+Today the tracer knows refCount transitions but not *which scalar*
+holds the relevant ownership flag. The unpaired sites are easier to
+find if we tag each `setLargeRefCounted` increment with the
+RuntimeScalar's identity, and each decrement with the scalar whose
+`refCountOwned` is being consumed. Imbalance = an increment scalar
+that was never decremented, or a decrement scalar that was never
+incremented.
+
+Implementation sketch:
+```java
+// In setLargeRefCounted: when nb.refCount++ runs,
+nb.recordOwner(this);        // tag this scalar as an owner
+
+// In deferDecrementIfTracked: when scalar.refCountOwned -> false,
+base.releaseOwner(scalar);   // remove tag
+
+// At end of run, dump base.activeOwners:
+//   - 1 entry expected: the hash element scalar of $METAS{name}
+//   - 0 entries observed → the bug
+```
+
+**Step 2: Identify the unpaired site.**
+
+Run instrumented `use Class::MOP` once. The 4 extra decrement
+queueings will surface as either:
+
+- A scalar that was decremented twice (double-release)
+- A pending.add() called for a scalar that never owned the increment
+- A `deferDecrementRecursive` walking through a container that
+  shouldn't be torn down (probably the most likely — DBIC's stash
+  cleanup walks too aggressively?)
+
+Likely suspects from the trace:
+- **`RuntimeArray.shift` at line 163** queues a `deferDecrement` for
+  a blessed metaclass element. When this slot's prior store
+  incremented refCount, this dec balances. But if shift was called
+  on a non-tracked array (or on a slot that was a copy not the
+  original), the dec is unpaired. Stack: `Class/MOP/Package.pm:1281`
+  — investigate what shift target is being shifted there.
+- **`deferDecrementRecursive` (4 calls)** walks recursively into
+  containers being destroyed. If the metaclass is referenced
+  through a hash that itself goes out of scope, this is the path.
+  But the surrounding hash may have been only a transient (e.g.,
+  args list to a method) — its tear-down would be paired with
+  whatever increment created that hash's elements.
+
+**Step 3: Fix the unpaired site.**
+
+Once located, the fix is one of:
+- Add a missing increment (e.g., a path that stores into a
+  container without going through `setLargeRefCounted`)
+- Remove a spurious decrement (e.g., `deferDecrementRecursive`
+  walking a container whose elements were stored without
+  ownership)
+- Adjust ownership tracking (e.g., copy-ctor not setting
+  `refCountOwned`, but a downstream path treating the copy as if
+  it owned)
+
+**Step 4: Remove the class-name heuristic.**
+
+Once the underlying bug is fixed, the gate at
+`MortalList.flush()` line 561 simplifies to:
+
+```java
+} else if (base.blessId != 0
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // Universal walker safety net (no heuristic).
+}
+```
+
+Or even simpler: remove the gate entirely once cooperative refCount
+is correct and DBIC's leak detection passes without rescue.
+
+**Step 5: Acceptance gates.**
+
+The fix is acceptable when ALL of:
+- `make` passes (unit tests)
+- DBIC `t/52leaks.t` passes 11/11 (today's master baseline)
+- Moose suite ≥ 396/478 files (today's baseline)
+- `use Class::MOP` succeeds without the walker gate
+- The synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+  pass with the gate disabled
+
+The diagnostic env-flags (`PJ_REFCOUNT_TRACE`, `PJ_WEAKCLEAR_TRACE`,
+`PJ_DESTROY_TRACE`) and instrumentation hooks remain in place for
+future regressions.
+
+### D-W6.12: Per-scalar ownership tracker — 2 unpaired increments isolated
+
+Implemented Step 1 of the D-W6.11 plan: per-scalar ownership tracker
+on `RuntimeBase` with `recordOwner(scalar, site)` /
+`releaseOwner(scalar, site)`. When `PJ_REFCOUNT_TRACE` is set, every
+refCount-affecting operation that touches a heuristic-blessed object
+records or releases the owning scalar; `dumpTraceOwners()` runs as a
+JVM shutdown hook.
+
+Wired increments into:
+- `RuntimeScalar.setLargeRefCounted` (line 1133)
+- `RuntimeScalar.incrementRefCountForContainerStore` (line 932)
+- `ReferenceOperators.bless` re-bless path (line 139)
+- `RuntimeScalar.setLargeRefCounted` rescue path (line 1183)
+
+Wired releases into:
+- `RuntimeScalar.setLargeRefCounted` overwrite (line 1196)
+- `WeakRefRegistry.weaken` (line 116)
+- `MortalList.deferDecrementIfTracked` (line 183)
+- `MortalList.deferDecrementRecursive` (line 444)
+- `RuntimeArray.shift` (line 164)
+- `DestroyDispatch.doCallDestroy` args balance (line 364)
+
+After plumbing all known inc/dec paths: zero `*** UNPAIRED RELEASE ***`
+events, but one CMOP metaclass (`RuntimeHash` id `408069119`) ends
+the run with **`refCount = Integer.MIN_VALUE` (destroyed) and 2
+surviving owner scalars holding strong references**. Trace at
+`dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt`.
+
+The two surviving owners both came from `setLargeRefCounted store`:
+- One via `RuntimeScalar.set ← addToScalar:902` (normal store path)
+- One via `RuntimeScalar.set ← RuntimeBaseProxy.set:65` (proxy delegate)
+
+This proves the imbalance is **not in the tracer instrumentation**:
+those owner scalars genuinely still hold strong refs to the
+destroyed metaclass. Cooperative refCount said "0 strong refs"
+while in fact 2 strong refs exist.
+
+#### Smoking-gun candidates
+
+The 2 extra decrements that brought refCount → 0 must come from
+sites that **modify `base.refCount` without consulting ownership**.
+Audit candidates (sites doing `--base.refCount` directly):
+
+| File | Line | Path |
+|---|---|---|
+| `RuntimeList.java` | 623, 642, 666, 699 | list-assignment "undo materialized copy" |
+| `Storable.java` | 617 | dclone refCount fixup |
+| `DestroyDispatch.java` | 366 | doCallDestroy args balance (instrumented; OK) |
+| `RuntimeBaseProxy.java` | 65–67 | proxy set: copies `lvalue.value` to proxy without ref-tracking |
+
+The most suspicious is `RuntimeBaseProxy.set`:
+```java
+this.lvalue.set(value);    // properly increments refCount via setLargeRefCounted
+this.type = lvalue.type;
+this.value = lvalue.value; // proxy ALSO points to base, but no recordOwner
+```
+
+The proxy's `this.value` field then holds a strong reference to the
+base **invisible to cooperative refcounting**. When the proxy is
+later assigned a new value, the proxy's `set()` calls
+`lvalue.set(new_value)` which decrements old base's refCount via the
+overwrite path — but only because `lvalue.refCountOwned` is true. If
+some path inadvertently decrements via `this.value` (bypassing
+lvalue), or the proxy is treated as a normal scalar copy
+(invalidating `lvalue.refCountOwned`), the count desyncs.
+
+#### Step 2 audit (next):
+
+For each site that does `base.refCount--` directly (without going
+through the queueing-then-flushing protocol):
+
+1. Confirm what RuntimeScalar "owned" the increment that this
+   decrement is undoing.
+2. If a specific scalar can be identified, replace direct decrement
+   with `releaseOwner(scalar, site) + base.refCount--`.
+3. If no scalar can be identified, the path is decrementing without
+   pairing — fix by either:
+   a. tracking the increment differently (e.g. recording on the
+      original increment), or
+   b. removing the decrement (it was unpaired in the first place).
+
+Once all sites are cleanly paired, the cooperative refCount becomes
+self-consistent and the walker-gate heuristic can be removed.
+
+#### Files committed on this branch
+
+- `dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` —
+  D-W6.10 trace (4 inc/dec sites instrumented).
+- `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt` —
+  D-W6.10 with queue-site tracing.
+- `dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt` —
+  D-W6.12 trace (full owner pairing, surfaces the 2 unpaired
+  increments).
+
+The diagnostic instrumentation is left in place (gated on
+`PJ_REFCOUNT_TRACE`) so future sessions can resume the audit.
+
+### D-W6.13: activeOwners infrastructure + audit of direct --refCount sites
+
+This session implemented Step 2 of the D-W6.11 plan: audited and
+instrumented all direct `--base.refCount` sites with paired
+`releaseOwner` / `releaseActiveOwner` calls. The new
+`base.activeOwners` set on `RuntimeBase` tracks the live set of
+RuntimeScalars that hold a counted strong reference, with
+`activeOwnerCount()` providing a filtered count (only scalars that
+still satisfy `refCountOwned == true && value == this`).
+
+#### Sites instrumented
+
+- `RuntimeArray.shift` line 163 (`MortalList.deferDecrement` path)
+- `RuntimeList.java` line 624, 645, 670, 705 (4 "undo materialized
+  copy" paths)
+- `Storable.java` `releaseApplyArgs` line 617
+- `DestroyDispatch.doCallDestroy` line 366 (args balance)
+- `MortalList.deferDecrementIfTracked` line 184
+- `MortalList.deferDecrementRecursive` line 446
+- `WeakRefRegistry.weaken` line 119
+- `RuntimeScalar.setLargeRefCounted` overwrite at line 1199 and
+  store at line 1135
+
+#### Production rescue experiment — partial win, partial loss
+
+Trying `activeOwnerCount() > 0 → restore refCount` as a universal
+rescue at `MortalList.flush()` (replacing the class-name
+heuristic):
+
+| Result | Note |
+|---|---|
+| `use Class::MOP` works without heuristic | confirmed |
+| `use Moose` works without heuristic | confirmed |
+| Unit tests: PASS | all green |
+| DBIC `t/52leaks.t`: 9–10 of 18 fail | leak rescue too aggressive — keeps cycle members alive that real Perl correctly leaks |
+
+The fundamental issue: cooperative refCount cannot tolerate
+cycles without weaken. My filter `refCountOwned && value == this`
+finds true strong owners, including cycle members that real Perl
+also leaks but DBIC's leak test expects to see destroyed (likely
+because real Perl's mark-sweep would clean them up at GC time, or
+because the test environment specifically expects refcount-zero).
+
+Reverted production rescue to retain master parity (11/11 on
+`t/52leaks.t`, walker-gate heuristic still primary).
+
+#### Surprising side-effect: `ScalarRefRegistry.snapshot()` causes regression
+
+Calling `base.activateOwnerTracking()` on every `weaken()` (which
+backfills from `ScalarRefRegistry.snapshot()`) caused 9/18 fails
+on `t/52leaks.t` — but `activateOwnerTracking` is supposed to be
+side-effect free (just initializes a private set + reads the
+registry). The most plausible explanation: iterating
+`scalarRegistry.keySet()` triggers `WeakHashMap.expungeStaleEntries()`,
+which can shift the timing of when JVM GC observes scalars as
+collected. This indirectly affects DBIC's leak detection (which
+relies on weak refs becoming undef at specific points).
+
+For now, removed the `activateOwnerTracking()` call from
+`weaken()` — the infrastructure is dormant unless explicitly
+activated. Future work: investigate the WeakHashMap expungement
+side-effect.
+
+#### Status after D-W6.13
+
+- All ownership-affecting sites have paired record/release calls
+- `activeOwners` set + `activeOwnerCount()` filter ready for use
+- DBIC `t/52leaks.t`: 11/11 (master parity)
+- Unit tests: green
+- `use Class::MOP` / `use Moose`: work (with class-name heuristic
+  still gating)
+- Walker-gate heuristic still in place — replacement still pending
+  the proper refCount-discipline fix
+
+#### Next step (D-W6.14)
+
+The cooperative refCount underflow is real (D-W6.10 trace shows
+the metaclass refCount going to 0 with 2 surviving strong owners
+— D-W6.12). The 2 unpaired increments are still unidentified. The
+audit of direct `--refCount` sites pointed at all known paths,
+which now have paired releases — yet the trace numbers from
+D-W6.12 (50 inc / 51 dec) still don't balance.
+
+The next investigation should:
+1. Re-run the D-W6.12 trace with all the new release calls in
+   place (this branch). The owner dump should now show clean
+   `refCount == owners.size()` for the metaclass.
+2. If imbalance persists: the unpaired sites are NOT in the 22
+   reviewed locations. Search for hidden refCount manipulations:
+   - assignment paths in `RuntimeArrayProxyEntry`,
+     `RuntimeHashProxyEntry`, `RuntimeStash`
+   - bytecode-emitted scope-exit code that uses direct field access
+3. If the trace is now clean: the bug is elsewhere — perhaps in
+   how `refCount = MIN_VALUE` interacts with subsequent stores
+   (the rescue path in `setLargeRefCounted`).
+
+### D-W6.14: How does system Perl solve this? — Algorithm analysis
+
+**Question raised**: my `activeOwnerCount > 0` rescue regresses
+DBIC's leak detection by 5-9 tests. What does system Perl do
+differently?
+
+**Answer**: System Perl **does not solve cycles**. It uses precise
+reference counting, and cycles leak by design. The programmer breaks
+cycles via explicit `weaken()` (or `Scalar::Util::weaken`).
+DBIC's leak tests pass on real Perl because DBIC weakens its
+internal back-references (e.g., `ResultSource → Schema` is weak),
+allowing each reference-counted graph to collapse properly when an
+external strong reference is dropped.
+
+For PerlOnJava to behave the same way, we need:
+1. **Precise cooperative refCount** — every increment paired with
+   exactly one decrement, no transient zeros.
+2. **Effective weaken()** — weakening must decrement refCount and
+   exclude the slot from owner-counting (already done correctly).
+3. **No cycle-breaker rescue** — cycles SHOULD leak (matching
+   real Perl), and DBIC's weakens will resolve them.
+
+#### What's wrong today
+
+Cooperative refCount has **transient zeros**. The deferred
+decrement model (`MortalList.flush`) means a sequence like
+`inc → queue → inc → flush → flush → inc` can have refCount briefly
+hit 0 between the second flush and the third inc — even though the
+third inc's owning scalar was alive throughout.
+
+When the transient zero hits, `MortalList.flush()` fires DESTROY,
+permanently corrupting the object's state (clearWeakRefsTo, cascade
+cleanup). Even if subsequent stores re-bump refCount, the damage
+is done.
+
+#### Why the activeOwnerCount rescue regresses DBIC
+
+`activeOwnerCount > 0` correctly identifies objects with surviving
+strong owners. But:
+
+1. **For Class::MOP/Moose metaclasses** (held by `our %METAS`):
+   surviving owners reflect real strong refs. Rescue is correct.
+
+2. **For DBIC row objects in test cycles**: `populate_weakregistry`
+   weak-refs the row. Then test does `undef $row` in some scope.
+   Real Perl: refcount drops to 0, DESTROY fires, weak ref clears.
+   PerlOnJava: cooperative refCount has phantom owners — typically
+   container element scalars whose containers are themselves
+   transient/dying but haven't yet released their elements.
+
+The phantom owners satisfy the filter `refCountOwned == true &&
+value == base`, but are themselves on a path to destruction.
+Rescue keeps them alive, breaking the leak detection.
+
+#### Best-fit algorithm
+
+System Perl's approach (precise refcount + programmer-controlled
+weaken) maps to PerlOnJava as:
+
+**Goal**: eliminate transient zeros from cooperative refCount
+without changing the deferred-decrement architecture.
+
+**Algorithm options:**
+
+1. **Synchronous decrement** (simplest, correct, expensive):
+   make all decrements synchronous like real Perl. Eliminate
+   `MortalList.flush` and put decrement at scope-exit / overwrite
+   sites. Performance cost: every Perl statement has ~10x more
+   refCount work today.
+
+2. **Owner snapshot at flush** (lazy validation):
+   when a deferred decrement would bring refCount to 0, validate
+   the activeOwners set first. Force-purge stale entries by:
+   - Iterating activeOwners
+   - For each owner scalar: check `sc.refCountOwned && sc.value == base`
+   - For surviving owners: check whether they are themselves
+     reachable from package globals OR live my-vars
+   - Rescue ONLY if at least one surviving owner is reachable
+
+   The "reachable owner" check is the critical filter — it
+   excludes phantom owners that are themselves on a path to
+   destruction. This addresses the DBIC regression.
+
+3. **Two-phase destruction** (deferred validation):
+   when refCount→0, defer the actual `clearWeakRefsTo` and
+   cascade. Add the object to a "pending destruction" queue.
+   Validate at next safe point (e.g., outer flush completion or
+   before END blocks):
+   - Force a JVM `System.gc()` to purge stale weak refs from
+     `ScalarRefRegistry`
+   - Re-check `activeOwnerCount`
+   - Fire DESTROY only if still 0
+   This matches Java's deferred finalization model. Performance:
+   System.gc() is slow but only at infrequent boundaries.
+
+**Recommended**: Option 2 (owner snapshot + reachability filter).
+The reachability filter naturally excludes phantom owners (they
+won't be reachable from roots once their containing scopes have
+exited).
+
+#### Implementation sketch (Option 2)
+
+```java
+// At MortalList.flush() refCount→0:
+if (base.activeOwners != null) {
+    // Filter: only count scalars that are owned AND reachable
+    int reachableOwners = 0;
+    for (RuntimeScalar sc : base.activeOwners) {
+        if (sc.refCountOwned && sc.value == base
+                && ReachabilityWalker.isScalarReachable(sc)) {
+            reachableOwners++;
+        }
+    }
+    if (reachableOwners > 0) {
+        base.refCount = reachableOwners;
+        return;  // skip DESTROY
+    }
+}
+// Otherwise: fire DESTROY normally
+```
+
+Where `isScalarReachable(sc)` checks if `sc` itself is reachable
+from any package global, live my-var, or stash entry. This is a
+new method on ReachabilityWalker — currently the walker checks
+"is base reachable from roots" but not "is THIS specific scalar
+reachable".
+
+#### Next session task
+
+Implement Option 2:
+1. Add `ReachabilityWalker.isScalarReachable(RuntimeScalar)` —
+   walks from roots looking for the specific scalar identity.
+2. Wire it into the rescue check at `MortalList.flush()`.
+3. Test: Class::MOP loads (with metaclass having package-global
+   reachable owners), DBIC `t/52leaks.t` 11/11 (cycle objects
+   have only phantom owners not reachable from roots).
+4. Remove the class-name heuristic gate.
+
+This is a tractable design change and matches system Perl's
+semantics: only objects with reachable strong owners are kept
+alive; cycles (with no external reachable owner) leak as in real
+Perl.
+
+### D-W6.15: Implementation of D-W6.14 Option 2 — partial success
+
+Implemented `reachableOwnerCount()` (refCount-rescue using
+walker-validated active owners) and disabled the class-name
+heuristic gate. Wired into `MortalList.flush()` at the
+refCount→0 transition.
+
+**Results:**
+
+| Test | Status |
+|---|---|
+| `use Class::MOP` (no heuristic) | ✅ works |
+| `use Moose` (no heuristic) | ✅ works |
+| Unit tests | ✅ green |
+| DBIC `t/52leaks.t` | ❌ "detached result source" at line 433 (early failure) |
+
+The Class::MOP/Moose case is fully fixed: the metaclass owner
+(the `$METAS{name}` hash element) is found reachable through
+`globalHashes`, so its `reachableOwnerCount()` returns >0 and
+DESTROY is suppressed correctly.
+
+DBIC still regresses: a Schema or ResultSource object is
+destroyed prematurely. Some scalar holding the Schema strongly
+isn't reachable via the current walker's seeds (globalCodeRefs,
+globalVariables, globalArrays, globalHashes, MyVarCleanupStack
+live my-vars, RuntimeCode.capturedScalars).
+
+#### What's missing for DBIC
+
+The walker doesn't find Schema's owner. Likely candidates:
+- The owner is a JVM-stack-live RuntimeScalar that isn't
+  registered in `MyVarCleanupStack` (e.g., a method-call argument
+  scalar that's still on the JVM call stack).
+- The owner is in a TIE_HASH/TIE_ARRAY/TIED_SCALAR slot that
+  needs special walking.
+- The owner is in a RuntimeStash entry that the walker doesn't
+  enter (line 519 in `isReachableFromRoots(target, false)` skips
+  RuntimeStash for perf).
+
+The walker is fundamentally **a snapshot of live JVM state at
+this exact moment**. Cooperative refCount can hit 0 transiently
+DURING method call frames where strong owners are sitting on the
+JVM stack but haven't been pushed into MyVarCleanupStack (e.g.,
+intermediate `RuntimeScalar` values during method dispatch).
+
+#### Path forward
+
+The right fix would be one of:
+
+1. **Make every refCount-affecting RuntimeScalar register itself
+   in MyVarCleanupStack** (like local vars), so the walker can
+   always find live owners. Cost: every increment of refCount
+   adds a stack entry.
+
+2. **Use Java GC as ground truth**: treat refCount<=0 +
+   walker-unreachable as "candidate for destruction". Defer the
+   actual DESTROY call to a periodic safe point (e.g., MortalList
+   batch-flush boundary), where we force `System.gc()` and
+   re-validate. Java GC will purge truly-dead objects from
+   ScalarRefRegistry; survivors are real strong owners.
+
+3. **Eliminate transient zeros at the source**: ensure
+   cooperative refCount never goes to 0 except at true scope
+   exits, by making MortalList drain only AFTER the destination
+   scalar's increment has happened. Requires re-ordering JVM-
+   emitted bytecode for assignments (probably very invasive).
+
+#### Status
+
+The class-name heuristic gate is **not removable today**. The
+infrastructure for D-W6.14 Option 2 is in place but the reachability
+gap for DBIC's intermediate owners must be bridged first. The
+heuristic gate is the safety net until that bridge is built.
+
+For this session, the heuristic gate remains disabled in code
+(line 591 has `else if (false ...)`), with `reachableOwnerCount()`
+as the only rescue. This means Class::MOP/Moose work but DBIC
+regresses. To restore master parity, re-enable the heuristic gate
+as a fallback alongside `reachableOwnerCount > 0`.
+
+### D-W6.16: ScalarRefRegistry seeding + closure capture walking — partial fix
+
+Implemented a more aggressive `isScalarReachable()` that:
+1. Seeds from globalCodeRefs/Variables/Arrays/Hashes (package globals)
+2. Seeds from `MyVarCleanupStack.snapshotLiveVars()` (active lexical
+   scopes)
+3. Follows `RuntimeCode.capturedScalars` during BFS
+4. Skips weak refs (`WeakRefRegistry.isweak`)
+5. Auto-init `activeOwners` on first `recordActiveOwner` (no need
+   for explicit activation in weaken)
+
+**Results:**
+
+| Test | Status |
+|---|---|
+| `use Class::MOP` (no heuristic via reachableOwnerCount) | ✅ works |
+| `use Moose` | ✅ works |
+| Unit tests | ✅ green |
+| DBIC `t/52leaks.t` 1-8 (basic) | ✅ pass |
+| DBIC `t/52leaks.t` 9-12 (per-object GC checks) | ❌ 4 fails |
+| Master `t/52leaks.t` baseline | 11/11 (heuristic only) |
+
+The walker correctly reaches the `our %METAS` cache via
+`globalHashes`, which fixes the Class::MOP/Moose case without
+needing the class-name heuristic.
+
+#### The remaining over-rescue problem
+
+DBICTest::Artist/CD row objects with phantom strong owners. After
+`undef $row`, real Perl's refcount drops to 0 and DESTROY fires.
+PerlOnJava with my walker finds Artist still reachable through
+SOME path (likely a phantom my-var or scalar still holding the row
+strongly).
+
+Possible sources:
+1. **DBIC's internal method dispatch left a my-var holding the row**
+   that wasn't released because cooperative refCount has a
+   pre-existing imbalance.
+2. **Closure captures**: a closure created during DBIC processing
+   captured the row; the closure is reachable from globals.
+3. **JVM lazy GC**: a RuntimeScalar holding the row hasn't been
+   GC'd, and is still in `MyVarCleanupStack.liveCounts`.
+
+The walker correctly handles weak refs (skips them via
+`WeakRefRegistry.isweak`), but cannot distinguish "phantom strong
+holder" from "real strong holder" — both look identical at the JVM
+level.
+
+#### Why heuristic-as-fallback doesn't help
+
+The walker-gate heuristic (`classNeedsWalkerGate`) only matches
+`Class::MOP/Moose/Moo` classes. DBICTest::Artist/CD aren't in
+heuristic, so the heuristic doesn't rescue them either. The
+problem is `reachableOwnerCount > 0` itself returns positive for
+Artist/CD when it shouldn't.
+
+#### Status
+
+Class::MOP/Moose ARE removable from the heuristic gate (the new
+walker handles them correctly via `our %METAS`). But removing
+the heuristic outright still has 4 DBIC leak-test failures.
+
+The path forward: dig into WHICH scalar in the walker is finding
+each Artist/CD reachable. Add a probe that prints the path. From
+there, identify whether it's a closure capture, a my-var, or a
+hash element — then either filter that path out or fix the
+underlying refCount imbalance that left it as a phantom.
+
+#### Conservative current state (committed)
+
+The commit ships `reachableOwnerCount()` as the primary rescue,
+with the walker-gate heuristic as a fallback. DBIC still has 4
+failures (the heuristic doesn't help for non-Moose classes), but
+Class::MOP/Moose now work via the precise walker rather than the
+heuristic — so even if the heuristic was deleted, those modules
+would continue to load.
+
+To delete the heuristic safely, the over-rescue of DBIC rows
+must be addressed first — see D-W6.17 (next session).
+
+### D-W6.17: Plan revision — FREETMPS-style flushing is necessary but NOT sufficient
+
+The original D-W6.15 plan suggested making cooperative refCount precise
+by ensuring transient zeros only happen at scope-exit boundaries
+(matching Perl 5's FREETMPS). This session attempted that and learned
+the plan needs revision.
+
+#### Experiment: per-statement MORTAL_FLUSH instead of per-assignment
+
+**Hypothesis**: replace the `MortalList.flush()` at the end of every
+`setLargeRefCounted` with a single flush per statement (FREETMPS at
+statement boundaries, matching Perl 5).
+
+**Implementation**:
+- Removed `MortalList.flush()` from `setLargeRefCounted`
+- Added per-statement `MortalList.flush()` in JVM `EmitBlock` after
+  each non-last statement
+- Added per-statement `MORTAL_FLUSH` opcode in `BytecodeCompiler` for
+  the interpreter backend
+
+**Result**:
+- Unit tests: PASS
+- DBIC `t/52leaks.t` 11/11: PASS (with heuristic gate enabled)
+- Class::MOP load WITH heuristic: works
+- Class::MOP load WITHOUT heuristic: **STILL FAILS** with
+  "Can't call method 'get_method' on undefined value at
+  Class/MOP/Attribute.pm line 475"
+
+**Conclusion**: per-statement flush is correct (matches Perl 5
+semantics), but it does NOT fix the underlying refCount imbalance.
+The 50 inc / 51 dec event count from D-W6.10 is a REAL imbalance,
+not a timing artifact. Flush schedule changes WHEN decrements fire,
+not WHETHER they're paired.
+
+#### Why the plan needs revision
+
+The user's plan asked for "transient zeros only at scope-exit
+boundaries". This would be sufficient IF the cooperative refCount
+were otherwise balanced. But it's NOT balanced — somewhere a
+decrement fires for which no matching increment ever happened (or
+vice versa).
+
+The transient-zero hypothesis came from observing a specific
+trace: refCount went 1→0 mid-statement during `Class/MOP/Class.pm:260`.
+But that 1→0 was the CONSEQUENCE of the imbalance, not a cause —
+the metaclass's "true" refCount should be 2 at end of run (matching
+2 surviving owners), but PerlOnJava's cooperative count went to
+MIN_VALUE because there were 2 extra decrement events somewhere.
+
+#### Revised plan: find the REAL unpaired site
+
+Step 1: **Per-pair tracing**. Tag each setLargeRefCounted increment
+with a unique ID. Tag each decrement with the ID of the increment
+it's pairing with. At end of run, find unmatched IDs.
+
+Step 2: **Identify the unpaired site**. From the trace, identify
+the specific code path that produces an unmatched event.
+
+Step 3: **Fix the site**. Either:
+- Add a missing increment for an unmatched decrement (correct: a
+  store path that doesn't go through setLargeRefCounted)
+- Remove a spurious decrement for an unmatched increment (correct:
+  a path that calls deferDecrement but no matching scalar exists)
+
+Step 4: **Verify all four invariants without heuristic**:
+- Unit tests pass
+- Class::MOP/Moose load
+- DBIC `t/52leaks.t` 11/11
+- The synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+  pass
+
+#### Why per-statement flush is still worth doing (eventually)
+
+Even after fixing the imbalance, switching from per-assignment to
+per-statement flush has these benefits:
+
+1. **Matches Perl 5 semantics** — FREETMPS at statement boundaries
+2. **Performant** — fewer flush calls per script (one per statement
+   vs per assignment)
+3. **Cleaner refCount transitions** — within a statement, refCount
+   only increases; at statement end, all decrements fire together
+
+But this is a separate refactoring, distinct from the imbalance fix.
+
+#### Status
+
+This session: experimental per-statement flush implemented and
+verified. Heuristic gate restored to primary. The plan correctly
+identifies that the underlying imbalance is the root issue;
+flush-schedule changes alone don't fix it.
+
+Next step: **Step 1 (per-pair tracing)** to pinpoint the unpaired
+site that creates the 50/51 imbalance for the CMOP metaclass.
+Once the specific path is identified, the fix is targeted and
+correct.
+
+### D-W6.18: Critical plan review — what we're really fixing
+
+User asked: "review the plan to make sure we are fixing the right
+thing — must be performant and correct."
+
+#### What we know empirically
+
+1. **Master with class-name heuristic gate works correctly** for both
+   Class::MOP/Moose AND DBIC. Performance is acceptable.
+2. **Replacing the heuristic with universal walker** breaks DBIC.
+3. **Replacing per-assignment flush with per-statement (FREETMPS)** does
+   NOT fix the underlying imbalance.
+4. **The 50/51 inc/dec count** from D-W6.10 represents a real refCount
+   imbalance for the CMOP metaclass — somewhere a decrement fires
+   without a paired increment.
+
+#### What's the heuristic actually doing right?
+
+Real Perl's behavior:
+- Class::MOP metaclass in `our %METAS`: refcount stays ≥ 1 forever
+  (held by package hash); object never destroyed during program run
+- DBIC row in `my $row`: refcount drops to 0 when `undef $row`;
+  destroyed correctly
+
+Master's heuristic gate:
+- For Class::MOP/Moose/Moo classes: walker check at refCount→0 →
+  finds reachable from `%METAS` → rescue. Works.
+- For DBIC row classes: heuristic NOT triggered → standard refCount
+  → 0 → DESTROY. Works.
+
+The heuristic is empirically correct for the modules we care about.
+Its shape is: "for these specific classes, cooperative refCount may
+have transient zeros; consult walker before firing DESTROY."
+
+#### Is the heuristic actually wrong?
+
+It's NOT semantically wrong — it correctly distinguishes two real
+classes of object lifetime:
+
+1. **Module-global metadata** (CMOP metaclass): persistent
+   throughout program run, held by package globals
+2. **Per-call data** (DBIC row): transient, follows lexical scope
+
+The heuristic's flaw is:
+- Hard-coded class name list — won't extend to other module-global
+  metadata (custom MOPs, plugin systems)
+- Doesn't capture the underlying property
+
+#### Right plan: capture the property, not the class name
+
+Replace `classNeedsWalkerGate(blessId)` with a **property-based check**
+that captures "this object is stored in a package-global hash":
+
+```java
+// Set on the RuntimeBase when stored as the value of a
+// global hash element (e.g., $METAS{Foo} = $meta).
+public boolean storedInPackageGlobal = false;
+
+// Set in setLargeRefCounted when 'this' (the scalar being assigned to)
+// is an element of a hash registered in GlobalVariable.globalHashes.
+```
+
+Then the gate becomes:
+
+```java
+} else if (base.blessId != 0
+        && base.storedInPackageGlobal
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // Rescue: this object's lifetime is module-global, but
+    // cooperative refCount has transient zeros. Walker confirms
+    // reachability; suppress DESTROY.
+}
+```
+
+For DBIC rows: never stored in a package-global hash → flag never set
+→ heuristic doesn't trigger → standard refCount → DESTROY on undef.
+
+For CMOP metaclass: stored in `$METAS{...}` → flag set → walker
+checks reachability → rescue.
+
+#### Performance characteristics
+
+- Per-store cost: one boolean check + one flag set if scalar's
+  container is a global hash. O(1) per store.
+- Walker cost: only fires when object has weak refs AND
+  storedInPackageGlobal AND refCount→0. Same gating as today's
+  heuristic — same performance envelope.
+- No tracing or instrumentation overhead.
+
+#### Correctness characteristics
+
+- Class-name agnostic: works for any module that uses package-
+  global hashes for metadata (extensibility).
+- Behaviorally equivalent to current heuristic for tested modules
+  (Class::MOP, Moose, Moo, DBIC).
+- Captures the underlying property explicitly rather than via
+  ad-hoc class name list.
+
+#### Implementation steps
+
+1. Add `boolean storedInPackageGlobal` field to `RuntimeBase`.
+2. In `RuntimeScalar.setLargeRefCounted`: when storing, check if
+   `this` (destination scalar) is an element of a `RuntimeHash`
+   that's in `GlobalVariable.globalHashes`. If yes, set the flag
+   on the new base.
+3. Replace `classNeedsWalkerGate(blessId)` with
+   `base.storedInPackageGlobal` in the walker gate condition.
+4. Verify:
+   - `make` passes
+   - `use Class::MOP; use Moose;` works
+   - DBIC `t/52leaks.t` 11/11
+5. Once green, **delete `classNeedsWalkerGate` and the class-name
+   list entirely**. The class-name heuristic is gone.
+
+#### Why this is the right plan
+
+This is "principled removal of the class-name heuristic". The
+heuristic worked because it captured a real property — we're just
+moving from "approximate by class name" to "exact via flag set at
+store time".
+
+Alternative plans rejected:
+- **Per-statement FREETMPS**: doesn't fix the imbalance (proven by
+  D-W6.17 experiment).
+- **Universal walker**: breaks DBIC (regression in 4-9 tests).
+- **Find unpaired refCount site**: bounded work but unclear if
+  finable in practice; even if found and fixed, the heuristic is
+  still in place (orthogonal).
+- **Java GC ground truth**: major rewrite, too risky.
+
+#### Caveat
+
+The flag must propagate correctly:
+- Stored in package-global hash → flag set on referent's RuntimeBase
+- If stored in a sub-hash (e.g., `$Foo::CACHE{x}{y} = $meta`) — does
+  the deep storage propagate? Need to verify.
+- For now, only set flag on direct global-hash stores. Indirect
+  stores would not be rescued — but that matches the current
+  heuristic's behavior (only direct module-global metadata).
+
+This is the next-session implementation task.
+
+### D-W6.19: Cached-walker DBIC `t/52leaks.t` regression — investigate
+
+**Status:** **CLOSED — not a regression in this branch.**
+
+**Original symptom (user report):**
+
+```
+DBIx::Class::ResultSource::schema(): Unable to perform storage-
+dependent operations with a detached result source (source 'CD'
+is not associated with a schema). at t/52leaks.t line 208
+t/52leaks.t .....................................
+Dubious, test returned 255 (wstat 65280, 0xff00)
+All 6 subtests passed
+```
+
+**Resolution (Apr 29, 2026):** The user's `time ./jcpan -t DBIx::Class`
+ran `make test` in `~/.perlonjava/cpan/build/DBIx-Class-0.082844-81/`.
+That dist's `Makefile` had been generated by a previous CPAN install
+under **`/Users/fglock/projects/PerlOnJava4/jperl`** (a different
+checkout on branch `feature/storable-native-format`, with WIP
+Storable native-format changes). So the failing `make test` was
+exercising **PerlOnJava4's** Storable code, not this branch's
+walker-gate code.
+
+Verification: re-running the exact same `t/*.t t/admin/*.t ...`
+glob using **`/Users/fglock/projects/PerlOnJava2/jperl`** (this
+branch) under the same `test_harness(0, ...)` invocation, the
+test passes:
+
+```
+t/52leaks.t ......................................... ok
+t/53lean_startup.t .................................. ok
+t/60core.t .......................................... ok
+```
+
+So:
+- The walker gate (PR #618) and per-flush cache (`f45308336`) are
+  not implicated in the user's `make test` failure.
+- The failing test under PerlOnJava4 surfaced a `dclone failed:
+  freeze failed: Can't store CODE items` diagnostic, consistent
+  with the in-progress Storable rewrite on that branch.
+
+**Lesson learned:** when a CPAN dist's `Makefile` was generated by
+a different jperl binary, `make test` will keep using that binary
+even if the user's current shell points at a different repo. To
+test a specific PerlOnJava checkout's behaviour against an existing
+build dir, either:
+1. Run `jperl Makefile.PL` from the target repo to regenerate the
+   Makefile, or
+2. Skip `make test` and invoke `jperl ... test_harness(...) t/*.t`
+   directly with the binary you want to test (as done above).
+
+**No code change required.** Section retained for the historical
+record so a future agent doesn't repeat the misdiagnosis.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

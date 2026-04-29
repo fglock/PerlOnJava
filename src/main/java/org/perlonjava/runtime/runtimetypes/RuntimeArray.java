@@ -122,6 +122,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        if (base.refCountTrace) {
+                            base.releaseOwner(result, "RuntimeArray.pop");
+                        }
+                        base.releaseActiveOwner(result);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
@@ -160,6 +164,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        if (base.refCountTrace) {
+                            base.releaseOwner(result, "RuntimeArray.shift");
+                        }
+                        base.releaseActiveOwner(result);
                         MortalList.deferDecrement(base);
                     }
                     yield result;
@@ -1156,7 +1164,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray values() {
         // Reset the each iterator when values() is called
         this.eachIteratorIndex = null;
-        return this;
+        // Return a new RuntimeArray that aliases the elements but carries
+        // scalarContextSize so values() in scalar context yields the count
+        // (matching real Perl). We do not set scalarContextSize on `this`
+        // because that would persist and corrupt later scalar(@arr) results.
+        RuntimeArray result = new RuntimeArray();
+        result.elements.addAll(this.elements);
+        result.scalarContextSize = this.elements.size();
+        return result;
     }
 
     /**

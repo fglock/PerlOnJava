@@ -65,6 +65,17 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
         this.lvalue.set(value);
         this.type = lvalue.type;
         this.value = lvalue.value;
+        // D-W6.18: propagate package-global metadata flag.
+        // If this proxy is for an element of a package-global hash,
+        // mark the stored value's referent as storedInPackageGlobal
+        // so the walker gate at refCount→0 can rescue it across
+        // transient zeros (replaces the class-name heuristic).
+        if (this instanceof RuntimeHashProxyEntry hpe
+                && hpe.getParent() != null
+                && hpe.getParent().isGlobalPackageHash
+                && lvalue.value instanceof RuntimeBase rb) {
+            rb.storedInPackageGlobal = true;
+        }
         return lvalue;
     }
 
