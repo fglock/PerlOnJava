@@ -294,6 +294,62 @@ public class SubroutineParser {
                                         arguments, currentIndex2),
                                 currentIndex2);
                     }
+                    // Followed by an infix operator (e.g. `new Foo or die`,
+                    // `new Foo && bar`) or a statement terminator: parse as a
+                    // zero-arg indirect-object call `Class->method()` and let
+                    // the outer parser handle the operator.
+                    //
+                    // Be conservative about which operators trigger this:
+                    // limit to logical/comparison operators (idiomatic after a
+                    // method call) and statement terminators. Arithmetic
+                    // operators (`+`, `-`, `*`, …) are excluded because the
+                    // identifier parser converts a trailing `'` into a `::`
+                    // package separator (so `eval'1+2'` becomes packageName
+                    // `eval::1` followed by `+`); blindly accepting `+` here
+                    // would mis-parse that idiom as `eval::1->f()` and leave
+                    // the rest of the expression dangling.
+                    boolean isSafeInfix =
+                            token.text.equals("or")
+                            || token.text.equals("and")
+                            || token.text.equals("xor")
+                            || token.text.equals("not")
+                            || token.text.equals("||")
+                            || token.text.equals("&&")
+                            || token.text.equals("//")
+                            || token.text.equals("==")
+                            || token.text.equals("!=")
+                            || token.text.equals("<=>")
+                            || token.text.equals("eq")
+                            || token.text.equals("ne")
+                            || token.text.equals("cmp")
+                            || token.text.equals("<")
+                            || token.text.equals(">")
+                            || token.text.equals("<=")
+                            || token.text.equals(">=")
+                            || token.text.equals("lt")
+                            || token.text.equals("gt")
+                            || token.text.equals("le")
+                            || token.text.equals("ge");
+                    boolean isTerminator =
+                            token.text.equals(";")
+                            || token.text.equals(")")
+                            || token.text.equals("}")
+                            || token.text.equals("]")
+                            || token.text.equals(",")
+                            || token.text.equals("?")
+                            || token.text.equals(":")
+                            || token.type == LexerTokenType.EOF;
+                    if (isSafeInfix || isTerminator) {
+                        return new BinaryOperatorNode(
+                                "->",
+                                new IdentifierNode(packageName, currentIndex2),
+                                new BinaryOperatorNode("(",
+                                        new OperatorNode("&",
+                                                new IdentifierNode(subName, currentIndex2),
+                                                currentIndex),
+                                        new ListNode(currentIndex), currentIndex2),
+                                currentIndex2);
+                    }
                 }
 
                 // backtrack
