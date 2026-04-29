@@ -128,28 +128,28 @@ public class NumericPackHandler implements PackFormatHandler {
             switch (format) {
                 case 'c':
                     // Signed char
-                    int signedChar = value.getInt();
+                    int signedChar = (int) (long) value.getDouble();
                     output.write(signedChar & 0xFF);
                     break;
                 case 'C':
                     // Unsigned char
-                    int intValue = value.getInt();
+                    int intValue = (int) (long) value.getDouble();
                     output.write(intValue & 0xFF);
                     break;
                 case 's':
                     // Signed short - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackWriter.writeShortBigEndian(output, value.getInt());
+                        PackWriter.writeShortBigEndian(output, (int) (long) value.getDouble());
                     } else {
-                        PackWriter.writeShortLittleEndian(output, value.getInt());
+                        PackWriter.writeShortLittleEndian(output, (int) (long) value.getDouble());
                     }
                     break;
                 case 'S':
                     // Unsigned short - use endianness if specified
                     if (modifiers.bigEndian) {
-                        PackWriter.writeShortBigEndian(output, value.getInt());
+                        PackWriter.writeShortBigEndian(output, (int) (long) value.getDouble());
                     } else {
-                        PackWriter.writeShort(output, value.getInt());
+                        PackWriter.writeShort(output, (int) (long) value.getDouble());
                     }
                     break;
                 case 'l':
@@ -199,7 +199,7 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'n':
                     // Network short (always big-endian)
-                    PackWriter.writeShortBigEndian(output, value.getInt());
+                    PackWriter.writeShortBigEndian(output, (int) (long) value.getDouble());
                     break;
                 case 'N':
                     // Network long (always big-endian)
@@ -207,7 +207,7 @@ public class NumericPackHandler implements PackFormatHandler {
                     break;
                 case 'v':
                     // VAX short (always little-endian)
-                    PackWriter.writeShortLittleEndian(output, value.getInt());
+                    PackWriter.writeShortLittleEndian(output, (int) (long) value.getDouble());
                     break;
                 case 'V':
                     // VAX long (always little-endian)

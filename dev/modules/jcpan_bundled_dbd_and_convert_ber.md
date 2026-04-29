@@ -219,15 +219,47 @@ Depends on classification. Likely candidates:
 
 ## Progress Tracking
 
-### Current Status: planning
+### Current Status: Phase A complete, Phase B partial
 
 ### Completed
 - (preliminary) `src/main/perl/lib/DBI/DBD.pm` shim added so
   `jcpan -t DBD::JDBC` clears configure step.
+- **Phase A done (2026-04-29).** MakeMaker shim now tracks
+  `$primary_pm_bundled` in the SKIP loop and replaces the generated
+  `test::` rule with a no-op + clear notice when the dist's primary
+  `.pm` is JAR-bundled. Honours `JCPAN_RUN_BUNDLED_TESTS=1` opt-out.
+  Verified manually with `./jcpan -t DBD::JDBC`.
+- **Phase B partial (2026-04-29).** Two underlying jperl bugs found
+  while triaging Convert::BER and fixed:
+  1. `pack` formats `c`/`C`/`s`/`S`/`n`/`v` saturated values
+     `> Integer.MAX_VALUE` because the Java path was `value.getInt()`
+     (which routes a double through `(int)d`, saturating). Switched to
+     `(int)(long)value.getDouble()` so the low-N-bits truncation
+     semantics match `N`/`V` and system Perl. File:
+     `src/main/java/org/perlonjava/runtime/operators/pack/NumericPackHandler.java`.
+  2. `bytes::chr(0x84)` followed by `bytes::ord(...)` returned `0xc2`
+     instead of `0x84` because `ordBytes` always UTF-8-encoded the
+     input string, even when its `type` was already `BYTE_STRING`
+     (where each Java char *is* a raw byte). Added a `BYTE_STRING`
+     fast path that just returns `charAt(0) & 0xFF`. Also fixed
+     `chrBytes` saturation by going through `(long)getDouble()`. Files:
+     `src/main/java/org/perlonjava/runtime/operators/ScalarOperators.java`,
+     `src/main/java/org/perlonjava/runtime/operators/StringOperators.java`.
+  - Regression test added in `src/test/resources/unit/pack.t`.
+  - Effect on Convert::BER 1.32 `t/00prim.t`: 36 → 33 failures.
 
-### Next Steps
-1. Phase A: bundled-test SKIP in MakeMaker shim.
-2. Phase B step 1: reproduce Convert::BER first failure in isolation.
+### Remaining (deeper, not landed in this PR)
+- Convert::BER `t/00prim.t` still fails on every "decode" assertion
+  (positions 4–5 of every encode/decode group). The encode path now
+  produces correct bytes; the decode path doesn't populate the output
+  scalar refs. Needs separate triage of Convert::BER's `unpack`/regex
+  use under jperl.
+- `t/07io.t` 300s hang remains untouched.
+- Numeric stringification for values ≥ 2^31 is float32-rounded:
+  `printf "%d", 0x81828384` prints `2172814212` under jperl
+  (system Perl: `2172649860`). Smells like a `(float)` cast on the
+  numeric→string path. Not on this PR's scope; flagged for separate
+  investigation.
 
 ### Open Questions
 - Should the bundled-test SKIP also short-circuit `make` (build) for

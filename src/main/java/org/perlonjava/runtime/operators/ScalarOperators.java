@@ -130,6 +130,11 @@ public class ScalarOperators {
         int i;
         if (str.isEmpty()) {
             i = 0;
+        } else if (runtimeScalar.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING) {
+            // BYTE_STRING already stores raw bytes (each char is a byte 0-255).
+            // Returning the first char value avoids re-encoding to UTF-8, which
+            // would bytes::ord(chr(0x84)) yield 0xc2 instead of 0x84.
+            i = str.charAt(0) & 0xFF;
         } else {
             // Get the first byte of the UTF-8 representation
             try {

@@ -124,4 +124,23 @@ subtest 'Error handling' => sub {
     ok($@, "Unsupported format character throws error");
 };
 
+subtest 'High-bit values truncate, not saturate (regression)' => sub {
+    # Regression: pack used to saturate doubles > Integer.MAX_VALUE on
+    # the narrow integer formats (c, C, s, S, n, v) because the call
+    # path went through (int)d in Java, which saturates. The correct
+    # Perl semantics is "take the low N bits", same as for 'N'/'V'.
+    is(pack('n', 0x81828384),  "\x83\x84",         "n: low 16 bits of >2^31");
+    is(pack('v', 0x81828384),  "\x84\x83",         "v: low 16 bits LE");
+    is(pack('C', 0x81828384),  "\x84",             "C: low 8 bits of >2^31");
+    is(pack('s', 0x81828384),  "\x84\x83",         "s: low 16 bits LE-native");
+    is(pack('nc', 0x81828384>>8, 0x81828384),
+       "\x82\x83\x84",                              "nc: combined high/low bits");
+
+    # bytes::chr / bytes::ord round-trip on a byte value with high bit set:
+    # used to saturate (chr(0x84) -> 0xff) and then UTF-8 encode (-> 0xc2).
+    use bytes;
+    is(ord(chr(0x84)),         0x84,                "bytes: ord(chr(0x84)) round-trips");
+    is(ord(chr(0x81828384)),   0x84,                "bytes: chr truncates to low 8 bits");
+};
+
 done_testing();
