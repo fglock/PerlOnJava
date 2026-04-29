@@ -901,6 +901,17 @@ public class GlobalVariable {
     }
 
     /**
+     * Peek at a glob entry without vivifying it. Returns null if no glob has
+     * been registered under this name. Used by anon-sub naming lookups
+     * (see dev/modules/anon_sub_naming.md) to read *PKG::__ANON__'s
+     * nameOverride without creating an empty glob as a side effect.
+     */
+    public static RuntimeGlob peekGlobalIO(String key) {
+        String resolvedKey = resolveStashHashRedirect(key);
+        return globalIORefs.get(resolvedKey);
+    }
+
+    /**
      * Retrieves a detached copy of a global IO reference, wrapped in a RuntimeScalar.
      *
      * <p>This method is crucial for the {@code do { local *FH; *FH }} pattern used to create

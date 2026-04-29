@@ -27,6 +27,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     RuntimeHash hashSlot;
     // Local code slot for detached globs (from stash delete)
     public RuntimeScalar codeSlot;
+    // Dynamic name override set by `*foo = $string` glob-as-scalar assignment.
+    // Used to honor the `local *PKG::__ANON__ = 'name'` idiom (see SUPER.pm,
+    // Try::Tiny, namespace::clean) — caller()/Sub::Util::subname report this
+    // string in place of __ANON__ for anonymous subs whose CvSTASH is PKG.
+    // See dev/modules/anon_sub_naming.md.
+    public String nameOverride;
 
     /**
      * Tracks how many RuntimeScalar variables hold a GLOBREFERENCE to this glob.
@@ -326,6 +332,17 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     GlobalVariable.aliasGlobalVariable(this.globName, newScalar);
                 } else {
                     currentScalar.set(value);
+                }
+                // Record the dynamic name override for `local *PKG::__ANON__ =
+                // 'name'`. We update the *current* glob in globalIORefs (which
+                // is the freshly-created glob during a local scope), so readers
+                // that look up by name see the override regardless of whether
+                // they reached the lvalue before or after `local` swapped the
+                // glob. See dev/modules/anon_sub_naming.md.
+                if (this.globName != null) {
+                    RuntimeGlob currentGlob = GlobalVariable.peekGlobalIO(this.globName);
+                    if (currentGlob == null) currentGlob = this;
+                    currentGlob.nameOverride = value.toString();
                 }
                 return value;
             case FORMAT:
