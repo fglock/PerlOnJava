@@ -2812,6 +2812,102 @@ would continue to load.
 To delete the heuristic safely, the over-rescue of DBIC rows
 must be addressed first — see D-W6.17 (next session).
 
+### D-W6.17: Plan revision — FREETMPS-style flushing is necessary but NOT sufficient
+
+The original D-W6.15 plan suggested making cooperative refCount precise
+by ensuring transient zeros only happen at scope-exit boundaries
+(matching Perl 5's FREETMPS). This session attempted that and learned
+the plan needs revision.
+
+#### Experiment: per-statement MORTAL_FLUSH instead of per-assignment
+
+**Hypothesis**: replace the `MortalList.flush()` at the end of every
+`setLargeRefCounted` with a single flush per statement (FREETMPS at
+statement boundaries, matching Perl 5).
+
+**Implementation**:
+- Removed `MortalList.flush()` from `setLargeRefCounted`
+- Added per-statement `MortalList.flush()` in JVM `EmitBlock` after
+  each non-last statement
+- Added per-statement `MORTAL_FLUSH` opcode in `BytecodeCompiler` for
+  the interpreter backend
+
+**Result**:
+- Unit tests: PASS
+- DBIC `t/52leaks.t` 11/11: PASS (with heuristic gate enabled)
+- Class::MOP load WITH heuristic: works
+- Class::MOP load WITHOUT heuristic: **STILL FAILS** with
+  "Can't call method 'get_method' on undefined value at
+  Class/MOP/Attribute.pm line 475"
+
+**Conclusion**: per-statement flush is correct (matches Perl 5
+semantics), but it does NOT fix the underlying refCount imbalance.
+The 50 inc / 51 dec event count from D-W6.10 is a REAL imbalance,
+not a timing artifact. Flush schedule changes WHEN decrements fire,
+not WHETHER they're paired.
+
+#### Why the plan needs revision
+
+The user's plan asked for "transient zeros only at scope-exit
+boundaries". This would be sufficient IF the cooperative refCount
+were otherwise balanced. But it's NOT balanced — somewhere a
+decrement fires for which no matching increment ever happened (or
+vice versa).
+
+The transient-zero hypothesis came from observing a specific
+trace: refCount went 1→0 mid-statement during `Class/MOP/Class.pm:260`.
+But that 1→0 was the CONSEQUENCE of the imbalance, not a cause —
+the metaclass's "true" refCount should be 2 at end of run (matching
+2 surviving owners), but PerlOnJava's cooperative count went to
+MIN_VALUE because there were 2 extra decrement events somewhere.
+
+#### Revised plan: find the REAL unpaired site
+
+Step 1: **Per-pair tracing**. Tag each setLargeRefCounted increment
+with a unique ID. Tag each decrement with the ID of the increment
+it's pairing with. At end of run, find unmatched IDs.
+
+Step 2: **Identify the unpaired site**. From the trace, identify
+the specific code path that produces an unmatched event.
+
+Step 3: **Fix the site**. Either:
+- Add a missing increment for an unmatched decrement (correct: a
+  store path that doesn't go through setLargeRefCounted)
+- Remove a spurious decrement for an unmatched increment (correct:
+  a path that calls deferDecrement but no matching scalar exists)
+
+Step 4: **Verify all four invariants without heuristic**:
+- Unit tests pass
+- Class::MOP/Moose load
+- DBIC `t/52leaks.t` 11/11
+- The synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+  pass
+
+#### Why per-statement flush is still worth doing (eventually)
+
+Even after fixing the imbalance, switching from per-assignment to
+per-statement flush has these benefits:
+
+1. **Matches Perl 5 semantics** — FREETMPS at statement boundaries
+2. **Performant** — fewer flush calls per script (one per statement
+   vs per assignment)
+3. **Cleaner refCount transitions** — within a statement, refCount
+   only increases; at statement end, all decrements fire together
+
+But this is a separate refactoring, distinct from the imbalance fix.
+
+#### Status
+
+This session: experimental per-statement flush implemented and
+verified. Heuristic gate restored to primary. The plan correctly
+identifies that the underlying imbalance is the root issue;
+flush-schedule changes alone don't fix it.
+
+Next step: **Step 1 (per-pair tracing)** to pinpoint the unpaired
+site that creates the 50/51 imbalance for the CMOP metaclass.
+Once the specific path is identified, the fix is targeted and
+correct.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
