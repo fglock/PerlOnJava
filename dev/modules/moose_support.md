@@ -1991,6 +1991,98 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
+### D-W6.7: Pinpointed root cause — %METAS storage doesn't bump cooperative refCount
+
+**Date:** 2026-04-26
+**Branch:** `fix/d-w6-precise-die-probe`
+
+With the walker gate disabled in `MortalList.java:558` and a more
+granular probe added to `WeakRefRegistry` (env-flag
+`PJ_WEAKCLEAR_TRACE`), we instrumented `weaken`, `removeWeakRef`, and
+`clearWeakRefsTo` and ran `use Class::MOP` after wrapping
+`Class::MOP::Attribute::{attach_to_class, install_accessors}` from
+Perl with refaddr-printing logs.
+
+**Smoking gun trace** (`use Class::MOP`, gate disabled):
+
+```
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← _methods slot
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← method_metaclass slot
+[WEAKEN]    ref=...   referent=1746570062 (RuntimeHash)   ← wrapped_method_metaclass slot
+[WEAKCLEAR] referent=1746570062 (RuntimeHash) clearing 4 weak refs
+   at WeakRefRegistry.clearWeakRefsTo(...)
+   at DestroyDispatch.callDestroy(...)
+   at MortalList.flush(...)
+   at jar:PERL5LIB/Class/MOP/Class.pm:260   ← inside Class::MOP::Class::initialize/_construct_class_instance
+   at jar:PERL5LIB/Class/MOP/Mixin.pm:104   ← Mixin::meta
+   at jar:PERL5LIB/Class/MOP.pm:2351        ← bootstrap statement
+attach_to_class attr=...  name=_methods                  class=1746570062
+   after_attach: assoc=1746570062  ← OK
+attach_to_class attr=...  name=method_metaclass          class=1746570062
+   after_attach: assoc=1746570062  ← OK
+attach_to_class attr=...  name=wrapped_method_metaclass  class=1746570062
+   after_attach: assoc=UNDEF       ← BUG
+install_accessors:                  assoc=UNDEF
+```
+
+**The bug:** the metaclass `RuntimeHash` (id=1746570062) is stored in
+`our %METAS` (`store_metaclass_by_name $METAS{$name} = $self`).
+Despite `%METAS` strongly holding it, the cooperative refCount drops
+to 0 at end-of-statement when the temporary returned by
+`HasMethods->meta` falls out of scope and `MortalList.flush()`
+processes its mortals. `clearWeakRefsTo` is called on the metaclass,
+which nulls all 4 attribute back-references including the freshly
+weakened `wrapped_method_metaclass`'s `associated_class` slot.
+
+The first failing `install_accessors` then sees `associated_class =
+UNDEF` and dies on `$class->add_method(...)`. That die is hidden by
+`local $SIG{__DIE__}` inside `try { install_accessors }` at
+`Class/MOP/Class.pm:897`. The catch block runs `remove_attribute →
+remove_accessors → _remove_accessor` at `Class/MOP/Attribute.pm:475`,
+which dies again with the visible `Can't call method "get_method" on
+an undefined value` message.
+
+**Root cause statement:** the cooperative refCount is failing to
+count the strong reference held by the package variable hash slot
+`$METAS{$package_name}`. When the temporary metaclass return-value
+from `->meta` expires, refCount goes from 1 → 0 even though `%METAS`
+still holds it.
+
+**Why the walker gate "fixes" it:** the gate at
+`MortalList.java:558-561` short-circuits the destroy cascade for
+metaclass-shaped names, so `clearWeakRefsTo` never gets a chance to
+null the attribute back-refs.
+
+**Why universal walker doesn't fix it:** the walker is consulted
+*after* refCount underflow. By the time `MortalList.flush()` decides
+to call DESTROY, the refCount is already 0; the walker would need to
+detect "refCount=0 but %METAS still references" — which is exactly
+what a graph walk from package globals could confirm. The "universal
+walker" experiments only checked direct lexical reachability, not
+package-variable-hash reachability.
+
+### D-W6.8: Next steps
+
+Two options for a real fix:
+
+1. **Fix the refCount discipline:** ensure `RuntimeHash.put()` /
+   slot-assignment increments the cooperative refCount of the
+   referent when storing a blessed/tracked RuntimeBase value. Find
+   why this doesn't happen for `$METAS{$name} = $meta`.
+
+2. **Walker as ground truth before `clearWeakRefsTo`:** when refCount
+   hits 0, before firing DESTROY, run a reachability walk from
+   package-variable roots; if reachable, leave refCount at 1 instead
+   of dropping to 0. (Replaces the heuristic gate with a precise
+   walker check.)
+
+Option 1 is the proper fix; option 2 is the safety net we already
+half-built.
+
+The diagnostic env-flags `PJ_WEAKCLEAR_TRACE` (now wired up across
+`weaken`, `removeWeakRef`, `clearWeakRefsTo`) and `PJ_DESTROY_TRACE`
+should be retained.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
