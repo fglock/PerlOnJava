@@ -555,18 +555,34 @@ public class MortalList {
                         // leak-tracing scenarios; those scenarios now use
                         // createAnonymousReference() (localBindingExists stays false)
                         // so the clear is no longer needed and broke #76716.
+                    } else if (base.blessId != 0
+                            && WeakRefRegistry.hasWeakRefsTo(base)
+                            && ReachabilityWalker.isReachableFromRoots(base)) {
+                        // Phase D-W6 (deferred): walker gate retained as
+                        // a temporary safeguard until cooperative
+                        // refCount accuracy is audited and fixed at the
+                        // sources documented in
+                        // dev/modules/moose_support.md (Phase D-W6).
+                        //
+                        // Empirically: removing the gate makes cycles
+                        // leak correctly (52leaks.t passes), DESTROY
+                        // fires twice on the second-DESTROY pattern
+                        // (txn_scope_guard.t passes), and DBIC row
+                        // construction stops losing column data
+                        // (cdbi/04-lazy.t passes). But it also breaks
+                        // Moose bootstrap because anonymous CVs are
+                        // briefly the only ref to themselves before
+                        // being installed in package stashes; the
+                        // cooperative refCount transient-drops to 0,
+                        // DESTROY fires on a CV that should still be
+                        // live, and Class::MOP::Class loses its
+                        // `initialize` method.
+                        //
+                        // The walker check absorbs this drift safely.
+                        // It is no longer class-name-based (PR #599)
+                        // and uses MyVarCleanupStack-seeded reachability
+                        // so live `my` variables pin their referents.
                     } else {
-                        // Phase D-W6: cooperative refCount is the single
-                        // source of truth for DESTROY firing — no walker
-                        // gate. Matches Perl 5 semantics:
-                        //   - Cycles leak (cooperative refCount keeps
-                        //     cycle members at refCount ≥ 1).
-                        //   - DESTROY fires at every refCount=0
-                        //     transition (no deferral via reachability
-                        //     analysis).
-                        // Any drift in cooperative refCount must be
-                        // fixed at the source, not papered over here.
-                        // See dev/modules/moose_support.md (D-W6).
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);
                     }
