@@ -383,10 +383,9 @@ public class IdentifierParser {
                     variableName.append("::");
                     parser.tokenIndex++;
 
-                    // Skip whitespace after '
-                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
-
-                    // Update token references
+                    // Update token references. Do NOT skip whitespace here:
+                    // in real perl, qualified names cannot contain whitespace
+                    // around the separator. "$Foo' bar" is not "$Foo::bar".
                     token = parser.tokens.get(parser.tokenIndex);
                     nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
@@ -404,8 +403,16 @@ public class IdentifierParser {
                     variableName.append(token.text);
                     parser.tokenIndex++;
 
-                    // Skip whitespace after ::
-                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                    // Do NOT skip whitespace after ::. In real perl, "$Foo:: bar"
+                    // is parsed as the stash glob "$Foo::" followed by the bareword
+                    // "bar"; whitespace breaks the qualified name. Specifically,
+                    // "%Foo:: and 2" must tokenize as the stash hash %Foo:: followed
+                    // by the low-precedence operator `and`, not as %Foo::and.
+                    // Previously we skipped whitespace here and accidentally pulled
+                    // the next keyword (and / or / not / xor / cmp / eq / ...) into
+                    // the identifier, which broke e.g. the bundled Dumpvalue.pm
+                    // (`and %overload:: and defined ...`) and any code path that
+                    // required loading it (notably CPAN.pm's error reporter).
 
                     // Check what follows ::
                     token = parser.tokens.get(parser.tokenIndex);
@@ -413,6 +420,7 @@ public class IdentifierParser {
 
                     // After ::, only identifiers or another :: are allowed (or ' as package separator)
                     // Note: Keywords CAN be valid identifier parts after :: (e.g., $Foo::and, &UNIVERSAL::isa)
+                    // — but only when they are flush against ::, with no intervening whitespace.
                     if (token.type != LexerTokenType.IDENTIFIER && !token.text.equals("::") && !token.text.equals("'")) {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();
