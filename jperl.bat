@@ -18,16 +18,13 @@ rem --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memo
 rem   for native system calls (file operations, process management).
 set JVM_OPTS=--enable-native-access=ALL-UNNAMED
 
-rem Set a sensible default max heap. JVM auto-defaults to 1/4 of system RAM,
-rem which causes severe memory pressure when multiple jperl instances run
-rem concurrently (Test::Harness spawns one child JVM per test file).
-rem Strategy: -XX:SoftMaxHeapSize as a soft target paired with a higher
-rem hard cap (-Xmx) that allows spikes for memory-intensive tests.
-rem Override with `JPERL_OPTS=-Xmx<size>` or `-XX:SoftMaxHeapSize=<size>`.
-echo.%JPERL_OPTS% | findstr /C:"-Xmx" >nul
-if errorlevel 1 set JVM_OPTS=%JVM_OPTS% -Xmx4g
-echo.%JPERL_OPTS% | findstr /C:"SoftMaxHeapSize" >nul
-if errorlevel 1 set JVM_OPTS=%JVM_OPTS% -XX:SoftMaxHeapSize=2g
+rem Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
+rem That combination triggers an aggressive G1 GC cadence that interacts
+rem pathologically with PerlOnJava's weak-ref / cooperative-refcount
+rem machinery (DBIx-Class t/96_is_deteministic_value.t hangs at 100% CPU
+rem under SoftMaxHeapSize=2g + Xmx=4g). The JVM auto-default
+rem (MaxHeapSize = 1/4 of system RAM) is honored when nothing is set.
+rem Override via `JPERL_OPTS=-Xmx<size>` in the environment if needed.
 
 rem Java 23+ warns about sun.misc.Unsafe usage (JEP 471). Add flag to suppress
 rem warnings from transitive libraries (ASM, ICU4J, etc.) that still use it.
