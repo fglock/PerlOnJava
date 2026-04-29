@@ -425,10 +425,26 @@ public class DBI extends PerlModuleBase {
                         RuntimeScalar boundParamsRef = sth.get("bound_params");
                         if (boundParamsRef != null && RuntimeScalarType.isReference(boundParamsRef)) {
                             RuntimeHash boundParams = boundParamsRef.hashDeref();
+                            RuntimeScalar boundAttrsRef = sth.get("bound_attrs");
+                            RuntimeHash boundAttrs = (boundAttrsRef != null && RuntimeScalarType.isReference(boundAttrsRef))
+                                    ? boundAttrsRef.hashDeref() : null;
                             for (RuntimeScalar key : boundParams.keys().elements) {
                                 int paramIndex = Integer.parseInt(key.toString());
                                 RuntimeScalar val = boundParams.get(key.toString());
-                                stmt.setObject(paramIndex, toJdbcValue(val));
+                                int sqlType = boundAttrs != null ? extractSqlType(boundAttrs.get(key.toString())) : 0;
+                                if ((sqlType == 30 /* SQL_BLOB */
+                                        || sqlType == -2 /* SQL_BINARY */
+                                        || sqlType == -3 /* SQL_VARBINARY */
+                                        || sqlType == -4 /* SQL_LONGVARBINARY */)
+                                        && val.type != RuntimeScalarType.UNDEF) {
+                                    // Treat each Perl character as a raw byte (ISO-8859-1)
+                                    // so binary blobs like Storable::freeze() round-trip
+                                    // through JDBC TEXT/BLOB columns without UTF-8 mangling.
+                                    String s = val.toString();
+                                    stmt.setBytes(paramIndex, s.getBytes(StandardCharsets.ISO_8859_1));
+                                } else {
+                                    stmt.setObject(paramIndex, toJdbcValue(val));
+                                }
                             }
                         }
                     }
@@ -541,11 +557,20 @@ public class DBI extends PerlModuleBase {
                 // level — it always decodes UTF-8 on fetch. Re-encoding to UTF-8 bytes
                 // here restores the byte-level behavior that Perl code expects.
                 for (int i = 1; i <= colCount; i++) {
-                    RuntimeScalar val = RuntimeScalar.newScalarOrString(rs.getObject(i));
-                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
-                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                    Object obj = rs.getObject(i);
+                    RuntimeScalar val;
+                    if (obj instanceof byte[] bytes) {
+                        // BLOB column — preserve bytes 1:1 by stuffing them into
+                        // a Java String via ISO-8859-1 and tagging as BYTE_STRING.
+                        val = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
                         val.type = RuntimeScalarType.BYTE_STRING;
+                    } else {
+                        val = RuntimeScalar.newScalarOrString(obj);
+                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                            byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                            val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                            val.type = RuntimeScalarType.BYTE_STRING;
+                        }
                     }
                     RuntimeArray.push(row, val);
                 }
@@ -619,11 +644,17 @@ public class DBI extends PerlModuleBase {
                 for (int i = 1; i <= metaData.getColumnCount(); i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
-                    RuntimeScalar val = RuntimeScalar.newScalarOrString(value);
-                    if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
-                        byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
-                        val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                    RuntimeScalar val;
+                    if (value instanceof byte[] bytes) {
+                        val = new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1));
                         val.type = RuntimeScalarType.BYTE_STRING;
+                    } else {
+                        val = RuntimeScalar.newScalarOrString(value);
+                        if (val.type == RuntimeScalarType.STRING && val.value instanceof String s) {
+                            byte[] utf8Bytes = s.getBytes(StandardCharsets.UTF_8);
+                            val.value = new String(utf8Bytes, StandardCharsets.ISO_8859_1);
+                            val.type = RuntimeScalarType.BYTE_STRING;
+                        }
                     }
                     row.put(columnName, val);
                 }
@@ -746,6 +777,22 @@ public class DBI extends PerlModuleBase {
      * @param handle    The database or statement handle
      * @param exception The SQL exception that occurred
      */
+    /**
+     * Extracts a SQL type code from a bind_param attribute argument.
+     * Real DBI accepts either a plain integer (e.g. SQL_BLOB == 30) or a
+     * hashref with a TYPE key. Returns 0 if no type is set.
+     */
+    private static int extractSqlType(RuntimeScalar attr) {
+        if (attr == null || attr.type == RuntimeScalarType.UNDEF) return 0;
+        if (RuntimeScalarType.isReference(attr)) {
+            RuntimeHash h = attr.hashDeref();
+            RuntimeScalar t = h.get("TYPE");
+            if (t != null && t.type != RuntimeScalarType.UNDEF) return t.getInt();
+            return 0;
+        }
+        return attr.getInt();
+    }
+
     /**
      * Converts a RuntimeScalar to a JDBC-compatible Java object.
      * <p>
@@ -964,12 +1011,20 @@ public class DBI extends PerlModuleBase {
             Connection conn = (Connection) dbh.get("connection").value;
             DatabaseMetaData metaData = conn.getMetaData();
 
-            String catalog = args.size() > 1 ? args.get(1).toString() : null;
-            String schema = args.size() > 2 ? args.get(2).toString() : null;
-            String table = args.size() > 3 ? args.get(3).toString() : "%";
-            String type = args.size() > 4 ? args.get(4).toString() : null;
+            // Treat undef/empty as null so JDBC drivers apply their default
+            // matching ("any") instead of looking for a literal empty string.
+            String catalog = (args.size() > 1 && args.get(1).getDefinedBoolean()) ? args.get(1).toString() : null;
+            String schema  = (args.size() > 2 && args.get(2).getDefinedBoolean()) ? args.get(2).toString() : null;
+            String table   = (args.size() > 3 && args.get(3).getDefinedBoolean()) ? args.get(3).toString() : "%";
+            String type    = (args.size() > 4 && args.get(4).getDefinedBoolean()) ? args.get(4).toString() : null;
 
-            ResultSet rs = metaData.getTables(catalog, schema, table, type != null ? new String[]{type} : null);
+            // Real DBI accepts a comma-separated list of types like "TABLE,VIEW".
+            // JDBC's getTables() takes a String[] of types instead.
+            String[] types = null;
+            if (type != null && !type.isEmpty()) {
+                types = type.split("\\s*,\\s*");
+            }
+            ResultSet rs = metaData.getTables(catalog, schema, table, types);
 
             // Create statement handle for results
             RuntimeHash sth = createMetadataResultSet(dbh, rs);
