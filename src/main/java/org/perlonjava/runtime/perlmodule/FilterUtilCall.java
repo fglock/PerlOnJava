@@ -469,6 +469,52 @@ public class FilterUtilCall extends PerlModuleBase {
     }
 
     /**
+     * Snapshot of filter state (stack + "installed during use" flag).
+     * Source filters are scoped to the file/compilation unit in which
+     * they were installed; when we begin parsing a new file (e.g. via
+     * {@code require}/{@code do}), we save the outer state, start with
+     * a clean state, and restore on the way out.
+     */
+    public static class FilterStateSnapshot {
+        final RuntimeList filterStack;
+        final boolean installedDuringUse;
+
+        FilterStateSnapshot(RuntimeList filterStack, boolean installedDuringUse) {
+            this.filterStack = filterStack;
+            this.installedDuringUse = installedDuringUse;
+        }
+    }
+
+    /**
+     * Save the current filter state and reset to a clean state.
+     * Call this before compiling a new file (require/do); pair with
+     * {@link #restoreFilterState(FilterStateSnapshot)}.
+     */
+    public static FilterStateSnapshot saveAndResetFilterState() {
+        FilterContext context = filterContext.get();
+        FilterStateSnapshot snapshot =
+                new FilterStateSnapshot(context.filterStack, filterInstalledDuringUse.get());
+        context.filterStack = new RuntimeList();
+        context.sourceLines = null;
+        context.currentLine = 0;
+        filterInstalledDuringUse.set(false);
+        return snapshot;
+    }
+
+    /**
+     * Restore filter state previously saved by
+     * {@link #saveAndResetFilterState()}.
+     */
+    public static void restoreFilterState(FilterStateSnapshot snapshot) {
+        if (snapshot == null) return;
+        FilterContext context = filterContext.get();
+        context.filterStack = snapshot.filterStack;
+        context.sourceLines = null;
+        context.currentLine = 0;
+        filterInstalledDuringUse.set(snapshot.installedDuringUse);
+    }
+
+    /**
      * Context for managing active source filters.
      */
     static class FilterContext {
