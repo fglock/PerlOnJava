@@ -319,7 +319,19 @@ public class ArgumentParser {
             int perlIndex = shebangLine.indexOf("perl");
             if (perlIndex != -1) {
                 String relevantPart = shebangLine.substring(perlIndex + 4).trim();
-                String[] shebangArgs = relevantPart.split("\\s+");
+                // Strip emacs mode line marker (e.g. "-*- mode: cperl -*-") which real
+                // perl tolerates in #! lines but not on the command line.
+                int emacsStart = relevantPart.indexOf("-*-");
+                if (emacsStart != -1) {
+                    int emacsEnd = relevantPart.indexOf("-*-", emacsStart + 3);
+                    if (emacsEnd != -1) {
+                        relevantPart = relevantPart.substring(0, emacsStart)
+                                + relevantPart.substring(emacsEnd + 3);
+                    } else {
+                        relevantPart = relevantPart.substring(0, emacsStart);
+                    }
+                }
+                String[] shebangArgs = relevantPart.trim().split("\\s+");
                 // Filter out empty args from shebang processing
                 String[] nonEmptyArgs = Arrays.stream(shebangArgs)
                         .filter(arg -> !arg.isEmpty())

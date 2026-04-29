@@ -2,6 +2,7 @@
 asm = "9.9.1"
 bouncycastle = "1.78.1"
 commons-csv = "1.14.1"
+commons-compress = "1.27.1"
 icu4j = "78.3"
 junit-jupiter = "6.1.0-M1"
 snakeyaml-engine = "3.0.1"
@@ -14,6 +15,7 @@ asm-util = { module = "org.ow2.asm:asm-util", version.ref = "asm" }
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons-compress" }
 icu4j = { module = "com.ibm.icu:icu4j", version.ref = "icu4j" }
 junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junit-jupiter" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }

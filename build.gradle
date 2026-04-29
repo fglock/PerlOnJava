@@ -204,6 +204,7 @@ dependencies {
     implementation libs.snakeyaml.engine              // YAML processing
     implementation libs.tomlj                         // TOML processing
     implementation libs.commons.csv                   // CSV processing
+    implementation libs.commons.compress               // BZip2/tar/etc. compressors
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
