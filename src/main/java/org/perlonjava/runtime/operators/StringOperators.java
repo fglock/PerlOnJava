@@ -583,8 +583,6 @@ public class StringOperators {
             runtimeScalar = NumberParser.parseNumber(runtimeScalar);
         }
 
-        int codePoint = runtimeScalar.getInt();
-
         // Handle special double values
         if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
             double doubleValue = runtimeScalar.getDouble();
@@ -595,8 +593,11 @@ public class StringOperators {
             }
         }
 
-        // In bytes mode, wrap the value modulo 256
-        codePoint = codePoint & 0xFF;
+        // In bytes mode, wrap the value modulo 256.
+        // Go through (long) first to avoid Java's int saturation on doubles
+        // that exceed Integer.MAX_VALUE (e.g. chr(0x81828384) under bytes
+        // must yield ord 0x84, not 0xff).
+        int codePoint = (int) (((long) runtimeScalar.getDouble()) & 0xFF);
 
         // Create character from byte value
         RuntimeScalar res = new RuntimeScalar(String.valueOf((char) codePoint));
