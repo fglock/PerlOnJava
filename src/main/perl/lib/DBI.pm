@@ -3,8 +3,29 @@ use strict;
 use warnings;
 use Scalar::Util ();
 use XSLoader;
+use Exporter 'import';
 
 our $VERSION = '1.643';
+
+# SQL type constants exported on demand, e.g. `use DBI qw(SQL_BLOB SQL_VARCHAR)`
+# or via the :sql_types tag. Mirrors real DBI's export interface so modules
+# like CGI::Session::Driver::sqlite can `use DBI qw(SQL_BLOB)` and use the
+# bareword under `use strict`.
+our @SQL_TYPES = qw(
+    SQL_GUID SQL_WLONGVARCHAR SQL_WVARCHAR SQL_WCHAR SQL_BIGINT SQL_BIT
+    SQL_TINYINT SQL_LONGVARBINARY SQL_VARBINARY SQL_BINARY SQL_LONGVARCHAR
+    SQL_UNKNOWN_TYPE SQL_ALL_TYPES SQL_CHAR SQL_NUMERIC SQL_DECIMAL SQL_INTEGER
+    SQL_SMALLINT SQL_FLOAT SQL_REAL SQL_DOUBLE SQL_DATETIME SQL_DATE
+    SQL_INTERVAL SQL_TIME SQL_TIMESTAMP SQL_VARCHAR SQL_BOOLEAN SQL_UDT
+    SQL_UDT_LOCATOR SQL_ROW SQL_REF SQL_BLOB SQL_BLOB_LOCATOR SQL_CLOB
+    SQL_CLOB_LOCATOR SQL_ARRAY SQL_MULTISET SQL_TYPE_DATE SQL_TYPE_TIME
+    SQL_TYPE_TIMESTAMP SQL_TYPE_TIME_WITH_TIMEZONE
+    SQL_TYPE_TIMESTAMP_WITH_TIMEZONE
+);
+our @EXPORT_OK = (@SQL_TYPES);
+our %EXPORT_TAGS = (
+    sql_types => [@SQL_TYPES],
+);
 
 XSLoader::load( 'DBI' );
 
@@ -173,6 +194,30 @@ sub DBI::st::STORABLE_freeze {
 sub DBI::st::STORABLE_thaw {
     my ($self, $cloning, $serialized) = @_;
     $self->{Active} = 0;
+}
+
+# $dbh->tables([$catalog, $schema, $table, $type])
+# Returns a list of table names from table_info(). Names are quoted with
+# the database identifier quote (or '"' as a safe default) to match real
+# DBI behaviour — callers like CGI::Session's t/g4_sqlite.t strip quotes
+# before using the names.
+sub DBI::db::tables {
+    my ($dbh, $catalog, $schema, $table, $type) = @_;
+    $type = 'TABLE,VIEW' unless defined $type;
+    my $sth = $dbh->table_info($catalog, $schema, $table, $type) or return;
+    my $q = eval { $dbh->get_info(29) };  # SQL_IDENTIFIER_QUOTE_CHAR
+    $q = '"' unless defined $q && length $q;
+    my @names;
+    while (my $row = $sth->fetchrow_arrayref) {
+        my ($cat, $sch, $name) = @$row[0,1,2];
+        next unless defined $name;
+        my $full = '';
+        $full .= "$q$cat$q." if defined $cat  && length $cat;
+        $full .= "$q$sch$q." if defined $sch  && length $sch;
+        $full .= "$q$name$q";
+        push @names, $full;
+    }
+    return @names;
 }
 
 sub _handle_error {
