@@ -39,57 +39,15 @@ sub break {
     return defined $str ? $str : '';
 }
 
-package Unicode::GCString;
-
-# Minimal grapheme-cluster string class.  Uses \X to split the string
-# into grapheme clusters.  Only the methods used by Text::vCard et al
-# are implemented: new, length, substr, as_string, columns.
-
-use strict;
-use warnings;
-
-sub new {
-    my ($class, $str) = @_;
-    $str = '' unless defined $str;
-    my @clusters = ($str =~ /(\X)/gs);
-    return bless { str => $str, clusters => \@clusters }, $class;
-}
-
-sub length { return scalar @{ $_[0]->{clusters} }; }
-
-sub as_string { return $_[0]->{str}; }
-
-# String overload would be nice, but keep it explicit.
-sub substr {
-    my ($self, $start, $len) = @_;
-    my @c = @{ $self->{clusters} };
-    my $total = scalar @c;
-    $start = 0 if !defined $start;
-    if ($start < 0) { $start = $total + $start; }
-    $start = 0     if $start < 0;
-    $start = $total if $start > $total;
-    my $end;
-    if (!defined $len) {
-        $end = $total;
-    } elsif ($len < 0) {
-        $end = $total + $len;
-    } else {
-        $end = $start + $len;
-    }
-    $end = $start if $end < $start;
-    $end = $total if $end > $total;
-    my $piece = join '', @c[$start .. $end - 1];
-    return Unicode::GCString->new($piece);
-}
-
-# Approximate column width (1 per grapheme cluster).
-sub columns { return scalar @{ $_[0]->{clusters} }; }
-
-use overload
-    '""'   => \&as_string,
-    'bool' => sub { CORE::length( $_[0]->{str} ) > 0 },
-    '0+'   => \&length,
-    fallback => 1;
+# The Unicode::GCString package now lives in its own file
+# (lib/Unicode/GCString.pm) so that:
+#   * `use Unicode::GCString` works without first loading
+#     Unicode::LineBreak (e.g. String::Print does this);
+#   * the MakeMaker SKIP-bundled-file logic detects
+#     jar:PERL5LIB/Unicode/GCString.pm and refuses to overwrite the
+#     pure-Perl shim with the XS-needing version from CPAN's
+#     Unicode-LineBreak distribution.
+require Unicode::GCString;
 
 1;
 

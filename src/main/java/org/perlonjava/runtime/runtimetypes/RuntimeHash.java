@@ -923,7 +923,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 isKey = !isKey;
             }
-            hashIterator = null; // keys resets the iterator
+            hashIterator = null; // values resets the iterator
+            // Set scalarContextSize so that values() in scalar context returns the count.
+            // Without this, when `values %h` is the last expression of a sub called in
+            // scalar context, getList() copies the elements into a RuntimeList whose
+            // scalar() yields the LAST element instead of the count.
+            list.scalarContextSize = list.elements.size();
             return list;
         }
 
@@ -936,6 +941,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             list.elements.add(value); // push an alias to the value (direct reference, not a copy)
         }
         hashIterator = null; // values resets the iterator
+        // Mirror keys(): mark this array so scalar context returns the count, not the last value.
+        list.scalarContextSize = list.elements.size();
         return list;
     }
 
