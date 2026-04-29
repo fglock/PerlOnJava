@@ -118,7 +118,12 @@ sub _method_check {
     # For Moose/Moo classes, use the metaclass if available
     if (defined &Class::MOP::class_of) {
         my $meta = Class::MOP::class_of($package);
-        if ($meta) {
+        # Only metaclasses that mix in HasMethods (Class::MOP::Class and friends)
+        # implement get_method_list. A bare Class::MOP::Package instance does not,
+        # so guard with can() to avoid "Can't locate object method" errors during
+        # on_scope_end callbacks (seen with MooseX::Types loading namespace::autoclean
+        # in non-class packages).
+        if ($meta && $meta->can('get_method_list')) {
             my %methods = map +($_ => 1), $meta->get_method_list;
             $methods{meta} = 1
                 if $meta->isa('Moose::Meta::Role')
