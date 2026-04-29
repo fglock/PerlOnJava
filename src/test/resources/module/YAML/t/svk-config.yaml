@@ -1,0 +1,320 @@
+---
+checkout: !perl/Data::Hierarchy
+  hash:
+    /home/jesse/README:
+      depotpath: //local/rt-3.4/README
+      encoding: ascii
+      revision: 17371
+    /home/jesse/foo:
+      depotpath: //local/foo
+      encoding: ascii
+      revision: 19501
+    /home/jesse/svk/1.0-releng:
+      depotpath: //mirror/svk/branches/1.0-releng/
+      encoding: ascii
+      revision: 20905
+    /home/jesse/svk/Acme-Net-OdiousPlan:
+      depotpath: //mirror//bps-public/Acme-Net-OdiousPlan/
+      encoding: ascii
+      revision: 13820
+    /home/jesse/svk/Business-Hours:
+      depotpath: //local/Business-Hours
+      encoding: iso-8859-1
+      revision: 17426
+    /home/jesse/svk/DBIx-DBSchema:
+      depotpath: //local/DBIx-DBSchema
+      encoding: utf-8-strict
+      revision: 19508
+    /home/jesse/svk/DBIx-SearchBuilder:
+      depotpath: //local/DBIx-SearchBuilder/
+      encoding: iso-8859-1
+      revision: 21870
+    /home/jesse/svk/Data-ICal:
+      depotpath: //local/Data-ICal
+      encoding: iso-8859-1
+      revision: 17222
+    /home/jesse/svk/Devel-ebug:
+      depotpath: //local/Devel-ebug/
+      encoding: ascii
+      revision: 15097
+    /home/jesse/svk/Devel-ebug-HTTP:
+      depotpath: //local/Devel-ebug-HTTP/
+      encoding: ascii
+      revision: 15099
+    /home/jesse/svk/HTTP-Server-Simple:
+      depotpath: //local/HTTP-Server-Simple/
+      encoding: iso-8859-1
+      revision: 18459
+    /home/jesse/svk/HTTP-Server-Simple-Mason:
+      depotpath: //local/HTTP-Server-Simple-Mason/
+      encoding: ascii
+      revision: 13726
+    /home/jesse/svk/HTTP-Server-Simple-Recorder:
+      depotpath: //local/HTTP-Server-Simple-Recorder
+      encoding: ascii
+      revision: 13245
+    /home/jesse/svk/Module-Install-RTx:
+      depotpath: //local/Module-Install-RTx/
+      encoding: ascii
+      revision: 19842
+    /home/jesse/svk/Module-Refresh:
+      depotpath: //local/Module-Refresh
+      encoding: iso-8859-1
+      revision: 20956
+    /home/jesse/svk/RT-Extension-ActivityReports:
+      depotpath: //local/RT-Extension-ActivityReports/
+      encoding: ascii
+      revision: 22084
+    /home/jesse/svk/RT-Extension-MergeUsers:
+      depotpath: //local/RT-Extension-MergeUsers/
+      encoding: ascii
+      revision: 18043
+    /home/jesse/svk/RT-Extension-Redacted:
+      depotpath: //local/RT-Extension-Redacted/
+      encoding: ascii
+      revision: 20453
+    /home/jesse/svk/RT-Integration-SVN:
+      depotpath: //local/RT-Integration-SVN/
+      encoding: iso-8859-1
+      revision: 4915
+    /home/jesse/svk/RT-KeyBindings:
+      depotpath: //local/RT-KeyBindings
+      encoding: ascii
+      revision: 15495
+    /home/jesse/svk/RT-OnlineDocs:
+      depotpath: //local/RT-OnlineDocs/
+      encoding: ascii
+      revision: 20473
+    /home/jesse/svk/RT-TicketWhiteboard:
+      depotpath: //local/RT-TicketWhiteboard/
+      encoding: utf-8-strict
+      revision: 20454
+    /home/jesse/svk/RT-Todo:
+      depotpath: //local/RT-Todo
+      encoding: iso-8859-1
+      revision: 7320
+    /home/jesse/svk/RT-View-Directory:
+      depotpath: //local/RT-View-Directory/
+      encoding: ascii
+      revision: 20455
+    /home/jesse/svk/RT-View-Tree:
+      depotpath: //local/RT-View-Tree/
+      encoding: iso-8859-1
+      revision: 4918
+    /home/jesse/svk/Test-HTTP-Server-Simple:
+      depotpath: //mirror/bps-public/Test-HTTP-Server-Simple/
+      encoding: ascii
+      revision: 7358
+    /home/jesse/svk/WWW-Mechanize-FromRecording:
+      depotpath: //mirror/bps-public/WWW-Mechanize-FromRecording/
+      encoding: ascii
+      revision: 15347
+    /home/jesse/svk/chaldea:
+      depotpath: //local/chaldea
+      encoding: ascii
+      revision: 19696
+    /home/jesse/svk/chaldea/html/Ticket/ModifyAll.html:
+      revision: 19797
+    /home/jesse/svk/clkao:
+      depotpath: //local/clkao
+      encoding: ascii
+      revision: 15496
+    /home/jesse/svk/customers:
+      depotpath: //local/customers
+      encoding: ascii
+      revision: 20447
+    /home/jesse/svk/hiveminder-trunk:
+      depotpath: //local/hiveminder-trunk/
+      encoding: ascii
+      revision: 21802
+    /home/jesse/svk/jifty.org:
+      depotpath: //local/jifty.org
+      encoding: ascii
+      revision: 22079
+    /home/jesse/svk/logo:
+      depotpath: //mirror/bps-private/docs/logo
+      encoding: ascii
+      revision: 7032
+    /home/jesse/svk/modinstal:
+      depotpath: //local/modinstal
+      encoding: ascii
+      revision: 20926
+    /home/jesse/svk/people:
+      depotpath: //local/people
+      encoding: ascii
+      revision: 7029
+    /home/jesse/svk/people/kevinr:
+      revision: 7633
+    /home/jesse/svk/perl6-doc:
+      depotpath: //local/perl6-doc/
+      encoding: iso-8859-1
+      revision: 17030
+    /home/jesse/svk/personal:
+      depotpath: //local/personal
+      encoding: ascii
+      revision: 13817
+    /home/jesse/svk/planetsix:
+      depotpath: //local/planetsix
+      encoding: ascii
+      revision: 21020
+    /home/jesse/svk/private-docs:
+      depotpath: //local/private-docs
+      encoding: ascii
+      revision: 18093
+    /home/jesse/svk/quebec:
+      depotpath: //local/quebec
+      encoding: ascii
+      revision: 19693
+    /home/jesse/svk/rt-3.0:
+      depotpath: //local/rt-3.0
+      encoding: iso-8859-1
+      revision: 18019
+    /home/jesse/svk/rt-3.2:
+      depotpath: //local/rt-3.2
+      encoding: iso-8859-1
+      revision: 17458
+    /home/jesse/svk/rt-3.4:
+      depotpath: //local/rt-3.4
+      encoding: iso-8859-1
+      revision: 20436
+    /home/jesse/svk/rt-3.5:
+      depotpath: //local/rt-3.5
+      encoding: iso-8859-1
+      revision: 20493
+    /home/jesse/svk/rt-book:
+      depotpath: //local/rt-book/
+      encoding: ascii
+      revision: 4893
+    /home/jesse/svk/rt.cpan.org:
+      depotpath: //local/rt.cpan.org
+      encoding: ascii
+      revision: 17911
+    /home/jesse/svk/rtfm-2.0:
+      depotpath: //local/rtfm-2.0
+      encoding: ascii
+      revision: 16160
+    /home/jesse/svk/rtfm-2.1:
+      depotpath: //local/rtfm-2.1
+      encoding: ascii
+      revision: 19705
+    /home/jesse/svk/rtir-1.0:
+      depotpath: //local/rtir-1.0
+      encoding: iso-8859-1
+      revision: 17456
+    /home/jesse/svk/svk-trunk:
+      depotpath: //local/svk-trunk
+      encoding: ascii
+      revision: 21697
+    /home/jesse/svk/svkbook:
+      depotpath: //local/svkbook-trunk
+      encoding: ascii
+      revision: 18587
+    /home/jesse/svk/training:
+      depotpath: //local/training
+      encoding: ascii
+      revision: 22081
+    /home/jesse/svk/trunk:
+      depotpath: //local/svk/trunk
+      encoding: ascii
+      revision: 0
+    /tmp/3.5-TESTING:
+      depotpath: //mirror/bps-public/rt/branches/3.5-TESTING/
+      encoding: ascii
+      revision: 19687
+    /tmp/gtd:
+      depotpath: //local/gtd
+      encoding: ascii
+      revision: 0
+    /tmp/hm/hiveminder-trunk:
+      depotpath: //local/hiveminder-trunk
+      encoding: ascii
+      revision: 15375
+    /tmp/svl-checkous/Acme-Colour:
+      depotpath: //_default_/acme/Acme-Colour
+      encoding: ascii
+      revision: 7268
+    /tmp/svlco/Acme-Colour:
+      depotpath: //_default_/acme/Acme-Colour
+      encoding: ascii
+      revision: 7268
+    /tmp/trunk:
+      depotpath: //mirror/bps-private/hiveminder/trunk
+      encoding: utf-8-strict
+      revision: 19754
+  sep: /
+  sticky:
+    /home/jesse/svk/1.0-releng/lib/SVK/Target.pm:
+      .newprop: {}
+    /home/jesse/svk/hiveminder-trunk/Jifty:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/Makefile:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/Makefile.old:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/blib:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/doc:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/doc/session:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/inc:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/jifty:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/lib:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/lib/Jifty:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/lib/Jifty/DefaultApp:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/lib/Jifty/Manual:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/lib/Jifty/Manual/ObjectModel.pod:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/pm_to_blib:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Continuations:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Continuations/Makefile.old:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Continuations/continuations:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Continuations/continuationstest:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Continuations/inc:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Mapper:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Mapper/mapper:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/Mapper/mappertest:
+      .conflict: 1
+    /home/jesse/svk/hiveminder-trunk/Jifty/t/utils.pl:
+      .conflict: 1
+    /home/jesse/svk/jifty.org:
+      .newprop:
+        svk:merge: e84bef0a-9b06-0410-84ba-c4c9edb13aeb:/:428
+      .schedule: prop
+    /home/jesse/svk/rt.cpan.org/rt2-existing/local/WebRT/html/NoAuth/bugs.tsv:
+      .newprop:
+        svn:executable: '*'
+      .schedule: add
+    /home/jesse/svk/training:
+      .newprop:
+        svk:merge: |-
+          6641d27c-1bcc-0310-8a77-bef5c512aa61:/training:1585
+          a51291e0-c2ea-0310-847b-fbb8d8170edb:/local/training:5752
+      .schedule: prop
+    /home/jesse/svk/training/developer_training:
+      .newprop:
+        svk:merge: |-
+          5f29b386-91d9-0310-ba9f-d3bca794479a:/rttraining/local:1354
+          5f29b386-91d9-0310-ba9f-d3bca794479a:/rttraining/local-merge-9322:1032
+          5f88e03f-dcfa-0310-a525-a1f853655784:/rt-developer-training:1586
+          8d5e1d6e-e2eb-0310-9379-fb19c180b7be:/dev_training-local:1241
+      .schedule: prop
+depotmap:
+  '': /home/jesse/.svk/local
+  parrot: /home/jesse/.svk/parrot
