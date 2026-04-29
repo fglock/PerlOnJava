@@ -2732,6 +2732,86 @@ as the only rescue. This means Class::MOP/Moose work but DBIC
 regresses. To restore master parity, re-enable the heuristic gate
 as a fallback alongside `reachableOwnerCount > 0`.
 
+### D-W6.16: ScalarRefRegistry seeding + closure capture walking — partial fix
+
+Implemented a more aggressive `isScalarReachable()` that:
+1. Seeds from globalCodeRefs/Variables/Arrays/Hashes (package globals)
+2. Seeds from `MyVarCleanupStack.snapshotLiveVars()` (active lexical
+   scopes)
+3. Follows `RuntimeCode.capturedScalars` during BFS
+4. Skips weak refs (`WeakRefRegistry.isweak`)
+5. Auto-init `activeOwners` on first `recordActiveOwner` (no need
+   for explicit activation in weaken)
+
+**Results:**
+
+| Test | Status |
+|---|---|
+| `use Class::MOP` (no heuristic via reachableOwnerCount) | ✅ works |
+| `use Moose` | ✅ works |
+| Unit tests | ✅ green |
+| DBIC `t/52leaks.t` 1-8 (basic) | ✅ pass |
+| DBIC `t/52leaks.t` 9-12 (per-object GC checks) | ❌ 4 fails |
+| Master `t/52leaks.t` baseline | 11/11 (heuristic only) |
+
+The walker correctly reaches the `our %METAS` cache via
+`globalHashes`, which fixes the Class::MOP/Moose case without
+needing the class-name heuristic.
+
+#### The remaining over-rescue problem
+
+DBICTest::Artist/CD row objects with phantom strong owners. After
+`undef $row`, real Perl's refcount drops to 0 and DESTROY fires.
+PerlOnJava with my walker finds Artist still reachable through
+SOME path (likely a phantom my-var or scalar still holding the row
+strongly).
+
+Possible sources:
+1. **DBIC's internal method dispatch left a my-var holding the row**
+   that wasn't released because cooperative refCount has a
+   pre-existing imbalance.
+2. **Closure captures**: a closure created during DBIC processing
+   captured the row; the closure is reachable from globals.
+3. **JVM lazy GC**: a RuntimeScalar holding the row hasn't been
+   GC'd, and is still in `MyVarCleanupStack.liveCounts`.
+
+The walker correctly handles weak refs (skips them via
+`WeakRefRegistry.isweak`), but cannot distinguish "phantom strong
+holder" from "real strong holder" — both look identical at the JVM
+level.
+
+#### Why heuristic-as-fallback doesn't help
+
+The walker-gate heuristic (`classNeedsWalkerGate`) only matches
+`Class::MOP/Moose/Moo` classes. DBICTest::Artist/CD aren't in
+heuristic, so the heuristic doesn't rescue them either. The
+problem is `reachableOwnerCount > 0` itself returns positive for
+Artist/CD when it shouldn't.
+
+#### Status
+
+Class::MOP/Moose ARE removable from the heuristic gate (the new
+walker handles them correctly via `our %METAS`). But removing
+the heuristic outright still has 4 DBIC leak-test failures.
+
+The path forward: dig into WHICH scalar in the walker is finding
+each Artist/CD reachable. Add a probe that prints the path. From
+there, identify whether it's a closure capture, a my-var, or a
+hash element — then either filter that path out or fix the
+underlying refCount imbalance that left it as a phantom.
+
+#### Conservative current state (committed)
+
+The commit ships `reachableOwnerCount()` as the primary rescue,
+with the walker-gate heuristic as a fallback. DBIC still has 4
+failures (the heuristic doesn't help for non-Moose classes), but
+Class::MOP/Moose now work via the precise walker rather than the
+heuristic — so even if the heuristic was deleted, those modules
+would continue to load.
+
+To delete the heuristic safely, the over-rescue of DBIC rows
+must be addressed first — see D-W6.17 (next session).
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

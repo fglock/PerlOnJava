@@ -592,9 +592,13 @@ public class MortalList {
                             && WeakRefRegistry.hasWeakRefsTo(base)
                             && DestroyDispatch.classNeedsWalkerGate(base.blessId)
                             && ReachabilityWalker.isReachableFromRoots(base)) {
-                        // D-W6.15: heuristic walker gate. To be replaced
-                        // by reachableOwnerCount() once the DBIC owner-
-                        // reachability gap is bridged.
+                        // D-W6.16: heuristic walker gate (primary).
+                        // The new reachableOwnerCount() infrastructure
+                        // (D-W6.14/16) handles Class::MOP/Moose correctly
+                        // without needing this heuristic, but DBIC's
+                        // row-leak tests still over-rescue when using it
+                        // as the only gate. Heuristic stays as primary
+                        // until the over-rescue is fixed (D-W6.17).
                     } else {
                         base.refCount = Integer.MIN_VALUE;
                         DestroyDispatch.callDestroy(base);
