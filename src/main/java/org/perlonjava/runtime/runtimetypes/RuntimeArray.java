@@ -163,6 +163,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                         if (base.refCountTrace) {
                             base.releaseOwner(result, "RuntimeArray.shift");
                         }
+                        base.releaseActiveOwner(result);
                         MortalList.deferDecrement(base);
                     }
                     yield result;

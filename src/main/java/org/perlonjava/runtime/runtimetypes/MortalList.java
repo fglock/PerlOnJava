@@ -182,6 +182,7 @@ public class MortalList {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
                     base.releaseOwner(scalar, "deferDecrementIfTracked");
                 }
+                base.releaseActiveOwner(scalar);
                 pending.add(base);
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
@@ -443,6 +444,7 @@ public class MortalList {
                         base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
                         base.releaseOwner(s, "deferDecrementRecursive blessed");
                     }
+                    base.releaseActiveOwner(s);
                     pending.add(base);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {

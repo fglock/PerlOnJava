@@ -930,6 +930,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && base.refCount >= 0) {
             base.refCount++;
             base.recordOwner(scalar, "incrementRefCountForContainerStore");
+            base.recordActiveOwner(scalar);
             scalar.refCountOwned = true;
             // Phase B1 (refcount_alignment_52leaks_plan.md): track the
             // container element so ReachabilityWalker can see it via
@@ -1133,6 +1134,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (nb.refCount >= 0) {
                 nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
                 nb.recordOwner(this, "setLargeRefCounted store");
+                nb.recordActiveOwner(this);
                 nb.refCount++;
                 newOwned = true;
             }
@@ -1198,6 +1200,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
+                oldBase.releaseActiveOwner(this);
             }
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 if (oldBase.localBindingExists) {

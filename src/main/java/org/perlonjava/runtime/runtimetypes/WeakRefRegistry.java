@@ -114,6 +114,7 @@ public class WeakRefRegistry {
             ref.refCountOwned = false;
             base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
             base.releaseOwner(ref, "weaken");
+            base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
                 if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable

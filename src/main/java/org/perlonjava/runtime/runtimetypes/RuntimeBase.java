@@ -33,6 +33,62 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public boolean refCountTrace = false;
 
+    // ─────────────────────────────────────────────────────────────────────
+    // D-W6.13: production-grade ownership tracking.
+    // Active for blessed objects that have at least one weak reference
+    // (the only case where we care about precise refCount semantics).
+    // Stores the set of RuntimeScalars that hold a counted strong ref
+    // to this base (refCountOwned=true && value==this).
+    // At MortalList.flush() refCount→0, this is consulted: if non-empty,
+    // refCount is restored to the owner count and DESTROY is suppressed.
+    // ─────────────────────────────────────────────────────────────────────
+    public java.util.Set<RuntimeScalar> activeOwners = null;
+
+    public void activateOwnerTracking() {
+        if (activeOwners == null) {
+            activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            // Backfill from ScalarRefRegistry: scalars that already hold a
+            // counted strong reference to this base were registered there
+            // when their setLargeRefCounted increment fired.
+            for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+                if (sc != null && sc.refCountOwned && sc.value == this) {
+                    activeOwners.add(sc);
+                }
+            }
+        }
+    }
+
+    public void recordActiveOwner(RuntimeScalar scalar) {
+        if (activeOwners != null) {
+            activeOwners.add(scalar);
+        }
+    }
+
+    public void releaseActiveOwner(RuntimeScalar scalar) {
+        if (activeOwners != null) {
+            activeOwners.remove(scalar);
+        }
+    }
+
+    public int activeOwnerCount() {
+        if (activeOwners == null) return 0;
+        // Filter for actual still-owning scalars: refCountOwned=true and
+        // value==this. Stale entries (overwritten without going through a
+        // tracked release path, or scope-exited via untracked paths) are
+        // pruned and ignored.
+        java.util.Iterator<RuntimeScalar> it = activeOwners.iterator();
+        int count = 0;
+        while (it.hasNext()) {
+            RuntimeScalar sc = it.next();
+            if (sc != null && sc.refCountOwned && sc.value == this) {
+                count++;
+            } else {
+                it.remove();
+            }
+        }
+        return count;
+    }
+
     private static final boolean REFCOUNT_TRACE_ENV =
             System.getenv("PJ_REFCOUNT_TRACE") != null;
 

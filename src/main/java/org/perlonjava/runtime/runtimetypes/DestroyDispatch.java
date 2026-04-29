@@ -363,6 +363,7 @@ public class DestroyDispatch {
                     if (base.refCountTrace) {
                         base.releaseOwner(elem, "doCallDestroy args balance");
                     }
+                    base.releaseActiveOwner(elem);
                     base.refCount--;
                     elem.refCountOwned = false;
                 }

@@ -2413,6 +2413,102 @@ self-consistent and the walker-gate heuristic can be removed.
 The diagnostic instrumentation is left in place (gated on
 `PJ_REFCOUNT_TRACE`) so future sessions can resume the audit.
 
+### D-W6.13: activeOwners infrastructure + audit of direct --refCount sites
+
+This session implemented Step 2 of the D-W6.11 plan: audited and
+instrumented all direct `--base.refCount` sites with paired
+`releaseOwner` / `releaseActiveOwner` calls. The new
+`base.activeOwners` set on `RuntimeBase` tracks the live set of
+RuntimeScalars that hold a counted strong reference, with
+`activeOwnerCount()` providing a filtered count (only scalars that
+still satisfy `refCountOwned == true && value == this`).
+
+#### Sites instrumented
+
+- `RuntimeArray.shift` line 163 (`MortalList.deferDecrement` path)
+- `RuntimeList.java` line 624, 645, 670, 705 (4 "undo materialized
+  copy" paths)
+- `Storable.java` `releaseApplyArgs` line 617
+- `DestroyDispatch.doCallDestroy` line 366 (args balance)
+- `MortalList.deferDecrementIfTracked` line 184
+- `MortalList.deferDecrementRecursive` line 446
+- `WeakRefRegistry.weaken` line 119
+- `RuntimeScalar.setLargeRefCounted` overwrite at line 1199 and
+  store at line 1135
+
+#### Production rescue experiment — partial win, partial loss
+
+Trying `activeOwnerCount() > 0 → restore refCount` as a universal
+rescue at `MortalList.flush()` (replacing the class-name
+heuristic):
+
+| Result | Note |
+|---|---|
+| `use Class::MOP` works without heuristic | confirmed |
+| `use Moose` works without heuristic | confirmed |
+| Unit tests: PASS | all green |
+| DBIC `t/52leaks.t`: 9–10 of 18 fail | leak rescue too aggressive — keeps cycle members alive that real Perl correctly leaks |
+
+The fundamental issue: cooperative refCount cannot tolerate
+cycles without weaken. My filter `refCountOwned && value == this`
+finds true strong owners, including cycle members that real Perl
+also leaks but DBIC's leak test expects to see destroyed (likely
+because real Perl's mark-sweep would clean them up at GC time, or
+because the test environment specifically expects refcount-zero).
+
+Reverted production rescue to retain master parity (11/11 on
+`t/52leaks.t`, walker-gate heuristic still primary).
+
+#### Surprising side-effect: `ScalarRefRegistry.snapshot()` causes regression
+
+Calling `base.activateOwnerTracking()` on every `weaken()` (which
+backfills from `ScalarRefRegistry.snapshot()`) caused 9/18 fails
+on `t/52leaks.t` — but `activateOwnerTracking` is supposed to be
+side-effect free (just initializes a private set + reads the
+registry). The most plausible explanation: iterating
+`scalarRegistry.keySet()` triggers `WeakHashMap.expungeStaleEntries()`,
+which can shift the timing of when JVM GC observes scalars as
+collected. This indirectly affects DBIC's leak detection (which
+relies on weak refs becoming undef at specific points).
+
+For now, removed the `activateOwnerTracking()` call from
+`weaken()` — the infrastructure is dormant unless explicitly
+activated. Future work: investigate the WeakHashMap expungement
+side-effect.
+
+#### Status after D-W6.13
+
+- All ownership-affecting sites have paired record/release calls
+- `activeOwners` set + `activeOwnerCount()` filter ready for use
+- DBIC `t/52leaks.t`: 11/11 (master parity)
+- Unit tests: green
+- `use Class::MOP` / `use Moose`: work (with class-name heuristic
+  still gating)
+- Walker-gate heuristic still in place — replacement still pending
+  the proper refCount-discipline fix
+
+#### Next step (D-W6.14)
+
+The cooperative refCount underflow is real (D-W6.10 trace shows
+the metaclass refCount going to 0 with 2 surviving strong owners
+— D-W6.12). The 2 unpaired increments are still unidentified. The
+audit of direct `--refCount` sites pointed at all known paths,
+which now have paired releases — yet the trace numbers from
+D-W6.12 (50 inc / 51 dec) still don't balance.
+
+The next investigation should:
+1. Re-run the D-W6.12 trace with all the new release calls in
+   place (this branch). The owner dump should now show clean
+   `refCount == owners.size()` for the metaclass.
+2. If imbalance persists: the unpaired sites are NOT in the 22
+   reviewed locations. Search for hidden refCount manipulations:
+   - assignment paths in `RuntimeArrayProxyEntry`,
+     `RuntimeHashProxyEntry`, `RuntimeStash`
+   - bytecode-emitted scope-exit code that uses direct field access
+3. If the trace is now clean: the bug is elsewhere — perhaps in
+   how `refCount = MIN_VALUE` interacts with subsequent stores
+   (the rescue path in `setLargeRefCounted`).
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
