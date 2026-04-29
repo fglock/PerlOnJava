@@ -124,6 +124,21 @@ public class OperatorParser {
             LexerToken operand = parser.tokens.get(parser.tokenIndex);
             String tokenText = operand.text;
 
+            // <ARGV> is special: it behaves like the diamond operator <>,
+            // iterating over @ARGV (or STDIN if @ARGV is empty), rather than
+            // reading from a single named filehandle. Treat it as <> so it
+            // routes through DiamondIO.
+            if (operand.type == IDENTIFIER && tokenText.equals("ARGV")
+                    && parser.tokens.get(parser.tokenIndex + 1).text.equals(">")) {
+                parser.tokenIndex += 2; // consume ARGV and >
+                OperatorNode diamond = new OperatorNode(
+                        "<>",
+                        new ListNode(currentTokenIndex),
+                        currentTokenIndex);
+                diamond.setAnnotation("handleName", "ARGV");
+                return diamond;
+            }
+
             // Check if the token looks like a Bareword file handle
             if (operand.type == IDENTIFIER) {
                 Node fileHandle = FileHandle.parseFileHandle(parser);
