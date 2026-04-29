@@ -438,18 +438,47 @@ will turn more upstream `t/*.t` tests green:
 2. `SX_REGEXP` writer — pattern + flags. Currently refuses with a
    clear error. `regexp.t` bails on this.
 3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings. Same shape.
-4. `SX_HOOK` write side: `STORABLE_freeze` hook emission. Currently
-   write side treats hooked objects as plain blessed containers, which
-   loses the cookie representation.
-5. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer — currently emits plain
-   `SX_REF`. Round-trips inside jperl but loses the magic when the
-   blob crosses to upstream perl.
-6. Hash-key UTF-8 flag handling: emit `SX_FLAG_HASH` with `SHV_K_UTF8`
+4. `SX_HOOK` write side: ✅ landed in commit `6fb5ac09d` —
+   `STORABLE_freeze` is invoked, the cookie + sub-refs are emitted
+   with the SHF_NEED_RECURSE chain when needed, and the read side
+   (`Hooks.readHook`) handles `STORABLE_attach` as a class-level
+   alternative to `STORABLE_thaw` (Storable.xs L5119-5172). Verified
+   with `attach_singleton.t` (16/16 clean), `circular_hook.t` (9/9
+   clean), and `attach_errors.t` (39/40, was 13/40).
+5. `SX_OVERLOAD` writer: ✅ landed in commit `5748eaa6d` — refs whose
+   referent is blessed into an overload-pragma class are emitted as
+   `SX_OVERLOAD` instead of `SX_REF`, matching upstream
+   Storable.xs L2350-2354. The reader has always supported it via
+   `Refs.readOverload`.
+6. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer — currently emits plain
+   `SX_REF` / `SX_OVERLOAD`. Round-trips inside jperl via the read
+   side's `WeakRefRegistry.weaken()` call, but the writer never
+   chooses the weak opcode so external weakness is lost.
+7. Hash-key UTF-8 flag handling: emit `SX_FLAG_HASH` with `SHV_K_UTF8`
    when keys carry the UTF-8 flag, so non-ASCII keys round-trip
    exactly through upstream.
-7. (Cosmetic) Drop the YAML writer codepath entirely, remove the
-   `BINARY_MAGIC = 0xFF` legacy in-memory format. Only the legacy
-   readers stay for one release as a migration safety net.
+8. **Top-level ref-of-ref level loss.** `freeze \$blessed_ref`
+   currently round-trips with one ref level dropped — the thaw result
+   is the blessed ref directly instead of a ref-to-ref. Cause: our
+   container readers (`Containers.java`) return already-wrapped
+   `ARRAYREFERENCE`/`HASHREFERENCE` scalars (one level above bare),
+   versus upstream's `retrieve_array` which returns a bare AV. The
+   "always wrap" rule in `readRef` would fix the top-level case but
+   breaks every inner-ref case (because our containers double-count
+   when both sides add a level). A correct fix requires either a
+   "bare container" sentinel type or a substantial refactor of the
+   container readers. Affects ~5 specific upstream tests (`overload.t`
+   parts, `freeze.t` parts, `dclone.t` parts).
+9. **Tied container freeze/retrieve** (`SX_TIED_ARRAY`, `SX_TIED_HASH`,
+   `SX_TIED_SCALAR`). The reader currently refuses these (in
+   `Misc.readTied*`). Round-tripping requires a way to programmatically
+   tie a Java-side container to a Perl class implementation; PerlOnJava
+   has the runtime machinery (see `RuntimeTiedHashProxyEntry`) but
+   wiring it from Storable's read path is a multi-step task. Tests
+   blocked: `tied.t`, `tied_hook.t`, `tied_items.t`.
+10. (Cosmetic) Drop the YAML writer codepath entirely, remove the
+    `BINARY_MAGIC = 0xFF` legacy in-memory format. Only the legacy
+    readers stay for one release as a migration safety net.
 
 ### Open Questions
 
