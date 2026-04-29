@@ -287,6 +287,35 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
         // Create case-modified node
         var contentNode = createJoinNode(modifier.segments);
+
+        // Single-char modifiers (backslash-u, backslash-l) inside a region modifier
+        // (backslash-L/U/F) need the region's case function applied FIRST,
+        // then the single-char on top.  Otherwise a `\L` region followed
+        // by an inner single-char modifier becomes lc(ucfirst(...)) —
+        // which lowercases the freshly-uppercased
+        // first char and produces the wrong result.  Real Perl applies
+        // the modifiers per-character left-to-right: at the first char
+        // both `\L` and the single-char are active and the single-char
+        // (the more recent one) wins; for the rest only `\L` is active.
+        // Equivalent expression: ucfirst(lc($1)).
+        if (modifier.isSingleChar && !caseModifiers.isEmpty()) {
+            CaseModifier outer = caseModifiers.peek();
+            String outerOp = switch (outer.type) {
+                case "U" -> "uc";
+                case "L" -> "lc";
+                case "F" -> "fc";
+                case "Q" -> "quotemeta";
+                default -> null;
+            };
+            // Only apply the pre-wrap if the outer modifier is a region
+            // type (\L/\U/\F/\Q) AND it actually tracks these same
+            // segments — otherwise we'd double-wrap segments owned by
+            // a different modifier.
+            if (outerOp != null && outer.segments.containsAll(modifier.segments)) {
+                contentNode = new OperatorNode(outerOp, contentNode, parser.tokenIndex);
+            }
+        }
+
         var caseModifiedNode = new OperatorNode(operator, contentNode, parser.tokenIndex);
 
         // Replace segments with case-modified node
@@ -298,11 +327,21 @@ public class StringDoubleQuoted extends StringSegmentParser {
             segments.add(firstIndex, caseModifiedNode);
 
             // Update parent modifiers to reference the new node instead of the old segments
-            // This maintains proper nesting when modifiers are nested
+            // This maintains proper nesting when modifiers are nested.
+            //
+            // For single-char modifiers that already pre-wrapped with the
+            // outer's operator above, REMOVE the segments from the outer's
+            // tracking entirely — we don't want the outer to wrap again.
             for (CaseModifier parent : caseModifiers) {
-                if (parent.segments.removeAll(modifier.segments)) {
-                    parent.segments.add(caseModifiedNode);
+                boolean removed = parent.segments.removeAll(modifier.segments);
+                if (!removed) continue;
+                if (modifier.isSingleChar && parent == caseModifiers.peek()) {
+                    // pre-wrapped by outer's op above; do not re-add so
+                    // the outer modifier won't wrap with lc/uc/fc again
+                    // for these segments. (Other ancestors still wrap.)
+                    continue;
                 }
+                parent.segments.add(caseModifiedNode);
             }
         }
     }

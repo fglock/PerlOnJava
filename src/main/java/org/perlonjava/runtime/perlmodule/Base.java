@@ -96,20 +96,19 @@ public class Base extends PerlModuleBase {
                 continue;
             }
 
-            // Check if the base class is already "loaded" in the Perl sense.
-            // Match Perl 5 base.pm semantics: a package counts as loaded if it has
-            //   - $VERSION set, OR
-            //   - @ISA populated, OR
-            //   - any CODE refs in its stash
-            // (Perl's base.pm uses: !defined($VERSION) && !@ISA → then require.)
-            // Without this, packages that were populated programmatically (e.g. DBIC
-            // schema classes built from result_source metadata, or eval-created
-            // packages) would be spuriously require()d and fail because there is
-            // no corresponding .pm file. Fixes DBIC t/inflate/hri.t which does:
-            //   eval "package DBICTest::CDSubclass; use base '$orig_resclass'";
-            // where $orig_resclass is DBICTest::CD (defined in memory, no file).
-            boolean baseIsLoaded = GlobalVariable.isPackageLoaded(baseClassName)
-                    || !GlobalVariable.getGlobalArray(baseClassName + "::ISA").elements.isEmpty()
+            // Match Perl 5 base.pm semantics: require the base class unless it
+            // already has $VERSION set OR @ISA populated.
+            //   unless (defined ${"$base\::VERSION"} || @{"$base\::ISA"}) {
+            //       require $base;
+            //   }
+            // We add a graceful fallback for packages that were populated
+            // programmatically (no .pm file exists): if `require` fails with a
+            // "not found" error, but the package's stash has any code refs
+            // (Java-backend bridge stubs OR eval-created subs like in DBIC's
+            // t/inflate/hri.t which does
+            //     eval "package DBICTest::CDSubclass; use base '$orig_resclass'";
+            // ), accept the existing in-memory package instead of erroring.
+            boolean baseIsLoaded = !GlobalVariable.getGlobalArray(baseClassName + "::ISA").elements.isEmpty()
                     || GlobalVariable.existsGlobalVariable(baseClassName + "::VERSION");
             if (!baseIsLoaded) {
                 // Require the base class file
@@ -117,9 +116,19 @@ public class Base extends PerlModuleBase {
                 try {
                     RuntimeScalar ret = ModuleOperators.require(new RuntimeScalar(filename));
                 } catch (Exception e) {
-                    if (e.getMessage().contains("not found")) {
-                        System.err.println("Base class package \"" + baseClassName + "\" is empty.");
-                        throw new PerlCompilerException("Base class package \"" + baseClassName + "\" is empty.");
+                    String msg = e.getMessage();
+                    boolean notFound = msg != null
+                            && (msg.contains("not found")
+                                || msg.contains("Can't locate"));
+                    if (notFound) {
+                        // No .pm file. Fall back to in-memory check — the
+                        // package may have been built up by other code (e.g.
+                        // Java bridge stubs for IO::Handle::_sync, or DBIC's
+                        // eval-created classes).
+                        if (!GlobalVariable.isPackageLoaded(baseClassName)) {
+                            System.err.println("Base class package \"" + baseClassName + "\" is empty.");
+                            throw new PerlCompilerException("Base class package \"" + baseClassName + "\" is empty.");
+                        }
                     } else {
                         throw e;
                     }
