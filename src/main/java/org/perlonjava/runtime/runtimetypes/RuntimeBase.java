@@ -33,6 +33,28 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public boolean refCountTrace = false;
 
+    /**
+     * D-W6.18: marks objects whose lifetime is "module-global metadata":
+     * stored as the value of a package-global hash element (`$Foo::META{x}
+     * = $meta`). Such objects' cooperative refCount may transient-zero
+     * during the program run (mid-statement decrements before paired
+     * increments fire), but they should NOT be destroyed because their
+     * "real" lifetime is the duration of the package's existence.
+     * <p>
+     * Set in {@code RuntimeScalar.setLargeRefCounted} when the
+     * destination scalar is detected to be an element of a hash that
+     * appears in {@code GlobalVariable.globalHashes}. Once set, never
+     * cleared (the object remains a module-global anchor for the
+     * program's lifetime).
+     * <p>
+     * Replaces the class-name heuristic in
+     * {@code DestroyDispatch.classNeedsWalkerGate}: instead of
+     * approximating "module-global metadata" by hard-coded class names
+     * (Class::MOP, Moose, Moo), we capture the underlying property
+     * directly at store time.
+     */
+    public boolean storedInPackageGlobal = false;
+
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: production-grade ownership tracking.
     // Active for blessed objects that have at least one weak reference

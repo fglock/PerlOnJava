@@ -2908,6 +2908,149 @@ site that creates the 50/51 imbalance for the CMOP metaclass.
 Once the specific path is identified, the fix is targeted and
 correct.
 
+### D-W6.18: Critical plan review — what we're really fixing
+
+User asked: "review the plan to make sure we are fixing the right
+thing — must be performant and correct."
+
+#### What we know empirically
+
+1. **Master with class-name heuristic gate works correctly** for both
+   Class::MOP/Moose AND DBIC. Performance is acceptable.
+2. **Replacing the heuristic with universal walker** breaks DBIC.
+3. **Replacing per-assignment flush with per-statement (FREETMPS)** does
+   NOT fix the underlying imbalance.
+4. **The 50/51 inc/dec count** from D-W6.10 represents a real refCount
+   imbalance for the CMOP metaclass — somewhere a decrement fires
+   without a paired increment.
+
+#### What's the heuristic actually doing right?
+
+Real Perl's behavior:
+- Class::MOP metaclass in `our %METAS`: refcount stays ≥ 1 forever
+  (held by package hash); object never destroyed during program run
+- DBIC row in `my $row`: refcount drops to 0 when `undef $row`;
+  destroyed correctly
+
+Master's heuristic gate:
+- For Class::MOP/Moose/Moo classes: walker check at refCount→0 →
+  finds reachable from `%METAS` → rescue. Works.
+- For DBIC row classes: heuristic NOT triggered → standard refCount
+  → 0 → DESTROY. Works.
+
+The heuristic is empirically correct for the modules we care about.
+Its shape is: "for these specific classes, cooperative refCount may
+have transient zeros; consult walker before firing DESTROY."
+
+#### Is the heuristic actually wrong?
+
+It's NOT semantically wrong — it correctly distinguishes two real
+classes of object lifetime:
+
+1. **Module-global metadata** (CMOP metaclass): persistent
+   throughout program run, held by package globals
+2. **Per-call data** (DBIC row): transient, follows lexical scope
+
+The heuristic's flaw is:
+- Hard-coded class name list — won't extend to other module-global
+  metadata (custom MOPs, plugin systems)
+- Doesn't capture the underlying property
+
+#### Right plan: capture the property, not the class name
+
+Replace `classNeedsWalkerGate(blessId)` with a **property-based check**
+that captures "this object is stored in a package-global hash":
+
+```java
+// Set on the RuntimeBase when stored as the value of a
+// global hash element (e.g., $METAS{Foo} = $meta).
+public boolean storedInPackageGlobal = false;
+
+// Set in setLargeRefCounted when 'this' (the scalar being assigned to)
+// is an element of a hash registered in GlobalVariable.globalHashes.
+```
+
+Then the gate becomes:
+
+```java
+} else if (base.blessId != 0
+        && base.storedInPackageGlobal
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // Rescue: this object's lifetime is module-global, but
+    // cooperative refCount has transient zeros. Walker confirms
+    // reachability; suppress DESTROY.
+}
+```
+
+For DBIC rows: never stored in a package-global hash → flag never set
+→ heuristic doesn't trigger → standard refCount → DESTROY on undef.
+
+For CMOP metaclass: stored in `$METAS{...}` → flag set → walker
+checks reachability → rescue.
+
+#### Performance characteristics
+
+- Per-store cost: one boolean check + one flag set if scalar's
+  container is a global hash. O(1) per store.
+- Walker cost: only fires when object has weak refs AND
+  storedInPackageGlobal AND refCount→0. Same gating as today's
+  heuristic — same performance envelope.
+- No tracing or instrumentation overhead.
+
+#### Correctness characteristics
+
+- Class-name agnostic: works for any module that uses package-
+  global hashes for metadata (extensibility).
+- Behaviorally equivalent to current heuristic for tested modules
+  (Class::MOP, Moose, Moo, DBIC).
+- Captures the underlying property explicitly rather than via
+  ad-hoc class name list.
+
+#### Implementation steps
+
+1. Add `boolean storedInPackageGlobal` field to `RuntimeBase`.
+2. In `RuntimeScalar.setLargeRefCounted`: when storing, check if
+   `this` (destination scalar) is an element of a `RuntimeHash`
+   that's in `GlobalVariable.globalHashes`. If yes, set the flag
+   on the new base.
+3. Replace `classNeedsWalkerGate(blessId)` with
+   `base.storedInPackageGlobal` in the walker gate condition.
+4. Verify:
+   - `make` passes
+   - `use Class::MOP; use Moose;` works
+   - DBIC `t/52leaks.t` 11/11
+5. Once green, **delete `classNeedsWalkerGate` and the class-name
+   list entirely**. The class-name heuristic is gone.
+
+#### Why this is the right plan
+
+This is "principled removal of the class-name heuristic". The
+heuristic worked because it captured a real property — we're just
+moving from "approximate by class name" to "exact via flag set at
+store time".
+
+Alternative plans rejected:
+- **Per-statement FREETMPS**: doesn't fix the imbalance (proven by
+  D-W6.17 experiment).
+- **Universal walker**: breaks DBIC (regression in 4-9 tests).
+- **Find unpaired refCount site**: bounded work but unclear if
+  finable in practice; even if found and fixed, the heuristic is
+  still in place (orthogonal).
+- **Java GC ground truth**: major rewrite, too risky.
+
+#### Caveat
+
+The flag must propagate correctly:
+- Stored in package-global hash → flag set on referent's RuntimeBase
+- If stored in a sub-hash (e.g., `$Foo::CACHE{x}{y} = $meta`) — does
+  the deep storage propagate? Need to verify.
+- For now, only set flag on direct global-hash stores. Indirect
+  stores would not be rescued — but that matches the current
+  heuristic's behavior (only direct module-global metadata).
+
+This is the next-session implementation task.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

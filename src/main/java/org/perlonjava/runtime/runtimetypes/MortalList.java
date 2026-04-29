@@ -589,9 +589,16 @@ public class MortalList {
                         // createAnonymousReference() (localBindingExists stays false)
                         // so the clear is no longer needed and broke #76716.
                     } else if (base.blessId != 0
+                            && base.storedInPackageGlobal
                             && WeakRefRegistry.hasWeakRefsTo(base)
-                            && DestroyDispatch.classNeedsWalkerGate(base.blessId)
                             && ReachabilityWalker.isReachableFromRoots(base)) {
+                        // D-W6.18: property-based walker gate.
+                        // Replaces the class-name heuristic
+                        // (classNeedsWalkerGate). Object's lifetime is
+                        // module-global metadata (stored in a package-
+                        // global hash like %METAS), so cooperative
+                        // refCount transient zeros must not fire DESTROY.
+                        // Walker confirms reachability; suppress destroy.
                         // D-W6.16: heuristic walker gate (primary).
                         // The new reachableOwnerCount() infrastructure
                         // (D-W6.14/16) handles Class::MOP/Moose correctly

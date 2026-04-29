@@ -1209,9 +1209,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
+                        && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && DestroyDispatch.classNeedsWalkerGate(oldBase.blessId)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {
+                    // D-W6.18: property-based walker gate (mirror of
+                    // MortalList.flush). Replaces classNeedsWalkerGate
+                    // class-name heuristic with the storedInPackageGlobal
+                    // flag set at hash-store time.
                     // Phase D / Step W3-Path 2: mirror of the gate in
                     // MortalList.flush(). Blessed object with outstanding
                     // weak refs whose cooperative refCount dipped to 0
