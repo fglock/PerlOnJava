@@ -753,6 +753,58 @@ fix, removing the gate clause in `MortalList.flush` makes
 At that point the gate clause for non-`hasWeakRefsTo` paths can be
 deleted.
 
+#### D-W6.1 — investigation log (2026-04-29)
+
+Reproducer file `src/test/resources/unit/refcount/drift/sub_install.t`
+landed with five patterns covering simple glob-assignment, named-sub,
+loop-installed, temp-dropped, and nested-install shapes. **All five
+pass on master AND on a probe-disabled gate** (i.e. the simple
+sub-install patterns are not the drift source).
+
+`PJ_DESTROY_TRACE=1 ./jperl -e 'use Class::MOP::Class'` (gate
+disabled) revealed the actual stack of the first premature destroy:
+
+```
+[DESTROY] RuntimeCode@... name=Sub::Install::(anon)
+  at MortalList.flush(MortalList.java:588)
+  at RuntimeScalar.setLargeRefCounted(RuntimeScalar.java:1241)
+  at RuntimeScalar.setLarge(RuntimeScalar.java:1019)
+  at RuntimeScalar.set(RuntimeScalar.java:949)
+  at RuntimeGlob.set(RuntimeGlob.java:229)
+  at anon652.apply(.../Sub/Install.pm:2159)
+```
+
+Key facts:
+
+1. The destroyed CV is *not* the one being assigned — it's an
+   *unrelated* `Sub::Install::(anon)` sitting in the deferred-decrement
+   queue.
+2. The flush at the end of `setLargeRefCounted` (line 1241) processes
+   that queue entry. The decrement takes refCount from 0 → -1, which
+   PerlOnJava treats as a refCount=0 transition, firing DESTROY.
+3. Sub::Install's actual install path is a stack of nested closures:
+   `*install_sub = _build_public_installer(_ignore_warnings(_installer))`.
+   Each layer is an `_wants_code = sub { ... sub { $code->(@_) } }`
+   shape — a closure returning a closure. The captured `$code`,
+   `$arg`, `$installer` move through several lexical scopes before
+   the final glob assignment.
+
+**Conclusion: D-W6.1 misnamed.** The drift is *not* in the glob
+assignment / sub-installation path. The bytecode for `*foo = $cv` is
+correct; the simple reproducers prove it. The actual drift is in
+**closure captures across multi-layer wrappers** — `_installer`'s
+closure over `$code`, `_do_with_warn`'s closure over `$arg`/`$code`,
+`_build_public_installer`'s closure over `$installer`. Each closure
+needs its captures to bump refCount of their referents; if any layer
+skips the increment but keeps the decrement, the chain ends with a
+spurious refCount=0 transition.
+
+**Next step is D-W6.2 (closure-capture drift)**, which is exactly
+the right shape to fix this. The `sub_install.t` reproducer is kept
+as a regression guard — once D-W6.2 lands and the gate is loosened,
+any future regression in the simple sub-install path will be caught
+here.
+
 ### D-W6.2 — Closure-capture drift
 
 **Symptom.** Closures returned by `Class::MOP::Method::Generated::sub`

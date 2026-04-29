@@ -121,9 +121,14 @@ public class DestroyDispatch {
             String klass = referent.blessId != 0
                     ? NameNormalizer.getBlessStr(referent.blessId)
                     : referent.getClass().getSimpleName();
+            String extra = "";
+            if (referent instanceof RuntimeCode rc) {
+                extra = " name=" + (rc.packageName != null ? rc.packageName : "?")
+                        + "::" + (rc.subName != null ? rc.subName : "(anon)");
+            }
             System.err.println("[DESTROY] " + klass + "@"
                     + System.identityHashCode(referent)
-                    + " refCount=" + referent.refCount);
+                    + " refCount=" + referent.refCount + extra);
             new RuntimeException("destroy trace").printStackTrace(System.err);
         }
 
