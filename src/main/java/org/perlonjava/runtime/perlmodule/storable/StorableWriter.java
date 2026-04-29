@@ -60,13 +60,21 @@ public final class StorableWriter {
         // We're more permissive: accept bare scalars and emit them directly.
         // Real perl would croak with "Not a reference" — adjust later if needed.
         if (RuntimeScalarType.isReference(value)) {
-            // The OUTER ref is stripped; we dispatch on the referent.
-            // For ARRAYREFERENCE/HASHREFERENCE the referent is the AV/HV.
-            // For REFERENCE (scalar ref) the referent is another RuntimeScalar.
-            // Containers/blessed refs go through dispatchReferent which knows
-            // how to record-seen the underlying value object so SX_OBJECT
-            // backrefs match.
-            dispatchReferent(c, value);
+            // Strip ONE outer ref level (matching `sv = SvRV(sv)`).
+            // For ARRAYREFERENCE/HASHREFERENCE the strip yields a bare
+            // AV/HV — emit its body without an outer SX_REF wrapper.
+            // For REFERENCE (scalar ref) the strip yields the inner
+            // RuntimeScalar, which may itself be a reference. We dispatch
+            // through `dispatch` which decides whether to emit
+            // SX_REF/SX_OVERLOAD around the inner. That keeps the wire
+            // format right for `freeze \$blessed_ref` (one ref of
+            // wrapping in the output) and matches the corresponding
+            // upstream `do_store` → `store` flow.
+            if (value.type == RuntimeScalarType.REFERENCE) {
+                dispatch(c, (RuntimeScalar) value.value);
+            } else {
+                dispatchReferent(c, value);
+            }
         } else {
             // Top-level non-ref: emit it straight.
             dispatch(c, value);
@@ -345,11 +353,13 @@ public final class StorableWriter {
     public void dispatch(StorableContext c, RuntimeScalar value) {
         if (RuntimeScalarType.isReference(value)) {
             // An inner reference inside a container/scalar-ref. Emit
-            // SX_REF/SX_WEAKREF/SX_OVERLOAD wrapper, then the body.
+            // SX_REF (or SX_OVERLOAD when the inner is blessed into a
+            // class with overload-pragma magic). Storable.xs L2350-L2354
+            // makes the same choice on store_ref.
             //
-            // (For now we always emit SX_REF — weak/overload detection
-            //  requires extra plumbing into the runtime that's out of
-            //  scope for the first encoder pass.)
+            // Weak detection (SX_WEAKREF / SX_WEAKOVERLOAD) is not yet
+            // wired through from the runtime — emitted as plain
+            // SX_REF / SX_OVERLOAD for now.
             Object key = sharedKey(value);
             long tag = c.lookupSeenTag(key);
             if (tag >= 0) {
@@ -357,7 +367,11 @@ public final class StorableWriter {
                 c.writeU32Length(tag);
                 return;
             }
-            c.writeByte(Opcodes.SX_REF);
+            int blessId = RuntimeScalarType.blessedId(value);
+            boolean isOverloaded = blessId != 0
+                    && org.perlonjava.runtime.runtimetypes.OverloadContext
+                            .prepare(blessId) != null;
+            c.writeByte(isOverloaded ? Opcodes.SX_OVERLOAD : Opcodes.SX_REF);
             // Bump the write-side tag for the SX_REF placeholder so
             // tags align with the read side, where `readRef` always
             // records its placeholder before recursing into the body

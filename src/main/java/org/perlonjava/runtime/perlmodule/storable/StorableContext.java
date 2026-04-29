@@ -135,6 +135,12 @@ public final class StorableContext {
         return buf[pos++] & 0xFF;
     }
 
+    /** Peek at the next unsigned byte without advancing. */
+    public int peekU8() {
+        if (pos >= buf.length) throw new StorableFormatException("unexpected end of stream");
+        return buf[pos] & 0xFF;
+    }
+
     /** Read {@code n} raw bytes (no decoding) and advance. */
     public byte[] readBytes(int n) {
         if (n < 0) throw new StorableFormatException("negative length " + n);

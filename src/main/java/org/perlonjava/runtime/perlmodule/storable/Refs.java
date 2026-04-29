@@ -4,6 +4,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+
 
 /**
  * Reference opcode readers/writers (regular, weak, and overloaded
@@ -110,22 +112,39 @@ public final class Refs {
 
     /**
      * Plumb {@code refScalar} so it becomes a reference to
-     * {@code referent}. The referent may already be a container value
-     * (a RuntimeScalar whose .value is a RuntimeArray/RuntimeHash
-     * returned bare by the container retriever — see Containers.java
-     * docs); in that case we wrap the underlying RuntimeArray/Hash
-     * directly to avoid producing a ref-to-ref. Otherwise we make a
-     * scalar reference to the referent.
+     * {@code referent}.
+     * <p>
+     * The shape depends on what the body produced:
+     * <ul>
+     *   <li>If the body produced a bare value (non-reference scalar):
+     *       wrap {@code referent} as a scalar reference.</li>
+     *   <li>If the body produced an already-wrapped reference (the
+     *       common case: containers return an ARRAYREFERENCE/HASHREFERENCE
+     *       scalar; SX_BLESS produces a blessed ref of either kind):
+     *       a SX_REF on top of that means we want one more level of
+     *       indirection. Wrap as a scalar ref to {@code referent} (so
+     *       {@code refScalar} ends up as a REFERENCE pointing at the
+     *       inner ref).</li>
+     * </ul>
+     * Earlier this code unconditionally collapsed the wrapper when the
+     * inner held a RuntimeArray/RuntimeHash, on the assumption that the
+     * SX_REF wrapper around a bare container was redundant. That was
+     * wrong: it dropped a level of indirection for cases like
+     * {@code freeze \$blessed_arrayref}, where the test expects
+     * {@code ref \$thawed} to be {@code REF} (not the blessed class
+     * name).
      */
     private static void installReferent(RuntimeScalar refScalar, RuntimeScalar referent) {
-        RuntimeScalar wrapped;
+        // Container readers (Containers.java) already return ARRAYREFERENCE/
+        // HASHREFERENCE scalars wrapping the underlying AV/HV, which IS the
+        // desired ref level. Collapse here so we don't double-count.
+        // Otherwise wrap as a scalar reference to the referent.
         if (referent.value instanceof RuntimeArray arr) {
-            wrapped = arr.createReference();
+            refScalar.set(arr.createReference());
         } else if (referent.value instanceof RuntimeHash hash) {
-            wrapped = hash.createReference();
+            refScalar.set(hash.createReference());
         } else {
-            wrapped = referent.createReference();
+            refScalar.set(referent.createReference());
         }
-        refScalar.set(wrapped);
     }
 }
