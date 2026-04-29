@@ -213,7 +213,11 @@ public class IdentifierParser {
                 return null; // Force fallback to expression parsing for unary plus + hash constructor
             }
             // Check if this is a leading single quote followed by an identifier ($'foo means $main::foo)
-            if (firstChar == '\'' && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
+            // BUT: inside ${...}, a leading ' starts a string literal expression (e.g. ${'Foo::'})
+            // and must not be treated as the legacy package separator. Returning null here forces
+            // parseBracedVariable to fall back to parseBlock, which evaluates the string literal.
+            if (firstChar == '\'' && !insideBraces
+                    && (nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER)) {
                 // This is $'foo which means $main::foo
                 // We convert it to ::foo internally (leading :: means main::)
                 variableName.append("::");
@@ -221,6 +225,10 @@ public class IdentifierParser {
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
                 // Continue to parse the rest of the identifier - fall through to main loop
+            } else if (firstChar == '\'' && insideBraces) {
+                // Inside ${...}: the ' starts a string literal — fail identifier parsing so the
+                // caller falls through to parseBlock and evaluates 'Foo::' as a normal expression.
+                return null;
             } else {
                 // Either it's a special variable like $' (postmatch), $| (autoflush), etc.
                 // Consume the character from the token (which might be "|=" or just "|")
