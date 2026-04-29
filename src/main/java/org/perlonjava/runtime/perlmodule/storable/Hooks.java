@@ -161,6 +161,12 @@ public final class Hooks {
             // Replace the placeholder in the seen table with the attached
             // object so any prior backref tag resolves to the right thing.
             c.replaceSeen(placeholderTag, attached);
+            // The attached object is a one-level container/blessed-ref;
+            // signal to the surrounding SX_REF (if any) to collapse so
+            // we don't add another ref level. See item 8 in
+            // dev/modules/storable_binary_format.md.
+            c.takeBareContainerFlag();   // drain any stale inner flag
+            c.markBareContainer();
             return attached;
         }
 
@@ -170,6 +176,11 @@ public final class Hooks {
         // Step 7: invoke $obj->STORABLE_thaw($cloning=0, $frozen, @extraRefs).
         invokeThaw(classname, placeholder, frozen, extraRefs);
 
+        // Same bare-container signaling as the attach branch above —
+        // the placeholder is at one ref level, just like SX_HASH /
+        // SX_ARRAY output, so the outer SX_REF should collapse.
+        c.takeBareContainerFlag();
+        c.markBareContainer();
         return placeholder;
     }
 
@@ -194,8 +205,22 @@ public final class Hooks {
             case SHT_HASH:
                 return new RuntimeHash().createAnonymousReference();
             case SHT_EXTRA:
+                // Hooked-tied: SHT_EXTRA means the freezer is a class
+                // that has BOTH a tied-magic kind AND a STORABLE_freeze
+                // hook. The wire format puts an eflags byte right after
+                // the main SX_HOOK flags byte, encoding which tied kind
+                // (SHT_TSCALAR=4 / SHT_TARRAY=5 / SHT_THASH=6 in
+                // upstream Storable.xs L3624-L3653, L5230-L5290).
+                // Properly handling this requires (a) reading the
+                // eflags byte from the still-open SX_HOOK stream and
+                // (b) installing tied magic on the placeholder before
+                // STORABLE_thaw runs. (a) is not reachable from this
+                // helper without changing readHook's call site, which
+                // is out of scope for the tied agent. Refuse with a
+                // clear message that names the known follow-up.
                 throw new StorableFormatException(
-                        "SX_HOOK: tied/SHT_EXTRA sub-type not supported");
+                        "SX_HOOK: SHT_EXTRA (hooked-tied) sub-type not yet implemented; "
+                                + "see dev/modules/storable_binary_format.md item 9 follow-up");
             default:
                 throw new StorableFormatException(
                         "SX_HOOK: unknown object type " + objType);

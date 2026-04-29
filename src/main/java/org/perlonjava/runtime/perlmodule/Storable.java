@@ -118,6 +118,7 @@ public class Storable extends PerlModuleBase {
             RuntimeScalar data = args.get(0);
             org.perlonjava.runtime.perlmodule.storable.StorableWriter w =
                     new org.perlonjava.runtime.perlmodule.storable.StorableWriter();
+            w.setCanonical(GlobalVariable.getGlobalVariable("Storable::canonical").getBoolean());
             String encoded = w.writeTopLevelToMemory(data, netorder);
             // The encoded string holds bytes 0..255 as chars. Wrap as a
             // byte-string scalar so consumers see it as raw bytes (matches
@@ -166,6 +167,11 @@ public class Storable extends PerlModuleBase {
                 org.perlonjava.runtime.perlmodule.storable.StorableReader sReader =
                         new org.perlonjava.runtime.perlmodule.storable.StorableReader();
                 RuntimeScalar data = sReader.dispatch(sCtx);
+                // Drain the bare-container sentinel left by the
+                // top-level container reader (if any) so it does not
+                // leak into a subsequent thaw of unrelated data
+                // sharing the same Storable runtime.
+                sCtx.takeBareContainerFlag();
                 if (!RuntimeScalarType.isReference(data)) {
                     data = data.createReference();
                 }
@@ -547,6 +553,7 @@ public class Storable extends PerlModuleBase {
 
             org.perlonjava.runtime.perlmodule.storable.StorableWriter w =
                     new org.perlonjava.runtime.perlmodule.storable.StorableWriter();
+            w.setCanonical(GlobalVariable.getGlobalVariable("Storable::canonical").getBoolean());
             String encoded = w.writeTopLevelToFile(data, netorder);
             // The encoded string holds bytes 0..255 as chars; convert back
             // to the raw byte sequence for file I/O.
@@ -584,6 +591,8 @@ public class Storable extends PerlModuleBase {
                 org.perlonjava.runtime.perlmodule.storable.StorableReader sReader =
                         new org.perlonjava.runtime.perlmodule.storable.StorableReader();
                 RuntimeScalar data = sReader.dispatch(sCtx);
+                // Drain the bare-container sentinel (see thaw).
+                sCtx.takeBareContainerFlag();
                 // Storable's `retrieve` always returns a reference (see
                 // do_retrieve -> newRV_noinc in Storable.xs around L7601).
                 // If the top-level opcode already produced a reference

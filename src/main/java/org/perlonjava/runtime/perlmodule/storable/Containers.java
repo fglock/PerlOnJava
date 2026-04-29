@@ -67,8 +67,18 @@ public final class Containers {
         int n = (int) size;
         for (int i = 0; i < n; i++) {
             RuntimeScalar elem = r.dispatch(c);
+            // Drain any bare-container flag the child opcode left
+            // behind: only Refs.readRef / Storable.thaw need to see
+            // it, and an array element is consumed here so the flag
+            // must not leak to the next sibling.
+            c.takeBareContainerFlag();
             RuntimeArray.push(av, elem);
         }
+        // Signal the surrounding SX_REF (if any) that we returned a
+        // bare-container scalar — i.e. this ARRAYREFERENCE structurally
+        // stands in for upstream's bare AV. See StorableContext for
+        // the full rationale.
+        c.markBareContainer();
         return result;
     }
 
@@ -91,6 +101,9 @@ public final class Containers {
         for (int i = 0; i < n; i++) {
             // VALUE first, KEY second (Storable.xs retrieve_hash).
             RuntimeScalar value = r.dispatch(c);
+            // Drain any bare flag the child opcode produced — see
+            // readArray for the rationale.
+            c.takeBareContainerFlag();
             long keylen = c.readU32Length();
             if (keylen < 0 || keylen > Integer.MAX_VALUE) {
                 throw new StorableFormatException("SX_HASH keylen " + keylen + " out of range");
@@ -99,6 +112,7 @@ public final class Containers {
             String key = new String(keyBytes, StandardCharsets.ISO_8859_1);
             hv.put(key, value);
         }
+        c.markBareContainer();
         return result;
     }
 
@@ -123,6 +137,7 @@ public final class Containers {
         int n = (int) size;
         for (int i = 0; i < n; i++) {
             RuntimeScalar value = r.dispatch(c);
+            c.takeBareContainerFlag();
             int keyFlags = c.readU8();
             long keylen = c.readU32Length();
             if (keylen < 0 || keylen > Integer.MAX_VALUE) {
@@ -134,6 +149,7 @@ public final class Containers {
                     : new String(keyBytes, StandardCharsets.ISO_8859_1);
             hv.put(key, value);
         }
+        c.markBareContainer();
         return result;
     }
 

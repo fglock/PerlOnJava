@@ -1,53 +1,34 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
+import org.perlonjava.runtime.runtimetypes.TieArray;
+import org.perlonjava.runtime.runtimetypes.TieHash;
+import org.perlonjava.runtime.runtimetypes.TieScalar;
 
 /**
- * Stub for the tied-container encoder
+ * Tied-container encoder
  * ({@code SX_TIED_ARRAY} / {@code SX_TIED_HASH} / {@code SX_TIED_SCALAR}).
- * <p>
- * <strong>Owner: tied-agent.</strong>
  * <p>
  * Wire format (Storable.xs L5502-L5610):
  * <pre>
- *   SX_TIED_ARRAY  &lt;object&gt;     // &lt;object&gt; = the tying implementation
+ *   SX_TIED_ARRAY  &lt;object&gt;
  *   SX_TIED_HASH   &lt;object&gt;
  *   SX_TIED_SCALAR &lt;object&gt;
  * </pre>
  * The body is a single recursive opcode tree producing the tying
  * object (typically a blessed ref to whatever class implements TIE*).
  * <p>
- * <strong>Detection.</strong> Inspect the underlying
- * {@code RuntimeArray}/{@code RuntimeHash}/{@code RuntimeScalar} held
- * in {@code refScalar.value}. If it carries tied magic (look for
- * {@code RuntimeTiedHashProxyEntry} usage, an {@code isTied()}
- * method, or a non-null {@code tiedObject} field — search PerlOnJava's
- * runtime for the canonical accessor), retrieve the tying object and
- * emit:
- * <pre>
- *   c.writeByte(Opcodes.SX_TIED_HASH);   // or _ARRAY / _SCALAR
- *   c.recordWriteSeen(sharedKey(refScalar));
- *   writer.dispatch(c, tiedObject);
- *   return true;
- * </pre>
- * <p>
- * Return {@code false} if the referent is NOT tied, so the caller
- * (StorableWriter.dispatchReferent) falls through to the normal
- * SX_BLESS / container-body path.
- * <p>
- * The corresponding read side replaces the throws in
- * {@link Misc#readTiedArray} / {@link Misc#readTiedHash} /
- * {@link Misc#readTiedScalar}. The tied-agent owns both halves and
- * may need to add a public helper in PerlOnJava's tie machinery to
- * programmatically install tied magic from Java.
- * <p>
- * <strong>Hooked-tied case (SHT_EXTRA).</strong> When a class has
- * BOTH tied magic AND {@code STORABLE_freeze}, upstream emits
- * SX_HOOK with {@code obj_type == SHT_EXTRA} and an {@code eflags}
- * byte indicating which tied-kind. {@link Hooks#allocatePlaceholder}
- * already has a {@code SHT_EXTRA} branch that throws; the tied-agent
- * replaces it. See Storable.xs L3624-L3653 for the writer side and
- * L5230-L5290 for the reader side.
+ * Detection looks at the underlying {@code RuntimeArray}/
+ * {@code RuntimeHash}/{@code RuntimeScalar} held in
+ * {@code refScalar.value}: PerlOnJava marks tied containers by
+ * setting their {@code type} field to one of {@code TIED_ARRAY},
+ * {@code TIED_HASH}, or {@code TIED_SCALAR} and storing a
+ * {@link TieArray}/{@link TieHash}/{@link TieScalar} in
+ * {@code elements}/{@code value}. Those Tie* objects expose the
+ * tying object via {@code getSelf()}.
  */
 public final class TiedEncoder {
     private TiedEncoder() {}
@@ -57,8 +38,41 @@ public final class TiedEncoder {
      *  through to plain bless / container body). */
     public static boolean tryEmit(StorableContext c, RuntimeScalar refScalar,
                                   StorableWriter writer) {
-        // Foundation default: no tied magic detected. Fall through.
-        // Tied agent fills in detection + emission.
-        return false;
+        Object value = refScalar.value;
+        RuntimeScalar tying = null;
+        int opcode = 0;
+
+        if (refScalar.type == RuntimeScalarType.ARRAYREFERENCE
+                && value instanceof RuntimeArray av
+                && av.type == RuntimeArray.TIED_ARRAY
+                && av.elements instanceof TieArray ta) {
+            tying = ta.getSelf();
+            opcode = Opcodes.SX_TIED_ARRAY;
+        } else if (refScalar.type == RuntimeScalarType.HASHREFERENCE
+                && value instanceof RuntimeHash hv
+                && hv.type == RuntimeHash.TIED_HASH
+                && hv.elements instanceof TieHash th) {
+            tying = th.getSelf();
+            opcode = Opcodes.SX_TIED_HASH;
+        } else if (refScalar.type == RuntimeScalarType.REFERENCE
+                && value instanceof RuntimeScalar inner
+                && inner.type == RuntimeScalarType.TIED_SCALAR
+                && inner.value instanceof TieScalar ts) {
+            tying = ts.getSelf();
+            opcode = Opcodes.SX_TIED_SCALAR;
+        }
+
+        if (tying == null) {
+            return false;
+        }
+
+        c.writeByte(opcode);
+        // Register the seen-tag for the tied container so that
+        // backref tags inside the tying object can resolve to it.
+        // We key on the underlying AV/HV/scalar to mirror the
+        // sharedKey logic in StorableWriter.
+        c.recordWriteSeen(value);
+        writer.dispatch(c, tying);
+        return true;
     }
 }

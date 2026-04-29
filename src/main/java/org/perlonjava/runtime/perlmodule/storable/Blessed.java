@@ -55,6 +55,18 @@ public final class Blessed {
         String classname = new String(nameBytes, StandardCharsets.UTF_8);
         c.recordClass(classname);
         RuntimeScalar inner = r.dispatch(c);
+        // Note: we do NOT drain the bare-container flag here. The
+        // surrounding SX_REF should still see the body as bare
+        // (because in our type model, blessed HASHREFERENCE / blessed
+        // ARRAYREFERENCE is a one-level scalar, just like the bare
+        // container — bless mutates the underlying AV/HV's blessId
+        // without changing the ref level). Draining would force
+        // SX_REF to wrap, which over-counts levels for `freeze
+        // tied-hash` (the tying object is a blessed ref that the
+        // user expects to round-trip as a one-level blessed ref,
+        // not a ref-to-ref). The cost: `freeze \$blessed_ref`
+        // round-trips with one level lost. See item 8 in
+        // dev/modules/storable_binary_format.md.
         return ReferenceOperators.bless(inner, new RuntimeScalar(classname));
     }
 
@@ -81,6 +93,7 @@ public final class Blessed {
         }
         String classname = c.getClass(ix);
         RuntimeScalar inner = r.dispatch(c);
+        // See readBless above for the bare-container-flag rationale.
         return ReferenceOperators.bless(inner, new RuntimeScalar(classname));
     }
 }

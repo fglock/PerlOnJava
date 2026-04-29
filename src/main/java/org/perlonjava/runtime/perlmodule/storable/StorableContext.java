@@ -310,6 +310,43 @@ public final class StorableContext {
         return ix;
     }
 
+    // --- bare-container sentinel (option a in storable_binary_format.md, item 8) ---
+    //
+    // Container readers (SX_ARRAY / SX_HASH / SX_FLAG_HASH) return
+    // already-wrapped ARRAYREFERENCE / HASHREFERENCE scalars (one ref
+    // level above bare AV/HV in upstream's data model). When an SX_REF
+    // wraps such a "bare-container" body the SX_REF wrapper is
+    // structurally redundant and must collapse to keep the level count
+    // matching upstream (see {@code retrieve_ref} in Storable.xs L5321
+    // which calls {@code SvRV_set} once on top of an AV/HV). When an
+    // SX_REF wraps something that already carries a real ref level
+    // (the result of another SX_REF, an SX_HOOK / SX_OBJECT result,
+    // etc.), the SX_REF really adds a level and must wrap.
+    //
+    // The flag is one-shot: {@link #markBareContainer()} sets it,
+    // {@link #takeBareContainerFlag()} reads-and-clears it. Refs.readRef
+    // and friends drain the flag before recursing (so it doesn't leak
+    // from a sibling) and again after recursing (to learn what the body
+    // was). Storable.thaw / Storable.retrieve also drain it once after
+    // dispatch returns to keep state clean across calls.
+    private boolean lastWasBareContainer = false;
+
+    /** Read-and-clear the bare-container flag. Returns whatever was
+     *  most recently {@linkplain #markBareContainer marked}. */
+    public boolean takeBareContainerFlag() {
+        boolean v = lastWasBareContainer;
+        lastWasBareContainer = false;
+        return v;
+    }
+
+    /** Mark the most recently produced value as a bare-container body
+     *  (an ARRAYREFERENCE / HASHREFERENCE that stands in for an
+     *  upstream {@code AV}/{@code HV}). The flag is consumed by the
+     *  next caller of {@link #takeBareContainerFlag()}. */
+    public void markBareContainer() {
+        this.lastWasBareContainer = true;
+    }
+
     // --- seen-table management ---
 
     /** Register a freshly retrieved scalar in the seen table at the next

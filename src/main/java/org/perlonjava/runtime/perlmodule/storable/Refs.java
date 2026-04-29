@@ -46,7 +46,17 @@ public final class Refs {
      */
     public static RuntimeScalar readObject(StorableReader r, StorableContext c) {
         long tag = c.readU32Length();
-        return c.getSeen(tag);
+        RuntimeScalar seen = c.getSeen(tag);
+        // SX_OBJECT yields a value that's already at the right ref
+        // level (whatever it was when stored). Signal to a surrounding
+        // SX_REF to collapse (don't add another level), matching
+        // SX_HASH/SX_ARRAY/SX_HOOK behavior. Drain any stale inner
+        // flag first.
+        c.takeBareContainerFlag();
+        if (RuntimeScalarType.isReference(seen)) {
+            c.markBareContainer();
+        }
+        return seen;
     }
 
     /**
@@ -59,10 +69,18 @@ public final class Refs {
      * itself.
      */
     public static RuntimeScalar readRef(StorableReader r, StorableContext c) {
+        // Drain any incoming bare-container flag from a previous
+        // sibling opcode: it's not meaningful for our own decision
+        // (which is driven by what our BODY produces) but must not
+        // leak into the dispatch below.
+        c.takeBareContainerFlag();
         RuntimeScalar refScalar = new RuntimeScalar();
         c.recordSeen(refScalar);
         RuntimeScalar referent = r.dispatch(c);
-        installReferent(refScalar, referent);
+        boolean bodyWasBare = c.takeBareContainerFlag();
+        installReferent(refScalar, referent, bodyWasBare);
+        // We produced a real ref-level value: do NOT mark bare for
+        // our caller.
         return refScalar;
     }
 
@@ -72,10 +90,12 @@ public final class Refs {
      * (Storable.xs L5389).
      */
     public static RuntimeScalar readWeakRef(StorableReader r, StorableContext c) {
+        c.takeBareContainerFlag();
         RuntimeScalar refScalar = new RuntimeScalar();
         c.recordSeen(refScalar);
         RuntimeScalar referent = r.dispatch(c);
-        installReferent(refScalar, referent);
+        boolean bodyWasBare = c.takeBareContainerFlag();
+        installReferent(refScalar, referent, bodyWasBare);
         try {
             WeakRefRegistry.weaken(refScalar);
         } catch (RuntimeException ignored) {
@@ -112,38 +132,46 @@ public final class Refs {
 
     /**
      * Plumb {@code refScalar} so it becomes a reference to
-     * {@code referent}.
+     * {@code referent}, choosing between collapse and wrap based on
+     * whether the body was a bare-container scalar.
      * <p>
-     * The shape depends on what the body produced:
+     * See {@link StorableContext#markBareContainer()} for the full
+     * rationale. Briefly:
      * <ul>
-     *   <li>If the body produced a bare value (non-reference scalar):
-     *       wrap {@code referent} as a scalar reference.</li>
-     *   <li>If the body produced an already-wrapped reference (the
-     *       common case: containers return an ARRAYREFERENCE/HASHREFERENCE
-     *       scalar; SX_BLESS produces a blessed ref of either kind):
-     *       a SX_REF on top of that means we want one more level of
-     *       indirection. Wrap as a scalar ref to {@code referent} (so
-     *       {@code refScalar} ends up as a REFERENCE pointing at the
-     *       inner ref).</li>
+     *   <li><b>bodyWasBare = true</b>: the body was an
+     *       {@code ARRAYREFERENCE} / {@code HASHREFERENCE} returned
+     *       directly by {@link Containers}. In upstream's data model
+     *       that's a bare {@code AV}/{@code HV} (zero ref levels);
+     *       the surrounding SX_REF adds the one level we already
+     *       embedded into the {@code ARRAYREFERENCE} type. Collapse:
+     *       refScalar takes on the same shape as referent (one ref
+     *       level pointing at the same container).</li>
+     *   <li><b>bodyWasBare = false</b>: the body was already
+     *       ref-shaped (a SCALARREFERENCE produced by another SX_REF,
+     *       a hook-allocated placeholder, an SX_OBJECT backref, etc.).
+     *       The SX_REF really adds a level — wrap referent as a
+     *       SCALARREFERENCE so the result is one above the body.</li>
      * </ul>
-     * Earlier this code unconditionally collapsed the wrapper when the
-     * inner held a RuntimeArray/RuntimeHash, on the assumption that the
-     * SX_REF wrapper around a bare container was redundant. That was
-     * wrong: it dropped a level of indirection for cases like
-     * {@code freeze \$blessed_arrayref}, where the test expects
-     * {@code ref \$thawed} to be {@code REF} (not the blessed class
-     * name).
      */
-    private static void installReferent(RuntimeScalar refScalar, RuntimeScalar referent) {
-        // Container readers (Containers.java) already return ARRAYREFERENCE/
-        // HASHREFERENCE scalars wrapping the underlying AV/HV, which IS the
-        // desired ref level. Collapse here so we don't double-count.
-        // Otherwise wrap as a scalar reference to the referent.
-        if (referent.value instanceof RuntimeArray arr) {
-            refScalar.set(arr.createReference());
-        } else if (referent.value instanceof RuntimeHash hash) {
-            refScalar.set(hash.createReference());
+    private static void installReferent(RuntimeScalar refScalar, RuntimeScalar referent, boolean bodyWasBare) {
+        if (bodyWasBare) {
+            // Bare-container body: collapse the redundant SX_REF wrap.
+            // The fresh reference we attach must point at the SAME
+            // underlying RuntimeArray/RuntimeHash as `referent` so
+            // mutations through either alias (or backref tags pointing
+            // at the seen-table entry of the container) stay coherent.
+            if (referent.value instanceof RuntimeArray arr) {
+                refScalar.set(arr.createReference());
+            } else if (referent.value instanceof RuntimeHash hash) {
+                refScalar.set(hash.createReference());
+            } else {
+                // Bare flag set but not a recognised container — fall
+                // back to a fresh scalar reference. Defensive; should
+                // not happen with current container readers.
+                refScalar.set(referent.createReference());
+            }
         } else {
+            // Real ref level: SX_REF adds one level on top of the body.
             refScalar.set(referent.createReference());
         }
     }

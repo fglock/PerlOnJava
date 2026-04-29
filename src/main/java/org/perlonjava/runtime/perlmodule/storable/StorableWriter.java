@@ -36,6 +36,21 @@ import java.util.List;
  */
 public final class StorableWriter {
 
+    /** When true, hash keys are emitted in byte-lexicographic order so
+     *  that the wire output of {@code freeze} / {@code store} is
+     *  deterministic. Driven by {@code $Storable::canonical} in the
+     *  Perl-level wrapper; threaded in by
+     *  {@link org.perlonjava.runtime.perlmodule.Storable}. */
+    private boolean canonical = false;
+
+    /** Set the {@code $Storable::canonical} flag for this writer. Must
+     *  be called before {@link #writeTopLevelToFile} /
+     *  {@link #writeTopLevelToMemory}; the flag is read by every
+     *  recursive {@code writeHashBody} call. */
+    public void setCanonical(boolean canonical) {
+        this.canonical = canonical;
+    }
+
     /** Encode {@code value} (must be a reference, like upstream's
      *  {@code do_store} requirement) as a complete file with a {@code pst0}
      *  header. Returns the encoded bytes as a string of 0..255 chars. */
@@ -381,7 +396,20 @@ public final class StorableWriter {
             boolean isOverloaded = blessId != 0
                     && org.perlonjava.runtime.runtimetypes.OverloadContext
                             .prepare(blessId) != null;
-            c.writeByte(isOverloaded ? Opcodes.SX_OVERLOAD : Opcodes.SX_REF);
+            // Weak-ref detection: if the value (which is a reference) was
+            // weakened via Scalar::Util::weaken, emit SX_WEAKREF /
+            // SX_WEAKOVERLOAD instead of the strong variants. Mirrors
+            // Storable.xs `store_ref` weak branch around L2362.
+            boolean isWeak =
+                    org.perlonjava.runtime.runtimetypes.WeakRefRegistry.weakRefsExist
+                            && org.perlonjava.runtime.runtimetypes.WeakRefRegistry.isweak(value);
+            int opcode;
+            if (isWeak) {
+                opcode = isOverloaded ? Opcodes.SX_WEAKOVERLOAD : Opcodes.SX_WEAKREF;
+            } else {
+                opcode = isOverloaded ? Opcodes.SX_OVERLOAD : Opcodes.SX_REF;
+            }
+            c.writeByte(opcode);
             // Bump the write-side tag for the SX_REF placeholder so
             // tags align with the read side, where `readRef` always
             // records its placeholder before recursing into the body
@@ -501,18 +529,69 @@ public final class StorableWriter {
     }
 
     private void writeHashBody(StorableContext c, RuntimeHash hv) {
+        // Snapshot keys, optionally sorted byte-lexicographically when
+        // $Storable::canonical is in effect. Upstream sorts by the raw
+        // UTF-8 byte representation (Storable.xs `store_hash` canonical
+        // branch), which gives a stable order across hash randomization.
+        List<String> keys = new ArrayList<>(hv.elements.keySet());
+        if (canonical) {
+            keys.sort((a, b) -> {
+                byte[] ab = a.getBytes(StandardCharsets.UTF_8);
+                byte[] bb = b.getBytes(StandardCharsets.UTF_8);
+                int n = Math.min(ab.length, bb.length);
+                for (int i = 0; i < n; i++) {
+                    int x = ab[i] & 0xFF, y = bb[i] & 0xFF;
+                    if (x != y) return x - y;
+                }
+                return ab.length - bb.length;
+            });
+        }
+
+        // If any key carries non-ASCII characters, switch to SX_FLAG_HASH
+        // with per-key SHV_K_UTF8 so the receiver knows to flag those
+        // keys as utf8 (Storable.xs `store_hash` flag-hash branch).
+        boolean anyUtf8 = false;
+        for (String k : keys) {
+            for (int i = 0; i < k.length(); i++) {
+                if (k.charAt(i) >= 0x80) { anyUtf8 = true; break; }
+            }
+            if (anyUtf8) break;
+        }
+
+        if (anyUtf8) {
+            c.writeByte(Opcodes.SX_FLAG_HASH);
+            c.writeByte(0);                 // hash-flags byte (no RESTRICTED_HASH)
+            c.writeU32Length(keys.size());
+            for (String key : keys) {
+                RuntimeScalar val = hv.elements.get(key);
+                dispatch(c, val == null ? new RuntimeScalar() : val);
+                byte[] kb = key.getBytes(StandardCharsets.UTF_8);
+                int kf = 0;
+                for (int i = 0; i < key.length(); i++) {
+                    if (key.charAt(i) >= 0x80) { kf = SHV_K_UTF8; break; }
+                }
+                c.writeByte(kf);
+                c.writeU32Length(kb.length);
+                c.writeBytes(kb);
+            }
+            return;
+        }
+
         c.writeByte(Opcodes.SX_HASH);
-        c.writeU32Length(hv.elements.size());
+        c.writeU32Length(keys.size());
         // Upstream order: VALUE first, then U32 keylen, then key bytes.
-        for (var entry : hv.elements.entrySet()) {
-            String key = entry.getKey();
-            RuntimeScalar val = entry.getValue();
+        for (String key : keys) {
+            RuntimeScalar val = hv.elements.get(key);
             dispatch(c, val == null ? new RuntimeScalar() : val);
             byte[] kb = key.getBytes(StandardCharsets.UTF_8);
             c.writeU32Length(kb.length);
             c.writeBytes(kb);
         }
     }
+
+    /** Per-key flag bit emitted under {@code SX_FLAG_HASH} indicating the
+     *  key is utf8-flagged. Mirrors upstream Storable's {@code SHV_K_UTF8}. */
+    private static final int SHV_K_UTF8 = 0x01;
 
     /** {@code SX_BLESS} / {@code SX_IX_BLESS} length encoding: 1 byte for
      *  values 0..127, otherwise high bit set followed by a U32. */
