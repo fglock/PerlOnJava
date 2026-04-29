@@ -77,7 +77,11 @@
 ║       --theirs = the commit being replayed (your work)                       ║
 ║                                                                              ║
 ║   Why: rebase replays your commits onto upstream, so from rebase's POV       ║
-║   "ours" is the new base it is building on top of.                           ║
+║   "ours" is the new base it is building on top of. From git-rebase(1):       ║
+║     "the side reported as ours is the so-far rebased series, starting        ║
+║      with <upstream>, and theirs is the working branch. In other words,      ║
+║      the sides are swapped."                                                 ║
+║     https://git-scm.com/docs/git-rebase  (search for "sides are swapped")    ║
 ║                                                                              ║
 ║   FAILURE MODE: running `git checkout --ours <file>` during a rebase         ║
 ║   conflict takes the upstream version, makes your replayed commit empty,     ║
