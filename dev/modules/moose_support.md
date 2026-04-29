@@ -625,24 +625,364 @@ for the future audit.
 
 #### Next concrete steps
 
-1. **Sub installation drift.** Audit
-   `BytecodeCompiler.compileNamedSub` and the glob-assignment path
-   in `RuntimeGlob.setSlot`/`GlobalVariable.defineGlobalCodeRef`.
-   The sub's first refCount increment must happen *before* any
-   intermediate scalar in the bytecode emit chain releases its
-   transient hold.
+The audit is structured as three independent sub-phases. Each
+sub-phase ships:
 
-2. **Closure capture drift.** Audit
-   `RuntimeCode.cloneForClosure` and the `addToCapturedScalars` /
-   `setLargeRefCounted` paths to ensure captures bump refCount on
-   every captured blessed scalar.
+1. **A standalone reproducer** in `src/test/resources/unit/refcount/drift/`
+   that demonstrates the cooperative refCount drift WITHOUT relying on
+   Moose, DBIC, or any large module — just plain Perl.
+2. **A bisectable fix commit** that adds the missing increment(s) /
+   decrement(s) at the source. The commit subject must follow
+   `fix(refcount): drift in <area> — <one-liner>` so `git bisect` can
+   target it.
+3. **A `git revert`-able guarded removal** of one branch of the
+   temporary walker gate condition (or a tightening of the gate) so we
+   can prove the fix is sufficient and roll back cheaply if a Moose
+   regression appears.
+4. **Verification** against the hard regression gate in this doc
+   (DBIC = 0/0, Moose ≥ 396/478, refcount unit tests, weaken_via_sub).
 
-3. **Argument promotion drift.** Audit `RuntimeArray.push` and the
-   `@_` build path in `RuntimeCode.apply`.
+The three sub-phases are intentionally orderable; D-W6.1 is most
+likely to fix the bulk of the bootstrap failure, the others harden
+related paths.
 
-Each fix should ship with a tiny standalone reproducer in
-`src/test/resources/unit/refcount/drift/` and the ability to remove
-one branch of the temporary gate condition.
+### D-W6.1 — Sub-installation drift (highest ROI)
+
+**Symptom.** `PJ_DESTROY_TRACE=1 ./jperl -e 'use Class::MOP::Class'`
+shows ~15 non-blessed `RuntimeCode` objects being destroyed inside
+`MortalList.flush` during `MiniTrait::apply`. By the time the
+bootstrap calls `Class::MOP::Class->initialize(...)` the
+`initialize` slot is gone from the package stash.
+
+**Hypothesis.** `*Pkg::name = sub { ... }` (and the equivalent
+`sub Pkg::name { ... }` named-sub form) creates an anonymous CV in a
+temporary scalar, then assigns it into the package stash slot. The
+temporary scalar's refCount drops to 0 BEFORE the stash slot
+increments the CV's refCount, so the CV is briefly the only
+referent of itself, and it gets pushed into the deferred-decrement
+list.
+
+**Audit targets.**
+
+- `BytecodeCompiler.compileSubroutine` (or `compileNamedSub` if it
+  exists) — the bytecode emitted between sub-creation and
+  glob-assignment. Look for:
+  - The `RuntimeScalar` holding the new CV: where does it get its
+    refCount=1? Is `setLargeRefCounted` called on it?
+  - The glob-assignment opcode: does the receiving glob slot
+    INCREMENT the CV's refCount before the stack-temp is popped?
+- `GlobalVariable.defineGlobalCodeRef` — the first time a sub is
+  installed for a key, we create a fresh `RuntimeScalar` slot. Does
+  that slot's `value` field hold a refCount on the CV?
+- `RuntimeGlob.setSlot` (the `*foo = $coderef` path) — same
+  question, plus: when overwriting an old slot value, does the
+  decrement happen AFTER the increment of the new value? Off-by-one
+  here causes refCount=0 transient.
+
+**Reproducer skeleton** (`drift/sub_install.t`):
+
+```perl
+use strict;
+use warnings;
+use Test::More;
+
+# Recreate Class::MOP's bootstrap pattern: install several subs
+# into a brand-new package, observe whether any are destroyed
+# before the package stash holds them.
+my $destroyed_count = 0;
+my $bind_destroy = sub {
+    my $cv = shift;
+    bless $cv, 'TmpCVProbe';   # bless so DESTROY fires observably
+    no strict 'refs';
+    *{"TmpCVProbe::DESTROY"} = sub { $destroyed_count++ };
+    $cv;
+};
+
+# Pattern A: glob assignment with anonymous sub
+my $sub_a = sub { 42 };
+$bind_destroy->($sub_a);
+{
+    no strict 'refs';
+    *{"TestPkg::method_a"} = $sub_a;
+}
+# After the glob assignment, $sub_a is held by both the stash AND
+# this lexical. Drop $sub_a:
+$sub_a = undef;
+ok exists &TestPkg::method_a, 'glob-assigned sub still in stash';
+is TestPkg->method_a, 42, 'glob-assigned sub still callable';
+
+# Pattern B: named sub
+package TestPkg;
+sub method_b { 17 }
+package main;
+ok exists &TestPkg::method_b, 'named sub in stash';
+
+# Pattern C: many subs in a loop (mimics MiniTrait::apply)
+my @CVs;
+for my $i (1..50) {
+    my $cv = sub { $i };
+    no strict 'refs';
+    *{"TestPkg::loop_$i"} = $cv;
+    push @CVs, \$cv;        # capture into an outer array
+}
+my $missing = 0;
+for my $i (1..50) {
+    no strict 'refs';
+    $missing++ unless exists &{"TestPkg::loop_$i"};
+}
+is $missing, 0, 'all 50 loop-installed subs survive in stash';
+
+is $destroyed_count, 0, 'no installed sub was prematurely destroyed';
+done_testing;
+```
+
+**Fix shape.** When the glob slot accepts a new CV, do this in order:
+
+1. `newCv.refCount++`
+2. `oldSlotValue = slot.value;`
+3. `slot.value = newCv;`
+4. `oldSlotValue.refCount--; if (oldSlotValue.refCount == 0) destroy(oldSlotValue);`
+
+The current code may be doing 4 before 1 (or relying on the caller's
+temp-scalar to keep `newCv` alive across step 4). Fix is to make
+step 1 unconditional inside the slot store.
+
+**Acceptance.** `drift/sub_install.t` passes. After applying the
+fix, removing the gate clause in `MortalList.flush` makes
+`./jperl -e 'use Class::MOP::Class'` succeed (currently it fails).
+At that point the gate clause for non-`hasWeakRefsTo` paths can be
+deleted.
+
+### D-W6.2 — Closure-capture drift
+
+**Symptom.** Closures returned by `Class::MOP::Method::Generated::sub`
+(and the equivalent in Moose's accessor inliner) sometimes lose
+their captured `$self`/`$attr` references after the outer scope
+exits. The walker masks this today.
+
+**Hypothesis.** When a closure is created from a closure prototype
+(see `RuntimeCode.cloneForClosure`), the captured scalars are
+copied into the new code object's `capturedScalars` array. If the
+copy doesn't increment the captured scalars' referents' refCounts,
+the cooperative refCount stays at the original (now wrong) value.
+When a captured RuntimeScalar's refCount hits 0 — possibly via a
+deferred decrement from some unrelated scope — its referent dies
+out from under the closure.
+
+**Audit targets.**
+
+- `RuntimeCode.cloneForClosure` — copies of `capturedScalars`
+  must call `setLargeRefCounted` on each capture so its referent
+  refCount tracks the closure's lifetime, not the prototype's.
+- `EmitClosure` (bytecode side) — the per-closure-creation opcodes
+  that snapshot the lexical environment. `addToCapturedScalars`
+  must be the increment-aware path; any direct `add()` or array
+  append bypassing it is a bug.
+- `RuntimeCode.releaseCaptures` — when the closure itself dies, we
+  decrement the captures. The pairing must be exact: every
+  `addToCapturedScalars` needs a matching `releaseCaptures` entry.
+
+**Reproducer skeleton** (`drift/closure_capture.t`):
+
+```perl
+use strict;
+use warnings;
+use Test::More;
+
+my $destroy_count = 0;
+package Probe;
+sub new { bless { id => ++$Probe::N, alive => 1 }, shift }
+sub DESTROY { $destroy_count++ }
+
+package main;
+
+# A closure that captures a blessed object. The outer scope should
+# keep the object alive AS LONG AS the closure is reachable.
+sub make_closure {
+    my $obj = Probe->new;
+    return sub { $obj->{id} };
+}
+
+my $c = make_closure();
+# At this point, $obj has gone out of make_closure's scope, but
+# the closure $c is the only strong holder of it. Refcount must
+# be 1 (held by closure capture).
+is $destroy_count, 0, 'object alive while closure is reachable';
+ok defined eval { $c->() }, 'closure call still works';
+
+undef $c;
+# Now the closure is gone, so the captured object should die.
+is $destroy_count, 1, 'object destroyed after closure released';
+
+# Pattern B: closure prototype reused in a loop (Moose accessor
+# inliner does this for every attribute).
+my @closures;
+my @ids;
+for (1..10) {
+    push @closures, make_closure();
+}
+my $alive = 0;
+for my $cl (@closures) { $alive++ if defined eval { $cl->() } }
+is $alive, 10, 'all 10 captured objects survive in their closures';
+
+@closures = ();
+is $destroy_count, 11, 'all captures released exactly once';
+
+done_testing;
+```
+
+**Fix shape.** Inside `cloneForClosure`:
+
+```java
+RuntimeCode clone = new RuntimeCode(...);
+clone.capturedScalars = new ArrayList<>(this.capturedScalars.size());
+for (RuntimeScalar capture : this.capturedScalars) {
+    addToCapturedScalars(clone, capture);   // bumps refCount
+}
+```
+
+NOT a bare `clone.capturedScalars = new ArrayList<>(this.capturedScalars)`
+which copies references but skips the refCount math.
+
+**Acceptance.** `drift/closure_capture.t` passes. Then we can
+remove a second branch of the gate condition (the
+`hasWeakRefsTo`-on-closure path).
+
+### D-W6.3 — `@_` argument-promotion drift
+
+**Symptom.** Subroutines that pass blessed objects through `@_`,
+shift them into a `my $self = shift`, then return — the blessed
+object's refCount sometimes transient-drops to 0 inside the
+callee, not at the caller's actual scope-exit. DBIC method chains
+(`$rs->find(1)->update({...})`) are the canonical pattern.
+
+**Hypothesis.** When `@_` is built at call time, each argument
+scalar should hold a refCount on its referent. When `shift @_`
+moves a scalar into a `my` slot, the `@_` element loses its slot
+but the `my` slot picks up the refCount. If either side mishandles
+the increment/decrement, refCount drifts.
+
+**Audit targets.**
+
+- `RuntimeCode.apply` (the call-site path that builds `@_`):
+  every push into `RuntimeArray @_` must `setLargeRefCounted` the
+  referent. Especially the `getList()` flattening path, which
+  is known to be the source of several edge-case bugs.
+- `RuntimeArray.shift` and `RuntimeArray.set`: the cooperative
+  decrement-on-removal must happen.
+- The named-arg path used by `method` keyword and Moose's
+  inlined constructors.
+
+**Reproducer skeleton** (`drift/at_underscore.t`):
+
+```perl
+use strict;
+use warnings;
+use Test::More;
+
+my $destroy_count = 0;
+package Probe;
+sub new { bless { id => ++$Probe::N }, shift }
+sub DESTROY { $destroy_count++ }
+
+package main;
+
+# Pattern A: object passed through @_ and shifted out
+sub identity { my $x = shift; return $x }
+
+{
+    my $obj = Probe->new;
+    my $back = identity($obj);
+    is $destroy_count, 0, 'no destroy across @_ → my-var transfer';
+    is $back->{id}, $obj->{id}, 'roundtrip object identity';
+}
+is $destroy_count, 1, 'destroyed once at outer scope exit';
+
+# Pattern B: chained method call (DBIC-style)
+$destroy_count = 0;
+package Chain;
+sub new { bless { inner => Probe->new }, shift }
+sub get { return $_[0]->{inner} }
+sub touch { return $_[0] }   # passes object through @_
+
+package main;
+{
+    my $c = Chain->new;
+    my $r = $c->touch->get;
+    is $destroy_count, 0, 'no destroy in chained method call';
+    is $r->{id}, $c->{inner}{id}, 'chain returns expected object';
+}
+is $destroy_count, 1, 'inner Probe destroyed once at outer scope exit';
+
+# Pattern C: stress — many calls in a loop
+$destroy_count = 0;
+{
+    my @objs = map { Probe->new } 1..100;
+    my @out = map { identity($_) } @objs;
+    is scalar @out, 100, 'all 100 round-tripped';
+    is $destroy_count, 0, 'no destroy mid-loop';
+}
+is $destroy_count, 100, 'all 100 destroyed at outer scope exit';
+
+done_testing;
+```
+
+**Fix shape.** Audit `RuntimeCode.apply`'s `@_` build path
+(approximately):
+
+```java
+// Today (suspect): may push without setLargeRefCounted
+for (RuntimeScalar arg : args) {
+    underscore.elements.add(arg);
+}
+
+// After fix:
+for (RuntimeScalar arg : args) {
+    RuntimeScalar slot = new RuntimeScalar();
+    slot.set(arg);                     // increments refCount of arg.value
+    underscore.elements.add(slot);
+}
+```
+
+Or, if the existing code already does this, find where the
+*decrement* on `shift @_` skips the corresponding `set` path.
+
+**Acceptance.** `drift/at_underscore.t` passes. The third (and
+likely last) branch of the temporary gate condition can be
+removed at this point.
+
+### After all three sub-phases land
+
+Once D-W6.1, D-W6.2, and D-W6.3 are all merged and verified:
+
+1. Delete the `else if (... && hasWeakRefsTo && isReachableFromRoots)`
+   branch in `MortalList.flush` and `RuntimeScalar.set`.
+2. Confirm DBIC stays at 0/0 and Moose at ≥396/478.
+3. Run the three "Perl 5 semantics" tests
+   (`cdbi/04-lazy.t`, `txn_scope_guard.t`, `t/52leaks.t`) — all
+   should pass.
+4. Mark D-W6 as DONE and update this doc with the final landing
+   commits.
+
+The `ReachabilityWalker` BFS code stays in place, but is consulted
+only by explicit `Internals::jperl_gc()` calls, matching real
+Perl's "leak by default; explicit GC available" model.
+
+### Sequencing and effort estimate
+
+- **D-W6.1 (sub install):** highest probability of also fixing the
+  `cdbi/04-lazy.t` failure on its own, because that failure is a
+  transient destroy of a row-construction CV. Estimate: 2–4
+  focused sessions.
+- **D-W6.2 (closure capture):** likely to clear the
+  `numeric_defaults.t` and `make_mutable.t` regressions that hit
+  whenever the gate is loosened. Estimate: 2–3 sessions.
+- **D-W6.3 (`@_`):** smallest blast radius; if D-W6.1 and D-W6.2
+  go in cleanly, this may already be fine. Otherwise 1–2
+  sessions.
+
+Each session must end with the hard regression gate green, even
+if that means reverting the in-progress drift fix.
 
 ---
 
