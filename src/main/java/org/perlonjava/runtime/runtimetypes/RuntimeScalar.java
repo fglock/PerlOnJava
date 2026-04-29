@@ -929,6 +929,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.recordOwner(scalar, "incrementRefCountForContainerStore");
             scalar.refCountOwned = true;
             // Phase B1 (refcount_alignment_52leaks_plan.md): track the
             // container element so ReachabilityWalker can see it via
@@ -1131,6 +1132,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeBase nb = (RuntimeBase) value.value;
             if (nb.refCount >= 0) {
                 nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
+                nb.recordOwner(this, "setLargeRefCounted store");
                 nb.refCount++;
                 newOwned = true;
             }
@@ -1172,10 +1174,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // clearWeakRefsTo or cascade), keeping Schema's internals intact.
             // Proper cleanup happens at END time via clearRescuedWeakRefs.
             if (base.refCount == Integer.MIN_VALUE) {
+                base.traceRefCount(0, "RuntimeScalar.setLargeRefCounted (rescue MIN_VALUE -> 1)");
                 base.refCount = 1;
             } else if (base.refCount >= 0) {
+                base.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (rescue increment)");
                 base.refCount++;
             }
+            base.recordOwner(this, "rescue from currentDestroyTarget");
             newOwned = true;
         }
 
@@ -1192,6 +1197,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && !thisWasWeak && this.refCountOwned) {
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
+                oldBase.releaseOwner(this, "setLargeRefCounted overwrite");
             }
             if (oldBase.refCount > 0 && --oldBase.refCount == 0) {
                 if (oldBase.localBindingExists) {

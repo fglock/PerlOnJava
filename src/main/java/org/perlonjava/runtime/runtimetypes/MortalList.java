@@ -60,6 +60,9 @@ public class MortalList {
      * from a container.
      */
     public static void deferDecrement(RuntimeBase base) {
+        if (base.refCountTrace) {
+            base.traceRefCount(0, "MortalList.deferDecrement (queued)");
+        }
         pending.add(base);
     }
 
@@ -175,6 +178,10 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base) {
             if (base.refCount > 0) {
                 scalar.refCountOwned = false;
+                if (base.refCountTrace) {
+                    base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
+                    base.releaseOwner(scalar, "deferDecrementIfTracked");
+                }
                 pending.add(base);
             }
             // Note: WEAKLY_TRACKED (-2) objects are NOT scheduled for destruction
@@ -220,9 +227,15 @@ public class MortalList {
                 if (scalar.refCountOwned && base.refCount > 0) {
                     // Tracked object with owned refCount: defer decrement
                     scalar.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDestroyForContainerClear (queued)");
+                    }
                     pending.add(base);
                 } else if (base.blessId != 0 && base.refCount == 0) {
                     // Never-stored blessed object: bump to 1 so flush triggers DESTROY
+                    if (base.refCountTrace) {
+                        base.traceRefCount(+1, "MortalList.deferDestroyForContainerClear (refCount=1 bump for never-stored)");
+                    }
                     base.refCount = 1;
                     pending.add(base);
                 }
@@ -426,14 +439,24 @@ public class MortalList {
             if (base.blessId != 0) {
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (blessed, queued)");
+                        base.releaseOwner(s, "deferDecrementRecursive blessed");
+                    }
                     pending.add(base);
                 } else if (base.refCount == 0) {
+                    if (base.refCountTrace) {
+                        base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
+                    }
                     base.refCount = 1;
                     pending.add(base);
                 }
             } else {
                 if (s.refCountOwned && base.refCount > 0) {
                     s.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.deferDecrementRecursive (unblessed container, queued)");
+                    }
                     pending.add(base);
                 }
                 // Walk into unblessed containers to find nested blessed refs
@@ -463,6 +486,9 @@ public class MortalList {
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && scalar.value instanceof RuntimeBase base
                     && base.blessId != 0 && base.refCount == 0) {
+                if (base.refCountTrace) {
+                    base.traceRefCount(+1, "MortalList.mortalizeForVoidDiscard (refCount=1 bump+queue)");
+                }
                 base.refCount = 1;
                 pending.add(base);
             }

@@ -136,6 +136,7 @@ public class ReferenceOperators {
                     // already holds a reference that was never counted (because
                     // tracking wasn't active at assignment time). Count it as 1.
                     referent.refCount = 1;
+                    referent.recordOwner(runtimeScalar, "rebless from untracked");
                     runtimeScalar.refCountOwned = true;
                 } else {
                     // First bless: start at refCount=1 and add to MortalList.

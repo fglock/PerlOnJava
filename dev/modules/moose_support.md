@@ -2187,6 +2187,232 @@ The diagnostic env-flags and tracer are retained on this PR so the
 next session can pinpoint the unpaired site without re-bootstrapping
 the instrumentation.
 
+### D-W6.11: Concrete fix plan — eliminate the class-name heuristic
+
+The user-stated requirement: **the class-name heuristic is not
+acceptable**. We must find and fix the actual unpaired
+increment/decrement in cooperative refCount discipline.
+
+#### What we know from the tracer
+
+For the failing CMOP metaclass, instrumented over `use Class::MOP`
+with the gate disabled:
+
+| Source | Count |
+|---|---|
+| `setLargeRefCounted` increments (line 1133) | 50 |
+| `bless` silent increment (`ReferenceOperators.java:83`) | 1 |
+| `MortalList.deferDecrement` queueings | 2 |
+|   ↳ from `bless` at `ReferenceOperators.java:100` | 1 |
+|   ↳ from `RuntimeArray.shift` at `RuntimeArray.java:163` | 1 |
+| `MortalList.deferDecrementIfTracked` queueings | 42 |
+| `MortalList.deferDecrementRecursive` queueings (blessed) | 4 |
+| `WeakRefRegistry.weaken` decrements | 6 |
+| (queueings flushed during run) | 45 |
+
+Total queueings (deferred decrements): 48
+Plus immediate weaken decrements: 6
+Total logical decrements at end: 54
+
+Total increments: 51 (50 setLargeRefCounted + 1 silent bless)
+
+**Net: 51 - 54 = -3** decrement excess, vs the expected **+1**
+(metaclass held by `our %METAS`). Discrepancy: **4 extra decrements
+unpaired with increments**.
+
+Trace artifact: `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt`
+(150 lines, full call-stack snippets).
+
+#### Fix plan
+
+**Step 1: Make the tracer track per-scalar ownership.**
+
+Today the tracer knows refCount transitions but not *which scalar*
+holds the relevant ownership flag. The unpaired sites are easier to
+find if we tag each `setLargeRefCounted` increment with the
+RuntimeScalar's identity, and each decrement with the scalar whose
+`refCountOwned` is being consumed. Imbalance = an increment scalar
+that was never decremented, or a decrement scalar that was never
+incremented.
+
+Implementation sketch:
+```java
+// In setLargeRefCounted: when nb.refCount++ runs,
+nb.recordOwner(this);        // tag this scalar as an owner
+
+// In deferDecrementIfTracked: when scalar.refCountOwned -> false,
+base.releaseOwner(scalar);   // remove tag
+
+// At end of run, dump base.activeOwners:
+//   - 1 entry expected: the hash element scalar of $METAS{name}
+//   - 0 entries observed → the bug
+```
+
+**Step 2: Identify the unpaired site.**
+
+Run instrumented `use Class::MOP` once. The 4 extra decrement
+queueings will surface as either:
+
+- A scalar that was decremented twice (double-release)
+- A pending.add() called for a scalar that never owned the increment
+- A `deferDecrementRecursive` walking through a container that
+  shouldn't be torn down (probably the most likely — DBIC's stash
+  cleanup walks too aggressively?)
+
+Likely suspects from the trace:
+- **`RuntimeArray.shift` at line 163** queues a `deferDecrement` for
+  a blessed metaclass element. When this slot's prior store
+  incremented refCount, this dec balances. But if shift was called
+  on a non-tracked array (or on a slot that was a copy not the
+  original), the dec is unpaired. Stack: `Class/MOP/Package.pm:1281`
+  — investigate what shift target is being shifted there.
+- **`deferDecrementRecursive` (4 calls)** walks recursively into
+  containers being destroyed. If the metaclass is referenced
+  through a hash that itself goes out of scope, this is the path.
+  But the surrounding hash may have been only a transient (e.g.,
+  args list to a method) — its tear-down would be paired with
+  whatever increment created that hash's elements.
+
+**Step 3: Fix the unpaired site.**
+
+Once located, the fix is one of:
+- Add a missing increment (e.g., a path that stores into a
+  container without going through `setLargeRefCounted`)
+- Remove a spurious decrement (e.g., `deferDecrementRecursive`
+  walking a container whose elements were stored without
+  ownership)
+- Adjust ownership tracking (e.g., copy-ctor not setting
+  `refCountOwned`, but a downstream path treating the copy as if
+  it owned)
+
+**Step 4: Remove the class-name heuristic.**
+
+Once the underlying bug is fixed, the gate at
+`MortalList.flush()` line 561 simplifies to:
+
+```java
+} else if (base.blessId != 0
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // Universal walker safety net (no heuristic).
+}
+```
+
+Or even simpler: remove the gate entirely once cooperative refCount
+is correct and DBIC's leak detection passes without rescue.
+
+**Step 5: Acceptance gates.**
+
+The fix is acceptable when ALL of:
+- `make` passes (unit tests)
+- DBIC `t/52leaks.t` passes 11/11 (today's master baseline)
+- Moose suite ≥ 396/478 files (today's baseline)
+- `use Class::MOP` succeeds without the walker gate
+- The synthetic reproducers in `src/test/resources/unit/refcount/drift/`
+  pass with the gate disabled
+
+The diagnostic env-flags (`PJ_REFCOUNT_TRACE`, `PJ_WEAKCLEAR_TRACE`,
+`PJ_DESTROY_TRACE`) and instrumentation hooks remain in place for
+future regressions.
+
+### D-W6.12: Per-scalar ownership tracker — 2 unpaired increments isolated
+
+Implemented Step 1 of the D-W6.11 plan: per-scalar ownership tracker
+on `RuntimeBase` with `recordOwner(scalar, site)` /
+`releaseOwner(scalar, site)`. When `PJ_REFCOUNT_TRACE` is set, every
+refCount-affecting operation that touches a heuristic-blessed object
+records or releases the owning scalar; `dumpTraceOwners()` runs as a
+JVM shutdown hook.
+
+Wired increments into:
+- `RuntimeScalar.setLargeRefCounted` (line 1133)
+- `RuntimeScalar.incrementRefCountForContainerStore` (line 932)
+- `ReferenceOperators.bless` re-bless path (line 139)
+- `RuntimeScalar.setLargeRefCounted` rescue path (line 1183)
+
+Wired releases into:
+- `RuntimeScalar.setLargeRefCounted` overwrite (line 1196)
+- `WeakRefRegistry.weaken` (line 116)
+- `MortalList.deferDecrementIfTracked` (line 183)
+- `MortalList.deferDecrementRecursive` (line 444)
+- `RuntimeArray.shift` (line 164)
+- `DestroyDispatch.doCallDestroy` args balance (line 364)
+
+After plumbing all known inc/dec paths: zero `*** UNPAIRED RELEASE ***`
+events, but one CMOP metaclass (`RuntimeHash` id `408069119`) ends
+the run with **`refCount = Integer.MIN_VALUE` (destroyed) and 2
+surviving owner scalars holding strong references**. Trace at
+`dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt`.
+
+The two surviving owners both came from `setLargeRefCounted store`:
+- One via `RuntimeScalar.set ← addToScalar:902` (normal store path)
+- One via `RuntimeScalar.set ← RuntimeBaseProxy.set:65` (proxy delegate)
+
+This proves the imbalance is **not in the tracer instrumentation**:
+those owner scalars genuinely still hold strong refs to the
+destroyed metaclass. Cooperative refCount said "0 strong refs"
+while in fact 2 strong refs exist.
+
+#### Smoking-gun candidates
+
+The 2 extra decrements that brought refCount → 0 must come from
+sites that **modify `base.refCount` without consulting ownership**.
+Audit candidates (sites doing `--base.refCount` directly):
+
+| File | Line | Path |
+|---|---|---|
+| `RuntimeList.java` | 623, 642, 666, 699 | list-assignment "undo materialized copy" |
+| `Storable.java` | 617 | dclone refCount fixup |
+| `DestroyDispatch.java` | 366 | doCallDestroy args balance (instrumented; OK) |
+| `RuntimeBaseProxy.java` | 65–67 | proxy set: copies `lvalue.value` to proxy without ref-tracking |
+
+The most suspicious is `RuntimeBaseProxy.set`:
+```java
+this.lvalue.set(value);    // properly increments refCount via setLargeRefCounted
+this.type = lvalue.type;
+this.value = lvalue.value; // proxy ALSO points to base, but no recordOwner
+```
+
+The proxy's `this.value` field then holds a strong reference to the
+base **invisible to cooperative refcounting**. When the proxy is
+later assigned a new value, the proxy's `set()` calls
+`lvalue.set(new_value)` which decrements old base's refCount via the
+overwrite path — but only because `lvalue.refCountOwned` is true. If
+some path inadvertently decrements via `this.value` (bypassing
+lvalue), or the proxy is treated as a normal scalar copy
+(invalidating `lvalue.refCountOwned`), the count desyncs.
+
+#### Step 2 audit (next):
+
+For each site that does `base.refCount--` directly (without going
+through the queueing-then-flushing protocol):
+
+1. Confirm what RuntimeScalar "owned" the increment that this
+   decrement is undoing.
+2. If a specific scalar can be identified, replace direct decrement
+   with `releaseOwner(scalar, site) + base.refCount--`.
+3. If no scalar can be identified, the path is decrementing without
+   pairing — fix by either:
+   a. tracking the increment differently (e.g. recording on the
+      original increment), or
+   b. removing the decrement (it was unpaired in the first place).
+
+Once all sites are cleanly paired, the cooperative refCount becomes
+self-consistent and the walker-gate heuristic can be removed.
+
+#### Files committed on this branch
+
+- `dev/diagnostic-traces/cmop-metaclass-refcount-underflow.txt` —
+  D-W6.10 trace (4 inc/dec sites instrumented).
+- `dev/diagnostic-traces/cmop-metaclass-refcount-with-queue-sites.txt` —
+  D-W6.10 with queue-site tracing.
+- `dev/diagnostic-traces/cmop-metaclass-with-owner-tracking.txt` —
+  D-W6.12 trace (full owner pairing, surfaces the 2 unpaired
+  increments).
+
+The diagnostic instrumentation is left in place (gated on
+`PJ_REFCOUNT_TRACE`) so future sessions can resume the audit.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism

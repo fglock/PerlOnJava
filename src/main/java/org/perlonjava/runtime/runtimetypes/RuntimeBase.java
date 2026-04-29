@@ -36,6 +36,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     private static final boolean REFCOUNT_TRACE_ENV =
             System.getenv("PJ_REFCOUNT_TRACE") != null;
 
+    static {
+        if (REFCOUNT_TRACE_ENV) {
+            Runtime.getRuntime().addShutdownHook(new Thread(RuntimeBase::dumpTraceOwners));
+        }
+    }
+
     public static boolean refCountTraceEnabled() {
         return REFCOUNT_TRACE_ENV;
     }
@@ -54,6 +60,64 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             sb.append("\n      at ").append(st[i]);
         }
         System.err.println(sb);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // D-W6.11 Step 1: per-scalar ownership tracking (debug-only).
+    // When refCountTrace is on, every setLargeRefCounted increment records
+    // the owning RuntimeScalar identity. Every paired decrement removes it.
+    // At end of run, surviving owners are printed — if the count !=
+    // expected (e.g. metaclass should have 1 owner = $METAS slot but
+    // shows 0), we know the underflow site by elimination.
+    // ─────────────────────────────────────────────────────────────────────
+    private static final java.util.Map<RuntimeBase, java.util.LinkedHashMap<Integer, String>> traceOwners
+        = new java.util.IdentityHashMap<>();
+
+    public synchronized void recordOwner(RuntimeScalar owner, String site) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        traceOwners
+            .computeIfAbsent(this, k -> new java.util.LinkedHashMap<>())
+            .put(System.identityHashCode(owner), site);
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
+          .append(" owner=").append(System.identityHashCode(owner))
+          .append("   ").append(site);
+        for (int i = 1; i < Math.min(st.length, 5); i++) {
+            sb.append("\n      at ").append(st[i]);
+        }
+        System.err.println(sb);
+    }
+
+    public synchronized void releaseOwner(RuntimeScalar owner, String site) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        java.util.LinkedHashMap<Integer, String> owners = traceOwners.get(this);
+        if (owners == null) return;
+        String prev = owners.remove(System.identityHashCode(owner));
+        if (prev == null) {
+            System.err.println("[REFCOUNT-OWNER] *** UNPAIRED RELEASE *** base="
+                + System.identityHashCode(this)
+                + " owner=" + System.identityHashCode(owner)
+                + " release-site=" + site);
+            new Throwable().printStackTrace(System.err);
+        }
+    }
+
+    public static void dumpTraceOwners() {
+        if (!REFCOUNT_TRACE_ENV) return;
+        for (java.util.Map.Entry<RuntimeBase, java.util.LinkedHashMap<Integer, String>> e
+                : traceOwners.entrySet()) {
+            RuntimeBase b = e.getKey();
+            if (e.getValue().isEmpty()) continue;
+            System.err.println("[REFCOUNT-OWNERS] base=" + System.identityHashCode(b)
+                + " (" + b.getClass().getSimpleName() + ")"
+                + " blessId=" + b.blessId
+                + " refCount=" + b.refCount
+                + " owners=" + e.getValue().size());
+            for (java.util.Map.Entry<Integer, String> own : e.getValue().entrySet()) {
+                System.err.println("    owner=" + own.getKey() + " from " + own.getValue());
+            }
+        }
     }
 
     /**

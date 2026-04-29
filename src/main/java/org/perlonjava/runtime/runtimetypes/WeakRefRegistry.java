@@ -113,6 +113,7 @@ public class WeakRefRegistry {
             // the weak scalar should not trigger another DEC on scope exit or overwrite.
             ref.refCountOwned = false;
             base.traceRefCount(-1, "WeakRefRegistry.weaken (decrement on weakening)");
+            base.releaseOwner(ref, "weaken");
             if (--base.refCount == 0) {
                 if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
