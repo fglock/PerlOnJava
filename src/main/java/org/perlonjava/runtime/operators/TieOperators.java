@@ -81,12 +81,28 @@ public class TieOperators {
             }
             case ARRAYREFERENCE -> {
                 RuntimeArray array = variable.arrayDeref();
+                // If this array is the autoviv proxy of a still-undef scalar
+                // (e.g. `tie @$undef, ...`), bind the scalar to a real array
+                // ref now so the caller's variable becomes a usable arrayref.
+                if (array.elements instanceof org.perlonjava.runtime.runtimetypes.AutovivificationArray) {
+                    org.perlonjava.runtime.runtimetypes.AutovivificationArray.vivify(array);
+                }
                 RuntimeArray previousValue = new RuntimeArray(array);
                 array.type = TIED_ARRAY;
                 array.elements = new TieArray(className, previousValue, self, array);
             }
             case HASHREFERENCE -> {
                 RuntimeHash hash = variable.hashDeref();
+                // If this hash is the autoviv proxy of a still-undef scalar
+                // (e.g. `tie %$undef, ...`), bind the scalar to a real hash
+                // ref now so the caller's variable becomes a usable hashref.
+                // Without this, $undef stays UNDEF after the tie, the tie
+                // attaches to an orphan hash, and code like
+                //   my $new; tie %$new, ...; return $new
+                // (the YAML::Node mapping/sequence pattern) returns undef.
+                if (hash.elements instanceof org.perlonjava.runtime.runtimetypes.AutovivificationHash) {
+                    org.perlonjava.runtime.runtimetypes.AutovivificationHash.vivify(hash);
+                }
                 RuntimeHash previousValue = RuntimeHash.createHash(hash);
                 hash.type = TIED_HASH;
                 hash.elements = new TieHash(className, previousValue, self);
