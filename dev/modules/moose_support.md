@@ -2202,6 +2202,162 @@ Follow-ups (each non-class-name):
    the cheap `WeakRefRegistry.hasWeakRefsTo` gate keeps it off the
    common path entirely.
 
+## Phase D-W6: replicate Perl 5 destroy semantics exactly
+
+### Why
+
+The user's directive: *PerlOnJava should not "improve on" Perl 5's
+DESTROY semantics; it should match them.* The two remaining DBIC
+regressions in D-W5 are exactly the cases where PerlOnJava
+"diverges by being more correct":
+
+- **`52leaks.t`**: tests that self-referential cycles **leak**.
+  Real Perl 5 cannot collect cycles; an object holding `$self->{me}
+  = $self` lives forever even after the user drops their last
+  external reference. PerlOnJava's walker currently *detects* the
+  cycle and destroys it, which is technically nicer but breaks
+  any code that relies on the leak as a feature (the entire
+  intentional-leak diagnostic in DBIC's `t/52leaks.t`, plus any
+  user code that uses the leak to keep a per-instance state alive
+  through "I'll fix this later" cycle constructs).
+
+- **`txn_scope_guard.t`**: tests that DESTROY fires *each* time
+  refCount transitions to 0 — including the transient transition
+  where a `Devel::StackTrace`-style `@DB::args` capture briefly
+  holds the object after the user-visible `undef $g`. Real Perl 5
+  fires DESTROY immediately at the first refCount=0, then again
+  when the captures are dropped, and DBIC's TxnScopeGuard guards
+  against the second one with a warning. PerlOnJava's walker sees
+  the capture and defers the first DESTROY, so only one fires
+  (no warning).
+
+The right fix is to make cooperative refCount the **single source
+of truth** for DESTROY firing, and use the walker only for explicit
+`jperl_gc()` calls. Cycles will leak (matching Perl 5). DESTROY
+will fire at every refCount=0 transition (matching Perl 5).
+
+### What was wrong with the walker-gate approach
+
+The walker gate exists because cooperative refCount is known to
+drift — it transiently drops to 0 in MOP-style code (Moose,
+Class::MOP, Moo, DBIx::Class::Schema bootstrap) where blessed
+objects bounce through hash slots, closures, and method-modifier
+wrappers. The walker absorbs the drift at the cost of incorrect
+behaviour for the two patterns above.
+
+The proper long-term fix (already noted in D-W2c "Why this is a
+stopgap") is to **find and back-fill the missing refCount
+increments at the source**, not paper over them with the walker.
+
+### Concrete plan
+
+#### Step 1 — instrument the refCount-drift sources
+
+For each Moose-bootstrap pattern that currently relies on the
+walker gate, identify *where* the cooperative refCount drift
+happens. Candidates (from prior D-W investigations):
+
+1. **Hash slot stores in MOP-style code** — e.g.
+   `$METAS{$pkg} = $meta`. Does `RuntimeHash.put` always
+   increment `$meta`'s refCount before discarding the previous
+   slot value? Audit `RuntimeHash.put`, `RuntimeHash.put` via
+   `set`, hash-slice stores (`@h{@keys} = @vals`), and the
+   special-case paths in `RuntimeScalar.set`.
+2. **Closure captures** — `RuntimeCode.capturedScalars`. When a
+   blessed scalar is captured by a closure, the refCount must
+   reflect that. Today some capture paths use `setLargeRefCounted`
+   / `addToCapturedScalars` correctly but others may go through
+   `MortalList` deferred-decrement before the capture is
+   established.
+3. **Argument promotion in method calls** — `@_` is built from
+   the caller's arg list. Each scalar in `@_` should hold its
+   own refCount on its referent. Audit `RuntimeArray.push`,
+   `RuntimeArray.set` for the per-element refCount path.
+4. **Glob assignment** — `*Foo::bar = sub {...}` stores a
+   blessed CV. Audit `GlobalVariable.setGlobalCodeRef` and the
+   typeglob-overlay path in `RuntimeGlob`.
+5. **Stash / package-global writes** — `our %FOO = ...`,
+   `${"Pkg::var"} = ...`. Audit `GlobalVariable.set*`.
+
+For each source, write a tiny standalone reproducer that drops
+the refCount to 0 transiently while a strong reference is still
+held. Add it to `src/test/resources/unit/refcount/drift/`.
+
+#### Step 2 — fix each drift source
+
+For each reproducer, add the missing
+increment/decrement so cooperative refCount stays consistent.
+Verify each with `make` + the reproducer.
+
+#### Step 3 — remove the walker gate
+
+Once Steps 1 and 2 are complete, the walker gate at
+`MortalList.flush` and `RuntimeScalar.set` can be removed
+entirely:
+
+```java
+// Today:
+} else if (base.blessId != 0
+        && WeakRefRegistry.hasWeakRefsTo(base)
+        && ReachabilityWalker.isReachableFromRoots(base)) {
+    // defer
+}
+
+// After Step 3:
+} else {
+    base.refCount = Integer.MIN_VALUE;
+    DestroyDispatch.callDestroy(base);
+}
+```
+
+The walker continues to exist for explicit `jperl_gc()` calls
+(opt-in cycle collection), but is **not** consulted on every
+refCount→0 transition.
+
+#### Step 4 — verify both Perl 5 semantics tests pass
+
+- `52leaks.t`: the test populates `@circreffed` with cycles and
+  then weakens them. With cooperative refCount alone, the cycle
+  members keep each other alive; weaken doesn't drop a strong
+  ref; the cycle leaks; `$r` stays defined; the test runs to
+  completion.
+
+- `txn_scope_guard.t` test 18: `undef $g` triggers DESTROY
+  immediately (refCount→0). The handler captures @DB::args
+  refs, raising the captured object's refCount back to ≥1 after
+  DESTROY exits. `@arg_capture = ()` drops to 0 again, firing
+  DESTROY a second time. DBIC's `_finalized` guard emits the
+  expected warning. The test passes.
+
+#### Step 5 — confirm Moose still works
+
+Run `./jcpan -t Moose` and confirm pass rate is *at least* equal
+to the current universal-walker number (61 failing files / 133
+asserts). If any Moose tests regress, that points to a
+not-yet-fixed drift source (back to Step 1 for that pattern).
+
+### Acceptance criteria
+
+- `MortalList.flush` and `RuntimeScalar.set` contain no walker
+  call at all (gate is removed, not replaced with another
+  heuristic).
+- `52leaks.t` passes (cycles leak as expected).
+- `txn_scope_guard.t` test 18 passes (double-DESTROY warning
+  fires).
+- `cdbi/04-lazy.t` passes (the SELECT result no longer loses
+  `opop` because no transient destroy clobbers row construction).
+- Moose: ≥396/478 (no regression vs current branch).
+- DBIC: 0 / 0 PASS.
+- All existing refcount unit tests still pass.
+
+### Risk and rollback
+
+This is a refactor of the cooperative refCount contract, not just
+a gate change. Each Step 2 fix should be its own commit so any
+regression can be bisected. The walker code itself is left in
+place (only the gate call sites are simplified), so reintroducing
+the gate as a safety net during debugging is a one-line revert.
+
 ## Related Documents
 
 - [xs_fallback.md](xs_fallback.md) — XS fallback mechanism
