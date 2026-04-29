@@ -336,6 +336,13 @@ public class FFMPosixWindows implements FFMPosixInterface {
             return -1;
         }
     }
+
+    @Override
+    public int mkfifo(String path, int mode) {
+        // Windows has no POSIX FIFOs (named pipes use a different API).
+        setErrno(38); // ENOSYS
+        return -1;
+    }
     
     @Override
     public int utimes(String path, long atime, long mtime) {

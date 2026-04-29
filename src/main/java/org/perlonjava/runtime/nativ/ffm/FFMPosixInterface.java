@@ -122,6 +122,14 @@ public interface FFMPosixInterface {
      * @return 0 on success, -1 on error
      */
     int link(String oldPath, String newPath);
+
+    /**
+     * Create a FIFO (named pipe).
+     * @param path Path of the FIFO to create
+     * @param mode Permission mode (modified by umask)
+     * @return 0 on success, -1 on error (check errno)
+     */
+    int mkfifo(String path, int mode);
     
     /**
      * Set file access and modification times.

@@ -45,6 +45,7 @@ public class FFMPosixLinux implements FFMPosixInterface {
     // Method handles that need errno capture
     private static MethodHandle killHandle;
     private static MethodHandle chmodHandle;
+    private static MethodHandle mkfifoHandle;
     private static MethodHandle statHandle;
     private static MethodHandle lstatHandle;
     
@@ -212,6 +213,16 @@ public class FFMPosixLinux implements FFMPosixInterface {
                 stdlib.find("chmod").orElseThrow(),
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
                 captureErrno
+            );
+
+            // mkfifo is optional — not every libc exposes it (it always does on
+            // Linux/macOS; this guard just keeps initialization robust).
+            stdlib.find("mkfifo").ifPresent(addr ->
+                mkfifoHandle = linker.downcallHandle(
+                    addr,
+                    FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT),
+                    captureErrno
+                )
             );
             
             // stat and lstat - take path pointer and stat buffer pointer
@@ -802,6 +813,29 @@ public class FFMPosixLinux implements FFMPosixInterface {
             return 0;
         } catch (Exception e) {
             setErrno(getErrnoForException(e));
+            return -1;
+        }
+    }
+
+    @Override
+    public int mkfifo(String path, int mode) {
+        ensureInitialized();
+        if (mkfifoHandle == null) {
+            // libc has no mkfifo on this platform
+            setErrno(38); // ENOSYS - function not implemented
+            return -1;
+        }
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pathSegment = arena.allocateFrom(path);
+            MemorySegment capturedState = arena.allocate(Linker.Option.captureStateLayout());
+            int result = (int) mkfifoHandle.invokeExact(capturedState, pathSegment, mode);
+            if (result == -1) {
+                int err = capturedState.get(ValueLayout.JAVA_INT, errnoOffset);
+                setErrno(err);
+            }
+            return result;
+        } catch (Throwable e) {
+            setErrno(1); // EPERM
             return -1;
         }
     }
