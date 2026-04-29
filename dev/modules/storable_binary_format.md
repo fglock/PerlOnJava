@@ -429,56 +429,357 @@ perl. Bidirectional CPAN cache sharing works.
 
 ### Next Steps (Phase 2.x — encoder polish)
 
-These are narrow follow-ups that don't block any major use case but
-will turn more upstream `t/*.t` tests green:
+The remaining work is a mix of small encoder tweaks and a few larger
+items that need careful design. Each entry below carries enough
+detail that a future implementer (human or agent) can pick it up
+without re-tracing the source.
 
-1. `$Storable::canonical` — emit hash keys in sorted order. Currently
-   we use insertion order. Affects `canonical.t` and parts of
-   `dclone.t`.
-2. `SX_REGEXP` writer — pattern + flags. Currently refuses with a
-   clear error. `regexp.t` bails on this.
-3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings. Same shape.
-4. `SX_HOOK` write side: ✅ landed in commit `6fb5ac09d` —
-   `STORABLE_freeze` is invoked, the cookie + sub-refs are emitted
-   with the SHF_NEED_RECURSE chain when needed, and the read side
-   (`Hooks.readHook`) handles `STORABLE_attach` as a class-level
-   alternative to `STORABLE_thaw` (Storable.xs L5119-5172). Verified
-   with `attach_singleton.t` (16/16 clean), `circular_hook.t` (9/9
-   clean), and `attach_errors.t` (39/40, was 13/40).
-5. `SX_OVERLOAD` writer: ✅ landed in commit `5748eaa6d` — refs whose
-   referent is blessed into an overload-pragma class are emitted as
-   `SX_OVERLOAD` instead of `SX_REF`, matching upstream
-   Storable.xs L2350-2354. The reader has always supported it via
-   `Refs.readOverload`.
-6. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer — currently emits plain
-   `SX_REF` / `SX_OVERLOAD`. Round-trips inside jperl via the read
-   side's `WeakRefRegistry.weaken()` call, but the writer never
-   chooses the weak opcode so external weakness is lost.
-7. Hash-key UTF-8 flag handling: emit `SX_FLAG_HASH` with `SHV_K_UTF8`
-   when keys carry the UTF-8 flag, so non-ASCII keys round-trip
-   exactly through upstream.
-8. **Top-level ref-of-ref level loss.** `freeze \$blessed_ref`
-   currently round-trips with one ref level dropped — the thaw result
-   is the blessed ref directly instead of a ref-to-ref. Cause: our
-   container readers (`Containers.java`) return already-wrapped
-   `ARRAYREFERENCE`/`HASHREFERENCE` scalars (one level above bare),
-   versus upstream's `retrieve_array` which returns a bare AV. The
-   "always wrap" rule in `readRef` would fix the top-level case but
-   breaks every inner-ref case (because our containers double-count
-   when both sides add a level). A correct fix requires either a
-   "bare container" sentinel type or a substantial refactor of the
-   container readers. Affects ~5 specific upstream tests (`overload.t`
-   parts, `freeze.t` parts, `dclone.t` parts).
-9. **Tied container freeze/retrieve** (`SX_TIED_ARRAY`, `SX_TIED_HASH`,
-   `SX_TIED_SCALAR`). The reader currently refuses these (in
-   `Misc.readTied*`). Round-tripping requires a way to programmatically
-   tie a Java-side container to a Perl class implementation; PerlOnJava
-   has the runtime machinery (see `RuntimeTiedHashProxyEntry`) but
-   wiring it from Storable's read path is a multi-step task. Tests
-   blocked: `tied.t`, `tied_hook.t`, `tied_items.t`.
-10. (Cosmetic) Drop the YAML writer codepath entirely, remove the
-    `BINARY_MAGIC = 0xFF` legacy in-memory format. Only the legacy
-    readers stay for one release as a migration safety net.
+#### 1. `$Storable::canonical` — sorted hash-key emission
+
+Affects: `canonical.t` (all 8 tests), parts of `dclone.t`.
+
+* Currently `Containers.java`-equivalent code in `StorableWriter`
+  iterates `hv.elements.entrySet()` in insertion order, which Java's
+  `LinkedHashMap` preserves but Perl's hash iteration randomises.
+  Tests that compare frozen byte streams across two perls fail
+  whenever `$Storable::canonical = 1` is set.
+* Implementation: in `StorableWriter.writeHashBody`, when the
+  caller has set `$Storable::canonical`, sort the keys
+  byte-lexicographically (matching upstream's `qsort` of UTF-8 byte
+  representations, see `store_hash` at `Storable.xs ~L2750`). Use
+  `Arrays.sort(keys)` with `Comparator.comparing(...)` against the
+  UTF-8-encoded key bytes.
+* Wire the Perl-level `our $canonical` in `Storable.pm` through to
+  the writer. `Storable.pm` already has `our $canonical = 0;`.
+  Either (a) read `GlobalVariable` directly from `StorableWriter`,
+  or (b) thread a flag through `freezeImpl`/`storeImpl` in
+  `Storable.java`. Option (b) is cleaner.
+* Test plan: enable `canonical.t` in `dev/import-perl5/config.yaml`,
+  expect 8/8 pass.
+
+#### 2. `SX_REGEXP` writer — `qr//` pattern + flags
+
+Affects: `regexp.t` (full 64 tests, currently bails after 8).
+
+* Currently `StorableWriter.dispatchReferent` for `RuntimeScalarType.REGEX`
+  throws `"storing regexes not yet supported by encoder"`.
+* Wire format (Storable.xs `store_regexp`, search for `SX_REGEXP`):
+  ```
+  SX_REGEXP <pat-len> <pat-bytes> <flags-len> <flags-bytes>
+  ```
+  Both lengths use the small/large convention (1 byte if ≤ LG_SCALAR,
+  high-bit + U32 otherwise).
+* Where to source the pattern + flags: `RuntimeRegex` (which is what
+  `RuntimeScalar`'s value field carries when type is `REGEX`) exposes
+  the original Perl pattern source and a flags string. Look in
+  `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeRegex.java`
+  for the public accessors — they should already be there for
+  `Data::Dumper`-style stringification.
+* Reader side: `Misc.readRegexp` is a refusal stub; replace it.
+  Build a `RuntimeRegex` via the same constructor `qr//` uses
+  (`RuntimeRegex.compile(patternBytes, flagsString)` or similar).
+* Cross-perl interop: byte-for-byte identical output to upstream
+  matters here (`regexp.t` runs `is_deeply` on round-tripped patterns).
+* Test plan: enable `regexp.t` in config.yaml, expect 64/64.
+
+#### 3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings
+
+Affects: `blessed.t` test ~57 (the WeirdRefHook v-string subtest),
+parts of `freeze.t`.
+
+* Currently both refuse with `"misc-agent: SX_VSTRING not yet
+  implemented"` on the read side, and the write side falls through
+  to plain string encoding so the v-string magic is lost on retrieve.
+* Wire format: same shape as `SX_SCALAR`/`SX_LSCALAR` — length-prefixed
+  bytes. The receiver attaches a v-string magic to the resulting SV
+  (via `sv_magic(sv, NULL, PERL_MAGIC_vstring, vstr_pv, vstr_len)`
+  in upstream).
+* PerlOnJava has a `RuntimeScalarType.VSTRING` already. Check
+  `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
+  for the v-string constructor and accessors.
+* On store: detect VSTRING type, emit SX_VSTRING/LVSTRING with the
+  v-string bytes followed by the textual scalar (per
+  `retrieve_vstring` at `Storable.xs L5833` — note the v-string
+  bytes come FIRST, then a regular scalar opcode for the stringy
+  part).
+* On retrieve: the body is `<vstring-len> <vstring-bytes>` and then
+  a recursive opcode for the regular scalar. Build a
+  `RuntimeScalar(VSTRING)` with both pieces.
+* Test plan: enable nothing extra (the gain is more `blessed.t`
+  tests reaching plan completion, not flipping a whole file green).
+
+#### 4. `SX_HOOK` write side ✅ landed (commit `6fb5ac09d`)
+
+`STORABLE_freeze` is invoked, cookie + sub-refs are emitted with
+the SHF_NEED_RECURSE chain when needed, and the reader's
+`Hooks.readHook` handles `STORABLE_attach` as a class-level
+alternative to `STORABLE_thaw` (Storable.xs L5119-5172). Verified
+with `attach_singleton.t` (16/16 clean), `circular_hook.t` (9/9
+clean), and `attach_errors.t` (39/40, was 13/40).
+
+#### 5. `SX_OVERLOAD` writer ✅ landed (commit `5748eaa6d`)
+
+Refs whose referent is blessed into an overload-pragma class are
+emitted as `SX_OVERLOAD` instead of `SX_REF`, matching upstream
+`store_ref` at `Storable.xs L2350-2354`. The reader has always
+supported it via `Refs.readOverload`.
+
+#### 6. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer
+
+Affects: `weak.t` (when imported — currently skipped due to
+`List::Util was not built` upstream-test guard, but a future
+build may run it).
+
+* Currently `StorableWriter.dispatch` always emits plain
+  `SX_REF`/`SX_OVERLOAD` for inner refs.
+* Detection: PerlOnJava tracks weak references via
+  `WeakRefRegistry`. The reader uses `WeakRefRegistry.weaken()` on
+  retrieval; the writer should consult `WeakRefRegistry.isWeak(refScalar)`
+  (or whatever the runtime exposes) and pick the weak opcode.
+* The wire layout is identical to `SX_REF`/`SX_OVERLOAD`; only the
+  opcode byte differs:
+  ```
+  SX_WEAKREF      = 27   // = 0x1B
+  SX_WEAKOVERLOAD = 28   // = 0x1C
+  ```
+  (See `Opcodes.java` and Storable.xs L168-169.)
+* Round-trips inside jperl already work (the reader's `readWeakRef`
+  invokes `WeakRefRegistry.weaken`). The visible bug is when a
+  weakened ref crosses to system perl, which receives a strong ref
+  instead.
+* Test plan: enable `weak.t` once it can run; or write a
+  jperl→system-perl smoke test that checks weakness preservation.
+
+#### 7. Hash-key UTF-8 flag handling on the writer
+
+Affects: any test that round-trips non-ASCII hash keys via
+`SX_FLAG_HASH`; `utf8hash.t` post-completion.
+
+* Currently `StorableWriter.writeHashBody` always emits `SX_HASH`
+  (without the per-key flag byte). The reader handles
+  `SX_FLAG_HASH` correctly (Containers.java), but the writer never
+  produces it.
+* Detection: PerlOnJava strings carry their UTF-8-or-not state via
+  `RuntimeScalar.type` (`STRING` is utf8-flagged, `BYTE_STRING` is
+  not). For hash KEYS the encoding lives in the key string itself
+  (`hv.elements.keySet()` returns Java `String`s, which are UTF-16
+  internally; the original UTF-8-flag-ness is lost at the Java
+  boundary).
+* The simplest correct rule: if any key contains a code point
+  ≥ 0x80, emit `SX_FLAG_HASH` and set `SHV_K_UTF8 = 0x01` on those
+  keys. Hash flags byte = 0 (we don't model RESTRICTED_HASH yet).
+* Wire format (Storable.xs `store_hash` flag-hash branch):
+  ```
+  SX_FLAG_HASH <hash-flags-byte> <U32 size> N×{ value, <key-flags>, <U32 keylen>, <key-bytes> }
+  ```
+* Test plan: utf8hash.t round-trips successfully (currently bails
+  at test 26 on `Not a SCALAR reference`, mostly unrelated, but
+  exposes a UTF-8 mismatch downstream).
+
+#### 8. Top-level ref-of-ref level loss
+
+Affects: `overload.t` test 4-5, `freeze.t` "VSTRING" subtests,
+parts of `dclone.t`, parts of `blessed.t`. Probably ~5-10 specific
+assertions across the upstream suite.
+
+**Root cause.** Our container readers (`Containers.java`)
+return already-wrapped `ARRAYREFERENCE`/`HASHREFERENCE` scalars
+(structurally one ref level above bare), versus upstream's
+`retrieve_array` which returns a bare `AV`. So in our model:
+
+| Wire | Our readers produce | Upstream produces |
+|------|---------------------|-------------------|
+| `SX_HASH` | HASHREFERENCE (1 ref) | bare HV (0 ref) |
+| `SX_REF + SX_HASH` | ? | RV-to-HV (1 ref) |
+| `SX_REF + SX_REF + SX_HASH` | ? | RV-to-RV-to-HV (2 ref) |
+
+For each `SX_REF`, upstream's `retrieve_ref` does `SvRV_set(rv, sv)`
+adding ONE ref level on top of the body. Then `do_retrieve` adds
+ONE MORE via `newRV_noinc`. Our `Storable.thaw` adds one level only
+when the body wasn't a reference, so the totals come out correct
+for most cases — but `SX_REF + SX_BLESS + SX_HASH` becomes a
+problem: the body produces `HASHREFERENCE-blessed` (1 ref), our
+`Refs.readRef.installReferent` collapses (correct for the inner-ref
+case `[\@a]`) but loses a level for the top-level case
+`freeze \$blessed_ref`.
+
+**Why a peek-and-decide doesn't work.** A trivial rule like
+"`installReferent` wraps when the body opcode is `SX_REF`, collapses
+otherwise" handles `\\@a` but breaks `[\$blessed]` (and vice versa).
+The information that disambiguates the two cases — whether the
+SX_REF is "redundant given our type system" or "really adds a
+level" — isn't in the wire bytes; it's in the data shape we want
+to reproduce.
+
+**Three viable fixes**, in increasing order of invasiveness:
+
+a. **Bare-container sentinel.** Have `Containers.readArray` /
+   `readHash` return a `RuntimeScalar` with a non-reference type
+   (e.g. add a private `STORABLE_BARE_AV` / `STORABLE_BARE_HV`
+   value to `RuntimeScalarType` or use a side-table on
+   `StorableContext`). `Refs.readRef` checks the marker and either
+   collapses (if marked) or wraps (otherwise). After installing,
+   the marker is consumed. Storable.thaw treats the result like
+   any other scalar.
+   
+   Pros: keeps the container readers unchanged for non-Storable
+   callers; localised change. Cons: introduces a transient type
+   only Storable understands.
+
+b. **Refactor container readers to return bare values.** Make
+   `Containers.readArray` return a `RuntimeArray` (not a
+   `RuntimeScalar`). The dispatcher returns `RuntimeBase` instead
+   of `RuntimeScalar`. `Refs.readRef` always wraps;
+   `Storable.thaw` always wraps. This is the closest match to
+   upstream's data flow.
+   
+   Pros: clean, matches upstream model. Cons: every dispatcher
+   site needs to handle the wider return type.
+
+c. **Always-wrap + emit SX_REF wrapper everywhere.** Drop the
+   "strip one level" in `emitTopLevel`, always emit a SX_REF
+   wrapper, mirror with always-wrap on the read side. Adds one
+   byte to every output, more importantly DIVERGES from upstream
+   wire format — our jperl-written files would no longer be
+   readable by system perl. Reject this option.
+
+Recommended: **option a** (bare-container sentinel). Smallest
+diff, no perf impact (one extra byte field on `StorableContext`,
+one branch in `Refs.readRef`).
+
+Sketch:
+```java
+// StorableContext additions:
+private boolean lastWasBareContainer = false;
+public boolean takeBareContainerFlag() {
+    boolean v = lastWasBareContainer;
+    lastWasBareContainer = false;
+    return v;
+}
+public void markBareContainer() { lastWasBareContainer = true; }
+
+// In Containers.readArray / readHash:
+RuntimeScalar result = av.createAnonymousReference();
+c.recordSeen(result);
+// ... fill in elements ...
+c.markBareContainer();
+return result;
+
+// In Refs.readRef (new logic):
+boolean wasBare = c.takeBareContainerFlag();
+RuntimeScalar referent = r.dispatch(c);
+boolean bodyWasBare = c.takeBareContainerFlag();
+if (bodyWasBare) {
+    // body was a fresh container — collapse, the SX_REF was
+    // redundant given our types.
+    refScalar.set(referent);  // or .set(arr.createReference()) etc.
+} else {
+    // body was already a "ref level" thing — wrap.
+    refScalar.set(referent.createReference());
+}
+```
+
+Test plan: enable `overload.t`, `freeze.t`, `dclone.t` once
+landed; expect ~10 additional passing assertions across them.
+
+#### 9. Tied container freeze/retrieve
+
+Affects: `tied.t` (25 tests), `tied_hook.t` (28 tests),
+`tied_items.t` (post-test-2 cases), the `SHT_EXTRA` branch of
+`Hooks.allocatePlaceholder` (currently throws).
+
+**Wire format** (Storable.xs `retrieve_tied_array`/`hash`/`scalar`,
+L5502-L5610):
+```
+SX_TIED_ARRAY <object>      // <object> = the inner tying object
+SX_TIED_HASH  <object>
+SX_TIED_SCALAR <object>
+```
+Plus `SX_TIED_KEY <object> <key>` and `SX_TIED_IDX <object> <idx>`
+for tied magic on individual hash entries / array slots.
+
+**Read path.** Currently `Misc.readTiedArray`/`readTiedHash`/
+`readTiedScalar` throw a refusal. Replace with:
+
+1. Allocate a placeholder container (`RuntimeArray` / `RuntimeHash`
+   / `RuntimeScalar`) and recordSeen it in the seen-table.
+2. Recurse: `RuntimeScalar inner = top.dispatch(c)` — this is the
+   tying object (a blessed ref to the implementation class).
+3. "Tie" the placeholder to the inner object. PerlOnJava's
+   internal `tie` operator lives in
+   `src/main/java/org/perlonjava/runtime/perlmodule/AttributeHandlers.java`
+   or similar — find the static helper that takes a
+   `(target, classname, args...)` and installs tied magic.
+   Concretely: `RuntimeTiedHashProxyEntry` is the runtime hook that
+   intercepts hash operations; we need to wire it via the standard
+   `tie %h, $class, @args` mechanism, except the `$class` is
+   already known (from blessing on the inner) and `@args` are
+   replaced by the inner object itself.
+4. Return the tied container.
+
+The hardest part is step 3 — the path from "I have a placeholder
+hash and an already-instantiated tying object" to "the placeholder
+now delegates all operations to the object" goes through code
+that's currently only reachable from the `tie` operator's parser
+output. Likely needs a new public helper in the tie infrastructure.
+
+**Write path.** Detect tied containers in `dispatchReferent`:
+inspect whether the underlying `RuntimeArray`/`RuntimeHash` carries
+tied magic (look for an `isTied()` method or a non-null
+`tiedObject` field). If yes, emit `SX_TIED_ARRAY`/`HASH`/`SCALAR`
+followed by `dispatch(tiedObject)`. Keep tag bookkeeping in mind:
+the placeholder gets a tag, the inner gets the next tag.
+
+**Tied hooks** (`tied_hook.t`): when both `STORABLE_freeze` and
+tied magic apply, upstream's `store_hook` uses the SHT_EXTRA
+sub-type with an `eflags` byte carrying `SHT_THASH`/`TARRAY`/
+`TSCALAR` (Storable.xs L3624-L3653). Reader side already has the
+`SHT_EXTRA` slot in `Hooks.allocatePlaceholder`; replace its
+`throw` with a tied-placeholder allocation following the readTied
+path above, then read the magic-object into the trailing `<object>`
+position.
+
+**Test plan**: enable `tied.t`, `tied_hook.t`, `tied_items.t`
+(currently all excluded). Realistic target: most of `tied.t`'s 25
+tests plus ~80% of `tied_items.t`. `tied_hook.t` depends on the
+SHT_EXTRA wiring above and may take a second pass.
+
+#### 10. Drop the YAML writer codepath (cosmetic)
+
+Once Phase-2.x has settled, remove the legacy YAML serializer from
+`Storable.java`:
+
+* `serializeToYAML` / `deserializeFromYAML` and the snakeyaml
+  imports become dead code on the write path.
+* `BINARY_MAGIC = 0xFF` in-memory format and the
+  `serializeBinary`/`deserializeBinary` helpers can also go.
+* Keep `thaw`'s legacy-format detection (the YAML reader and the
+  0xFF-magic reader) for one release as a migration safety net so
+  users with old `~/.cpan/Metadata` or old in-memory blobs aren't
+  broken on upgrade.
+* After the deprecation window, remove those readers too. The
+  `Storable.java` file shrinks from ~1100 lines to ~250 lines
+  (just the public-API shim that delegates to the
+  `org.perlonjava.runtime.perlmodule.storable` package).
+
+Test plan: ensure `make` and `make test-bundled-modules` stay
+green throughout.
+
+#### 11. PR-side: re-enable upstream tests and watch the count tick down
+
+Each time one of the items above lands, check whether any
+`dev/import-perl5/config.yaml` exclusions can be removed. Re-run:
+
+```
+rm -rf src/test/resources/module/Storable
+perl dev/import-perl5/sync.pl
+JPERL_TEST_FILTER=Storable ./gradlew testModule
+```
+
+Goal at the end of Phase 2.x: the only remaining excludes are
+genuinely-unsupported features (legacy 0.6 binary, 4 GiB
+allocations, fork-based threads tests, malice fuzz with
+specific Perl-version croak wording).
 
 ### Open Questions
 
