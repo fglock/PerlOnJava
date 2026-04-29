@@ -350,13 +350,29 @@ sub _install_pure_perl {
     # from being overwritten by incompatible CPAN versions, while still
     # allowing other files from the same distribution to be installed
     # (e.g. IO::Socket::SSL::Utils from the IO-Socket-SSL dist).
+    #
+    # Also track whether the *primary* module of this distribution was
+    # the one we SKIPped: if so, the upstream tarball's t/*.t suite is
+    # almost certainly testing a different architecture from our JAR
+    # shim (e.g. CPAN DBD::JDBC drives an external Java proxy server,
+    # whereas our bundled DBD::JDBC is an in-JVM driver). We use this
+    # flag below to short-circuit `make test`.
+    (my $primary_rel = $name) =~ s{::}{/}g;
+    $primary_rel .= '.pm';
+    my $primary_pm_bundled = 0;
     for my $src (sort keys %pm) {
         my $dest = $pm{$src};
         (my $rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
         if ($rel && -f "jar:PERL5LIB/$rel") {
             print "  SKIP: $rel (bundled in PerlOnJava JAR)\n";
+            $primary_pm_bundled = 1 if $rel eq $primary_rel;
             delete $pm{$src};
         }
+    }
+    $args->{_primary_pm_bundled} = $primary_pm_bundled;
+    if ($primary_pm_bundled && !$ENV{JCPAN_RUN_BUNDLED_TESTS}) {
+        print "  NOTE: $primary_rel is bundled; upstream test suite will be skipped.\n";
+        print "        Set JCPAN_RUN_BUNDLED_TESTS=1 to run it anyway.\n";
     }
     
     print "\nWill install to: $INSTALL_BASE\n\n";
@@ -522,7 +538,17 @@ sub _create_install_makefile {
     my $test_cmd;
     my $test_glob = ($args->{test} && $args->{test}{TESTS}) || '';
     $test_glob = 't/*.t' if !$test_glob && -d 't';
-    if ($test_glob) {
+    if ($args->{_primary_pm_bundled} && !$ENV{JCPAN_RUN_BUNDLED_TESTS}) {
+        # Primary .pm is JAR-bundled; the upstream tarball's tests almost
+        # certainly target a different architecture (e.g. an external
+        # proxy server) from our in-JVM shim, so running them will only
+        # produce confusing failures. Emit a clear no-op test step.
+        my $msg = "PerlOnJava: $name is bundled in the JAR; "
+                . "skipping upstream test suite (incompatible architecture). "
+                . "Set JCPAN_RUN_BUNDLED_TESTS=1 to run it anyway.";
+        $msg =~ s/'/'\\''/g;
+        $test_cmd = qq{\@$perl -e 'print "$msg\\n"'};
+    } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
         $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, './blib/lib', './blib/arch')" $test_glob};
