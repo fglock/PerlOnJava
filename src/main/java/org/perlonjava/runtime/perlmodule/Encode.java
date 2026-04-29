@@ -90,6 +90,10 @@ public class Encode extends PerlModuleBase {
         CHARSET_ALIASES.put("UCS-2LE", StandardCharsets.UTF_16LE);
         CHARSET_ALIASES.put("ucs-2le", StandardCharsets.UTF_16LE);
 
+        // ISO-10646-1 is an Encode alias for UCS-2 (used by File::BOM, etc.)
+        CHARSET_ALIASES.put("iso-10646-1", StandardCharsets.UTF_16BE);
+        CHARSET_ALIASES.put("ISO-10646-1", StandardCharsets.UTF_16BE);
+
         // Shift_JIS aliases
         try {
             Charset shiftJIS = Charset.forName("Shift_JIS");
