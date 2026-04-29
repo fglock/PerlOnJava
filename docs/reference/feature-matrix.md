@@ -717,7 +717,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **Perl::OSType** module.
 - ✅  **Scalar::Util**: `blessed`, `reftype`, `set_prototype`, `dualvar` are implemented.
 - ✅  **SelectSaver**: module.
-- ✅  **Storable**: module. `retrieve` reads native Perl binary (`pst0`) files written by system perl. `store`/`freeze` still write a custom format that round-trips within jperl but is not yet readable by system perl.
+- ✅  **Storable**: module. Reads and writes the native Perl Storable binary format (`pst0` magic), interoperable with system perl in both directions: jperl-written files are readable by system perl and vice versa. `$Storable::canonical`, `SX_REGEXP`/`SX_VSTRING` encoding, and full `STORABLE_freeze` hook emission are not yet implemented (see `dev/modules/storable_binary_format.md`).
 - ✅  **Sys::Hostname** module.
 - ✅  **Symbol**: `gensym`, `qualify` and `qualify_to_ref` are implemented.
 - ✅  **Term::ANSIColor** module.

@@ -2,13 +2,10 @@
 
 ## Status
 
-**Read path landed (Phase 1 complete).** PerlOnJava's `Storable::retrieve`
-now decodes native Perl Storable binary files (`pst0` magic) directly,
-matching upstream `perl`'s output byte-for-byte. The full plan was to
-replace the YAML-based implementation with the native binary format —
-that work is half done; the **encoder** (`store`/`nstore`/`freeze`/
-`nfreeze`) still emits YAML and is queued as Phase 2 (see "Progress
-Tracking" near the end of this document).
+**Both directions land — Phase 1 (decoder) and Phase 2 (encoder) complete.**
+PerlOnJava's Storable now reads AND writes the native Perl Storable
+binary format, byte-compatible with what upstream `perl` produces.
+Files written by `jperl` can be read by system `perl` and vice versa.
 
 What works today:
 - `retrieve($file)` reads any current-format Storable file produced by
@@ -16,23 +13,33 @@ What works today:
   objects, cyclic references via `SX_OBJECT` backrefs, shared
   substructures, network and native byte order, UTF-8 keys, nested
   structures.
-- Native `STORABLE_thaw` hooks fire (`SX_HOOK` frame parser is
+- `store` / `nstore` / `freeze` / `nfreeze` emit `pst0` (file) or the
+  bare in-memory body, with all of the above shapes plus
+  `SX_BLESS` / `SX_IX_BLESS` for blessed refs.
+- `dclone` works (pure deep-copy, never touches the wire format).
+- Native `STORABLE_thaw` hooks fire on read (`SX_HOOK` frame parser is
   complete).
-- The `~/.cpan/Metadata` cache written by system perl is now readable
-  by jperl, so switching between the two perls no longer invalidates
-  the CPAN index.
-- 875+ assertions from upstream `perl5/dist/Storable/t/integer.t` pass
-  unmodified, plus `lock.t`, `tied_reify.t`, `tied_store.t`,
-  `utf8hash.t`, etc. — see `dev/import-perl5/config.yaml` for the
-  curated list under `make test-bundled-modules`.
+- The `~/.cpan/Metadata` cache is fully shareable between jperl and
+  system perl in either direction. CPAN-based tooling that exchanges
+  Storable blobs (Cache::FileCache, Module::Build's `_build/` state,
+  etc.) interoperates.
+- ~889 upstream `t/*.t` assertions pass cleanly under
+  `make test-bundled-modules` (integer.t alone is 875). Many more
+  tests now reach the end of their plan than before; specific
+  per-test exclusions are documented in `dev/import-perl5/config.yaml`.
 
-What does NOT yet work:
-- `store`/`freeze`/`nstore`/`nfreeze` still write YAML. As a result,
-  files written by jperl can be read by jperl but not by system perl
-  (you get the "File is not a perl storable" error from upstream).
-  Tracking: Phase 2 in this doc.
-- `dclone` works (it's a pure deep-copy and never goes through the
-  wire format).
+What does NOT yet work (Phase 2.x follow-ups):
+- `$Storable::canonical` — we currently emit hash keys in insertion
+  order, not the canonical sort. Affects byte-level output equality
+  with upstream when canonical mode is requested. Tests:
+  `canonical.t`, `dclone.t`.
+- `SX_REGEXP` encoding — refuses with a clear error today.
+- `SX_VSTRING` / `SX_LVSTRING` encoding — same.
+- `STORABLE_freeze` hook emission (read side works; write side treats
+  hooked objects as plain blessed containers, which loses the cookie
+  representation).
+- `SX_WEAKREF` / `SX_OVERLOAD` — currently emitted as plain `SX_REF`.
+  Round-trips internally but loses the magic for upstream consumers.
 
 ## Motivation
 
@@ -332,7 +339,7 @@ perl. Bidirectional CPAN cache sharing works.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 (decoder) complete. Phase 2 (encoder) pending.
+### Current Status: Phase 1 (decoder) and Phase 2 (encoder) complete.
 
 ### Completed Phases
 
@@ -397,23 +404,52 @@ perl. Bidirectional CPAN cache sharing works.
     Phase 2 / specific fixes). `make test-bundled-modules` is green
     for the storable subset.
 
-### Next Steps (Phase 2 — encoder)
+- [x] **Phase 2 — encoder** (2026-04-29, commit `cd3c74974`).
+    - `StorableWriter.java` mirrors `StorableReader`. Top-level
+      entry points `writeTopLevelToFile` / `writeTopLevelToMemory`
+      strip ONE outer ref (matching upstream's
+      `do_store → SvRV(sv)`), then dispatch.
+    - `StorableContext` extended with symmetric write primitives
+      (`writeBytes`, `writeU32Length`, `writeNetInt`, `writeNativeIV`,
+      `writeNativeNV`) plus an identity-keyed seen-table for
+      `SX_OBJECT` and a classname table for `SX_BLESS` / `SX_IX_BLESS`
+      interning.
+    - `Header.writeFile` / `writeInMemory` emit the `pst0` magic +
+      version bytes (mirroring `magic_write` at Storable.xs L4460-4530).
+    - `Storable.java` rewired: `store`/`nstore`/`freeze`/`nfreeze`
+      now go through the new writer. `thaw` accepts native, the
+      legacy 0xFF in-memory binary, and YAML+GZIP (so blobs frozen
+      before this commit still de-thaw).
+    - Verified end-to-end: `nstore` from jperl produces a file that
+      `file(1)` identifies as
+      `perl Storable (v0.7) data (network-ordered) (major 2) (minor 12)`,
+      and system perl's `retrieve` decodes it intact, blessing
+      preserved. Reverse direction (system perl → jperl) was
+      already working since Phase 1.
 
-1. `NativeWriter` mirroring `NativeReader`. Write the `pst0` header,
-   pick integer width (SX_BYTE vs SX_INTEGER vs SX_NETINT) the same
-   way XS does. The new package already has `StorableContext`
-   write-side primitives (`writeByte`, `encoded()`); plumb them.
-2. `$Storable::canonical` honored for hash key ordering.
-3. SX_OBJECT shared-reference table keyed on identity (Java
-   `IdentityHashMap`).
-4. `STORABLE_freeze` hook emission.
-5. Default `store`/`nstore`/`freeze`/`nfreeze` to native binary;
-   keep the YAML reader as a one-release fallback for files that
-   don't start with `pst0` so upgraders don't lose their old caches.
-6. Re-enable upstream tests blocked on encoding: `freeze.t`,
-   `blessed.t` (round-trips through freeze), `regexp.t`, `malice.t`,
-   `dclone.t`, `recurse.t`, etc. Most of these come for free once
-   the writer is byte-compatible with upstream.
+### Next Steps (Phase 2.x — encoder polish)
+
+These are narrow follow-ups that don't block any major use case but
+will turn more upstream `t/*.t` tests green:
+
+1. `$Storable::canonical` — emit hash keys in sorted order. Currently
+   we use insertion order. Affects `canonical.t` and parts of
+   `dclone.t`.
+2. `SX_REGEXP` writer — pattern + flags. Currently refuses with a
+   clear error. `regexp.t` bails on this.
+3. `SX_VSTRING` / `SX_LVSTRING` writer — version strings. Same shape.
+4. `SX_HOOK` write side: `STORABLE_freeze` hook emission. Currently
+   write side treats hooked objects as plain blessed containers, which
+   loses the cookie representation.
+5. `SX_WEAKREF` / `SX_WEAKOVERLOAD` writer — currently emits plain
+   `SX_REF`. Round-trips inside jperl but loses the magic when the
+   blob crosses to upstream perl.
+6. Hash-key UTF-8 flag handling: emit `SX_FLAG_HASH` with `SHV_K_UTF8`
+   when keys carry the UTF-8 flag, so non-ASCII keys round-trip
+   exactly through upstream.
+7. (Cosmetic) Drop the YAML writer codepath entirely, remove the
+   `BINARY_MAGIC = 0xFF` legacy in-memory format. Only the legacy
+   readers stay for one release as a migration safety net.
 
 ### Open Questions
 
