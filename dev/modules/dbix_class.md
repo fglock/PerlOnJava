@@ -235,11 +235,122 @@ disable the sweep entirely — that breaks the leak-detection tests
 - [x] **Confirmed root cause: `maybeAutoSweep()` 5-s timer + `ReachabilityWalker`
       missing live lexicals as roots.** Disabling auto-GC removes the crash;
       keeping it on with broken reachability clears live weak refs.
+- [ ] **Build deterministic repro infrastructure (next step)** — see "How to
+      make this reliably reproducible" below. Without that, every repro
+      attempt is timing-dependent and we waste cycles on flaky runs.
 - [ ] Pinpoint which seeding/walking phase in `ReachabilityWalker` misses
       the test-scope `my $schema` lexical.
 - [ ] Add lexical seeding and re-run; expect t/52leaks.t to pass under
       auto-GC at ALL test positions in the harness.
 - [ ] Verify under full DBIC suite (must hit 0/314 fails).
+
+### How to make this reliably reproducible
+
+Today's testing is flaky because the bug only fires when the auto-sweep
+5-s timer expires at a precise moment relative to Perl's statement
+boundaries. Naive reproducers either complete too fast (no sweep fires)
+or have lexical roots so simple the walker can't miss them. We need
+infrastructure that forces both knobs:
+
+#### 1. Force sweep timing — `JPERL_FORCE_SWEEP_EVERY_FLUSH=1`
+
+Add a debug-only env var that makes `MortalList.maybeAutoSweep()` fire
+on **every** `MortalList.flush()` call (i.e. at every Perl statement
+boundary), bypassing the 5-s throttle and the
+`WeakRefRegistry.weakRefsExist` gate. With that, ANY reproducer pattern
+that would hit the walker's blind spot fails on the first statement.
+
+This converts a stochastic 1-in-314 timing race into a deterministic
+"sweep happens here" → "schema cleared here" → "next access dies"
+sequence we can debug step-by-step.
+
+Implementation: gate the existing throttle/flag check in
+`MortalList.maybeAutoSweep()` (lines 643-651) on
+`!System.getenv("JPERL_FORCE_SWEEP_EVERY_FLUSH")`. ~3 lines.
+
+#### 2. Walker diagnostic transcript — `JPERL_WALKER_TRACE=1`
+
+When set, `ReachabilityWalker.sweepWeakRefs()` writes a structured
+log line for EVERY weak-ref it clears, including:
+
+- target classname + `System.identityHashCode`
+- `findPathTo(target)` output (which is "<unreachable>" for the cases
+  we care about)
+- a one-line snapshot of which seeding sources fired this walk
+  (`globalCodeRefs.size`, `globalHashes.size`, `ScalarRefRegistry.snapshot.size`,
+  `MyVarCleanupStack.snapshotLiveVars.size`)
+- caller stack (1-2 frames of native Java; useful for distinguishing
+  manual `Internals::jperl_gc()` vs `MortalList.flush()`-triggered)
+
+Together with (1), running:
+
+    JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+        ./jperl small_repro.t 2> /tmp/sweep_trace.log
+
+…produces an exact ordered transcript of every clear in the small
+reproducer. The first line whose target is a Schema (or any blessed
+object the test still wants alive) is the bug.
+
+#### 3. Tiered reproducers (graduate from simple → DBIC-like)
+
+Today's `dev/sandbox/walker_blind_spot/simple_lexical_repro.t` doesn't
+fail — too simple. We need a tier of progressively-richer reproducers
+to find the smallest one that fails under (1):
+
+- **T1 (simplest)**: 1 schema, 1 result-source, 1 weakened back-ref.
+  Already exists; passes.
+- **T2**: T1 + holding the schema indirectly through a closure-captured
+  `$self` chain (mirroring DBIC's `accessor` closures).
+- **T3**: T2 + passing the schema through `@_` arg-pass via a method call
+  that uses `shift` to consume it.
+- **T4**: T3 + using overloaded operators (DBIC ResultSource has `""`
+  overload via Carp::Clan; many JVM temporaries from stringify).
+- **T5**: T4 + populating `WeakRefRegistry` with thousands of unrelated
+  weakened scalars, like `populate_weakregistry()` does.
+- **T6**: T5 + interleaving `dclone` on a separate complex structure
+  to inflate Storable's internal seen-table, mirroring t/52leaks.t's
+  `$fire_resultsets->()`.
+
+The smallest tier that fails under `JPERL_FORCE_SWEEP_EVERY_FLUSH=1`
+is the bug-trigger pattern. We add it as a unit test under
+`src/test/resources/unit/refcount/walker_blind_spot.t` so any future
+fix has an automated guard.
+
+#### 4. Prefix bisection on the full DBIC suite
+
+Independent of the small-repro work, narrow the harness reproduction.
+The current full run is ~40 min and hits ~1-2 failures stochastically.
+Build a prefix bisection harness:
+
+    cd cpan_build_dir/DBIx-Class-0.082844
+    JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+        timeout 600 ../../jperl -MTest::Harness \
+            -e 'test_harness(0, "blib/lib", "blib/arch")' \
+            t/52leaks.t
+
+If the SCALAR-prefix (just t/52leaks.t alone) fails under (1), we have
+a 1-test deterministic harness reproducer in <30s. If it doesn't fail,
+add prior tests one at a time (binary search on the suite list) until
+it does. The smallest failing prefix is reliable repro.
+
+### Plan ordering (to minimize wasted effort)
+
+1. **Implement (1) and (2)** in PerlOnJava — both are small, debug-only,
+   gated on env vars. Cost: ~30 min of dev work.
+
+2. **Run (4) prefix bisection** with (1) + (2) enabled — gives
+   deterministic harness repro within ~1 hour.
+
+3. **Inspect the walker transcript** at the moment of premature clear.
+   That tells us exactly which seeding gate dropped the schema.
+
+4. **Fix the seeding gate** in `ReachabilityWalker.walk()`.
+
+5. **Run the full suite** (no debug envs) to verify the fix.
+
+6. **Promote the smallest reproducer** from (3) into
+   `src/test/resources/unit/refcount/walker_blind_spot.t` so the fix
+   stays fixed.
 
 ### Why we can't ship without this fix
 
