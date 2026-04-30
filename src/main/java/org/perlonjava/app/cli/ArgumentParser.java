@@ -1178,9 +1178,20 @@ public class ArgumentParser {
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
         }
-        // Prepend the use statements to the code
+        // Prepend the use statements to the code.
+        // Wrap them in #line directives so caller() reports file=<scriptName>
+        // line=0 for these synthetic imports, matching real Perl's behavior
+        // for -M/-m.  Some modules (notably Parse::RecDescent's precompiler
+        // mode `perl -MParse::RecDescent - grammar class`) rely on this:
+        // they detect the -M invocation by checking caller() in import for
+        // line 0 and a script file equal to '-'.
         if (!useStatements.isEmpty()) {
-            parsedArgs.code = useStatements + parsedArgs.code;
+            String scriptName = parsedArgs.fileName != null ? parsedArgs.fileName : "-e";
+            // Escape backslashes and double quotes for the #line directive
+            String escapedName = scriptName.replace("\\", "\\\\").replace("\"", "\\\"");
+            String prefix = "#line 0 \"" + escapedName + "\"\n" + useStatements
+                          + "#line 1 \"" + escapedName + "\"\n";
+            parsedArgs.code = prefix + parsedArgs.code;
         }
 
         // Prepend rudimentary switch assignments if any
