@@ -739,7 +739,14 @@ realclean:: clean
 distclean:: clean
 \t\$(RM_RF) $makefile ${makefile}.old
 
-.PHONY: all pm_to_blib pure_all pl_files blib_scripts config test install clean realclean distclean install_scripts
+# ppd: real ExtUtils::MakeMaker generates a Win32 PPM .ppd descriptor here.
+# PerlOnJava has no PPM, but some Makefile.PLs (e.g. MailTools) add
+# `all:: ppd` in their postamble. Provide a no-op target so make doesn't
+# fail with "No rule to make target ppd".
+ppd::
+\t\@true
+
+.PHONY: all pm_to_blib pure_all pl_files blib_scripts config test install clean realclean distclean install_scripts ppd
 MAKEFILE
 
     # Call MY::postamble if it exists (File::ShareDir::Install uses this)
