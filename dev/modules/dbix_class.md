@@ -148,7 +148,7 @@ test under cumulative state pressure, weak-ref clearing is over-applied.
   contaminating subsequent runs (no more 100% CPU starvation), but does NOT
   fix the schema-detached exception itself.
 
-### Confirmed root cause — `MortalList.maybeAutoSweep()` walker blind spot
+### Confirmed root cause — `ScalarRefRegistry` race against forced GC
 
 The Schema's weak ref is being cleared by `MortalList.maybeAutoSweep()` (a
 5-second-throttled `ReachabilityWalker.sweepWeakRefs(true)` invocation that
@@ -164,57 +164,107 @@ Confirmed via env var:
 | default (auto-GC every 5 s) | crashes mid-test: `detached result source` at line 430 |
 | `JPERL_NO_AUTO_GC=1` | runs to completion, 14/23 subtests fail (the existing tests 12-18 leak detection) |
 
-The walker correctly identifies that *most* objects can be cleaned up
-during the sweep, but it has a **blind spot**: the test-scope lexical
-`my $schema = DBICTest->init_schema()` holds a strong reference to the
-Schema, yet `ReachabilityWalker.sweepWeakRefs(true)` decides it's unreachable
-and clears its weak refs. The Schema's `weaken`'d back-references from each
-ResultSource then read as undef.
+#### The actual blind spot
 
-### Path that the walker should but doesn't trace
+The walker DOES seed lexicals (`ReachabilityWalker.walk()` lines 111–153,
+two loops):
 
+```java
+// (a) ScalarRefRegistry — every RuntimeScalar that holds a ref
+for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+    if (sc.captureCount > 0) continue;
+    if (WeakRefRegistry.isweak(sc)) continue;
+    if (MortalList.isDeferredCapture(sc)) continue;
+    if (!MyVarCleanupStack.isLive(sc)) {
+        if (sc.scopeExited) continue;
+        if (!sc.refCountOwned) continue;
+    }
+    visitScalar(sc, todo);
+}
+// (b) MyVarCleanupStack — explicit live my-var registration
+for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+    if (liveVar instanceof RuntimeScalar sc) { ... }
+    else if (liveVar instanceof RuntimeBase rb) { ... }
+}
 ```
-test scope lexical    `my $schema`            (RuntimeScalar, refCountOwned=true)
-       ↓ strong ref to
-  Schema HASH instance                        (DBIx::Class::Schema, blessed)
-       ↑ weak ref from each
-  ResultSource::Table instance                (Artist, CD, etc.)
-       ↑ strong ref from each
-  Row instance (`$phantom`)                   (DBICTest::Artist, blessed)
-```
 
-When the test does `$phantom = $phantom->result_source` → `$phantom = $phantom->resultset`,
-the second step calls `$result_source->schema` which dereferences the weak
-back-ref. **That ref is the only path that needs to stay defined** — the
-schema itself is still strongly held by the test's `$schema` lexical, but
-the WEAK ref from RS → Schema is what just got cleared by the sweep.
+But there's a race. `sweepWeakRefs` calls
+`ScalarRefRegistry.forceGcAndSnapshot()` BEFORE iterating the snapshot.
+`ScalarRefRegistry` is a `WeakHashMap`. Any scalar whose only live JVM-side
+reference is a stack-frame local can get GC'd from the registry between the
+force-GC and the snapshot — even though the Perl-level lexical is still
+on the stack and reachable.
 
-So the walker's job at sweep time is: "starting from all roots (globals +
-lexicals reachable from the JVM stack), mark every Schema instance as
-reachable so its weak-ref entries don't get cleared." It's failing at that
-for the test-scope lexical.
+When that happens to the test's `my $schema`:
+- Path (a) misses it (gone from `ScalarRefRegistry.snapshot()` after the
+  forced GC).
+- Path (b) misses it too — `MyVarCleanupStack` (Phase D-W1) was added
+  specifically for `my @arr` / `my %hash` (RuntimeArray / RuntimeHash).
+  A `my $scalar = $ref` does **not** register there because scalars aren't
+  tracked by that mechanism.
 
-### Fix path
+Result: the schema is **seedable only through the WeakHashMap path** —
+which is exactly the one path that races against the forced GC inside
+`sweepWeakRefs` itself.
 
-Fix `ReachabilityWalker.walk()` (and/or `isScalarReachable`) to correctly
-trace from lexical-scope roots to blessed objects held via strong refs.
-Specifically, audit:
+This explains:
+- **Why simple reproducers pass** — short scopes, low GC pressure, the
+  WeakHashMap entry survives long enough to be snapshotted.
+- **Why DBIC fails after ~20 prior tests** — cumulative GC pressure raises
+  the probability that `my $schema` is the unlucky entry GC'd between
+  `forceGcAndSnapshot` and the snapshot read.
 
-1. Are JVM-stack lexicals (`my $schema`) being seeded as roots? Currently
-   the walker probably only seeds `globalCodeRefs`, `globalArrays`,
-   `globalHashes`, `globalScalars` — not lexicals. We need to add the live
-   set of lexicals from the running call stack (or a tracking table that
-   records each `my` assignment of a refCountOwned scalar).
+### Fix path (narrow, TDD ordering)
 
-2. Are closures that capture lexicals being walked? See
-   `ReachabilityWalker.walk()` Phase 1 ("seed globalCodeRefs, walk WITH
-   captures") — the capture-following exists for code refs but lexicals
-   themselves may not be roots.
+Make `MyVarCleanupStack` track `my $scalar = $ref` strongly the same way it
+tracks `my @arr` / `my %hash`. Then walker path (b) finds the schema's
+lexical even when path (a)'s WeakHashMap entry has been GC'd.
 
-3. Is the Schema's actual identity being matched? The walker uses
-   IdentityHashMap; if the Schema's `RuntimeBase` instance somehow gets
-   replaced/wrapped during DBIC initialization (unlikely but possible),
-   identity comparison would miss it.
+**Order matters — test before fix:**
+
+1. **Add `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` debug knob** ✅ DONE (this PR).
+   In `MortalList.maybeAutoSweep()` — bypasses the 5-s throttle and the
+   `weakRefsExist` gate when the env var is set. Required for (2) to be
+   deterministic; same code is also useful for any future walker
+   investigation.
+
+2. **Add a FAILING unit test** under
+   `src/test/resources/unit/refcount/walker_lexical_scalar_root.t` that
+   uses `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` to deterministically reproduce
+   the race.
+
+   ⚠️ **STATUS — hypothesis disconfirmed**. The simple-lexical
+   reproducer PASSES under `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` + 20×
+   `Internals::jperl_gc()`. So does a DBIC-shape reproducer with
+   global-registered schemas. The walker correctly seeds both paths today.
+
+   **The actual DBIC bug is somewhere else** — likely tied to:
+   - Moo / Class::C3::XS / MRO interaction with refCount tracking
+   - DBIC's per-row `_result_source` cached weak ref via accessor magic
+   - Or Storable's seen-table inflating refcounts during `dclone`
+   - Or some other DBIC-specific structural cycle
+
+   The fix path below ("Implement the fix in EmitVariable.java") is
+   speculative — it might help, might not. Don't implement it without
+   first capturing a real DBIC failure with the diagnostic knob enabled
+   and inspecting which seeding gate dropped the schema.
+
+3. **Capture a real DBIC failure with the diagnostic knob.** Next
+   investigation step: add `JPERL_WALKER_TRACE=1` instrumentation to
+   `ReachabilityWalker.sweepWeakRefs()` so every cleared weak ref is
+   logged with its target identity + `findPathTo()` output. Then run:
+
+       JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+           ./jcpan -t DBIx::Class > /tmp/full.log 2>&1
+
+   The first line in the trace whose target is a Schema/ResultSource
+   that DBIC subsequently complains about is the actual blind spot.
+   Then we know which seeding gate to fix — without speculating.
+
+4. ~~Implement the fix in EmitVariable.java~~ — DEFERRED until (3) gives
+   us evidence about which gate is actually missing.
+
+5. ~~Run the unit test~~, ~~Run the full DBIC suite~~ — same.
 
 ### Architectural note (don't repeat past mistakes)
 

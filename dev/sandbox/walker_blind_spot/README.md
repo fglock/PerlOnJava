@@ -10,45 +10,43 @@ Under `./jcpan -t DBIx::Class`, `t/52leaks.t` occasionally throws
 `Unable to perform storage-dependent operations with a detached
 result source` mid-test. We confirmed it is caused by
 `MortalList.maybeAutoSweep()` (5-s throttled) clearing the weak ref
-from `ResultSource → Schema` even though the test scope still holds
-a strong ref to the Schema via `my $schema = DBICTest->init_schema()`.
+from `ResultSource → Schema`.
 
 `JPERL_NO_AUTO_GC=1` removes the crash but exposes 14/23 leak-detection
 failures (the existing tests 12-18 issues), so the fix is NOT to
 disable the sweep.
 
-## Reproducer attempts
+## Reproducer attempts (all PASS — none reproduce the actual bug)
 
-`simple_lexical_repro.t` — minimal Schema/ResultSource pair with one
-weakened back-ref. Holds `my $schema` and burns >5s of wall clock so
-the auto-sweep timer fires multiple times.
+| File | Pattern | Result |
+|---|---|---|
+| `simple_lexical_repro.t` | 1 schema, 1 result-source, 1 weakened back-ref, busy loop > 5 s | PASS in both default and JPERL_NO_AUTO_GC modes |
+| `lexical_scalar_root_PASSES.t` | `my $obj = bless` lexical + weakened back-ref, JPERL_FORCE_SWEEP_EVERY_FLUSH=1 + 20× Internals::jperl_gc() | PASS — walker seeds the lexical correctly |
+| `dbic_real_pattern_PASSES.t` | DBIC-shape: schema in global %REGISTRY, RS chain via `$phantom`, JPERL_FORCE_SWEEP_EVERY_FLUSH=1 | PASS — walker traces the global path correctly |
 
-**Status: passes both with and without `JPERL_NO_AUTO_GC=1`.** The
-walker correctly traces the simple `my $schema` lexical. The DBIC
-failure must depend on a more complex pattern — possibly the schema
-being captured into a closure/temporary during one of the accessor
-chain steps, or held only via a HashSpecialVariable / refCountOwned
-flag the walker happens to skip in that moment.
+**Conclusion**: the walker correctly seeds both `my $scalar = $ref`
+lexicals AND globally-registered schemas. The actual DBIC blind spot is
+elsewhere — likely tied to Moo/Class::C3::XS/MRO interaction, DBIC's
+accessor-magic for `_result_source`, Storable's seen-table inflating
+refcounts during `dclone`, or some other DBIC-specific structural cycle.
 
-## Next steps (for whoever picks this up)
+## How to find the actual bug
 
-1. Add diagnostic logging into `ReachabilityWalker.sweepWeakRefs()`
-   so that **every weak-ref clear** prints the cleared object's
-   classname + `findPathTo(target)` output. Run the full DBIC suite
-   with that on; find the first clear that hits a Schema object;
-   use the path to identify which seeding gate dropped it.
+Don't speculate further. Use the diagnostic infrastructure now in PR #635:
 
-2. Look at `ReachabilityWalker.walk()` Phase 2 lines 111-153: the
-   ScalarRefRegistry seed loop has guards on `captureCount > 0`,
-   `WeakRefRegistry.isweak`, `MortalList.isDeferredCapture`,
-   `MyVarCleanupStack.isLive`, `scopeExited`, `refCountOwned`. Some
-   subset of those is incorrectly excluding the test-scope `$schema`
-   in DBIC's specific call pattern.
+1. **`JPERL_FORCE_SWEEP_EVERY_FLUSH=1`** — landed in this PR.
+   Bypasses the 5-s sweep throttle so timing-dependent races trigger
+   on every statement boundary.
 
-3. Build the *failing* reproducer by mirroring DBIC's pattern more
-   precisely — passing the schema through method dispatch (which
-   creates `@_` temporaries and JVM-stack temporaries), via a chain
-   of accessor closures.
+2. **Add `JPERL_WALKER_TRACE=1`** (next investigator's job).
+   Instrument `ReachabilityWalker.sweepWeakRefs()` so every cleared
+   weak ref logs target identity + `findPathTo()` output + which
+   seeding sources were active.
+
+3. Run `JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1
+   ./jcpan -t DBIx::Class` and inspect the first cleared
+   Schema/ResultSource. The path-not-found tells you exactly which
+   seeding gate dropped it.
 
 ## Pointers
 
@@ -57,4 +55,5 @@ flag the walker happens to skip in that moment.
 - `src/main/java/org/perlonjava/runtime/runtimetypes/MyVarCleanupStack.java`
 - `src/main/java/org/perlonjava/runtime/runtimetypes/ScalarRefRegistry.java`
 - Disable while debugging: `JPERL_NO_AUTO_GC=1`
-- Trace mode: `JPERL_GC_DEBUG=1`
+- Force sweep on every flush: `JPERL_FORCE_SWEEP_EVERY_FLUSH=1`
+- Trace mode (existing): `JPERL_GC_DEBUG=1`

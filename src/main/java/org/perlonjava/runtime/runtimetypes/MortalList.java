@@ -560,6 +560,15 @@ public class MortalList {
             System.getenv("JPERL_NO_AUTO_GC") != null;
     private static final boolean AUTO_GC_DEBUG =
             System.getenv("JPERL_GC_DEBUG") != null;
+    // Phase D-W6.20 (debug knob): force the auto-sweep on EVERY flush()
+    // call, bypassing the 5-s throttle and the `weakRefsExist` gate.
+    // Used to reproduce timing-dependent walker bugs (e.g. the
+    // ScalarRefRegistry-vs-forceGc race that surfaces as DBIC's
+    // "detached result source" mid-test crash). Off by default; when on,
+    // every Perl statement boundary triggers a full sweepWeakRefs walk —
+    // very slow, only for diagnostics.
+    private static final boolean FORCE_SWEEP_EVERY_FLUSH =
+            System.getenv("JPERL_FORCE_SWEEP_EVERY_FLUSH") != null;
     private static boolean inAutoSweep = false;
 
     // D-W6.18 perf: cached reachable-set, valid for the duration of a
@@ -642,14 +651,19 @@ public class MortalList {
     private static void maybeAutoSweep() {
         if (AUTO_GC_DISABLED) return;
         if (inAutoSweep) return;
-        if (!WeakRefRegistry.weakRefsExist) return;
+        // FORCE_SWEEP_EVERY_FLUSH bypasses the weakRefsExist gate AND the
+        // 5-s throttle so reproducers can deterministically trigger the
+        // walker at every statement boundary.
+        if (!FORCE_SWEEP_EVERY_FLUSH && !WeakRefRegistry.weakRefsExist) return;
         // Phase B2a: skip while require/use/BEGIN/eval-STRING is running.
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
-        long now = System.nanoTime();
-        if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
-        lastAutoSweepNanos = now;
+        if (!FORCE_SWEEP_EVERY_FLUSH) {
+            long now = System.nanoTime();
+            if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
+            lastAutoSweepNanos = now;
+        }
         inAutoSweep = true;
         try {
             // Quiet mode: only clear weak refs for unreachable objects,
