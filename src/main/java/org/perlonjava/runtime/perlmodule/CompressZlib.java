@@ -594,10 +594,21 @@ public class CompressZlib extends PerlModuleBase {
             self.put("_eof", new RuntimeScalar(0));
 
             if (mode.startsWith("r")) {
-                // Read mode
-                InputStream fis = new FileInputStream(filename);
-                GZIPInputStream gis = new GZIPInputStream(fis);
-                self.put("_stream", new RuntimeScalar(gis));
+                // Read mode. zlib's gzopen transparently reads non-gzip files
+                // in 'rb' mode, so detect the gzip magic and fall back to a
+                // plain InputStream when the file isn't actually gzip-compressed.
+                InputStream fis = new BufferedInputStream(new FileInputStream(filename));
+                fis.mark(2);
+                int b1 = fis.read();
+                int b2 = fis.read();
+                fis.reset();
+                InputStream is;
+                if (b1 == 0x1F && b2 == 0x8B) {
+                    is = new GZIPInputStream(fis);
+                } else {
+                    is = fis;
+                }
+                self.put("_stream", new RuntimeScalar(is));
             } else if (mode.startsWith("w")) {
                 // Write mode - check for compression level
                 OutputStream fos = new FileOutputStream(filename);
