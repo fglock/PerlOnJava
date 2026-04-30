@@ -41,6 +41,21 @@ public class NameNormalizer {
      */
     public static int getBlessId(String str) {
         Integer id = blessIdCache.get(str);
+        if (id != null) {
+            // If this className was previously anonymized (e.g. by `undef
+            // %Pkg::`), the cached id maps to "__ANON__". A NEW `bless` into
+            // the same class name should produce an object whose `ref`
+            // reports the real class name — old objects still hold the
+            // anonymized id and continue to report "__ANON__". So when we
+            // detect this case, allocate a fresh id and rebind className→id.
+            // This is what enables `clean_inc` style patterns (Class::Trait
+            // tests, etc.) to wipe and reload a package without leaving new
+            // objects stuck reporting "__ANON__".
+            String blessStr = blessStrCache.get(id);
+            if ("__ANON__".equals(blessStr) && !"__ANON__".equals(str)) {
+                id = null;  // fall through to fresh allocation below
+            }
+        }
         if (id == null) {
             // Check if class has overload marker "(("
             boolean hasOverload = hasOverloadMarker(str);
@@ -100,10 +115,20 @@ public class NameNormalizer {
     public static void anonymizeBlessId(String className) {
         Integer id = blessIdCache.get(className);
         if (id == null) {
-            // Ensure subsequent blesses into this name also become anonymous.
+            // Ensure subsequent blesses into this name also become anonymous
+            // (until a NEW `bless` rebinds the cache via the
+            // anonymized-cache-entry detection in getBlessId above).
             id = getBlessId(className);
         }
         blessStrCache.put(id, "__ANON__");
+        // Note: we deliberately keep the className→id mapping in
+        // blessIdCache so that *glob{PACKAGE} on a glob in this stash
+        // (and ref() of objects already blessed into this id) continue
+        // to report "__ANON__". A subsequent `bless({}, className)` will
+        // observe the anonymized blessStr in getBlessId() and allocate
+        // a fresh id, rebinding the cache to the real class name — so
+        // new objects get the real class name back while old ones stay
+        // anonymous (matches Perl semantics for `undef %Pkg::`).
     }
 
     public static String getBlessStrForClassName(String className) {

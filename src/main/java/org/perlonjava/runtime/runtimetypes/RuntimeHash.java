@@ -255,6 +255,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 MortalList.deferDestroyForContainerClear(this.elements.values());
                 this.elements.clear();
                 if (this.byteKeys != null) this.byteKeys.clear();
+                // Reset each() iterator so it doesn't throw ConcurrentModificationException
+                // on the next each() call after this hash is re-populated.
+                hashIterator = null;
 
                 // Populate the hash from the materialized list
                 iterator = materializedList.iterator();
@@ -1102,6 +1105,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 this.elements.clear();
             }
             this.byteKeys = null;
+            hashIterator = null;
             MortalList.flush();
             return this;
         }
@@ -1129,6 +1133,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.elements = new StableHashMap<>();
         }
         this.byteKeys = null;
+        hashIterator = null;
         return this;
     }
 

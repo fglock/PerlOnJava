@@ -1318,10 +1318,22 @@ public class OperatorParser {
             // This avoids treating module names like "Encode" as subroutine calls when a sub
             // with the same name exists in the current package (e.g., sub Encode in Image::ExifTool)
             // But don't intercept quote-like operators like q(), qq(), etc.
+            int savedIndex = parser.tokenIndex;
             String moduleName = IdentifierParser.parseSubroutineIdentifier(parser);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("require module name `" + moduleName + "`");
             if (moduleName == null) {
                 throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
+            }
+
+            // If the bareword is followed by `->`, this is actually an expression like
+            // `require File::Spec->catfile(...)` — restore the position and fall through
+            // to expression parsing below.
+            LexerToken afterToken = peek(parser);
+            if (afterToken.type == OPERATOR && afterToken.text.equals("->")) {
+                parser.tokenIndex = savedIndex;
+                ListNode op = ListParser.parseZeroOrOneList(parser, 1);
+                operand = op;
+                return new OperatorNode("require", operand, parser.tokenIndex);
             }
 
             // Check if module name starts with ::
