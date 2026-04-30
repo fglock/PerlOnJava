@@ -266,6 +266,90 @@ lexical even when path (a)'s WeakHashMap entry has been GC'd.
 
 5. ~~Run the unit test~~, ~~Run the full DBIC suite~~ — same.
 
+### Next steps (concrete, in order)
+
+This PR (#635) ships the diagnostic infrastructure (`JPERL_FORCE_SWEEP_EVERY_FLUSH`)
+and the corrected investigation plan. Whoever picks up the actual fix should:
+
+#### Step A — Add `JPERL_WALKER_TRACE=1` instrumentation
+
+In `src/main/java/org/perlonjava/runtime/runtimetypes/ReachabilityWalker.java`,
+inside `sweepWeakRefs(boolean quiet)` (around the loop that clears weak
+refs to unreachable objects), add an env-gated `System.err.println` for
+each clear that records:
+
+```
+WALKER_CLEAR target=<className>@<identityHashCode>
+             refCount=<base.refCount>
+             refCountOwned=<sc.refCountOwned>
+             scopeExited=<sc.scopeExited>
+             captureCount=<sc.captureCount>
+             storedInPackageGlobal=<base.storedInPackageGlobal>
+             path=<findPathTo(target) or "<unreachable>">
+             seedStats=globals:<n> myVars:<n> scalarRefReg:<n>
+```
+
+The seed-stats snapshot is the critical piece — it tells us whether
+the schema's lexical was *eligible* to be seeded, even if it ended up
+filtered out.
+
+#### Step B — Capture a real DBIC failure
+
+```
+JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+    timeout 3000 ./jcpan -t DBIx::Class > /tmp/dbic.log 2>/tmp/dbic.trace
+```
+
+In the resulting `dbic.trace` file, find the first `WALKER_CLEAR` line
+whose target class is `DBIx::Class::Schema`, `DBIx::Class::ResultSource::Table`,
+or `DBIx::Class::Storage::DBI` (the classes whose weak-ref clearing
+produces the `detached result source` exception). That single trace line
+identifies the seeding gate that incorrectly excluded a still-live object.
+
+#### Step C — Fix the specific gate
+
+Once we know which property/state caused the false-negative seeding,
+the fix is in `ReachabilityWalker.walk()` Phase 2 (lines 111–153).
+Most likely candidates:
+
+1. The `sc.captureCount > 0` skip (path (a)) is over-eager — closures
+   that capture but are themselves only weakly held in
+   `globalCodeRefs` won't be walked, leaving the captured scalar
+   un-seeded. Fix: remove the `captureCount > 0` skip when the
+   scalar is `refCountOwned` (the closure capture is real ownership).
+
+2. `MyVarCleanupStack.isLive(sc)` returns false for scalars allocated
+   by JVM-stack temporaries during method dispatch (e.g. `@_`
+   storage). Fix: always seed `refCountOwned=true` scalars
+   regardless of `isLive`.
+
+3. A specific DBIC pattern (e.g. `Class::C3::XS` next-method dispatch,
+   Moo accessor magic, Sub::Quote eval-string captures) creates a
+   reachability path through closures that the walker doesn't know
+   how to follow. Fix: walk additional capture sources.
+
+The trace tells us which.
+
+#### Step D — Promote the fix's regression test
+
+Once Step B identifies the actual pattern, the smallest version of it
+becomes the regression test under
+`src/test/resources/unit/refcount/walker_<specific_gate>.t`. The
+`dev/sandbox/walker_blind_spot/*_PASSES.t` files in this PR are
+*starting points* for that — they set up the
+JPERL_FORCE_SWEEP_EVERY_FLUSH harness correctly, just don't exercise
+the actual blind spot yet.
+
+#### Step E — Verify on full DBIC suite
+
+```
+timeout 3600 ./jcpan -t DBIx::Class > /tmp/final.log 2>&1
+grep "Files=" /tmp/final.log    # must show 0/N failures
+```
+
+Run on a quiet box (no concurrent jcpan/jprove from other worktrees) so
+the test is meaningful.
+
 ### Architectural note (don't repeat past mistakes)
 
 `/dev/modules/dbix_class.md` "What Didn't Work" warns:
