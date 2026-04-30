@@ -301,7 +301,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Note: \@array and \%hash come in as ARRAYREFERENCE/HASHREFERENCE types,
                 // not REFERENCE, so they are handled above in their respective cases.
                 if (value.value instanceof RuntimeScalar) {
-                    GlobalVariable.aliasGlobalVariable(this.globName, (RuntimeScalar) value.value);
+                    // Update all glob aliases so that earlier `*A = *B`
+                    // (which makes A and B share their SCALAR slot) keeps both
+                    // names pointing at the new aliased scalar after `*A = \$x`.
+                    for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                        GlobalVariable.aliasGlobalVariable(aliasedName, (RuntimeScalar) value.value);
+                    }
                     // Mark as explicitly declared for strict vars (e.g., Exporter imports)
                     GlobalVariable.declareGlobalVariable(this.globName);
                 }

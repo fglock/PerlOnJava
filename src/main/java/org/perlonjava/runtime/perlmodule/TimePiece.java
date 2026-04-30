@@ -73,6 +73,20 @@ public class TimePiece extends PerlModuleBase {
         boolean isLocal = args.get(2).getBoolean();
         RuntimeHash locales = args.size() > 3 ? args.get(3).hashDeref() : null;
 
+        // Special-case %s (epoch seconds) — Java's DateTimeFormatter has no
+        // direct strftime-style %s token, so handle it explicitly.
+        if (format.trim().equals("%s")) {
+            try {
+                long epoch = Long.parseLong(dateString.trim());
+                ZonedDateTime zdt = isLocal
+                        ? Instant.ofEpochSecond(epoch).atZone(ZoneId.systemDefault())
+                        : Instant.ofEpochSecond(epoch).atZone(ZoneOffset.UTC);
+                return buildTimeArray(zdt, isLocal);
+            } catch (NumberFormatException e) {
+                return new RuntimeList();
+            }
+        }
+
         // Convert strftime format to Java DateTimeFormatter pattern
         String javaPattern = convertStrftimeToJava(format, locales);
         
