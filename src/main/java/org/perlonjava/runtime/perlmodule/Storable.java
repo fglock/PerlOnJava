@@ -96,6 +96,7 @@ public class Storable extends PerlModuleBase {
             // byte-string scalar so consumers see it as raw bytes (matches
             // the existing freeze() return shape).
             RuntimeScalar result = new RuntimeScalar(encoded);
+            result.type = RuntimeScalarType.BYTE_STRING;
             return result.getList();
         } catch (Exception e) {
             return WarnDie.die(new RuntimeScalar("freeze failed: " + e.getMessage()), new RuntimeScalar("\n")).getList();

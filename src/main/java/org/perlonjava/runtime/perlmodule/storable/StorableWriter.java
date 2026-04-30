@@ -223,9 +223,23 @@ public final class StorableWriter {
 
         // First element is the frozen cookie; rest are sub-refs.
         RuntimeScalar cookieSv = items.get(0);
-        byte[] frozen = cookieSv == null
-                ? new byte[0]
-                : cookieSv.toString().getBytes(StandardCharsets.UTF_8);
+        // The cookie returned by STORABLE_freeze is a binary Storable
+        // blob (chars 0..255 stored as Java chars). Treat it as raw
+        // bytes — encoding it as UTF-8 mangles the high bytes (0x80..0xFF
+        // become 2-byte sequences) and corrupts the embedded stream.
+        byte[] frozen;
+        if (cookieSv == null) {
+            frozen = new byte[0];
+        } else if (cookieSv.type == RuntimeScalarType.BYTE_STRING) {
+            String s = cookieSv.toString();
+            frozen = new byte[s.length()];
+            for (int i = 0; i < frozen.length; i++) frozen[i] = (byte) s.charAt(i);
+        } else {
+            // Plain STRING — also a byte string in practice for hook cookies,
+            // since STORABLE_freeze returns the result of nfreeze(). Use
+            // ISO_8859_1 to preserve every char 0..255 as a single byte.
+            frozen = cookieSv.toString().getBytes(StandardCharsets.ISO_8859_1);
+        }
         int subCount = items.size() - 1;
 
         // Determine object kind from the bless target.
