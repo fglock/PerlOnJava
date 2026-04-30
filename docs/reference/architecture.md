@@ -178,6 +178,16 @@ Java implementations of Perl operators, organized by category.
 #### Perl Modules (`runtime/perlmodule/`)
 Java XS implementations for modules that normally use C XS code (DateTime, DBI, JSON, etc.).
 
+#### Memory Management
+PerlOnJava relies on the JVM's tracing garbage collector for general memory
+reclamation, including circular references. On top of that, a small
+**selective reference-counting overlay** provides Perl 5's deterministic
+`DESTROY` timing and `Scalar::Util::weaken` semantics for the narrow set of
+objects that need them. See [Memory Management](memory-management.md) for
+the user-facing summary, the relationship to the GC literature
+(Bacon 2004, Blackburn & McKinley 2003, *The Garbage Collection Handbook*),
+and a comparison with Perl 5 / JVM finalization.
+
 ## Interpreter Backend Details
 
 The interpreter provides an alternative execution path:
@@ -230,9 +240,11 @@ Tests use Perl's TAP (Test Anything Protocol) format and are executed via JUnit 
 
 ## Related Documentation
 
+- [Memory Management](memory-management.md) - Selective reference-counting
+  overlay for `DESTROY` and `weaken`, with literature context.
 - `dev/architecture/` - Deep-dive architecture documents for contributors:
   - [Overview and index](../../dev/architecture/README.md)
-  - [DESTROY and weak references](../../dev/architecture/weaken-destroy.md) - Cooperative reference counting overlay
+  - [DESTROY and weak references](../../dev/architecture/weaken-destroy.md) - Implementation details
   - [Dynamic scoping](../../dev/architecture/dynamic-scope.md) - `local` and DynamicVariableManager
   - [Lexical pragmas](../../dev/architecture/lexical-pragmas.md) - Warnings, strict, and features
   - [Control flow](../../dev/architecture/control-flow.md) - die/eval, loop control, exceptions

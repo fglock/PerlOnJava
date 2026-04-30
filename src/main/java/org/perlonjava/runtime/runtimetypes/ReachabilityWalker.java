@@ -12,7 +12,7 @@ import java.util.Set;
  * Walks the live object graph from Perl-visible roots and identifies which
  * objects in the weak-ref registry are unreachable. Clears weak refs for
  * those objects, simulating Perl 5's refcount-based collection when
- * PerlOnJava's cooperative refCount has drifted due to JVM temporaries.
+ * PerlOnJava's selective refCount has drifted due to JVM temporaries.
  * <p>
  * Roots:
  * <ul>
@@ -335,7 +335,7 @@ public class ReachabilityWalker {
      * without enumerating the full live set.
      * <p>
      * Used by {@link MortalList#flush} to avoid prematurely firing
-     * DESTROY on a blessed object whose cooperative refCount dipped to
+     * DESTROY on a blessed object whose selective refCount dipped to
      * 0 transiently while the object is still held by a container the
      * walker can see (globals, hash/array elements registered in
      * {@link ScalarRefRegistry}). Concrete failure mode without this

@@ -118,7 +118,7 @@ public class ReferenceOperators {
                 // count these as strong references so scopeExitCleanupHash
                 // correctly decrements them when the container is destroyed.
                 // Without this, references stored before bless are invisible to
-                // cooperative refcounting, causing premature destruction of
+                // selective refcounting, causing premature destruction of
                 // objects held only by this container (e.g., DBIC ResultSource
                 // held by a ResultSet's {result_source} hash element).
                 if (referent instanceof RuntimeHash hash) {

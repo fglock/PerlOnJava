@@ -4,9 +4,9 @@ use Test::More;
 use Scalar::Util qw(weaken);
 
 # =============================================================================
-# our_metas_underflow.t — Reproducer for the cooperative refCount bug:
+# our_metas_underflow.t — Reproducer for the selective refCount bug:
 # storing a blessed reference in a package hash (`our %METAS`) does NOT
-# bump the cooperative refCount, so the object's refCount underflows to 0
+# bump the selective refCount, so the object's refCount underflows to 0
 # at end-of-statement when the temporary holding it expires.
 #
 # This is the root cause of the Class::MOP bootstrap failure that the

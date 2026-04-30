@@ -48,7 +48,7 @@ will do the real port — they're complementary, not alternatives.
 These are listed only because they were "out of scope" / "blockers" in
 earlier revisions of this document; they no longer are:
 
-- **`weaken` / `isweak`** — implemented in core (cooperative reference
+- **`weaken` / `isweak`** — implemented in core (selective reference
   counting on top of JVM GC). See `dev/architecture/weaken-destroy.md`.
 - **`DESTROY` / `DEMOLISH` timing** — implemented in core; fires
   deterministically for tracked blessed objects. Moose's `DEMOLISH`
@@ -859,7 +859,7 @@ during `Class::MOP.pm`'s self-bootstrap). Without the fix
 
 The auto-sweep (`MortalList.maybeAutoSweep` →
 `ReachabilityWalker.sweepWeakRefs(true)`) was clearing weak refs to
-blessed objects whose cooperative `refCount > 0` simply because the
+blessed objects whose selective `refCount > 0` simply because the
 walker couldn't see them as reachable. The walker only seeds from
 package globals and `ScalarRefRegistry`; it doesn't seed from `my`
 lexical hashes or arrays. A blessed object held only by a `my %REG`
@@ -870,7 +870,7 @@ in the caller's scope is therefore invisible to the walker —
 
 `ReachabilityWalker.sweepWeakRefs(quiet=true)` now skips clearing weak
 refs whose referent has `refCount > 0`. Reasoning: PerlOnJava's
-cooperative refCount can drift due to JVM temporaries, but a positive
+selective refCount can drift due to JVM temporaries, but a positive
 refCount means at least one tracked container thinks it's holding a
 strong reference. Auto-sweep should be conservative; explicit
 `Internals::jperl_gc()` (non-quiet) still clears, since the user
@@ -965,7 +965,7 @@ guard, the cycle stays alive forever. Reverted.
 
 **Lesson**: there's no simple predicate that distinguishes
 "transient refCount drift during heavy reference shuffling" from
-"genuine end-of-life with weak refs about to clear". The cooperative
+"genuine end-of-life with weak refs about to clear". The selective
 refCount system doesn't carry enough information at the destroy gate
 to make this call. The fix has to be in the **accounting itself**,
 not at the destroy gate.
@@ -1218,7 +1218,7 @@ After Paths 1 and 2 land:
 
 ####### What success does NOT mean
 
-The cooperative refCount may still over-count in some cases (objects
+The selective refCount may still over-count in some cases (objects
 hold refCount > 0 after they're truly dead). That's acceptable: the
 existing auto-sweep will reap them on the next walker cycle. The
 problematic direction — under-counting that fires DESTROY too early
@@ -1634,7 +1634,7 @@ fix-level work:
    `Class/MOP/PurePerl.pm`.
 
 6. **Patch Class::MOP::Method::Accessor** to skip
-   `weaken($self->{attribute})`. The cooperative refCount can't
+   `weaken($self->{attribute})`. The selective refCount can't
    keep the attribute alive across the brief window between
    `weaken` and `_initialize_body`. Trade: leaks attribute objects
    at global destruction.
@@ -1810,7 +1810,7 @@ Moose stays at 412/478, refcount unit tests stay green.
       untracked to refCount=0+ tracked, scan ScalarRefRegistry
       for scalars holding the object and back-increment).
 
-   2. Replace the cooperative refCount mechanism with a more
+   2. Replace the selective refCount mechanism with a more
       reliable scheme (e.g. JVM-level identity hashmap keyed
       by referent, counting actual scalar holders).
 
@@ -1991,7 +1991,7 @@ Tests fixed:
   - A handful of cmop/method introspection edge cases (constants,
     forward declarations, eval-defined subs).
 
-### D-W6.7: Pinpointed root cause — %METAS storage doesn't bump cooperative refCount
+### D-W6.7: Pinpointed root cause — %METAS storage doesn't bump selective refCount
 
 **Date:** 2026-04-26
 **Branch:** `fix/d-w6-precise-die-probe`
@@ -2027,7 +2027,7 @@ install_accessors:                  assoc=UNDEF
 
 **The bug:** the metaclass `RuntimeHash` (id=1746570062) is stored in
 `our %METAS` (`store_metaclass_by_name $METAS{$name} = $self`).
-Despite `%METAS` strongly holding it, the cooperative refCount drops
+Despite `%METAS` strongly holding it, the selective refCount drops
 to 0 at end-of-statement when the temporary returned by
 `HasMethods->meta` falls out of scope and `MortalList.flush()`
 processes its mortals. `clearWeakRefsTo` is called on the metaclass,
@@ -2042,7 +2042,7 @@ remove_accessors → _remove_accessor` at `Class/MOP/Attribute.pm:475`,
 which dies again with the visible `Can't call method "get_method" on
 an undefined value` message.
 
-**Root cause statement:** the cooperative refCount is failing to
+**Root cause statement:** the selective refCount is failing to
 count the strong reference held by the package variable hash slot
 `$METAS{$package_name}`. When the temporary metaclass return-value
 from `->meta` expires, refCount goes from 1 → 0 even though `%METAS`
@@ -2066,7 +2066,7 @@ package-variable-hash reachability.
 Two options for a real fix:
 
 1. **Fix the refCount discipline:** ensure `RuntimeHash.put()` /
-   slot-assignment increments the cooperative refCount of the
+   slot-assignment increments the selective refCount of the
    referent when storing a blessed/tracked RuntimeBase value. Find
    why this doesn't happen for `$METAS{$name} = $meta`.
 
@@ -2149,7 +2149,7 @@ The 1→0 transition occurs during `MortalList.flush()` triggered at
 the end of statement at `Class/MOP/Class.pm:260`
 (`my $super_meta = Class::MOP::get_metaclass_by_name(...)`). At
 that moment the metaclass should have refCount==1 (held by
-`our %METAS`), but the cooperative count goes to 0 because one of
+`our %METAS`), but the selective count goes to 0 because one of
 the 50 increment sites does **not** end up paired with the right
 decrement (one extra `pending.add(metaclass)` queued without a
 paired increment, or one increment lost without queueing a paired
@@ -2191,7 +2191,7 @@ the instrumentation.
 
 The user-stated requirement: **the class-name heuristic is not
 acceptable**. We must find and fix the actual unpaired
-increment/decrement in cooperative refCount discipline.
+increment/decrement in selective refCount discipline.
 
 #### What we know from the tracer
 
@@ -2298,7 +2298,7 @@ Once the underlying bug is fixed, the gate at
 }
 ```
 
-Or even simpler: remove the gate entirely once cooperative refCount
+Or even simpler: remove the gate entirely once selective refCount
 is correct and DBIC's leak detection passes without rescue.
 
 **Step 5: Acceptance gates.**
@@ -2350,7 +2350,7 @@ The two surviving owners both came from `setLargeRefCounted store`:
 
 This proves the imbalance is **not in the tracer instrumentation**:
 those owner scalars genuinely still hold strong refs to the
-destroyed metaclass. Cooperative refCount said "0 strong refs"
+destroyed metaclass. Selective refCount said "0 strong refs"
 while in fact 2 strong refs exist.
 
 #### Smoking-gun candidates
@@ -2374,7 +2374,7 @@ this.value = lvalue.value; // proxy ALSO points to base, but no recordOwner
 ```
 
 The proxy's `this.value` field then holds a strong reference to the
-base **invisible to cooperative refcounting**. When the proxy is
+base **invisible to selective refcounting**. When the proxy is
 later assigned a new value, the proxy's `set()` calls
 `lvalue.set(new_value)` which decrements old base's refCount via the
 overwrite path — but only because `lvalue.refCountOwned` is true. If
@@ -2397,7 +2397,7 @@ through the queueing-then-flushing protocol):
       original increment), or
    b. removing the decrement (it was unpaired in the first place).
 
-Once all sites are cleanly paired, the cooperative refCount becomes
+Once all sites are cleanly paired, the selective refCount becomes
 self-consistent and the walker-gate heuristic can be removed.
 
 #### Files committed on this branch
@@ -2449,7 +2449,7 @@ heuristic):
 | Unit tests: PASS | all green |
 | DBIC `t/52leaks.t`: 9–10 of 18 fail | leak rescue too aggressive — keeps cycle members alive that real Perl correctly leaks |
 
-The fundamental issue: cooperative refCount cannot tolerate
+The fundamental issue: selective refCount cannot tolerate
 cycles without weaken. My filter `refCountOwned && value == this`
 finds true strong owners, including cycle members that real Perl
 also leaks but DBIC's leak test expects to see destroyed (likely
@@ -2489,7 +2489,7 @@ side-effect.
 
 #### Next step (D-W6.14)
 
-The cooperative refCount underflow is real (D-W6.10 trace shows
+The selective refCount underflow is real (D-W6.10 trace shows
 the metaclass refCount going to 0 with 2 surviving strong owners
 — D-W6.12). The 2 unpaired increments are still unidentified. The
 audit of direct `--refCount` sites pointed at all known paths,
@@ -2524,7 +2524,7 @@ allowing each reference-counted graph to collapse properly when an
 external strong reference is dropped.
 
 For PerlOnJava to behave the same way, we need:
-1. **Precise cooperative refCount** — every increment paired with
+1. **Precise selective refCount** — every increment paired with
    exactly one decrement, no transient zeros.
 2. **Effective weaken()** — weakening must decrement refCount and
    exclude the slot from owner-counting (already done correctly).
@@ -2533,7 +2533,7 @@ For PerlOnJava to behave the same way, we need:
 
 #### What's wrong today
 
-Cooperative refCount has **transient zeros**. The deferred
+Selective refCount has **transient zeros**. The deferred
 decrement model (`MortalList.flush`) means a sequence like
 `inc → queue → inc → flush → flush → inc` can have refCount briefly
 hit 0 between the second flush and the third inc — even though the
@@ -2555,7 +2555,7 @@ strong owners. But:
 2. **For DBIC row objects in test cycles**: `populate_weakregistry`
    weak-refs the row. Then test does `undef $row` in some scope.
    Real Perl: refcount drops to 0, DESTROY fires, weak ref clears.
-   PerlOnJava: cooperative refCount has phantom owners — typically
+   PerlOnJava: selective refCount has phantom owners — typically
    container element scalars whose containers are themselves
    transient/dying but haven't yet released their elements.
 
@@ -2568,7 +2568,7 @@ Rescue keeps them alive, breaking the leak detection.
 System Perl's approach (precise refcount + programmer-controlled
 weaken) maps to PerlOnJava as:
 
-**Goal**: eliminate transient zeros from cooperative refCount
+**Goal**: eliminate transient zeros from selective refCount
 without changing the deferred-decrement architecture.
 
 **Algorithm options:**
@@ -2692,7 +2692,7 @@ The walker doesn't find Schema's owner. Likely candidates:
   RuntimeStash for perf).
 
 The walker is fundamentally **a snapshot of live JVM state at
-this exact moment**. Cooperative refCount can hit 0 transiently
+this exact moment**. Selective refCount can hit 0 transiently
 DURING method call frames where strong owners are sitting on the
 JVM stack but haven't been pushed into MyVarCleanupStack (e.g.,
 intermediate `RuntimeScalar` values during method dispatch).
@@ -2714,7 +2714,7 @@ The right fix would be one of:
    ScalarRefRegistry; survivors are real strong owners.
 
 3. **Eliminate transient zeros at the source**: ensure
-   cooperative refCount never goes to 0 except at true scope
+   selective refCount never goes to 0 except at true scope
    exits, by making MortalList drain only AFTER the destination
    scalar's increment has happened. Requires re-ordering JVM-
    emitted bytecode for assignments (probably very invasive).
@@ -2768,7 +2768,7 @@ strongly).
 
 Possible sources:
 1. **DBIC's internal method dispatch left a my-var holding the row**
-   that wasn't released because cooperative refCount has a
+   that wasn't released because selective refCount has a
    pre-existing imbalance.
 2. **Closure captures**: a closure created during DBIC processing
    captured the row; the closure is reachable from globals.
@@ -2814,7 +2814,7 @@ must be addressed first — see D-W6.17 (next session).
 
 ### D-W6.17: Plan revision — FREETMPS-style flushing is necessary but NOT sufficient
 
-The original D-W6.15 plan suggested making cooperative refCount precise
+The original D-W6.15 plan suggested making selective refCount precise
 by ensuring transient zeros only happen at scope-exit boundaries
 (matching Perl 5's FREETMPS). This session attempted that and learned
 the plan needs revision.
@@ -2849,7 +2849,7 @@ not WHETHER they're paired.
 #### Why the plan needs revision
 
 The user's plan asked for "transient zeros only at scope-exit
-boundaries". This would be sufficient IF the cooperative refCount
+boundaries". This would be sufficient IF the selective refCount
 were otherwise balanced. But it's NOT balanced — somewhere a
 decrement fires for which no matching increment ever happened (or
 vice versa).
@@ -2858,7 +2858,7 @@ The transient-zero hypothesis came from observing a specific
 trace: refCount went 1→0 mid-statement during `Class/MOP/Class.pm:260`.
 But that 1→0 was the CONSEQUENCE of the imbalance, not a cause —
 the metaclass's "true" refCount should be 2 at end of run (matching
-2 surviving owners), but PerlOnJava's cooperative count went to
+2 surviving owners), but PerlOnJava's selective count went to
 MIN_VALUE because there were 2 extra decrement events somewhere.
 
 #### Revised plan: find the REAL unpaired site
@@ -2939,7 +2939,7 @@ Master's heuristic gate:
   → 0 → DESTROY. Works.
 
 The heuristic is empirically correct for the modules we care about.
-Its shape is: "for these specific classes, cooperative refCount may
+Its shape is: "for these specific classes, selective refCount may
 have transient zeros; consult walker before firing DESTROY."
 
 #### Is the heuristic actually wrong?
@@ -2978,7 +2978,7 @@ Then the gate becomes:
         && WeakRefRegistry.hasWeakRefsTo(base)
         && ReachabilityWalker.isReachableFromRoots(base)) {
     // Rescue: this object's lifetime is module-global, but
-    // cooperative refCount has transient zeros. Walker confirms
+    // selective refCount has transient zeros. Walker confirms
     // reachability; suppress DESTROY.
 }
 ```

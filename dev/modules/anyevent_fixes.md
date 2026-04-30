@@ -18,7 +18,7 @@ including low-priority ones.
 **Note**: `./jcpan -t AnyEvent` stops at `t/02_signals.t` because that
 test outputs `Bail out!` on failure, which aborts the entire harness
 run after only 3 files. The signal failure is downstream of the
-`weaken`/cooperative-refcount limitation documented in `AGENTS.md`
+`weaken`/selective-refcount limitation documented in `AGENTS.md`
 (timer/io watchers are destroyed immediately because `weaken` too
 eagerly clears the last strong ref). This is being addressed in a
 separate branch. Running tests individually would reveal the per-file
@@ -177,7 +177,7 @@ not ok 5    # weakened timer still fires
 not ok 6    # twin (expected/unexpected) of 5
 ```
 
-Our `weaken` is cooperative-refcount based (per AGENTS.md) and doesn't
+Our `weaken` is selective-refcount based (per AGENTS.md) and doesn't
 match Perl's eager-free semantics in this specific pattern:
 
 ```perl
@@ -232,7 +232,7 @@ Result: 82/83 → 13/83 test-program failures; subtests 24 → 157.
 
 - `fork`: implement, or reach agreement that fork-dependent tests are
   exempt from the "all tests must pass" rule?
-- `weaken` semantics: cooperative-refcount is documented in `AGENTS.md`
+- `weaken` semantics: selective-refcount is documented in `AGENTS.md`
   — do we strengthen it for this test, or treat t/13_weaken #5–#6 as a
   known deviation?
 

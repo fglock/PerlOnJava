@@ -78,7 +78,7 @@ cross-links), which empties the Structure's hash. When the lexer next calls
 `_continues`, it sees `$LastChild->{start}` as undef, falls through to the
 `while` branch, and throws `Illegal state in 'while' compound statement`.
 
-The root cause is **not** in PPI; it is in PerlOnJava's cooperative refcount
+The root cause is **not** in PPI; it is in PerlOnJava's selective refcount
 bookkeeping for containers that hold DESTROY-tracked objects.
 
 **Minimal PerlOnJava-only repro (no PPI):**
@@ -186,7 +186,7 @@ Investigative steps before coding a fix:
 3. If object identity is lost: it's a PerlOnJava-level bug in hash/blessed-ref
    handling or in `Scalar::Util::weaken` / refaddr.
 4. If `weaken` prematurely collects the start brace (unlikely given
-   `_PARENT` weak ref, but possible): that points to our `weaken` cooperative
+   `_PARENT` weak ref, but possible): that points to our `weaken` selective
    refcount interacting badly with PPI's hand-rolled weak-parent table.
 
 Fix will depend on what (1)–(4) reveal. Document the resolution back in this
@@ -230,7 +230,7 @@ file before closing the phase.
 ### Next Steps
 
 1. **Phase 2 is blocked** on a broader refcount-parity investigation. The root
-   cause is in PerlOnJava's cooperative refcount (container stores do not
+   cause is in PerlOnJava's selective refcount (container stores do not
    increment refcount for DESTROY-tracked refs), not in PPI. Needed work,
    in order, as its own branch:
    - Make container-store ops increment refcount consistently: `push`,

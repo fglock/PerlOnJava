@@ -133,7 +133,7 @@ public class MortalList {
      * <p>
      * This is safe because at this point ALL lexical scopes have exited
      * (the main script has returned). Closures installed in stashes still
-     * hold JVM references to the RuntimeScalar, but the cooperative
+     * hold JVM references to the RuntimeScalar, but the selective
      * refCount should reflect that the declaring scope is gone.
      */
     public static void flushDeferredCaptures() {
@@ -154,7 +154,7 @@ public class MortalList {
 
         // Final sweep: clear weak refs for ALL remaining blessed objects.
         // At this point the main script has returned and all lexical scopes
-        // have exited. Some objects may still have inflated cooperative
+        // have exited. Some objects may still have inflated selective
         // refCounts (due to JVM temporaries, method-call copies, interpreter
         // captures) that prevent DESTROY from firing. Their weak refs would
         // remain defined forever, causing DBIC's leak tracer to report false
@@ -613,7 +613,7 @@ public class MortalList {
                         // Replaces the class-name heuristic
                         // (classNeedsWalkerGate). Object's lifetime is
                         // module-global metadata (stored in a package-
-                        // global hash like %METAS), so cooperative
+                        // global hash like %METAS), so selective
                         // refCount transient zeros must not fire DESTROY.
                         // Walker confirms reachability; suppress destroy.
                         // D-W6.16: heuristic walker gate (primary).

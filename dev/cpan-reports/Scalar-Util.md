@@ -34,7 +34,7 @@ All 14 standard Scalar::Util EXPORT_OK functions are declared and registered.
 | `blessed` | Full | Handles blessed refs and `qr//` (implicit "Regexp" blessing) |
 | `refaddr` | Full | Uses `System.identityHashCode()` (JVM -- not real memory address) |
 | `reftype` | Full | Handles SCALAR, REF, ARRAY, HASH, CODE, GLOB, FORMAT, REGEXP, VSTRING |
-| `weaken` | Full | Cooperative reference counting on JVM GC. Well tested. |
+| `weaken` | Full | Selective reference counting on JVM GC. Well tested. |
 | `unweaken` | Full | Restores strong reference |
 | `isweak` | Full | Delegates to `WeakRefRegistry.isweak()` |
 | `dualvar` | Full | Creates `DualVar` record with separate numeric/string values |

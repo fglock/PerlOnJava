@@ -247,7 +247,7 @@ public class WeakRefRegistry {
      * Clear weak refs for ALL blessed, non-CODE objects in the registry.
      * Called after flushDeferredCaptures() — at this point the main script
      * has returned and all lexical scopes have exited. Objects with inflated
-     * cooperative refCounts (due to JVM temporaries, method-call argument
+     * selective refCounts (due to JVM temporaries, method-call argument
      * copies, etc.) may still appear "alive" even though no Perl code holds
      * a reference. Clearing their weak refs allows DBIC's leak tracer
      * (which runs in an END block) to see them as "collected".

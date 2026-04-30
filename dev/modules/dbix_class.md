@@ -141,7 +141,7 @@ When scope exits, scalar releases 1 reference but hash stays at refCount > 0. `c
 
 ### Next Steps
 
-Both remaining failures (t/52leaks.t tests 12-18 and t/storage/txn_scope_guard.t test 18) hit **fundamental limitations** of PerlOnJava's cooperative refCounting that can't be solved without a major architectural change:
+Both remaining failures (t/52leaks.t tests 12-18 and t/storage/txn_scope_guard.t test 18) hit **fundamental limitations** of PerlOnJava's selective refCounting that can't be solved without a major architectural change:
 
 #### Why t/52leaks.t tests 12-18 Are Blocked
 
@@ -162,7 +162,7 @@ Attempted fix (Fix 10n attempt #2): Set `refCount = 0` during DESTROY body (not 
 
 **Failure mode**: `my $self = shift` inside DESTROY body increments `refCount` to 1 via `setLargeRefCounted` when `$self` is assigned. When DESTROY returns, `$self` is a Java local that goes out of scope without triggering a corresponding decrement (PerlOnJava lexicals don't hook scope-exit decrements for scalar copies). Post-DESTROY `refCount=1` → false resurrection detection → loops indefinitely on File::Temp DESTROY during DBIC test loading.
 
-Root cause: PerlOnJava's cooperative refCount scheme can't accurately track the net delta from a DESTROY body, because lexical assignments increment but lexical destruction doesn't always decrement.
+Root cause: PerlOnJava's selective refCount scheme can't accurately track the net delta from a DESTROY body, because lexical assignments increment but lexical destruction doesn't always decrement.
 
 #### What Would Fix Both
 
@@ -180,7 +180,7 @@ Deferred until such architectural work becomes practical.
 2. **`createReference()` audit** — Fixed: Storable, DBI. Other deserializers (JSON, XML::Parser) don't appear in the DBIC leak pattern.
 3. **Targeted refcount inflation sources** — function-arg copies tracked via `originalArgsStack` (Fix 10l), @DB::args preservation works; but inflation in `map`/`grep`/`keys` temporaries remains.
 
-### Cooperative Refcounting Internals (reference)
+### Selective Refcounting Internals (reference)
 
 **States**: `-1`=untracked; `0`=tracked, 0 counted refs; `>0`=N counted refs; `-2`=WEAKLY_TRACKED; `MIN_VALUE`=DESTROY called.
 
