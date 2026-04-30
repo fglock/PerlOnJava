@@ -53,6 +53,12 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("V", "V", null);
             internals.registerMethod("getcwd", "getcwd", null);
             internals.registerMethod("abs_path", "abs_path", ";$");
+            // PerlOnJava-only probe: report whether a fully qualified sub
+            // name was installed via typeglob assignment (e.g. Exporter
+            // imports do `*Dst::name = \&Src::name`). Used by B::GV::GvFLAGS
+            // to approximate the real-Perl GVf_IMPORTED_CV bit so callers
+            // such as Pod::Coverage can skip imported helpers.
+            internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -501,5 +507,27 @@ public class Internals extends PerlModuleBase {
         } catch (java.io.IOException e) {
             return new RuntimeScalar().getList();  // return undef on error
         }
+    }
+
+    /**
+     * Returns 1 if the named sub was installed via typeglob assignment
+     * (i.e. Exporter-style import) rather than defined directly with
+     * {@code sub name { ... }}, otherwise empty list (undef).
+     *
+     * <p>PerlOnJava tracks this in
+     * {@link org.perlonjava.runtime.runtimetypes.GlobalVariable#isSubs};
+     * we expose it so {@code B::GV::GvFLAGS} can approximate the real-Perl
+     * {@code GVf_IMPORTED_CV} bit. Pod::Coverage uses this to skip
+     * imported helpers when reporting coverage.
+     *
+     * @param args The fully-qualified sub name (e.g. {@code "Pkg::name"}).
+     */
+    public static RuntimeList jperl_is_imported_sub(RuntimeArray args, int ctx) {
+        if (args.size() == 0) return new RuntimeScalar().getList();
+        String name = args.get(0).toString();
+        if (org.perlonjava.runtime.runtimetypes.GlobalVariable.isSubs.getOrDefault(name, false)) {
+            return new RuntimeScalar(1).getList();
+        }
+        return new RuntimeScalar().getList();
     }
 }
