@@ -376,8 +376,12 @@ public class LayeredIOHandle implements IOHandle {
                 inputPipeline = inputPipeline.andThen(inputTransform);
                 outputPipeline = outputPipeline.andThen(outputTransform);
             }
-            case "utf8" -> {
-                // UTF-8 encoding layer - convenience alias for :encoding(UTF-8)
+            case "utf8", "utf8_strict" -> {
+                // UTF-8 encoding layer - convenience alias for :encoding(UTF-8).
+                // :utf8_strict (from the PerlIO::utf8_strict CPAN module) is treated
+                // as an alias for :utf8 here: the JVM's UTF-8 CharsetDecoder already
+                // rejects malformed sequences by default, which matches the "strict"
+                // semantics the XS module provides.
                 EncodingLayer layer = new EncodingLayer(StandardCharsets.UTF_8, "utf8");
                 activeLayers.add(layer);
                 Function<String, String> inputTransform = s -> layer.processInput(s);
