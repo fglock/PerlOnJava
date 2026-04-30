@@ -56,6 +56,15 @@ fi
 # Override: JPERL_TEST_TIMEOUT=0 (disable) or JPERL_TEST_TIMEOUT=600 (10 min)
 export JPERL_TEST_TIMEOUT="${JPERL_TEST_TIMEOUT:-300}"
 
+# Enable the orphan-exit watchdog in every jperl this run spawns. If the
+# parent jcpan / test_harness process is killed (e.g. SIGKILL'd by the
+# user, or terminated by a CI step), each child JVM polls its initial
+# parent PID every 2s and self-exits when that parent disappears.
+# Without this, killing the harness leaves dozens of in-flight test
+# JVMs reparented to PID 1, all spinning at 100% CPU until manually
+# pkill'd. See AGENTS.md "ALWAYS WRAP jperl/jcpan IN timeout" rule.
+export JPERL_ORPHAN_EXIT=1
+
 # Expose the jperl launcher AND the jcpan launcher itself so distroprefs
 # (e.g. Moose.yml) can run upstream tests against the bundled shims with
 # `prove --exec jperl`, and bootstrap missing helper modules with
