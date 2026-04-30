@@ -435,8 +435,11 @@ public class ErrorMessageUtil {
                             currentFileName = tokens.get(j).text;
                         }
 
-                        if (directiveLine >= 1) {
+                        if (directiveLine >= 0) {
                             // The directive applies to the following line.
+                            // Perl allows `#line 0` (the next line becomes line 0);
+                            // -M/-m import injection relies on this to make caller()
+                            // report line 0, matching real Perl behavior.
                             lineNumber = directiveLine - 1;
                         }
                     }
