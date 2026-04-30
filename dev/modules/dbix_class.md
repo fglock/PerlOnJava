@@ -148,14 +148,98 @@ test under cumulative state pressure, weak-ref clearing is over-applied.
   contaminating subsequent runs (no more 100% CPU starvation), but does NOT
   fix the schema-detached exception itself.
 
+### Confirmed root cause — `MortalList.maybeAutoSweep()` walker blind spot
+
+The Schema's weak ref is being cleared by `MortalList.maybeAutoSweep()` (a
+5-second-throttled `ReachabilityWalker.sweepWeakRefs(true)` invocation that
+fires at every statement boundary once `WeakRefRegistry.weakRefsExist`
+flips). This is **timing-dependent**: which test trips the bug depends on
+when the 5-second timer happens to expire relative to the test's accessor
+chain.
+
+Confirmed via env var:
+
+| Mode | t/52leaks.t result |
+|---|---|
+| default (auto-GC every 5 s) | crashes mid-test: `detached result source` at line 430 |
+| `JPERL_NO_AUTO_GC=1` | runs to completion, 14/23 subtests fail (the existing tests 12-18 leak detection) |
+
+The walker correctly identifies that *most* objects can be cleaned up
+during the sweep, but it has a **blind spot**: the test-scope lexical
+`my $schema = DBICTest->init_schema()` holds a strong reference to the
+Schema, yet `ReachabilityWalker.sweepWeakRefs(true)` decides it's unreachable
+and clears its weak refs. The Schema's `weaken`'d back-references from each
+ResultSource then read as undef.
+
+### Path that the walker should but doesn't trace
+
+```
+test scope lexical    `my $schema`            (RuntimeScalar, refCountOwned=true)
+       ↓ strong ref to
+  Schema HASH instance                        (DBIx::Class::Schema, blessed)
+       ↑ weak ref from each
+  ResultSource::Table instance                (Artist, CD, etc.)
+       ↑ strong ref from each
+  Row instance (`$phantom`)                   (DBICTest::Artist, blessed)
+```
+
+When the test does `$phantom = $phantom->result_source` → `$phantom = $phantom->resultset`,
+the second step calls `$result_source->schema` which dereferences the weak
+back-ref. **That ref is the only path that needs to stay defined** — the
+schema itself is still strongly held by the test's `$schema` lexical, but
+the WEAK ref from RS → Schema is what just got cleared by the sweep.
+
+So the walker's job at sweep time is: "starting from all roots (globals +
+lexicals reachable from the JVM stack), mark every Schema instance as
+reachable so its weak-ref entries don't get cleared." It's failing at that
+for the test-scope lexical.
+
+### Fix path
+
+Fix `ReachabilityWalker.walk()` (and/or `isScalarReachable`) to correctly
+trace from lexical-scope roots to blessed objects held via strong refs.
+Specifically, audit:
+
+1. Are JVM-stack lexicals (`my $schema`) being seeded as roots? Currently
+   the walker probably only seeds `globalCodeRefs`, `globalArrays`,
+   `globalHashes`, `globalScalars` — not lexicals. We need to add the live
+   set of lexicals from the running call stack (or a tracking table that
+   records each `my` assignment of a refCountOwned scalar).
+
+2. Are closures that capture lexicals being walked? See
+   `ReachabilityWalker.walk()` Phase 1 ("seed globalCodeRefs, walk WITH
+   captures") — the capture-following exists for code refs but lexicals
+   themselves may not be roots.
+
+3. Is the Schema's actual identity being matched? The walker uses
+   IdentityHashMap; if the Schema's `RuntimeBase` instance somehow gets
+   replaced/wrapped during DBIC initialization (unlikely but possible),
+   identity comparison would miss it.
+
+### Architectural note (don't repeat past mistakes)
+
+`/dev/modules/dbix_class.md` "What Didn't Work" warns:
+- Cascading cleanup after rescue → destroys Schema internals
+- WEAKLY_TRACKED for birth-tracked objects → refcounts inaccurate
+- DESTROY resurrection via refCount=0 reset → infinite loops
+
+The fix here is **narrower**: ensure the walker's reachability set is
+complete (so the sweep doesn't clear refs to live objects). It is NOT to
+disable the sweep entirely — that breaks the leak-detection tests
+(observed: 14/23 fails with `JPERL_NO_AUTO_GC=1`).
+
 ### Status
 
 - [x] Reproduced under `./jcpan -t DBIx::Class` (occasionally; today on test
       `t/52leaks.t` ~test #21 of the suite).
-- [ ] Pinpoint earlier test that contaminates state.
-- [ ] Capture call stack at the moment the schema's weak ref is cleared.
-- [ ] Bisect c4db69e8d → master (likely PR #618 commit ce8186e89).
-- [ ] Fix and verify under full DBIC suite (must hit 0/314 fails).
+- [x] **Confirmed root cause: `maybeAutoSweep()` 5-s timer + `ReachabilityWalker`
+      missing live lexicals as roots.** Disabling auto-GC removes the crash;
+      keeping it on with broken reachability clears live weak refs.
+- [ ] Pinpoint which seeding/walking phase in `ReachabilityWalker` misses
+      the test-scope `my $schema` lexical.
+- [ ] Add lexical seeding and re-run; expect t/52leaks.t to pass under
+      auto-GC at ALL test positions in the harness.
+- [ ] Verify under full DBIC suite (must hit 0/314 fails).
 
 ### Why we can't ship without this fix
 
