@@ -10,7 +10,14 @@
 use strict;
 use warnings;
 use Test::More;
-use Net::SSLeay;
+BEGIN {
+    eval { require Net::SSLeay; Net::SSLeay->import; 1 }
+        or do {
+            require Test::More;
+            Test::More->import;
+            Test::More::plan(skip_all => 'Net::SSLeay not available');
+        };
+}
 
 Net::SSLeay::load_error_strings();
 Net::SSLeay::library_init();

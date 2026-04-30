@@ -97,15 +97,20 @@ print "ok 5 - 100 iterations without scope-exit ClassCastException\n";
 # --- Test 6: short-circuit-skipped my-hash + interpreter fallback ----
 # Combine the short-circuit pattern (which my_short_circuit_scope_exit.t
 # covers for scalars) with a my-hash on the interpreter path.
+#
+# Note: a `my %copy` declaration only becomes visible after the statement
+# that declares it (real Perl + strict reject `my %h = ...; $h{k}` inside
+# the same expression). So we declare %copy on its own statement, then
+# rely on its truthiness in the condition.
 sub short_circuit_hash {
     my $arg = shift;
     if ( ref($arg)
-         and UNIVERSAL::isa($arg, 'HASH')
-         and defined( (my %copy = %$arg)
-                      ? $copy{key}
-                      : undef ) )
+         and UNIVERSAL::isa($arg, 'HASH') )
     {
-        return "k=" . $copy{key};
+        my %copy = %$arg;
+        if ( %copy and defined $copy{key} ) {
+            return "k=" . $copy{key};
+        }
     }
     return 'skipped';
     # Force interpreter fallback regardless of which branch ran:

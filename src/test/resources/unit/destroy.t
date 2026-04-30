@@ -1,25 +1,34 @@
 use Test::More;
+use warnings;
+
+# Note: each subtest below uses a fresh package with `sub DESTROY { push @log, ... }`.
+# We deliberately use a package-global `@PkgName::log` rather than a `my @log`
+# captured by the named DESTROY sub, because real Perl warns and silently
+# breaks "Variable will not stay shared" for that pattern (the named sub's
+# closure does not bind to the per-invocation `my` scope of the subtest).
+# Using a package global gives the same observable semantics on both
+# `./jperl` and system `prove`.
 
 subtest 'DESTROY called at scope exit' => sub {
-    my @log;
+    @DestroyBasic::log = ();
     { package DestroyBasic;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     { my $obj = DestroyBasic->new; }
-    is_deeply(\@log, ["destroyed"], "DESTROY called at scope exit");
+    is_deeply(\@DestroyBasic::log, ["destroyed"], "DESTROY called at scope exit");
 };
 
 subtest 'DESTROY with multiple references' => sub {
-    my @log;
+    @DestroyMulti::log = ();
     { package DestroyMulti;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     my $a = DestroyMulti->new;
     my $b = $a;
     undef $a;
-    is_deeply(\@log, [], "DESTROY not called with refs remaining");
+    is_deeply(\@DestroyMulti::log, [], "DESTROY not called with refs remaining");
     undef $b;
-    is_deeply(\@log, ["destroyed"], "DESTROY called when last ref gone");
+    is_deeply(\@DestroyMulti::log, ["destroyed"], "DESTROY called when last ref gone");
 };
 
 subtest 'DESTROY exception becomes warning' => sub {
@@ -33,38 +42,38 @@ subtest 'DESTROY exception becomes warning' => sub {
 };
 
 subtest 'DESTROY on undef' => sub {
-    my @log;
+    @DestroyUndef::log = ();
     { package DestroyUndef;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     my $obj = DestroyUndef->new;
     undef $obj;
-    is_deeply(\@log, ["destroyed"], "DESTROY called on undef");
+    is_deeply(\@DestroyUndef::log, ["destroyed"], "DESTROY called on undef");
 };
 
 subtest 'DESTROY on hash delete' => sub {
-    my @log;
+    @DestroyDelete::log = ();
     { package DestroyDelete;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     my %h;
     $h{obj} = DestroyDelete->new;
     delete $h{obj};
-    is_deeply(\@log, ["destroyed"], "DESTROY called on hash delete");
+    is_deeply(\@DestroyDelete::log, ["destroyed"], "DESTROY called on hash delete");
 };
 
 subtest 'DESTROY not called twice' => sub {
-    my $count = 0;
+    $DestroyOnce::count = 0;
     { package DestroyOnce;
       sub new { bless {}, shift }
       sub DESTROY { $count++ } }
     { my $obj = DestroyOnce->new;
       undef $obj; }
-    is($count, 1, "DESTROY called exactly once");
+    is($DestroyOnce::count, 1, "DESTROY called exactly once");
 };
 
 subtest 'DESTROY inheritance' => sub {
-    my @log;
+    @DestroyParent::log = ();
     { package DestroyParent;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "parent" } }
@@ -72,19 +81,19 @@ subtest 'DESTROY inheritance' => sub {
       our @ISA = ('DestroyParent');
       sub new { bless {}, shift } }
     { my $obj = DestroyChild->new; }
-    is_deeply(\@log, ["parent"], "DESTROY inherited from parent");
+    is_deeply(\@DestroyParent::log, ["parent"], "DESTROY inherited from parent");
 };
 
 subtest 'Return value not destroyed' => sub {
-    my @log;
+    @DestroyReturn::log = ();
     { package DestroyReturn;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     sub make_obj { my $obj = DestroyReturn->new; return $obj }
     my $x = make_obj();
-    is_deeply(\@log, [], "returned object not destroyed");
+    is_deeply(\@DestroyReturn::log, [], "returned object not destroyed");
     undef $x;
-    is_deeply(\@log, ["destroyed"], "destroyed when last ref gone");
+    is_deeply(\@DestroyReturn::log, ["destroyed"], "destroyed when last ref gone");
 };
 
 subtest 'No DESTROY on blessed without DESTROY method' => sub {
@@ -96,7 +105,7 @@ subtest 'No DESTROY on blessed without DESTROY method' => sub {
 };
 
 subtest 'Re-bless to class without DESTROY' => sub {
-    my @log;
+    @HasDestroy::log = ();
     { package HasDestroy;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
@@ -105,37 +114,37 @@ subtest 'Re-bless to class without DESTROY' => sub {
     my $obj = HasDestroy->new;
     bless $obj, 'NoDestroy2';
     undef $obj;
-    is_deeply(\@log, [], "DESTROY not called after re-bless to class without DESTROY");
+    is_deeply(\@HasDestroy::log, [], "DESTROY not called after re-bless to class without DESTROY");
 };
 
 subtest 'DESTROY on hash delete returns value' => sub {
-    my @log;
+    @DestroyDeleteReturn::log = ();
     { package DestroyDeleteReturn;
       sub new { bless { data => 42 }, shift }
       sub DESTROY { push @log, "destroyed" } }
     my %h;
     $h{obj} = DestroyDeleteReturn->new;
     my $val = delete $h{obj};
-    is_deeply(\@log, [], "DESTROY not called while return value alive");
+    is_deeply(\@DestroyDeleteReturn::log, [], "DESTROY not called while return value alive");
     is($val->{data}, 42, "deleted value still accessible");
     undef $val;
-    is_deeply(\@log, ["destroyed"], "DESTROY called after return value dropped");
+    is_deeply(\@DestroyDeleteReturn::log, ["destroyed"], "DESTROY called after return value dropped");
 };
 
 subtest 'DESTROY on hash delete in void context' => sub {
-    my @log;
+    @DestroyDeleteVoid::log = ();
     { package DestroyDeleteVoid;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
     my %h;
     $h{obj} = DestroyDeleteVoid->new;
     delete $h{obj};  # void context — no one captures the return value
-    is_deeply(\@log, ["destroyed"],
+    is_deeply(\@DestroyDeleteVoid::log, ["destroyed"],
         "DESTROY called at statement end for void-context delete (mortal mechanism)");
 };
 
 subtest 'DESTROY on untie - immediate when no other refs' => sub {
-    my @log;
+    @DestroyTieScalar::log = ();
     { package DestroyTieScalar;
       sub TIESCALAR { bless {}, shift }
       sub FETCH { "val" }
@@ -144,12 +153,12 @@ subtest 'DESTROY on untie - immediate when no other refs' => sub {
       sub DESTROY { push @log, "destroy" } }
     tie my $s, 'DestroyTieScalar';
     untie $s;
-    is_deeply(\@log, ["untie", "destroy"],
+    is_deeply(\@DestroyTieScalar::log, ["untie", "destroy"],
         "DESTROY fires immediately after untie when no other refs hold the object");
 };
 
 subtest 'DESTROY on untie - deferred when ref held' => sub {
-    my @log;
+    @DestroyTieDeferred::log = ();
     { package DestroyTieDeferred;
       sub TIESCALAR { bless {}, shift }
       sub FETCH { "val" }
@@ -158,10 +167,10 @@ subtest 'DESTROY on untie - deferred when ref held' => sub {
       sub DESTROY { push @log, "destroy" } }
     my $obj = tie my $s, 'DestroyTieDeferred';
     untie $s;
-    is_deeply(\@log, ["untie"],
+    is_deeply(\@DestroyTieDeferred::log, ["untie"],
         "DESTROY deferred when caller holds a reference to the tied object");
     undef $obj;
-    is_deeply(\@log, ["untie", "destroy"],
+    is_deeply(\@DestroyTieDeferred::log, ["untie", "destroy"],
         "DESTROY fires when last reference is dropped");
 };
 
