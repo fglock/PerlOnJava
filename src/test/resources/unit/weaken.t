@@ -26,7 +26,12 @@ subtest 'copy of weak ref is strong' => sub {
 };
 
 subtest 'weaken with DESTROY' => sub {
-    my @log;
+    # Note: a `my @log` inside this subtest plus `sub DESTROY { push @log, ... }`
+    # defined in a named package would NOT stay shared across the subtest's
+    # closure (real Perl warns "Variable @log will not stay shared"). We use
+    # a package-global @WeakDestroy::log instead so the closure semantics are
+    # well-defined and work identically under `prove` and `./jperl`.
+    @WeakDestroy::log = ();
     { package WeakDestroy;
       sub new { bless {}, shift }
       sub DESTROY { push @log, "destroyed" } }
@@ -34,7 +39,7 @@ subtest 'weaken with DESTROY' => sub {
     my $weak = $strong;
     weaken($weak);
     undef $strong;
-    is_deeply(\@log, ["destroyed"], "DESTROY called when last strong ref gone");
+    is_deeply(\@WeakDestroy::log, ["destroyed"], "DESTROY called when last strong ref gone");
     ok(!defined($weak), "weak ref is undef after DESTROY");
 };
 

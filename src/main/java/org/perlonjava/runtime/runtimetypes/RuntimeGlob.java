@@ -928,7 +928,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      */
     public RuntimeGlob undefine() {
         if (this.globName.endsWith("::")) {
-            new RuntimeStash(this.globName).undefine();
+            // `undef *Pkg::` removes the stash slot from the parent package but
+            // does not anonymize previously-blessed objects (Perl semantics: old
+            // refs keep their package name; only `undef %Pkg::` anonymizes).
+            // Just clear the symbol table contents.
+            String prefix = this.globName;
+            GlobalVariable.clearStashAlias(prefix);
+            GlobalVariable.globalVariables.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalArrays.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalHashes.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            // Drop the stash hash view so it's empty.
+            new RuntimeStash(prefix).elements.clear();
+            InheritanceResolver.invalidateCache();
+            GlobalVariable.clearPackageCache();
             return this;
         }
         // Undefine CODE
@@ -943,10 +958,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Undefine SCALAR
         GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
 
-        // Undefine ARRAY - create empty array
+        // Undefine ARRAY - clear the existing array (fires DESTROY on blessed
+        // elements via MortalList) before replacing with an empty one. Just
+        // putting a new empty array would orphan the old contents without
+        // running their destructors, breaking `undef *Pkg::arr` for arrays
+        // holding blessed values.
+        RuntimeArray oldArray = GlobalVariable.globalArrays.get(this.globName);
+        if (oldArray != null) oldArray.undefine();
         GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
 
-        // Undefine HASH - create empty hash
+        // Undefine HASH - same reasoning as ARRAY above.
+        RuntimeHash oldHash = GlobalVariable.globalHashes.get(this.globName);
+        if (oldHash != null) oldHash.undefine();
         GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
 
         return this;

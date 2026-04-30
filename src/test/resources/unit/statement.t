@@ -148,13 +148,23 @@ is($scope_test, 12, 'scope in loops calculation');
 }
 
 # state with statement modifier unless
+#
+# Note: `state $counter = 0 unless defined $counter` does NOT compile under
+# `use strict` in real Perl 5 — the `defined $counter` check on the modifier
+# side references $counter before the `state` declaration installs it, which
+# strict rejects ("Global symbol $counter requires explicit package name").
+# So we test the equivalent reachable form: `state $counter = 0 if !defined`
+# nested in a statement-form `if` block, which is the closest real-Perl
+# analogue and exercises state initialisation under a conditional.
 {
     use feature 'state';
     sub state_unless_test {
-        state $counter = 0 unless defined $counter;
+        state $counter;
+        $counter = 0 unless defined $counter;
         return $counter;
     }
-    is(state_unless_test(), 0, 'state $VAR = VAL unless defined $VAR - works');
+    is(state_unless_test(), 0, 'state $VAR with conditional init - works');
+    is(state_unless_test(), 0, '... and still 0 on subsequent call');
 }
 
 done_testing();

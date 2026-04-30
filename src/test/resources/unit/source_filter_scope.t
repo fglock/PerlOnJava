@@ -22,6 +22,8 @@
 use strict;
 use warnings;
 use Test::More tests => 4;
+use File::Temp qw(tempdir);
+use File::Spec;
 
 # ---------------------------------------------------------------------
 # A bundled bystander module that the filter module's import() will
@@ -56,30 +58,39 @@ my $bystander = 'Cwd';   # not loaded by Test::More; has multiple `use` statemen
     }
 }
 # Pretend the inline package was loaded from a file so `use
-# InlineFilter` inside the eval below finds it without scanning @INC.
+# InlineFilter` inside the test file below finds it without scanning @INC.
 $INC{'InlineFilter.pm'} = __FILE__;
 
 # ---------------------------------------------------------------------
-# Test 1 — the filter rewrites code in *this* file (the parent),
-# even though InlineFilter::import did a require in the middle of
-# its work.  Without the per-compilation-unit scoping, the filter's
-# install flag would have been consumed by the bystander's `use`
-# statements and the parent's REPLACEME would not have been
-# transformed.
+# Test 1-3 — write a real .pm file and `require` it.
+#
+# Source filters operate on the source FILE being read by the parser
+# (Filter::Util::Call's filter_read pulls from the file handle), so an
+# eval STRING is not a meaningful substitute — under real Perl, an
+# eval STRING isn't a "filterable" source, and `filter_read` sees
+# EOF immediately. We therefore exercise the real bug path by writing
+# a temp .pm and requiring it; this is exactly the Spiffy case.
 # ---------------------------------------------------------------------
-my $compiled = eval <<"EOPL";
+my $tmp = tempdir(CLEANUP => 1);
+my $pm  = File::Spec->catfile($tmp, 'InlineFilterTest.pm');
+open my $fh, '>', $pm or die "open $pm: $!";
+print {$fh} <<"EOPM";
 package InlineFilterTest;
 use InlineFilter '$bystander';
 sub answer { return "REPLACEME" }   # will become "ok_marker" if filter applied
 1;
-EOPL
+EOPM
+close $fh;
+
+local @INC = ($tmp, @INC);
+my $compiled = eval { require InlineFilterTest; 1 };
 ok $compiled, "filter-installing module imports without error"
     or diag "compile error: \$\@ = $@";
 
 SKIP: {
     skip "package didn't compile", 2 unless $compiled;
 
-    # Test 2 — filter actually fired on the parent's source.
+    # Test 2 — filter actually fired on the parent file's source.
     my $got = InlineFilterTest::answer();
     is $got, 'ok_marker',
        'filter rewrote `REPLACEME` in the parent file (filter survived nested require)';
@@ -93,10 +104,10 @@ SKIP: {
 }
 
 # ---------------------------------------------------------------------
-# Test 4 — after the eval finishes, the filter's chain must NOT
+# Test 4 — after the require finishes, the filter chain must NOT
 # leak into *this* file: REPLACEME in this outer scope is left
 # untouched.
 # ---------------------------------------------------------------------
 my $literal = "REPLACEME";   # would become "ok_marker" if the filter leaked
 is $literal, 'REPLACEME',
-   'filter scoped to the eval STRING — does not leak to caller';
+   'filter scoped to the required file — does not leak to caller';
