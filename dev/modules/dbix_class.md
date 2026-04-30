@@ -45,9 +45,126 @@ done | sort
 | File | Count | Status |
 |------|-------|--------|
 | `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain. Needs refCount-inflation audit; hasn't reproduced in simpler tests |
+| `t/52leaks.t` (line 430, harness-only) | **NEW — INVESTIGATE NEXT** | "Unable to perform storage-dependent operations with a detached result source (source 'Artist' is not associated with a schema)". Test passes standalone (11/11 in 46s) but raises this exception when run as part of `./jcpan -t DBIx::Class` after ~20 prior tests. Schema's weak ref to ResultSource (or RS's strong ref to schema?) is being cleared *prematurely* — DESTROY firing on the schema while a child resultset still expects it. Different failure mode from tests 12-18 (which is a leak, this is over-eager DESTROY). See "Investigation Plan: Schema-Detached Bug" below. |
 | `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE). Tried refCount-reset approach — caused infinite DESTROY loops when __WARN__ handler re-triggers captures. Needs architectural redesign (separate "destroying" state from MIN_VALUE sentinel) |
 
 `t/storage/txn.t` — **FIXED** (90/90 pass) via Fix 10m (eq/ne fallback semantics).
+
+---
+
+## Investigation Plan: Schema-Detached Bug in t/52leaks.t (line 430) — IN PROGRESS
+
+### Symptom
+
+Under `./jcpan -t DBIx::Class` (full 314-test suite), `t/52leaks.t` fails with:
+
+```
+DBIx::Class::ResultSource::schema(): Unable to perform storage-dependent operations
+with a detached result source (source 'Artist' is not associated with a schema).
+at t/52leaks.t line 430
+```
+
+`Tests were run but no plan was declared and done_testing() was not seen` — i.e. the test
+died mid-execution, not at the leak-detection assertion.
+
+Standalone `../../jperl -Ilib -It/lib t/52leaks.t` passes 11/11 in ~46 s. Failure
+only manifests when ~20+ prior DBIC tests have run through the same harness JVM.
+
+### Code path that triggers it
+
+`t/52leaks.t` lines 414–438 iterate a chain of accessor closures over `$phantom`:
+
+```perl
+for my $accessor (
+    sub { shift->clone },
+    sub { shift->resultset('CD') },
+    sub { shift->next },
+    sub { shift->artist },
+    sub { shift->search_related('cds') },
+    sub { shift->next },
+    sub { shift->search_related('artist') },
+    sub { shift->result_source },
+    sub { shift->resultset },              # <── line 430 fails here
+    sub { shift->create({ name => 'detached' }) },
+    ...
+) {
+    $phantom = populate_weakregistry( $weak_registry, scalar $_->($phantom) );
+}
+```
+
+Each step replaces `$phantom`. The step-before-failure produces a `ResultSource`
+(via `->result_source`); the failing step calls `->resultset` on it, which
+does `$self->schema or die 'detached…'`. So the `ResultSource`'s `schema`
+attribute (an inflated weak ref) is empty by the time we read it.
+
+### Hypothesis
+
+A previous test in the harness has populated the global walker / weak-ref state
+in a way that makes the schema's weak ref to itself get auto-cleared during a
+mid-statement walker pass. When the row's `result_source` is later asked for
+its schema, the weak ref reads as undef.
+
+The walker-gate property fix (PR #618 / commit ce8186e89) widened the gate to
+fire on every blessed object whose `storedInPackageGlobal` flag is set. The
+perf-cache fix in 691f95386 keeps the BFS bounded but **doesn't change which
+objects get gated**. If a Schema/ResultSource pair becomes gate-eligible mid-
+test under cumulative state pressure, weak-ref clearing is over-applied.
+
+### Diagnostic plan
+
+1. **Pinpoint which earlier test contaminates the JVM.** Run the same DBIC
+   prefix one test at a time and bisect: with [00..101], [00..52], [00..40],
+   etc., find the smallest prefix whose final state makes a freestanding
+   `populate_weakregistry( $weak_registry, $phantom->result_source->resultset )`
+   throw.
+
+2. **Capture the exact moment.** With the bisected prefix, instrument
+   `DBIx::Class::ResultSource::schema()` (or the Java side at
+   `WeakRefRegistry.clearWeakRefsTo`) to log:
+   - which Schema instance is having its weak refs cleared,
+   - what triggered the clear (DESTROY? walker pass? scope exit?),
+   - the call stack in Perl + Java at the moment of the clear.
+
+3. **Compare reachability**: at the moment of the clear, is the Schema
+   actually unreachable (in which case the clear is correct and DBIC has a
+   genuine ref-tracking gap), or is it reachable but the walker missed it?
+   If walker missed it, that's a PerlOnJava bug in `ReachabilityWalker`.
+
+4. **Verify with c4db69e8d baseline.** That commit's documented run is
+   `./jcpan --jobs 1 -t DBIx::Class → 0/13858 fails`. If we can apply just
+   the relevant commits (PR #618 walker-gate property change + 691f95386 perf
+   cache) on top of c4db69e8d's parent and reproduce the failure, the
+   property-based gate is the regression source.
+
+### What we already know (from today's instrumentation)
+
+- The harness *parent* JVM is **not** the bottleneck. 10 jstack samples over
+  32 min show the parent in `IOOperator.selectWithNIO` `Thread.sleep(10)`
+  polling 99.7 % of the time (6 s CPU in 32 min wall). It's just waiting.
+- The harness uses `IPC::Open3` → `ProcessInputHandle`, which does correctly
+  return `false` from `isReadReady()` when the child is silent — that's the
+  intended behaviour, not the bug.
+- The orphan-watchdog landed in PR #635 prevents leftover JVMs from
+  contaminating subsequent runs (no more 100% CPU starvation), but does NOT
+  fix the schema-detached exception itself.
+
+### Status
+
+- [x] Reproduced under `./jcpan -t DBIx::Class` (occasionally; today on test
+      `t/52leaks.t` ~test #21 of the suite).
+- [ ] Pinpoint earlier test that contaminates state.
+- [ ] Capture call stack at the moment the schema's weak ref is cleared.
+- [ ] Bisect c4db69e8d → master (likely PR #618 commit ce8186e89).
+- [ ] Fix and verify under full DBIC suite (must hit 0/314 fails).
+
+### Why we can't ship without this fix
+
+A user running `jcpan DBIx::Class` will see a clean install when run alone
+(passes standalone) but a failed install under the published smoke-test
+infrastructure. That's a worse user experience than the current pre-PR-#635
+state (where the storable bugs blocked things up front). Per
+@dev/cpan-reports/cpan-compatibility.md we publish "DBIx::Class PASS" — we
+can't ship a regression behind that flag.
 
 ---
 
