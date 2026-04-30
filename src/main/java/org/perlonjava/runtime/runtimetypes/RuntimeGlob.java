@@ -463,7 +463,32 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeGlob sourceIO = GlobalVariable.getGlobalIO(globName);
         RuntimeGlob targetIO = GlobalVariable.getGlobalIO(this.globName);
 
-        RuntimeScalar ioSource = (value.IO != null) ? value.IO : sourceIO.IO;
+        // Prefer the source glob's IO scalar so that writes during the local
+        // scope are visible to the caller after it exits. This matches Perl 5
+        // semantics for `local(*F) = @_` where `*F` from the caller and the
+        // local scope's `*F` need to share the same IO slot.
+        //
+        // The exception is `RuntimeStashEntry`: stash lookups like
+        // `$Pkg::{FH}` return a fresh per-call clone whose IO scalar is an
+        // orphaned empty placeholder, never connected to the canonical glob
+        // in globalIORefs. Aliasing to that orphaned scalar would make
+        // `open()` modify a scalar nobody else can see. For stash entries we
+        // therefore fall back to `sourceIO.IO` (the canonical glob's IO).
+        RuntimeScalar ioSource;
+        if (value instanceof RuntimeStashEntry) {
+            // Use canonical IO unless the stash entry itself happens to
+            // already carry a real RuntimeIO (Symbol::gensym pattern, where
+            // the entry was tied or had its slot populated directly).
+            if (value.IO != null
+                    && (value.IO.value instanceof RuntimeIO
+                            || value.IO.type == RuntimeScalarType.TIED_SCALAR)) {
+                ioSource = value.IO;
+            } else {
+                ioSource = sourceIO.IO;
+            }
+        } else {
+            ioSource = (value.IO != null) ? value.IO : sourceIO.IO;
+        }
 
         // Save old IO for selectedHandle check (needed for local *STDOUT = *OTHER)
         RuntimeIO oldRuntimeIO = null;
@@ -480,15 +505,38 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeIO.selectedHandle = newRIO;
         }
 
-        // Alias the ARRAY slot: both names point to the same RuntimeArray object
-        RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
-        GlobalVariable.globalArrays.put(this.globName, sourceArray);
+        // Alias the ARRAY slot: both names point to the same RuntimeArray object.
+        // Only alias if the source actually has an array slot — calling
+        // getGlobalArray() here would auto-vivify an empty array, which then
+        // makes `defined *dst{ARRAY}` return true even though neither source
+        // nor dest ever had an array. Devel::Symdump and other introspection
+        // modules rely on the absence of these slots.
+        if (GlobalVariable.existsGlobalArray(globName)) {
+            RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
+            GlobalVariable.globalArrays.put(this.globName, sourceArray);
+        }
 
-        // Alias the HASH slot: both names point to the same RuntimeHash object
-        RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
-        GlobalVariable.globalHashes.put(this.globName, sourceHash);
+        // Alias the HASH slot: both names point to the same RuntimeHash object.
+        // Stash globs (name ends with "::") always have an intrinsic HASH slot
+        // that mirrors the package's symbol table — getGlobSlot("HASH") returns
+        // it unconditionally for stashes, so we must materialise the alias here
+        // even if globalHashes hasn't been populated yet.
+        boolean sourceHasHash = GlobalVariable.existsGlobalHash(globName)
+                || globName.endsWith("::");
+        if (sourceHasHash) {
+            RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
+            GlobalVariable.globalHashes.put(this.globName, sourceHash);
+        }
 
-        // Alias the SCALAR slot: both names point to the same RuntimeScalar object
+        // Alias the SCALAR slot: both names point to the same RuntimeScalar
+        // object. We deliberately auto-vivify the source side when it doesn't
+        // exist yet — unlike arrays/hashes, a scalar slot is always present
+        // in real Perl semantics (a glob's GvSV is conceptually always there,
+        // even if it holds undef), so consumers like `*& = *a6; *& = 0`
+        // expect that `*& = *a6` makes `*&` and `*a6` share storage even when
+        // neither has been written yet. Without this, the second `*& = 0`
+        // hits the original read-only `$&` instead of the freshly-aliased
+        // scalar (refstack.t GH#15752).
         RuntimeScalar sourceScalar = GlobalVariable.getGlobalVariable(globName);
         GlobalVariable.globalVariables.put(this.globName, sourceScalar);
 
@@ -564,14 +612,28 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case "IO", "FILEHANDLE" -> {
                 // Accessing the IO slot yields a blessable reference-like value.
                 // We model this by returning a GLOBREFERENCE wrapper around the RuntimeIO.
-                if (IO != null && IO.type == RuntimeScalarType.GLOB && IO.value instanceof RuntimeIO) {
+                //
+                // For named globs we may be looking at a *copy* of the canonical
+                // glob (e.g. RuntimeStashEntry, or the lightweight clone produced
+                // by globDeref()). `open(Pkg::FH, ...)` only stores the
+                // RuntimeIO on the canonical glob in globalIORefs, so consult
+                // that as a fallback when the local IO slot is empty.
+                RuntimeScalar effectiveIO = this.IO;
+                if ((effectiveIO == null || effectiveIO.value == null) && this.globName != null) {
+                    RuntimeGlob canonical = GlobalVariable.peekGlobalIO(this.globName);
+                    if (canonical != null && canonical != this && canonical.IO != null) {
+                        effectiveIO = canonical.IO;
+                    }
+                }
+                if (effectiveIO != null && effectiveIO.type == RuntimeScalarType.GLOB
+                        && effectiveIO.value instanceof RuntimeIO) {
                     RuntimeScalar ioRef = new RuntimeScalar();
                     ioRef.type = RuntimeScalarType.GLOBREFERENCE;
-                    ioRef.value = IO.value;
-                    ioRef.blessId = IO.blessId;
+                    ioRef.value = effectiveIO.value;
+                    ioRef.blessId = effectiveIO.blessId;
                     yield ioRef;
                 }
-                yield IO;
+                yield effectiveIO != null ? effectiveIO : IO;
             }
             case "SCALAR" -> {
                 // For anonymous globs (null globName), use local scalarSlot
@@ -650,7 +712,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // The glob for $::{"UNIVERSAL::"} has globName "main::UNIVERSAL::" but the
         // stash is stored with key "UNIVERSAL::". Strip "main::" for top-level packages.
         if (this.globName.endsWith("::")) {
-            String stashKey = this.globName.startsWith("main::")
+            // Strip a leading "main::" only when there is something after it
+            // (e.g. "main::Foo::" -> "Foo::"). For the bare "main::" stash,
+            // keep the key intact so we don't end up looking up "" and
+            // returning an empty hash. Mirrors GlobalVariable.getGlobalHash().
+            String stashKey = this.globName.length() > 6 && this.globName.startsWith("main::")
                     ? this.globName.substring(6)
                     : this.globName;
             return GlobalVariable.getGlobalHash(stashKey);
@@ -977,9 +1043,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     @Override
     public void dynamicSaveState() {
-        RuntimeScalar savedScalar = GlobalVariable.getGlobalVariable(this.globName);
-        RuntimeArray savedArray = GlobalVariable.getGlobalArray(this.globName);
-        RuntimeHash savedHash = GlobalVariable.getGlobalHash(this.globName);
+        // Capture pre-existence so we can faithfully restore an absent slot
+        // (rather than leaving an empty placeholder behind that would make
+        // `defined *glob{ARRAY|HASH}` lie after `local(*glob) = $val`).
+        // Use direct map access so we don't auto-vivify the slot here.
+        RuntimeScalar savedScalar = GlobalVariable.globalVariables.get(this.globName);
+        RuntimeArray savedArray = GlobalVariable.globalArrays.get(this.globName);
+        RuntimeHash savedHash = GlobalVariable.globalHashes.get(this.globName);
         RuntimeScalar savedCode = GlobalVariable.getGlobalCodeRef(this.globName);
         // Save the current IO object reference (not its state) so we can restore it later.
         // This allows captured glob references to keep the "local" IO even after restore.
@@ -996,15 +1066,34 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             savedSelectedHandle = RuntimeIO.selectedHandle;
             isSelectedHandle = true;
         }
-        globSlotStack.push(new GlobSlotSnapshot(this.globName, savedScalar, savedArray, savedHash, savedCode, savedIO, savedSelectedHandle));
+        globSlotStack.push(new GlobSlotSnapshot(this.globName,
+                savedScalar, savedArray, savedHash,
+                savedCode, savedIO, savedSelectedHandle));
 
         // Replace global table entries with NEW empty objects instead of mutating the
         // existing ones in-place. This is critical because the existing objects may be
         // aliased (e.g., via *glob = $blessed_ref), and calling dynamicSaveState() on
         // them would clear/corrupt the original blessed reference's data.
+        //
+        // Only pre-populate slots that already existed before the local scope.
+        // Otherwise we would make `defined *glob{ARRAY|HASH}` return true even
+        // when neither the saved state nor any code in the local scope ever
+        // assigned to the slot. Lazy slot creation handles writes within the
+        // local scope: getGlobalArray()/getGlobalHash() will materialise a
+        // fresh empty container on first access, which is then visible only
+        // for the duration of the scope (dynamicRestoreState removes it).
+        // The scalar slot is conceptually always present in Perl (a glob's
+        // GvSV is "there" with value undef even when never written), so
+        // unconditionally install a fresh RuntimeScalar for the local scope.
+        // Otherwise `local *X; $X = 5` would mutate the canonical $X and the
+        // change would survive the scope exit.
         GlobalVariable.globalVariables.put(this.globName, new RuntimeScalar());
-        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
-        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        if (savedArray != null) {
+            GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+        }
+        if (savedHash != null) {
+            GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        }
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.globalCodeRefs.put(this.globName, newCode);
         // Decrement stashRefCount on the saved CODE ref being removed from the stash
@@ -1067,9 +1156,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Restore saved objects directly - they were never mutated, so no
         // dynamicRestoreState() call is needed.
-        GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
-        GlobalVariable.globalHashes.put(snap.globName, snap.hash);
-        GlobalVariable.globalArrays.put(snap.globName, snap.array);
+        // A null saved value means the slot did not exist before the local
+        // scope; remove the placeholder we may have lazily created during the
+        // scope so that `defined *glob{SLOT}` reports false again.
+        if (snap.scalar != null) {
+            GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
+        } else {
+            GlobalVariable.globalVariables.remove(snap.globName);
+        }
+        if (snap.hash != null) {
+            GlobalVariable.globalHashes.put(snap.globName, snap.hash);
+        } else {
+            GlobalVariable.globalHashes.remove(snap.globName);
+        }
+        if (snap.array != null) {
+            GlobalVariable.globalArrays.put(snap.globName, snap.array);
+        } else {
+            GlobalVariable.globalArrays.remove(snap.globName);
+        }
 
         // Before replacing the code ref, decrement the refCount of the CODE
         // that was installed during the local scope. The local scope's code

@@ -197,6 +197,15 @@ $os_name =~ s/\s+/_/g;
     d_double_has_inf => 'define',
     d_double_has_nan => 'define',
     d_double_style_ieee => 'define',
+
+    # Directory handles — we implement opendir/readdir/telldir/closedir
+    # via java.nio. Devel::Symdump (and similar introspection modules)
+    # branch on these to choose between telldir() and B::IO::IoTYPE
+    # introspection, so they need to be advertised honestly.
+    d_telldir   => 'define',
+    d_seekdir   => 'define',
+    d_rewinddir => 'define',
+    d_readdir   => 'define',
     
     # Socket support - we have implemented socket operators
     d_socket => 'define',

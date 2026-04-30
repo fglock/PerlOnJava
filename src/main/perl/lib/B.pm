@@ -281,6 +281,58 @@ package B::GV {
         }
         return B::SPECIAL->new(0);  # 0 = index for 'Nullsv'
     }
+
+    # GvFLAGS returns the GV flag bits. PerlOnJava does not track real GV
+    # flags, but we can approximate GVf_IMPORTED_CV by comparing the CV's
+    # original package (recorded via Sub::Util introspection) against this
+    # GV's stash. When a sub is imported into another package via typeglob
+    # assignment (Exporter style), the CV remembers its home package, so
+    # if they disagree we report the IMPORTED_CV bit. This is what callers
+    # such as Pod::Coverage rely on to skip imported helpers.
+    sub GvFLAGS {
+        my $self = shift;
+        my $name = $self->{name};
+        my $pkg  = $self->{package};
+        return 0 unless defined $name && defined $pkg && length $name;
+        my $fqn = "${pkg}::${name}";
+        # PerlOnJava records typeglob CODE assignments (Exporter imports
+        # like `*Dst::name = \&Src::name`) in an internal map. Expose that
+        # as the GVf_IMPORTED_CV bit so callers like Pod::Coverage skip
+        # imported helpers without forcing every package to document them.
+        if (Internals::jperl_is_imported_sub($fqn)) {
+            return B::GVf_IMPORTED_CV();
+        }
+        # Constants defined via `use constant` are stored in PerlOnJava as
+        # CODE slots with an empty prototype. Real Perl uses proxy constant
+        # subroutines (PCS) and tags them with GVf_IMPORTED_CV so Pod
+        # coverage tools skip them; mirror that here so packages that only
+        # declare constants don't fail Pod::Coverage tests.
+        no strict 'refs';
+        my $code = *{$fqn}{CODE};
+        if (defined $code) {
+            my $proto = prototype($code);
+            if (defined $proto && $proto eq '') {
+                return B::GVf_IMPORTED_CV();
+            }
+        }
+        return 0;
+    }
+
+    # CV slot accessor: return a B::CV for the sub installed under this glob,
+    # or B::SPECIAL/Nullsv when the slot is empty. Pod::Coverage and friends
+    # call this to inspect the underlying coderef.
+    sub CV {
+        my $self = shift;
+        my $name = $self->{name};
+        my $pkg  = $self->{package};
+        my $fqn  = $pkg . '::' . $name;
+        no strict 'refs';
+        my $code = *{$fqn}{CODE};
+        if (defined $code) {
+            return B::CV->new($code);
+        }
+        return B::SPECIAL->new(0);
+    }
 }
 
 package B::SPECIAL {
@@ -412,6 +464,12 @@ sub svref_2object {
 
 # Export CVf_ANON as a function
 sub CVf_ANON() { return 0x0004; }
+
+# GV flag for "this CV was imported". Real Perl uses 0x80 in older perls and
+# 0x4000 in newer ones; Pod::Coverage falls back to 0x80 when this is missing.
+# Returning 0 here means GvFLAGS() & GVf_IMPORTED_CV() is always 0 (PerlOnJava
+# doesn't track this), which is what callers default to anyway.
+sub GVf_IMPORTED_CV() { return 0x80; }
 
 # Export SVf_IOK as a function
 sub SVf_IOK() { return 0x00000100; }

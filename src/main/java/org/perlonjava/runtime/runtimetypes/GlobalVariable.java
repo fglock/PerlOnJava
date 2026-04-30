@@ -331,6 +331,18 @@ public class GlobalVariable {
     }
 
     /**
+     * Returns true if {@code globName} participates in a `*A = *B` style glob
+     * alias relationship. Includes both sides — only one direction is stored
+     * in {@link #globAliases}, so the canonical destination (e.g. {@code B}
+     * after {@code *A = *B}) is detected by walking the map values.
+     */
+    public static boolean isInGlobAliasGroup(String globName) {
+        if (globAliases.isEmpty()) return false;
+        if (globAliases.containsKey(globName)) return true;
+        return globAliases.containsValue(globName);
+    }
+
+    /**
      * Retrieves a global variable by its key, initializing it if necessary.
      * If the key matches a regex capture variable pattern, it initializes a special variable.
      *
@@ -449,8 +461,35 @@ public class GlobalVariable {
         }
         RuntimeArray var = globalArrays.get(key);
         if (var == null) {
-            var = new RuntimeArray();
-            globalArrays.put(key, var);
+            // Glob-aliased names (`*A = *B`) need to share the same RuntimeArray
+            // so that auto-vivification under one name shows up under the other.
+            // Fan-out to every alias-group sibling on first creation. We detect
+            // membership by asking for the alias group itself instead of just
+            // probing globAliases.containsKey(key) — for `*A = *B`, only one
+            // direction is recorded in the map, so the canonical name (B) is
+            // not a key but is still part of the group.
+            java.util.List<String> aliasGroup = isInGlobAliasGroup(key) ? getGlobAliasGroup(key) : null;
+            if (aliasGroup != null && aliasGroup.size() > 1) {
+                for (String alias : aliasGroup) {
+                    RuntimeArray existing = globalArrays.get(alias);
+                    if (existing != null) {
+                        var = existing;
+                        break;
+                    }
+                }
+                if (var == null) {
+                    var = new RuntimeArray();
+                }
+                for (String alias : aliasGroup) {
+                    globalArrays.putIfAbsent(alias, var);
+                }
+                if (!globalArrays.containsKey(key)) {
+                    globalArrays.put(key, var);
+                }
+            } else {
+                var = new RuntimeArray();
+                globalArrays.put(key, var);
+            }
         }
         return var;
     }
@@ -508,17 +547,46 @@ public class GlobalVariable {
         }
         RuntimeHash var = globalHashes.get(key);
         if (var == null) {
-            // Check if this is a package stash (ends with ::)
-            if (key.endsWith("::")) {
-                var = new RuntimeStash(key);
+            boolean isStash = key.endsWith("::");
+            // Glob-aliased names (`*A = *B`) need to share the same RuntimeHash
+            // so that auto-vivification under one name shows up under the other.
+            // Stash-view hashes are excluded — they have their own unification
+            // path in RuntimeGlob.set(). See getGlobalArray() for the mirror
+            // logic and the rationale for using isInGlobAliasGroup() (the map
+            // only records one side of `*A = *B`, so the canonical name has
+            // to be detected via the values).
+            java.util.List<String> aliasGroup =
+                    (!isStash && isInGlobAliasGroup(key)) ? getGlobAliasGroup(key) : null;
+            if (aliasGroup != null && aliasGroup.size() > 1) {
+                for (String alias : aliasGroup) {
+                    RuntimeHash existing = globalHashes.get(alias);
+                    if (existing != null) {
+                        var = existing;
+                        break;
+                    }
+                }
+                if (var == null) {
+                    var = new RuntimeHash();
+                }
+                var.isGlobalPackageHash = true;
+                for (String alias : aliasGroup) {
+                    globalHashes.putIfAbsent(alias, var);
+                }
+                if (!globalHashes.containsKey(key)) {
+                    globalHashes.put(key, var);
+                }
             } else {
-                var = new RuntimeHash();
+                if (isStash) {
+                    var = new RuntimeStash(key);
+                } else {
+                    var = new RuntimeHash();
+                }
+                // D-W6.18: mark as package-global so values stored here
+                // get the storedInPackageGlobal flag (replaces class-name
+                // heuristic in walker gate).
+                var.isGlobalPackageHash = true;
+                globalHashes.put(key, var);
             }
-            // D-W6.18: mark as package-global so values stored here
-            // get the storedInPackageGlobal flag (replaces class-name
-            // heuristic in walker gate).
-            var.isGlobalPackageHash = true;
-            globalHashes.put(key, var);
         }
         return var;
     }
