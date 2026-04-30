@@ -707,7 +707,7 @@ public class StatementParser {
                         // ":5.34"
                         String[] parts = normalizeVersion(versionScalar).split("\\.");
                         int majorVersion = Integer.parseInt(parts[0]);
-                        int minorVersion = Integer.parseInt(parts[1]);
+                        int minorVersion = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
 
                         // If the minor version is odd, increment it to make it the next even version
                         if (minorVersion % 2 != 0) {
