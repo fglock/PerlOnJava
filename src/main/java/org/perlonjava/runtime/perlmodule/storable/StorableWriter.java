@@ -447,6 +447,15 @@ public final class StorableWriter {
     /** Emit the body of a non-reference scalar. Mirrors
      *  {@code store_scalar} (Storable.xs L2393). */
     private void writeScalar(StorableContext c, RuntimeScalar v) {
+        // Every fresh leaf scalar consumes a seen-tag on the read side
+        // (Storable.xs `retrieve_*` for SX_SCALAR / SX_BYTE / SX_INTEGER /
+        // SX_DOUBLE / SX_UTF8STR / SX_LSCALAR / SX_LUTF8STR / SX_UNDEF /
+        // SX_SV_* all call SEEN_NN). The writer must allocate the
+        // matching tag here so subsequent SX_OBJECT backrefs line up.
+        // The key is unique per emission — leaf scalars don't
+        // participate in identity-shared backref deduplication.
+        c.recordWriteSeen(new Object());
+
         // undef
         if (v.type == RuntimeScalarType.UNDEF || !v.getDefinedBoolean()) {
             c.writeByte(Opcodes.SX_UNDEF);
