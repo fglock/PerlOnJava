@@ -11,7 +11,13 @@ use POSIX ":sys_wait_h";
 use vars qw($VERSION);
 $VERSION = "2.34";
 
-my $run_allow_installing_within_test = 1; # boolean; either in test or in install, there is no third option
+my $run_allow_installing_within_test = 0; # boolean; either in test or in install, there is no third option
+# PerlOnJava: defer the "may downgrade / may install outdated dist" checks to
+# the install phase so that `jcpan -t Module::Name` can test older releases
+# that contain modules no longer indexed under the same distribution (e.g.
+# JSON::Validator::Ref only exists in JSON-Validator-4.25 even though the
+# current indexed JSON::Validator dist is 5.15). For full installs the check
+# still fires at install time.
 
 # no prepare, because prepare is not a command on the shell command line
 # TODO: clear instance cache on reload
