@@ -217,7 +217,7 @@ All 4492 subtests must pass. Rerun `make` to ensure no unit-test regressions.
   Scalar::Util::weaken($ref);
   is($ref, undef, "weakened away");
   ```
-  In real perl the temporary returned by `indexes(...)` has a refcount of 1 held by `$ref`; weakening that ref drops the refcount to 0 and the temporary is freed, so `$ref` becomes undef. PerlOnJava's cooperative-refcount overlay (see `dev/architecture/weaken-destroy.md`) only tracks objects blessed into a class with `DESTROY`. For an unblessed numeric scalar like this one, weaken transitions it to `WEAKLY_TRACKED` but does not clear the weak ref at scope exit because we can't distinguish "last strong ref was this one" from "symbol table still holds a ref" without full refcounting. This is a known architectural limitation being addressed on a separate branch; this PR does not touch it.
+  In real perl the temporary returned by `indexes(...)` has a refcount of 1 held by `$ref`; weakening that ref drops the refcount to 0 and the temporary is freed, so `$ref` becomes undef. PerlOnJava's selective-refcount overlay (see `dev/architecture/weaken-destroy.md`) only tracks objects blessed into a class with `DESTROY`. For an unblessed numeric scalar like this one, weaken transitions it to `WEAKLY_TRACKED` but does not clear the weak ref at scope exit because we can't distinguish "last strong ref was this one" from "symbol table still holds a ref" without full refcounting. This is a known architectural limitation being addressed on a separate branch; this PR does not touch it.
 
 ### Final summary
 

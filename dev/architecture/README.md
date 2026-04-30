@@ -29,7 +29,7 @@ PerlOnJava is a Perl 5 implementation that compiles Perl source code to JVM byte
 | Document | Description |
 |----------|-------------|
 | [dynamic-scope.md](dynamic-scope.md) | Dynamic scoping via `local` and DynamicVariableManager |
-| [weaken-destroy.md](weaken-destroy.md) | Cooperative reference counting, DESTROY, and weak references |
+| [weaken-destroy.md](weaken-destroy.md) | Selective reference counting, DESTROY, and weak references |
 | [lexical-pragmas.md](lexical-pragmas.md) | Lexical warnings, strict, and features |
 | [control-flow.md](control-flow.md) | Control flow implementation (die/eval, last/next/redo, block dispatchers) |
 | [block-dispatcher-optimization.md](block-dispatcher-optimization.md) | Block-level shared dispatchers for control flow |

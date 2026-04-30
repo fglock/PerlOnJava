@@ -76,7 +76,7 @@ Work currently in progress:
 
 ### Core Language Gaps
 
-- ~~**`DESTROY` Support**~~ — Implemented with cooperative reference counting. Supports cascading destruction, closure capture tracking, and global destruction phase.
+- ~~**`DESTROY` Support**~~ — Implemented with selective reference counting. Supports cascading destruction, closure capture tracking, and global destruction phase.
 - ~~**Weak References**~~ — Implemented: `Scalar::Util::weaken`/`isweak`/`unweaken` with external WeakRefRegistry.
 - **Taint Mode (`-T`)** — Track external data provenance using a `TAINTED` wrapper type (no extra storage for untainted scalars). Required for security-sensitive Perl applications. See `dev/design/TAINT_MODE.md`.
 - **Dynamically-Scoped Regex Variables** — `$1`, `$2`, etc. should be localized per regex match in the dynamic scope.

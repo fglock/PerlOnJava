@@ -179,7 +179,7 @@ public class DestroyDispatch {
         }
 
         // Perl 5 semantics: DESTROY CAN be called multiple times for resurrected
-        // objects. However, in PerlOnJava, cooperative refCount inflation means
+        // objects. However, in PerlOnJava, selective refCount inflation means
         // rescue detection fires more broadly than in Perl 5, so we keep
         // destroyFired=true after rescue to prevent infinite loops.
         // The destroyFired flag acts as a one-shot guard: once DESTROY has fired,
@@ -209,7 +209,7 @@ public class DestroyDispatch {
         // This allows captured variables to be properly cleaned up
         // (e.g., blessed objects in captured scalars can fire DESTROY).
         // However, skip releaseCaptures if the CODE ref is still installed in the
-        // stash (stashRefCount > 0). The cooperative refCount can falsely reach 0
+        // stash (stashRefCount > 0). The selective refCount can falsely reach 0
         // for stash-installed closures because glob assignments, closure captures,
         // and other JVM-level references aren't always counted. Releasing captures
         // prematurely would cascade to clear weak references (e.g., in Sub::Defer's

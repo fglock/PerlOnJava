@@ -7,7 +7,7 @@ but only for the outer test-wide registry (more than 5 entries).
 ## Why
 
 DBIC's leak tracer uses `weaken()` + `defined` to detect orphan objects.
-PerlOnJava's cooperative refCount inflates vs native Perl's reference
+PerlOnJava's selective refCount inflates vs native Perl's reference
 counting, so weak refs that *should* become undef at Perl-level (because
 the object is unreachable) remain defined.
 

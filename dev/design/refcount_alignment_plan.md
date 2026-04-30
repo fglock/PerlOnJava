@@ -18,7 +18,7 @@ destruction semantics:
   diagnostics/leak detection.
 
 DBIC, Moose/Moo, Sub::Quote, File::Temp, Devel::StackTrace, and many cache/ORM
-modules all depend on these semantics. Today PerlOnJava's **cooperative
+modules all depend on these semantics. Today PerlOnJava's **selective
 refcount** approximates them, but it diverges in enough places that several
 real-world tests fail (DBIC t/52leaks tests 12–18, txn_scope_guard test 18,
 etc.), and further real-world modules fail silently. This limits PerlOnJava's
@@ -35,7 +35,7 @@ This document lays out a phased plan to close the gap so that:
 
 ## 2. Why the Current Scheme Falls Short
 
-PerlOnJava uses **cooperative reference counting** layered on top of JVM GC:
+PerlOnJava uses **selective reference counting** layered on top of JVM GC:
 
 - `RuntimeBase.refCount` is an `int` with state machine values:
   `-1` (untracked), `0` (tracked, no counted refs), `>0` (N counted refs),
@@ -99,7 +99,7 @@ Specifically:
 
 ## 4. Strategy Overview
 
-Keep cooperative refcounting as the *primary* mechanism, but add:
+Keep selective refcounting as the *primary* mechanism, but add:
 
 - **Scope-exit decrement completeness** — ensure every path that increments
   has a matching path that decrements when the holder goes out of scope.
@@ -337,14 +337,14 @@ Each phase is independently shippable. Rollback is per-commit.
 | 1 (Scope exit) | Could break closures/eval/goto by over-decrementing | Large test corpus from Phase 0; feature-flag behind `JPERL_STRICT_SCOPE_EXIT=1` during validation |
 | 2 (`@_` aliasing) | XS / C-level assumptions could break | Feature-flag `JPERL_ALIASED_AT_UNDERSCORE=1`; keep old behavior as fallback for first release |
 | 3 (DESTROY FSM) | Resurrection cycles if state machine has bugs | Loop detection (fail fast with RuntimeException above 1000 DESTROY calls on same object) |
-| 4 (Reachability) | Cost; rarely-triggered edge cases (tied vars, weak refs into globs) | Profile extensively; amortize via periodic not per-op; keep current cooperative refcount as source of truth, reachability as fallback |
+| 4 (Reachability) | Cost; rarely-triggered edge cases (tied vars, weak refs into globs) | Profile extensively; amortize via periodic not per-op; keep current selective refcount as source of truth, reachability as fallback |
 | 5 (REFCNT API) | CPAN modules with specific REFCNT expectations might break | Opt-in via `JPERL_ACCURATE_REFCNT=1` for one release; default-on in next |
 | 6 (CPAN validation) | Modules may need small patches for their own test bugs | Apply via `dev/patches/cpan/` if module's test is jperl-unaware |
 | 7 (Interpreter) | Double the work | Share semantic helpers between backends via `runtime` classes |
 
 ## 7. What Stays the Same
 
-- JVM GC remains the memory manager. Cooperative refCount is *metadata*,
+- JVM GC remains the memory manager. Selective refCount is *metadata*,
   not storage.
 - `MortalList` / `DynamicState` stack discipline unchanged.
 - Existing compile-time optimizations (constant folding, type propagation)

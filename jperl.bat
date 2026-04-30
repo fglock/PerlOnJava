@@ -20,7 +20,7 @@ set JVM_OPTS=--enable-native-access=ALL-UNNAMED
 
 rem Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
 rem That combination triggers an aggressive G1 GC cadence that interacts
-rem pathologically with PerlOnJava's weak-ref / cooperative-refcount
+rem pathologically with PerlOnJava's weak-ref / selective-refcount
 rem machinery (DBIx-Class t/96_is_deteministic_value.t hangs at 100% CPU
 rem under SoftMaxHeapSize=2g + Xmx=4g). The JVM auto-default
 rem (MaxHeapSize = 1/4 of system RAM) is honored when nothing is set.

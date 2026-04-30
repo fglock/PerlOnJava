@@ -236,7 +236,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
                 // Increment stashRefCount on the new CODE ref installed in the stash.
                 // This tracks that the stash holds a reference to this CODE object,
-                // which is invisible to the cooperative refCount mechanism.
+                // which is invisible to the selective refCount mechanism.
                 if (value.value instanceof RuntimeCode newCode) {
                     newCode.stashRefCount++;
                 }

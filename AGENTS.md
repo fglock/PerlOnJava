@@ -197,7 +197,7 @@ Example format at the end of a design doc:
 
 | Feature | Status |
 |---------|--------|
-| `weaken` / `isweak` | Implemented. Uses cooperative reference counting on top of JVM GC. See `dev/architecture/weaken-destroy.md` for details. |
+| `weaken` / `isweak` | Implemented. Uses selective reference counting on top of JVM GC. See `dev/architecture/weaken-destroy.md` for details. |
 | `DESTROY` | Implemented. Fires deterministically for tracked objects (blessed into a class with DESTROY). See `dev/architecture/weaken-destroy.md`. |
 | `Scalar::Util::readonly` | Works for compile-time constants (`RuntimeScalarReadOnly` instances). Does not yet detect variables made readonly at runtime via `Internals::SvREADONLY` (those copy type/value into a plain `RuntimeScalar` without replacing the object). |
 

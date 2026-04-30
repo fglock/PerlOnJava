@@ -43,7 +43,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * the value's referent is marked as {@code storedInPackageGlobal} —
      * which then allows the walker-gate rescue at refCount→0 to
      * preserve module-global metadata (Class::MOP %METAS, similar caches)
-     * across transient cooperative-refCount zeros.
+     * across transient selective-refCount zeros.
      * <p>
      * Set by {@code GlobalVariable.markAsGlobalPackageHash} when the hash
      * is registered into globalHashes.

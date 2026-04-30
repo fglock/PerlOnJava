@@ -51,7 +51,7 @@ package B::SV {
     sub new {
         # IMPORTANT: Avoid `my ($class, $ref) = @_` or `shift` — each local
         # variable assignment that holds a reference inflates the referent's
-        # cooperative refcount by 1 (via setLargeRefCounted). Instead, use
+        # selective refcount by 1 (via setLargeRefCounted). Instead, use
         # $_[0]/$_[1] (aliases into @_) which don't increment refcount.
         # This keeps the only inflation to the `$self->{ref}` hash slot,
         # which REFCNT compensates for with its -1 adjustment.
@@ -61,28 +61,28 @@ package B::SV {
     }
 
     sub REFCNT {
-        # Return the cooperative refcount via Internals::SvREFCNT.
+        # Return the selective refcount via Internals::SvREFCNT.
         #
         # In PerlOnJava, B::SV stores the reference in $self->{ref} which is
         # a tracked (blessed) hash element. This inflates the referent's
-        # cooperative refCount by +1 via setLargeRefCounted.
+        # selective refCount by +1 via setLargeRefCounted.
         #
         # In Perl 5, B::svref_2object() stores the SV pointer directly (a C
         # pointer), so it does NOT inflate the referent's refcnt. However,
         # Perl 5 has higher refcounts overall because ALL references count
         # (hash elements, stack temporaries, mortal slots). PerlOnJava's
-        # cooperative refCount is lower because:
+        # selective refCount is lower because:
         #   1. Stack/JVM temporaries don't contribute
         #   2. Method call argument copies don't contribute
         #
         # The B::SV inflation (+1) roughly compensates for these deficits,
-        # so we return the raw cooperative refCount WITHOUT subtracting 1.
+        # so we return the raw selective refCount WITHOUT subtracting 1.
         #
         # For Schema::DESTROY's `refcount($source) > 1` check:
-        #   - Source with 1 cooperative ref (e.g., source_registrations only):
+        #   - Source with 1 selective ref (e.g., source_registrations only):
         #     B::SV inflation → 2, REFCNT = 2 → > 1 → rescue ✓
         #     (In Perl 5 this source also shows > 1 because stack temps add refs)
-        #   - Source with 0 cooperative refs (untracked):
+        #   - Source with 0 selective refs (untracked):
         #     B::SV inflation → 1, REFCNT = 1 → no rescue ✓
         Internals::SvREFCNT($_[0]->{ref});
     }
@@ -373,7 +373,7 @@ sub class {
 # Main introspection function
 sub svref_2object {
     # IMPORTANT: Do NOT do `my $ref = shift` — that creates a local variable
-    # holding a reference, which inflates the referent's cooperative refcount
+    # holding a reference, which inflates the referent's selective refcount
     # by 1 (via setLargeRefCounted). Use $_[0] (an alias into @_) instead,
     # which doesn't increment refcount. This is critical for DBIC's
     # refcount() function which calls B::svref_2object($_[0])->REFCNT

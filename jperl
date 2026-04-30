@@ -33,7 +33,7 @@ JVM_OPTS="--enable-native-access=ALL-UNNAMED"
 
 # Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
 # That combination triggers an aggressive G1 GC cadence that interacts
-# pathologically with PerlOnJava's weak-ref / cooperative-refcount
+# pathologically with PerlOnJava's weak-ref / selective-refcount
 # machinery — DBIx-Class t/96_is_deteministic_value.t hangs at 100% CPU
 # under -XX:SoftMaxHeapSize=2g -Xmx4g while passing in seconds without
 # the soft cap (or with SoftMax >= Xmx). The JVM's auto-default

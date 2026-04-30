@@ -1,6 +1,6 @@
 # Weaken & DESTROY - Architecture Guide
 
-**Last Updated:** 2026-04-24
+**Last Updated:** 2026-04-30
 **Status:** PRODUCTION READY
 - 841/841 Moo subtests (100%)
 - 13858/13858 DBIx::Class subtests across 314 test files (100%, 0 Dubious) — measured on branch `perf/dbic-safe-port` at `2ef41907d`
@@ -10,8 +10,9 @@
 See also [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md),
 [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md),
 [dev/design/refcount_alignment_52leaks_plan.md](../design/refcount_alignment_52leaks_plan.md),
-and [dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md)
-for the 2026-04 alignment work that closes the remaining Perl-parity gaps.
+[dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md), and
+[dev/modules/moose_support.md](../modules/moose_support.md) (D-W6.7 → D-W6.18 walker-gate
+investigation log) for the 2026-04 alignment work that closes the remaining Perl-parity gaps.
 
 ---
 
@@ -41,7 +42,7 @@ The system is designed around three principles:
    reference-counting burden. Weak references are registered externally and
    cleared as a side-effect of DESTROY.
 
-3. **Perl-semantics first.** When cooperative refcount drifts from Perl's
+3. **Perl-semantics first.** When selective refcount drifts from Perl's
    accurate refcount (due to JVM temporaries, call-stack lexicals the walker
    can't see, etc.), the reachability walker (`ReachabilityWalker` + opt-in
    `Internals::jperl_gc()`) fills the gap, matching what Perl's refcount
@@ -171,15 +172,16 @@ variable to trigger destruction.
 
 | File | Role |
 |------|------|
-| `RuntimeBase.java` | Defines `refCount`, `blessId`, `destroyFired`, `currentlyDestroying`, `needsReDestroy`, `localBindingExists` fields on all referent types |
+| `RuntimeBase.java` | Defines `refCount`, `blessId`, `destroyFired`, `currentlyDestroying`, `needsReDestroy`, `localBindingExists`, `storedInPackageGlobal`, `activeOwners` fields on all referent types; `recordActiveOwner` / `releaseActiveOwner` / `reachableOwnerCount` |
 | `RuntimeScalar.java` | `setLarge()` (increment/decrement), `scopeExitCleanup()`, `undefine()`, `incrementRefCountForContainerStore()` |
 | `RuntimeList.java` | `setFromList()` -- list destructuring with materialized copy refcount undo |
-| `RuntimeHash.java` | `createReferenceWithTrackedElements()` (birth-tracking for anonymous hashes), `delete()` with deferred decrement |
+| `RuntimeHash.java` | `createReferenceWithTrackedElements()` (birth-tracking for anonymous hashes), `delete()` with deferred decrement, `isGlobalPackageHash` flag |
 | `RuntimeArray.java` | `createReferenceWithTrackedElements()` (element tracking), `setFromListAliased()` (Phase 2: `@DB::args` population without refCount inflation) |
 | `WeakRefRegistry.java` | Weak reference tracking: forward set + reverse map; `snapshotWeakRefReferents()` for Phase 4 walker |
 | `DestroyDispatch.java` | DESTROY method resolution, caching, invocation; Phase 3 state machine (`currentlyDestroying` / `needsReDestroy`); `snapshotRescuedForWalk()` for Phase 4 walker |
-| `MortalList.java` | Deferred decrements (FREETMPS equivalent); Phase 3 `pendingSize()` / `drainPendingSince()` for DESTROY body's deferred decrements |
-| `ReachabilityWalker.java` | Phase 4 mark-and-sweep from Perl roots; `sweepWeakRefs()` clears weak refs for unreachable objects; `findPathTo()` diagnostic |
+| `MortalList.java` | Deferred decrements (FREETMPS equivalent); Phase 3 `pendingSize()` / `drainPendingSince()` for DESTROY body's deferred decrements; property-based walker gate (D-W6.18) at `flush()` with per-flush reachable-set cache |
+| `ReachabilityWalker.java` | Phase 4 mark-and-sweep from Perl roots; `sweepWeakRefs()` clears weak refs for unreachable objects; `findPathTo()` diagnostic; `isScalarReachable()` for owner-scalar liveness checks (D-W6.16) |
+| `RuntimeBaseProxy.java` / `RuntimeHashProxyEntry.java` | Mark stored values as `storedInPackageGlobal` when the parent hash is a package-global (D-W6.18) |
 | `GlobalDestruction.java` | End-of-program stash walking |
 | `ReferenceOperators.java` | `bless()` -- activates tracking |
 | `RuntimeGlob.java` | CODE slot replacement -- optree reaping emulation |
@@ -568,7 +570,7 @@ and is later released.
 
 **Path:** `org.perlonjava.runtime.runtimetypes.ReachabilityWalker`
 
-Mark-and-sweep reachability walker for when cooperative refcount has
+Mark-and-sweep reachability walker for when selective refcount has
 drifted beyond what `callDestroy` alone can reconcile. Walks the Perl-
 visible object graph from roots and clears weak refs for referents that
 no path reaches.
@@ -600,16 +602,60 @@ no path reaches.
 | `walk()` | BFS from roots; returns set of reachable `RuntimeBase` instances. |
 | `sweepWeakRefs()` | Forces `System.gc()` via `ScalarRefRegistry.forceGcAndSnapshot()` (3 passes with WeakReference sentinels), drains `rescuedObjects`, runs `walk()`, clears weak refs for unreachable referents, fires DESTROY on blessed ones. |
 | `sweepWeakRefs(true)` | Quiet mode: clears weak refs but does NOT fire DESTROY — for use from safe-to-interrupt callers that must not run Perl code mid-operation. Currently only used by future Phase B2 work (none active). |
+| `isScalarReachable(target)` | (D-W6.16) Walks roots looking for a specific `RuntimeScalar` identity (rather than a `RuntimeBase` referent). Skips weak refs and follows closure captures. Used by `RuntimeBase.reachableOwnerCount()` to filter the `activeOwners` set down to scalars that are actually live (not phantom entries left over after their JVM frame slot was nulled). |
 | `findPathTo(target)` | Diagnostic: returns first path string (e.g. `"%DBIx::Class::Schema::{accessors}{schema}"` or `"<live-lexical#N>"`) found to the target, or null. |
 
-**When not to run automatically:** Phase B2 (auto-trigger from hot
-paths) was attempted and reverted — see comment in
-`Scalar::Util::isweak()` and `MortalList.flush()`. Even Phase B1's
-lexical-aware sweep can't safely run inside module-init chains
-(e.g. DBICTest::BaseResult's use-chain relies on weak-refed state
-remaining defined). Auto-triggering requires a compiler-emitted
-"outside-of-module-init" marker which jperl doesn't yet have.
-Use `Internals::jperl_gc()` explicitly for leak-tracer integration.
+**Auto-trigger from hot paths (D-W6.18 — property-based walker gate).**
+A previous attempt at "auto-trigger from hot paths" (Phase B2) was reverted
+because seeding the walker from globals + `rescuedObjects` alone misclassified
+live-via-lexical objects as unreachable. That ground has now been recovered
+with a far narrower trigger:
+
+`MortalList.flush()` consults the walker before letting `refCount → 0`
+fire DESTROY, **but only when** the referent satisfies all of:
+
+1. `base.blessId != 0` — blessed object;
+2. `base.storedInPackageGlobal` — currently held as a value of a
+   package-global hash (set at `RuntimeBaseProxy.set` time when the
+   parent `RuntimeHashProxyEntry`'s hash is `isGlobalPackageHash`);
+3. `WeakRefRegistry.hasWeakRefsTo(base)` — at least one outstanding
+   weak ref points at it.
+
+When all three hold, the walker is consulted. If the object is still
+reachable from Perl roots, `MortalList.flush()` rescues it (skips
+DESTROY, restores `refCount = 1`, and re-marks it as owned by the
+appropriate package-hash entry). Otherwise the normal destruction path
+runs.
+
+The same gate is mirrored in `RuntimeScalar.setLargeRefCounted` on the
+overwrite path so a transient-zero during reassignment doesn't fire
+DESTROY for a still-reachable package-global object.
+
+This replaces the earlier class-name-based heuristic
+(`DestroyDispatch.classNeedsWalkerGate`, hard-coded list of
+`Class::MOP` / `Moose` / `Moo`) with a structural property that
+correctly captures *why* those classes need rescuing: their metaclass
+instances live as values in `our %METAS`-style package hashes whose
+selective refcount transient-zeros mid-statement during method
+dispatch. `classNeedsWalkerGate` is retained only for opt-in
+diagnostic tracing (`PJ_REFCOUNT_TRACE` / `PJ_WEAKCLEAR_TRACE`); no
+production code path consults it any more.
+
+**Per-flush reachable-set cache.** Because the gate now fires for
+DBIC's many blessed-into-package-globals objects (Schema,
+ResultSource, Storage::DBI, …) under heavy weaken usage, an O(N×G)
+naïve implementation (`isReachableFromRoots(target)` per gate fire,
+where G = #globals and N = #flush targets) would surface as a 100%
+CPU spin on `t/100populate*.t`. `MortalList.flush()` therefore walks
+the reachable set **once** per outer flush invocation via
+`ReachabilityWalker.walk()` and reuses it for O(1) membership lookups
+on subsequent gate fires within the same flush. The cache is cleared
+in the `finally` block so the next flush sees fresh global state.
+
+**Manual sweep is still opt-in.** `Internals::jperl_gc()` remains the
+only caller-driven full sweep. The auto-gate above only fires inside
+`MortalList.flush()` on the narrow `storedInPackageGlobal` &
+`hasWeakRefsTo` slice, which is safe to run from any flush point.
 
 ### 10a. ScalarRefRegistry (Phase B1)
 
@@ -631,6 +677,66 @@ sentinel waits to ensure multi-level cascades complete before the
 walker reads the snapshot.
 
 Opt out for benchmarking: `JPERL_NO_SCALAR_REGISTRY=1`.
+
+### 10b. Active-Owner Tracking (D-W6.14 / D-W6.16)
+
+**Path:** `RuntimeBase.activeOwners` / `recordActiveOwner` /
+`releaseActiveOwner` / `activeOwnerCount` / `reachableOwnerCount`
+
+A precise per-referent owner set, parallel to `refCount` but tracking
+*which* `RuntimeScalar`s currently own each increment rather than just
+the count. `activeOwners` is an `IdentityHashMap`-backed
+`Set<RuntimeScalar>`, lazily allocated via `activateOwnerTracking()`.
+
+Every `++base.refCount` increment site is paired with a
+`base.recordActiveOwner(scalar)` call, and every `--base.refCount`
+decrement site with a matching `base.releaseActiveOwner(scalar)`. The
+audit covers the full set:
+
+- `RuntimeScalar.setLargeRefCounted` (store + overwrite + undefine)
+- `RuntimeScalar.incrementRefCountForContainerStore`
+- `RuntimeArray.shift` / `pop` (deferred-decrement path)
+- `RuntimeList` materialized-copy undo (4 sites: undef-target,
+  scalar-target, array-target, hash-target)
+- `Storable.releaseApplyArgs`
+- `DestroyDispatch.doCallDestroy` (args.push balance)
+- `MortalList.deferDecrementIfTracked` /
+  `deferDecrementRecursive` / `deferDestroyForContainerClear`
+- `WeakRefRegistry.weaken`
+- `RuntimeStash.dynamicRestoreState`
+
+`reachableOwnerCount()` walks `activeOwners`, filters to scalars that
+still satisfy `refCountOwned == true && value == this`, and asks
+`ReachabilityWalker.isScalarReachable(scalar)` whether each owning
+scalar is reachable from Perl roots. The resulting count is a precise
+"how many genuinely-live owners does this referent still have"
+metric — strictly more accurate than raw `refCount`, which can be
+inflated by JVM temporaries and stale-but-not-yet-GC'd lexicals.
+
+**Status: instrumented but not yet activated as the production rescue
+criterion.** The property-based walker gate in section 10 (which
+checks `storedInPackageGlobal` + `hasWeakRefsTo`) is sufficient for
+all currently-exercised modules (Class::MOP, Moose, Moo, DBIx::Class,
+Template::Toolkit). `reachableOwnerCount()` is available for future
+work that needs a finer-grained "is this referent really still
+owned?" check — for example, replacing the `storedInPackageGlobal`
+property with `reachableOwnerCount() > 0` once owner-set population
+catches all increment sites that pre-date `activateOwnerTracking()`.
+
+**Diagnostic tracing.** Three env-flag-gated tracers print to stderr:
+
+- `PJ_REFCOUNT_TRACE` — per-`RuntimeBase` refCount transitions, with
+  abbreviated stack snippets and owner record/release events. Activated
+  at bless time for classes matching the legacy
+  `DestroyDispatch.classNeedsWalkerGate` list (Class::MOP / Moose /
+  Moo). A JVM shutdown hook dumps each tracked base's surviving
+  `activeOwners` set.
+- `PJ_WEAKCLEAR_TRACE` — `WeakRefRegistry.weaken` /
+  `removeWeakRef` / `clearWeakRefsTo` events.
+- `PJ_DESTROY_TRACE` — `DestroyDispatch.callDestroy` invocations.
+
+All three are zero-cost when their env flags are unset (single
+boolean check at the call site).
 
 ### 11. `Internals::*` Perl-Visible API
 
@@ -766,7 +872,7 @@ my @kept;
 
 ### Example 6: Reachability Sweep (Phase 4)
 
-For leak-tracer-style scripts where cooperative refcount inflates beyond
+For leak-tracer-style scripts where selective refcount inflates beyond
 what `callDestroy` alone resolves.
 
 ```perl
@@ -783,7 +889,7 @@ sub register {
     my $obj = DBICTest::Artist->new(...);
     register($obj);
     # ... lots of DBIC machinery creates JVM temporaries that inflate
-    # $obj's cooperative refCount ...
+    # $obj's selective refCount ...
 }
 
 # At this point $obj's lexical is gone, but refCount > 0 due to inflation.
@@ -873,7 +979,7 @@ decrement per reference assignment), but this is by design.
 | Aspect | Perl 5 | PerlOnJava |
 |--------|--------|------------|
 | Tracking scope | Every SV has a refcount | Only blessed-into-DESTROY objects, anonymous containers, closures with captures, and weaken targets |
-| GC model | Deterministic refcounting + cycle collector | JVM tracing GC + cooperative refcounting overlay + opt-in reachability sweep |
+| GC model | Deterministic refcounting + cycle collector | JVM tracing GC + selective refcounting overlay + opt-in reachability sweep |
 | Circular references | Leak without weaken | Handled by JVM GC (weaken still needed for DESTROY timing) |
 | `weaken()` on the only ref | Immediate DESTROY | Same behavior |
 | DESTROY timing | Immediate when refcount hits 0 | Same for tracked objects; untracked objects rely on JVM GC |
@@ -930,11 +1036,15 @@ decrement per reference assignment), but this is by design.
 
 7. **Reachability walker can't see live JVM-call-stack lexicals.** Phase 4's
    `ReachabilityWalker` walks from globals and `rescuedObjects` but not into
-   per-frame Java locals. Running an auto-triggered sweep is therefore
-   unsafe (it would clear weak refs to objects that are alive in some live
-   lexical). `Internals::jperl_gc()` is opt-in for exactly this reason —
-   the caller is responsible for ensuring the current frame's lexicals
-   aren't holding objects that should survive.
+   per-frame Java locals. A *full* auto-triggered sweep is therefore still
+   unsafe in general — it would clear weak refs to objects that are alive
+   in some live lexical. The narrow auto-gate at `MortalList.flush()`
+   (D-W6.18: blessed + `storedInPackageGlobal` + `hasWeakRefsTo`) is the
+   exception: that triple guard is structurally restricted to objects
+   whose canonical owner is a package-global hash entry, so reachability
+   from globals is sufficient. `Internals::jperl_gc()` remains opt-in for
+   the same reason — the caller is responsible for ensuring the current
+   frame's lexicals aren't holding objects that should survive.
 
 8. **Reachability walker does not follow `RuntimeCode.capturedScalars` by
    default.** Sub::Quote and Moo generate accessor closures that capture
@@ -944,7 +1054,7 @@ decrement per reference assignment), but this is by design.
    captures. Opt in via `ReachabilityWalker.withCodeCaptures(true)` if you
    need the more conservative traversal.
 
-9. **`Internals::SvREFCNT` is approximate.** Cooperative refCount
+9. **`Internals::SvREFCNT` is approximate.** Selective refCount
    under-counts stack / JVM temporaries vs native Perl. `B::SV::REFCNT`
    (in `bundled-modules/B.pm`) relies on the +1 inflation from `$self->{ref}`
    hash storage to compensate for this under-counting; removing either
@@ -989,7 +1099,7 @@ Tests are organized in four tiers:
 ## See Also
 
 - [dev/design/destroy_weaken_plan.md](../design/destroy_weaken_plan.md) -- Design document with implementation history, strategy analysis, and evolution of the WEAKLY_TRACKED design
-- [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md) -- 2026-04 plan for aligning cooperative refcount with Perl semantics (phases 0-7)
+- [dev/design/refcount_alignment_plan.md](../design/refcount_alignment_plan.md) -- 2026-04 plan for aligning selective refcount with Perl semantics (phases 0-7)
 - [dev/design/refcount_alignment_progress.md](../design/refcount_alignment_progress.md) -- Per-phase progress log
 - [dev/design/perf-dbic-safe-port.md](../design/perf-dbic-safe-port.md) -- 2026-04-24 post-merge branch plan
 - [dev/modules/moo.md](../modules/moo.md) -- Moo test tracking and category-by-category fix log

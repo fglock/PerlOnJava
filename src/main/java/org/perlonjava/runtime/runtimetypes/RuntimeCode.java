@@ -467,11 +467,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /**
      * Tracks the number of stash (glob) entries that reference this CODE object.
      * Stash entries created via {@code *Foo::bar = $coderef} are invisible to the
-     * cooperative refCount because glob assignments go through a container that
+     * selective refCount because glob assignments go through a container that
      * may be overwritten independently.
      * <p>
      * When stashRefCount > 0, the CODE ref should NOT be considered dead even if
-     * the cooperative refCount reaches 0, because the stash still holds a live
+     * the selective refCount reaches 0, because the stash still holds a live
      * reference. This prevents premature {@code releaseCaptures()} which would
      * cascade to clear weak references (e.g., in Sub::Defer's %DEFERRED hash).
      */
@@ -533,7 +533,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // capture, decrement refCount to balance the original increment.
                     //
                     // Only cascade for BLESSED referents. For unblessed containers
-                    // (arrays, hashes), the cooperative refCount from releaseCaptures
+                    // (arrays, hashes), the selective refCount from releaseCaptures
                     // can falsely reach 0 (because closure captures hold JVM references
                     // not counted in refCount). Cascading to callDestroy for such
                     // containers would clear weak references prematurely, breaking

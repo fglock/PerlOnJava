@@ -1218,7 +1218,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // flag set at hash-store time.
                     // Phase D / Step W3-Path 2: mirror of the gate in
                     // MortalList.flush(). Blessed object with outstanding
-                    // weak refs whose cooperative refCount dipped to 0
+                    // weak refs whose selective refCount dipped to 0
                     // under an overwrite, but the walker says it's still
                     // reachable from roots (e.g. held by `our %METAS`).
                     // Treat as transient refCount drift; don't fire
@@ -1236,7 +1236,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     && WeakRefRegistry.weakRefsExist) {
                 // Phase D: inside a DESTROY body, an explicit undef
                 // assignment released our strong ref to another
-                // blessed-with-DESTROY object but cooperative refCount
+                // blessed-with-DESTROY object but selective refCount
                 // didn't drop to 0 (cycles). Flag a deferred sweep to
                 // run once at the end of the outermost DESTROY.
                 // Narrow gating (only inside DESTROY, only value==UNDEF,
@@ -2332,7 +2332,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     }
                 } else if (oldBase.blessId != 0 && oldBase.refCount > 0
                         && WeakRefRegistry.weakRefsExist) {
-                    // Phase D: cooperative refCount suggests this object still has
+                    // Phase D: selective refCount suggests this object still has
                     // strong references, but those may all be internal cycles
                     // (e.g. DBIC's Schema <-> source_registrations). Defer to the
                     // reachability walker if the class has DESTROY — it's the
@@ -2345,7 +2345,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             } else if (oldBase.blessId != 0 && WeakRefRegistry.weakRefsExist) {
                 // Phase D: no owned-count decrement (refCountOwned was false, or
-                // refCount was already 0 from prior cooperative drift). The
+                // refCount was already 0 from prior selective drift). The
                 // object is blessed — if its class has DESTROY, let the walker
                 // decide whether this undef just released the last live lexical
                 // handle.
@@ -2365,7 +2365,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Phase D: undef-of-blessed auto-trigger for the reachability walker.
         // When the user explicitly undef's a blessed ref with DESTROY but
-        // cooperative refCount stays > 0 (internal cycles), ask the walker
+        // selective refCount stays > 0 (internal cycles), ask the walker
         // to determine real reachability. Bypasses the MortalList auto-sweep
         // throttle because this is an explicit release, not an opportunistic
         // check. Skips when we're in module-init to avoid clearing weak refs
