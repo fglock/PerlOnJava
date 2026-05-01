@@ -118,11 +118,7 @@ public final class StorableWriter {
             return;
         }
 
-        // 2b. Tied container detection. If the referent's underlying
-        // AV/HV/scalar carries tied magic, route through TiedEncoder
-        // which emits SX_TIED_ARRAY / SX_TIED_HASH / SX_TIED_SCALAR
-        // followed by the tying object. The tied agent fills in the
-        // body of TiedEncoder.tryEmit; foundation just delegates.
+        // 2b. Tied container detection.
         if (TiedEncoder.tryEmit(c, refScalar, this)) {
             return;
         }
@@ -222,6 +218,12 @@ public final class StorableWriter {
         }
 
         // First element is the frozen cookie; rest are sub-refs.
+        // The cookie is a binary Storable stream returned by STORABLE_freeze
+        // (typically produced by an inner nfreeze call).  In PerlOnJava, binary
+        // strings are stored as Java Strings with one char per byte (chars 0–255).
+        // We must extract the raw bytes without any charset re-encoding: UTF-8
+        // would expand chars > 127 into multi-byte sequences, corrupting the
+        // stream.  Use a direct char→byte cast instead (same approach as thaw).
         RuntimeScalar cookieSv = items.get(0);
         // The cookie returned by STORABLE_freeze is a binary Storable
         // blob (chars 0..255 stored as Java chars). Treat it as raw
@@ -264,10 +266,9 @@ public final class StorableWriter {
 
         // For a hooked object we don't go through SX_BLESS; the SX_HOOK
         // frame carries the classname inline (or by index).
-        // Register the seen-tag for backref resolution. Upstream stores
-        // the eventual blessed object here; we use the input ref since
-        // that's what's identity-shared in our model.
-        c.recordWriteSeen(sharedKey(refScalar));
+        // Register the seen-tag for backref resolution.
+        Object hookKey = sharedKey(refScalar);
+        c.recordWriteSeen(hookKey);
 
         // If sub-refs are present we must serialize them first (recursing
         // with SHF_NEED_RECURSE) so the receiver can resolve their tags
@@ -396,14 +397,6 @@ public final class StorableWriter {
      *  {@link #dispatchReferent}. */
     public void dispatch(StorableContext c, RuntimeScalar value) {
         if (RuntimeScalarType.isReference(value)) {
-            // An inner reference inside a container/scalar-ref. Emit
-            // SX_REF (or SX_OVERLOAD when the inner is blessed into a
-            // class with overload-pragma magic). Storable.xs L2350-L2354
-            // makes the same choice on store_ref.
-            //
-            // Weak detection (SX_WEAKREF / SX_WEAKOVERLOAD) is not yet
-            // wired through from the runtime — emitted as plain
-            // SX_REF / SX_OVERLOAD for now.
             Object key = sharedKey(value);
             long tag = c.lookupSeenTag(key);
             if (tag >= 0) {
@@ -415,10 +408,6 @@ public final class StorableWriter {
             boolean isOverloaded = blessId != 0
                     && org.perlonjava.runtime.runtimetypes.OverloadContext
                             .prepare(blessId) != null;
-            // Weak-ref detection: if the value (which is a reference) was
-            // weakened via Scalar::Util::weaken, emit SX_WEAKREF /
-            // SX_WEAKOVERLOAD instead of the strong variants. Mirrors
-            // Storable.xs `store_ref` weak branch around L2362.
             boolean isWeak =
                     org.perlonjava.runtime.runtimetypes.WeakRefRegistry.weakRefsExist
                             && org.perlonjava.runtime.runtimetypes.WeakRefRegistry.isweak(value);
@@ -429,13 +418,6 @@ public final class StorableWriter {
                 opcode = isOverloaded ? Opcodes.SX_OVERLOAD : Opcodes.SX_REF;
             }
             c.writeByte(opcode);
-            // Bump the write-side tag for the SX_REF placeholder so
-            // tags align with the read side, where `readRef` always
-            // records its placeholder before recursing into the body
-            // (Storable.xs `retrieve_ref` L5343). The key is unique
-            // per emission so it does NOT participate in future
-            // identity-shared lookups; outer-ref sharing falls back
-            // to the inner-key check above.
             c.recordWriteSeen(new Object());
             dispatchReferent(c, value);
             return;
@@ -445,7 +427,12 @@ public final class StorableWriter {
     }
 
     /** Emit the body of a non-reference scalar. Mirrors
-     *  {@code store_scalar} (Storable.xs L2393). */
+     *  {@code store_scalar} (Storable.xs L2393).
+     *
+     * <p>Every reader in {@code Scalars.java} calls {@code c.recordSeen(sv)}
+     * so the read-side seen-table grows by one entry per plain scalar.
+     * We must mirror that on the write side so that {@code SX_OBJECT} tag
+     * numbers computed here match the indices the reader will compute. */
     private void writeScalar(StorableContext c, RuntimeScalar v) {
         // Every fresh leaf scalar consumes a seen-tag on the read side
         // (Storable.xs `retrieve_*` for SX_SCALAR / SX_BYTE / SX_INTEGER /
