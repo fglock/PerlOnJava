@@ -45,9 +45,455 @@ done | sort
 | File | Count | Status |
 |------|-------|--------|
 | `t/52leaks.t` | 7 (tests 12-18) | Deep — refCount inflation in DBIC LeakTracer's `visit_refs` + ResultSource back-ref chain. Needs refCount-inflation audit; hasn't reproduced in simpler tests |
+| `t/52leaks.t` (line 430, harness-only) | **NEW — INVESTIGATE NEXT** | "Unable to perform storage-dependent operations with a detached result source (source 'Artist' is not associated with a schema)". Test passes standalone (11/11 in 46s) but raises this exception when run as part of `./jcpan -t DBIx::Class` after ~20 prior tests. Schema's weak ref to ResultSource (or RS's strong ref to schema?) is being cleared *prematurely* — DESTROY firing on the schema while a child resultset still expects it. Different failure mode from tests 12-18 (which is a leak, this is over-eager DESTROY). See "Investigation Plan: Schema-Detached Bug" below. |
 | `t/storage/txn_scope_guard.t` | 1 (test 18) | Needs DESTROY resurrection semantics (strong ref via @DB::args after MIN_VALUE). Tried refCount-reset approach — caused infinite DESTROY loops when __WARN__ handler re-triggers captures. Needs architectural redesign (separate "destroying" state from MIN_VALUE sentinel) |
 
 `t/storage/txn.t` — **FIXED** (90/90 pass) via Fix 10m (eq/ne fallback semantics).
+
+---
+
+## Investigation Plan: Schema-Detached Bug in t/52leaks.t (line 430) — IN PROGRESS
+
+### Symptom
+
+Under `./jcpan -t DBIx::Class` (full 314-test suite), `t/52leaks.t` fails with:
+
+```
+DBIx::Class::ResultSource::schema(): Unable to perform storage-dependent operations
+with a detached result source (source 'Artist' is not associated with a schema).
+at t/52leaks.t line 430
+```
+
+`Tests were run but no plan was declared and done_testing() was not seen` — i.e. the test
+died mid-execution, not at the leak-detection assertion.
+
+Standalone `../../jperl -Ilib -It/lib t/52leaks.t` passes 11/11 in ~46 s. Failure
+only manifests when ~20+ prior DBIC tests have run through the same harness JVM.
+
+### Code path that triggers it
+
+`t/52leaks.t` lines 414–438 iterate a chain of accessor closures over `$phantom`:
+
+```perl
+for my $accessor (
+    sub { shift->clone },
+    sub { shift->resultset('CD') },
+    sub { shift->next },
+    sub { shift->artist },
+    sub { shift->search_related('cds') },
+    sub { shift->next },
+    sub { shift->search_related('artist') },
+    sub { shift->result_source },
+    sub { shift->resultset },              # <── line 430 fails here
+    sub { shift->create({ name => 'detached' }) },
+    ...
+) {
+    $phantom = populate_weakregistry( $weak_registry, scalar $_->($phantom) );
+}
+```
+
+Each step replaces `$phantom`. The step-before-failure produces a `ResultSource`
+(via `->result_source`); the failing step calls `->resultset` on it, which
+does `$self->schema or die 'detached…'`. So the `ResultSource`'s `schema`
+attribute (an inflated weak ref) is empty by the time we read it.
+
+### Hypothesis
+
+A previous test in the harness has populated the global walker / weak-ref state
+in a way that makes the schema's weak ref to itself get auto-cleared during a
+mid-statement walker pass. When the row's `result_source` is later asked for
+its schema, the weak ref reads as undef.
+
+The walker-gate property fix (PR #618 / commit ce8186e89) widened the gate to
+fire on every blessed object whose `storedInPackageGlobal` flag is set. The
+perf-cache fix in 691f95386 keeps the BFS bounded but **doesn't change which
+objects get gated**. If a Schema/ResultSource pair becomes gate-eligible mid-
+test under cumulative state pressure, weak-ref clearing is over-applied.
+
+### Diagnostic plan
+
+1. **Pinpoint which earlier test contaminates the JVM.** Run the same DBIC
+   prefix one test at a time and bisect: with [00..101], [00..52], [00..40],
+   etc., find the smallest prefix whose final state makes a freestanding
+   `populate_weakregistry( $weak_registry, $phantom->result_source->resultset )`
+   throw.
+
+2. **Capture the exact moment.** With the bisected prefix, instrument
+   `DBIx::Class::ResultSource::schema()` (or the Java side at
+   `WeakRefRegistry.clearWeakRefsTo`) to log:
+   - which Schema instance is having its weak refs cleared,
+   - what triggered the clear (DESTROY? walker pass? scope exit?),
+   - the call stack in Perl + Java at the moment of the clear.
+
+3. **Compare reachability**: at the moment of the clear, is the Schema
+   actually unreachable (in which case the clear is correct and DBIC has a
+   genuine ref-tracking gap), or is it reachable but the walker missed it?
+   If walker missed it, that's a PerlOnJava bug in `ReachabilityWalker`.
+
+4. **Verify with c4db69e8d baseline.** That commit's documented run is
+   `./jcpan --jobs 1 -t DBIx::Class → 0/13858 fails`. If we can apply just
+   the relevant commits (PR #618 walker-gate property change + 691f95386 perf
+   cache) on top of c4db69e8d's parent and reproduce the failure, the
+   property-based gate is the regression source.
+
+### What we already know (from today's instrumentation)
+
+- The harness *parent* JVM is **not** the bottleneck. 10 jstack samples over
+  32 min show the parent in `IOOperator.selectWithNIO` `Thread.sleep(10)`
+  polling 99.7 % of the time (6 s CPU in 32 min wall). It's just waiting.
+- The harness uses `IPC::Open3` → `ProcessInputHandle`, which does correctly
+  return `false` from `isReadReady()` when the child is silent — that's the
+  intended behaviour, not the bug.
+- The orphan-watchdog landed in PR #635 prevents leftover JVMs from
+  contaminating subsequent runs (no more 100% CPU starvation), but does NOT
+  fix the schema-detached exception itself.
+
+### Confirmed root cause — `ScalarRefRegistry` race against forced GC
+
+The Schema's weak ref is being cleared by `MortalList.maybeAutoSweep()` (a
+5-second-throttled `ReachabilityWalker.sweepWeakRefs(true)` invocation that
+fires at every statement boundary once `WeakRefRegistry.weakRefsExist`
+flips). This is **timing-dependent**: which test trips the bug depends on
+when the 5-second timer happens to expire relative to the test's accessor
+chain.
+
+Confirmed via env var:
+
+| Mode | t/52leaks.t result |
+|---|---|
+| default (auto-GC every 5 s) | crashes mid-test: `detached result source` at line 430 |
+| `JPERL_NO_AUTO_GC=1` | runs to completion, 14/23 subtests fail (the existing tests 12-18 leak detection) |
+
+#### The actual blind spot
+
+The walker DOES seed lexicals (`ReachabilityWalker.walk()` lines 111–153,
+two loops):
+
+```java
+// (a) ScalarRefRegistry — every RuntimeScalar that holds a ref
+for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+    if (sc.captureCount > 0) continue;
+    if (WeakRefRegistry.isweak(sc)) continue;
+    if (MortalList.isDeferredCapture(sc)) continue;
+    if (!MyVarCleanupStack.isLive(sc)) {
+        if (sc.scopeExited) continue;
+        if (!sc.refCountOwned) continue;
+    }
+    visitScalar(sc, todo);
+}
+// (b) MyVarCleanupStack — explicit live my-var registration
+for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+    if (liveVar instanceof RuntimeScalar sc) { ... }
+    else if (liveVar instanceof RuntimeBase rb) { ... }
+}
+```
+
+But there's a race. `sweepWeakRefs` calls
+`ScalarRefRegistry.forceGcAndSnapshot()` BEFORE iterating the snapshot.
+`ScalarRefRegistry` is a `WeakHashMap`. Any scalar whose only live JVM-side
+reference is a stack-frame local can get GC'd from the registry between the
+force-GC and the snapshot — even though the Perl-level lexical is still
+on the stack and reachable.
+
+When that happens to the test's `my $schema`:
+- Path (a) misses it (gone from `ScalarRefRegistry.snapshot()` after the
+  forced GC).
+- Path (b) misses it too — `MyVarCleanupStack` (Phase D-W1) was added
+  specifically for `my @arr` / `my %hash` (RuntimeArray / RuntimeHash).
+  A `my $scalar = $ref` does **not** register there because scalars aren't
+  tracked by that mechanism.
+
+Result: the schema is **seedable only through the WeakHashMap path** —
+which is exactly the one path that races against the forced GC inside
+`sweepWeakRefs` itself.
+
+This explains:
+- **Why simple reproducers pass** — short scopes, low GC pressure, the
+  WeakHashMap entry survives long enough to be snapshotted.
+- **Why DBIC fails after ~20 prior tests** — cumulative GC pressure raises
+  the probability that `my $schema` is the unlucky entry GC'd between
+  `forceGcAndSnapshot` and the snapshot read.
+
+### Fix path (narrow, TDD ordering)
+
+Make `MyVarCleanupStack` track `my $scalar = $ref` strongly the same way it
+tracks `my @arr` / `my %hash`. Then walker path (b) finds the schema's
+lexical even when path (a)'s WeakHashMap entry has been GC'd.
+
+**Order matters — test before fix:**
+
+1. **Add `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` debug knob** ✅ DONE (this PR).
+   In `MortalList.maybeAutoSweep()` — bypasses the 5-s throttle and the
+   `weakRefsExist` gate when the env var is set. Required for (2) to be
+   deterministic; same code is also useful for any future walker
+   investigation.
+
+2. **Add a FAILING unit test** under
+   `src/test/resources/unit/refcount/walker_lexical_scalar_root.t` that
+   uses `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` to deterministically reproduce
+   the race.
+
+   ⚠️ **STATUS — hypothesis disconfirmed**. The simple-lexical
+   reproducer PASSES under `JPERL_FORCE_SWEEP_EVERY_FLUSH=1` + 20×
+   `Internals::jperl_gc()`. So does a DBIC-shape reproducer with
+   global-registered schemas. The walker correctly seeds both paths today.
+
+   **The actual DBIC bug is somewhere else** — likely tied to:
+   - Moo / Class::C3::XS / MRO interaction with refCount tracking
+   - DBIC's per-row `_result_source` cached weak ref via accessor magic
+   - Or Storable's seen-table inflating refcounts during `dclone`
+   - Or some other DBIC-specific structural cycle
+
+   The fix path below ("Implement the fix in EmitVariable.java") is
+   speculative — it might help, might not. Don't implement it without
+   first capturing a real DBIC failure with the diagnostic knob enabled
+   and inspecting which seeding gate dropped the schema.
+
+3. **Capture a real DBIC failure with the diagnostic knob.** Next
+   investigation step: add `JPERL_WALKER_TRACE=1` instrumentation to
+   `ReachabilityWalker.sweepWeakRefs()` so every cleared weak ref is
+   logged with its target identity + `findPathTo()` output. Then run:
+
+       JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+           ./jcpan -t DBIx::Class > /tmp/full.log 2>&1
+
+   The first line in the trace whose target is a Schema/ResultSource
+   that DBIC subsequently complains about is the actual blind spot.
+   Then we know which seeding gate to fix — without speculating.
+
+4. ~~Implement the fix in EmitVariable.java~~ — DEFERRED until (3) gives
+   us evidence about which gate is actually missing.
+
+5. ~~Run the unit test~~, ~~Run the full DBIC suite~~ — same.
+
+### Next steps (concrete, in order)
+
+This PR (#635) ships the diagnostic infrastructure (`JPERL_FORCE_SWEEP_EVERY_FLUSH`)
+and the corrected investigation plan. Whoever picks up the actual fix should:
+
+#### Step A — Add `JPERL_WALKER_TRACE=1` instrumentation
+
+In `src/main/java/org/perlonjava/runtime/runtimetypes/ReachabilityWalker.java`,
+inside `sweepWeakRefs(boolean quiet)` (around the loop that clears weak
+refs to unreachable objects), add an env-gated `System.err.println` for
+each clear that records:
+
+```
+WALKER_CLEAR target=<className>@<identityHashCode>
+             refCount=<base.refCount>
+             refCountOwned=<sc.refCountOwned>
+             scopeExited=<sc.scopeExited>
+             captureCount=<sc.captureCount>
+             storedInPackageGlobal=<base.storedInPackageGlobal>
+             path=<findPathTo(target) or "<unreachable>">
+             seedStats=globals:<n> myVars:<n> scalarRefReg:<n>
+```
+
+The seed-stats snapshot is the critical piece — it tells us whether
+the schema's lexical was *eligible* to be seeded, even if it ended up
+filtered out.
+
+#### Step B — Capture a real DBIC failure
+
+```
+JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+    timeout 3000 ./jcpan -t DBIx::Class > /tmp/dbic.log 2>/tmp/dbic.trace
+```
+
+In the resulting `dbic.trace` file, find the first `WALKER_CLEAR` line
+whose target class is `DBIx::Class::Schema`, `DBIx::Class::ResultSource::Table`,
+or `DBIx::Class::Storage::DBI` (the classes whose weak-ref clearing
+produces the `detached result source` exception). That single trace line
+identifies the seeding gate that incorrectly excluded a still-live object.
+
+#### Step C — Fix the specific gate
+
+Once we know which property/state caused the false-negative seeding,
+the fix is in `ReachabilityWalker.walk()` Phase 2 (lines 111–153).
+Most likely candidates:
+
+1. The `sc.captureCount > 0` skip (path (a)) is over-eager — closures
+   that capture but are themselves only weakly held in
+   `globalCodeRefs` won't be walked, leaving the captured scalar
+   un-seeded. Fix: remove the `captureCount > 0` skip when the
+   scalar is `refCountOwned` (the closure capture is real ownership).
+
+2. `MyVarCleanupStack.isLive(sc)` returns false for scalars allocated
+   by JVM-stack temporaries during method dispatch (e.g. `@_`
+   storage). Fix: always seed `refCountOwned=true` scalars
+   regardless of `isLive`.
+
+3. A specific DBIC pattern (e.g. `Class::C3::XS` next-method dispatch,
+   Moo accessor magic, Sub::Quote eval-string captures) creates a
+   reachability path through closures that the walker doesn't know
+   how to follow. Fix: walk additional capture sources.
+
+The trace tells us which.
+
+#### Step D — Promote the fix's regression test
+
+Once Step B identifies the actual pattern, the smallest version of it
+becomes the regression test under
+`src/test/resources/unit/refcount/walker_<specific_gate>.t`. The
+`dev/sandbox/walker_blind_spot/*_PASSES.t` files in this PR are
+*starting points* for that — they set up the
+JPERL_FORCE_SWEEP_EVERY_FLUSH harness correctly, just don't exercise
+the actual blind spot yet.
+
+#### Step E — Verify on full DBIC suite
+
+```
+timeout 3600 ./jcpan -t DBIx::Class > /tmp/final.log 2>&1
+grep "Files=" /tmp/final.log    # must show 0/N failures
+```
+
+Run on a quiet box (no concurrent jcpan/jprove from other worktrees) so
+the test is meaningful.
+
+### Architectural note (don't repeat past mistakes)
+
+`/dev/modules/dbix_class.md` "What Didn't Work" warns:
+- Cascading cleanup after rescue → destroys Schema internals
+- WEAKLY_TRACKED for birth-tracked objects → refcounts inaccurate
+- DESTROY resurrection via refCount=0 reset → infinite loops
+
+The fix here is **narrower**: ensure the walker's reachability set is
+complete (so the sweep doesn't clear refs to live objects). It is NOT to
+disable the sweep entirely — that breaks the leak-detection tests
+(observed: 14/23 fails with `JPERL_NO_AUTO_GC=1`).
+
+### Status
+
+- [x] Reproduced under `./jcpan -t DBIx::Class` (occasionally; today on test
+      `t/52leaks.t` ~test #21 of the suite).
+- [x] **Confirmed root cause: `maybeAutoSweep()` 5-s timer + `ReachabilityWalker`
+      missing live lexicals as roots.** Disabling auto-GC removes the crash;
+      keeping it on with broken reachability clears live weak refs.
+- [ ] **Build deterministic repro infrastructure (next step)** — see "How to
+      make this reliably reproducible" below. Without that, every repro
+      attempt is timing-dependent and we waste cycles on flaky runs.
+- [ ] Pinpoint which seeding/walking phase in `ReachabilityWalker` misses
+      the test-scope `my $schema` lexical.
+- [ ] Add lexical seeding and re-run; expect t/52leaks.t to pass under
+      auto-GC at ALL test positions in the harness.
+- [ ] Verify under full DBIC suite (must hit 0/314 fails).
+
+### How to make this reliably reproducible
+
+Today's testing is flaky because the bug only fires when the auto-sweep
+5-s timer expires at a precise moment relative to Perl's statement
+boundaries. Naive reproducers either complete too fast (no sweep fires)
+or have lexical roots so simple the walker can't miss them. We need
+infrastructure that forces both knobs:
+
+#### 1. Force sweep timing — `JPERL_FORCE_SWEEP_EVERY_FLUSH=1`
+
+Add a debug-only env var that makes `MortalList.maybeAutoSweep()` fire
+on **every** `MortalList.flush()` call (i.e. at every Perl statement
+boundary), bypassing the 5-s throttle and the
+`WeakRefRegistry.weakRefsExist` gate. With that, ANY reproducer pattern
+that would hit the walker's blind spot fails on the first statement.
+
+This converts a stochastic 1-in-314 timing race into a deterministic
+"sweep happens here" → "schema cleared here" → "next access dies"
+sequence we can debug step-by-step.
+
+Implementation: gate the existing throttle/flag check in
+`MortalList.maybeAutoSweep()` (lines 643-651) on
+`!System.getenv("JPERL_FORCE_SWEEP_EVERY_FLUSH")`. ~3 lines.
+
+#### 2. Walker diagnostic transcript — `JPERL_WALKER_TRACE=1`
+
+When set, `ReachabilityWalker.sweepWeakRefs()` writes a structured
+log line for EVERY weak-ref it clears, including:
+
+- target classname + `System.identityHashCode`
+- `findPathTo(target)` output (which is "<unreachable>" for the cases
+  we care about)
+- a one-line snapshot of which seeding sources fired this walk
+  (`globalCodeRefs.size`, `globalHashes.size`, `ScalarRefRegistry.snapshot.size`,
+  `MyVarCleanupStack.snapshotLiveVars.size`)
+- caller stack (1-2 frames of native Java; useful for distinguishing
+  manual `Internals::jperl_gc()` vs `MortalList.flush()`-triggered)
+
+Together with (1), running:
+
+    JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+        ./jperl small_repro.t 2> /tmp/sweep_trace.log
+
+…produces an exact ordered transcript of every clear in the small
+reproducer. The first line whose target is a Schema (or any blessed
+object the test still wants alive) is the bug.
+
+#### 3. Tiered reproducers (graduate from simple → DBIC-like)
+
+Today's `dev/sandbox/walker_blind_spot/simple_lexical_repro.t` doesn't
+fail — too simple. We need a tier of progressively-richer reproducers
+to find the smallest one that fails under (1):
+
+- **T1 (simplest)**: 1 schema, 1 result-source, 1 weakened back-ref.
+  Already exists; passes.
+- **T2**: T1 + holding the schema indirectly through a closure-captured
+  `$self` chain (mirroring DBIC's `accessor` closures).
+- **T3**: T2 + passing the schema through `@_` arg-pass via a method call
+  that uses `shift` to consume it.
+- **T4**: T3 + using overloaded operators (DBIC ResultSource has `""`
+  overload via Carp::Clan; many JVM temporaries from stringify).
+- **T5**: T4 + populating `WeakRefRegistry` with thousands of unrelated
+  weakened scalars, like `populate_weakregistry()` does.
+- **T6**: T5 + interleaving `dclone` on a separate complex structure
+  to inflate Storable's internal seen-table, mirroring t/52leaks.t's
+  `$fire_resultsets->()`.
+
+The smallest tier that fails under `JPERL_FORCE_SWEEP_EVERY_FLUSH=1`
+is the bug-trigger pattern. We add it as a unit test under
+`src/test/resources/unit/refcount/walker_blind_spot.t` so any future
+fix has an automated guard.
+
+#### 4. Prefix bisection on the full DBIC suite
+
+Independent of the small-repro work, narrow the harness reproduction.
+The current full run is ~40 min and hits ~1-2 failures stochastically.
+Build a prefix bisection harness:
+
+    cd cpan_build_dir/DBIx-Class-0.082844
+    JPERL_FORCE_SWEEP_EVERY_FLUSH=1 JPERL_WALKER_TRACE=1 \
+        timeout 600 ../../jperl -MTest::Harness \
+            -e 'test_harness(0, "blib/lib", "blib/arch")' \
+            t/52leaks.t
+
+If the SCALAR-prefix (just t/52leaks.t alone) fails under (1), we have
+a 1-test deterministic harness reproducer in <30s. If it doesn't fail,
+add prior tests one at a time (binary search on the suite list) until
+it does. The smallest failing prefix is reliable repro.
+
+### Plan ordering (to minimize wasted effort)
+
+1. **Implement (1) and (2)** in PerlOnJava — both are small, debug-only,
+   gated on env vars. Cost: ~30 min of dev work.
+
+2. **Run (4) prefix bisection** with (1) + (2) enabled — gives
+   deterministic harness repro within ~1 hour.
+
+3. **Inspect the walker transcript** at the moment of premature clear.
+   That tells us exactly which seeding gate dropped the schema.
+
+4. **Fix the seeding gate** in `ReachabilityWalker.walk()`.
+
+5. **Run the full suite** (no debug envs) to verify the fix.
+
+6. **Promote the smallest reproducer** from (3) into
+   `src/test/resources/unit/refcount/walker_blind_spot.t` so the fix
+   stays fixed.
+
+### Why we can't ship without this fix
+
+A user running `jcpan DBIx::Class` will see a clean install when run alone
+(passes standalone) but a failed install under the published smoke-test
+infrastructure. That's a worse user experience than the current pre-PR-#635
+state (where the storable bugs blocked things up front). Per
+@dev/cpan-reports/cpan-compatibility.md we publish "DBIx::Class PASS" — we
+can't ship a regression behind that flag.
 
 ---
 
