@@ -6,7 +6,6 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
-
 /**
  * Reference opcode readers/writers (regular, weak, and overloaded
  * variants), plus the backref opcode {@link Opcodes#SX_OBJECT}.

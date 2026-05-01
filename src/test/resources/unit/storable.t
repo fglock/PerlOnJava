@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use Storable qw(store retrieve nstore freeze thaw nfreeze dclone);
 
 # Test plan
-plan tests => 9;
+plan tests => 10;
 
 subtest 'Basic scalar serialization' => sub {
     plan tests => 6;
@@ -253,6 +253,70 @@ subtest 'Deep cloning preserves hash-wrapper independence' => sub {
         $clone->{attrs}{order_by}[0] != $clone->{shared},
         'order_by chunk hash and shared wrapper hash are distinct refs in clone'
     );
+};
+
+# Regression test: STORABLE_freeze hook cookie must survive nfreeze/thaw.
+# The STORABLE_freeze return value is a binary Storable stream (from an inner
+# nfreeze call).  Before the fix, StorableWriter encoded it as UTF-8, which
+# corrupted any bytes > 0x7F in the binary cookie, causing the outer thaw to
+# fail or return garbled data.  This test exercises a nested hook chain
+# similar to DBIx::Class ResultSet -> ResultSource -> ResultSourceHandle and
+# verifies the round-trip is lossless.
+subtest 'STORABLE_freeze nested hook cookie round-trip (binary-safe)' => sub {
+    plan tests => 6;
+
+    # Inner-most class: plain hash with STORABLE_freeze returning an nfreeze of
+    # its own shallow copy.  The nfreeze output is binary and will contain bytes
+    # > 127 because the class name itself produces them in the Storable stream.
+    package _StTestInner;
+    use Storable qw(nfreeze thaw);
+    sub new { my ($c, %a) = @_; bless \%a, $c }
+    sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
+        return nfreeze({ %$self });
+    }
+    sub STORABLE_thaw {
+        my ($self, $cloning, $ice) = @_;
+        %$self = %{ thaw($ice) };
+    }
+
+    # Outer class: also has STORABLE_freeze; it wraps an _StTestInner object,
+    # so its inner nfreeze will call _StTestInner's STORABLE_freeze and produce
+    # a cookie with an embedded binary Storable stream.
+    package _StTestOuter;
+    use Storable qw(nfreeze thaw);
+    sub new { my ($c, %a) = @_; bless \%a, $c }
+    sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
+        return nfreeze({ %$self });
+    }
+    sub STORABLE_thaw {
+        my ($self, $cloning, $ice) = @_;
+        %$self = %{ thaw($ice) };
+    }
+
+    package main;
+
+    my $inner = _StTestInner->new(
+        moniker => 'CD',
+        magic   => "\x80\x81\x82\xff",  # bytes > 127 to stress-test encoding
+    );
+    my $outer = _StTestOuter->new(
+        name   => 'outer',
+        inner  => $inner,
+        count  => 42,
+    );
+
+    my $frozen = eval { nfreeze($outer) };
+    ok(!$@, "nfreeze of nested hooked object lives (err: $@)");
+
+    my $thawed = eval { thaw($frozen) };
+    ok(!$@, "thaw of nested hooked object lives (err: $@)");
+
+    is(ref($thawed), '_StTestOuter', 'thawed outer object is right class');
+    is($thawed->{name},  'outer', 'outer name attribute survives');
+    is($thawed->{count}, 42,      'outer count attribute survives');
+    isa_ok($thawed->{inner}, '_StTestInner', 'inner hooked object survives');
 };
 
 done_testing();
