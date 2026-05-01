@@ -314,6 +314,18 @@ sub keep_blanks {
     return $self->__parser_option(XML_PARSE_NOBLANKS, @args) ? 0 : 1;
 }
 
+sub base_uri {
+    my $self = shift;
+    if (scalar @_) { $self->{XML_LIBXML_BASE_URI} = shift; return $self }
+    return $self->{XML_LIBXML_BASE_URI};
+}
+
+sub URI {
+    my $self = shift;
+    if (scalar @_) { $self->{XML_LIBXML_BASE_URI} = shift; return $self }
+    return $self->{XML_LIBXML_BASE_URI};
+}
+
 sub recover          { my $self = shift; $self->__parser_option(XML_PARSE_RECOVER,    @_) }
 sub recover_silently { my $self = shift; $self->__parser_option(XML_PARSE_RECOVER,    @_) }
 sub expand_entities  { my $self = shift; $self->__parser_option(XML_PARSE_NOENT,      @_) }
@@ -387,6 +399,18 @@ sub parse_html_string {
     $self->{_State_} = 0;
     if ($@) { my $e = $@; chomp $e unless ref $e; croak $e }
     return $result;
+}
+
+sub processXIncludes {
+    my ($self, $doc) = @_;
+    croak("No document to process!")
+        unless ref($doc) && $doc->isa('XML::LibXML::Document');
+    return $self->_processXIncludes($doc);
+}
+
+sub _processXIncludes {
+    # Stub: XInclude processing not yet implemented; return 0 (no includes processed)
+    return 0;
 }
 
 sub load_xml {
@@ -537,6 +561,103 @@ sub exists {
 
 sub load_catalog { }   # no-op
 sub set_handler  { }   # no-op for non-SAX use
+sub _init_callbacks    { }  # no-op (SAX callback setup)
+sub _cleanup_callbacks { }  # no-op
+
+# -----------------------------------------------------------------------
+# Push / incremental parser API
+# -----------------------------------------------------------------------
+
+sub init_push {
+    my $self = shift;
+    delete $self->{CONTEXT} if defined $self->{CONTEXT};
+    $self->{CONTEXT} = $self->_start_push(0);
+}
+
+sub push {
+    my $self = shift;
+    if ( not defined $self->{CONTEXT} ) {
+        $self->init_push();
+    }
+    foreach ( @_ ) {
+        eval { $self->_push( $self->{CONTEXT}, $_ ); };
+        if ( $@ ) {
+            # Clean up context so next parse_chunk starts fresh
+            delete $self->{CONTEXT};
+            my $err = $@;
+            chomp $err unless ref $err;
+            Carp::croak( $err );
+        }
+    }
+}
+
+sub parse_chunk {
+    my $self = shift;
+    my $chunk     = shift;
+    my $terminate = shift;
+
+    if ( not defined $self->{CONTEXT} ) {
+        $self->init_push();
+    }
+
+    if ( defined $chunk and length $chunk ) {
+        eval { $self->_push( $self->{CONTEXT}, $chunk ); };
+        if ( $@ ) {
+            delete $self->{CONTEXT};
+            my $err = $@;
+            chomp $err unless ref $err;
+            Carp::croak( $err );
+        }
+    }
+
+    if ( $terminate ) {
+        return $self->finish_push();
+    }
+    return;
+}
+
+sub finish_push {
+    my $self    = shift;
+    my $recover = shift || 0;
+    return undef unless defined $self->{CONTEXT};
+    my $retval;
+    eval { $retval = $self->_end_push( $self->{CONTEXT}, $recover ); };
+    my $err = $@;
+    delete $self->{CONTEXT};
+    if ( $err ) {
+        chomp $err unless ref $err;
+        Carp::croak( $err );
+    }
+    return $retval;
+}
+
+sub parse_xml_chunk {
+    my $self = shift;
+    Carp::croak("parse_xml_chunk is not a class method! Create a parser object with XML::LibXML->new first!") unless ref $self;
+    unless ( defined $_[0] and length $_[0] ) {
+        Carp::croak("Empty String");
+    }
+    my $result;
+    eval { $result = $self->_parse_xml_chunk( @_ ); };
+    my $err = $@;
+    if ( $err ) {
+        chomp $err unless ref $err;
+        Carp::croak( $err );
+    }
+    return $result;
+}
+
+sub parse_balanced_chunk {
+    my $self = shift;
+    my $rv;
+    eval { $rv = $self->parse_xml_chunk( @_ ); };
+    my $err = $@;
+    if ( $err ) {
+        chomp $err unless ref $err;
+        Carp::croak( $err );
+    }
+    return $rv;
+}
 
 package XML::LibXML::_SAXParser;  # placeholder
 

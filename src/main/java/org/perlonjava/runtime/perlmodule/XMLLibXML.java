@@ -3,10 +3,12 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
+import org.perlonjava.runtime.runtimetypes.PerlDieException;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 
 import javax.xml.namespace.NamespaceContext;
+import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.*;
@@ -36,6 +38,10 @@ public class XMLLibXML extends PerlModuleBase {
     private static final String OPTS_KEY = "_parser_opts";
     private static final String XPC_KEY  = "_xpc_state";
 
+    /** Pseudo-namespace for functions registered without namespace ("{}name"). */
+    private static final String NONS_NS     = "http://perlonjava.org/xpc-nons";
+    private static final String NONS_PREFIX = "__pns__";
+
     private static final DocumentBuilderFactory DBF;
     private static final XPathFactory XPATH_FACTORY = XPathFactory.newInstance();
 
@@ -50,13 +56,16 @@ public class XMLLibXML extends PerlModuleBase {
     // ----------------------------------------------------------------
 
     static class ParserOptions {
-        boolean keepBlanks  = true;
-        boolean recover     = false;
+        boolean keepBlanks      = true;
+        boolean recover         = false;
+        boolean expandEntities  = false; // XML_PARSE_NOENT; false = keep EntityReference nodes
     }
 
     static class XPathContextState {
         Node contextNode;
-        final Map<String, String> namespaces = new LinkedHashMap<>();
+        final Map<String, String>         namespaces       = new LinkedHashMap<>();
+        final Map<String, RuntimeScalar>  customFunctions  = new HashMap<>();
+        RuntimeScalar                     varLookupCallback = null;  // single var-lookup func
     }
 
     static class SimpleNamespaceContext implements NamespaceContext {
@@ -106,6 +115,11 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethod("DISABLE_THREAD_SUPPORT", null);
             module.registerMethod("encodeToUTF8",         null);
             module.registerMethod("decodeFromUTF8",       null);
+            // Push parsing
+            module.registerMethod("_start_push",          null);
+            module.registerMethod("_push",                null);
+            module.registerMethod("_end_push",            null);
+            module.registerMethod("_parse_xml_chunk",     null);
 
             // Node methods
             String nodePkg = "XML::LibXML::Node";
@@ -123,6 +137,7 @@ public class XMLLibXML extends PerlModuleBase {
                 {"isSameNode"},
                 {"localname"}, {"prefix"}, {"namespaceURI"},
                 {"nodePath"}, {"line_number"},
+                {"appendText"},
                 {"getData"}, {"setData"},
                 {"setNamespace"},
                 {"findnodes"}, {"find"}, {"exists"},
@@ -148,6 +163,8 @@ public class XMLLibXML extends PerlModuleBase {
                 // aliases for documentElement
                 {"getDocumentElement", "documentElement"},
                 {"createElement"},     {"createElementNS"},
+                {"createRawElement",   "createElement"},
+                {"createRawElementNS", "createElementNS"},
                 {"createTextNode"},    {"createComment"},
                 {"createCDATASection"},
                 {"createProcessingInstruction", "docCreatePI"},
@@ -414,6 +431,14 @@ public class XMLLibXML extends PerlModuleBase {
                 if (declEnd > 2 && declEnd < result.length() && result.charAt(declEnd) != '\n') {
                     result = result.substring(0, declEnd) + "\n" + result.substring(declEnd);
                 }
+                // libxml2 always ends document serialization with a trailing newline
+                if (!result.endsWith("\n")) {
+                    result = result + "\n";
+                }
+            }
+            // $XML::LibXML::setTagCompression = 1 serializes empty elements as <foo></foo>
+            if (GlobalVariable.getGlobalVariable("XML::LibXML::setTagCompression").getBoolean()) {
+                result = result.replaceAll("<([\\w:.-]+)([^>]*?)/>", "<$1$2></$1>");
             }
             return result;
         } catch (TransformerException e) {
@@ -443,6 +468,7 @@ public class XMLLibXML extends PerlModuleBase {
         if (flagsScalar != null && flagsScalar.type != RuntimeScalarType.UNDEF) {
             int flags = flagsScalar.getInt();
             if ((flags & XML_PARSE_NOBLANKS) != 0) opts.keepBlanks = false;
+            opts.expandEntities = (flags & 2) != 0; // XML_PARSE_NOENT = 2
         }
         return opts;
     }
@@ -452,6 +478,8 @@ public class XMLLibXML extends PerlModuleBase {
             DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
             f.setNamespaceAware(true);
             if (!opts.keepBlanks) f.setIgnoringElementContentWhitespace(true);
+            // When expand_entities is false, keep EntityReference nodes in the tree
+            f.setExpandEntityReferences(opts.expandEntities);
             DocumentBuilder db = f.newDocumentBuilder();
             db.setErrorHandler(new ErrorHandler() {
                 public void warning(SAXParseException e) {}
@@ -669,7 +697,146 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList _parse_html_string(RuntimeArray args, int ctx) {
-        return _parse_string(args, ctx); // Tier B stub
+        // Try to parse as XML first; if that fails due to unclosed void HTML
+        // elements, self-close them and retry.
+        try {
+            return _parse_string(args, ctx);
+        } catch (Exception e) {
+            // Fall through to HTML-aware fallback
+        }
+        RuntimeScalar self   = args.get(0);
+        RuntimeScalar strArg = args.size() > 1 ? args.get(1) : scalarUndef;
+        if (strArg.type == RuntimeScalarType.UNDEF) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"), new RuntimeScalar("\n")).getList();
+        }
+        String html = strArg.toString();
+        // Self-close HTML void elements that are not already self-closed
+        String[] voidElements = {"area","base","br","col","embed","hr","img",
+                                  "input","link","meta","param","source","track","wbr"};
+        for (String tag : voidElements) {
+            // Replace <tag ...> (not already self-closed) with <tag .../>
+            html = html.replaceAll("(?i)<(" + tag + ")(\\s[^>]*)?>", "<$1$2/>");
+            html = html.replaceAll("(?i)<(" + tag + ")>", "<$1/>");
+        }
+        RuntimeArray newArgs = new RuntimeArray();
+        RuntimeArray.push(newArgs, self);
+        RuntimeArray.push(newArgs, new RuntimeScalar(html));
+        return _parse_string(newArgs, ctx);
+    }
+
+    // ================================================================
+    // Push / incremental parsing
+    // ================================================================
+
+    /** Context object for push (incremental) parsing. Buffers all chunks. */
+    static class PushContext {
+        final StringBuilder buffer = new StringBuilder();
+    }
+
+    /** _start_push(sax): initialise a push context and return it. */
+    public static RuntimeList _start_push(RuntimeArray args, int ctx) {
+        PushContext pctx = new PushContext();
+        RuntimeScalar wrapped = new RuntimeScalar();
+        wrapped.type = RuntimeScalarType.JAVAOBJECT;
+        wrapped.value = pctx;
+        return wrapped.getList();
+    }
+
+    /** _push(context, chunk): append a chunk to the push context. */
+    public static RuntimeList _push(RuntimeArray args, int ctx) {
+        // args: (self, context, chunk)
+        if (args.size() < 3) return scalarUndef.getList();
+        RuntimeScalar ctxScalar = args.get(1);
+        String chunk = args.get(2).toString();
+        if (ctxScalar.type == RuntimeScalarType.JAVAOBJECT && ctxScalar.value instanceof PushContext) {
+            ((PushContext) ctxScalar.value).buffer.append(chunk);
+        }
+        return scalarTrue.getList();
+    }
+
+    /** _end_push(context, recover): finish push parsing and return document. */
+    public static RuntimeList _end_push(RuntimeArray args, int ctx) {
+        // args: (self, context, recover_flag)
+        RuntimeScalar self = args.get(0);
+        RuntimeScalar ctxScalar = args.size() > 1 ? args.get(1) : scalarUndef;
+        if (ctxScalar.type != RuntimeScalarType.JAVAOBJECT || !(ctxScalar.value instanceof PushContext)) {
+            return WarnDie.die(new RuntimeScalar("push context is invalid\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        String xmlStr = ((PushContext) ctxScalar.value).buffer.toString();
+        if (xmlStr.isEmpty()) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        ParserOptions opts = getParserOptions(self);
+        try {
+            DocumentBuilder db = newBuilder(opts);
+            Document doc = db.parse(new InputSource(new StringReader(xmlStr)));
+            if (!opts.keepBlanks) stripBlankTextNodes(doc);
+            String declEnc = doc.getXmlEncoding();
+            if (declEnc != null && doc.getUserData(UDATA_ENCODING) == null) {
+                doc.setUserData(UDATA_ENCODING, declEnc, null);
+            }
+            return wrapNode(doc).getList();
+        } catch (SAXParseException e) {
+            String msg = ":" + e.getLineNumber() + ": parser error : " + e.getMessage();
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::push_parse: " + msg + "\n"),
+                new RuntimeScalar("\n")).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::push_parse: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    /** _parse_xml_chunk(chunk[, encoding]): parse a well-balanced XML fragment. */
+    public static RuntimeList _parse_xml_chunk(RuntimeArray args, int ctx) {
+        RuntimeScalar self = args.get(0);
+        if (args.size() < 2) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        RuntimeScalar chunkArg = args.get(1);
+        if (chunkArg.type == RuntimeScalarType.UNDEF || chunkArg.toString().isEmpty()) {
+            return WarnDie.die(new RuntimeScalar("Empty String\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+        String chunk = chunkArg.toString();
+
+        // Wrap in a synthetic root so we can parse as a document
+        String wrapped = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><__xml_chunk__>" + chunk + "</__xml_chunk__>";
+        ParserOptions opts = getParserOptions(self);
+        Document wrapDoc;
+        try {
+            DocumentBuilder db = newBuilder(opts);
+            wrapDoc = db.parse(new InputSource(new StringReader(wrapped)));
+        } catch (SAXParseException e) {
+            String msg = ":" + (e.getLineNumber() - 1) + ": parser error : " + e.getMessage();
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_xml_chunk: " + msg + "\n"),
+                new RuntimeScalar("\n")).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_xml_chunk: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+
+        // Create a standalone document, move the children of __xml_chunk__ into a DocumentFragment
+        try {
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setNamespaceAware(true);
+            DocumentBuilder db2 = dbf.newDocumentBuilder();
+            Document fragDoc = db2.newDocument();
+            DocumentFragment frag = fragDoc.createDocumentFragment();
+            org.w3c.dom.Element wrapper = wrapDoc.getDocumentElement();
+            NodeList children = wrapper.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                org.w3c.dom.Node child = children.item(i);
+                org.w3c.dom.Node imported = fragDoc.importNode(child, true);
+                frag.appendChild(imported);
+            }
+            return wrapNode(frag).getList();
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_xml_chunk: fragment error: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
     }
 
     public static RuntimeList LIBXML_RUNTIME_VERSION(RuntimeArray args, int ctx) {
@@ -756,6 +923,14 @@ public class XMLLibXML extends PerlModuleBase {
             // Return undef in scalar context, empty list in list context.
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef.getList();
         }
+        if (ctx == RuntimeContextType.LIST) {
+            // In list context, return individual attribute node scalars so that
+            // "for my $attr ($node->attributes)" iterates over Attr nodes.
+            RuntimeList result = new RuntimeList();
+            for (int i = 0; i < attrs.getLength(); i++) result.add(wrapNode(attrs.item(i)));
+            return result;
+        }
+        // In scalar context, return the blessed NamedNodeMap reference.
         RuntimeArray arr = new RuntimeArray();
         for (int i = 0; i < attrs.getLength(); i++) RuntimeArray.push(arr, wrapNode(attrs.item(i)));
         return ReferenceOperators.bless(arr.createReference(),
@@ -764,7 +939,8 @@ public class XMLLibXML extends PerlModuleBase {
 
     public static RuntimeList cloneNode(RuntimeArray args, int ctx) {
         Node n = getNode(args.get(0));
-        boolean deep = args.size() < 2 || args.get(1).getBoolean();
+        // libxml2: cloneNode() with no arg = shallow, cloneNode(1) = deep
+        boolean deep = args.size() > 1 && args.get(1).getBoolean();
         return wrapNode(n.cloneNode(deep)).getList();
     }
 
@@ -807,6 +983,7 @@ public class XMLLibXML extends PerlModuleBase {
         Node parent   = getNode(args.get(0));
         Node newChild = getNode(args.get(1));
         Node refChild = (args.size() > 2 && args.get(2).getDefinedBoolean()) ? getNode(args.get(2)) : null;
+        newChild = importNodeIfNeeded(parent, newChild);
         parent.insertBefore(newChild, refChild);
         return wrapNode(newChild).getList();
     }
@@ -816,8 +993,19 @@ public class XMLLibXML extends PerlModuleBase {
         Node newChild = getNode(args.get(1));
         Node refChild = (args.size() > 2 && args.get(2).getDefinedBoolean()) ? getNode(args.get(2)) : null;
         Node nextRef  = (refChild != null) ? refChild.getNextSibling() : null;
+        newChild = importNodeIfNeeded(parent, newChild);
         parent.insertBefore(newChild, nextRef);
         return wrapNode(newChild).getList();
+    }
+
+    /** Import a node into the parent's document if they are in different documents. */
+    private static Node importNodeIfNeeded(Node parent, Node child) {
+        Document ownerDoc = (parent.getNodeType() == Node.DOCUMENT_NODE)
+            ? (Document) parent : parent.getOwnerDocument();
+        if (ownerDoc != null && child.getOwnerDocument() != null && child.getOwnerDocument() != ownerDoc) {
+            child = ownerDoc.importNode(child, true);
+        }
+        return child;
     }
 
     public static RuntimeList removeChild(RuntimeArray args, int ctx) {
@@ -825,6 +1013,21 @@ public class XMLLibXML extends PerlModuleBase {
         Node child  = getNode(args.get(1));
         parent.removeChild(child);
         return wrapNode(child).getList();
+    }
+
+    /**
+     * $node->appendText($text) — append a text node child with the given content.
+     * Returns the new Text node.
+     */
+    public static RuntimeList appendText(RuntimeArray args, int ctx) {
+        Node parent = getNode(args.get(0));
+        String text = args.size() > 1 ? args.get(1).toString() : "";
+        Document ownerDoc = (parent.getNodeType() == Node.DOCUMENT_NODE)
+            ? (Document) parent : parent.getOwnerDocument();
+        if (ownerDoc == null) ownerDoc = getScratchDoc();
+        Text textNode = ownerDoc.createTextNode(text);
+        parent.appendChild(textNode);
+        return wrapNode(textNode).getList();
     }
 
     public static RuntimeList replaceChild(RuntimeArray args, int ctx) {
@@ -941,8 +1144,10 @@ public class XMLLibXML extends PerlModuleBase {
         Node n     = getNode(args.get(0));
         String ns  = args.size() > 1 ? nsArg(args.get(1)) : null;
         String pfx = (args.size() > 2) ? args.get(2).toString() : null;
-        boolean act = args.size() < 4 || args.get(3).getBoolean();
-        if (n instanceof Element && pfx != null && ns != null && act) {
+        // act flag (arg 4): when true the element is moved to this namespace;
+        // we can't change an element's QName after creation in Java DOM, so we
+        // simply declare the namespace binding in all cases.
+        if (n instanceof Element && pfx != null && ns != null) {
             ((Element) n).setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + pfx, ns);
         }
         return scalarTrue.getList();
@@ -961,7 +1166,7 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList findnodes(RuntimeArray args, int ctx) {
         Node node = getNode(args.get(0));
         String expr = args.size() > 1 ? toXPathString(args.get(1)) : "";
-        List<RuntimeScalar> nodes = evaluateXPathToNodeList(node, expr, null);
+        List<RuntimeScalar> nodes = evaluateXPathToNodeList(node, expr, null, null);
         if (ctx == RuntimeContextType.LIST) {
             RuntimeList result = new RuntimeList();
             for (RuntimeScalar ns : nodes) result.add(ns);
@@ -1656,7 +1861,7 @@ public class XMLLibXML extends PerlModuleBase {
         String expr             = args.get(1).toString();
         Node contextNode        = (args.size() > 2 && args.get(2).getDefinedBoolean())
             ? getNode(args.get(2)) : state.contextNode;
-        List<RuntimeScalar> nodes = evaluateXPathToNodeList(contextNode, expr, state.namespaces);
+        List<RuntimeScalar> nodes = evaluateXPathToNodeList(contextNode, expr, state.namespaces, state.customFunctions, state.varLookupCallback);
         RuntimeList result = new RuntimeList();
         for (RuntimeScalar n : nodes) result.add(n);
         return result;
@@ -1666,7 +1871,7 @@ public class XMLLibXML extends PerlModuleBase {
         XPathContextState state = getXpcState(args.get(0));
         String expr             = args.get(1).toString();
         boolean existsOnly      = args.size() > 2 && args.get(2).getBoolean();
-        return evaluateXPath(state.contextNode, expr, state.namespaces, existsOnly);
+        return evaluateXPath(state.contextNode, expr, state.namespaces, existsOnly, state.customFunctions, state.varLookupCallback);
     }
 
     public static RuntimeList xpcFreeNodePool(RuntimeArray args, int ctx) {
@@ -1674,10 +1879,28 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList xpcRegisterFunctionNS(RuntimeArray args, int ctx) {
+        XPathContextState state  = getXpcState(args.get(0));
+        String localName         = args.get(1).toString();
+        String namespaceUri      = args.size() > 2 ? args.get(2).toString() : "";
+        String key = "{" + namespaceUri + "}" + localName;
+        if (args.size() < 4 || args.get(3).type == RuntimeScalarType.UNDEF) {
+            // Unregister: remove the function
+            state.customFunctions.remove(key);
+        } else {
+            state.customFunctions.put(key, args.get(3));
+        }
         return scalarTrue.getList();
     }
 
     public static RuntimeList xpcRegisterVarLookupFunc(RuntimeArray args, int ctx) {
+        XPathContextState state = getXpcState(args.get(0));
+        // args[1] = callback (or undef to unregister), args[2] = ns context (ignored for now)
+        RuntimeScalar callback = args.size() > 1 ? args.get(1) : null;
+        if (callback != null && callback.type != RuntimeScalarType.UNDEF) {
+            state.varLookupCallback = callback;
+        } else {
+            state.varLookupCallback = null;
+        }
         return scalarTrue.getList();
     }
 
@@ -1686,14 +1909,50 @@ public class XMLLibXML extends PerlModuleBase {
     // ================================================================
 
     public static RuntimeList encodeToUTF8(RuntimeArray args, int ctx) {
-        // encodeToUTF8($encoding, $string) — on JVM strings are already Unicode
-        String str = args.size() > 1 ? args.get(1).toString() : args.get(0).toString();
-        return new RuntimeScalar(str).getList();
+        // encodeToUTF8($encoding, $string): convert $string from $encoding to a Unicode char string
+        String enc = args.get(0).toString();
+        if (args.size() < 2 || args.get(1).type == RuntimeScalarType.UNDEF) {
+            return scalarUndef.getList();
+        }
+        String str = args.get(1).toString();
+        if (str.isEmpty()) return new RuntimeScalar(str).getList();
+        try {
+            java.nio.charset.Charset charset = getCharsetFor(enc);
+            // Treat input as raw bytes (ISO-8859-1 maps bytes 0-255 to chars 0-255)
+            byte[] bytes = str.getBytes(StandardCharsets.ISO_8859_1);
+            return new RuntimeScalar(new String(bytes, charset)).getList();
+        } catch (java.nio.charset.UnsupportedCharsetException e) {
+            return WarnDie.die(new RuntimeScalar("Unknown encoding: " + enc + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
     }
 
     public static RuntimeList decodeFromUTF8(RuntimeArray args, int ctx) {
-        String str = args.size() > 1 ? args.get(1).toString() : args.get(0).toString();
-        return new RuntimeScalar(str).getList();
+        // decodeFromUTF8($encoding, $string): convert Unicode char string to $encoding byte string
+        String enc = args.get(0).toString();
+        if (args.size() < 2 || args.get(1).type == RuntimeScalarType.UNDEF) {
+            return scalarUndef.getList();
+        }
+        String str = args.get(1).toString();
+        if (str.isEmpty()) return new RuntimeScalar(str).getList();
+        try {
+            java.nio.charset.Charset charset = getCharsetFor(enc);
+            byte[] bytes = str.getBytes(charset);
+            // Return as Perl byte string (ISO-8859-1 maps bytes 0-255 back to chars)
+            return new RuntimeScalar(new String(bytes, StandardCharsets.ISO_8859_1)).getList();
+        } catch (java.nio.charset.UnsupportedCharsetException e) {
+            return WarnDie.die(new RuntimeScalar("Unknown encoding: " + enc + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
+    /** Map encoding name to Java Charset, using UTF-16LE for "UTF-16" (to avoid BOM). */
+    private static java.nio.charset.Charset getCharsetFor(String enc) {
+        // Use UTF-16LE for plain "UTF-16" to avoid the 2-byte BOM Java adds
+        if ("UTF-16".equalsIgnoreCase(enc)) {
+            return java.nio.charset.Charset.forName("UTF-16LE");
+        }
+        return java.nio.charset.Charset.forName(enc);
     }
 
     // ================================================================
@@ -1843,18 +2102,235 @@ public class XMLLibXML extends PerlModuleBase {
         }
     }
 
+    /**
+     * XPathFunctionResolver that calls Perl code refs registered via registerFunctionNS.
+     */
+    static class PerlFunctionResolver implements XPathFunctionResolver {
+        private final Map<String, RuntimeScalar> functions;
+
+        PerlFunctionResolver(Map<String, RuntimeScalar> functions) {
+            this.functions = functions;
+        }
+
+        @Override
+        public XPathFunction resolveFunction(QName functionName, int arity) {
+            String nsUri = functionName.getNamespaceURI();
+            if (nsUri == null) nsUri = "";
+            String key = "{" + nsUri + "}" + functionName.getLocalPart();
+            RuntimeScalar callback = functions.get(key);
+            if (callback == null) {
+                // Return a function that throws when invoked so the XPath error propagates.
+                // (Returning null causes Xalan/JAXP to silently return empty instead of erroring.)
+                final String missingKey = key;
+                return (xpathArgs) -> {
+                    throw new javax.xml.xpath.XPathFunctionException(
+                        "Could not find function: " + functionName.getLocalPart());
+                };
+            }
+            return (xpathArgs) -> {
+                // Convert XPath argument types to Perl RuntimeScalars
+                RuntimeArray perlArgs = new RuntimeArray();
+                for (Object arg : xpathArgs) {
+                    if (arg instanceof String)   perlArgs.push(new RuntimeScalar((String) arg));
+                    else if (arg instanceof Double) perlArgs.push(new RuntimeScalar((Double) arg));
+                    else if (arg instanceof Boolean) perlArgs.push(new RuntimeScalar(((Boolean) arg) ? 1 : 0));
+                    else if (arg instanceof NodeList) {
+                        // Wrap as XML::LibXML::NodeList blessed array ref — single argument
+                        NodeList nl = (NodeList) arg;
+                        RuntimeArray arr = new RuntimeArray();
+                        for (int i = 0; i < nl.getLength(); i++) RuntimeArray.push(arr, wrapNode(nl.item(i)));
+                        perlArgs.push(ReferenceOperators.bless(arr.createReference(),
+                            new RuntimeScalar("XML::LibXML::NodeList")));
+                    } else {
+                        perlArgs.push(new RuntimeScalar(arg == null ? "" : arg.toString()));
+                    }
+                }
+                RuntimeList result = RuntimeCode.apply(callback, perlArgs, RuntimeContextType.SCALAR);
+                RuntimeScalar first = result.getFirst();
+                // Convert Perl return to XPath type
+                if (first.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    // Could be a blessed XML::LibXML::NodeList — convert to Java NodeList
+                    RuntimeArray arr = (RuntimeArray) ((RuntimeBase) first.value);
+                    List<Node> nodes = new ArrayList<>();
+                    for (int i = 0; i < arr.size(); i++) {
+                        Node n = getNode(arr.get(i));
+                        if (n != null) nodes.add(n);
+                    }
+                    return (NodeList) new NodeList() {
+                        public Node item(int i) { return (i >= 0 && i < nodes.size()) ? nodes.get(i) : null; }
+                        public int getLength() { return nodes.size(); }
+                    };
+                }
+                if (first.type == RuntimeScalarType.JAVAOBJECT || first.type == RuntimeScalarType.HASHREFERENCE) {
+                    // It's a single node — return as a 1-element NodeList
+                    Node n = getNode(first);
+                    if (n != null) {
+                        return (NodeList) new NodeList() {
+                            public Node item(int i) { return i == 0 ? n : null; }
+                            public int getLength() { return 1; }
+                        };
+                    }
+                }
+                // Try numeric first; if it looks like a number, return Double
+                try {
+                    return Double.parseDouble(first.toString());
+                } catch (NumberFormatException e2) {
+                    return first.toString();
+                }
+            };
+        }
+    }
+
+    /**
+     * XPathVariableResolver that calls a Perl callback registered via registerVarLookupFunc.
+     * The callback is invoked with (varName, nsUri) and should return a value.
+     */
+    static class PerlVariableResolver implements javax.xml.xpath.XPathVariableResolver {
+        private final RuntimeScalar callback;
+
+        PerlVariableResolver(RuntimeScalar callback) {
+            this.callback = callback;
+        }
+
+        @Override
+        public Object resolveVariable(QName variableName) {
+            // Call the Perl callback with (varName, nsUri)
+            RuntimeArray perlArgs = new RuntimeArray();
+            perlArgs.push(new RuntimeScalar(variableName.getLocalPart()));
+            String nsUri = variableName.getNamespaceURI();
+            perlArgs.push(nsUri != null && !nsUri.isEmpty()
+                ? new RuntimeScalar(nsUri) : RuntimeScalarCache.scalarUndef);
+            RuntimeList result = RuntimeCode.apply(callback, perlArgs, RuntimeContextType.SCALAR);
+            RuntimeScalar first = result.getFirst();
+            if (first == null || first.type == RuntimeScalarType.UNDEF) return null;
+            if (first.type == RuntimeScalarType.ARRAYREFERENCE) {
+                // Blessed XML::LibXML::NodeList or plain array ref — convert to NodeList
+                RuntimeArray arr = (RuntimeArray) ((RuntimeBase) first.value);
+                List<Node> nodes = new ArrayList<>();
+                for (int i = 0; i < arr.size(); i++) {
+                    Node n = getNode(arr.get(i));
+                    if (n != null) nodes.add(n);
+                }
+                return (NodeList) new NodeList() {
+                    public Node item(int i) { return (i >= 0 && i < nodes.size()) ? nodes.get(i) : null; }
+                    public int getLength() { return nodes.size(); }
+                };
+            }
+            if (first.type == RuntimeScalarType.JAVAOBJECT || first.type == RuntimeScalarType.HASHREFERENCE) {
+                Node n = getNode(first);
+                if (n != null) {
+                    return (NodeList) new NodeList() {
+                        public Node item(int i) { return i == 0 ? n : null; }
+                        public int getLength() { return 1; }
+                    };
+                }
+            }
+            try { return Double.parseDouble(first.toString()); }
+            catch (NumberFormatException ignored) { return first.toString(); }
+        }
+    }
+
+
+    /**
+     * Rewrites an XPath expression to add a pseudo-namespace prefix to
+     * no-namespace custom function calls.  Java's JAXP XPath only calls
+     * XPathFunctionResolver for namespace-prefixed functions; plain names
+     * are rejected as "unknown function".  We work around this by:
+     *   1. Finding all "{}name" entries in customFunctions.
+     *   2. Replacing bare `name(` with `__pns__:name(` in the expression.
+     *   3. Adding NONS_NS to the namespace map under the NONS_PREFIX alias.
+     *   4. Registering the same callback also under the "{NONS_NS}name" key.
+     * Returns the (possibly modified) expression; the ns map is mutated in place.
+     */
+    private static String rewriteNoNsFunctions(String expr,
+            Map<String, String> ns, Map<String, RuntimeScalar> customFunctions) {
+        if (customFunctions == null || customFunctions.isEmpty()) return expr;
+
+        // Collect plain (no-namespace) function names
+        Map<String, RuntimeScalar> extras = new LinkedHashMap<>();
+        for (Map.Entry<String, RuntimeScalar> e : customFunctions.entrySet()) {
+            if (e.getKey().startsWith("{}")) {
+                String funcName = e.getKey().substring(2);
+                extras.put(funcName, e.getValue());
+            }
+        }
+        if (extras.isEmpty()) return expr;
+
+        // Add pseudo-namespace mapping and register functions under it
+        ns.put(NONS_PREFIX, NONS_NS);
+        for (Map.Entry<String, RuntimeScalar> e : extras.entrySet()) {
+            customFunctions.put("{" + NONS_NS + "}" + e.getKey(), e.getValue());
+        }
+
+        // Rewrite: replace bare `funcName(` → `__pns__:funcName(` in the expression
+        // Only replace when NOT already prefixed (char before is not ':') and followed by `(`
+        for (String funcName : extras.keySet()) {
+            expr = expr.replaceAll(
+                "(?<![:\\w])" + java.util.regex.Pattern.quote(funcName) + "(?=\\s*\\()",
+                NONS_PREFIX + ":" + funcName);
+        }
+        return expr;
+    }
+
+    /**
+     * If the XPathExpressionException was caused by a Perl die, re-throw it.
+     * Otherwise return the exception for normal handling.
+     */
+    private static void rethrowIfPerlDie(XPathExpressionException e) {
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof PerlDieException) throw (PerlDieException) cause;
+            if (cause instanceof RuntimeException && cause.getCause() instanceof PerlDieException)
+                throw (PerlDieException) cause.getCause();
+            cause = cause.getCause();
+        }
+    }
+
+    /** Returns true if this XPathExpressionException is about a function not being found. */
+    private static boolean isFunctionNotFoundError(XPathExpressionException e) {
+        Throwable t = e;
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null) {
+                String lc = msg.toLowerCase(java.util.Locale.ROOT);
+                if (lc.contains("could not find function") ||
+                    lc.contains("unknown function") ||
+                    lc.contains("undeclared function") ||
+                    (lc.contains("function") && lc.contains("not found"))) {
+                    return true;
+                }
+            }
+            t = t.getCause();
+        }
+        return false;
+    }
+
     private static List<RuntimeScalar> evaluateXPathToNodeList(
-            Node contextNode, String expr, Map<String, String> namespaces) {
+            Node contextNode, String expr, Map<String, String> namespaces,
+            Map<String, RuntimeScalar> customFunctions) {
+        return evaluateXPathToNodeList(contextNode, expr, namespaces, customFunctions, null);
+    }
+
+    private static List<RuntimeScalar> evaluateXPathToNodeList(
+            Node contextNode, String expr, Map<String, String> namespaces,
+            Map<String, RuntimeScalar> customFunctions, RuntimeScalar varLookupCallback) {
         List<RuntimeScalar> results = new ArrayList<>();
         if (contextNode == null) return results;
         try {
             XPath xp = XPATH_FACTORY.newXPath();
-            Map<String, String> ns = namespaces != null ? namespaces : collectDocumentNamespaces(contextNode);
+            Map<String, String> ns = new LinkedHashMap<>(namespaces != null ? namespaces : collectDocumentNamespaces(contextNode));
+            Map<String, RuntimeScalar> funcs = customFunctions != null ? new LinkedHashMap<>(customFunctions) : null;
+            expr = rewriteNoNsFunctions(expr, ns, funcs);
             if (!ns.isEmpty())
                 xp.setNamespaceContext(new SimpleNamespaceContext(ns));
+            if (funcs != null && !funcs.isEmpty())
+                xp.setXPathFunctionResolver(new PerlFunctionResolver(funcs));
+            if (varLookupCallback != null && varLookupCallback.type != RuntimeScalarType.UNDEF)
+                xp.setXPathVariableResolver(new PerlVariableResolver(varLookupCallback));
             NodeList nl = (NodeList) xp.evaluate(expr, contextNode, XPathConstants.NODESET);
             for (int i = 0; i < nl.getLength(); i++) results.add(wrapNode(nl.item(i)));
         } catch (XPathExpressionException e) {
+            rethrowIfPerlDie(e);
             throw new RuntimeException("XPath error in findnodes('" + expr + "'): " + e.getMessage(), e);
         }
         return results;
@@ -1862,15 +2338,35 @@ public class XMLLibXML extends PerlModuleBase {
 
     private static RuntimeList evaluateXPath(Node contextNode, String expr,
             Map<String, String> namespaces, boolean existsOnly) {
+        return evaluateXPath(contextNode, expr, namespaces, existsOnly, null, null);
+    }
+
+    private static RuntimeList evaluateXPath(Node contextNode, String expr,
+            Map<String, String> namespaces, boolean existsOnly,
+            Map<String, RuntimeScalar> customFunctions) {
+        return evaluateXPath(contextNode, expr, namespaces, existsOnly, customFunctions, null);
+    }
+
+    private static RuntimeList evaluateXPath(Node contextNode, String expr,
+            Map<String, String> namespaces, boolean existsOnly,
+            Map<String, RuntimeScalar> customFunctions, RuntimeScalar varLookupCallback) {
         if (contextNode == null) {
             RuntimeList r = new RuntimeList();
             r.add(new RuntimeScalar("XML::LibXML::NodeList"));
             return r;
         }
         XPath xp = XPATH_FACTORY.newXPath();
-        Map<String, String> ns = namespaces != null ? namespaces : collectDocumentNamespaces(contextNode);
+        Map<String, String> ns = new LinkedHashMap<>(namespaces != null ? namespaces : collectDocumentNamespaces(contextNode));
+        Map<String, RuntimeScalar> funcs = customFunctions != null ? new LinkedHashMap<>(customFunctions) : null;
+        expr = rewriteNoNsFunctions(expr, ns, funcs);
         if (!ns.isEmpty())
             xp.setNamespaceContext(new SimpleNamespaceContext(ns));
+        if (funcs != null && !funcs.isEmpty())
+            xp.setXPathFunctionResolver(new PerlFunctionResolver(funcs));
+        if (varLookupCallback != null && varLookupCallback.type != RuntimeScalarType.UNDEF)
+            xp.setXPathVariableResolver(new PerlVariableResolver(varLookupCallback));
+
+        XPathExpressionException funcNotFoundError = null;
 
         // Try NODESET first — only return if it actually has nodes
         try {
@@ -1882,11 +2378,15 @@ public class XMLLibXML extends PerlModuleBase {
                 for (int i = 0; i < nl.getLength(); i++) result.add(wrapNode(nl.item(i)));
                 return result;
             }
-        } catch (XPathExpressionException ignored) {}
+        } catch (XPathExpressionException e) {
+            rethrowIfPerlDie(e);
+            if (funcNotFoundError == null && isFunctionNotFoundError(e)) funcNotFoundError = e;
+        }
 
         // Try NUMBER — catches numeric literals and math expressions
         try {
             Double num = (Double) xp.evaluate(expr, contextNode, XPathConstants.NUMBER);
+            funcNotFoundError = null; // expression is valid — clear any saved function error
             if (!num.isNaN()) {
                 // Check if it's actually a STRING expression (string returns "true"/"false" for booleans)
                 String str = (String) xp.evaluate(expr, contextNode, XPathConstants.STRING);
@@ -1905,11 +2405,15 @@ public class XMLLibXML extends PerlModuleBase {
                 r.add(new RuntimeScalar(num));
                 return r;
             }
-        } catch (XPathExpressionException ignored2) {}
+        } catch (XPathExpressionException e) {
+            rethrowIfPerlDie(e);
+            if (funcNotFoundError == null && isFunctionNotFoundError(e)) funcNotFoundError = e;
+        }
 
         // Try STRING
         try {
             String str = (String) xp.evaluate(expr, contextNode, XPathConstants.STRING);
+            funcNotFoundError = null; // expression is valid — clear any saved function error
             if (str != null && !str.isEmpty()) {
                 if (existsOnly) return scalarTrue.getList();
                 RuntimeList r = new RuntimeList();
@@ -1917,19 +2421,31 @@ public class XMLLibXML extends PerlModuleBase {
                 r.add(new RuntimeScalar(str));
                 return r;
             }
-        } catch (XPathExpressionException ignored) {}
+        } catch (XPathExpressionException e) {
+            rethrowIfPerlDie(e);
+            if (funcNotFoundError == null && isFunctionNotFoundError(e)) funcNotFoundError = e;
+        }
 
         // Try BOOLEAN
         try {
             Boolean bool = (Boolean) xp.evaluate(expr, contextNode, XPathConstants.BOOLEAN);
+            funcNotFoundError = null; // expression is valid
             if (existsOnly) return new RuntimeScalar(bool ? 1 : 0).getList();
             RuntimeList r = new RuntimeList();
             r.add(new RuntimeScalar("XML::LibXML::Boolean"));
             r.add(new RuntimeScalar(bool ? 1 : 0));
             return r;
-        } catch (XPathExpressionException ignored) {}
+        } catch (XPathExpressionException e) {
+            rethrowIfPerlDie(e);
+            if (funcNotFoundError == null && isFunctionNotFoundError(e)) funcNotFoundError = e;
+        }
 
-        // Fallback: empty NodeList (expression returned no nodes, no string, no bool)
+        // Fallback: propagate function-not-found, or return empty NodeList
+        if (funcNotFoundError != null) {
+            Throwable root = funcNotFoundError;
+            while (root.getCause() != null) root = root.getCause();
+            throw new PerlDieException(new RuntimeScalar("XPath error: " + root.getMessage() + "\n"));
+        }
         if (existsOnly) return scalarFalse.getList();
         RuntimeList result = new RuntimeList();
         result.add(new RuntimeScalar("XML::LibXML::NodeList"));

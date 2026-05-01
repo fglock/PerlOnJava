@@ -102,21 +102,103 @@ sub _parse {
     }
 
     $args->{LibParser}->set_handler( $self );
+    my $dom;
     eval {
-      $args->{ParseFunc}->($args->{LibParser}, $args->{ParseFuncParam});
+      $dom = $args->{ParseFunc}->($args->{LibParser}, $args->{ParseFuncParam});
     };
+    my $parse_err = $@;
 
-    if ( $args->{LibParser}->{SAX}->{State} == 1 ) {
-        croak( "SAX Exception not implemented, yet; Data ended before document ended\n" );
+    # Generate SAX events from the DOM tree so that SAX handlers
+    # (e.g. XML::LibXML::SAX::Builder) build their result.
+    if ( !$parse_err && defined $dom ) {
+        eval {
+            $self->start_document({});
+            _fire_sax_events($self, $dom);
+        };
+        $parse_err ||= $@;
     }
 
     # break a possible circular reference
     $args->{LibParser}->set_handler( undef );
-    if ( $@ ) {
-        croak $@;
+    if ( $parse_err ) {
+        chomp $parse_err unless ref $parse_err;
+        croak $parse_err;
     }
     return;
 }
 
-1;
+# -----------------------------------------------------------------------
+# Walk a DOM node and fire SAX events to $handler.
+# Called for both Document and DocumentFragment roots.
+# end_document is NOT fired here; callers (_parse_string etc.) do that.
+# -----------------------------------------------------------------------
+sub _fire_sax_events {
+    my ($handler, $node) = @_;
+    my $type = $node->nodeType;
 
+    if ($type == XML::LibXML::XML_DOCUMENT_NODE()
+     || $type == XML::LibXML::XML_DOCUMENT_FRAG_NODE()) {
+        foreach my $child ($node->childNodes) {
+            _fire_sax_events($handler, $child);
+        }
+    }
+    elsif ($type == XML::LibXML::XML_ELEMENT_NODE()) {
+        _fire_sax_element($handler, $node);
+    }
+    elsif ($type == XML::LibXML::XML_TEXT_NODE()) {
+        $handler->characters({ Data => $node->getData });
+    }
+    elsif ($type == XML::LibXML::XML_CDATA_SECTION_NODE()) {
+        $handler->start_cdata({});
+        $handler->characters({ Data => $node->getData });
+        $handler->end_cdata({});
+    }
+    elsif ($type == XML::LibXML::XML_COMMENT_NODE()) {
+        $handler->comment({ Data => $node->getData });
+    }
+    elsif ($type == XML::LibXML::XML_PI_NODE()) {
+        $handler->processing_instruction({
+            Target => $node->nodeName,
+            Data   => $node->getData // '',
+        });
+    }
+    elsif ($type == XML::LibXML::XML_ENTITY_REF_NODE()) {
+        foreach my $child ($node->childNodes) {
+            _fire_sax_events($handler, $child);
+        }
+    }
+    # Silently ignore other node types (DTD, notation, etc.)
+}
+
+sub _fire_sax_element {
+    my ($handler, $element) = @_;
+
+    my %attrs;
+    for my $attr ($element->attributes) {
+        next unless ref $attr;  # skip undef
+        my $name = $attr->nodeName;
+        $attrs{$name} = {
+            Name         => $name,
+            Value        => $attr->value // '',
+            NamespaceURI => $attr->namespaceURI // '',
+            Prefix       => $attr->prefix // '',
+            LocalName    => $attr->localname,
+        };
+    }
+
+    my $el = {
+        Name         => $element->nodeName,
+        NamespaceURI => $element->namespaceURI // '',
+        Prefix       => $element->prefix // '',
+        LocalName    => $element->localname,
+        Attributes   => \%attrs,
+    };
+
+    $handler->start_element($el);
+    foreach my $child ($element->childNodes) {
+        _fire_sax_events($handler, $child);
+    }
+    $handler->end_element($el);
+}
+
+1;
