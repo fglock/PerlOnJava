@@ -74,6 +74,26 @@ if (!$loaded) {
         }
         return $self->$orig_process_support_files(@_);
     };
+
+    # Preserve PERL5LIB that CPAN's set_perl5lib injects for tested-but-not-yet-installed
+    # dependencies.  The original run_perl_command sets PERL5LIB to only _added_to_INC,
+    # which clobbers any blib paths for peer modules (e.g. Pod::Wrap when testing Pod::Tidy).
+    no warnings 'redefine';
+    *Module::Build::Base::run_perl_command = sub {
+        my ($self, $args) = @_;
+        $args = [ $self->split_like_shell($args) ] unless ref($args);
+        my $perl = ref($self) ? $self->perl : $self->find_perl_interpreter;
+
+        # Merge our local blib additions with whatever PERL5LIB CPAN already set
+        my @added = $self->_added_to_INC;
+        my $sep   = $self->config('path_sep');
+        my @parts = @added;
+        push @parts, $ENV{PERL5LIB}
+            if defined $ENV{PERL5LIB} && length $ENV{PERL5LIB};
+        local $ENV{PERL5LIB} = join $sep, @parts;
+
+        return $self->do_system($perl, @$args);
+    };
 }
 
 1;
