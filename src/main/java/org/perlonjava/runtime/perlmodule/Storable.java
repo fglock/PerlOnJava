@@ -356,7 +356,7 @@ public class Storable extends PerlModuleBase {
 
         // Check for already-cloned references (circular reference handling)
         if (scalar.value != null && cloned.containsKey(scalar.value)) {
-            return cloned.get(scalar.value);
+            return new RuntimeScalar(cloned.get(scalar.value));
         }
 
         // Check for blessed objects with STORABLE_freeze hook

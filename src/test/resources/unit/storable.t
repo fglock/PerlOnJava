@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use Storable qw(store retrieve nstore freeze thaw nfreeze dclone);
 
 # Test plan
-plan tests => 8;
+plan tests => 9;
 
 subtest 'Basic scalar serialization' => sub {
     plan tests => 6;
@@ -229,6 +229,30 @@ subtest 'Deep cloning' => sub {
     my $blessed_clone = dclone($blessed_original);
     
     isa_ok($blessed_clone, 'CloneTest', 'Cloned blessed object preserves class');
+};
+
+subtest 'Deep cloning preserves hash-wrapper independence' => sub {
+    plan tests => 2;
+
+    my $shared = { '-asc' => 'year' };
+    my $original = {
+        attrs  => { order_by => [ $shared ] },
+        shared => $shared,
+    };
+
+    my $clone = dclone($original);
+
+    $clone->{shared} = { alias => 'me', order_by => { '-asc' => 'year' } };
+
+    is_deeply(
+        $clone->{attrs}{order_by},
+        [ { '-asc' => 'year' } ],
+        'order_by chunk remains intact after replacing sibling hash wrapper'
+    );
+    ok(
+        $clone->{attrs}{order_by}[0] != $clone->{shared},
+        'order_by chunk hash and shared wrapper hash are distinct refs in clone'
+    );
 };
 
 done_testing();
