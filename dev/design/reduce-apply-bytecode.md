@@ -818,6 +818,26 @@ Phase 2.
     `TempLocalCountVisitor.java`
   - DBIx::Class `t/multi_create/torture.t` now passes all 23 tests (JVM backend)
 
+### Safe Revert Point — DBIx::Class full suite PASS (2026-05-01)
+
+**Commit: `e3b987640`** (HEAD of `perf/reduce-apply-bytecode` after Phase 2 bugfix)
+
+Full DBIx::Class 0.082844 test suite run on this commit:
+
+```
+Files=314, Tests=13858, 1618 wallclock secs (3.49 usr + 1.64 sys = 5.14 CPU)
+Result: PASS
+  RIBASUSHI/DBIx-Class-0.082844.tar.gz
+  /usr/bin/make test -- OK
+```
+
+All 13,858 tests pass. Two files have TODO-passed tests (expected):
+- `t/sqlmaker/limit_dialects/generic_subq.t` — TODO 9, 11, 13, 15, 17
+- `t/storage/txn_scope_guard.t` — TODO 13, 15, 17
+
+This is the earliest known-good commit for DBIx::Class on this branch.
+If any subsequent change causes a regression, revert to this SHA.
+
 ### Next Steps
 
 1. **Phase 3**: Extract eval prologue/epilogue sequences — small but easy win
