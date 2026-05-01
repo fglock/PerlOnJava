@@ -701,6 +701,13 @@ public class EmitSubroutine {
             }
         }
 
+        // Set debug line number to the call site (the function name/reference expression),
+        // so that caller() inside the called subroutine reports the correct source line.
+        // Without this, the JVM frame reports the line of the closing ')' instead.
+        if (node.left != null && node.left.getIndex() > 0) {
+            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+        }
+
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);

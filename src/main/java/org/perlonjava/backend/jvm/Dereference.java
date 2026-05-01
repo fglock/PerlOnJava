@@ -972,6 +972,13 @@ public class Dereference {
 
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId++;
+            // Set debug line number to the call site (the object/receiver expression),
+            // so that caller() inside the called method reports the correct source line.
+            // Without this, the JVM frame reports the line of the closing ')' instead.
+            if (node.left.getIndex() > 0) {
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+            }
+
             mv.visitLdcInsn(callsiteId);
             mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
