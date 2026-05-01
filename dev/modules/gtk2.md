@@ -291,47 +291,142 @@ public static RuntimeList get_property(RuntimeArray args, int ctx) {
 
 ---
 
+## Cross-Platform Support
+
+JavaFX is available on all three target platforms.  Each has its own concerns.
+
+| Platform | JavaFX backend | Notes |
+|----------|---------------|-------|
+| **Linux x86_64** | GTK3 (native peer) | Requires `libgtk-3.so`, `libpango-1.0.so`, `libfreetype.so`, `libXtst.so` at runtime. All present on a standard desktop; absent on minimal servers — use Monocle headless there. |
+| **macOS x86_64 (Intel)** | Quartz / Metal | Works out of the box. Classifier: `mac`. |
+| **macOS aarch64 (Apple Silicon M1/M2/M3)** | Quartz / Metal | Separate Maven artifact. Classifier: **`mac-aarch64`**, not `mac`. Auto-detected by `javafxplugin`. |
+| **Windows x86_64** | Direct3D / GDI | All native DLLs ship inside the JavaFX JARs; no extra system installs. Classifier: `win`. |
+
+JavaFX does **not** require `-XstartOnFirstThread` on macOS (that is an SWT
+requirement). `Platform.startup()` starts the FX Application Thread as a daemon
+thread and returns immediately to the calling thread — safe to call from the
+JVM main thread that PerlOnJava runs Perl on.
+
+---
+
 ## Gradle/Maven Changes
 
-JavaFX is distributed as platform-specific JARs. Gradle resolves the correct
-platform automatically with the `javafxplugin`:
+### The `shadowJar` Constraint
+
+PerlOnJava builds a fat JAR via the Gradle Shadow plugin (`shadowJar`).
+JavaFX JARs **cannot** be merged into a fat JAR because:
+
+1. Each JavaFX JAR contains a `module-info.class` in its root. Shadow merges
+   all JARs by copying files; duplicate `module-info.class` entries cause
+   `IllegalStateException: module-info.class found in multiple JARs`.
+2. JavaFX's security model depends on JPMS encapsulation which is enforced
+   per-JAR, not per merged blob.
+3. Native libraries (`.so` / `.dylib` / `.dll`) inside JavaFX JARs are
+   extracted by the JavaFX bootstrap code using JPMS resource lookup — this
+   lookup path breaks when the JARs are merged.
+
+**Solution: `compileOnly` dependency + runtime `--module-path`.**
+
+JavaFX is added as `compileOnly` so `Gtk2.java` compiles against the JavaFX
+API. It is **not** merged into `perlonjava.jar`. At runtime, users who want
+`Gtk2` must have JavaFX JARs on the `--module-path`. A `jperl-gtk` wrapper
+script handles this automatically (see below).
 
 ```groovy
-// build.gradle — apply plugin and add dependency
-plugins {
-    id 'org.openjfx.javafxplugin' version '0.1.0'
-    // ... existing plugins
-}
+// build.gradle — compile-time only; NOT merged into shadowJar
+def fxVersion = "21"
+def fxClassifier = {
+    def arch = System.getProperty("os.arch")
+    def os   = System.getProperty("os.name").toLowerCase()
+    if (os.contains("mac"))  return arch == "aarch64" ? "mac-aarch64" : "mac"
+    if (os.contains("win"))  return "win"
+    return "linux"
+}()
 
-javafx {
-    version = "21"
-    modules = ['javafx.controls', 'javafx.graphics', 'javafx.swing']
-}
+compileOnly "org.openjfx:javafx-controls:${fxVersion}:${fxClassifier}"
+compileOnly "org.openjfx:javafx-graphics:${fxVersion}:${fxClassifier}"
+compileOnly "org.openjfx:javafx-base:${fxVersion}:${fxClassifier}"
 ```
 
-Alternatively, without the plugin (explicit classifier):
+At install time, the build also downloads the JavaFX JARs to a known location
+so `jperl-gtk` can find them:
 
 ```groovy
+// Separate configuration to resolve JavaFX JARs to a directory
+configurations { javafxRuntime }
 dependencies {
-    // ... existing
-    def fxClassifier = System.getProperty("os.name").toLowerCase().contains("mac") ? "mac"
-                     : System.getProperty("os.name").toLowerCase().contains("win") ? "win"
-                     : "linux"
-    implementation "org.openjfx:javafx-controls:21:${fxClassifier}"
-    implementation "org.openjfx:javafx-graphics:21:${fxClassifier}"
-    implementation "org.openjfx:javafx-base:21:${fxClassifier}"
+    javafxRuntime "org.openjfx:javafx-controls:${fxVersion}:${fxClassifier}"
+    javafxRuntime "org.openjfx:javafx-graphics:${fxVersion}:${fxClassifier}"
+    javafxRuntime "org.openjfx:javafx-base:${fxVersion}:${fxClassifier}"
 }
+tasks.register('copyJavaFX', Copy) {
+    from configurations.javafxRuntime
+    into "$buildDir/../lib/javafx"
+}
+build.dependsOn copyJavaFX
 ```
 
-The `jperl` launcher must pass `--add-opens` for JavaFX modules:
+### `jperl-gtk` Wrapper Script
+
+A new launcher (`jperl-gtk` / `jperl-gtk.bat`) wraps `jperl` and adds the
+JavaFX module path. Users run `jperl-gtk mygui.pl` instead of `jperl mygui.pl`
+for any script that uses `Gtk2`.
 
 ```bash
-# jperl — add to existing JVM args:
-exec java \
-    --enable-native-access=ALL-UNNAMED \
-    --add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED \
-    ...
+#!/bin/bash
+# jperl-gtk — jperl with JavaFX modules for Gtk2 support
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+FX_LIBS="$SCRIPT_DIR/lib/javafx"
+
+exec "$SCRIPT_DIR/jperl" \
+    --module-path "$FX_LIBS" \
+    --add-modules javafx.controls,javafx.graphics,javafx.base \
+    "$@"
 ```
+
+```bat
+@echo off
+rem jperl-gtk.bat — jperl with JavaFX for Gtk2
+set SCRIPT_DIR=%~dp0
+set FX_LIBS=%SCRIPT_DIR%lib\javafx
+java %JVM_OPTS% %JPERL_OPTS% ^
+  --module-path "%FX_LIBS%" ^
+  --add-modules javafx.controls,javafx.graphics,javafx.base ^
+  -cp "%SCRIPT_DIR%target\perlonjava-5.42.0.jar" ^
+  org.perlonjava.app.cli.Main %*
+```
+
+`jcpan` also needs to use `jperl-gtk` when testing Gtk2:
+
+```bash
+# Distroprefs override for Gtk2 (in CPAN/distroprefs/Gtk2.yml)
+# Tells jcpan to run tests with jperl-gtk instead of jperl
+```
+
+Alternatively, `jperl` itself detects at startup that the `Gtk2` module was
+required and re-execs itself with the `--module-path` flag if JavaFX JARs are
+present in `lib/javafx/` — transparent to users.
+
+### Graceful Degradation
+
+`Gtk2.java`'s `initialize()` detects whether JavaFX is available at runtime:
+
+```java
+public static void initialize() {
+    try {
+        Class.forName("javafx.application.Platform");
+    } catch (ClassNotFoundException e) {
+        // JavaFX not on module path — register nothing
+        // XSLoader will fail with "Can't load loadable object" as usual
+        return;
+    }
+    // ... register methods
+}
+```
+
+No JavaFX → standard `"Can't load loadable object"` error → scripts with a
+`Gtk2::PP` fallback degrade gracefully. Server deployments without any GUI
+dependency are completely unaffected.
 
 **Note:** JavaFX is optional. If the jars are absent (server-only deployments),
 `Gtk2.java`'s `initialize()` checks `Class.forName("javafx.application.Platform")`
@@ -769,23 +864,35 @@ The `Glib.java` Java XS stub need only implement:
 
 ## Open Questions
 
-1. **JavaFX dependency size**: The JavaFX platform JARs add ~30 MB to the fat
-   JAR. Is this acceptable, or should JavaFX be an optional runtime dependency
-   loaded only when `use Gtk2` is detected? (Preferred: optional.)
+1. **`jperl` auto-reexec vs `jperl-gtk` separate launcher**: Should the
+   standard `jperl` detect `use Gtk2` early (before execution) and re-exec
+   itself with `--module-path lib/javafx` if those JARs exist? This would be
+   transparent to users but requires parsing `@INC`/`use` statements before the
+   interpreter starts. Alternatively, keep `jperl-gtk` as an explicit separate
+   launcher and document it in `jcpan`'s Gtk2 distroprefs. Preferred: auto-reexec
+   if the performance cost is acceptable.
 
-2. **macOS Quartz vs Monocle**: On macOS, JavaFX uses the Quartz backend.
-   `Gtk2->main` will open a real window. For headless CI, Monocle must be
-   explicitly requested. Should the `jcpan` wrapper auto-detect and inject
-   Monocle flags when no display is found?
+2. **`jcpan -t Gtk2` without `jperl-gtk`**: The current `jcpan` wrapper calls
+   `jperl` directly. For `./jcpan -t Gtk2` to work, `jcpan` needs to know to use
+   `jperl-gtk`. Distroprefs (`CPAN/distroprefs/Gtk2.yml`) can override the test
+   command per module — document this and ship the override file bundled in the
+   CPAN configuration.
 
-3. **`Gtk2::Gdk::*` namespace**: Many programs use `Gtk2::Gdk::Event`,
+3. **Linux: detect missing GTK3 system libraries gracefully**: On a minimal
+   Linux server without `libgtk-3.so`, JavaFX will throw `UnsatisfiedLinkError`
+   when `Platform.startup()` tries to load the GTK3 native peer. `Gtk2.java`
+   must catch this in `initialize()` and fall back to `"No display available"`
+   rather than a cryptic JVM crash. Check if Monocle is available and auto-enable
+   it as fallback.
+
+4. **`Gtk2::Gdk::*` namespace**: Many programs use `Gtk2::Gdk::Event`,
    `Gtk2::Gdk::Keyval`, `Gtk2::Gdk::Screen`. Phase 1 stubs returning sensible
-   defaults are sufficient; Phase 2 should map to JavaFX Screen/KeyCode APIs.
+   defaults are sufficient; Phase 2 should map to JavaFX `Screen`/`KeyCode` APIs.
 
-4. **`Gtk2::Stock` constants**: `gtk-ok`, `gtk-cancel`, etc. are deprecated in
+5. **`Gtk2::Stock` constants**: `gtk-ok`, `gtk-cancel`, etc. are deprecated in
    GTK3 and removed in GTK4. Map to plain text labels + standard JavaFX buttons.
 
-5. **Perl threads**: `Gtk2->main` occupies the main Perl thread. Programs that
+6. **Perl threads**: `Gtk2->main` occupies the main Perl thread. Programs that
    spawn `threads` and update GUI from worker threads will not work correctly
    (but neither does this reliably in real GTK2 without `gdk_threads_*` guards).
 
