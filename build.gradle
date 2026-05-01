@@ -89,19 +89,34 @@ cyclonedxBom {
 
 // Git info injection - injects commit ID and date into Configuration.java before compilation
 // This ensures the built JAR contains accurate version information for -v output
-def configFilePath = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
+//
+// Configuration.java is NOT tracked by git (it is listed in .gitignore).
+// The canonical template is Configuration.java.in, which is tracked and contains
+// placeholder values.  This task copies the template to Configuration.java when
+// the file is absent (e.g. after a fresh clone) and then patches in the real
+// git hash, commit date, and build timestamp.
+def configFilePath    = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java')
+def configTemplPath   = layout.projectDirectory.file('src/main/java/org/perlonjava/core/Configuration.java.in')
 
 tasks.register('injectGitInfo') {
-    description = 'Injects git commit info into Configuration.java'
+    description = 'Copies Configuration.java.in → Configuration.java (if needed) and injects git info'
     group = 'build'
     
     // Declare inputs/outputs for configuration cache compatibility
-    def configFile = configFilePath.asFile
+    def configFile  = configFilePath.asFile
+    def templateFile = configTemplPath.asFile
     
     doLast {
+        // If Configuration.java is absent (fresh clone, gitignored), recreate it
+        // from the committed template so the compiler has a valid source file.
         if (!configFile.exists()) {
-            logger.warn("Configuration.java not found, skipping git info injection")
-            return
+            if (templateFile.exists()) {
+                configFile.text = templateFile.text
+                logger.lifecycle("Created Configuration.java from template")
+            } else {
+                logger.warn("Neither Configuration.java nor Configuration.java.in found; skipping git info injection")
+                return
+            }
         }
         
         // Get git commit info using Runtime.exec

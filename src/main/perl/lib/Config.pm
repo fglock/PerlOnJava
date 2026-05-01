@@ -75,6 +75,35 @@ my $host_name = eval {
     Sys::Hostname::hostname();
 } || 'localhost';
 
+# Detect the real system C compiler by walking PATH directly.
+# This is needed so that Makefile.PL files which run "$Config{cc} -o ..."
+# to test for C library availability (e.g. Gzip::Faster checks for zlib)
+# actually invoke a working C compiler instead of javac.
+#
+# We deliberately avoid backticks / system() here: spawning a subprocess
+# (e.g. `which cc`) is slow, sets $?, and is not portable (Windows has no
+# 'which').  Walking $ENV{PATH} in pure Perl is fast, leaves $? untouched,
+# and works on every platform.
+my $system_cc = do {
+    my $is_win = lc($os_name) =~ /win/;
+    my @candidates = $is_win ? qw(cl cc gcc) : qw(cc gcc clang);
+    my $sep        = $is_win ? ';' : ':';
+    my @path_dirs  = split /\Q$sep\E/, ($ENV{PATH} // '');
+    my $found      = '';
+    SEARCH: for my $candidate (@candidates) {
+        for my $dir (@path_dirs) {
+            # On Windows executables may have a .exe suffix
+            for my $suffix ($is_win ? ('', '.exe', '.cmd') : ('')) {
+                if (-x "$dir/$candidate$suffix") {
+                    $found = $candidate;
+                    last SEARCH;
+                }
+            }
+        }
+    }
+    $found || ($is_win ? 'cl' : 'cc');
+};
+
 # Normalize OS name
 $os_name = lc($os_name);
 $os_name =~ s/\s+/_/g;
@@ -92,9 +121,14 @@ $os_name =~ s/\s+/_/g;
     java_vendor => $java_vendor,
     java_home => $java_home,
 
-    # Compiler settings (Java instead of C)
-    cc => 'javac',
-    ld => 'javac',
+    # Compiler settings
+    # cc/ld report the *system* C compiler so that Makefile.PL probes
+    # (e.g. in Gzip::Faster) that test C compilation with "$Config{cc} -o ..."
+    # actually invoke a real C compiler rather than javac.  PerlOnJava's
+    # MakeMaker (MM_PerlOnJava) still skips all XS/C build steps, so setting
+    # these to the real compiler does not accidentally enable native builds.
+    cc => $system_cc,
+    ld => $system_cc,
     # ccflags includes -DSILENT_NO_TAINT_SUPPORT because PerlOnJava does not
     # implement full taint checking. This allows tests that check for taint
     # support to skip gracefully.
