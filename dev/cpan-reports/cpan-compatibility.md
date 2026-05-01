@@ -3703,7 +3703,7 @@
 | Test::Override::UserAgent |  | Unknown test outcome | 2026-04-30 |
 | Test::Run |  | Unknown test outcome | 2026-04-30 |
 | Test::Script |  | Unknown test outcome | 2026-04-21 |
-| Test::Unit::Lite | PARTIAL | 37/39 pass; 2 fail due to `caller()` line-number off-by-one for multi-line calls (pre-existing limitation) | 2026-05-01 |
+| Test::Unit::Lite | PASS | 39/39 pass | 2026-05-01 |
 | Text::ASCIIMathML |  |  | 2026-04-30 |
 | Text::DelimMatch |  | Unknown test outcome | 2026-04-30 |
 | Text::FillIn |  | Unknown test outcome | 2026-04-12 |
