@@ -597,7 +597,7 @@ public class EmitterMethodCreator implements Opcodes {
             TempLocalCountVisitor tempCountVisitor =
                     new TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 256;  // Buffer for uncounted allocations
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 32;  // Buffer for infrastructure + uncounted allocations
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
