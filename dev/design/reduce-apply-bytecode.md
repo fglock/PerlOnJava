@@ -630,6 +630,176 @@ JPERL_DISABLE_INTERPRETER_FALLBACK=1 timeout 60 ./jperl -e 'sub f{my $x=shift; $
 
 ---
 
+## How to Evaluate Results
+
+This section explains how to measure progress after completing a phase and
+interpret what the numbers mean in terms of the C1 JIT failure risk.
+
+### 1. Measure apply() method bytecode sizes
+
+```bash
+DBIX_DIR=/Users/fglock/projects/PerlOnJava2/cpan_build_dir/DBIx-Class-0.082844
+JPERL=/path/to/your/jperl   # use the current build's jperl
+
+cd "$DBIX_DIR"
+JPERL_BYTECODE_SIZE_DEBUG=1 timeout 120 "$JPERL" -Ilib -It/lib \
+    t/96_is_deteministic_value.t > /dev/null 2> /tmp/96_sizes.txt
+
+# Top-10 largest apply() methods
+grep 'method=apply\b' /tmp/96_sizes.txt \
+  | awk -F'code_bytes=' '{print $2}' | sort -rn | head -10
+
+# Summary statistics
+grep 'method=apply\b' /tmp/96_sizes.txt \
+  | awk -F'code_bytes=' '{sum+=$2; count++; if($2>max)max=$2}
+    END{printf "methods=%d  total=%dKB  avg=%d  max=%d\n",
+        count, sum/1024, sum/count, max}'
+```
+
+**What to look for:**
+
+- **`max`**: The largest `apply()` method. C1 register allocation failures
+  have been observed for methods above ~9,000 bytes when the JVM is
+  CPU-starved. Each Phase reduces the max (Phase 2 removes ~65 bytes per
+  call site, which is the dominant term for large methods).
+- **`avg`**: The average method size. Dominated by the pre-init buffer before
+  Phase 1; dominated by call-site trampoline overhead before Phase 2.
+- **`total`**: Total class-file footprint for all Perl subs.  Drives heap
+  pressure and permgen/metaspace usage.
+
+### 2. Measure test timing
+
+```bash
+# Always kill orphaned JVMs before timing — they starve the JIT
+pkill -9 -f "perlonjava-.*\.jar.*\.t\b" 2>/dev/null
+ps aux | awk '$3 > 20 {print $2, $3, $11}' | grep -v WindowServer | grep -v Spotlight
+
+cd "$DBIX_DIR"
+time timeout 120 "$JPERL" -Ilib -It/lib t/96_is_deteministic_value.t
+time timeout 120 "$JPERL" -Ilib -It/lib t/76joins.t
+```
+
+**Pass/fail thresholds** (clean machine, no competing JVMs):
+
+| Test | Expected real time | Concern threshold | Failure threshold |
+|------|--------------------|-------------------|-------------------|
+| `t/96_is_deteministic_value.t` | < 15 s | > 30 s | > 120 s (harness kills at 300 s) |
+| `t/76joins.t` | < 15 s | > 30 s | > 120 s |
+
+If timing exceeds the concern threshold on a clean machine, the C1 JIT may
+be failing on large methods. Confirm with step 4 below.
+
+### 3. Verify correctness
+
+```bash
+cd "$DBIX_DIR"
+"$JPERL" -Ilib -It/lib t/96_is_deteministic_value.t | grep -E "^(ok|not ok|1\.\.)"
+"$JPERL" -Ilib -It/lib t/76joins.t                  | grep -E "^(ok|not ok|1\.\.)"
+```
+
+Expected: `1..8` with 8 `ok` lines for `96_is_det`, `1..27` with 27 `ok`
+lines for `76joins`.
+
+### 4. Check for C1 JIT failures (optional deep-dive)
+
+```bash
+# Add -XX:+PrintCompilation to jperl JVM opts
+JPERL_OPTS="-XX:+PrintCompilation" timeout 120 "$JPERL" -Ilib -It/lib \
+    t/96_is_deteministic_value.t 2>&1 | grep "made not entrant\|COMPILE SKIPPED\|out of virtual"
+
+# Or use JFR (Java Flight Recorder) for full JIT event trace
+JPERL_OPTS="-XX:StartFlightRecording=filename=/tmp/96det.jfr,duration=120s" \
+    timeout 120 "$JPERL" -Ilib -It/lib t/96_is_deteministic_value.t 2>/dev/null
+# Then open /tmp/96det.jfr in JDK Mission Control and inspect:
+#   JVM Internals → JIT Compilation → Compilation Failures
+#   (look for "out of virtual registers in linear scan")
+```
+
+A C1 failure shows as `COMPILE SKIPPED` or `made not entrant` for the
+SQL::Abstract `_expand_expr` method in `PrintCompilation` output.
+
+### 5. Reference benchmarks (Phase 1 complete, buffer=32)
+
+Measured on 2026-05-01 with PerlOnJava4 after merging PR #650:
+
+| Metric | Value |
+|--------|-------|
+| `t/96_is_deteministic_value.t` — real time | 11.8 s |
+| `t/96_is_deteministic_value.t` — all tests | 8/8 pass |
+| `t/76joins.t` — real time | 9.3 s |
+| `t/76joins.t` — all tests | 27/27 pass |
+| Total `apply()` methods compiled | 8,264 |
+| Total `apply()` code bytes | 4.0 MB |
+| Average method size | 511 bytes |
+| Minimum method size | 200 bytes |
+| Largest `apply()` method | 36,554 bytes |
+| Estimated savings vs old buffer=256 | ~5.4 MB (~56% reduction) |
+
+**Notes on the baseline:**
+- The design doc's original baseline (Largest=9,377 bytes, 980 methods) was
+  measured on an older build before the TAILCALL trampoline (~65–130 bytes
+  per call site) was added to every call site. PerlOnJava4 therefore has
+  larger methods per call-heavy sub.
+- The 36,554-byte largest method did not cause C1 failures in this run
+  because the machine was under low load. Under CPU contention from orphaned
+  JVMs (the scenario that caused the original timeout incidents), C1 may
+  still fail on such methods. **Phase 2 (trampoline extraction) is the key
+  fix for the largest methods.**
+- Phase 1 gives dramatic size reduction for simple subs (minimum dropped
+  from ~648 bytes → 200 bytes) and a 672-byte reduction for every method
+  regardless of complexity.
+
+### 6. Targets for subsequent phases
+
+| Phase | Target max method size | Expected timing |
+|-------|------------------------|-----------------|
+| Phase 1 complete (current) | 36,554 bytes | ~12 s (clean) |
+| After Phase 2 (trampoline extraction) | ~20,000 bytes* | ~10 s (clean) |
+| After Phase 3 (eval prologue) | ~20,000 bytes | ~10 s (clean) |
+
+*Estimate: largest method has ~250+ call sites × 65 bytes saved = ~16 KB
+removed. Actual number of call sites in `_expand_expr` to be measured in
+Phase 2.
+
+---
+
+## Progress Tracking
+
+### Current Status: Phase 1 complete (2026-05-01)
+
+### Completed Phases
+
+- [x] **Phase 1: Extend TempLocalCountVisitor + reduce buffer 256→32** (2026-05-01)
+  - Extended `TempLocalCountVisitor` to count: sub calls (+1 each), eval (+4),
+    foreach (+4), while/for (+1), flip-flop (+3), xor (+1)
+  - Reduced `EmitterMethodCreator` pre-init buffer from `+256` to `+32`
+  - Files: `TempLocalCountVisitor.java`, `EmitterMethodCreator.java`
+  - PR: #650
+  - Result: ~56% total bytecode reduction; both DBIx::Class timing tests pass
+    in < 15 s; all `make` unit tests pass
+
+### Next Steps
+
+1. **Phase 2**: Extract per-call-site TAILCALL trampoline to
+   `RuntimeCode.resolveTailCalls()` — this is the key fix for large methods
+   (the 36,554-byte maximum is driven by call-site trampoline code)
+2. **Phase 3**: Extract eval prologue/epilogue sequences — small but easy win
+3. Re-run the timing tests under simulated CPU pressure to confirm C1 failure
+   rate has dropped (requires running ~10 orphan JVMs to create contention)
+
+### Open Questions
+
+- The largest `apply()` method is now 36,554 bytes — well above the 9,377-byte
+  threshold from the original C1 failure analysis. However, the threshold may
+  differ between the PerlOnJava2 era and current PerlOnJava4 (different JVM,
+  different method structure). Phase 2 should reduce this significantly;
+  measure again after Phase 2 to see if the threshold is now a concern.
+- Should `JPERL_SPILL_SLOTS=8` be tested after Phase 2?  Reducing the spill
+  pool from 16 to 8 would save 24 bytes per method (8 fewer null-inits);
+  measure whether it causes any spill overflow failures first.
+
+---
+
 ## Related Files
 
 | File | Role |
