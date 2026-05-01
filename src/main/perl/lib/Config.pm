@@ -79,17 +79,28 @@ my $host_name = eval {
 # This is needed so that Makefile.PL files which run "$Config{cc} -o ..."
 # to test for C library availability (e.g. Gzip::Faster checks for zlib)
 # actually invoke a working C compiler instead of javac.
+#
+# Notes:
+#  - We save/restore $? so the backtick probe does not pollute the child
+#    process status seen by test code that loads Config.pm as a side effect.
+#  - On Windows 'which' / '2>/dev/null' do not work; we skip the probe and
+#    fall back to 'cl' (MSVC front-end).  PerlOnJava's MakeMaker skips all
+#    XS/C builds on every platform, so the exact value rarely matters.
 my $system_cc = do {
+    my $_saved_child_status = $?;   # save before any system/backtick call
     my $found = '';
-    for my $candidate (qw(cc gcc clang)) {
-        my $path = `which $candidate 2>/dev/null`;
-        chomp $path;
-        if ($path && -x $path) {
-            $found = $candidate;
-            last;
+    if (lc($os_name) !~ /win/) {
+        for my $candidate (qw(cc gcc clang)) {
+            my $path = `which $candidate 2>/dev/null`;
+            chomp $path;
+            if ($path && -x $path) {
+                $found = $candidate;
+                last;
+            }
         }
     }
-    $found || 'cc';
+    $? = $_saved_child_status;      # restore so callers see a clean $?
+    $found || (lc($os_name) =~ /win/ ? 'cl' : 'cc');
 };
 
 # Normalize OS name
