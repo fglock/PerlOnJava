@@ -87,8 +87,21 @@ public class IOOperator {
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.selectedHandle);
-        RuntimeIO.selectedHandle = runtimeList.getFirst().getRuntimeIO();
-        RuntimeIO.lastAccesseddHandle = RuntimeIO.selectedHandle;
+        RuntimeScalar fileHandleArg = runtimeList.getFirst();
+        RuntimeIO newIO = fileHandleArg.getRuntimeIO();
+        // Auto-vivify: when called with an undefined scalar, Perl creates a new anonymous
+        // GLOB reference and stores it back in the variable (like `open my $fh, ...` does).
+        // This enables the idiom:  select select my $fh_null;  tie *$fh_null, 'SomeClass';
+        if (newIO == null && !fileHandleArg.getDefinedBoolean()) {
+            RuntimeGlob anonGlob = new RuntimeGlob(null);
+            RuntimeIO anonIO = new RuntimeIO();
+            anonGlob.setIO(anonIO);
+            RuntimeScalar newGlobRef = anonGlob.createReference();
+            fileHandleArg.set(newGlobRef);
+            newIO = anonIO;
+        }
+        RuntimeIO.selectedHandle = newIO;
+        RuntimeIO.lastAccesseddHandle = newIO;
         return fh;
     }
 
