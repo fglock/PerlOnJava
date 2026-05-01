@@ -793,6 +793,31 @@ Phase 2.
   - `goto &sub` chains verified correct (factorial via tail calls, multi-hop chains,
     `@_` aliasing preservation, LAST/NEXT/REDO after tail-called sub return)
 
+- [x] **Phase 2 bugfix: VerifyError from int callContextSlot** (2026-05-01)
+  - Root cause: `callContextSlot` was allocated via `allocateLocalVariable()` and
+    stored with `ISTORE` (int type) in four emitter sites:
+    `EmitSubroutine.handleApplyOperator()`, `Dereference.java` method calls,
+    `EmitOperator.handleSubstrOperator()`, `EmitOperator.handleOperator()`.
+  - The pre-init loop (EmitterMethodCreator) initialises every temp slot as
+    `ACONST_NULL / ASTORE` (reference type).  When a callContextSlot (int) in the
+    pre-init range was written by some code paths but not others, the verifier
+    found "int vs null-reference" at the `blockDispatcher` merge point and threw
+    `VerifyError: Bad local variable type`.
+  - This VerifyError propagated out of the compiled main body through
+    `executeCodeImpl`, which transparently re-ran the script body via the
+    interpreter — calling `plan tests => 23` a second time → "You tried to plan
+    twice" in DBIx::Class `t/multi_create/torture.t`.
+  - Fix: replace every `ISTORE callContextSlot` + `ILOAD callContextSlot` with
+    inline calls to `pushCallContext()` at each use site; `pushCallContext()` emits
+    either an `LDC` constant or `ILOAD 2` (no slot allocation needed).
+  - `TempLocalCountVisitor`: the `->` and `(` count entries are KEPT (even though
+    the int slot is removed) because they control the pre-init range — removing
+    them shrank the range and caused a second VerifyError ("Type top … is not
+    assignable to reference type" at slot 143 in torture.t's main body).
+  - Files: `EmitSubroutine.java`, `Dereference.java`, `EmitOperator.java`,
+    `TempLocalCountVisitor.java`
+  - DBIx::Class `t/multi_create/torture.t` now passes all 23 tests (JVM backend)
+
 ### Next Steps
 
 1. **Phase 3**: Extract eval prologue/epilogue sequences — small but easy win
