@@ -46,10 +46,19 @@ public class TempLocalCountVisitor implements Visitor {
             // Using acquireSpillSlot() first, but count conservatively in case pool is full.
             case "&&", "||", "//" -> countTemp();
 
-            // Dereference (->) conservatively counts 1 temp for method/element access.
+            // Dereference (->): the callContextSlot was removed to prevent VerifyError
+            // (int slot pre-initialised as null reference).  However we KEEP this count
+            // because it serves as a pre-init-range proxy: Dereference.java still
+            // allocates reference-typed slots when the spill pool overflows, and the
+            // pre-init loop (EmitterMethodCreator) must cover those slots.  Removing
+            // this count would shrink the pre-init range, leaving later-allocated
+            // reference slots in TOP state and causing a different VerifyError.
             case "->" -> countTemp();
 
-            // Sub-call apply operator: always allocates callContextSlot directly.
+            // Sub-call apply operator: callContextSlot was removed (same reason as "->").
+            // We KEEP this count for the same pre-init-range reason: other code paths
+            // inside handleApplyOperator allocate reference slots when the spill pool
+            // overflows, so we need enough pre-init coverage.
             case "(" -> countTemp();
 
             // Flip-flop operators in scalar context always allocate 3 slots directly:

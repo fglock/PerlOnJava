@@ -497,14 +497,23 @@ public class EmitSubroutine {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Capture the call context into a local slot early.
-        // IMPORTANT: Do not leave the context int on the JVM operand stack while evaluating
-        // subroutine arguments. Argument evaluation may trigger non-local control flow
-        // propagation (e.g. last/next/redo) which jumps out of the expression; any stray
-        // stack items would then break ASM frame merging.
-        int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        emitterVisitor.pushCallContext();
-        mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+        // Note: The call context is NOT stored in a local variable slot.
+        // pushCallContext() emits either a compile-time constant (LDC) or loads the
+        // callContext method parameter (ILOAD 2).  Both are side-effect-free and can be
+        // re-emitted at the exact moment the value is needed on the JVM operand stack,
+        // so there is no need to stash the int in a slot.
+        //
+        // Storing it in a slot would be WRONG: the pre-initialisation loop in
+        // EmitterMethodCreator initialises every temporary slot to null (ACONST_NULL /
+        // ASTORE) so that reference slots are never in TOP state at merge points.
+        // An int slot initialised that way acquires the reference type "null" from the
+        // pre-init path.  At a merge point (e.g. blockDispatcher) that is reachable from
+        // both a path that executed ISTORE-callContextSlot and a path through a
+        // conditional branch that skipped it, the JVM verifier sees conflicting types
+        // (int vs null-reference) and throws VerifyError: "Bad local variable type".
+        // This VerifyError triggers the interpreter-fallback which re-runs the main
+        // script body, calling plan() a second time and causing the "tried to plan
+        // twice" error in DBIx::Class torture.t (perf/reduce-apply-bytecode Phase 2).
 
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
@@ -593,7 +602,7 @@ public class EmitSubroutine {
         if (node.left instanceof SubroutineNode subNode && subNode.useTryCatch) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -622,7 +631,7 @@ public class EmitSubroutine {
         if (node.getBooleanAnnotation("shareCallerArgs")) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -711,7 +720,7 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-        mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // Push call context to stack
+        emitterVisitor.pushCallContext();   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -778,7 +787,7 @@ public class EmitSubroutine {
             // (no control flow) incurs zero extra overhead.  (Phase 2 of
             // perf/reduce-apply-bytecode.)
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "resolveTailCalls",
