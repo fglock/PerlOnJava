@@ -211,6 +211,19 @@ sub DESTROY {
 }
 
 # Delegate IO methods to filehandle
+sub flush {
+    my $self = shift;
+    my $fh = $self->{_fh};
+    return 1 unless defined $fh;
+    # Select the filehandle and enable autoflush to flush any pending output
+    my $old_fh = select($fh);
+    my $prev_af = $|;
+    $| = 1;
+    $| = $prev_af;
+    select($old_fh);
+    return 1;
+}
+
 sub AUTOLOAD {
     my $self = shift;
     my $method = $File::Temp::AUTOLOAD;
