@@ -19,6 +19,7 @@ import org.w3c.dom.*;
 import org.xml.sax.*;
 
 import java.io.*;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -109,6 +110,8 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethod("_parse_file",          null);
             module.registerMethod("_parse_fh",            null);
             module.registerMethod("_parse_html_string",   null);
+            module.registerMethod("_parse_html_fh",       null);
+            module.registerMethod("_parse_html_file",     null);
             module.registerMethod("LIBXML_RUNTIME_VERSION", null);
             module.registerMethod("LIBXML_VERSION",       null);
             module.registerMethod("INIT_THREAD_SUPPORT",  null);
@@ -120,11 +123,29 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethod("_push",                null);
             module.registerMethod("_end_push",            null);
             module.registerMethod("_parse_xml_chunk",     null);
+            // Stubs for SAX / XInclude / catalog functions
+            module.registerMethod("_end_sax_push",        "nopMethod", null);
+            module.registerMethod("_processXIncludes",    "nopMethod", null);
+            module.registerMethod("load_catalog",         "nopMethod", null);
+            module.registerMethod("_default_catalog",     "nopMethod", null);
+            module.registerMethod("_externalEntityLoader","nopMethod", null);
+            module.registerMethod("_parse_sax_string",    "nopMethod", null);
+            module.registerMethod("_parse_sax_fh",        "nopMethod", null);
+            module.registerMethod("_parse_sax_file",      "nopMethod", null);
+            module.registerMethod("_parse_sax_xml_chunk", "nopMethod", null);
+            module.registerMethod("lib_init_callbacks",   "nopMethod", null);
+            module.registerMethod("lib_cleanup_callbacks","nopMethod", null);
+
+            // InputCallback methods (nop stubs — no native callback support)
+            for (String m : new String[]{"lib_init_callbacks","lib_cleanup_callbacks"}) {
+                module.registerMethodInPackage("XML::LibXML::InputCallback", m, "nopMethod");
+            }
 
             // Node methods
             String nodePkg = "XML::LibXML::Node";
             String[][] nodeMethods = {
                 {"nodeName"},   {"nodeValue"},   {"nodeType"},
+                {"getName", "nodeName"},
                 {"parentNode"}, {"childNodes"},  {"firstChild"}, {"lastChild"},
                 {"previousSibling"}, {"nextSibling"},
                 {"attributes"}, {"hasAttributes"},
@@ -135,8 +156,11 @@ public class XMLLibXML extends PerlModuleBase {
                 {"textContent"}, {"string_value"},
                 {"ownerDocument"}, {"getOwnerDocument"},
                 {"isSameNode"},
-                {"localname"}, {"prefix"}, {"namespaceURI"},
+                {"localname"}, {"getLocalName", "localname"},
+                {"prefix"}, {"getPrefix", "prefix"},
+                {"namespaceURI"}, {"getNamespaceURI", "namespaceURI"},
                 {"nodePath"}, {"line_number"},
+                {"localNS"}, {"getNamespaces"},
                 {"appendText"},
                 {"getData"}, {"setData"},
                 {"setNamespace"},
@@ -151,6 +175,21 @@ public class XMLLibXML extends PerlModuleBase {
                 // node add/remove siblings/children
                 {"addSibling", "nodeAddSibling"},
                 {"addChild",   "addChildNode"},
+                // XS underscore aliases needed by original LibXML.pm Perl wrappers
+                {"_childNodes",  "childNodesFiltered"},  // _childNodes(onlyNonBlank flag)
+                {"_attributes",  "attributes"},           // _attributes() called by attributes()
+                {"_toString",    "toString"},              // _toString(format) called by toString()
+                {"_isEqual",     "nodeIsEqual"},           // _isEqual(other) for isEqualNode()
+                {"_toStringC14N","toStringC14N"},
+                // Additional node methods
+                {"removeChildNodes"},
+                {"lookupNamespacePrefix"},
+                {"firstNonBlankChild"},
+                {"nextNonBlankSibling"},
+                {"previousNonBlankSibling"},
+                {"setNodeName"},
+                {"_getNamespaceDeclURI", "getNamespaceDeclURI"},
+                {"setNamespaceDeclURI"},
             };
             for (String[] m : nodeMethods) {
                 module.registerMethodInPackage(nodePkg, m[0], m.length > 1 ? m[1] : m[0]);
@@ -201,6 +240,12 @@ public class XMLLibXML extends PerlModuleBase {
                 {"getElementsByTagName"},
                 {"getElementsByTagNameNS"},
                 {"getElementsByLocalName"},
+                // XS underscore aliases needed by original LibXML.pm Perl wrappers
+                {"_setDocumentElement", "setDocumentElement"},
+                {"_toString",           "documentToString"},
+                // Additional document methods
+                {"createEntityReference"},
+                {"getElementById"},
             };
             for (String[] m : docMethods) {
                 module.registerMethodInPackage(docPkg, m[0], m.length > 1 ? m[1] : m[0]);
@@ -213,7 +258,7 @@ public class XMLLibXML extends PerlModuleBase {
                 {"setAttribute"},    {"setAttributeNS"},
                 {"removeAttribute"}, {"removeAttributeNS"},
                 {"hasAttribute"},    {"hasAttributeNS"},
-                {"getAttributeNode"},  {"setAttributeNode"},
+                {"getAttributeNode"},  {"setAttributeNode"},  {"setAttributeNodeNS"},
                 {"getAttributeNodeNS"},
                 {"getElementsByTagName"},
                 {"getElementsByTagNameNS"},
@@ -229,6 +274,18 @@ public class XMLLibXML extends PerlModuleBase {
                 {"lookupNamespaceURI", "elemLookupNamespaceURI"},
                 {"getNamespaces",      "elemGetNamespaces"},
                 {"removeAttributeNode","elemRemoveAttributeNode"},
+                // XS underscore aliases needed by original LibXML.pm Perl wrappers
+                {"_getAttribute",    "getAttribute"},
+                {"_getAttributeNS",  "getAttributeNS"},
+                {"_setAttribute",    "setAttribute"},
+                {"_setAttributeNS",  "setAttributeNS"},
+                {"_setNamespace",    "setNamespace"},
+                {"_getNamespaceDeclURI", "getNamespaceDeclURI"},
+                {"setNamespaceDeclURI"},
+                {"setNamespaceDeclPrefix"},
+                {"lookupNamespacePrefix"},
+                {"setNodeName"},
+                {"_getChildrenByTagNameNS", "getChildrenByTagNameNS"},
             };
             for (String[] m : elemMethods) {
                 module.registerMethodInPackage(elemPkg, m[0], m.length > 1 ? m[1] : m[0]);
@@ -237,12 +294,17 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage(elemPkg, "new", "elemNew");
 
             // Attr methods
-            module.registerMethodInPackage("XML::LibXML::Attr", "name",         "attrName");
-            module.registerMethodInPackage("XML::LibXML::Attr", "value",        "attrValue");
-            module.registerMethodInPackage("XML::LibXML::Attr", "getValue",     "attrValue");
-            module.registerMethodInPackage("XML::LibXML::Attr", "setValue",     "setAttrValue");
-            module.registerMethodInPackage("XML::LibXML::Attr", "ownerElement", "attrOwnerElement");
-            module.registerMethodInPackage("XML::LibXML::Attr", "isId",         "attrIsId");
+            module.registerMethodInPackage("XML::LibXML::Attr", "name",             "attrName");
+            module.registerMethodInPackage("XML::LibXML::Attr", "value",            "attrValue");
+            module.registerMethodInPackage("XML::LibXML::Attr", "getValue",         "attrValue");
+            module.registerMethodInPackage("XML::LibXML::Attr", "setValue",         "setAttrValue");
+            module.registerMethodInPackage("XML::LibXML::Attr", "ownerElement",     "attrOwnerElement");
+            module.registerMethodInPackage("XML::LibXML::Attr", "isId",             "attrIsId");
+            module.registerMethodInPackage("XML::LibXML::Attr", "_setData",         "setAttrValue");
+            module.registerMethodInPackage("XML::LibXML::Attr", "_setNamespace",    "setNamespace");
+            module.registerMethodInPackage("XML::LibXML::Attr", "setNodeName",      "setNodeName");
+            module.registerMethodInPackage("XML::LibXML::Attr", "serializeContent", "attrSerializeContent");
+            module.registerMethodInPackage("XML::LibXML::Attr", "toString",         "attrToString");
 
             // Text / CDATASection
             module.registerMethodInPackage("XML::LibXML::Text", "data",    "getData");
@@ -268,6 +330,10 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage("XML::LibXML::PI", "target",  "piTarget");
             module.registerMethodInPackage("XML::LibXML::PI", "data",    "piData");
             module.registerMethodInPackage("XML::LibXML::PI", "setData", "piSetData");
+            module.registerMethodInPackage("XML::LibXML::PI", "_setData","piSetData"); // XS alias
+
+            // Namespace
+            module.registerMethodInPackage("XML::LibXML::Namespace", "_isEqual", "namespaceIsEqual");
 
             // XPathContext
             String xpcPkg = "XML::LibXML::XPathContext";
@@ -295,6 +361,10 @@ public class XMLLibXML extends PerlModuleBase {
 
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing XMLLibXML method: " + e.getMessage());
+        } catch (RuntimeException e) {
+            // registerMethodInPackage wraps NoSuchMethodException in RuntimeException
+            System.err.println("Warning: XMLLibXML.initialize() failed: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 
@@ -347,6 +417,83 @@ public class XMLLibXML extends PerlModuleBase {
             return (Node) ns.value;
         }
         throw new RuntimeException("Not a valid XML::LibXML node (missing " + NODE_KEY + " key)");
+    }
+
+    /**
+     * Update the Java Node stored in a Perl XML::LibXML node object.
+     * Needed after Document.renameNode() which may return a new Node instance.
+     */
+    static void updateNode(RuntimeScalar self, Node newNode) {
+        if (self == null || self.type == RuntimeScalarType.UNDEF) return;
+        try {
+            RuntimeHash hash = self.hashDerefRaw();
+            RuntimeScalar ns = hash.get(NODE_KEY);
+            if (ns != null && ns.type == RuntimeScalarType.JAVAOBJECT) {
+                ns.value = newNode;
+            }
+        } catch (Exception e) { /* ignore */ }
+    }
+
+    /**
+     * Cascade namespace removal: rename element and its attributes/child-elements
+     * that use the given prefix so they have no namespace and no prefix.
+     * Recurses into child elements unless they have their own re-declaration
+     * of the same prefix.
+     * Returns the (possibly new) element node after renaming.
+     */
+    private static Element removePrefixFromSubtree(Element el, String prefix, Document doc) {
+        // Rename element itself if it uses the given prefix
+        String elPfx = el.getPrefix();
+        String normalised = (elPfx != null) ? elPfx : "";
+        if (normalised.equals(prefix)) {
+            try {
+                String localName = el.getLocalName();
+                if (localName == null) localName = el.getNodeName();
+                if (localName.contains(":")) localName = localName.substring(localName.indexOf(':') + 1);
+                Node renamed = doc.renameNode(el, null, localName);
+                if (renamed instanceof Element) el = (Element) renamed;
+            } catch (Exception e) { /* ignore */ }
+        }
+        // Rename attributes that use the given prefix (collect first to avoid ConcurrentModification)
+        NamedNodeMap attrs = el.getAttributes();
+        List<Attr> toRename = new java.util.ArrayList<>();
+        for (int i = 0; i < attrs.getLength(); i++) {
+            Node n = attrs.item(i);
+            if (n instanceof Attr) {
+                Attr attr = (Attr) n;
+                String aPfx = attr.getPrefix();
+                // Skip xmlns declarations themselves
+                if ("xmlns".equals(aPfx) || "xmlns".equals(attr.getNodeName())) continue;
+                if (aPfx != null && aPfx.equals(prefix)) {
+                    toRename.add(attr);
+                }
+            }
+        }
+        for (Attr attr : toRename) {
+            try {
+                String localName = attr.getLocalName();
+                if (localName == null || localName.isEmpty()) {
+                    String nm = attr.getNodeName();
+                    localName = nm.contains(":") ? nm.substring(nm.indexOf(':') + 1) : nm;
+                }
+                doc.renameNode(attr, null, localName);
+            } catch (Exception e) { /* ignore */ }
+        }
+        // Recurse into child elements (skip if child has its own xmlns:prefix declaration)
+        NodeList children = el.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child instanceof Element) {
+                Element childEl = (Element) child;
+                // Check if this child has its own declaration for the prefix
+                String decl = childEl.getAttributeNS("http://www.w3.org/2000/xmlns/", prefix.isEmpty() ? "xmlns" : prefix);
+                if (decl == null || decl.isEmpty()) decl = childEl.getAttribute(prefix.isEmpty() ? "xmlns" : "xmlns:" + prefix);
+                if (decl == null || decl.isEmpty()) {
+                    removePrefixFromSubtree(childEl, prefix, doc);
+                }
+            }
+        }
+        return el;
     }
 
     /**
@@ -724,6 +871,51 @@ public class XMLLibXML extends PerlModuleBase {
         return _parse_string(newArgs, ctx);
     }
 
+    public static RuntimeList _parse_html_fh(RuntimeArray args, int ctx) {
+        // Read from the filehandle first, then parse as HTML string
+        RuntimeScalar self = args.get(0);
+        RuntimeScalar fhArg = args.size() > 1 ? args.get(1) : scalarUndef;
+        if (fhArg == null || fhArg.type == RuntimeScalarType.UNDEF) {
+            return WarnDie.die(new RuntimeScalar(
+                "Can't use an undefined value as a symbol reference"),
+                new RuntimeScalar("\n")).getList();
+        }
+        String htmlStr;
+        try {
+            org.perlonjava.runtime.runtimetypes.RuntimeBase content =
+                org.perlonjava.runtime.operators.Readline.readline(fhArg, RuntimeContextType.LIST);
+            if (content instanceof RuntimeList rl) {
+                StringBuilder sb = new StringBuilder();
+                for (var elem : rl.elements) sb.append(elem.toString());
+                htmlStr = sb.toString();
+            } else {
+                htmlStr = content.toString();
+            }
+        } catch (Exception e) {
+            htmlStr = fhArg.toString();
+        }
+        RuntimeArray newArgs = new RuntimeArray();
+        RuntimeArray.push(newArgs, self);
+        RuntimeArray.push(newArgs, new RuntimeScalar(htmlStr));
+        return _parse_html_string(newArgs, ctx);
+    }
+
+    public static RuntimeList _parse_html_file(RuntimeArray args, int ctx) {
+        // Read from the file, then parse as HTML string
+        RuntimeScalar self = args.get(0);
+        String filename = args.size() > 1 ? args.get(1).toString() : "";
+        try {
+            String htmlStr = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename)));
+            RuntimeArray newArgs = new RuntimeArray();
+            RuntimeArray.push(newArgs, self);
+            RuntimeArray.push(newArgs, new RuntimeScalar(htmlStr));
+            return _parse_html_string(newArgs, ctx);
+        } catch (Exception e) {
+            return WarnDie.die(new RuntimeScalar("XML::LibXML::parse_html_file: " + e.getMessage() + "\n"),
+                new RuntimeScalar("\n")).getList();
+        }
+    }
+
     // ================================================================
     // Push / incremental parsing
     // ================================================================
@@ -915,6 +1107,62 @@ public class XMLLibXML extends PerlModuleBase {
         return (has ? scalarTrue : scalarFalse).getList();
     }
 
+    /**
+     * Create a blessed XML::LibXML::Namespace hashref {prefix=>, uri=>}.
+     * This is the Perl-side representation for libxml2 namespace declaration nodes (type 18).
+     */
+    private static RuntimeScalar wrapNamespaceNode(String prefix, String uri) {
+        RuntimeHash h = new RuntimeHash();
+        h.put("prefix", new RuntimeScalar(prefix != null ? prefix : ""));
+        h.put("uri",    new RuntimeScalar(uri    != null ? uri    : ""));
+        RuntimeScalar ref = h.createReferenceWithTrackedElements();
+        return ReferenceOperators.bless(ref, new RuntimeScalar("XML::LibXML::Namespace"));
+    }
+
+    /**
+     * Wrap a single DOM Attr node, returning XML::LibXML::Namespace if it is
+     * a namespace declaration (xmlns or xmlns:prefix), or XML::LibXML::Attr otherwise.
+     */
+    private static RuntimeScalar wrapAttrNode(Attr a) {
+        String name = a.getName();
+        if ("xmlns".equals(name)) {
+            // Default namespace declaration
+            return wrapNamespaceNode("", a.getValue());
+        } else if (name.startsWith("xmlns:")) {
+            // Prefixed namespace declaration
+            return wrapNamespaceNode(name.substring(6), a.getValue());
+        }
+        return wrapNode(a);
+    }
+
+    /**
+     * Collect namespace nodes for an element that are NOT already covered by explicit
+     * xmlns: attributes on that element. This emulates libxml2's behavior of exposing
+     * namespace bindings (including those inherited / restored by importNode) as
+     * XML::LibXML::Namespace objects via attributes().
+     */
+    private static List<RuntimeScalar> collectImplicitNamespaceNodes(Element el, NamedNodeMap attrs) {
+        List<RuntimeScalar> nsNodes = new ArrayList<>();
+        // Gather explicit namespace prefixes already declared on this element
+        java.util.Set<String> declared = new java.util.HashSet<>();
+        for (int i = 0; i < attrs.getLength(); i++) {
+            Attr a = (Attr) attrs.item(i);
+            String aname = a.getName();
+            if ("xmlns".equals(aname)) declared.add("");
+            else if (aname.startsWith("xmlns:")) declared.add(aname.substring(6));
+        }
+        // If the element itself has a namespace binding not yet covered, synthesize one
+        String nsUri = el.getNamespaceURI();
+        String pfx   = el.getPrefix();
+        if (nsUri != null && !nsUri.isEmpty()) {
+            String key = (pfx != null) ? pfx : "";
+            if (!declared.contains(key)) {
+                nsNodes.add(wrapNamespaceNode(pfx, nsUri));
+            }
+        }
+        return nsNodes;
+    }
+
     public static RuntimeList attributes(RuntimeArray args, int ctx) {
         Node n = getNode(args.get(0));
         NamedNodeMap attrs = n.getAttributes();
@@ -923,18 +1171,369 @@ public class XMLLibXML extends PerlModuleBase {
             // Return undef in scalar context, empty list in list context.
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef.getList();
         }
+        // Build the combined list: xmlns* attrs as Namespace nodes, others as Attr nodes,
+        // plus any implicit namespace nodes (e.g. from importNode without explicit xmlns: attr).
+        List<RuntimeScalar> implicit = (n instanceof Element)
+            ? collectImplicitNamespaceNodes((Element) n, attrs) : java.util.Collections.emptyList();
         if (ctx == RuntimeContextType.LIST) {
             // In list context, return individual attribute node scalars so that
-            // "for my $attr ($node->attributes)" iterates over Attr nodes.
+            // "for my $attr ($node->attributes)" iterates over Attr/Namespace nodes.
             RuntimeList result = new RuntimeList();
-            for (int i = 0; i < attrs.getLength(); i++) result.add(wrapNode(attrs.item(i)));
+            for (int i = 0; i < attrs.getLength(); i++) result.add(wrapAttrNode((Attr) attrs.item(i)));
+            for (RuntimeScalar ns : implicit) result.add(ns);
             return result;
         }
         // In scalar context, return the blessed NamedNodeMap reference.
         RuntimeArray arr = new RuntimeArray();
-        for (int i = 0; i < attrs.getLength(); i++) RuntimeArray.push(arr, wrapNode(attrs.item(i)));
+        for (int i = 0; i < attrs.getLength(); i++) RuntimeArray.push(arr, wrapAttrNode((Attr) attrs.item(i)));
+        for (RuntimeScalar ns : implicit) RuntimeArray.push(arr, ns);
         return ReferenceOperators.bless(arr.createReference(),
             new RuntimeScalar("XML::LibXML::NamedNodeMap")).getList();
+    }
+
+    /** _childNodes(onlyNonBlank) — used by original LibXML.pm childNodes/nonBlankChildNodes wrappers */
+    public static RuntimeList childNodesFiltered(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        boolean onlyNonBlank = args.size() > 1 && args.get(1).getBoolean();
+        NodeList children = node.getChildNodes();
+        RuntimeList result = new RuntimeList();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (onlyNonBlank && isBlankNode(child)) continue;
+            result.add(wrapNode(child));
+        }
+        return result;
+    }
+
+    private static boolean isBlankNode(Node node) {
+        if (node.getNodeType() == Node.TEXT_NODE || node.getNodeType() == Node.CDATA_SECTION_NODE) {
+            String val = node.getNodeValue();
+            return val == null || val.trim().isEmpty();
+        }
+        return false;
+    }
+
+    /** removeChildNodes — removes all child nodes from a node */
+    public static RuntimeList removeChildNodes(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        NodeList children = node.getChildNodes();
+        for (int i = children.getLength() - 1; i >= 0; i--) {
+            node.removeChild(children.item(i));
+        }
+        return scalarUndef.getList();
+    }
+
+    /** lookupNamespacePrefix(uri) — reverse lookup: namespace URI → prefix */
+    public static RuntimeList lookupNamespacePrefix(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        if (args.size() < 2) return scalarUndef.getList();
+        String uri = args.get(1).toString();
+        if (!(node instanceof Element)) return scalarUndef.getList();
+        Node cur = node;
+        while (cur != null && cur.getNodeType() == Node.ELEMENT_NODE) {
+            // Check the node's own namespace prefix first
+            String nodeNsUri = cur.getNamespaceURI();
+            if (uri.equals(nodeNsUri)) {
+                String pfx = cur.getPrefix();
+                return new RuntimeScalar(pfx != null ? pfx : "").getList();
+            }
+            // Check xmlns: attribute declarations
+            NamedNodeMap attrs = cur.getAttributes();
+            for (int i = 0; i < attrs.getLength(); i++) {
+                Attr attr = (Attr) attrs.item(i);
+                String attrName = attr.getName();
+                if (attrName.startsWith("xmlns:") && attr.getValue().equals(uri)) {
+                    return new RuntimeScalar(attrName.substring(6)).getList();
+                }
+                if (attrName.equals("xmlns") && attr.getValue().equals(uri)) {
+                    return new RuntimeScalar("").getList();
+                }
+            }
+            cur = cur.getParentNode();
+        }
+        return scalarUndef.getList();
+    }
+
+    /** firstNonBlankChild — first non-whitespace child node */
+    public static RuntimeList firstNonBlankChild(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        Node child = node.getFirstChild();
+        while (child != null) {
+            if (!isBlankNode(child)) return wrapNode(child).getList();
+            child = child.getNextSibling();
+        }
+        return scalarUndef.getList();
+    }
+
+    /** nextNonBlankSibling — next non-whitespace sibling node */
+    public static RuntimeList nextNonBlankSibling(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        Node sib = node.getNextSibling();
+        while (sib != null) {
+            if (!isBlankNode(sib)) return wrapNode(sib).getList();
+            sib = sib.getNextSibling();
+        }
+        return scalarUndef.getList();
+    }
+
+    /** previousNonBlankSibling — previous non-whitespace sibling node */
+    public static RuntimeList previousNonBlankSibling(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        Node sib = node.getPreviousSibling();
+        while (sib != null) {
+            if (!isBlankNode(sib)) return wrapNode(sib).getList();
+            sib = sib.getPreviousSibling();
+        }
+        return scalarUndef.getList();
+    }
+
+    /** setNodeName — rename a node (best-effort using DOM3 renameNode) */
+    public static RuntimeList setNodeName(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        if (args.size() < 2) return scalarUndef.getList();
+        String newName = args.get(1).toString();
+        try {
+            Document doc = node.getOwnerDocument();
+            if (doc == null) return scalarUndef.getList();
+            int nodeType = node.getNodeType();
+            if (nodeType == Node.ELEMENT_NODE || nodeType == Node.ATTRIBUTE_NODE) {
+                // Keep existing prefix: rename to "prefix:newLocalName" or just "newLocalName"
+                String nsUri = node.getNamespaceURI();
+                String prefix = node.getPrefix();
+                String qualName = (prefix != null && !prefix.isEmpty())
+                    ? prefix + ":" + newName : newName;
+                // NOTE: renameNode may return a *new* Node instance (Xerces behavior),
+                // so we must update the stored reference in the Perl object.
+                Node renamed = doc.renameNode(node, nsUri, qualName);
+                if (renamed != node) updateNode(args.get(0), renamed);
+            }
+        } catch (Exception e) {
+            // ignore — best-effort
+        }
+        return scalarUndef.getList();
+    }
+
+    /** getNamespaceDeclURI(prefix) — get the URI for a namespace declaration on this element */
+    public static RuntimeList getNamespaceDeclURI(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        if (!(node instanceof Element)) return scalarUndef.getList();
+        Element el = (Element) node;
+        String prefix = (args.size() > 1 && args.get(1).type != RuntimeScalarType.UNDEF)
+            ? args.get(1).toString() : "";
+        String attrName = prefix.isEmpty() ? "xmlns" : "xmlns:" + prefix;
+        // Check explicit attribute (both non-namespaced and NS-aware variants)
+        String val = el.getAttribute(attrName);
+        if (val != null && !val.isEmpty()) return new RuntimeScalar(val).getList();
+        String nsLocal = prefix.isEmpty() ? "xmlns" : prefix;
+        val = el.getAttributeNS("http://www.w3.org/2000/xmlns/", nsLocal);
+        if (val != null && !val.isEmpty()) return new RuntimeScalar(val).getList();
+        // For default namespace (empty prefix): fall back to element's own namespace URI
+        // ONLY if no ancestor already declares the same namespace (libxml2 does namespace
+        // reconciliation on appendChild, stripping redundant declarations).
+        if (prefix.isEmpty()) {
+            String elPfx = el.getPrefix();
+            if (elPfx == null || elPfx.isEmpty()) {
+                String ns = el.getNamespaceURI();
+                if (ns != null && !ns.isEmpty()) {
+                    if (!isNsDeclaredByAncestor(el, "", ns)) {
+                        return new RuntimeScalar(ns).getList();
+                    }
+                }
+            }
+        }
+        // For non-empty prefix: fall back to element's own namespace URI
+        // if the element uses this prefix and no ancestor has declared it.
+        if (!prefix.isEmpty()) {
+            String elPfx = el.getPrefix();
+            if (prefix.equals(elPfx)) {
+                String ns = el.getNamespaceURI();
+                if (ns != null && !ns.isEmpty()) {
+                    if (!isNsDeclaredByAncestor(el, prefix, ns)) {
+                        return new RuntimeScalar(ns).getList();
+                    }
+                }
+            }
+        }
+        return scalarUndef.getList();
+    }
+
+    /**
+     * Returns true if an ancestor of el (not el itself) has an explicit namespace
+     * declaration for the given prefix and URI.
+     * For empty prefix (default namespace), also checks if an ancestor element
+     * is in the same namespace without prefix (implicit default ns).
+     * For non-empty prefix, also checks if an ancestor element itself uses
+     * the same prefix (implicit declaration via the element's own namespace binding).
+     */
+    private static boolean isNsDeclaredByAncestor(Element el, String prefix, String ns) {
+        Node parentNode = el.getParentNode();
+        while (parentNode != null && parentNode.getNodeType() == Node.ELEMENT_NODE) {
+            Element parentEl = (Element) parentNode;
+            String attrName = prefix.isEmpty() ? "xmlns" : "xmlns:" + prefix;
+            // Check explicit xmlns attribute on the ancestor
+            String parentDecl = parentEl.getAttribute(attrName);
+            if (parentDecl == null || parentDecl.isEmpty()) {
+                String nsLocal = prefix.isEmpty() ? "xmlns" : prefix;
+                parentDecl = parentEl.getAttributeNS("http://www.w3.org/2000/xmlns/", nsLocal);
+            }
+            if (ns.equals(parentDecl)) return true;
+            if (prefix.isEmpty()) {
+                // Also treat an ancestor without prefix (namespace via createElementNS) as declaring it
+                String pPfx = parentEl.getPrefix();
+                if ((pPfx == null || pPfx.isEmpty()) && ns.equals(parentEl.getNamespaceURI())) return true;
+            } else {
+                // Also treat an ancestor that has the same prefix (namespace via createElementNS) as declaring it
+                String pPfx = parentEl.getPrefix();
+                if (prefix.equals(pPfx) && ns.equals(parentEl.getNamespaceURI())) return true;
+            }
+            parentNode = parentNode.getParentNode();
+        }
+        return false;
+    }
+
+    /** setNamespaceDeclURI(prefix, newURI) — set/remove a namespace declaration */
+    public static RuntimeList setNamespaceDeclURI(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        if (!(node instanceof Element)) return scalarUndef.getList();
+        Element el = (Element) node;
+        String prefix = args.size() > 1 ? args.get(1).toString() : "";
+        String attrName = prefix.isEmpty() ? "xmlns" : "xmlns:" + prefix;
+        boolean removing = (args.size() < 3 || args.get(2).type == RuntimeScalarType.UNDEF);
+        if (removing) {
+            el.removeAttributeNS("http://www.w3.org/2000/xmlns/", attrName.contains(":") ? prefix : "xmlns");
+            // Also try removeAttribute in case the attr was set without a namespace
+            el.removeAttribute(attrName);
+            // Cascade: rename element, its attributes, and all descendant elements/attrs
+            // that use this prefix (matching libxml2 behavior).
+            Element newEl = removePrefixFromSubtree(el, prefix, el.getOwnerDocument());
+            if (newEl != el) {
+                // Xerces returned a new Element object; update the Perl wrapper
+                updateNode(args.get(0), newEl);
+            }
+        } else {
+            String newUri = args.get(2).toString();
+            // Use setAttributeNS so that DOM's lookupNamespaceURI() recognizes the declaration.
+            el.setAttributeNS("http://www.w3.org/2000/xmlns/", attrName, newUri);
+            // Also rename the element itself when its own namespace changes — matching libxml2 behavior.
+            String elPfx = el.getPrefix();
+            String normalised = (elPfx != null) ? elPfx : "";
+            if (normalised.equals(prefix)) {
+                try {
+                    String localName = el.getLocalName();
+                    if (localName == null) localName = el.getNodeName();
+                    if (localName.contains(":")) localName = localName.substring(localName.indexOf(':') + 1);
+                    String qualName = prefix.isEmpty() ? localName : prefix + ":" + localName;
+                    Node renamed = el.getOwnerDocument().renameNode(el, newUri, qualName);
+                    if (renamed != el) updateNode(args.get(0), renamed);
+                } catch (Exception e) { /* ignore */ }
+            }
+        }
+        // Return 1 (truthy) so that the || chain in setAttribute's xmlns handler
+        // does not fall through to the redundant setNamespace call.
+        return scalarOne.getList();
+    }
+
+    /** setNamespaceDeclPrefix(oldPrefix, newPrefix) — rename a namespace declaration prefix */
+    public static RuntimeList setNamespaceDeclPrefix(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        if (!(node instanceof Element)) return scalarUndef.getList();
+        Element el = (Element) node;
+        String oldPfx = args.size() > 1 ? args.get(1).toString() : "";
+        String newPfx = args.size() > 2 ? args.get(2).toString() : "";
+        String oldAttr = oldPfx.isEmpty() ? "xmlns" : "xmlns:" + oldPfx;
+        // Find the namespace URI declared under oldPfx
+        String uri = el.getAttributeNS("http://www.w3.org/2000/xmlns/", oldPfx.isEmpty() ? "xmlns" : oldPfx);
+        if (uri == null || uri.isEmpty()) uri = el.getAttribute(oldAttr);
+        if (uri == null || uri.isEmpty()) {
+            // prefix not found — treat as a no-op (matches libxml2 behavior)
+            return scalarOne.getList();
+        }
+        // Error if new prefix is already in use on this element (prefix occupied)
+        if (!newPfx.isEmpty()) {
+            String existing = el.getAttributeNS("http://www.w3.org/2000/xmlns/", newPfx);
+            if (existing == null || existing.isEmpty()) existing = el.getAttribute("xmlns:" + newPfx);
+            if (existing != null && !existing.isEmpty()) {
+                throw new PerlDieException(new RuntimeScalar("setNamespaceDeclPrefix: prefix '" + newPfx + "' is in use"));
+            }
+        } else {
+            // Cannot rename to empty prefix if already occupied or if uri is non-empty
+            String existing = el.getAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns");
+            if (existing == null || existing.isEmpty()) existing = el.getAttribute("xmlns");
+            if (existing != null && !existing.isEmpty()) {
+                throw new PerlDieException(new RuntimeScalar("setNamespaceDeclPrefix: cannot set non-empty prefix for empty namespace"));
+            }
+        }
+        // Rename: remove old, add new
+        el.removeAttributeNS("http://www.w3.org/2000/xmlns/", oldPfx.isEmpty() ? "xmlns" : oldPfx);
+        el.removeAttribute(oldAttr);
+        String newAttr = newPfx.isEmpty() ? "xmlns" : "xmlns:" + newPfx;
+        el.setAttributeNS("http://www.w3.org/2000/xmlns/", newAttr, uri);
+        // If the element itself uses the old prefix, rename it to use the new prefix
+        String elPfx = el.getPrefix();
+        String normElPfx = (elPfx != null) ? elPfx : "";
+        if (normElPfx.equals(oldPfx)) {
+            try {
+                String localName = el.getLocalName();
+                if (localName == null) localName = el.getNodeName();
+                if (localName.contains(":")) localName = localName.substring(localName.indexOf(':') + 1);
+                String qualName = newPfx.isEmpty() ? localName : newPfx + ":" + localName;
+                Node renamed = el.getOwnerDocument().renameNode(el, uri, qualName);
+                if (renamed != el) updateNode(args.get(0), renamed);
+            } catch (Exception e) { /* ignore */ }
+        }
+        return scalarOne.getList();
+    }
+
+
+    public static RuntimeList toStringC14N(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        // Full C14N is complex; return standard serialization as fallback
+        return new RuntimeScalar(serializeNode(node, false, false)).getList();
+    }
+
+    /** namespaceIsEqual — for XML::LibXML::Namespace _isEqual */
+    public static RuntimeList namespaceIsEqual(RuntimeArray args, int ctx) {
+        RuntimeScalar self  = args.get(0);
+        RuntimeScalar other = args.size() > 1 ? args.get(1) : scalarUndef;
+        try {
+            RuntimeHash h1 = self.hashDerefRaw();
+            RuntimeHash h2 = other.hashDerefRaw();
+            String p1 = h1.get("prefix").toString();
+            String p2 = h2.get("prefix").toString();
+            String u1 = h1.get("uri").toString();
+            String u2 = h2.get("uri").toString();
+            return new RuntimeScalar((p1.equals(p2) && u1.equals(u2)) ? 1 : 0).getList();
+        } catch (Exception e) {
+            return new RuntimeScalar(0).getList();
+        }
+    }
+
+    /** nopMethod — stub for unimplemented XS functions; returns undef */
+    public static RuntimeList nopMethod(RuntimeArray args, int ctx) {
+        return scalarUndef.getList();
+    }
+
+    /** nodeIsEqual — for _isEqual on DOM nodes (used by isEqualNode) */
+    public static RuntimeList nodeIsEqual(RuntimeArray args, int ctx) {
+        Node a = getNode(args.get(0));
+        Node b = args.size() > 1 ? getNode(args.get(1)) : null;
+        return new RuntimeScalar((a != null && b != null && a.isEqualNode(b)) ? 1 : 0).getList();
+    }
+
+    /** attrSerializeContent — serializes attribute value */
+    public static RuntimeList attrSerializeContent(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        String val = node.getNodeValue();
+        return new RuntimeScalar(val != null ? val : "").getList();
+    }
+
+    /** attrToString — serializes attribute as ' name="value"' */
+    public static RuntimeList attrToString(RuntimeArray args, int ctx) {
+        Node node = getNode(args.get(0));
+        String name = node.getNodeName();
+        String val  = node.getNodeValue() != null ? node.getNodeValue() : "";
+        val = val.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;");
+        return new RuntimeScalar(" " + name + "=\"" + val + "\"").getList();
     }
 
     public static RuntimeList cloneNode(RuntimeArray args, int ctx) {
@@ -953,7 +1552,47 @@ public class XMLLibXML extends PerlModuleBase {
             child = ownerDoc.importNode(child, true);
         }
         parent.appendChild(child);
+        // Namespace reconciliation: strip redundant declarations from child
+        if (child instanceof Element) {
+            reconcileNamespaces((Element) child);
+        }
         return wrapNode(child).getList();
+    }
+
+    /**
+     * Strips namespace declarations on el that are already declared with the same
+     * URI by an ancestor element.  This mirrors libxml2's namespace reconciliation
+     * on appendChild.
+     */
+    private static void reconcileNamespaces(Element el) {
+        NamedNodeMap attrs = el.getAttributes();
+        List<Attr> toRemove = new java.util.ArrayList<>();
+        for (int i = 0; i < attrs.getLength(); i++) {
+            Node n = attrs.item(i);
+            if (!(n instanceof Attr)) continue;
+            Attr attr = (Attr) n;
+            String name = attr.getNodeName();
+            if (!name.startsWith("xmlns")) continue;
+            // Determine the prefix this declaration covers
+            String declPrefix;
+            if (name.equals("xmlns")) {
+                declPrefix = "";
+            } else if (name.startsWith("xmlns:")) {
+                declPrefix = name.substring(6);
+                if (declPrefix.isEmpty()) continue;
+            } else {
+                continue;
+            }
+            String declURI = attr.getValue();
+            if (declURI == null || declURI.isEmpty()) continue;
+            // If an ancestor already declares the same prefix→URI, this one is redundant
+            if (isNsDeclaredByAncestor(el, declPrefix, declURI)) {
+                toRemove.add(attr);
+            }
+        }
+        for (Attr attr : toRemove) {
+            el.removeAttributeNode(attr);
+        }
     }
 
     /**
@@ -1012,7 +1651,56 @@ public class XMLLibXML extends PerlModuleBase {
         Node parent = getNode(args.get(0));
         Node child  = getNode(args.get(1));
         parent.removeChild(child);
+        // Namespace reconciliation: re-add namespace declarations for prefixes used
+        // by this node that are no longer in scope (they were declared on the former parent).
+        if (child instanceof Element) {
+            readdMissingNsDecls((Element) child);
+        }
         return wrapNode(child).getList();
+    }
+
+    /**
+     * After a node is detached from its parent, any namespace prefixes used by
+     * the node's own attributes (or its prefix) that are no longer in scope must
+     * be re-declared on the node itself.  This mirrors libxml2's behavior.
+     */
+    private static void readdMissingNsDecls(Element el) {
+        // Collect prefixes used by attributes that have actual namespace URIs
+        Map<String, String> needed = new java.util.LinkedHashMap<>();
+        // Check the element's own prefix
+        String elPfx = el.getPrefix();
+        String elNs  = el.getNamespaceURI();
+        if (elPfx != null && !elPfx.isEmpty() && elNs != null && !elNs.isEmpty()) {
+            needed.put(elPfx, elNs);
+        }
+        // Check attribute prefixes
+        NamedNodeMap attrs = el.getAttributes();
+        for (int i = 0; i < attrs.getLength(); i++) {
+            Node n = attrs.item(i);
+            if (!(n instanceof Attr)) continue;
+            Attr attr = (Attr) n;
+            // Skip xmlns declarations themselves
+            String aName = attr.getNodeName();
+            if (aName.equals("xmlns") || aName.startsWith("xmlns:")) continue;
+            String aPfx = attr.getPrefix();
+            String aNs  = attr.getNamespaceURI();
+            if (aPfx != null && !aPfx.isEmpty() && aNs != null && !aNs.isEmpty()) {
+                needed.put(aPfx, aNs);
+            }
+        }
+        // For each needed prefix, check if it's already declared on el or an ancestor
+        for (Map.Entry<String, String> entry : needed.entrySet()) {
+            String pfx = entry.getKey();
+            String ns  = entry.getValue();
+            // Check if el itself has an explicit xmlns:pfx declaration
+            String existing = el.getAttribute("xmlns:" + pfx);
+            if (existing == null || existing.isEmpty()) {
+                existing = el.getAttributeNS("http://www.w3.org/2000/xmlns/", pfx);
+            }
+            if (existing != null && !existing.isEmpty()) continue;  // already declared
+            // el is now detached (no parent), so we need to add the declaration
+            el.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + pfx, ns);
+        }
     }
 
     /**
@@ -1034,6 +1722,11 @@ public class XMLLibXML extends PerlModuleBase {
         Node parent   = getNode(args.get(0));
         Node newChild = getNode(args.get(1));
         Node oldChild = getNode(args.get(2));
+        // If newChild belongs to a different document, adopt it first (libxml2 behavior)
+        Document targetDoc = parent.getOwnerDocument();
+        if (targetDoc != null && newChild.getOwnerDocument() != targetDoc) {
+            newChild = targetDoc.adoptNode(newChild);
+        }
         parent.replaceChild(newChild, oldChild);
         return wrapNode(oldChild).getList();
     }
@@ -1057,7 +1750,7 @@ public class XMLLibXML extends PerlModuleBase {
         Node n = getNode(args.get(0));
         // libxml2 returns 0 for Attr->hasChildNodes() even though the attr has a text child
         if (n.getNodeType() == Node.ATTRIBUTE_NODE) return scalarZero.getList();
-        return (n.hasChildNodes() ? scalarTrue : scalarFalse).getList();
+        return (n.hasChildNodes() ? scalarOne : scalarZero).getList();
     }
 
     public static RuntimeList textContent(RuntimeArray args, int ctx) {
@@ -1096,6 +1789,68 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList namespaceURI(RuntimeArray args, int ctx) {
         String ns = getNode(args.get(0)).getNamespaceURI();
         return (ns != null ? new RuntimeScalar(ns) : scalarUndef).getList();
+    }
+
+    /**
+     * $element->localNS() — returns a XML::LibXML::Namespace object for the
+     * element's own namespace (its prefix binding), or undef if none.
+     */
+    public static RuntimeList localNS(RuntimeArray args, int ctx) {
+        Node n = getNode(args.get(0));
+        String prefix = n.getPrefix();
+        String ns = n.getNamespaceURI();
+        if (ns == null) return scalarUndef.getList();
+        return makeNamespaceObject(prefix != null ? prefix : "", ns).getList();
+    }
+
+    /**
+     * $element->getNamespaces() — return all namespace declarations on this
+     * element as a list of XML::LibXML::Namespace objects.
+     * Includes both the element's own namespace and explicit xmlns: attributes.
+     */
+    public static RuntimeList getNamespaces(RuntimeArray args, int ctx) {
+        Node n = getNode(args.get(0));
+        RuntimeList result = new RuntimeList();
+        Set<String> seen = new java.util.HashSet<>();
+
+        // Include the element's own namespace binding (from its prefix/nsURI)
+        String ownNsUri = n.getNamespaceURI();
+        String ownPrefix = n.getPrefix();
+        if (ownNsUri != null && !ownNsUri.isEmpty()) {
+            String pfx = (ownPrefix != null) ? ownPrefix : "";
+            result.add(makeNamespaceObject(pfx, ownNsUri));
+            seen.add(pfx);
+        }
+
+        // Also scan explicit xmlns:* attribute declarations
+        NamedNodeMap attrs = n.getAttributes();
+        if (attrs != null) {
+            for (int i = 0; i < attrs.getLength(); i++) {
+                Attr a = (Attr) attrs.item(i);
+                String attrName = a.getNodeName();
+                if (attrName.equals("xmlns")) {
+                    if (!seen.contains("")) {
+                        result.add(makeNamespaceObject("", a.getValue()));
+                        seen.add("");
+                    }
+                } else if (attrName.startsWith("xmlns:")) {
+                    String pfx = attrName.substring(6);
+                    if (!seen.contains(pfx)) {
+                        result.add(makeNamespaceObject(pfx, a.getValue()));
+                        seen.add(pfx);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    private static RuntimeScalar makeNamespaceObject(String prefix, String uri) {
+        RuntimeHash h = new RuntimeHash();
+        h.put("prefix", new RuntimeScalar(prefix));
+        h.put("uri",    new RuntimeScalar(uri));
+        return ReferenceOperators.bless(h.createReference(),
+            new RuntimeScalar("XML::LibXML::Namespace"));
     }
 
     public static RuntimeList nodePath(RuntimeArray args, int ctx) {
@@ -1144,13 +1899,61 @@ public class XMLLibXML extends PerlModuleBase {
         Node n     = getNode(args.get(0));
         String ns  = args.size() > 1 ? nsArg(args.get(1)) : null;
         String pfx = (args.size() > 2) ? args.get(2).toString() : null;
-        // act flag (arg 4): when true the element is moved to this namespace;
-        // we can't change an element's QName after creation in Java DOM, so we
-        // simply declare the namespace binding in all cases.
-        if (n instanceof Element && pfx != null && ns != null) {
-            ((Element) n).setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + pfx, ns);
+        // act flag (arg 4): when true the element/attr is moved to this namespace
+        boolean act = args.size() < 4 || args.get(3).getBoolean();
+
+        // Empty/null ns means "remove namespace" (libxml2 behavior)
+        if (ns == null) {
+            if (n instanceof Element) {
+                try {
+                    String localName = n.getLocalName();
+                    if (localName == null) localName = n.getNodeName();
+                    if (localName.contains(":")) localName = localName.substring(localName.indexOf(':') + 1);
+                    Node renamed = n.getOwnerDocument().renameNode(n, null, localName);
+                    if (renamed != n) updateNode(args.get(0), renamed);
+                } catch (Exception e) { /* ignore */ }
+            } else if (n instanceof Attr) {
+                try {
+                    String localName = n.getLocalName();
+                    if (localName == null) localName = n.getNodeName();
+                    if (localName.contains(":")) localName = localName.substring(localName.indexOf(':') + 1);
+                    Node renamed = n.getOwnerDocument().renameNode(n, null, localName);
+                    if (renamed != n) updateNode(args.get(0), renamed);
+                } catch (Exception e) { /* ignore */ }
+            }
+            return scalarOne.getList();
         }
-        return scalarTrue.getList();
+
+        if (n instanceof Element && pfx != null) {
+            // Declare the namespace binding on the element.
+            // Empty prefix = default namespace declaration ("xmlns"), not "xmlns:"
+            String xmlnsAttr = pfx.isEmpty() ? "xmlns" : "xmlns:" + pfx;
+            ((Element) n).setAttributeNS("http://www.w3.org/2000/xmlns/", xmlnsAttr, ns);
+            // If act=true, rename the element to prefix:localname
+            // NOTE: renameNode may return a *new* Node instance (Xerces behavior),
+            // so we must update the stored reference in the Perl object.
+            if (act) {
+                try {
+                    String localName = n.getLocalName();
+                    if (localName == null) localName = n.getNodeName();
+                    Node renamed = n.getOwnerDocument().renameNode(n, ns, pfx + ":" + localName);
+                    if (renamed != n) updateNode(args.get(0), renamed);
+                } catch (Exception e) { /* ignore */ }
+            }
+            return scalarOne.getList();
+        } else if (n instanceof Attr && pfx != null) {
+            // For attribute nodes: rename to prefix:localname with given namespace
+            // NOTE: renameNode may return a *new* Node instance (Xerces behavior),
+            // so we must update the stored reference in the Perl object.
+            try {
+                String localName = n.getLocalName();
+                if (localName == null) localName = n.getNodeName();
+                Node renamed = n.getOwnerDocument().renameNode(n, ns, pfx + ":" + localName);
+                if (renamed != n) updateNode(args.get(0), renamed);
+            } catch (Exception e) { /* ignore */ }
+            return scalarOne.getList();
+        }
+        return scalarOne.getList();
     }
 
     public static RuntimeList toString(RuntimeArray args, int ctx) {
@@ -1280,6 +2083,49 @@ public class XMLLibXML extends PerlModuleBase {
 
     public static RuntimeList createDocumentFragment(RuntimeArray args, int ctx) {
         return wrapNode(((Document) getNode(args.get(0))).createDocumentFragment()).getList();
+    }
+
+    public static RuntimeList createEntityReference(RuntimeArray args, int ctx) {
+        Document doc = (Document) getNode(args.get(0));
+        String name = args.get(1).toString();
+        try {
+            return wrapNode(doc.createEntityReference(name)).getList();
+        } catch (Exception e) {
+            return scalarUndef.getList();
+        }
+    }
+
+    /**
+     * getElementById(id) — find element by xml:id or id attribute.
+     * Xerces getElementById only works with DTD-declared IDs; we supplement
+     * with an explicit tree walk that checks xml:id and plain id attributes.
+     */
+    public static RuntimeList getElementById(RuntimeArray args, int ctx) {
+        Document doc = (Document) getNode(args.get(0));
+        String id = args.get(1).toString();
+        // Try the standard DOM first (works if DTD declares ID attributes)
+        Element found = doc.getElementById(id);
+        if (found != null) return wrapNode(found).getList();
+        // Fall back to walking the tree looking for xml:id or id
+        found = findElementById(doc.getDocumentElement(), id);
+        return wrapNode(found).getList();
+    }
+
+    private static Element findElementById(Element el, String id) {
+        if (el == null) return null;
+        String xmlId = el.getAttributeNS("http://www.w3.org/XML/1998/namespace", "id");
+        if (id.equals(xmlId)) return el;
+        String plainId = el.getAttribute("id");
+        if (id.equals(plainId)) return el;
+        NodeList children = el.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child instanceof Element) {
+                Element result = findElementById((Element) child, id);
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 
     public static RuntimeList importNode(RuntimeArray args, int ctx) {
@@ -1425,8 +2271,11 @@ public class XMLLibXML extends PerlModuleBase {
     /** XML::LibXML::Document->createDocument($version, $encoding) */
     public static RuntimeList docCreateDocument(RuntimeArray args, int ctx) {
         // args.get(0) is the class name (called as class method)
-        String version  = args.size() > 1 ? args.get(1).toString() : "1.0";
-        String encoding = args.size() > 2 ? args.get(2).toString() : null;
+        String version  = args.size() > 1 && args.get(1).type != RuntimeScalarType.UNDEF
+            ? args.get(1).toString() : "1.0";
+        if (version.isEmpty()) version = "1.0";
+        String encoding = args.size() > 2 && args.get(2).type != RuntimeScalarType.UNDEF
+            ? args.get(2).toString() : null;
         try {
             DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
             f.setNamespaceAware(true);
@@ -1481,9 +2330,40 @@ public class XMLLibXML extends PerlModuleBase {
 
     public static RuntimeList elemLookupNamespaceURI(RuntimeArray args, int ctx) {
         Element el = (Element) getNode(args.get(0));
-        String prefix = args.size() > 1 ? args.get(1).toString() : "";
-        String uri = el.lookupNamespaceURI(prefix.isEmpty() ? null : prefix);
-        return (uri != null ? new RuntimeScalar(uri) : scalarUndef).getList();
+        String prefix = args.size() > 1 && args.get(1).type != RuntimeScalarType.UNDEF
+            ? args.get(1).toString() : "";
+        // Walk up the element tree looking ONLY at explicit xmlns: attribute declarations.
+        // We must NOT fall back to DOM's lookupNamespaceURI() because it also inspects
+        // attribute prefixes, which gives false positives after xmlns: declarations are removed.
+        Node cur = el;
+        while (cur != null && cur.getNodeType() == Node.ELEMENT_NODE) {
+            Element curEl = (Element) cur;
+            NamedNodeMap attrs = curEl.getAttributes();
+            for (int i = 0; i < attrs.getLength(); i++) {
+                Attr a = (Attr) attrs.item(i);
+                String aname = a.getName();
+                if (prefix.isEmpty()) {
+                    if ("xmlns".equals(aname)) return new RuntimeScalar(a.getValue()).getList();
+                } else {
+                    if (("xmlns:" + prefix).equals(aname)) return new RuntimeScalar(a.getValue()).getList();
+                }
+            }
+            // Also check NS-aware attribute (set via setAttributeNS)
+            String nsLocal = prefix.isEmpty() ? "xmlns" : prefix;
+            String val = curEl.getAttributeNS("http://www.w3.org/2000/xmlns/", nsLocal);
+            if (val != null && !val.isEmpty()) return new RuntimeScalar(val).getList();
+            cur = cur.getParentNode();
+        }
+        // Final fallback: element's own namespace if it has no prefix (default namespace)
+        // Only apply when looking for the default namespace AND the element has no prefix.
+        if (prefix.isEmpty()) {
+            String elPfx = el.getPrefix();
+            if (elPfx == null || elPfx.isEmpty()) {
+                String ns = el.getNamespaceURI();
+                if (ns != null && !ns.isEmpty()) return new RuntimeScalar(ns).getList();
+            }
+        }
+        return scalarUndef.getList();
     }
 
     public static RuntimeList elemGetNamespaces(RuntimeArray args, int ctx) {
@@ -1526,6 +2406,17 @@ public class XMLLibXML extends PerlModuleBase {
         Element el  = (Element) getNode(args.get(0));
         String name = args.get(1).toString();
         String val  = args.size() > 2 ? args.get(2).toString() : "";
+        // If the attribute name has a prefix, resolve it to a namespace URI
+        // so we can use setAttributeNS (matching libxml2 behavior).
+        int colon = name.indexOf(':');
+        if (colon > 0) {
+            String prefix = name.substring(0, colon);
+            String nsUri = el.lookupNamespaceURI(prefix);
+            if (nsUri != null) {
+                el.setAttributeNS(nsUri, name, val);
+                return wrapNode(el.getAttributeNodeNS(nsUri, name.substring(colon + 1))).getList();
+            }
+        }
         el.setAttribute(name, val);
         return wrapNode(el.getAttributeNode(name)).getList();
     }
@@ -1700,6 +2591,11 @@ public class XMLLibXML extends PerlModuleBase {
 
     public static RuntimeList setAttributeNode(RuntimeArray args, int ctx) {
         return wrapNode(((Element) getNode(args.get(0))).setAttributeNode(
+            (Attr) getNode(args.get(1)))).getList();
+    }
+
+    public static RuntimeList setAttributeNodeNS(RuntimeArray args, int ctx) {
+        return wrapNode(((Element) getNode(args.get(0))).setAttributeNodeNS(
             (Attr) getNode(args.get(1)))).getList();
     }
 
@@ -2127,6 +3023,10 @@ public class XMLLibXML extends PerlModuleBase {
                         "Could not find function: " + functionName.getLocalPart());
                 };
             }
+            // Built-in Java function stored as JAVAOBJECT(XPathFunction) sentinel
+            if (callback.type == RuntimeScalarType.JAVAOBJECT && callback.value instanceof XPathFunction) {
+                return (XPathFunction) callback.value;
+            }
             return (xpathArgs) -> {
                 // Convert XPath argument types to Perl RuntimeScalars
                 RuntimeArray perlArgs = new RuntimeArray();
@@ -2232,6 +3132,128 @@ public class XMLLibXML extends PerlModuleBase {
 
 
     /**
+     * XPathFunctionResolver that handles built-in XSLT-style functions
+     * (e.g. document()) and chains to a user-provided resolver.
+     */
+    static class BuiltinXPathFunctionResolver implements XPathFunctionResolver {
+        private final XPathFunctionResolver userResolver;
+        private final Node contextNode;
+
+        BuiltinXPathFunctionResolver(XPathFunctionResolver userResolver, Node contextNode) {
+            this.userResolver = userResolver;
+            this.contextNode = contextNode;
+        }
+
+        @Override
+        public XPathFunction resolveFunction(QName functionName, int arity) {
+            String localPart = functionName.getLocalPart();
+            String nsUri = functionName.getNamespaceURI();
+
+            // Handle document(string) - XSLT extension function
+            if ("document".equals(localPart) && (nsUri == null || nsUri.isEmpty())) {
+                return (args) -> {
+                    if (args.isEmpty()) return emptyNodeList();
+                    String uriStr = args.get(0) == null ? "" : args.get(0).toString();
+                    try {
+                        // Resolve relative to contextNode's document URI or CWD
+                        File f;
+                        String baseUriStr = null;
+                        if (contextNode != null) {
+                            Document doc = (contextNode instanceof Document)
+                                ? (Document) contextNode : contextNode.getOwnerDocument();
+                            if (doc != null) baseUriStr = doc.getDocumentURI();
+                        }
+                        if (baseUriStr != null && !uriStr.startsWith("/") && !uriStr.contains("://")) {
+                            URI base = new URI(baseUriStr);
+                            URI resolved = base.resolve(uriStr);
+                            f = new File(resolved);
+                        } else {
+                            f = new File(uriStr);
+                        }
+                        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                        dbf.setNamespaceAware(true);
+                        DocumentBuilder db = dbf.newDocumentBuilder();
+                        Document loadedDoc = db.parse(f);
+                        final Document finalDoc = loadedDoc;
+                        return (NodeList) new NodeList() {
+                            public Node item(int i) { return i == 0 ? finalDoc : null; }
+                            public int getLength() { return 1; }
+                        };
+                    } catch (Exception e) {
+                        throw new javax.xml.xpath.XPathFunctionException("document() failed: " + e.getMessage());
+                    }
+                };
+            }
+
+            // Chain to user resolver
+            if (userResolver != null) {
+                return userResolver.resolveFunction(functionName, arity);
+            }
+            return null;
+        }
+
+        private static NodeList emptyNodeList() {
+            return new NodeList() {
+                public Node item(int i) { return null; }
+                public int getLength() { return 0; }
+            };
+        }
+    }
+
+
+    /**
+     * Adds built-in XSLT-style XPath functions (like document()) to the function map
+     * using the JAVAOBJECT sentinel mechanism so PerlFunctionResolver can dispatch them.
+     * Uses the "{}name" key format so rewriteNoNsFunctions picks them up.
+     */
+    private static void addBuiltinXPathFunctions(Map<String, RuntimeScalar> funcs, Node contextNode) {
+        // document(string) — load an XML file and return its document node
+        XPathFunction documentFunc = (args) -> {
+            if (args.isEmpty()) return emptyNodeList();
+            String uriStr = args.get(0) == null ? "" : args.get(0).toString();
+            try {
+                File f;
+                String baseUriStr = null;
+                if (contextNode != null) {
+                    Document doc = (contextNode instanceof Document)
+                        ? (Document) contextNode : contextNode.getOwnerDocument();
+                    if (doc != null) baseUriStr = doc.getDocumentURI();
+                }
+                if (baseUriStr != null && !uriStr.startsWith("/") && !uriStr.contains("://")) {
+                    URI base = new URI(baseUriStr);
+                    URI resolved = base.resolve(uriStr);
+                    f = new File(resolved);
+                } else {
+                    f = new File(uriStr);
+                }
+                DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                dbf.setNamespaceAware(true);
+                DocumentBuilder db = dbf.newDocumentBuilder();
+                Document loadedDoc = db.parse(f);
+                final Document finalDoc = loadedDoc;
+                return (NodeList) new NodeList() {
+                    public Node item(int i) { return i == 0 ? finalDoc : null; }
+                    public int getLength() { return 1; }
+                };
+            } catch (Exception e) {
+                throw new javax.xml.xpath.XPathFunctionException("document() failed: " + e.getMessage());
+            }
+        };
+        RuntimeScalar documentSentinel = new RuntimeScalar();
+        documentSentinel.type = RuntimeScalarType.JAVAOBJECT;
+        documentSentinel.value = documentFunc;
+        // Only add if not already overridden by user
+        funcs.putIfAbsent("{}document", documentSentinel);
+    }
+
+    private static NodeList emptyNodeList() {
+        return new NodeList() {
+            public Node item(int i) { return null; }
+            public int getLength() { return 0; }
+        };
+    }
+
+    /**
      * Rewrites an XPath expression to add a pseudo-namespace prefix to
      * no-namespace custom function calls.  Java's JAXP XPath only calls
      * XPathFunctionResolver for namespace-prefixed functions; plain names
@@ -2319,12 +3341,17 @@ public class XMLLibXML extends PerlModuleBase {
         try {
             XPath xp = XPATH_FACTORY.newXPath();
             Map<String, String> ns = new LinkedHashMap<>(namespaces != null ? namespaces : collectDocumentNamespaces(contextNode));
-            Map<String, RuntimeScalar> funcs = customFunctions != null ? new LinkedHashMap<>(customFunctions) : null;
+            Map<String, RuntimeScalar> funcs = customFunctions != null
+                ? new LinkedHashMap<>(customFunctions) : new LinkedHashMap<>();
+
+            // Register built-in XSLT-style functions (e.g. document()) with the
+            // namespace-rewriting mechanism so JAXP dispatches them correctly.
+            addBuiltinXPathFunctions(funcs, contextNode);
+
             expr = rewriteNoNsFunctions(expr, ns, funcs);
             if (!ns.isEmpty())
                 xp.setNamespaceContext(new SimpleNamespaceContext(ns));
-            if (funcs != null && !funcs.isEmpty())
-                xp.setXPathFunctionResolver(new PerlFunctionResolver(funcs));
+            xp.setXPathFunctionResolver(new PerlFunctionResolver(funcs));
             if (varLookupCallback != null && varLookupCallback.type != RuntimeScalarType.UNDEF)
                 xp.setXPathVariableResolver(new PerlVariableResolver(varLookupCallback));
             NodeList nl = (NodeList) xp.evaluate(expr, contextNode, XPathConstants.NODESET);
