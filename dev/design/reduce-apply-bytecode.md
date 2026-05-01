@@ -15,7 +15,7 @@ The C1 failure is triggered by the SIZE and LIVE-INTERVAL COUNT of the generated
 `apply()` methods. The target is to bring all generated methods under **~2,000
 bytes** of bytecode, down from the current maximum of **9,377 bytes**.
 
-See also: `dev/architecture/dbixclass-timeout-jit-analysis.md`
+See also: `dev/design/dbixclass-timeout-jit-analysis.md`
 
 ---
 
@@ -639,5 +639,5 @@ JPERL_DISABLE_INTERPRETER_FALLBACK=1 timeout 60 ./jperl -e 'sub f{my $x=shift; $
 | `EmitSubroutine.java` lines 725–870 | Per-call-site trampoline (Phase 2 target) |
 | `RuntimeCode.java` | Home for new helpers (Phases 2 & 3) |
 | `EmitterMethodCreator.java` lines 720, 894, 920 | Eval depth emit calls (Phase 3) |
-| `dev/architecture/dbixclass-timeout-jit-analysis.md` | Root cause analysis |
+| `dev/design/dbixclass-timeout-jit-analysis.md` | Root cause analysis |
 | `dev/architecture/large-code-refactoring.md` | Existing 64KB strategy |
