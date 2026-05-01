@@ -780,16 +780,16 @@ Phase 2.
 
 - [x] **Phase 2: Extract per-call-site TAILCALL trampoline** (2026-05-01)
   - Added `RuntimeCode.resolveTailCalls(RuntimeList, int)` static helper
-    that resolves TAILCALL chains, replacing the ~65-byte inline trampoline
+    that resolves TAILCALL chains; replaces the ~65-byte inline trampoline
     loop previously emitted at every JVM call site
-  - Modified `EmitSubroutine.handleApplyOperator()`: removed the 80-130 byte
-    inline trampoline block (lines 765–850 in old code), replaced with a
-    single `INVOKESTATIC resolveTailCalls` call + `ILOAD callContextSlot`
-    prepended before the `ASTORE controlFlowTempSlot`
-  - Per-call-site bytecode: ~83 bytes → ~18 bytes (saves ~65 bytes per site)
+  - Modified `EmitSubroutine.handleApplyOperator()`: `resolveTailCalls()` is
+    called only inside the `isNonLocalGoto()==true` branch (rare), so the
+    common path (no control flow) has **zero extra overhead** vs Phase 1 —
+    it remains: `apply()` → `ASTORE` → `ALOAD` → `isNonLocalGoto()` → branch
+  - Per-call-site bytecode: ~83 bytes → ~38 bytes (saves ~45 bytes per site)
   - Files: `RuntimeCode.java`, `EmitSubroutine.java`
   - All `make` tests pass; `tail_calls.t` (7/7), `subroutine.t` (39/39) pass
-  - Measured on `core_subroutine_refs.t`: 1,014 methods, avg 488 bytes, max 7,812 bytes
+  - Measured on `core_subroutine_refs.t`: 1,014 methods, avg 499 bytes, max 7,992 bytes
   - `goto &sub` chains verified correct (factorial via tail calls, multi-hop chains,
     `@_` aliasing preservation, LAST/NEXT/REDO after tail-called sub return)
 

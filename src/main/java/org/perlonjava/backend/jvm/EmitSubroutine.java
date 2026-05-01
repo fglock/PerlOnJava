@@ -750,18 +750,7 @@ public class EmitSubroutine {
             int belowResultStackLevel = 0;
             JavaClassInfo.SpillRef[] baseSpills = new JavaClassInfo.SpillRef[0];
 
-            // Resolve any pending TAILCALL chain before storing the result.
-            // resolveTailCalls() loops until the result is no longer TAILCALL,
-            // replacing ~65 bytes of inline per-call-site trampoline with a
-            // single INVOKESTATIC.  (Phase 2 of perf/reduce-apply-bytecode.)
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "resolveTailCalls",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
-                    false);
-
-            // Store resolved (never TAILCALL) result in temp slot
+            // Store result in temp slot
             mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
 
             // If the caller kept values on the JVM operand stack below the call result (e.g. a left operand),
@@ -771,7 +760,8 @@ public class EmitSubroutine {
                 emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, baseSpills[i]);
             }
 
-            // Load and check if it's a control flow marker (LAST/NEXT/REDO/GOTO/RETURN)
+            // Fast path: check if the result is any kind of control flow marker.
+            // This is the common case (no control flow) — branch skips everything below.
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
@@ -780,8 +770,32 @@ public class EmitSubroutine {
                     false);
             mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
 
-            // resolveTailCalls() already handled TAILCALL; any remaining marker is
-            // LAST/NEXT/REDO/GOTO/RETURN — dispatch it.
+            // A control-flow marker was returned.  It might be TAILCALL (goto &sub),
+            // LAST/NEXT/REDO/GOTO, or RETURN.  Resolve any TAILCALL chain first, then
+            // re-check whether the final result still carries a marker that the
+            // block-level dispatcher needs to handle.
+            // Keeping resolveTailCalls() inside this branch means the common case
+            // (no control flow) incurs zero extra overhead.  (Phase 2 of
+            // perf/reduce-apply-bytecode.)
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveTailCalls",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
+            // Re-check: a TAILCALL chain may have ended in a normal return.
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "isNonLocalGoto",
+                    "()Z",
+                    false);
+            mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
+
+            // Still a marker (LAST/NEXT/REDO/GOTO/RETURN) — dispatch it.
             mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
 
             // Not a control flow marker - load it back and continue
