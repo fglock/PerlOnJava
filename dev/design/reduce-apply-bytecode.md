@@ -765,7 +765,7 @@ Phase 2.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete (2026-05-01)
+### Current Status: Phase 2 complete (2026-05-01)
 
 ### Completed Phases
 
@@ -778,25 +778,39 @@ Phase 2.
   - Result: ~56% total bytecode reduction; both DBIx::Class timing tests pass
     in < 15 s; all `make` unit tests pass
 
+- [x] **Phase 2: Extract per-call-site TAILCALL trampoline** (2026-05-01)
+  - Added `RuntimeCode.resolveTailCalls(RuntimeList, int)` static helper
+    that resolves TAILCALL chains, replacing the ~65-byte inline trampoline
+    loop previously emitted at every JVM call site
+  - Modified `EmitSubroutine.handleApplyOperator()`: removed the 80-130 byte
+    inline trampoline block (lines 765–850 in old code), replaced with a
+    single `INVOKESTATIC resolveTailCalls` call + `ILOAD callContextSlot`
+    prepended before the `ASTORE controlFlowTempSlot`
+  - Per-call-site bytecode: ~83 bytes → ~18 bytes (saves ~65 bytes per site)
+  - Files: `RuntimeCode.java`, `EmitSubroutine.java`
+  - All `make` tests pass; `tail_calls.t` (7/7), `subroutine.t` (39/39) pass
+  - Measured on `core_subroutine_refs.t`: 1,014 methods, avg 488 bytes, max 7,812 bytes
+  - `goto &sub` chains verified correct (factorial via tail calls, multi-hop chains,
+    `@_` aliasing preservation, LAST/NEXT/REDO after tail-called sub return)
+
 ### Next Steps
 
-1. **Phase 2**: Extract per-call-site TAILCALL trampoline to
-   `RuntimeCode.resolveTailCalls()` — this is the key fix for large methods
-   (the 36,554-byte maximum is driven by call-site trampoline code)
-2. **Phase 3**: Extract eval prologue/epilogue sequences — small but easy win
-3. Re-run the timing tests under simulated CPU pressure to confirm C1 failure
+1. **Phase 3**: Extract eval prologue/epilogue sequences — small but easy win
+2. Re-run the timing tests under simulated CPU pressure to confirm C1 failure
    rate has dropped (requires running ~10 orphan JVMs to create contention)
+3. Consider reducing `JPERL_SPILL_SLOTS` from 16 to 8 after verifying no
+   spill overflow failures; saves 24 bytes per method
 
 ### Open Questions
 
-- The largest `apply()` method is now 36,554 bytes — well above the 9,377-byte
-  threshold from the original C1 failure analysis. However, the threshold may
-  differ between the PerlOnJava2 era and current PerlOnJava4 (different JVM,
-  different method structure). Phase 2 should reduce this significantly;
-  measure again after Phase 2 to see if the threshold is now a concern.
-- Should `JPERL_SPILL_SLOTS=8` be tested after Phase 2?  Reducing the spill
-  pool from 16 to 8 would save 24 bytes per method (8 fewer null-inits);
-  measure whether it causes any spill overflow failures first.
+- The largest `apply()` method before Phase 2 was 36,554 bytes. Phase 2
+  estimates ~65 bytes × N call sites removed. For a method with ~250 call
+  sites, this is ~16 KB saved, bringing it to ~20 KB — still above the
+  9,377-byte C1 threshold from the original analysis. However, the threshold
+  may differ for PerlOnJava4's method structure; re-measure after Phase 3.
+- Should `JPERL_SPILL_SLOTS=8` be tested?  Reducing the spill pool from 16
+  to 8 would save 24 bytes per method; measure whether it causes overflow
+  failures first.
 
 ---
 
