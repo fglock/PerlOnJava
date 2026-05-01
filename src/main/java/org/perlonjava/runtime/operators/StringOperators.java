@@ -115,16 +115,22 @@ public class StringOperators {
      */
     public static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar) {
         StringBuilder quoted = new StringBuilder();
-        // Iterate over each character in the string
-        for (char c : runtimeScalar.toString().toCharArray()) {
-            // If the character is alphanumeric or underscore, append it as is
+        String str = runtimeScalar.toString();
+        // Iterate over Unicode code points, not Java chars, so surrogate pairs
+        // (characters outside the BMP, e.g. \x{1D54B}) are handled correctly.
+        int len = str.length();
+        for (int i = 0; i < len; ) {
+            int cp = str.codePointAt(i);
+            // If the code point is alphanumeric or underscore, append it as is.
             // Perl's quotemeta does NOT escape underscore (it's part of \w)
-            if (Character.isLetterOrDigit(c) || c == '_') {
-                quoted.append(c);
+            if (Character.isLetterOrDigit(cp) || cp == '_') {
+                quoted.appendCodePoint(cp);
             } else {
                 // Otherwise, escape it with a backslash
-                quoted.append("\\").append(c);
+                quoted.append('\\');
+                quoted.appendCodePoint(cp);
             }
+            i += Character.charCount(cp);
         }
         return makeStringResult(quoted.toString(), runtimeScalar);
     }

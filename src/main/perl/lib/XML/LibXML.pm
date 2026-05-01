@@ -1405,6 +1405,7 @@ sub toStringEC14N {
 
 *serialize_c14n = \&toStringC14N;
 *serialize_exc_c14n = \&toStringEC14N;
+*serialize = \&toString;
 
 1;
 
@@ -1528,6 +1529,12 @@ package XML::LibXML::DocumentFragment;
 
 use vars qw(@ISA);
 @ISA = ('XML::LibXML::Node');
+
+sub new {
+    my $class = shift;
+    my $doc = XML::LibXML::Document->new();
+    return $doc->createDocumentFragment();
+}
 
 sub toString {
     my $self = shift;

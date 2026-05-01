@@ -129,10 +129,13 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethod("load_catalog",         "nopMethod", null);
             module.registerMethod("_default_catalog",     "nopMethod", null);
             module.registerMethod("_externalEntityLoader","nopMethod", null);
-            module.registerMethod("_parse_sax_string",    "nopMethod", null);
-            module.registerMethod("_parse_sax_fh",        "nopMethod", null);
-            module.registerMethod("_parse_sax_file",      "nopMethod", null);
-            module.registerMethod("_parse_sax_xml_chunk", "nopMethod", null);
+            // SAX variants: delegate to the same DOM parse methods.
+            // XML::LibXML::SAX fires SAX events manually via _fire_sax_events
+            // after getting the DOM back, so these just need to return the parsed document.
+            module.registerMethod("_parse_sax_string",    "_parse_string", null);
+            module.registerMethod("_parse_sax_fh",        "_parse_fh",     null);
+            module.registerMethod("_parse_sax_file",      "_parse_file",   null);
+            module.registerMethod("_parse_sax_xml_chunk", "nopMethod",     null);
             module.registerMethod("lib_init_callbacks",   "nopMethod", null);
             module.registerMethod("lib_cleanup_callbacks","nopMethod", null);
 
@@ -147,6 +150,7 @@ public class XMLLibXML extends PerlModuleBase {
                 {"nodeName"},   {"nodeValue"},   {"nodeType"},
                 {"getName", "nodeName"},
                 {"parentNode"}, {"childNodes"},  {"firstChild"}, {"lastChild"},
+                {"getFirstChild", "firstChild"}, {"getLastChild", "lastChild"},
                 {"previousSibling"}, {"nextSibling"},
                 {"attributes"}, {"hasAttributes"},
                 {"cloneNode"},
@@ -190,6 +194,9 @@ public class XMLLibXML extends PerlModuleBase {
                 {"setNodeName"},
                 {"_getNamespaceDeclURI", "getNamespaceDeclURI"},
                 {"setNamespaceDeclURI"},
+                {"normalize"},
+                {"getFirstChild", "firstChild"},
+                {"getLastChild",  "lastChild"},
             };
             for (String[] m : nodeMethods) {
                 module.registerMethodInPackage(nodePkg, m[0], m.length > 1 ? m[1] : m[0]);
@@ -311,6 +318,7 @@ public class XMLLibXML extends PerlModuleBase {
             module.registerMethodInPackage("XML::LibXML::Text", "setData", "setData");
             module.registerMethodInPackage("XML::LibXML::Text", "new",     "textNew");
             module.registerMethodInPackage("XML::LibXML::Comment", "new",  "commentNew");
+            module.registerMethodInPackage("XML::LibXML::CDATASection", "new", "cdataSectionNew");
             // CharacterData methods (Text, CDATASection, Comment)
             for (String cdPkg : new String[]{"XML::LibXML::Text", "XML::LibXML::CDATASection", "XML::LibXML::Comment"}) {
                 module.registerMethodInPackage(cdPkg, "substringData",    "charSubstringData");
@@ -533,6 +541,21 @@ public class XMLLibXML extends PerlModuleBase {
         // Attr node: libxml2 serializes as ' name="value"' (with leading space)
         if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
             Attr a = (Attr) node;
+            // If the attribute has entity reference children, serialize them explicitly
+            // (a.getValue() expands entity refs to text; we need &foo; notation preserved).
+            NodeList children = a.getChildNodes();
+            if (children != null && children.getLength() > 0) {
+                StringBuilder attrVal = new StringBuilder();
+                for (int i = 0; i < children.getLength(); i++) {
+                    Node child = children.item(i);
+                    if (child.getNodeType() == Node.ENTITY_REFERENCE_NODE) {
+                        attrVal.append('&').append(child.getNodeName()).append(';');
+                    } else {
+                        attrVal.append(escapeXmlAttr(child.getNodeValue() != null ? child.getNodeValue() : ""));
+                    }
+                }
+                return " " + a.getName() + "=\"" + attrVal + "\"";
+            }
             return " " + a.getName() + "=\"" + escapeXmlAttr(a.getValue()) + "\"";
         }
         // Respect $XML::LibXML::skipXMLDeclaration
@@ -540,15 +563,18 @@ public class XMLLibXML extends PerlModuleBase {
             withDecl = false;
         }
         // Determine what encoding to use in the output XML declaration
-        String outputEncoding = "UTF-8";
+        // libxml2 behavior: if no encoding set on document, serialize non-ASCII as &#xNN;
+        // (effectively ASCII output). If encoding is set (e.g. utf-8), use it literally.
+        String outputEncoding = "US-ASCII";  // default: ASCII-safe with &#xNN; entities
         boolean removeEncoding = false;
-        if (withDecl && node instanceof Document) {
-            Document doc = (Document) node;
+        Document doc = (node instanceof Document) ? (Document) node : node.getOwnerDocument();
+        if (doc != null) {
             Object ud = doc.getUserData(UDATA_ENCODING);
             if (ud instanceof String) {
                 String enc = (String) ud;
                 if (enc.isEmpty()) {   // ENCODING_CLEARED sentinel: omit encoding= from decl
                     removeEncoding = true;
+                    outputEncoding = "US-ASCII"; // cleared = ASCII-safe output
                 } else {
                     outputEncoding = enc;
                 }
@@ -587,6 +613,9 @@ public class XMLLibXML extends PerlModuleBase {
             if (GlobalVariable.getGlobalVariable("XML::LibXML::setTagCompression").getBoolean()) {
                 result = result.replaceAll("<([\\w:.-]+)([^>]*?)/>", "<$1$2></$1>");
             }
+            // libxml2 outputs numeric character references as hex (&#xNNN;), but Java's
+            // Transformer uses decimal (&#NNN;). Convert decimal to hex to match libxml2.
+            result = convertDecimalCharRefs(result);
             return result;
         } catch (TransformerException e) {
             throw new RuntimeException("XML serialization error: " + e.getMessage(), e);
@@ -596,6 +625,36 @@ public class XMLLibXML extends PerlModuleBase {
     // ================================================================
     // Parser helpers
     // ================================================================
+
+    /** Convert decimal XML character references (&#NNN;) to hex (&#xNNN;) as libxml2 does. */
+    private static String convertDecimalCharRefs(String s) {
+        if (s == null || !s.contains("&#")) return s;
+        // Pattern: &#digits;
+        StringBuilder sb = new StringBuilder();
+        int len = s.length();
+        int i = 0;
+        while (i < len) {
+            int amp = s.indexOf("&#", i);
+            if (amp < 0) { sb.append(s, i, len); break; }
+            // Check for &#x... (already hex) — skip
+            if (amp + 2 < len && s.charAt(amp + 2) == 'x') {
+                sb.append(s, i, amp + 2); i = amp + 2; continue;
+            }
+            // Try to parse decimal number followed by ;
+            int j = amp + 2;
+            while (j < len && Character.isDigit(s.charAt(j))) j++;
+            if (j > amp + 2 && j < len && s.charAt(j) == ';') {
+                // Found &#NNN;
+                sb.append(s, i, amp);
+                int codePoint = Integer.parseInt(s.substring(amp + 2, j));
+                sb.append("&#x").append(Integer.toHexString(codePoint).toUpperCase()).append(';');
+                i = j + 1;
+            } else {
+                sb.append(s, i, amp + 2); i = amp + 2;
+            }
+        }
+        return sb.toString();
+    }
 
     private static final int XML_PARSE_NOBLANKS = 256; // keep_blanks(0) sets this flag
     private static final String PARSER_OPTIONS_KEY = "XML_LIBXML_PARSER_OPTIONS";
@@ -905,7 +964,18 @@ public class XMLLibXML extends PerlModuleBase {
         RuntimeScalar self = args.get(0);
         String filename = args.size() > 1 ? args.get(1).toString() : "";
         try {
-            String htmlStr = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename)));
+            byte[] rawBytes = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename));
+            // Detect UTF-16 BOM and decode accordingly, stripping the BOM bytes.
+            String htmlStr;
+            if (rawBytes.length >= 2 && (rawBytes[0] & 0xFF) == 0xFF && (rawBytes[1] & 0xFF) == 0xFE) {
+                // UTF-16 LE BOM: FF FE
+                htmlStr = new String(rawBytes, 2, rawBytes.length - 2, "UTF-16LE");
+            } else if (rawBytes.length >= 2 && (rawBytes[0] & 0xFF) == 0xFE && (rawBytes[1] & 0xFF) == 0xFF) {
+                // UTF-16 BE BOM: FE FF
+                htmlStr = new String(rawBytes, 2, rawBytes.length - 2, "UTF-16BE");
+            } else {
+                htmlStr = new String(rawBytes, java.nio.charset.StandardCharsets.UTF_8);
+            }
             RuntimeArray newArgs = new RuntimeArray();
             RuntimeArray.push(newArgs, self);
             RuntimeArray.push(newArgs, new RuntimeScalar(htmlStr));
@@ -1090,6 +1160,12 @@ public class XMLLibXML extends PerlModuleBase {
 
     public static RuntimeList lastChild(RuntimeArray args, int ctx) {
         return wrapNode(getNode(args.get(0)).getLastChild()).getList();
+    }
+
+    /** normalize() — merges adjacent text nodes and removes empty text nodes (DOM3 normalize). */
+    public static RuntimeList normalize(RuntimeArray args, int ctx) {
+        getNode(args.get(0)).normalize();
+        return scalarUndef.getList();
     }
 
     public static RuntimeList previousSibling(RuntimeArray args, int ctx) {
@@ -1292,6 +1368,11 @@ public class XMLLibXML extends PerlModuleBase {
         Node node = getNode(args.get(0));
         if (args.size() < 2) return scalarUndef.getList();
         String newName = args.get(1).toString();
+        // Validate the name: must be a valid XML NCName (no leading digit, no invalid chars)
+        if (!isValidXmlName(newName)) {
+            throw new PerlDieException(new RuntimeScalar(
+                "invalid name '" + newName + "' at " + XMLLibXML.class.getSimpleName() + ".java line 0\n"));
+        }
         try {
             Document doc = node.getOwnerDocument();
             if (doc == null) return scalarUndef.getList();
@@ -1308,9 +1389,26 @@ public class XMLLibXML extends PerlModuleBase {
                 if (renamed != node) updateNode(args.get(0), renamed);
             }
         } catch (Exception e) {
-            // ignore — best-effort
+            // DOM renameNode can throw for namespace-related reasons in strict implementations
+            // (e.g. Xerces NAMESPACE_ERR for valid libxml2 operations). Silently ignore
+            // these — the name was already validated above; the rename is best-effort.
         }
         return scalarUndef.getList();
+    }
+
+    /** Returns true if name is a valid XML name (rough check: no leading digit/punct, no special chars). */
+    private static boolean isValidXmlName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        char first = name.charAt(0);
+        // XML name must start with letter, underscore, or colon (we also allow colon in prefix form)
+        if (!Character.isLetter(first) && first != '_') return false;
+        for (int i = 1; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!Character.isLetterOrDigit(c) && c != '_' && c != '-' && c != '.' && c != ':') return false;
+        }
+        // Disallow names that start with "xml" (case-insensitive) per spec, but only "-:" style
+        if (name.equals("-:")) return false;
+        return true;
     }
 
     /** getNamespaceDeclURI(prefix) — get the URI for a namespace declaration on this element */
@@ -1520,19 +1618,43 @@ public class XMLLibXML extends PerlModuleBase {
         return new RuntimeScalar((a != null && b != null && a.isEqualNode(b)) ? 1 : 0).getList();
     }
 
-    /** attrSerializeContent — serializes attribute value */
+    /** attrSerializeContent — serializes attribute value with XML entity escaping */
     public static RuntimeList attrSerializeContent(RuntimeArray args, int ctx) {
         Node node = getNode(args.get(0));
         String val = node.getNodeValue();
-        return new RuntimeScalar(val != null ? val : "").getList();
+        if (val == null) return new RuntimeScalar("").getList();
+        // Escape XML entities in attribute content (like libxml2 does)
+        String escaped = val
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace("\"", "&quot;");
+        return new RuntimeScalar(escaped).getList();
     }
 
     /** attrToString — serializes attribute as ' name="value"' */
     public static RuntimeList attrToString(RuntimeArray args, int ctx) {
         Node node = getNode(args.get(0));
         String name = node.getNodeName();
-        String val  = node.getNodeValue() != null ? node.getNodeValue() : "";
-        val = val.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;");
+        // If the attribute has entity reference children, serialize them explicitly.
+        // node.getNodeValue() expands entity refs; we need &foo; notation preserved.
+        NodeList children = node.getChildNodes();
+        StringBuilder val = new StringBuilder();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ENTITY_REFERENCE_NODE) {
+                val.append('&').append(child.getNodeName()).append(';');
+            } else {
+                String cv = child.getNodeValue();
+                if (cv != null) {
+                    val.append(cv.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;"));
+                }
+            }
+        }
+        if (val.length() == 0) {
+            // Fallback for attr with no children (shouldn't happen for set attrs)
+            String v = node.getNodeValue() != null ? node.getNodeValue() : "";
+            val.append(v.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;"));
+        }
         return new RuntimeScalar(" " + name + "=\"" + val + "\"").getList();
     }
 
@@ -1705,11 +1827,19 @@ public class XMLLibXML extends PerlModuleBase {
 
     /**
      * $node->appendText($text) — append a text node child with the given content.
-     * Returns the new Text node.
+     * libxml2 behavior: if the last child is already a text node, append to it
+     * instead of creating a new node (adjacent text nodes are automatically merged).
+     * Returns the new/extended Text node.
      */
     public static RuntimeList appendText(RuntimeArray args, int ctx) {
         Node parent = getNode(args.get(0));
         String text = args.size() > 1 ? args.get(1).toString() : "";
+        // If the last child is a text node, extend it (libxml2 merges adjacent text)
+        Node lastChild = parent.getLastChild();
+        if (lastChild != null && lastChild.getNodeType() == Node.TEXT_NODE) {
+            lastChild.setNodeValue(lastChild.getNodeValue() + text);
+            return wrapNode(lastChild).getList();
+        }
         Document ownerDoc = (parent.getNodeType() == Node.DOCUMENT_NODE)
             ? (Document) parent : parent.getOwnerDocument();
         if (ownerDoc == null) ownerDoc = getScratchDoc();
@@ -1734,13 +1864,44 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList replaceNode(RuntimeArray args, int ctx) {
         Node node    = getNode(args.get(0));
         Node newNode = getNode(args.get(1));
+        // For attribute nodes, use ownerElement (Attr.parentNode is null in W3C DOM).
+        if (node.getNodeType() == Node.ATTRIBUTE_NODE && newNode.getNodeType() == Node.ATTRIBUTE_NODE) {
+            Element owner = ((Attr) node).getOwnerElement();
+            if (owner != null) {
+                Attr newAttr = (Attr) newNode;
+                Document ownerDoc = owner.getOwnerDocument();
+                String nsUri = newAttr.getNamespaceURI();
+                if (nsUri != null && !nsUri.isEmpty()) {
+                    owner.setAttributeNodeNS((Attr) ownerDoc.adoptNode(newAttr));
+                } else {
+                    owner.setAttributeNode((Attr) ownerDoc.adoptNode(newAttr));
+                }
+                return wrapNode(node).getList();
+            }
+        }
         Node parent  = node.getParentNode();
         if (parent != null) parent.replaceChild(newNode, node);
-        return wrapNode(newNode).getList();
+        // Returns the replaced (old) node, matching libxml2 behavior.
+        return wrapNode(node).getList();
     }
 
     public static RuntimeList unbindNode(RuntimeArray args, int ctx) {
         Node node   = getNode(args.get(0));
+        // For attribute nodes, use ownerElement (Attr.parentNode is null in W3C DOM).
+        if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
+            Element owner = ((Attr) node).getOwnerElement();
+            if (owner != null) {
+                Attr attr = (Attr) node;
+                String nsUri = attr.getNamespaceURI();
+                String localName = attr.getLocalName();
+                if (nsUri != null && !nsUri.isEmpty()) {
+                    owner.removeAttributeNS(nsUri, localName);
+                } else {
+                    owner.removeAttribute(attr.getName());
+                }
+            }
+            return wrapNode(node).getList();
+        }
         Node parent = node.getParentNode();
         if (parent != null) parent.removeChild(node);
         return wrapNode(node).getList();
@@ -1763,7 +1924,11 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList ownerDocument(RuntimeArray args, int ctx) {
-        return wrapNode(getNode(args.get(0)).getOwnerDocument()).getList();
+        Document doc = getNode(args.get(0)).getOwnerDocument();
+        // Nodes created via elemNew() live in SCRATCH_DOC which is an internal
+        // implementation detail; callers should see them as "detached" (no owner doc).
+        if (doc == null || doc == SCRATCH_DOC) return scalarUndef.getList();
+        return wrapNode(doc).getList();
     }
 
     public static RuntimeList getOwnerDocument(RuntimeArray args, int ctx) {
@@ -2031,6 +2196,10 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList setDocumentElement(RuntimeArray args, int ctx) {
         Document doc  = (Document) getNode(args.get(0));
         Element  elem = (Element) getNode(args.get(1));
+        // Auto-adopt the element if it belongs to a different document (libxml2 behaviour)
+        if (elem.getOwnerDocument() != null && elem.getOwnerDocument() != doc) {
+            elem = (Element) doc.adoptNode(elem);
+        }
         Element old = doc.getDocumentElement();
         if (old != null) doc.removeChild(old);
         doc.appendChild(elem);
@@ -2365,6 +2534,17 @@ public class XMLLibXML extends PerlModuleBase {
         Node cur = el;
         while (cur != null && cur.getNodeType() == Node.ELEMENT_NODE) {
             Element curEl = (Element) cur;
+            // First check this element's own namespace prefix vs the requested prefix.
+            // Elements created with createElementNS have a namespace but no xmlns: attribute.
+            String curPfx = curEl.getPrefix();
+            String curNsUri = curEl.getNamespaceURI();
+            if (curNsUri != null && !curNsUri.isEmpty()) {
+                if (prefix.isEmpty() && (curPfx == null || curPfx.isEmpty())) {
+                    return new RuntimeScalar(curNsUri).getList();
+                } else if (!prefix.isEmpty() && prefix.equals(curPfx)) {
+                    return new RuntimeScalar(curNsUri).getList();
+                }
+            }
             NamedNodeMap attrs = curEl.getAttributes();
             for (int i = 0; i < attrs.getLength(); i++) {
                 Attr a = (Attr) attrs.item(i);
@@ -2397,12 +2577,29 @@ public class XMLLibXML extends PerlModuleBase {
         Element el = (Element) getNode(args.get(0));
         NamedNodeMap attrs = el.getAttributes();
         RuntimeList result = new RuntimeList();
-        if (attrs == null) return result;
-        for (int i = 0; i < attrs.getLength(); i++) {
-            Attr a = (Attr) attrs.item(i);
-            String name = a.getName();
-            if (name.startsWith("xmlns:") || name.equals("xmlns")) {
-                result.add(wrapNode(a));
+        // Collect explicit xmlns: declarations from attributes
+        java.util.Set<String> declaredPrefixes = new java.util.HashSet<>();
+        if (attrs != null) {
+            for (int i = 0; i < attrs.getLength(); i++) {
+                Attr a = (Attr) attrs.item(i);
+                String name = a.getName();
+                if (name.startsWith("xmlns:")) {
+                    result.add(wrapNamespaceNode(name.substring(6), a.getValue()));
+                    declaredPrefixes.add(name.substring(6));
+                } else if (name.equals("xmlns")) {
+                    result.add(wrapNamespaceNode("", a.getValue()));
+                    declaredPrefixes.add("");
+                }
+            }
+        }
+        // Also include the element's own namespace prefix if not already declared.
+        // This handles elements created with createElementNS that have no explicit xmlns: attribute.
+        String elPrefix = el.getPrefix();
+        String elNsUri = el.getNamespaceURI();
+        if (elNsUri != null && !elNsUri.isEmpty()) {
+            String pfxKey = (elPrefix == null) ? "" : elPrefix;
+            if (!declaredPrefixes.contains(pfxKey)) {
+                result.add(wrapNamespaceNode(pfxKey.isEmpty() ? null : pfxKey, elNsUri));
             }
         }
         return result;
@@ -2617,13 +2814,24 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList setAttributeNode(RuntimeArray args, int ctx) {
-        return wrapNode(((Element) getNode(args.get(0))).setAttributeNode(
-            (Attr) getNode(args.get(1)))).getList();
+        Element el   = (Element) getNode(args.get(0));
+        Attr    attr = (Attr)    getNode(args.get(1));
+        // Auto-adopt attribute if it belongs to a different document
+        if (attr.getOwnerDocument() != null && attr.getOwnerDocument() != el.getOwnerDocument()) {
+            Document targetDoc = el.getOwnerDocument();
+            if (targetDoc != null) attr = (Attr) targetDoc.adoptNode(attr);
+        }
+        return wrapNode(el.setAttributeNode(attr)).getList();
     }
 
     public static RuntimeList setAttributeNodeNS(RuntimeArray args, int ctx) {
         Element el   = (Element) getNode(args.get(0));
         Attr    attr = (Attr)    getNode(args.get(1));
+        // Auto-adopt attribute if it belongs to a different document (libxml2 behaviour)
+        Document elDoc = el.getOwnerDocument();
+        if (attr.getOwnerDocument() != null && elDoc != null && attr.getOwnerDocument() != elDoc) {
+            attr = (Attr) elDoc.adoptNode(attr);
+        }
         Attr result  = el.setAttributeNodeNS(attr);
         // libxml2 quirk: if the attribute has a prefix whose namespace is not yet
         // declared anywhere in the ancestor chain, libxml2 places the xmlns: declaration
@@ -3444,11 +3652,37 @@ public class XMLLibXML extends PerlModuleBase {
 
         XPathExpressionException funcNotFoundError = null;
 
+        // For existsOnly (used by Perl's exists/findbool), evaluate as XPath boolean directly.
+        // XPath boolean() conversion: non-empty nodeset→true, non-zero number→true,
+        // non-empty string→true, boolean as-is.  This is the correct semantic.
+        if (existsOnly) {
+            // First try BOOLEAN (handles all XPath types correctly via XPath rules)
+            try {
+                Boolean bool = (Boolean) xp.evaluate(expr, contextNode, XPathConstants.BOOLEAN);
+                funcNotFoundError = null;
+                RuntimeList r = new RuntimeList();
+                r.add(new RuntimeScalar("XML::LibXML::Boolean"));
+                r.add(new RuntimeScalar(bool != null && bool ? 1 : 0));
+                return r;
+            } catch (XPathExpressionException e) {
+                rethrowIfPerlDie(e);
+                if (funcNotFoundError == null && isFunctionNotFoundError(e)) funcNotFoundError = e;
+                if (funcNotFoundError != null) {
+                    Throwable root = funcNotFoundError;
+                    while (root.getCause() != null) root = root.getCause();
+                    throw new PerlDieException(new RuntimeScalar("XPath error: " + root.getMessage() + "\n"));
+                }
+                RuntimeList r = new RuntimeList();
+                r.add(new RuntimeScalar("XML::LibXML::Boolean"));
+                r.add(scalarFalse);
+                return r;
+            }
+        }
+
         // Try NODESET first — only return if it actually has nodes
         try {
             NodeList nl = (NodeList) xp.evaluate(expr, contextNode, XPathConstants.NODESET);
             if (nl.getLength() > 0) {
-                if (existsOnly) return scalarTrue.getList();
                 RuntimeList result = new RuntimeList();
                 result.add(new RuntimeScalar("XML::LibXML::NodeList"));
                 for (int i = 0; i < nl.getLength(); i++) result.add(wrapNode(nl.item(i)));
@@ -3469,13 +3703,11 @@ public class XMLLibXML extends PerlModuleBase {
                 if (str != null && (str.equals("true") || str.equals("false"))) {
                     // It's a boolean expression
                     boolean boolVal = str.equals("true");
-                    if (existsOnly) return new RuntimeScalar(boolVal ? 1 : 0).getList();
                     RuntimeList r = new RuntimeList();
                     r.add(new RuntimeScalar("XML::LibXML::Boolean"));
                     r.add(new RuntimeScalar(boolVal ? 1 : 0));
                     return r;
                 }
-                if (existsOnly) return new RuntimeScalar(num != 0 ? 1 : 0).getList();
                 RuntimeList r = new RuntimeList();
                 r.add(new RuntimeScalar("XML::LibXML::Number"));
                 r.add(new RuntimeScalar(num));
@@ -3491,7 +3723,6 @@ public class XMLLibXML extends PerlModuleBase {
             String str = (String) xp.evaluate(expr, contextNode, XPathConstants.STRING);
             funcNotFoundError = null; // expression is valid — clear any saved function error
             if (str != null && !str.isEmpty()) {
-                if (existsOnly) return scalarTrue.getList();
                 RuntimeList r = new RuntimeList();
                 r.add(new RuntimeScalar("XML::LibXML::Literal"));
                 r.add(new RuntimeScalar(str));
@@ -3506,10 +3737,9 @@ public class XMLLibXML extends PerlModuleBase {
         try {
             Boolean bool = (Boolean) xp.evaluate(expr, contextNode, XPathConstants.BOOLEAN);
             funcNotFoundError = null; // expression is valid
-            if (existsOnly) return new RuntimeScalar(bool ? 1 : 0).getList();
             RuntimeList r = new RuntimeList();
             r.add(new RuntimeScalar("XML::LibXML::Boolean"));
-            r.add(new RuntimeScalar(bool ? 1 : 0));
+            r.add(new RuntimeScalar(bool != null && bool ? 1 : 0));
             return r;
         } catch (XPathExpressionException e) {
             rethrowIfPerlDie(e);
@@ -3522,7 +3752,6 @@ public class XMLLibXML extends PerlModuleBase {
             while (root.getCause() != null) root = root.getCause();
             throw new PerlDieException(new RuntimeScalar("XPath error: " + root.getMessage() + "\n"));
         }
-        if (existsOnly) return scalarFalse.getList();
         RuntimeList result = new RuntimeList();
         result.add(new RuntimeScalar("XML::LibXML::NodeList"));
         return result;
@@ -3615,6 +3844,51 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList nodeAddSibling(RuntimeArray args, int ctx) {
         Node node    = getNode(args.get(0));
         Node sibling = getNode(args.get(1));
+        // For attribute nodes, libxml2 allows addSibling to add an attribute to the same element.
+        // In W3C DOM, Attr.getParentNode() returns null, but ownerElement is the parent.
+        if (node.getNodeType() == Node.ATTRIBUTE_NODE && sibling.getNodeType() == Node.ATTRIBUTE_NODE) {
+            Element owner = ((Attr) node).getOwnerElement();
+            if (owner != null) {
+                Attr sibAttr = (Attr) sibling;
+                String nsUri = sibAttr.getNamespaceURI();
+                String prefix = sibAttr.getPrefix();
+                Document ownerDoc = owner.getOwnerDocument();
+                if (nsUri != null && !nsUri.isEmpty()) {
+                    owner.setAttributeNodeNS((Attr) ownerDoc.adoptNode(sibAttr));
+                    // libxml2 also auto-creates the xmlns: declaration for the prefix.
+                    if (prefix != null && !prefix.isEmpty()) {
+                        String existingNs = owner.getAttributeNS("http://www.w3.org/2000/xmlns/", prefix);
+                        if (existingNs == null || existingNs.isEmpty()) {
+                            owner.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + prefix, nsUri);
+                        }
+                    }
+                } else {
+                    owner.setAttributeNode((Attr) ownerDoc.adoptNode(sibAttr));
+                }
+                return wrapNode(sibling).getList();
+            }
+        }
+        // Text node merging: libxml2 merges adjacent text nodes.
+        // When addSibling is called with a Text node next to another Text node, merge them.
+        if ((node.getNodeType() == Node.TEXT_NODE || node.getNodeType() == Node.CDATA_SECTION_NODE) &&
+            (sibling.getNodeType() == Node.TEXT_NODE || sibling.getNodeType() == Node.CDATA_SECTION_NODE)) {
+            Node parent = node.getParentNode();
+            if (parent != null) {
+                // Check if the sibling would be adjacent — merge by appending text and discarding sibling.
+                Node next = node.getNextSibling();
+                parent.insertBefore(sibling, next);
+                // If both are text nodes, merge.
+                if (node.getNodeType() == Node.TEXT_NODE && sibling.getNodeType() == Node.TEXT_NODE) {
+                    node.setNodeValue(node.getNodeValue() + sibling.getNodeValue());
+                    parent.removeChild(sibling);
+                    return wrapNode(node).getList();
+                }
+            } else {
+                // Both nodes are detached: libxml2 merges them by appending sibling's text to node.
+                node.setNodeValue(node.getNodeValue() + sibling.getNodeValue());
+                return wrapNode(node).getList();
+            }
+        }
         Node parent  = node.getParentNode();
         if (parent != null) {
             Node next = node.getNextSibling();
@@ -3661,6 +3935,11 @@ public class XMLLibXML extends PerlModuleBase {
     public static RuntimeList commentNew(RuntimeArray args, int ctx) {
         String content = args.size() > 1 ? args.get(1).toString() : "";
         return wrapNode(getScratchDoc().createComment(content)).getList();
+    }
+
+    public static RuntimeList cdataSectionNew(RuntimeArray args, int ctx) {
+        String content = args.size() > 1 ? args.get(1).toString() : "";
+        return wrapNode(getScratchDoc().createCDATASection(content)).getList();
     }
 
     // ================================================================
