@@ -506,6 +506,7 @@ EasyDBAccess	PASS	233	233		2026-04-30		1766659c7
 Eidolon	PASS	126	126		2026-04-12		c1942aad0
 Encode::Detect::CJK	PASS	11	11		2026-04-29		82e5e452d
 Encode::StdIO	PASS	1	1		2026-04-26		1d5def215
+Env::PS1	PASS	11	11		2026-04-30		1766659c7
 Env::ShellWords	PASS	14	14		2026-04-22		3f3336774
 Error::Pure::Output::Text	PASS	41	41		2026-04-12		c1942aad0
 Event::Join	PASS	18	18		2026-04-29		1766659c7
@@ -604,6 +605,7 @@ HTML::Calendar::Monthly	PASS	3	3		2026-04-21		73edc8aba
 HTML::ChunksLocal	PASS	3	3		2026-04-28		e3750ee00
 HTML::Clean::Human	PASS	29	29		2026-04-30		1766659c7
 HTML::CruftText	PASS	2	2		2026-04-26		1d5def215
+HTML::Declare	PASS	4	4		2026-04-30		1766659c7
 HTML::Detoxifier	PASS	1	1		2026-04-26		1d5def215
 HTML::EasyTags	PASS	79	79		2026-04-21		73edc8aba
 HTML::Email::Obfuscate	PASS	24	24		2026-04-22		3f3336774
@@ -906,6 +908,7 @@ Module::Runtime::Conflicts	PASS	2	2		2026-04-28		e3750ee00
 Module::Util	PASS	47	47		2026-04-30		1766659c7
 Module::cpmfile	PASS	8	8		2026-04-29		1766659c7
 Mojar	PASS	36	36		2026-04-30		1766659c7
+Moment	PASS	649	649		2026-04-30		1766659c7
 Momo	PASS	12	12		2026-04-28		e3750ee00
 Moo	PASS	841	841		2026-04-30		1766659c7
 Moo::Lax	PASS	7	7		2026-04-30		1766659c7
@@ -942,7 +945,7 @@ MooseX::ConstructInstance	PASS	13	13		2026-04-22		3f3336774
 MooseX::FileAttribute	PASS	7	7		2026-04-30		1766659c7
 MooseX::HasDefaults::RO	PASS	19	19		2026-04-29		82e5e452d
 MooseX::Iterator	PASS	46	46		2026-04-29		82e5e452d
-MooseX::LazyRequire	PASS	12	12		2026-04-29		82e5e452d
+MooseX::LazyRequire	PASS	12	12		2026-04-30		1766659c7
 MooseX::Log::Log4perl	PASS	30	30		2026-04-21		73edc8aba
 MooseX::Mangle	PASS	22	22		2026-04-30		1766659c7
 MooseX::Meta::Method::Transactional	PASS	17	17		2026-04-30		1766659c7
@@ -1310,6 +1313,7 @@ Struct::Compare	PASS	23	23		2026-04-26		1d5def215
 StupidMarkov	PASS	3	3		2026-04-25		1d5def215
 Sub::MultiMethod	PASS	135	135		2026-04-22		3f3336774
 Syntax::Highlight::Engine::Kate	PASS	588	588		2026-04-22		3f3336774
+Sys::CpuAffinity	PASS	24	24		2026-04-30		1766659c7
 Sys::Info::Base	PASS	9	9		2026-04-30		1766659c7
 Sys::Syscall	PASS	1	1		2026-04-12		c1942aad0
 SysAdmin	PASS	1	1		2026-04-28		e3750ee00
@@ -1327,6 +1331,7 @@ TUI::App	PASS	27	27		2026-04-22		3f3336774
 TXTCOD	PASS	1	1		2026-04-25		1d5def215
 Table::Readable	PASS	44	44		2026-04-30		1766659c7
 TableData::Lingua::Word::EN::Adjective::TalkEnglish	PASS	2	2		2026-04-25		1d5def215
+TableData::Lingua::Word::EN::Adverb::TalkEnglish	PASS	2	2		2026-04-30		1766659c7
 TableData::Lingua::Word::EN::ByClass::Adjective::TalkEnglish	PASS	2	2		2026-04-25		1d5def215
 TableData::Lingua::Word::EN::Noun::TalkEnglish	PASS	2	2		2026-04-30		1766659c7
 TableData::Locale::JP::City::MIC	PASS	2	2		2026-04-28		e3750ee00
@@ -1424,6 +1429,7 @@ Text::German	PASS	34	34		2026-04-12		c1942aad0
 Text::LineNumber	PASS	2	2		2026-04-21		3f3336774
 Text::Lorem	PASS	23	23		2026-04-29		1766659c7
 Text::MicroTemplate::DataSection	PASS	3	3		2026-04-25		1d5def215
+Text::NeatTemplate	PASS	4	4		2026-04-30		1766659c7
 Text::Patch	PASS	1	1		2026-04-12		c1942aad0
 Text::Quote	PASS	53	53		2026-04-12		c1942aad0
 Text::SimpleTable	PASS	10	10		2026-04-12		c1942aad0
@@ -1605,15 +1611,19 @@ WebService::PhotoZou	PASS	1	1		2026-04-26		1d5def215
 WebService::Postcodeanywhere::BACS::REST	PASS	1	1		2026-04-30		1766659c7
 WebService::Speechmatics	PASS	1	1		2026-04-22		3f3336774
 WebService::Sprint	PASS	5	5		2026-04-22		3f3336774
+WebService::Technorati	PASS	17	17		2026-04-30		1766659c7
 WebService::UK::Parliament	PASS	1	1		2026-04-29		82e5e452d
 WebService::Validator::CSS::W3C	PASS	4	4		2026-04-26		1d5def215
+WebService::WordsAPI	PASS	1	1		2026-04-30		1766659c7
 WebService::YahooJapan::WebMA	PASS	1	1		2026-04-25		1d5def215
+Whisper	PASS	8	8		2026-04-30		1766659c7
 Win32::Locale	PASS	2	2		2026-04-22		3f3336774
 Win32::ShellQuote	PASS	197	197		2026-04-22		3f3336774
 Win32::Wlan	PASS	1	1		2026-04-28		e3750ee00
 WordList	PASS	37	37		2026-04-22		3f3336774
 WordList::Char::ZH::HSK	PASS	14	14		2026-04-26		1d5def215
 WordList::EN::Adjective::TalkEnglish	PASS	2	2		2026-04-25		1d5def215
+WordList::EN::Adverb::TalkEnglish	PASS	2	2		2026-04-30		1766659c7
 WordList::EN::ByCategory::Animal	PASS	10	10		2026-04-26		1d5def215
 WordList::EN::Common::COCA::Top1000	PASS	1	1		2026-04-22		3f3336774
 WordList::EN::CommonException::EdPlace::Year1	PASS	11	11		2026-04-28		e3750ee00
@@ -1630,9 +1640,10 @@ WordList::ID::Color::PERLANCAR	PASS	1	1		2026-04-22		3f3336774
 WordList::ID::ColorName::HTML_ID	PASS	1	1		2026-04-25		1d5def215
 WordList::ID::KBBI	PASS	1	1		2026-04-25		1d5def215
 WordList::ID::KBBI::FigureOfSpeech	PASS	1	1		2026-04-29		82e5e452d
+WordList::SU::LTIS	PASS	1	1		2026-04-30		1766659c7
 WordList::Test::Empty	PASS	1	1		2026-04-29		82e5e452d
 WordList::ZH::Traditional::BIP39	PASS	1	1		2026-04-22		3f3336774
-WordListRole::Bloom	PASS	1	1		2026-04-29		82e5e452d
+WordListRole::Bloom	PASS	1	1		2026-04-30		1766659c7
 WordListRole::RandomSeekPick	PASS	1	1		2026-04-25		1d5def215
 WordListRole::Source::ArrayData	PASS	1	1		2026-04-26		1d5def215
 WordPress::XMLRPC	PASS	10	10		2026-04-22		3f3336774
@@ -1642,6 +1653,7 @@ X11::Resolution	PASS	5	5		2026-04-26		1d5def215
 X12::Parser	PASS	44	44		2026-04-29		82e5e452d
 XDR	PASS	28	28		2026-04-28		e3750ee00
 XML::Atom::SimpleFeed	PASS	32	32		2026-04-22		3f3336774
+XML::CuteQueries	PASS	80	80		2026-04-30		1766659c7
 XML::DOM2	PASS	32	32		2026-04-26		1d5def215
 XML::DOM::Lite	PASS	77	77		2026-04-28		e3750ee00
 XML::Elemental	PASS	64	64		2026-04-29		82e5e452d
@@ -1650,6 +1662,7 @@ XML::FeedPP::Plugin::DumpJSON	PASS	1	1		2026-04-26		1d5def215
 XML::Filter::Conditional	PASS	228	228		2026-04-28		e3750ee00
 XML::Generator::Pdb	PASS	1	1		2026-04-28		e3750ee00
 XML::Generator::vCard::Base	PASS	1	1		2026-04-26		1d5def215
+XML::Idiom	PASS	7	7		2026-04-30		1766659c7
 XML::MinWriter	PASS	256	256		2026-04-29		82e5e452d
 XML::NamespaceSupport	PASS	49	49		2026-04-12		cc5efa220
 XML::OPML	PASS	1	1		2026-04-22		3f3336774
@@ -1659,13 +1672,17 @@ XML::Parser::Nodes	PASS	39	39		2026-04-29		82e5e452d
 XML::Perl	PASS	19	19		2026-04-26		1d5def215
 XML::RSS	PASS	461	461		2026-04-29		82e5e452d
 XML::SAX::Expat	PASS	2	2		2026-04-12		c1942aad0
+XML::SAX::Simple	PASS	316	316		2026-04-30		1766659c7
 XML::SemanticDiff	PASS	47	47		2026-04-30		1766659c7
 XML::Trivial	PASS	9	9		2026-04-26		1d5def215
 XML::XPath::Helper::String	PASS	21	21		2026-04-29		82e5e452d
+XML::XSPF	PASS	81	81		2026-04-30		1766659c7
+XT::Files	PASS	624	624		2026-04-30		1766659c7
 XTerm::Util	PASS	1	1		2026-04-26		1d5def215
 Xporter	PASS	21	21		2026-04-25		1d5def215
 YAML::Shell	PASS	2	2		2026-04-26		1d5def215
 YAML::Tests	PASS	1	1		2026-04-28		e3750ee00
+YAPC::Russia	PASS	3	3		2026-04-30		1766659c7
 Ym	PASS	1	1		2026-04-29		82e5e452d
 ZHOUYI	PASS	1	1		2026-04-29		82e5e452d
 ZML	PASS	5	5		2026-04-22		3f3336774

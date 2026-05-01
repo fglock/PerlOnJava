@@ -48,5 +48,51 @@ SKIP: {
     }
 }
 
+###################
+# @_ aliasing across goto &SUB
+# Regression test: goto &SUB must pass the caller's @_ aliased to the
+# target sub's @_, so that `$_[N] = ...` in the target sub mutates the
+# caller's variable. Previously the bytecode emitted
+# `argsValue.getList().getArrayOfAlias()`, and RuntimeArray.getList()
+# deep-copied each element via `new RuntimeScalar(element)` — which
+# silently broke aliasing across the tail call. JSON::Validator's
+# coerce/boolean validators (and many other CPAN modules) depend on it.
+
+# Test 5: goto &NAME preserves $_[0] aliasing to caller's variable
+{
+    sub mutator_target { $_[0] = "MUTATED" }
+    sub mutator_via_goto { goto &mutator_target }
+    my $x = "orig";
+    mutator_via_goto($x);
+    is($x, "MUTATED", 'goto &NAME preserves @_ aliasing (single arg)');
+}
+
+# Test 6: aliasing survives nested goto &NAME chains and method dispatch
+{
+    package GotoAliasObj;
+    sub new        { bless {}, shift }
+    sub mutate     { $_[1] = "M" }
+    sub via_goto1  { goto &GotoAliasObj::via_goto2 }
+    sub via_goto2  { my $self = shift; $self->mutate($_[0]) }
+    sub entry      { my $self = shift; $self->via_goto1($_[0]) }
+    package main;
+    my $y = "orig";
+    GotoAliasObj->new->entry($y);
+    is($y, "M", 'goto &NAME preserves @_ aliasing across method dispatch chain');
+}
+
+# Test 7: goto __SUB__ also preserves aliasing
+{
+    my $hits = 0;
+    sub recursive_mutator {
+        $hits++;
+        if ($hits < 3) { goto __SUB__ }
+        $_[0] = "DONE";
+    }
+    my $z = "orig";
+    recursive_mutator($z);
+    is($z, "DONE", 'goto __SUB__ preserves @_ aliasing');
+}
+
 done_testing();
 
