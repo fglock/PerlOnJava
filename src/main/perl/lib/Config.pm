@@ -75,32 +75,33 @@ my $host_name = eval {
     Sys::Hostname::hostname();
 } || 'localhost';
 
-# Detect the real system C compiler.  We probe PATH for common candidates.
+# Detect the real system C compiler by walking PATH directly.
 # This is needed so that Makefile.PL files which run "$Config{cc} -o ..."
 # to test for C library availability (e.g. Gzip::Faster checks for zlib)
 # actually invoke a working C compiler instead of javac.
 #
-# Notes:
-#  - We save/restore $? so the backtick probe does not pollute the child
-#    process status seen by test code that loads Config.pm as a side effect.
-#  - On Windows 'which' / '2>/dev/null' do not work; we skip the probe and
-#    fall back to 'cl' (MSVC front-end).  PerlOnJava's MakeMaker skips all
-#    XS/C builds on every platform, so the exact value rarely matters.
+# We deliberately avoid backticks / system() here: spawning a subprocess
+# (e.g. `which cc`) is slow, sets $?, and is not portable (Windows has no
+# 'which').  Walking $ENV{PATH} in pure Perl is fast, leaves $? untouched,
+# and works on every platform.
 my $system_cc = do {
-    my $_saved_child_status = $?;   # save before any system/backtick call
-    my $found = '';
-    if (lc($os_name) !~ /win/) {
-        for my $candidate (qw(cc gcc clang)) {
-            my $path = `which $candidate 2>/dev/null`;
-            chomp $path;
-            if ($path && -x $path) {
-                $found = $candidate;
-                last;
+    my $is_win = lc($os_name) =~ /win/;
+    my @candidates = $is_win ? qw(cl cc gcc) : qw(cc gcc clang);
+    my $sep        = $is_win ? ';' : ':';
+    my @path_dirs  = split /\Q$sep\E/, ($ENV{PATH} // '');
+    my $found      = '';
+    SEARCH: for my $candidate (@candidates) {
+        for my $dir (@path_dirs) {
+            # On Windows executables may have a .exe suffix
+            for my $suffix ($is_win ? ('', '.exe', '.cmd') : ('')) {
+                if (-x "$dir/$candidate$suffix") {
+                    $found = $candidate;
+                    last SEARCH;
+                }
             }
         }
     }
-    $? = $_saved_child_status;      # restore so callers see a clean $?
-    $found || (lc($os_name) =~ /win/ ? 'cl' : 'cc');
+    $found || ($is_win ? 'cl' : 'cc');
 };
 
 # Normalize OS name
