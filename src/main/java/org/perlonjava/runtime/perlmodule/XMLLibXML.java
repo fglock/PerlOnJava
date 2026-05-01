@@ -2099,16 +2099,43 @@ public class XMLLibXML extends PerlModuleBase {
      * getElementById(id) — find element by xml:id or id attribute.
      * Xerces getElementById only works with DTD-declared IDs; we supplement
      * with an explicit tree walk that checks xml:id and plain id attributes.
+     *
+     * libxml2 maintains a persistent ID index so detached nodes are still
+     * findable after they are removed from the tree.  We emulate this with
+     * a per-Document HashMap stored via setUserData("__xmlIdCache__").
+     * The cache is populated (or refreshed) on each successful live-tree lookup.
      */
+    @SuppressWarnings("unchecked")
     public static RuntimeList getElementById(RuntimeArray args, int ctx) {
         Document doc = (Document) getNode(args.get(0));
         String id = args.get(1).toString();
-        // Try the standard DOM first (works if DTD declares ID attributes)
-        Element found = doc.getElementById(id);
-        if (found != null) return wrapNode(found).getList();
-        // Fall back to walking the tree looking for xml:id or id
-        found = findElementById(doc.getDocumentElement(), id);
-        return wrapNode(found).getList();
+
+        // 1. Try the live tree first (xml:id or id attribute walk)
+        Element found = doc.getElementById(id);            // DTD-declared IDs
+        if (found == null) {
+            found = findElementById(doc.getDocumentElement(), id);   // tree walk
+        }
+        if (found != null) {
+            // Refresh the persistent cache with this live-tree result
+            Map<String, Element> cache = (Map<String, Element>) doc.getUserData("__xmlIdCache__");
+            if (cache == null) {
+                cache = new HashMap<>();
+                doc.setUserData("__xmlIdCache__", cache, null);
+            }
+            cache.put(id, found);
+            return wrapNode(found).getList();
+        }
+
+        // 2. Not in the live tree — consult the persistent cache.
+        //    This mirrors libxml2's behaviour: nodes that were once in the tree
+        //    (and thus had their ID registered) are still returned even after removal.
+        Map<String, Element> cache = (Map<String, Element>) doc.getUserData("__xmlIdCache__");
+        if (cache != null) {
+            Element cached = cache.get(id);
+            if (cached != null) return wrapNode(cached).getList();
+        }
+
+        return wrapNode(null).getList();
     }
 
     private static Element findElementById(Element el, String id) {
@@ -2595,8 +2622,30 @@ public class XMLLibXML extends PerlModuleBase {
     }
 
     public static RuntimeList setAttributeNodeNS(RuntimeArray args, int ctx) {
-        return wrapNode(((Element) getNode(args.get(0))).setAttributeNodeNS(
-            (Attr) getNode(args.get(1)))).getList();
+        Element el   = (Element) getNode(args.get(0));
+        Attr    attr = (Attr)    getNode(args.get(1));
+        Attr result  = el.setAttributeNodeNS(attr);
+        // libxml2 quirk: if the attribute has a prefix whose namespace is not yet
+        // declared anywhere in the ancestor chain, libxml2 places the xmlns: declaration
+        // on the document root element rather than on the element receiving the attribute.
+        String attrNS = attr.getNamespaceURI();
+        String attrQName = attr.getName();
+        if (attrNS != null && !attrNS.isEmpty()
+                && attrQName != null && attrQName.contains(":")) {
+            String attrPrefix = attrQName.substring(0, attrQName.indexOf(':'));
+            // lookupNamespaceURI walks up the tree from el
+            String scopedNS = el.lookupNamespaceURI(attrPrefix);
+            if (scopedNS == null || !attrNS.equals(scopedNS)) {
+                // Prefix not in scope — declare on document root
+                Element root = el.getOwnerDocument().getDocumentElement();
+                if (root != null) {
+                    root.setAttributeNS(
+                        "http://www.w3.org/2000/xmlns/",
+                        "xmlns:" + attrPrefix, attrNS);
+                }
+            }
+        }
+        return wrapNode(result).getList();
     }
 
     public static RuntimeList appendTextChild(RuntimeArray args, int ctx) {
