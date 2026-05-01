@@ -40,7 +40,7 @@ comment: |
 match:
   distribution: "^HAARG/Moo-"
 test:
-  commandline: "/usr/bin/make test; exit 0"
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
 YAML
         'Params-Validate.yml' => <<'YAML',
 ---
@@ -145,13 +145,13 @@ comment: |
 match:
   distribution: "/DBI-1\\.647(?:\\b|\\.)"
 pl:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 make:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 test:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 install:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 YAML
         'SQL-Translator.yml' => <<'YAML',
 ---
@@ -182,26 +182,35 @@ comment: |
 match:
   distribution: "/SQL-Translator-"
 pl:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 make:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 test:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
 install:
-  commandline: "true"
+  commandline: "PERLONJAVA_SKIP"
+YAML
+        'XML-LibXML.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for XML::LibXML.
+  XML::LibXML's Makefile.PL requires Alien::Libxml2 (pkg-config or share dir).
+  Neither is available under the JVM.  Even if Alien::Libxml2 were satisfied,
+  LibXML.xs cannot be compiled or loaded (JVM cannot dlopen native .so/.dylib).
+
+  PerlOnJava bundles a Java-backed XML::LibXML implementation in the JAR
+  (src/main/perl/lib/XML/LibXML.pm + XMLLibXML.java).  The backend uses
+  JDK standard APIs: javax.xml.parsers.DocumentBuilder, org.w3c.dom.*,
+  javax.xml.xpath.*, javax.xml.transform.*.
+
+  No commandline overrides are needed: Distribution.pm detects the Makefile.PL
+  failure and automatically generates a cross-platform fallback Makefile.  The
+  fallback Makefile runs 'make test' with jperl and 'make install' skipping
+  files that are bundled in the JAR.
+match:
+  distribution: "^SHLOMIF/XML-LibXML-"
 YAML
     );
-
-    # Check if any files need to be written
-    my $needs_write = 0;
-    for my $file (keys %bundled) {
-        my $dest = File::Spec->catfile($prefs_dir, $file);
-        unless (-f $dest) {
-            $needs_write = 1;
-            last;
-        }
-    }
-    return unless $needs_write;
 
     # Create prefs directory if needed
     unless (-d $prefs_dir) {
@@ -211,7 +220,17 @@ YAML
 
     for my $file (keys %bundled) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
-        next if -f $dest;  # don't overwrite user customizations
+        if (-f $dest) {
+            # Only overwrite if the existing file was written by PerlOnJava
+            # (contains our signature).  A file without the signature is a
+            # genuine user customization and must not be touched.
+            open my $rfh, '<', $dest or next;
+            my $existing = do { local $/; <$rfh> };
+            close $rfh;
+            next unless $existing =~ /PerlOnJava/;
+            # Skip if content is already up to date (avoid needless writes).
+            next if $existing eq $bundled{$file};
+        }
         if (open my $fh, '>', $dest) {
             print $fh $bundled{$file};
             close $fh;
