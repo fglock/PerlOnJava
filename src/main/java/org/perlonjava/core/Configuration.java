@@ -48,7 +48,7 @@ public final class Configuration {
      * Parsed by App::perlbrew and other tools via: perl -V | grep "Compiled at"
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String buildTimestamp = "May  1 2026 15:02:29";
+    public static final String buildTimestamp = "May  1 2026 15:06:00";
 
     // Prevent instantiation
     private Configuration() {

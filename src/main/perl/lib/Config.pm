@@ -75,6 +75,23 @@ my $host_name = eval {
     Sys::Hostname::hostname();
 } || 'localhost';
 
+# Detect the real system C compiler.  We probe PATH for common candidates.
+# This is needed so that Makefile.PL files which run "$Config{cc} -o ..."
+# to test for C library availability (e.g. Gzip::Faster checks for zlib)
+# actually invoke a working C compiler instead of javac.
+my $system_cc = do {
+    my $found = '';
+    for my $candidate (qw(cc gcc clang)) {
+        my $path = `which $candidate 2>/dev/null`;
+        chomp $path;
+        if ($path && -x $path) {
+            $found = $candidate;
+            last;
+        }
+    }
+    $found || 'cc';
+};
+
 # Normalize OS name
 $os_name = lc($os_name);
 $os_name =~ s/\s+/_/g;
@@ -92,9 +109,14 @@ $os_name =~ s/\s+/_/g;
     java_vendor => $java_vendor,
     java_home => $java_home,
 
-    # Compiler settings (Java instead of C)
-    cc => 'javac',
-    ld => 'javac',
+    # Compiler settings
+    # cc/ld report the *system* C compiler so that Makefile.PL probes
+    # (e.g. in Gzip::Faster) that test C compilation with "$Config{cc} -o ..."
+    # actually invoke a real C compiler rather than javac.  PerlOnJava's
+    # MakeMaker (MM_PerlOnJava) still skips all XS/C build steps, so setting
+    # these to the real compiler does not accidentally enable native builds.
+    cc => $system_cc,
+    ld => $system_cc,
     # ccflags includes -DSILENT_NO_TAINT_SUPPORT because PerlOnJava does not
     # implement full taint checking. This allows tests that check for taint
     # support to skip gracefully.
