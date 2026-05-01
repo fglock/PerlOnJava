@@ -15,9 +15,16 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
  * This will update the version constant in this class and replace all
  * occurrences of perlonjava-X.Y.Z.jar throughout the repository.
  * <p>
- * Git commit information (gitCommitId, gitCommitDate) is automatically
- * injected by the build system (Gradle or Maven) before compilation.
- * Do not edit these values manually - they will be overwritten on each build.
+ * IMPORTANT: Configuration.java is NOT tracked by git.  It is generated
+ * at build time from this template (Configuration.java.in).  The build
+ * system (Gradle / Maven) copies this file to Configuration.java and then
+ * replaces the placeholder values below with the real git commit ID, date,
+ * and build timestamp.
+ * <p>
+ * If you need to capture a specific build's version info in git (e.g. for
+ * a release tag), you can force-add the generated file:
+ * <p>
+ *     git add -f src/main/java/org/perlonjava/core/Configuration.java
  */
 public final class Configuration {
 
@@ -33,14 +40,14 @@ public final class Configuration {
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitId = "28cf99b12";
+    public static final String gitCommitId = "dev";
 
     /**
      * Git commit date of the build (ISO format: YYYY-MM-DD).
      * Automatically populated by Gradle/Maven during build.
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String gitCommitDate = "2026-05-01";
+    public static final String gitCommitDate = "unknown";
 
     /**
      * Build timestamp in Perl 5 "Compiled at" format (e.g., "Apr  7 2026 11:20:00").
@@ -48,7 +55,7 @@ public final class Configuration {
      * Parsed by App::perlbrew and other tools via: perl -V | grep "Compiled at"
      * DO NOT EDIT MANUALLY - this value is replaced at build time.
      */
-    public static final String buildTimestamp = "May  1 2026 15:58:33";
+    public static final String buildTimestamp = "Jan  1 2000 00:00:00";
 
     // Prevent instantiation
     private Configuration() {

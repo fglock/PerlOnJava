@@ -330,6 +330,12 @@
                                         <argument>-c</argument>
                                         <argument><![CDATA[
 CONFIG_FILE="src/main/java/org/perlonjava/core/Configuration.java"
+TEMPLATE_FILE="src/main/java/org/perlonjava/core/Configuration.java.in"
+# Configuration.java is gitignored; recreate from template on a fresh clone.
+if [ ! -f "$CONFIG_FILE" ] && [ -f "$TEMPLATE_FILE" ]; then
+    cp "$TEMPLATE_FILE" "$CONFIG_FILE"
+    echo "Created Configuration.java from template"
+fi
 if [ -f "$CONFIG_FILE" ]; then
     GIT_COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
     GIT_COMMIT_DATE=$(git log -1 --format=%cs HEAD 2>/dev/null || echo "unknown")

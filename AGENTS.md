@@ -408,12 +408,9 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
   Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>
   ```
   Replace `TOOL_NAME` with the AI tool's name (e.g. Devin, Copilot, Claude), `TOOL_DOCS_URL` with a link to its documentation, and `TOOL_BOT_EMAIL` with the tool's GitHub bot email address (e.g. `158243242+devin-ai-integration[bot]@users.noreply.github.com`).
-- **Always include `src/main/java/org/perlonjava/core/Configuration.java` in commits and PRs** - This file contains the git commit ID and date that help users identify the exact PerlOnJava version when reporting issues. Running `make` automatically updates this file via the `injectGitInfo` Gradle task. Always stage it before committing:
-  ```bash
-  make  # Updates Configuration.java with current commit ID
-  git add src/main/java/org/perlonjava/core/Configuration.java
-  ```
-  **Why this matters:** Users can run `./jperl -v` to see the commit ID, making it easy to communicate exactly which version they're using when creating bug reports.
+- **Do NOT commit `src/main/java/org/perlonjava/core/Configuration.java`** - This file is listed in `.gitignore` and is generated at build time from `Configuration.java.in`. The `injectGitInfo` Gradle task creates it automatically (and recreates it on a fresh clone if it is absent). Committing it used to cause constant rebase conflicts on the injected git hash / date / timestamp.
+  - `./jperl -v` still shows the real commit ID because the build injects it into the gitignored file before compilation.
+  - If you ever need to capture a specific build's version info in git (e.g. for a release tag), use `git add -f`.
 
 ## Available Skills
 
