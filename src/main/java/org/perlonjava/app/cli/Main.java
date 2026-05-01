@@ -18,6 +18,65 @@ public class Main {
     static {
         // Set default locale to US (uses dot as decimal separator)
         Locale.setDefault(Locale.US);
+
+        // Optional orphan-exit watchdog. When the env var
+        // JPERL_ORPHAN_EXIT is set (typically by `./jcpan` and
+        // `./jprove`, which spawn many short-lived sub-jperls), this
+        // JVM self-exits a few seconds after its initial parent
+        // process disappears. Without this, a `kill -9` on the parent
+        // jcpan/test_harness leaves all in-flight test JVMs reparented
+        // to PID 1, where they happily keep running at 100% CPU
+        // forever — burning the box and starving subsequent runs.
+        //
+        // SIGTERM-style parent death is already handled by the
+        // shutdown hook in RuntimeIO; this watchdog covers the SIGKILL
+        // case (no shutdown hooks fire on the kernel-side kill).
+        //
+        // Direct `./jperl your_script.pl` does NOT set the env var, so
+        // user programs are never killed when their shell exits — they
+        // get the standard nohup-style behavior they'd expect from any
+        // long-running interpreter.
+        if (System.getenv("JPERL_ORPHAN_EXIT") != null) {
+            startOrphanWatchdog();
+        }
+    }
+
+    private static void startOrphanWatchdog() {
+        java.util.Optional<java.lang.ProcessHandle> parentOpt =
+                java.lang.ProcessHandle.current().parent();
+        if (parentOpt.isEmpty()) return;       // no parent? nothing to watch.
+        long initialParentPid = parentOpt.get().pid();
+        // PID 1 = init/launchd. If we were directly spawned by it,
+        // there's no point watching — we're already at the root.
+        if (initialParentPid <= 1) return;
+
+        Thread watchdog = new Thread(() -> {
+            // Poll every 2s. Exit only after two consecutive misses
+            // (~4s) to avoid race with rapid parent restarts.
+            int missCount = 0;
+            while (true) {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ie) {
+                    return;
+                }
+                java.util.Optional<java.lang.ProcessHandle> p =
+                        java.lang.ProcessHandle.of(initialParentPid);
+                boolean parentGone = p.isEmpty() || !p.get().isAlive();
+                if (parentGone) {
+                    if (++missCount >= 2) {
+                        System.err.println("[jperl] orphaned: parent PID "
+                                + initialParentPid
+                                + " is gone — exiting");
+                        Runtime.getRuntime().halt(143);  // 128 + SIGTERM
+                    }
+                } else {
+                    missCount = 0;
+                }
+            }
+        }, "perlonjava-orphan-watchdog");
+        watchdog.setDaemon(true);
+        watchdog.start();
     }
 
     /**

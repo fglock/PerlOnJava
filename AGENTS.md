@@ -141,6 +141,55 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
+## ⚠️⚠️⚠️ ALWAYS WRAP `jperl`/`jcpan` IN `timeout` ⚠️⚠️⚠️
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   Investigative agents that launch PerlOnJava test runs MUST wrap every      ║
+║   `jperl`/`jcpan`/`prove` invocation with `timeout N` — NEVER just           ║
+║   `/usr/bin/time -p` (which only measures, never kills) and NEVER bare       ║
+║   `./jperl …` for anything that could hang.                                  ║
+║                                                                              ║
+║       # WRONG — JVM survives forever if it hangs                             ║
+║       /usr/bin/time -p ./jperl t/foo.t                                       ║
+║       ./jperl t/foo.t &                                                      ║
+║                                                                              ║
+║       # RIGHT — JVM is hard-killed after 60 s                                ║
+║       timeout 60 ./jperl t/foo.t                                             ║
+║       timeout 60 ./jperl -Ilib -It/lib t/foo.t                               ║
+║                                                                              ║
+║   Why this matters:                                                          ║
+║                                                                              ║
+║   - `./jperl` ends with `exec java …`, so the bash wrapper is replaced       ║
+║     by the JVM. When the agent's own bash exits, those JVMs get              ║
+║     reparented to PID 1 and KEEP RUNNING at 100% CPU — there is no           ║
+║     SIGHUP propagation and no JVM-side self-watchdog.                        ║
+║   - On a 48 GB Mac the JVM defaults to ~12 GB heap. A handful of orphan      ║
+║     JVMs at 100% CPU silently starves the whole machine, which then          ║
+║     makes the NEXT `jcpan -t Module` run miss the 300 s no-output deadline   ║
+║     in `TAP::Parser::Iterator::Process` — the symptom looks like "test       ║
+║     X hangs" when it's really just CPU starvation from orphans.              ║
+║   - `t/96_is_deteministic_value.t` and `t/76joins.t` SIGKILLs in PR #635     ║
+║     CI runs were caused exactly by this: a previous agent left ~14 orphan    ║
+║     JVMs at 100% CPU each, load avg climbed to 50, and the harness gave      ║
+║     up on innocent tests after 5 minutes of no TAP output.                   ║
+║                                                                              ║
+║   If your run REALLY may exceed any sane wall clock (e.g. a full             ║
+║   `jcpan -t DBIx::Class` is ~40 min), still wrap it: `timeout 3600 ...`.     ║
+║   If you spawn parallel test workers, give each its own `timeout`.           ║
+║                                                                              ║
+║   When you finish an investigation, sanity-check your cleanup:               ║
+║                                                                              ║
+║       ps aux | awk '$3 > 20 {print $2, $3, $11, $12}'                        ║
+║                                                                              ║
+║   If any unexpected `java …perlonjava…` shows up, kill it:                   ║
+║                                                                              ║
+║       pkill -9 -f "perlonjava-.*\.jar.*\.t\b"                                ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
 ## Incident Log (do not delete — this is why the rules above exist)
 
 | Date       | What was lost                                  | Root cause                                        |
@@ -148,6 +197,7 @@
 | 2026-04-28 | ~600 cpan-tester module results (4736 → 4139)  | Agent ran `git checkout dev/cpan-reports/` on an unstaged refresh; concurrent `cpan_random_tester.pl` instances also race on `.dat` files (separate bug). |
 | 2026-04-29 | cpan-reports refresh commit (briefly, on a feature branch — recovered from reflog) | Agent resolved a rebase conflict with `git checkout --ours` thinking it would keep the branch's version. During rebase, `--ours` means UPSTREAM, so the upstream files were taken, the replayed commit became empty, and rebase silently dropped it. Recovery: `git reset --hard <sha>` from `git reflog`, then re-rebase using `--theirs`. |
 | 2026-04-30 | (no work lost — recovered) Working tree on `fix/class-trait-tests` was overwritten with master content | Agent ran `git checkout master -- .` to A/B test failures vs master without first snapshotting and without switching branches. Recovery only worked because the changes had already been committed to HEAD: `git restore .` (also a forbidden command on a dirty tree, but safe here because "dirty" was master content, not user work) brought the tree back from HEAD. Correct workflow would have been: stash via `git diff > /tmp/wip.patch`, or use `git worktree add` for the master comparison instead of mutating the current tree. |
+| 2026-04-30 | A full afternoon chasing a phantom "DBIx::Class regression" in `t/76joins.t` / `t/96_is_deteministic_value.t` | Investigative agent launched the test repeatedly under `/usr/bin/time -p ./jperl …` (no `timeout` wrapper). Each hung JVM survived past the agent's lifetime, accumulated as ~14 orphans at 100% CPU each, and starved the active `jcpan` harness — which then SIGKILLed innocent tests after 300 s of no TAP output. Symptom looked exactly like a real perf regression. Fix: always `timeout N ./jperl …` for any potentially-hanging run. |
 
 When you cause a new incident, append a row here in the same commit
 that fixes it. Future agents need to see that these warnings are real.
