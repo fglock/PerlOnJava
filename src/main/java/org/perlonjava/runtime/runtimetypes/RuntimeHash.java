@@ -18,6 +18,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public static final int PLAIN_HASH = 0;
     public static final int AUTOVIVIFY_HASH = 1;
     public static final int TIED_HASH = 2;
+    public static final int READONLY_HASH = 3;
     // Static stack to store saved "local" states of RuntimeHash instances
     private static final Stack<RuntimeHash> dynamicStateStack = new Stack<>();
     private static final RuntimeArray EMPTY_KEYS = new RuntimeArray();
@@ -26,7 +27,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         EMPTY_KEYS.scalarContextSize = 0;
     }
 
-    // Internal type of array - PLAIN_HASH, AUTOVIVIFY_HASH, or TIED_HASH
+    // Internal type of hash - PLAIN_HASH, AUTOVIVIFY_HASH, TIED_HASH, or READONLY_HASH
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
@@ -312,6 +313,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 }
                 yield result;
             }
+            case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -334,6 +336,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             case TIED_HASH -> {
                 TieHash.tiedStore(this, new RuntimeScalar(key), value);
             }
+            case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         }
     }
@@ -464,7 +467,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     "uninitialized");
         }
         return switch (this.type) {
-            case PLAIN_HASH, AUTOVIVIFY_HASH -> {
+            case PLAIN_HASH, AUTOVIVIFY_HASH, READONLY_HASH -> {
                 // Note: get() does not autovivify the hash, so we don't call AutovivificationHash.vivify()
                 String key = keyScalar.toString();
                 var value = elements.get(key);
@@ -498,7 +501,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeScalar exists(RuntimeScalar key) {
         return switch (type) {
-            case PLAIN_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
+            case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
             case AUTOVIVIFY_HASH -> scalarFalse;
             case TIED_HASH -> TieHash.tiedExists(this, key);
             default -> throw new IllegalStateException("Unknown array type: " + type);
@@ -507,7 +510,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
 
     public RuntimeScalar exists(String key) {
         return switch (type) {
-            case PLAIN_HASH -> new RuntimeScalar(elements.containsKey(key));
+            case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key));
             case AUTOVIVIFY_HASH -> scalarFalse;
             case TIED_HASH -> TieHash.tiedExists(this, new RuntimeScalar(key));
             default -> throw new IllegalStateException("Unknown array type: " + type);
@@ -544,6 +547,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 yield delete(key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, key);
+            case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -565,6 +569,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 yield delete(key);
             }
             case TIED_HASH -> TieHash.tiedDelete(this, new RuntimeScalar(key));
+            case READONLY_HASH -> throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
     }
@@ -696,7 +701,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public int size() {
         return switch (type) {
-            case PLAIN_HASH -> {
+            case PLAIN_HASH, READONLY_HASH -> {
                 yield elements.size();
             }
             case AUTOVIVIFY_HASH -> {
@@ -1202,11 +1207,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         currentState.elements = new StableHashMap<>(this.elements);
         currentState.blessId = this.blessId;
         currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
+        currentState.type = this.type;
         dynamicStateStack.push(currentState);
         // Clear the hash
         this.elements.clear();
         this.byteKeys = null;
         this.blessId = 0;
+        this.type = PLAIN_HASH;
     }
 
     /**
@@ -1242,6 +1249,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.elements = previousState.elements;
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
+            this.type = previousState.type;
         }
     }
 
@@ -1252,7 +1260,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public Iterator<RuntimeScalar> iterator() {
         return switch (type) {
-            case PLAIN_HASH, AUTOVIVIFY_HASH -> new RuntimeHashIterator();
+            case PLAIN_HASH, AUTOVIVIFY_HASH, READONLY_HASH -> new RuntimeHashIterator();
             case TIED_HASH -> new RuntimeTiedHashIterator();
             default -> throw new IllegalStateException("Unknown hash type: " + type);
         };

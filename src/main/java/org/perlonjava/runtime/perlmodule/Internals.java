@@ -365,25 +365,45 @@ public class Internals extends PerlModuleBase {
             RuntimeBase flag = args.get(1);
 
             if (flag.getBoolean()) {
-                // Make the variable readonly
+                // Make the variable readonly.
+                //
+                // Internals::SvREADONLY always operates on SvRV(arg) — the referent —
+                // whether called with or without prototype.  The prototype \\[$@%] means
+                // the Perl caller already added one level of reference, so inside here
+                // `variable` is always the reference and we mark its target.
                 if (variable instanceof RuntimeArray array) {
                     array.type = RuntimeArray.READONLY_ARRAY;
                 } else if (variable instanceof RuntimeScalar scalar) {
-                    // Handle array reference (from \@array via prototype)
-                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE && scalar.value instanceof RuntimeArray array) {
+                    // If this scalar was already marked READONLY_SCALAR by a previous call
+                    // (e.g. _make_readonly re-visits $ref which we marked on the first pass),
+                    // unwrap it so we can still reach the inner reference and mark its referent.
+                    RuntimeScalar effectiveScalar = scalar;
+                    if (scalar.type == RuntimeScalarType.READONLY_SCALAR
+                            && scalar.value instanceof RuntimeScalar innerSc
+                            && (innerSc.type == RuntimeScalarType.REFERENCE
+                                    || innerSc.type == RuntimeScalarType.ARRAYREFERENCE
+                                    || innerSc.type == RuntimeScalarType.HASHREFERENCE)) {
+                        effectiveScalar = innerSc;
+                    }
+
+                    // Handle array reference (from \@array via prototype or &-call)
+                    if (effectiveScalar.type == RuntimeScalarType.ARRAYREFERENCE
+                            && effectiveScalar.value instanceof RuntimeArray array) {
                         array.type = RuntimeArray.READONLY_ARRAY;
                     }
-                    // Handle hash reference (from \%hash via prototype)
-                    else if (scalar.type == RuntimeScalarType.HASHREFERENCE && scalar.value instanceof RuntimeHash hash) {
-                        // TODO: implement readonly hash when needed
+                    // Handle hash reference (from \%hash via prototype or &-call)
+                    else if (effectiveScalar.type == RuntimeScalarType.HASHREFERENCE
+                            && effectiveScalar.value instanceof RuntimeHash hash) {
+                        hash.type = RuntimeHash.READONLY_HASH;
                     }
-                    // Check if it's a scalar reference (from \$var)
-                    else if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
-                        // Skip if already readonly
+                    // Handle scalar reference: mark the *referent* (SvRV semantics).
+                    // This is both the with-prototype path (SvREADONLY($x,1) → arg=\$x →
+                    // marks $x) and the &-bypass path (&SvREADONLY(\$x,1) → arg=\$x →
+                    // same result).
+                    else if (effectiveScalar.type == RuntimeScalarType.REFERENCE
+                            && effectiveScalar.value instanceof RuntimeScalar targetScalar) {
                         if (targetScalar.type != RuntimeScalarType.READONLY_SCALAR
                                 && !(targetScalar instanceof RuntimeScalarReadOnly)) {
-                            // Wrap: save original type+value in an inner scalar,
-                            // set targetScalar.type = READONLY_SCALAR
                             RuntimeScalar inner = new RuntimeScalar();
                             inner.type = targetScalar.type;
                             inner.value = targetScalar.value;
@@ -391,14 +411,42 @@ public class Internals extends PerlModuleBase {
                             targetScalar.value = inner;
                         }
                     }
+                    // Plain scalar (e.g. &SvREADONLY($plain, 1) bypassing prototype):
+                    // mark it directly.
+                    else if (scalar.type != RuntimeScalarType.READONLY_SCALAR
+                            && !(scalar instanceof RuntimeScalarReadOnly)) {
+                        RuntimeScalar inner = new RuntimeScalar();
+                        inner.type = scalar.type;
+                        inner.value = scalar.value;
+                        scalar.type = RuntimeScalarType.READONLY_SCALAR;
+                        scalar.value = inner;
+                    }
                 }
             } else {
                 // Make the variable writable again
                 if (variable instanceof RuntimeScalar scalar) {
-                    if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
-                        if (targetScalar.type == RuntimeScalarType.READONLY_SCALAR) {
-                            // Unwrap: restore original type+value
-                            RuntimeScalar inner = (RuntimeScalar) targetScalar.value;
+                    if (scalar.type == RuntimeScalarType.ARRAYREFERENCE && scalar.value instanceof RuntimeArray array) {
+                        if (array.type == RuntimeArray.READONLY_ARRAY) {
+                            array.type = RuntimeArray.PLAIN_ARRAY;
+                        }
+                    } else if (scalar.type == RuntimeScalarType.HASHREFERENCE && scalar.value instanceof RuntimeHash hash) {
+                        if (hash.type == RuntimeHash.READONLY_HASH) {
+                            hash.type = RuntimeHash.PLAIN_HASH;
+                        }
+                    } else if (scalar.type == RuntimeScalarType.READONLY_SCALAR
+                            && scalar.value instanceof RuntimeScalar inner) {
+                        // Unwrap READONLY_SCALAR (covers plain scalars and reference scalars)
+                        scalar.type = inner.type;
+                        scalar.value = inner.value;
+                    } else if (scalar.type == RuntimeScalarType.REFERENCE
+                            && scalar.value instanceof RuntimeScalar targetScalar) {
+                        // Prototype-style call: variable is \$x, targetScalar is $x.
+                        // Skip compile-time constants (RuntimeScalarReadOnly) — those
+                        // can never be made writable (matches real Perl behaviour for
+                        // &SvREADONLY(\!0, 0) still leaving !0 read-only).
+                        if (!(targetScalar instanceof RuntimeScalarReadOnly)
+                                && targetScalar.type == RuntimeScalarType.READONLY_SCALAR
+                                && targetScalar.value instanceof RuntimeScalar inner) {
                             targetScalar.type = inner.type;
                             targetScalar.value = inner.value;
                         }
@@ -406,14 +454,49 @@ public class Internals extends PerlModuleBase {
                 }
             }
         } else if (args.size() == 1) {
-            // Query mode: return whether the variable is readonly
+            // Query mode: return whether the variable is readonly.
+            //
+            // When &SvREADONLY(x) is called without prototype, x might be a reference
+            // whose *referent* has been marked READONLY_SCALAR (which in PerlOnJava means
+            // x.type was changed to READONLY_SCALAR to encode the readonly flag while
+            // preserving the original type in the wrapped inner scalar).
+            //
+            // Real Perl's XS always calls SvRV(arg) first, so the query checks
+            // whether the *referent* is readonly — not whether the reference itself is.
+            // To replicate that: when `scalar` is READONLY_SCALAR wrapping a reference
+            // type, look through the wrapper and check the inner referent's readonly
+            // status (the next level down), not the wrapper itself.
             RuntimeBase variable = args.get(0);
             if (variable instanceof RuntimeScalar scalar) {
-                if (scalar.type == RuntimeScalarType.REFERENCE && scalar.value instanceof RuntimeScalar targetScalar) {
+                // Unwrap READONLY_SCALAR wrapping a reference, so we check the referent
+                // (mirrors real Perl: &SvREADONLY($ref) checks SvRV($ref)'s readonly flag)
+                RuntimeScalar effectiveScalar = scalar;
+                if (scalar.type == RuntimeScalarType.READONLY_SCALAR
+                        && scalar.value instanceof RuntimeScalar innerSc
+                        && (innerSc.type == RuntimeScalarType.REFERENCE
+                                || innerSc.type == RuntimeScalarType.ARRAYREFERENCE
+                                || innerSc.type == RuntimeScalarType.HASHREFERENCE)) {
+                    effectiveScalar = innerSc;
+                }
+
+                // Check array reference
+                if (effectiveScalar.type == RuntimeScalarType.ARRAYREFERENCE
+                        && effectiveScalar.value instanceof RuntimeArray array) {
+                    return new RuntimeScalar(array.type == RuntimeArray.READONLY_ARRAY).getList();
+                }
+                // Check hash reference
+                if (effectiveScalar.type == RuntimeScalarType.HASHREFERENCE
+                        && effectiveScalar.value instanceof RuntimeHash hash) {
+                    return new RuntimeScalar(hash.type == RuntimeHash.READONLY_HASH).getList();
+                }
+                // Check scalar reference: SvREADONLY checks whether SvRV(arg) has readonly flag
+                if (effectiveScalar.type == RuntimeScalarType.REFERENCE
+                        && effectiveScalar.value instanceof RuntimeScalar targetScalar) {
                     boolean isRo = targetScalar.type == RuntimeScalarType.READONLY_SCALAR
                             || targetScalar instanceof RuntimeScalarReadOnly;
                     return new RuntimeScalar(isRo).getList();
                 }
+                // Plain scalar or READONLY_SCALAR wrapping a plain type
                 boolean isRo = scalar instanceof RuntimeScalarReadOnly
                         || scalar.type == RuntimeScalarType.READONLY_SCALAR;
                 return new RuntimeScalar(isRo).getList();
