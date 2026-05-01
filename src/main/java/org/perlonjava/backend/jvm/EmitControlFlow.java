@@ -317,13 +317,14 @@ public class EmitControlFlow {
         ctx.mv.visitVarInsn(Opcodes.ASTORE, codeRefSlot);
 
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // Call getArrayOfAlias() directly on the RuntimeBase value: going through
+        // getList() would force RuntimeArray.getList() to copy each element with
+        // `new RuntimeScalar(element)`, which destroys aliasing of @_ across the
+        // tail call. `goto &SUB` is required to pass the caller's @_ aliased to
+        // the target sub so that `$_[N] = ...` mutations propagate. (See
+        // JSON::Validator::Schema::_validate_type_boolean which relies on this.)
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getList",
-                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
-                false);
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeList",
                 "getArrayOfAlias",
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                 false);
@@ -406,13 +407,9 @@ public class EmitControlFlow {
 
         // Build the args array
         argsNode.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        // See note in handleGotoSubroutine: skip getList() to preserve @_ aliasing.
         ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "getList",
-                "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
-                false);
-        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeList",
                 "getArrayOfAlias",
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                 false);
