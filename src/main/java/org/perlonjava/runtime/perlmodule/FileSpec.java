@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -438,9 +439,21 @@ public class FileSpec extends PerlModuleBase {
         String directories = args.get(1).toString();
         // Empty string returns empty list (Perl 5 behavior)
         if (directories.isEmpty()) {
+            // In scalar context, return count (0) — mirrors Perl's split behaviour
+            if (ctx == RuntimeContextType.SCALAR) {
+                return new RuntimeScalar(0).getList();
+            }
             return new RuntimeList(new ArrayList<>());
         }
-        String[] dirs = directories.split(Pattern.quote(File.separator), -1);
+        // On Windows, File::Spec::Win32::splitdir splits on both '/' and '\'.
+        // On Unix, File::Spec::Unix::splitdir splits on '/'.
+        String splitPattern = File.separator.equals("\\") ? "[/\\\\]" : Pattern.quote(File.separator);
+        String[] dirs = directories.split(splitPattern, -1);
+        // In scalar context, return the count — mirrors Perl's `split` returning
+        // the number of fields when evaluated in scalar context (perlop "split").
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(dirs.length).getList();
+        }
         List<RuntimeScalar> dirList = new ArrayList<>();
         for (String dir : dirs) {
             dirList.add(new RuntimeScalar(dir));

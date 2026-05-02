@@ -1,7 +1,7 @@
 use 5.38.0;
 use strict;
 use warnings;
-use Test::More tests => 9;
+use Test::More tests => 12;
 use Cwd qw(getcwd abs_path);
 use File::Spec;
 
@@ -90,4 +90,16 @@ if (-d $test_dir) {
 # Verify cleanup (non-fatal - let END block try again if needed)
 if (-d $test_dir || -e "$test_dir/$test_file") {
     diag "Warning: Cleanup verification found leftover files (will retry in END block)";
+}
+
+# Test File::Spec->splitdir scalar context (mirrors Perl's `split` count semantics)
+{
+    my $count = scalar File::Spec->splitdir("a/b/c");
+    is($count, 3, 'scalar File::Spec->splitdir returns count of components');
+
+    my $count2 = scalar File::Spec->splitdir("t/tlib");
+    is($count2, 2, 'scalar File::Spec->splitdir("t/tlib") returns 2');
+
+    my $count3 = scalar File::Spec->splitdir("");
+    is($count3, 0, 'scalar File::Spec->splitdir("") returns 0 for empty string');
 }

@@ -164,10 +164,13 @@ public class Symbol extends PerlModuleBase {
         RuntimeScalar object = qualify(args, ctx).scalar();
         RuntimeScalar result;
         if (!object.isString()) {
+            // Already a glob reference or similar — return as-is
             result = object;
         } else {
-            // System.out.println("qualify_to_ref");
-            result = new RuntimeScalar().set(new RuntimeGlob(object.toString()));
+            // Create a named RuntimeGlob and return a GLOBREFERENCE to it.
+            // This mirrors Perl's \*{name}: the caller gets a reference whose
+            // hash slot (and other slots) delegate to the global symbol table.
+            result = new RuntimeGlob(object.toString()).createReference();
         }
         // System.out.println("qualify_to_ref returns " + result.type);
         RuntimeList list = new RuntimeList();

@@ -75,4 +75,26 @@ subtest 'References in package code slots' => sub {
     }
 };
 
+subtest 'Symbol::qualify_to_ref returns a glob reference' => sub {
+    use Symbol;
+
+    # qualify_to_ref must return a GLOB reference (ref eq "GLOB"), not the
+    # glob itself.  Perl's list_tests idiom relies on:
+    #   keys %{ *{ Symbol::qualify_to_ref("Pkg::") } }
+    # to inspect a package's symbol table.
+
+    package QTRTest;
+    sub qtr_method { 1 }
+
+    package main;
+
+    my $ref = Symbol::qualify_to_ref("QTRTest::");
+    like($ref, qr/^GLOB\(/, 'qualify_to_ref stringifies as GLOB(...)');
+    is(ref($ref), 'GLOB', 'qualify_to_ref returns a reference of type GLOB');
+
+    # Dereference to get the typeglob, then access its HASH slot (package stash)
+    my %stash = %{ *{$ref} };
+    ok(exists $stash{qtr_method}, 'hash slot of qualify_to_ref result contains package symbols');
+};
+
 done_testing();

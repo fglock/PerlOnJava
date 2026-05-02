@@ -182,7 +182,14 @@ public class CompileBinaryOperator {
                 int rd = bytecodeCompiler.allocateOutputRegister();
 
                 // Emit CALL_SUB opcode
-                bytecodeCompiler.emit(Opcodes.CALL_SUB);
+                // Use emitWithToken so pcToTokenIndex maps the call instruction to the
+                // coderef's token index (call-site line), not the closing ')' line.
+                int callSiteToken = node.left.getIndex();
+                if (callSiteToken > 0) {
+                    bytecodeCompiler.emitWithToken(Opcodes.CALL_SUB, callSiteToken);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.CALL_SUB);
+                }
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(coderefReg);
                 bytecodeCompiler.emitReg(argsReg);
@@ -246,7 +253,15 @@ public class CompileBinaryOperator {
                     int rd = bytecodeCompiler.allocateOutputRegister();
 
                     // Emit CALL_METHOD
-                    bytecodeCompiler.emit(Opcodes.CALL_METHOD);
+                    // Use emitWithToken so pcToTokenIndex maps the call instruction to the
+                    // invocant's token index (call-site line), not the closing ')' line.
+                    // This ensures caller() inside the called method reports the correct line.
+                    int callSiteToken = node.left.getIndex();
+                    if (callSiteToken > 0) {
+                        bytecodeCompiler.emitWithToken(Opcodes.CALL_METHOD, callSiteToken);
+                    } else {
+                        bytecodeCompiler.emit(Opcodes.CALL_METHOD);
+                    }
                     bytecodeCompiler.emitReg(rd);
                     bytecodeCompiler.emitReg(invocantReg);
                     bytecodeCompiler.emitReg(methodReg);
@@ -403,8 +418,12 @@ public class CompileBinaryOperator {
             boolean shareCallerArgs = node.getBooleanAnnotation("shareCallerArgs");
 
             // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode
+            // Pass node.left.getIndex() so pcToTokenIndex maps the call to the function
+            // name / reference token index (call-site line) rather than the closing ')'.
+            int callSiteToken = (node.left != null && node.left.getIndex() > 0)
+                    ? node.left.getIndex() : node.getIndex();
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
-                    bytecodeCompiler, node.operator, rs1, rs2, node.getIndex(),
+                    bytecodeCompiler, node.operator, rs1, rs2, callSiteToken,
                     shareCallerArgs);
             bytecodeCompiler.lastResultReg = rd;
             return;
