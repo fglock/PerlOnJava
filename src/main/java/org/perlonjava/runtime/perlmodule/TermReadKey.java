@@ -75,8 +75,8 @@ public class TermReadKey extends PerlModuleBase {
 
         try {
             readkey.registerMethod("ReadMode", "readMode", "$;$");
-            readkey.registerMethod("ReadKey", "readKey", ";$");
-            readkey.registerMethod("ReadLine", "readLine", ";$");
+            readkey.registerMethod("ReadKey", "readKey", ";$$");   // ReadKey([timeout [, $fh]])
+            readkey.registerMethod("ReadLine", "readLine", ";$$"); // ReadLine([timeout [, $fh]])
             readkey.registerMethod("GetTerminalSize", "getTerminalSize", ";$");
             readkey.registerMethod("SetTerminalSize", "setTerminalSize", "$;$");
             readkey.registerMethod("GetSpeed", "getSpeed", ";$");
