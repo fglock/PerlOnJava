@@ -289,9 +289,7 @@ public class EmitBinaryOperator {
             if (pooledRight) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
-            if (pooledLeft) {
-                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-            }
+            // Note: leftSlot is released AFTER the assignment so we can reload it below
             // perform the operation
             // Note: operands are already on the stack (left DUPped, then right)
             String baseOperator = node.operator.substring(0, node.operator.length() - 1);
@@ -319,7 +317,16 @@ public class EmitBinaryOperator {
             } else {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "set", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             }
-            
+            // Discard set()/setPreservingByteString() return value and reload leftObj.
+            // This matches how *Assign methods (addAssign, etc.) return arg1 directly —
+            // for TIED_SCALAR lvalues the caller will trigger a 2nd FETCH when it reads
+            // the result, giving the correct Perl semantics (fetch=2 for compound assigns).
+            mv.visitInsn(Opcodes.POP);
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+
             // For string concat assign (.=), invalidate pos() since string was modified
             if (node.operator.equals(".=")) {
                 mv.visitInsn(Opcodes.DUP);

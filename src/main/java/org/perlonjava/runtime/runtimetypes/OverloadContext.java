@@ -72,20 +72,36 @@ public class OverloadContext {
      *   false (0)                     → deny autogeneration entirely
      */
     final RuntimeScalar fallbackValue;
+    /**
+     * Whether the class (or any class in its MRO) defines at least one actual
+     * operator overload method — i.e. any {@code (x} glob that is not the
+     * {@code (( } overload-marker or the {@code ()} fallback glob.
+     * <p>
+     * This distinguishes {@code use overload;} (no operators) from a package
+     * that genuinely overloads some operators.  Standard Perl silently falls
+     * back to native string/numeric comparison when a blessed object belongs
+     * to a class with {@code use overload;} but no operator methods; it only
+     * throws "Operation ... no method found" when at least one operator is
+     * defined but the requested one is missing and {@code fallback} is not
+     * explicitly {@code 1}.
+     */
+    final boolean hasAnyOperatorMethod;
 
     /**
      * Private constructor to create an OverloadContext instance.
      *
-     * @param perlClassName    The Perl class name
-     * @param methodOverloaded The overloaded method handler
-     * @param hasFallbackGlob  Whether "()" glob was found
-     * @param fallbackValue    The SCALAR slot value of "()" glob
+     * @param perlClassName         The Perl class name
+     * @param methodOverloaded      The overloaded method handler
+     * @param hasFallbackGlob       Whether "()" glob was found
+     * @param fallbackValue         The SCALAR slot value of "()" glob
+     * @param hasAnyOperatorMethod  Whether any actual operator method is defined
      */
-    private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, boolean hasFallbackGlob, RuntimeScalar fallbackValue) {
+    private OverloadContext(String perlClassName, RuntimeScalar methodOverloaded, boolean hasFallbackGlob, RuntimeScalar fallbackValue, boolean hasAnyOperatorMethod) {
         this.perlClassName = perlClassName;
         this.methodOverloaded = methodOverloaded;
         this.hasFallbackGlob = hasFallbackGlob;
         this.fallbackValue = fallbackValue;
+        this.hasAnyOperatorMethod = hasAnyOperatorMethod;
     }
 
     /**
@@ -104,18 +120,35 @@ public class OverloadContext {
      * <p>
      * Perl's semantics:
      * <ul>
+     *   <li>No operator methods defined ({@code use overload;}): always
+     *       falls through to native op — returns true.</li>
      *   <li>{@code fallback => 1}: autogeneration permitted → returns true</li>
      *   <li>{@code fallback => 0}: autogeneration denied → returns false</li>
-     *   <li>{@code fallback => undef} (default): conservative, die on
-     *       unable-to-autogen. We treat that as "not permitted" and let
-     *       callers throw "no method found".</li>
+     *   <li>{@code fallback => undef} (default, when at least one operator is
+     *       defined): die on unable-to-autogen → returns false, callers throw
+     *       "no method found".</li>
      * </ul>
      * <p>
      * Used by binary operators (eq/ne/cmp/lt/gt) to decide whether a
      * fallback to stringification-based comparison is safe, or whether
      * the operation should throw "no method found" to match Perl 5.
+     * <p>
+     * The critical distinction: {@code use overload;} with no operator
+     * arguments does NOT cause "no method found" errors — standard Perl
+     * silently falls back to native comparison in that case.  Only a
+     * package that defines at least one operator but leaves others undefined
+     * (and doesn't set {@code fallback => 1}) triggers the error.
      */
     public boolean allowsFallbackAutogen() {
+        // If no actual operator method is defined at all (e.g. "use overload;"),
+        // behave as if the package were not overloaded for dispatch purposes —
+        // standard Perl falls through to native string/numeric comparison.
+        if (!hasAnyOperatorMethod) {
+            return true;
+        }
+        // At least one operator is defined: check fallback setting.
+        // fallback => 1 (true): permit native fallback → true
+        // fallback => 0 (false) or fallback => undef: deny fallback → false
         return hasFallbackGlob
                 && fallbackValue != null
                 && fallbackValue.getDefinedBoolean()
@@ -180,10 +213,43 @@ public class OverloadContext {
             System.err.flush();
         }
 
+        // Check whether any actual operator overload method is defined in the MRO
+        // (excluding the "((" overload-marker and the "()" fallback-glob).
+        // Standard Perl: a class with "use overload;" and NO operator methods falls
+        // through to native comparison silently; a class with at least one operator
+        // method defined (and fallback not set to 1) throws "no method found" for
+        // unhandled operators.
+        boolean hasAnyOperatorMethod = false;
+        if (methodOverloaded != null) {
+            java.util.List<String> mroClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
+            outer:
+            for (String mroClass : mroClasses) {
+                String effectiveClass = GlobalVariable.resolveStashAlias(mroClass);
+                // Prefix used for all overload methods in this class, e.g. "Foo::("
+                String keyPrefix = effectiveClass + "::(";
+                // Walk globalCodeRefs to find any (x method that is not (( or ()
+                for (String key : GlobalVariable.globalCodeRefs.keySet()) {
+                    if (key.startsWith(keyPrefix)) {
+                        // Extract the method-name part (everything after "::")
+                        String op = key.substring(effectiveClass.length() + 2);
+                        if (!"((".equals(op) && !"()".equals(op)) {
+                            hasAnyOperatorMethod = true;
+                            break outer;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (TRACE_OVERLOAD_CONTEXT) {
+            System.err.println("  hasAnyOperatorMethod: " + hasAnyOperatorMethod);
+            System.err.flush();
+        }
+
         // Create context if overloading is enabled
         OverloadContext context = null;
         if (methodOverloaded != null || hasFallbackGlob) {
-            context = new OverloadContext(perlClassName, methodOverloaded, hasFallbackGlob, fallbackValue);
+            context = new OverloadContext(perlClassName, methodOverloaded, hasFallbackGlob, fallbackValue, hasAnyOperatorMethod);
             // Cache the result
             InheritanceResolver.cacheOverloadContext(blessId, context);
         }

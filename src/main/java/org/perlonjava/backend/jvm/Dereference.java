@@ -965,10 +965,9 @@ public class Dereference {
                 }
             }
 
-            // Save the call context into a local slot for the TAILCALL trampoline.
-            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            emitterVisitor.pushCallContext();
-            mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+            // The call context is NOT stored in a local slot (see EmitSubroutine.java comment for why:
+            // storing an int into a pre-null-initialised slot causes VerifyError at merge points).
+            // pushCallContext() is a side-effect-free inline emission and can be called at each use point.
 
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId++;
@@ -984,7 +983,7 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // push saved call context
+            emitterVisitor.pushCallContext();   // push call context
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1066,7 +1065,7 @@ public class Dereference {
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
                 mv.visitLdcInsn("tailcall");
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-                mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);  // context of the original call site
+                emitterVisitor.pushCallContext();  // context of the original call site
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "apply",

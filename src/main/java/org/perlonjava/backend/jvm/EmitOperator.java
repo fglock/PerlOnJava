@@ -321,12 +321,6 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
-            // Push context
-            emitterVisitor.pushCallContext();
-
-            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
-
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -370,7 +364,7 @@ public class EmitOperator {
                 index++;
             }
 
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
 
             // Check if warnings are enabled at compile time
@@ -404,12 +398,6 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
-            // Push context
-            emitterVisitor.pushCallContext();
-
-            int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
-
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -453,7 +441,7 @@ public class EmitOperator {
                 index++;
             }
 
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
 
             emitOperator(node, emitterVisitor);

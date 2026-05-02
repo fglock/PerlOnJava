@@ -597,7 +597,7 @@ public class EmitterMethodCreator implements Opcodes {
             TempLocalCountVisitor tempCountVisitor =
                     new TempLocalCountVisitor();
             ast.accept(tempCountVisitor);
-            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 256;  // Buffer for uncounted allocations
+            int preInitTempLocalsCount = tempCountVisitor.getMaxTempCount() + 32;  // Buffer for infrastructure + uncounted allocations
             for (int i = preInitTempLocalsStart; i < preInitTempLocalsStart + preInitTempLocalsCount; i++) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, i);
@@ -1150,18 +1150,115 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
-            String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
-            if (bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty()) {
-                try {
-                    System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);
+            // Phase 4 — Method-Size Threshold: Route Oversized Eval Methods to the Interpreter.
+            // DO NOT REMOVE: without this block the DBIx::Class test suite times out
+            // (200+ s instead of ~7 s) under even moderate CPU load.
+            //
+            // === THE BUG THIS PREVENTS ===
+            //
+            // Symptom: t/96_is_deteministic_value.t (DBIx::Class) is killed by the
+            //   TAP harness after 300 s with no output.
+            //
+            // Root-cause cascade:
+            //   1. CPU pressure slows JVM warm-up → methods stay in interpreted mode
+            //      longer than usual before becoming "hot".
+            //   2. Sub::Quote / Moo string-eval'd accessor methods become hot and are
+            //      submitted to the C1 JIT compiler.
+            //   3. C1 fails with: "out of virtual registers in linear scan"
+            //      (observed at compileIds 4980 and 6224 in C1 compile logs).
+            //   4. JVM marks those methods as "not compilable"; they run permanently
+            //      in interpreted mode — ~50× slower than compiled code.
+            //   5. The hot path through SQL::Abstract grinds to a halt; test takes
+            //      200+ seconds → TAP harness SIGKILL.
+            //
+            // === WHY THE INTERPRETER IS BETTER HERE ===
+            //
+            // The PerlOnJava interpreter is ~5–20× slower than JIT-compiled code.
+            // The C1 failure path is ~50× slower.
+            // For the 7 affected methods, using the interpreter is therefore
+            // *faster* than letting the JVM attempt (and fail) JIT compilation.
+            //
+            // === WHICH METHODS ARE AFFECTED ===
+            //
+            // Exactly 7 Sub::Quote / Moo-generated methods in the DBIx::Class run
+            // exceed the 9 KB threshold.  The smallest is 9,043 bytes; the largest
+            // is 36,554 bytes.  These methods contain inlined attribute-accessor
+            // logic — genuine Perl code, not PerlOnJava overhead — so no bytecode-
+            // reduction technique can shrink them below the C1 danger zone.
+            //
+            // === HOW THE FALLBACK IS TRIGGERED ===
+            //
+            // Throwing a RuntimeException whose message contains the literal string
+            //   "requires interpreter fallback"
+            // is the established protocol in this codebase.  The exception propagates
+            // up through getBytecodeInternal() (note the early re-throw in its
+            // RuntimeException catch) and is caught by createRuntimeCode(), which
+            // delegates to PerlLanguageProvider.checkForInterpreterFallback().
+            // That method matches the substring and re-runs the code through the
+            // PerlOnJava interpreter instead of the JVM class loader.
+            //
+            // === WHY EVAL-GENERATED CODE ONLY (isEvalCode guard) ===
+            //
+            // Regular Perl source files (e.g. unit-test bodies) also produce large
+            // methods — up to 16 KB — but they run correctly on the JVM backend.
+            // Those same files FAIL on the interpreter due to known parity gaps
+            // (e.g. "local", tied variables).  Applying the threshold to non-eval
+            // code would therefore swap a "works fine" JVM path for a broken
+            // interpreter path, causing regressions in dozens of unit tests.
+            // String-eval'd code (fileName starts with "(eval ") is exactly the
+            // Sub::Quote / Moo path where the interpreter fallback is known to work.
+            //
+            // === GUARD ORDER (cheapest first) ===
+            //
+            //   Step 1 — filename check (O(1)):   isEvalCode = fileName.startsWith("(eval ")
+            //   Step 2 — class-size pre-filter (O(1)): classData.length > threshold
+            //             (a class file is always ≥ its largest method's code, so a
+            //             small class cannot contain an oversized method — skip parse)
+            //   Step 3 — parse the class file to get the *exact* Code-attribute length
+            //
+            // Why classData.length alone (step 2) cannot be the final gate:
+            //   Sub::Quote classes have a constant pool that is 1.3×–4.9× the method
+            //   code size (measured: 9 KB code → 23 KB class; 7.7 KB code → 32 KB
+            //   class).  No single classData.length cutoff can reliably separate
+            //   "code > 9 KB" from "code < 7 KB" — the ranges overlap when the
+            //   constant pool varies.  Step 3 (bytecode parsing) is required.
+            //   The parse itself is cheap: O(classData.length), a few microseconds,
+            //   and it is only reached for the small number of large eval classes.
 
-                    java.io.DataInputStream in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(classData));
-                    int magic = in.readInt();
-                    if (magic != 0xCAFEBABE) {
-                        throw new RuntimeException("Bad class magic");
-                    }
-                    in.readUnsignedShort(); // minor
-                    in.readUnsignedShort(); // major
+            // Step 1 — filename check (O(1), no class parsing)
+            String srcFileName = ctx.compilerOptions != null ? ctx.compilerOptions.fileName : null;
+            boolean isEvalCode = srcFileName != null && srcFileName.startsWith("(eval ");
+
+            String bytecodeSizeDebug = System.getenv("JPERL_BYTECODE_SIZE_DEBUG");
+            boolean sizeDebugEnabled = bytecodeSizeDebug != null && !bytecodeSizeDebug.isEmpty();
+
+            // Early exit: not eval-generated code and debug not requested — nothing to do.
+            if (sizeDebugEnabled || isEvalCode) {
+                // Default: 9 000 bytes — catches all 7 Sub::Quote methods (smallest: 9 043 B).
+                // Override with JPERL_MAX_METHOD_BYTES (large number disables the threshold).
+                int maxMethodBytesThreshold = 9_000;
+                if (isEvalCode) {
+                    String maxBytesEnv = System.getenv("JPERL_MAX_METHOD_BYTES");
+                    if (maxBytesEnv != null && !maxBytesEnv.isEmpty()) maxMethodBytesThreshold = Integer.parseInt(maxBytesEnv);
+                }
+
+                // Step 2 — class size pre-filter (O(1)).
+                // classData.length >= method_code_length always, so if classData is small
+                // enough no method inside can exceed the threshold — skip parsing.
+                if (sizeDebugEnabled || classData.length > maxMethodBytesThreshold) {
+                    // Step 3 — parse the class file to get the exact method code length.
+                    try {
+                        if (sizeDebugEnabled) {
+                            System.err.println("BYTECODE_SIZE class=" + className + " bytes=" + classData.length);
+                        }
+
+                        java.io.DataInputStream in = new java.io.DataInputStream(new java.io.ByteArrayInputStream(classData));
+                        int magic = in.readInt();
+                        if (magic != 0xCAFEBABE) {
+                            throw new RuntimeException("Bad class magic");
+                        }
+                        in.readUnsignedShort(); // minor
+                        in.readUnsignedShort(); // major
 
                     int cpCount = in.readUnsignedShort();
                     String[] utf8 = new String[cpCount];
@@ -1271,20 +1368,45 @@ public class EmitterMethodCreator implements Opcodes {
                             if (codeLen > maxCodeLen) {
                                 maxCodeLen = codeLen;
                             }
-                            boolean isApply = "apply".equals(mName);
-                            boolean isLarge = codeLen >= 30000;
-                            if (isApply || isLarge) {
-                                System.err.println("BYTECODE_SIZE method=" + mName + mDesc + " code_bytes=" + codeLen);
+                            if (sizeDebugEnabled) {
+                                boolean isApply = "apply".equals(mName);
+                                boolean isLarge = codeLen >= 30000;
+                                if (isApply || isLarge) {
+                                    System.err.println("BYTECODE_SIZE method=" + mName + mDesc + " code_bytes=" + codeLen);
+                                }
                             }
                         }
                     }
 
-                    if (maxCodeLen >= 0) {
+                    if (sizeDebugEnabled && maxCodeLen >= 0) {
                         System.err.println("BYTECODE_SIZE max_code_bytes=" + maxCodeLen);
                     }
+
+                    // Phase 4 — trigger interpreter fallback for oversized eval methods.
+                    //
+                    // The literal substring "requires interpreter fallback" in the exception
+                    // message is load-bearing: PerlLanguageProvider.checkForInterpreterFallback()
+                    // matches it to route this code to the PerlOnJava interpreter instead of the
+                    // JVM class loader.  Do NOT change this string without updating that method.
+                    //
+                    // Why this is safe: C1 JIT fails (~50× slowdown) for these methods anyway;
+                    // the interpreter (~5–20× slower than JIT) is faster than the failure path.
+                    // See the large comment block above for the full explanation.
+                    if (maxCodeLen > maxMethodBytesThreshold) {
+                        throw new RuntimeException(
+                                "Method too large for reliable JIT: " + maxCodeLen
+                                + " bytes (threshold=" + maxMethodBytesThreshold + "). "
+                                + "requires interpreter fallback");
+                    }
+                } catch (RuntimeException re) {
+                    // Re-throw so the "requires interpreter fallback" exception above reaches
+                    // createRuntimeCode() → checkForInterpreterFallback().  Do NOT swallow it.
+                    throw re;
                 } catch (Throwable ignored) {
+                    // Ignore parse errors; class will be loaded as-is
                 }
-            }
+                } // end step-2 if (classData.length > threshold)
+            } // end step-1 if (isEvalCode || sizeDebugEnabled)
 
             if (asmDebug && asmDebugClassMatches && asmDebugClassFilter != null && !asmDebugClassFilter.isEmpty()) {
                 try {
@@ -1503,6 +1625,11 @@ public class EmitterMethodCreator implements Opcodes {
             // Let this propagate so getBytecode() can attempt large-code refactoring and retry.
             throw e;
         } catch (RuntimeException e) {
+            // Phase 4: threshold exception — let it propagate cleanly without wrapping so that
+            // createRuntimeCode() catches it and routes to the interpreter with a clear message.
+            if (e.getMessage() != null && e.getMessage().contains("requires interpreter fallback")) {
+                throw e;
+            }
             // Enhanced error message with debugging information
             StringBuilder errorMsg = new StringBuilder();
             errorMsg.append(String.format(

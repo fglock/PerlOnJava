@@ -497,14 +497,23 @@ public class EmitSubroutine {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator " + node + " in context " + emitterVisitor.ctx.contextType);
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
-        // Capture the call context into a local slot early.
-        // IMPORTANT: Do not leave the context int on the JVM operand stack while evaluating
-        // subroutine arguments. Argument evaluation may trigger non-local control flow
-        // propagation (e.g. last/next/redo) which jumps out of the expression; any stray
-        // stack items would then break ASM frame merging.
-        int callContextSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        emitterVisitor.pushCallContext();
-        mv.visitVarInsn(Opcodes.ISTORE, callContextSlot);
+        // Note: The call context is NOT stored in a local variable slot.
+        // pushCallContext() emits either a compile-time constant (LDC) or loads the
+        // callContext method parameter (ILOAD 2).  Both are side-effect-free and can be
+        // re-emitted at the exact moment the value is needed on the JVM operand stack,
+        // so there is no need to stash the int in a slot.
+        //
+        // Storing it in a slot would be WRONG: the pre-initialisation loop in
+        // EmitterMethodCreator initialises every temporary slot to null (ACONST_NULL /
+        // ASTORE) so that reference slots are never in TOP state at merge points.
+        // An int slot initialised that way acquires the reference type "null" from the
+        // pre-init path.  At a merge point (e.g. blockDispatcher) that is reachable from
+        // both a path that executed ISTORE-callContextSlot and a path through a
+        // conditional branch that skipped it, the JVM verifier sees conflicting types
+        // (int vs null-reference) and throws VerifyError: "Bad local variable type".
+        // This VerifyError triggers the interpreter-fallback which re-runs the main
+        // script body, calling plan() a second time and causing the "tried to plan
+        // twice" error in DBIx::Class torture.t (perf/reduce-apply-bytecode Phase 2).
 
         String subroutineName = "";
         if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
@@ -593,7 +602,7 @@ public class EmitSubroutine {
         if (node.left instanceof SubroutineNode subNode && subNode.useTryCatch) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -622,7 +631,7 @@ public class EmitSubroutine {
         if (node.getBooleanAnnotation("shareCallerArgs")) {
             mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
             mv.visitVarInsn(Opcodes.ALOAD, 1);  // caller's @_ (slot 1) - shared, not copied
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "apply",
@@ -711,7 +720,7 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-        mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);   // Push call context to stack
+        emitterVisitor.pushCallContext();   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -760,7 +769,8 @@ public class EmitSubroutine {
                 emitterVisitor.ctx.javaClassInfo.storeSpillRef(mv, baseSpills[i]);
             }
 
-            // Load and check if it's a control flow marker
+            // Fast path: check if the result is any kind of control flow marker.
+            // This is the common case (no control flow) — branch skips everything below.
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
@@ -769,91 +779,32 @@ public class EmitSubroutine {
                     false);
             mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
 
-            // Marked: check if TAILCALL (handle locally with trampoline)
-            Label tailcallLoop = new Label();
-            Label notTailcall = new Label();
-
-            // Check if type is TAILCALL
+            // A control-flow marker was returned.  It might be TAILCALL (goto &sub),
+            // LAST/NEXT/REDO/GOTO, or RETURN.  Resolve any TAILCALL chain first, then
+            // re-check whether the final result still carries a marker that the
+            // block-level dispatcher needs to handle.
+            // Keeping resolveTailCalls() inside this branch means the common case
+            // (no control flow) incurs zero extra overhead.  (Phase 2 of
+            // perf/reduce-apply-bytecode.)
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "getControlFlowType",
-                    "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
-                    false);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                    "ordinal",
-                    "()I",
-                    false);
-            mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
-            mv.visitJumpInsn(Opcodes.IF_ICMPNE, notTailcall);
-
-            // TAILCALL trampoline loop - handle tail calls at the call site
-            mv.visitLabel(tailcallLoop);
-
-            // Extract codeRef and args from the marker
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-            mv.visitInsn(Opcodes.DUP);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "getTailCallCodeRef",
-                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
-            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
-
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "getTailCallArgs",
-                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
-                    false);
-            mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-
-            // Call target: RuntimeCode.apply(codeRef, "tailcall", args, context)
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallCodeRefSlot);
-            mv.visitLdcInsn("tailcall");
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.tailCallArgsSlot);
-            mv.visitVarInsn(Opcodes.ILOAD, callContextSlot);  // context of the original call site
+            emitterVisitor.pushCallContext();
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "apply",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    "resolveTailCalls",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
-
-            // Store result to controlFlowTempSlot
             mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
 
-            // Check if result is still a control flow marker
+            // Re-check: a TAILCALL chain may have ended in a normal return.
             mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeList",
                     "isNonLocalGoto",
                     "()Z",
                     false);
-            mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);  // Not marked, done
+            mv.visitJumpInsn(Opcodes.IFEQ, notControlFlow);
 
-            // Marked: check if still TAILCALL
-            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
-                    "getControlFlowType",
-                    "()Lorg/perlonjava/runtime/runtimetypes/ControlFlowType;",
-                    false);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/ControlFlowType",
-                    "ordinal",
-                    "()I",
-                    false);
-            mv.visitInsn(Opcodes.ICONST_4);  // TAILCALL.ordinal() = 4
-            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, tailcallLoop);  // Still TAILCALL, loop
-
-            // Not TAILCALL - different marker (LAST/NEXT/REDO/GOTO), dispatch it
-            mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
-
-            // Not TAILCALL initially - jump to block dispatcher
-            mv.visitLabel(notTailcall);
+            // Still a marker (LAST/NEXT/REDO/GOTO/RETURN) — dispatch it.
             mv.visitJumpInsn(Opcodes.GOTO, blockDispatcher);
 
             // Not a control flow marker - load it back and continue

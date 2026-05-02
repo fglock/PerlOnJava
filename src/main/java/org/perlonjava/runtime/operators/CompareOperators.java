@@ -447,11 +447,14 @@ public class CompareOperators {
             // Try nomethod fallback (may throw if fallback=0)
             result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "eq");
             if (result != null) return result;
-            // Master's tryTwoArgumentNomethod only throws when fallback=>0;
-            // when fallback is undef / absent, Perl 5 still reports "no method
-            // found". Keep our throwIfFallbackDenied guard so
-            // DBIC t/storage/txn.t test 90 still sees the expected exception.
-            // See commit 1869badd2 for rationale.
+            // tryTwoArgumentNomethod only throws when fallback=>0.
+            // When at least one operator is defined but fallback is undef/absent,
+            // Perl 5 reports "no method found" — throwIfFallbackDenied enforces
+            // this (DBIC t/storage/txn.t test 90, commit 1869badd2).
+            // Exception: if the package defines NO operators at all (e.g.
+            // "use overload;"), Perl silently falls through to native string
+            // comparison; allowsFallbackAutogen() returns true in that case and
+            // throwIfFallbackDenied is a no-op.
             throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "eq");
         }
 
@@ -482,8 +485,9 @@ public class CompareOperators {
             // Try nomethod fallback (may throw if fallback=0)
             result = OverloadContext.tryTwoArgumentNomethod(runtimeScalar, arg2, blessId, blessId2, "ne");
             if (result != null) return result;
-            // See eq() above — retain throwIfFallbackDenied for the
-            // fallback=undef case (DBIC t/storage/txn.t test 90, commit 1869badd2).
+            // See eq() above — same semantics: only throw when at least one
+            // operator is defined and fallback is not 1 (DBIC t/storage/txn.t
+            // test 90, commit 1869badd2).  No-op when package has no operators.
             throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "ne");
         }
 
