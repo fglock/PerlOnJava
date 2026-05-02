@@ -445,7 +445,10 @@ public class FileSpec extends PerlModuleBase {
             }
             return new RuntimeList(new ArrayList<>());
         }
-        String[] dirs = directories.split(Pattern.quote(File.separator), -1);
+        // On Windows, File::Spec::Win32::splitdir splits on both '/' and '\'.
+        // On Unix, File::Spec::Unix::splitdir splits on '/'.
+        String splitPattern = File.separator.equals("\\") ? "[/\\\\]" : Pattern.quote(File.separator);
+        String[] dirs = directories.split(splitPattern, -1);
         // In scalar context, return the count — mirrors Perl's `split` returning
         // the number of fields when evaluated in scalar context (perlop "split").
         if (ctx == RuntimeContextType.SCALAR) {
