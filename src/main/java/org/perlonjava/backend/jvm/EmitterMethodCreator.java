@@ -1150,13 +1150,9 @@ public class EmitterMethodCreator implements Opcodes {
             cw.visitEnd();
             classData = cw.toByteArray(); // Generate the bytecode
 
-            // ╔══════════════════════════════════════════════════════════════════════╗
-            // ║  Phase 4 — Method-Size Threshold: Route Oversized Eval Methods to   ║
-            // ║  the Interpreter.                                                    ║
-            // ║                                                                      ║
-            // ║  DO NOT REMOVE THIS BLOCK.  Without it, the DBIx::Class test suite  ║
-            // ║  times out (200+ s instead of ~7 s) under even moderate CPU load.   ║
-            // ╚══════════════════════════════════════════════════════════════════════╝
+            // Phase 4 — Method-Size Threshold: Route Oversized Eval Methods to the Interpreter.
+            // DO NOT REMOVE: without this block the DBIx::Class test suite times out
+            // (200+ s instead of ~7 s) under even moderate CPU load.
             //
             // === THE BUG THIS PREVENTS ===
             //
