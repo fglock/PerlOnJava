@@ -223,7 +223,11 @@ public class CompileBinaryOperatorHelper {
 
                 // Emit CALL_SUB: rd = coderef.apply(args, context)
                 // Use CALL_SUB_SHARE_ARGS for &func (no parens) to share caller's @_
-                bytecodeCompiler.emit(shareCallerArgs ? Opcodes.CALL_SUB_SHARE_ARGS : Opcodes.CALL_SUB);
+                // emitWithToken records tokenIndex in pcToTokenIndex so caller() sees the
+                // call-site line (tokenIndex was set to node.left.getIndex() by the caller).
+                bytecodeCompiler.emitWithToken(
+                        shareCallerArgs ? Opcodes.CALL_SUB_SHARE_ARGS : Opcodes.CALL_SUB,
+                        tokenIndex);
                 bytecodeCompiler.emitReg(rd);  // Result register
                 bytecodeCompiler.emitReg(rs1); // Code reference register
                 bytecodeCompiler.emitReg(rs2); // Arguments register (RuntimeList to be converted to RuntimeArray)
