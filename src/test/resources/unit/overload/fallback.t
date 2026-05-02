@@ -62,4 +62,84 @@ ok(!($sum != 52), 'numeric fallback works in addition');
 my $concat = "Value: " . $num_obj;
 ok(!($concat ne "Value: 42"), 'string fallback works in concatenation (got: \'$concat\')');
 
+# -----------------------------------------------------------------------
+# Tests for "use overload; with no operators" fallback behaviour
+#
+# Standard Perl: a class that calls "use overload;" (no arguments) is
+# technically overloaded (overload::Overloaded returns true) but has no
+# operator methods.  String/numeric operators on such objects should
+# silently fall back to native comparison rather than dying with
+# "Operation '...': no method found".
+# -----------------------------------------------------------------------
+
+{
+    package NoOperators;
+    # "use overload;" with no arguments: package is marked overloaded
+    # but no operator methods are defined.
+    use overload;
+
+    sub new { bless {}, shift }
+}
+
+{
+    package OneOperator;
+    # Has one operator (+), but not eq/ne/cmp/etc.
+    # fallback is not set → default is undef → should throw "no method found"
+    # for unhandled operators like eq.
+    use overload '+' => sub { 42 };
+
+    sub new { bless {}, shift }
+}
+
+{
+    package OneOpFallback1;
+    # Has one operator, but fallback => 1 → silently fall back to native.
+    use overload '+' => sub { 42 }, fallback => 1;
+
+    sub new { bless {}, shift }
+}
+
+{
+    package NoOpFallback0;
+    # No operators, but explicit fallback => 0.
+    # Perl: the fallback => 0 is still stored, so the package HAS a ()
+    # glob, but no actual operator methods.  When eq is requested,
+    # tryTwoArgumentNomethod throws immediately because fallback=0.
+    use overload fallback => 0;
+
+    sub new { bless {}, shift }
+}
+
+my $no_ops   = NoOperators->new;
+my $one_op   = OneOperator->new;
+my $one_fb1  = OneOpFallback1->new;
+my $no_op_f0 = NoOpFallback0->new;
+
+# Case 1: "use overload;" with no operators → native fallback, no error
+{
+    my $ok = eval { ($no_ops eq "anything") ? 1 : 0 };
+    ok(!$@, 'use overload; (no ops) does not throw for eq');
+    ok(defined $ok, 'use overload; (no ops) eq returns a value');
+}
+
+# Case 2: one operator defined, fallback not set → "no method found" for eq
+{
+    eval { my $x = ($one_op eq "anything") };
+    like($@, qr/no method found/, 'one operator, fallback undef: eq throws "no method found"');
+}
+
+# Case 3: one operator + fallback => 1 → native fallback, no error
+{
+    my $ok = eval { ($one_fb1 eq "anything") ? 1 : 0 };
+    ok(!$@, 'one operator + fallback=>1 does not throw for eq');
+    ok(defined $ok, 'one operator + fallback=>1 eq returns a value');
+}
+
+# Case 4: no operators + explicit fallback => 0 → throws for eq
+{
+    eval { my $x = ($no_op_f0 eq "anything") };
+    like($@, qr/no method found/, 'no ops + fallback=>0 throws "no method found" for eq');
+}
+
 done_testing();
+
