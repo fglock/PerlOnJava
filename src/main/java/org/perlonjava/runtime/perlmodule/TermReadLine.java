@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -29,9 +31,12 @@ public class TermReadLine extends PerlModuleBase {
 
     /**
      * Constructor initializes the module.
+     * We pass false for setInc so %INC is NOT pre-set at startup; the companion
+     * Perl file Term/ReadLine.pm (which defines Term::ReadLine::Stub and friends)
+     * is allowed to execute when `use Term::ReadLine` is called normally.
      */
     public TermReadLine() {
-        super("Term::ReadLine");
+        super("Term::ReadLine", false);
         this.history = new ArrayList<>();
         this.minLine = 1;
         this.autoHistory = true;
@@ -47,6 +52,8 @@ public class TermReadLine extends PerlModuleBase {
         this.appName = appName;
         this.inputReader = new BufferedReader(new InputStreamReader(in != null ? in : System.in));
         this.outputWriter = new PrintWriter(out != null ? out : System.out, true);
+        // Re-initialise attributes so appname is reflected correctly.
+        initializeAttributes();
     }
 
     /**
@@ -58,14 +65,19 @@ public class TermReadLine extends PerlModuleBase {
         try {
             readline.registerMethod("new", "newReadLine", "$;$");
             readline.registerMethod("ReadLine", "getReadLinePackage", "");
-            readline.registerMethod("readline", "readLine", "$$");
+            readline.registerMethod("readline", "readLine", "$;$$");
             readline.registerMethod("addhistory", "addHistory", "$$");
+            readline.registerMethod("AddHistory", "addHistory", "$$");
+            readline.registerMethod("GetHistory", "getHistoryList", "$");
+            readline.registerMethod("SetHistory", "setHistoryList", "$@");
             readline.registerMethod("IN", "getInputHandle", "$");
             readline.registerMethod("OUT", "getOutputHandle", "$");
             readline.registerMethod("MinLine", "minLine", "$;$");
             readline.registerMethod("findConsole", "findConsole", "$");
             readline.registerMethod("Attribs", "getAttribs", "$");
             readline.registerMethod("Features", "getFeatures", "$");
+            readline.registerMethod("ornaments", "ornaments", "$;$");
+            readline.registerMethod("newTTY", "newTTY", "$$$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Term::ReadLine method: " + e.getMessage());
         }
@@ -73,17 +85,52 @@ public class TermReadLine extends PerlModuleBase {
 
     /**
      * Creates a new Term::ReadLine object.
+     *
+     * If $ENV{PERL_RL} contains "Perl" (case-insensitive) and the CPAN module
+     * Term::ReadLine::Perl is available, we delegate to it so the caller gets
+     * the full readline (history, key-bindings, completion) implementation.
+     * On any failure we fall back to the built-in Java implementation.
      */
     public static RuntimeList newReadLine(RuntimeArray args, int ctx) {
-        String appName = args.size() > 0 ? args.get(0).toString() : "perl";
+        // Check Perl-level %ENV (not the JVM environment, so BEGIN-block
+        // assignments like  BEGIN{ $ENV{PERL_RL} = 'Perl' }  are visible here).
+        String perlRL = GlobalVariable.getGlobalHash("main::ENV").get("PERL_RL").toString();
+        if (!perlRL.isEmpty()) {
+            String which = perlRL.split("\\s+")[0];
+            if (which.toLowerCase().contains("perl")) {
+                try {
+                    // Make sure Term::ReadLine::Stub (defined in Term/ReadLine.pm)
+                    // is available before loading the CPAN module.
+                    ModuleOperators.require(new RuntimeScalar("Term/ReadLine.pm"));
+                    // Load Term::ReadLine::Perl from ~/.perlonjava/lib (installed by jcpan).
+                    ModuleOperators.require(new RuntimeScalar("Term/ReadLine/Perl.pm"));
+                    // Find Term::ReadLine::Perl::new
+                    RuntimeScalar newMethod = InheritanceResolver.findMethodInHierarchy(
+                            "new", "Term::ReadLine::Perl", null, 0, false);
+                    if (newMethod != null && newMethod.type == RuntimeScalarType.CODE) {
+                        // Build the argument list: class name + caller's args (skip $self arg)
+                        RuntimeArray newArgs = new RuntimeArray();
+                        RuntimeArray.push(newArgs, new RuntimeScalar("Term::ReadLine::Perl"));
+                        for (int i = 1; i < args.size(); i++) {
+                            RuntimeArray.push(newArgs, args.get(i));
+                        }
+                        return RuntimeCode.apply(newMethod, newArgs, RuntimeContextType.LIST);
+                    }
+                } catch (Exception e) {
+                    // CPAN module not installed or failed to load – fall through to Java impl.
+                }
+            }
+        }
+
+        String appName = args.size() > 1 ? args.get(1).toString() : "perl";
         InputStream in = System.in;
         OutputStream out = System.out;
 
-        // Handle optional IN and OUT filehandles if provided
-        if (args.size() > 1 && args.get(1).getDefinedBoolean()) {
+        // Handle optional IN and OUT filehandles if provided (args.get(2) and args.get(3))
+        if (args.size() > 2 && args.get(2).getDefinedBoolean()) {
             // TODO: Convert Perl filehandle to Java InputStream
         }
-        if (args.size() > 2 && args.get(2).getDefinedBoolean()) {
+        if (args.size() > 3 && args.get(3).getDefinedBoolean()) {
             // TODO: Convert Perl filehandle to Java OutputStream
         }
 
@@ -110,16 +157,26 @@ public class TermReadLine extends PerlModuleBase {
     /**
      * Gets an input line with readline support. Trailing newline is removed.
      * Returns undef on EOF.
+     * Optional second arg is the preput (default text); if the terminal is not
+     * interactive we cannot actually inject it, but we display it in the prompt
+     * so the user can see what the default is.
      */
     public static RuntimeList readLine(RuntimeArray args, int ctx) {
         RuntimeHash termHash = args.get(0).hashDeref();
         TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
         String prompt = args.size() > 1 ? args.get(1).toString() : "";
+        String preput = args.size() > 2 && args.get(2).getDefinedBoolean() ? args.get(2).toString() : null;
 
         try {
+            // Build the display prompt, appending preput hint when present
+            String displayPrompt = prompt;
+            if (preput != null && !preput.isEmpty()) {
+                displayPrompt = prompt + "[" + preput + "] ";
+            }
+
             // Print prompt to STDOUT using RuntimeIO
-            if (!prompt.isEmpty()) {
-                RuntimeIO.stdout.write(prompt);
+            if (!displayPrompt.isEmpty()) {
+                RuntimeIO.stdout.write(displayPrompt);
                 RuntimeIO.stdout.flush();
             }
 
@@ -129,6 +186,11 @@ public class TermReadLine extends PerlModuleBase {
             String line = instance.inputReader.readLine();
             if (line == null) {
                 return new RuntimeList(scalarUndef);
+            }
+
+            // When the user just presses Enter with no input, use preput as the value
+            if (line.isEmpty() && preput != null) {
+                line = preput;
             }
 
             // Auto-add to history if enabled and line meets criteria
@@ -267,6 +329,60 @@ public class TermReadLine extends PerlModuleBase {
         return new RuntimeList(featuresHash.createReference());
     }
 
+    /**
+     * Returns the history list as a Perl list (GetHistory).
+     */
+    public static RuntimeList getHistoryList(RuntimeArray args, int ctx) {
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
+        RuntimeList result = new RuntimeList();
+        for (String entry : instance.history) {
+            result.add(new RuntimeScalar(entry));
+        }
+        return result;
+    }
+
+    /**
+     * Replaces the history with the supplied list (SetHistory).
+     * Called as $term->SetHistory(@lines).
+     */
+    public static RuntimeList setHistoryList(RuntimeArray args, int ctx) {
+        RuntimeHash termHash = args.get(0).hashDeref();
+        TermReadLine instance = (TermReadLine) termHash.get("_instance").value;
+        instance.history.clear();
+        // args.get(0) is $self; remaining elements are the new history entries
+        for (int i = 1; i < args.size(); i++) {
+            String entry = args.get(i).toString();
+            if (!entry.isEmpty()) {
+                instance.history.add(entry);
+            }
+        }
+        return new RuntimeList();
+    }
+
+    /**
+     * ornaments() – controls terminal highlighting of the prompt/input line.
+     * The JVM does not have direct termcap access, so this is a no-op stub
+     * that keeps the interface contract without dying.
+     */
+    public static RuntimeList ornaments(RuntimeArray args, int ctx) {
+        // No-op: return the current (empty) ornament string for compatibility
+        return new RuntimeList(new RuntimeScalar(""));
+    }
+
+    /**
+     * newTTY($in, $out) – switches the readline object to use different
+     * input/output filehandles.
+     * Full stream-level switching is not supported on the JVM backend; this
+     * stub accepts the call without dying so code that calls newTTY continues
+     * to work (using the original stdin/stdout).
+     */
+    public static RuntimeList newTTY(RuntimeArray args, int ctx) {
+        // No-op: JVM backend cannot rewire streams through Perl glob references.
+        // The method exists so that callers don't get "Can't locate object method".
+        return new RuntimeList();
+    }
+
     // Cross-platform console detection
     private static boolean isConsoleAvailable() {
         return System.console() != null;
@@ -294,10 +410,14 @@ public class TermReadLine extends PerlModuleBase {
         features.put("appname", true);
         features.put("minline", true);
         features.put("autohistory", true);
-        features.put("addhistory", true);
+        features.put("addhistory", true);  // lowercase alias kept for compatibility
+        features.put("addHistory", true);  // canonical camelCase name
         features.put("attribs", true);
         features.put("setHistory", true);
         features.put("getHistory", true);
+        features.put("ornaments", true);   // no-op stub present
+        features.put("newTTY", true);
+        features.put("preput", true);      // readline($prompt, $preput) supported
     }
 
     private void addToHistory(String line) {
