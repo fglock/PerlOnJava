@@ -71,7 +71,7 @@ sub STORE
     my ($key_ns, $key_local) = $self->from_clark($key);
     if (defined $key_ns)
     {
-        return $self->element->setAttributeNS($key_ns, "xxx:$key_local", "$value");
+        return $self->element->setAttributeNS($key_ns, "$key_local", "$value");
     }
     else
     {

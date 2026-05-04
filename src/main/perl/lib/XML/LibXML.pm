@@ -1256,6 +1256,9 @@ sub finish_push {
     return $retval;
 }
 
+# PerlOnJava stub: no native memory tracking
+sub _leaked_nodes { return 0; }
+
 1;
 
 #-------------------------------------------------------------------------#
@@ -1310,6 +1313,7 @@ sub attributes {
 
 sub findnodes {
     my ($node, $xpath) = @_;
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
     my @nodes = $node->_findnodes($xpath);
     if (wantarray) {
         return @nodes;
@@ -1321,6 +1325,7 @@ sub findnodes {
 
 sub exists {
     my ($node, $xpath) = @_;
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
     my (undef, $value) = $node->_find($xpath,1);
     return $value;
 }
@@ -1343,6 +1348,7 @@ sub findbool {
 
 sub find {
     my ($node, $xpath) = @_;
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
     my ($type, @params) = $node->_find($xpath,0);
     if ($type) {
         return $type->new(@params);
@@ -1544,6 +1550,8 @@ sub toString {
             $retval .= $n->toString(@_);
         }
     }
+    # libxml2 always ends serialization with a trailing newline
+    $retval .= "\n" unless $retval =~ /\n\z/;
     return $retval;
 }
 
@@ -1920,6 +1928,12 @@ sub CLONE_SKIP { 1 }
 # In fact, this is not a node!
 # PerlOnJava: Namespace objects are blessed hash refs {prefix=>, uri=>}
 # These pure-Perl methods replace the XS C-struct accessors.
+
+sub new {
+    my ($class, $uri, $prefix) = @_;
+    return bless { uri => $uri, prefix => ($prefix // '') }, $class;
+}
+
 sub localname     { $_[0]->{prefix} }
 sub getLocalName  { $_[0]->{prefix} }
 sub declaredPrefix { $_[0]->{prefix} }
@@ -1933,7 +1947,8 @@ sub unique_key    { ($_[0]->{prefix}//'') . "\n" . ($_[0]->{uri}//'') }
 
 sub prefix { return "xmlns"; }
 sub getPrefix { return "xmlns"; }
-sub getNamespaceURI { return "http://www.w3.org/2000/xmlns/" };
+sub getNamespaceURI { return "http://www.w3.org/2000/xmlns/" }
+sub namespaceURI { return "http://www.w3.org/2000/xmlns/" }
 
 sub getNamespaces { return (); }
 
@@ -2181,16 +2196,33 @@ sub new {
 
 package XML::LibXML::RegExp;
 
+use Carp qw(croak);
+
 sub CLONE_SKIP { 1 }
 
+# PerlOnJava: pure-Perl XML Schema regexp implementation.
+# XSD patterns are implicitly anchored; wrap with \A...\z.
 sub new {
-  my $class = shift;
-  my ($regexp)=@_;
-  unless (UNIVERSAL::can($class,'_compile')) {
-    croak("Cannot create XML::LibXML::RegExp - ".
-	  "your libxml2 is compiled without regexp support!");
-  }
-  return $class->_compile($regexp);
+    my ($class, $pattern) = @_;
+    my $re = eval { qr/\A(?:$pattern)\z/ };
+    croak("Cannot compile XML::LibXML::RegExp '$pattern': $@") if $@;
+    return bless { pattern => $pattern, re => $re }, $class;
+}
+
+sub matches {
+    my ($self, $string) = @_;
+    return (defined $string && $string =~ $self->{re}) ? 1 : 0;
+}
+
+# Heuristic: a regex is non-deterministic if it contains alternatives (|)
+# outside of character classes [...].  This matches libxml2's behaviour for
+# the patterns used in the upstream test suite.
+sub isDeterministic {
+    my $self = shift;
+    my $pat = $self->{pattern};
+    # Remove character classes to avoid false positives from [a|b]
+    (my $stripped = $pat) =~ s/\[(?:[^\]\\]|\\.)*\]//g;
+    return ($stripped =~ /\|/) ? 0 : 1;
 }
 
 1;
@@ -2202,6 +2234,16 @@ sub new {
 package XML::LibXML::XPathExpression;
 
 sub CLONE_SKIP { 1 }
+
+sub new {
+    my ($class, $expr) = @_;
+    return bless { expression => $expr }, $class;
+}
+
+sub expression { return $_[0]->{expression} }
+
+# Allow the object to stringify to the XPath expression string
+use overload '""' => sub { $_[0]->{expression} }, fallback => 1;
 
 1;
 

@@ -27,6 +27,8 @@ sub CLONE_SKIP { 1 }
 
 sub findnodes {
     my ($self, $xpath, $node) = @_;
+    # Accept XML::LibXML::XPathExpression objects
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
 
     my @nodes = $self->_guarded_find_call('_findnodes', $node, $xpath);
 
@@ -40,6 +42,7 @@ sub findnodes {
 
 sub find {
     my ($self, $xpath, $node) = @_;
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
 
     my ($type, @params) = $self->_guarded_find_call('_find', $node, $xpath,0);
 
@@ -51,6 +54,7 @@ sub find {
 
 sub exists {
     my ($self, $xpath, $node) = @_;
+    $xpath = $xpath->expression if ref($xpath) && $xpath->isa('XML::LibXML::XPathExpression');
     my (undef, $value) = $self->_guarded_find_call('_find', $node, $xpath,1);
     return $value;
 }
