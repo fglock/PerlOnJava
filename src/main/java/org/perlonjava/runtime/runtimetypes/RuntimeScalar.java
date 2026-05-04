@@ -1702,6 +1702,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Dereferences this scalar as a hash reference, bypassing any Perl-level
+     * {@code %{}} overload. This is used internally by Java-backed code (e.g.
+     * XML::LibXML's {@code getNode()}) that needs to access the raw object hash
+     * even when the class has a {@code %{}} overload installed.
+     */
+    public RuntimeHash hashDerefRaw() {
+        if (type == HASHREFERENCE) {
+            return (RuntimeHash) value;
+        }
+        // Fall back to the normal path for non-HASHREFERENCE types
+        // (autovivification, string refs under no-strict, etc.)
+        return hashDeref();
+    }
+
+    /**
      * Dereferences this scalar as a hash reference using the `%$v` operator.
      *
      * <p>This method implements Perl's hash dereference operator `%$v`, which treats

@@ -45,6 +45,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 - Work in Progress
   - [Multiplicity — per-runtime isolation for concurrent Perl interpreters](https://github.com/fglock/PerlOnJava/pull/480): `PerlRuntime` with `ThreadLocal`-based isolation; all mutable state (globals, I/O, regex, caller stack, method caches) moved to per-runtime instances; 122/126 concurrent interpreter tests pass; pending closure/method dispatch optimization
+  - Moose - most tests pass
+  - XML::LibXML - some tests pass
   - PerlIO
     - `get_layers`
   - Term::ReadLine

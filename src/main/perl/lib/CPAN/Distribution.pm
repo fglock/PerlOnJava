@@ -1989,6 +1989,13 @@ sub prepare {
     if ($pl_commandline) {
         $system = $pl_commandline;
         $ENV{PERL} = $^X;
+        if ($system eq 'PERLONJAVA_SKIP') {
+            # Cross-platform no-op: skip configure entirely.
+            $self->{writemakefile} = CPAN::Distrostatus->new("YES");
+            delete $self->{make_clean};
+            $self->store_persistent_state;
+            return $self->success("PERLONJAVA_SKIP -- configure phase skipped");
+        }
     } elsif ($self->{'configure'}) {
         $system = $self->{'configure'};
     } elsif ($self->{modulebuild}) {
@@ -2114,6 +2121,18 @@ sub prepare {
                 $ret = system($system);
             }
             if ($ret != 0) {
+                # PerlOnJava: When Makefile.PL fails (e.g. due to a missing
+                # native dependency like Alien::Libxml2 that cannot be satisfied
+                # on the JVM), attempt a cross-platform fallback: generate a
+                # minimal Makefile.PL from META.yml/META.json and re-run it.
+                # This removes the need for Unix-specific distropref commandlines
+                # like "pl: commandline: true" for XS modules.
+                if ($self->_try_perlonjava_fallback_pl($system)) {
+                    $self->{writemakefile} = CPAN::Distrostatus->new("YES");
+                    delete $self->{make_clean};
+                    $self->store_persistent_state;
+                    return $self->success("$system -- OK (PerlOnJava XS fallback)");
+                }
                 $self->{writemakefile} = CPAN::Distrostatus
                     ->new("NO '$system' returned status $ret");
                 $CPAN::Frontend->mywarn("Warning: No success on command[$system]\n");
@@ -2222,8 +2241,14 @@ FALLBACK
         return 0;
     }
 
-    # Re-run Makefile.PL
-    my $ret = system($system);
+    # Run the generated Makefile.PL with perl.
+    # We always use $^X here, not $system, because $system may be the
+    # distropref commandline (e.g. "true") which creates no Makefile.
+    # Set JCPAN_RUN_BUNDLED_TESTS=1 so MakeMaker generates a real 'make test'
+    # target even when the module's .pm is already bundled in the PerlOnJava
+    # JAR (otherwise MakeMaker emits a no-op skip message as the test target).
+    local $ENV{JCPAN_RUN_BUNDLED_TESTS} = 1;
+    my $ret = system($^X, 'Makefile.PL');
     return 0 if $ret != 0;
     return -f "Makefile" ? 1 : 0;
 }
@@ -2399,6 +2424,12 @@ is part of the perl-%s distribution. To install that, you need to run
     if ($make_commandline) {
         $system = $make_commandline;
         $ENV{PERL} = CPAN::find_perl();
+        if ($system eq 'PERLONJAVA_SKIP') {
+            # Cross-platform no-op: skip make entirely.
+            $self->{make} = CPAN::Distrostatus->new("YES");
+            $self->store_persistent_state;
+            return $self->success("PERLONJAVA_SKIP -- make phase skipped");
+        }
     } else {
         if ($self->{modulebuild}) {
             unless (-f "Build" || ($^O eq 'VMS' && -f 'Build.com')) {
@@ -3887,6 +3918,20 @@ sub test {
         = exists $prefs_test->{commandline} ? $prefs_test->{commandline} : "") {
         $system = $commandline;
         $ENV{PERL} = CPAN::find_perl();
+        if ($system eq 'PERLONJAVA_SKIP') {
+            # Cross-platform no-op: skip tests entirely.
+            $self->{make_test} = CPAN::Distrostatus->new("YES");
+            $self->store_persistent_state;
+            return $self->success("PERLONJAVA_SKIP -- test phase skipped");
+        } elsif ($system eq 'PERLONJAVA_TEST_IGNORE_FAILURES') {
+            # Run the platform-appropriate 'make test', always report success.
+            # Replaces Unix-only "/usr/bin/make test; exit 0" idiom.
+            my $make_test_cmd = join " ", $self->_make_command(), "test";
+            system($make_test_cmd);
+            $self->{make_test} = CPAN::Distrostatus->new("YES");
+            $self->store_persistent_state;
+            return $self->success("$make_test_cmd -- OK (failures ignored by PERLONJAVA_TEST_IGNORE_FAILURES)");
+        }
     } elsif ($self->{modulebuild}) {
         $system = sprintf "%s test", $self->_build_command();
         unless (-e "Build" || ($^O eq 'VMS' && -e "Build.com")) {
@@ -4311,6 +4356,12 @@ sub install {
     if (my $commandline = $self->prefs->{install}{commandline}) {
         $system = $commandline;
         $ENV{PERL} = CPAN::find_perl();
+        if ($system eq 'PERLONJAVA_SKIP') {
+            # Cross-platform no-op: skip install entirely.
+            $self->{install} = CPAN::Distrostatus->new("YES");
+            $self->store_persistent_state;
+            return $self->success("PERLONJAVA_SKIP -- install phase skipped");
+        }
     } elsif ($self->{modulebuild}) {
         my($mbuild_install_build_command) =
             exists $CPAN::HandleConfig::keys{mbuild_install_build_command} &&

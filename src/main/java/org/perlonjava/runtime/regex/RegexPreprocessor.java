@@ -978,7 +978,7 @@ public class RegexPreprocessor {
                 }
             }
 
-            offset++;
+            offset += Character.charCount(c);
         }
 
         return offset;
