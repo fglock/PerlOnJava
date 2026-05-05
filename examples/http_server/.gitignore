@@ -1,0 +1,10 @@
+# Compiled Java classes
+*.class
+
+# Library directory (downloaded dependencies)
+lib/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
