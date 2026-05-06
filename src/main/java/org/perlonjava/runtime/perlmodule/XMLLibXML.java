@@ -2018,9 +2018,9 @@ public class XMLLibXML extends PerlModuleBase {
             String baseUri = parent.getDocumentURI();
             URL url;
             if (baseUri != null) {
-                url = new URL(new URL(baseUri), href);
+                url = new URI(baseUri).resolve(href).toURL();
             } else if (href.contains("://") || href.startsWith("file:")) {
-                url = new URL(href);
+                url = new URI(href).toURL();
             } else {
                 // Relative path without a base URI — cannot resolve
                 return null;

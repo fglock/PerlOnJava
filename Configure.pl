@@ -482,7 +482,10 @@ sub update_to_latest_versions {
     # Update Gradle dependencies using version catalog
     if (-f 'build.gradle') {
         print "Updating Gradle dependencies to latest versions using version catalog...\n";
-        my $gradle_output = `./gradlew versionCatalogUpdate`;
+        # Disable configuration cache for versionCatalogUpdate: the plugin invokes Task.project at execution time,
+        # which is incompatible with Gradle's configuration cache. This flag prevents cache errors during upgrades.
+        # Regular builds keep the cache enabled for performance; only upgrade operations bypass it.
+        my $gradle_output = `./gradlew versionCatalogUpdate --no-configuration-cache`;
         my $gradle_status = $? >> 8;
         if ($gradle_status != 0) {
             warn "Failed to update Gradle dependencies. Exit status: $gradle_status\n";
