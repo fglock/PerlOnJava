@@ -53,6 +53,7 @@ make_repro_asm.log
 out.json
 test_results.json
 cpan_smoke_*
+*.dat
 logs/
 .perlonjava_env_ready
 *.diff
