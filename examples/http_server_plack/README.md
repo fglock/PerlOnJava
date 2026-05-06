@@ -126,6 +126,56 @@ The handler provides all standard PSGI v1.1 environment keys:
 | `backlog` | 128 | TCP backlog queue size |
 | `keepalive` | 30 | HTTP keep-alive timeout (seconds) |
 | `max_request_size` | 10485760 | Max request body size (bytes, ~10MB) |
+| `ssl` | 0 | Enable HTTPS/TLS |
+| `ssl_cert` | - | SSL certificate path (PEM format) |
+| `ssl_key` | - | SSL private key path (PEM format) |
+| `ssl_ca` | - | CA certificate for client verification (optional) |
+| `ssl_protocols` | TLSv1.2, TLSv1.3 | Allowed TLS versions (arrayref, optional) |
+| `ssl_ciphers` | - | Cipher suites (colon-separated, optional) |
+
+## HTTPS Support
+
+The handler supports SSL/TLS via Netty's SslHandler:
+
+```perl
+my $handler = Plack::Handler::Netty->new(
+    port     => 443,
+    ssl      => 1,
+    ssl_cert => '/path/to/cert.pem',
+    ssl_key  => '/path/to/key.pem',
+);
+$handler->run($app);
+```
+
+### Generating Test Certificates
+
+For testing (self-signed certificate):
+
+```bash
+cd examples/http_server_plack/certs
+./generate_test_cert.sh
+```
+
+Then run the HTTPS test server:
+
+```bash
+./jperl examples/http_server_plack/test_https.pl
+curl -k https://localhost:8443/  # -k skips cert verification
+```
+
+### Production Certificates
+
+For production, use Let's Encrypt:
+
+```bash
+certbot certonly --standalone -d yourdomain.com
+
+# Certificates will be at:
+# /etc/letsencrypt/live/yourdomain.com/fullchain.pem
+# /etc/letsencrypt/live/yourdomain.com/privkey.pem
+```
+
+**Do NOT use self-signed certificates in production.**
 
 ## Using with Your Own PSGI Apps
 
@@ -159,24 +209,27 @@ This design avoids PerlOnJava's thread-safety constraints while still providing 
 ## Limitations
 
 - **Single-threaded** - CPU-intensive handlers block other requests
-- **HTTP only** - HTTPS/TLS support planned for future phases
-- **Streaming not yet implemented** - Phase 1 supports array responses only
+- **Streaming responses** - Phase 3 adds support for PSGI streaming
 
 ## Performance
 
-Expected performance for "Hello World" apps: **5,000-10,000+ requests/sec**
+Expected performance for "Hello World" apps: **30,000+ requests/sec**
 
-Actual performance depends on:
-- Handler complexity (CPU vs I/O bound)
-- Netty configuration (keep-alive, buffer sizes)
-- System resources (RAM, file descriptors)
+Benchmark results (Apple Silicon):
+- Hello World: 32,980 req/sec @ 100 concurrent connections
+- JSON API: 22,461 req/sec with dynamic content
+- Streaming: 16,312 req/sec for streaming responses
+
+See `PERFORMANCE.md` for detailed benchmarks.
 
 ## Files in This Directory
 
 - `test.pl` - Complete working example with multiple test endpoints
-- `Makefile` - Build and utility targets (legacy, not needed with current build)
+- `test_https.pl` - HTTPS test server with self-signed certificates
+- `test_streaming.pl` - Streaming response examples
+- `certs/` - Test SSL certificates and generation scripts
+- `PERFORMANCE.md` - Detailed performance benchmarks
 - `README.md` - This file
-- `lib/` - Local copy of Netty JARs (if using Makefile)
 
 **Real implementation** is bundled in the JAR:
 - Java: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
@@ -202,12 +255,11 @@ $handler->run($app);
 
 ## Implementation Status
 
-✅ Phase 1 Complete - Synchronous PSGI responses working  
-✅ Single-threaded event loop for concurrency  
-✅ Full PSGI v1.1 environment  
-✅ HTTP/1.1 with keep-alive  
-✅ Standard Plack::Handler interface  
-🚧 Phase 2+ - Streaming responses, HTTPS, Dancer2 testing
+✅ Phase 1 Complete - Synchronous PSGI responses  
+✅ Phase 3 Complete - Streaming responses  
+✅ Phase 4 Complete - Production features (config, error handling, graceful shutdown)  
+✅ Phase 5 Complete - HTTPS/TLS support  
+🚧 Phase 2+ - Dancer2 testing (pending symbol table performance fixes)
 
 ## Contributing
 

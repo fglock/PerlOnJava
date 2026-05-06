@@ -318,28 +318,11 @@ The handler provides all required PSGI 1.1 environment keys:
 
 =back
 
-=head1 HTTPS/TLS SUPPORT (Future)
+=head1 HTTPS/TLS SUPPORT
 
-TLS/SSL support is planned for a future release. When implemented, configuration
-will include:
+SSL/TLS support is provided via Netty's SslHandler.
 
-=over 4
-
-=item * C<ssl> (boolean) - Enable HTTPS
-
-=item * C<ssl_cert> (string) - Path to SSL certificate file (PEM format)
-
-=item * C<ssl_key> (string) - Path to SSL private key file (PEM format)
-
-=item * C<ssl_ca> (string, optional) - Path to CA certificate for client verification
-
-=item * C<ssl_protocols> (arrayref, optional) - Allowed TLS versions (e.g., C<['TLSv1.2', 'TLSv1.3']>)
-
-=item * C<ssl_ciphers> (string, optional) - Allowed cipher suites
-
-=back
-
-B<Planned Example:>
+=head2 Basic Configuration
 
     my $handler = Plack::Handler::Netty->new(
         port     => 443,
@@ -347,14 +330,104 @@ B<Planned Example:>
         ssl_cert => '/path/to/cert.pem',
         ssl_key  => '/path/to/key.pem',
     );
+    $handler->run($app);
 
-B<Current Workaround:>
-
-For HTTPS support now, run the handler behind an SSL termination proxy:
+=head2 Configuration Options
 
 =over 4
 
-=item * Nginx with proxy_pass
+=item * C<ssl> (boolean, default: false)
+
+Enable HTTPS. When enabled, C<ssl_cert> and C<ssl_key> are required.
+
+=item * C<ssl_cert> (string, required if ssl=1)
+
+Path to SSL certificate file in PEM format.
+
+=item * C<ssl_key> (string, required if ssl=1)
+
+Path to SSL private key file in PEM format.
+
+=item * C<ssl_ca> (string, optional)
+
+Path to CA certificate for client certificate verification.
+When specified, client certificates will be optionally validated.
+
+=item * C<ssl_protocols> (arrayref, optional)
+
+Allowed TLS protocol versions. Default: C<['TLSv1.2', 'TLSv1.3']>
+
+    ssl_protocols => ['TLSv1.3']  # TLS 1.3 only
+
+=item * C<ssl_ciphers> (string, optional)
+
+Colon-separated list of allowed cipher suites.
+
+    ssl_ciphers => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384'
+
+=back
+
+=head2 Certificate Formats
+
+Certificates and keys must be in PEM format (ASCII-armored).
+
+B<Self-signed for testing:>
+
+    openssl req -x509 -newkey rsa:2048 -keyout key.pem \
+        -out cert.pem -days 365 -nodes \
+        -subj "/CN=localhost"
+
+B<Let's Encrypt for production:>
+
+    certbot certonly --standalone -d example.com
+
+    # Certificates will be at:
+    # /etc/letsencrypt/live/example.com/fullchain.pem
+    # /etc/letsencrypt/live/example.com/privkey.pem
+
+=head2 PSGI Environment
+
+When SSL is enabled, the PSGI environment includes:
+
+=over 4
+
+=item * C<psgi.url_scheme> - Set to C<"https">
+
+=item * C<HTTPS> - Set to C<"on"> (CGI standard variable)
+
+=back
+
+Applications can detect HTTPS:
+
+    my $app = sub {
+        my ($env) = @_;
+        my $is_https = $env->{'psgi.url_scheme'} eq 'https';
+        # or
+        my $is_https = $env->{'HTTPS'} eq 'on';
+        ...
+    };
+
+=head2 Production Deployment
+
+For production, use proper certificates from:
+
+=over 4
+
+=item * B<Let's Encrypt> - Free automated certificates (recommended)
+
+=item * B<Commercial CA> - Paid certificates with support/warranty
+
+=back
+
+B<Do NOT use self-signed certificates in production.>
+
+=head2 Reverse Proxy Alternative
+
+For some deployments, you may prefer SSL termination at a reverse proxy:
+
+=over 4
+
+=item * Nginx with proxy_pass (recommended)
 
 =item * Apache with mod_proxy
 
@@ -362,7 +435,8 @@ For HTTPS support now, run the handler behind an SSL termination proxy:
 
 =back
 
-The handler will receive requests as HTTP after SSL termination at the proxy layer.
+This allows the proxy to handle SSL, certificate renewal, and HTTPS-to-HTTP
+forwarding to the handler.
 
 =head1 ERROR HANDLING
 

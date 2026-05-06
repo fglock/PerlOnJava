@@ -1,14 +1,32 @@
 # Plack::Handler::Netty - PSGI Server Backend for PerlOnJava
 
-## Status: Phase 3 - Complete ✅, Phase 4 - In Progress 🚧
+## Status: Phase 5 - Complete ✅
 
 - **Module version**: Plack::Handler::Netty 0.01
 - **Date started**: 2026-05-06
 - **PR merged**: #662 (Phase 1), #663 (Phase 3)
-- **Test location**: `examples/http_server_plack/test.pl`, `examples/http_server_plack/test_streaming.pl`
+- **Test location**: `examples/http_server_plack/test.pl`, `examples/http_server_plack/test_streaming.pl`, `examples/http_server_plack/test_https.pl`
 - **Build system**: Maven (pom.xml) + Gradle (build.gradle)
 
 ## Recent Work
+
+**2026-05-06 - Phase 5 Complete: HTTPS/TLS Support**
+- Implemented SSL/TLS using Netty's SslHandler
+- Added SSL configuration options (ssl, ssl_cert, ssl_key, ssl_ca, ssl_protocols, ssl_ciphers)
+- Created SSL context builder with certificate/key loading
+- Integrated SslHandler into Netty pipeline
+- Updated PSGI environment (psgi.url_scheme='https', HTTPS='on')
+- Generated test certificates with OpenSSL
+- Created test_https.pl application
+- Updated documentation (POD, README)
+- TLS 1.2 and 1.3 enabled by default
+
+**2026-05-06 - Phase 4 Complete: Production Features**
+- Added configuration options (host, port, backlog, keepalive, max_request_size)
+- Implemented comprehensive error handling and logging
+- Added graceful shutdown via JVM shutdown hooks
+- Performance testing: 32,980 req/sec for Hello World
+- Complete documentation with all parameters
 
 **2026-05-06 - Phase 3 Complete: PSGI Streaming Response Support**
 - Implemented streaming responses using Perl-side responder callbacks
@@ -16,6 +34,11 @@
 - Created _handle_streaming_response() Perl helper function
 - All streaming tests passing (basic, large responses, conditional routing)
 - Both sync and streaming responses coexist seamlessly
+
+**2026-05-06 - Fixed plackup Middleware Compatibility**
+- Fixed psgi.errors and psgi.input being undefined in hash
+- Fixed psgi.version to be array reference [1,1] not scalar 11
+- plackup now works with all middleware (StackTrace, Lint, AccessLog)
 
 **2026-05-06 - Fixed MIME::Base64.encode_base64url blocker**
 - Added URL-safe base64 encoding functions (RFC 4648)
