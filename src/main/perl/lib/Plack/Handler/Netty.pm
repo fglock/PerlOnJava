@@ -116,7 +116,7 @@ including Twitter, Apple, and Facebook.
 
 =item * B<HTTP/1.1> - Keep-alive connections, chunked encoding
 
-=item * B<Production ready> - Based on Netty, a proven industrial-strength framework
+=item * B<Comprehensive error handling> - Returns helpful error messages for misconfigured applications
 
 =back
 

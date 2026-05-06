@@ -16,7 +16,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.nio.charset.StandardCharsets;
 
 /**
- * NettyPSGIServer - Production-ready PSGI server implementation using Netty.
+ * PlackHandlerNetty - PSGI server implementation using Netty.
  *
  * This class implements a high-performance HTTP server that bridges Perl web frameworks
  * (Dancer2, Catalyst, Mojolicious) to Java's Netty async I/O engine. It implements the
@@ -26,7 +26,7 @@ import java.nio.charset.StandardCharsets;
  * - Full PSGI v1.1 environment hash construction
  * - Synchronous array response support (Phase 1)
  * - Single-threaded event loop (PerlOnJava thread-safety requirement)
- * - Production-ready error handling
+ * - Error handling
  * - HTTP/1.1 with keep-alive support
  *
  * Thread Safety:
@@ -39,7 +39,7 @@ import java.nio.charset.StandardCharsets;
  *   // Perl side: Plack::Handler::Netty->new(port => 5000)->run($app);
  *   // Java side:
  *   RuntimeScalar psgiApp = ...; // PSGI coderef
- *   NettyPSGIServer server = new NettyPSGIServer();
+ *   PlackHandlerNetty server = new PlackHandlerNetty();
  *   // Method calls via Perl: $server = Plack::Handler::Netty->new(5000, $app, \%config);
  * </pre>
  *
@@ -262,7 +262,6 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
             } catch (Exception e) {
                 // Catch all exceptions from PSGI app and return 500
-                e.printStackTrace();
                 sendErrorResponse(ctx, req,
                     HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "Internal Server Error: " + e.getMessage());
