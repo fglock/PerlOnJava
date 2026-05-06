@@ -7,6 +7,8 @@ package org.perlonjava.runtime.util;
 public class Base64Util {
     private static final String BASE64_CHARS =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    private static final String BASE64_URL_CHARS =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     private static final char PAD = '=';
     private static final int MASK_6BITS = 0x3f;
     private static final int MASK_8BITS = 0xff;
@@ -14,16 +16,23 @@ public class Base64Util {
 
     // Lookup table for decoding
     private static final int[] DECODE_TABLE = new int[256];
+    private static final int[] DECODE_URL_TABLE = new int[256];
 
     static {
         // Initialize decode table
         for (int i = 0; i < 256; i++) {
             DECODE_TABLE[i] = -1;
+            DECODE_URL_TABLE[i] = -1;
         }
 
         // Fill valid characters
         for (int i = 0; i < BASE64_CHARS.length(); i++) {
             DECODE_TABLE[BASE64_CHARS.charAt(i)] = i;
+        }
+
+        // Fill URL-safe characters
+        for (int i = 0; i < BASE64_URL_CHARS.length(); i++) {
+            DECODE_URL_TABLE[BASE64_URL_CHARS.charAt(i)] = i;
         }
     }
 
@@ -205,5 +214,154 @@ public class Base64Util {
         }
 
         return result.toString();
+    }
+
+    /**
+     * Encodes binary data into URL-safe Base64 string (- and _ instead of + and /).
+     * Without padding by default (RFC 4648 section 5).
+     */
+    public static String encodeUrl(byte[] data) {
+        if (data == null) {
+            return "";
+        }
+
+        int len = data.length;
+        if (len == 0) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+
+        // Process 3 bytes at a time
+        int i = 0;
+        for (; i < len - 2; i += 3) {
+            int byte1 = data[i] & MASK_8BITS;
+            int byte2 = data[i + 1] & MASK_8BITS;
+            int byte3 = data[i + 2] & MASK_8BITS;
+
+            int c1 = byte1 >>> 2;
+            int c2 = ((byte1 & 0x03) << 4) | (byte2 >>> 4);
+            int c3 = ((byte2 & 0x0f) << 2) | (byte3 >>> 6);
+            int c4 = byte3 & MASK_6BITS;
+
+            result.append(BASE64_URL_CHARS.charAt(c1));
+            result.append(BASE64_URL_CHARS.charAt(c2));
+            result.append(BASE64_URL_CHARS.charAt(c3));
+            result.append(BASE64_URL_CHARS.charAt(c4));
+        }
+
+        // Handle remaining bytes (without padding)
+        if (i < len) {
+            int byte1 = data[i] & MASK_8BITS;
+
+            if (i + 1 < len) {
+                // 2 bytes remaining
+                int byte2 = data[i + 1] & MASK_8BITS;
+
+                int c1 = byte1 >>> 2;
+                int c2 = ((byte1 & 0x03) << 4) | (byte2 >>> 4);
+                int c3 = (byte2 & 0x0f) << 2;
+
+                result.append(BASE64_URL_CHARS.charAt(c1));
+                result.append(BASE64_URL_CHARS.charAt(c2));
+                result.append(BASE64_URL_CHARS.charAt(c3));
+            } else {
+                // 1 byte remaining
+                int c1 = byte1 >>> 2;
+                int c2 = (byte1 & 0x03) << 4;
+
+                result.append(BASE64_URL_CHARS.charAt(c1));
+                result.append(BASE64_URL_CHARS.charAt(c2));
+            }
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Decodes a URL-safe Base64 string into binary data.
+     * Handles both padded and unpadded versions.
+     */
+    public static byte[] decodeUrl(String base64) {
+        if (base64 == null || base64.isEmpty()) {
+            return new byte[0];
+        }
+
+        // Add padding if needed
+        int paddingNeeded = (4 - (base64.length() % 4)) % 4;
+        StringBuilder padded = new StringBuilder(base64);
+        for (int i = 0; i < paddingNeeded; i++) {
+            padded.append(PAD);
+        }
+        String base64Padded = padded.toString();
+
+        // Filter out non-Base64 characters
+        StringBuilder filtered = new StringBuilder();
+        for (int i = 0; i < base64Padded.length(); i++) {
+            char c = base64Padded.charAt(i);
+            if (c == '=' || (c < 128 && DECODE_URL_TABLE[c] != -1)) {
+                filtered.append(c);
+            }
+        }
+
+        String cleanBase64 = filtered.toString();
+        if (cleanBase64.isEmpty()) {
+            return new byte[0];
+        }
+
+        // Find the first padding character and truncate after it
+        int padIndex = cleanBase64.indexOf(PAD);
+        if (padIndex >= 0) {
+            cleanBase64 = cleanBase64.substring(0, padIndex);
+        }
+
+        // Calculate output length
+        int len = cleanBase64.length();
+        int outputLen = (len * 3) / 4;
+        byte[] result = new byte[outputLen];
+
+        int resultIndex = 0;
+        int i = 0;
+
+        // Process 4 characters at a time
+        for (; i <= len - 4; i += 4) {
+            int c1 = getUrlValue(cleanBase64.charAt(i));
+            int c2 = getUrlValue(cleanBase64.charAt(i + 1));
+            int c3 = getUrlValue(cleanBase64.charAt(i + 2));
+            int c4 = getUrlValue(cleanBase64.charAt(i + 3));
+
+            result[resultIndex++] = (byte) ((c1 << 2) | (c2 >>> 4));
+            result[resultIndex++] = (byte) ((c2 << 4) | (c3 >>> 2));
+            result[resultIndex++] = (byte) ((c3 << 6) | c4);
+        }
+
+        // Handle remaining characters
+        if (i < len) {
+            if (i + 1 < len) {
+                int c1 = getUrlValue(cleanBase64.charAt(i));
+                int c2 = getUrlValue(cleanBase64.charAt(i + 1));
+
+                if (resultIndex < result.length) {
+                    result[resultIndex++] = (byte) ((c1 << 2) | (c2 >>> 4));
+                }
+
+                if (i + 2 < len) {
+                    int c3 = getUrlValue(cleanBase64.charAt(i + 2));
+                    if (resultIndex < result.length) {
+                        result[resultIndex++] = (byte) ((c2 << 4) | (c3 >>> 2));
+                    }
+                } else if (i + 2 == len) {
+                    if (resultIndex < result.length) {
+                        result[resultIndex++] = (byte) (c2 << 4);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static int getUrlValue(char c) {
+        return (c < 128) ? DECODE_URL_TABLE[c] : -1;
     }
 }

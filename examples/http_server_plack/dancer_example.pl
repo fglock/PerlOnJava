@@ -5,8 +5,10 @@ use warnings;
 # Dancer2 example with Plack::Handler::Netty
 #
 # This demonstrates that Dancer2 works seamlessly with the Netty handler.
-# Run with: ./jperl examples/http_server_plack/dancer_example.pl
+# Run with: PLACK_SERVER=Netty plackup -p 5000 examples/http_server_plack/dancer_example.pl
+#       or: ./jperl examples/http_server_plack/dancer_example.pl
 
+# Use Plack to export the app as PSGI
 use Dancer2;
 
 get '/' => sub {
@@ -23,13 +25,5 @@ get '/echo' => sub {
     return "You sent: $msg";
 };
 
-get '/env/:key' => sub {
-    my $key = route_parameters->get('key');
-    # Access PSGI environment
-    my $env = request->env;
-    my $value = $env->{$key} // 'not found';
-    return "env{$key} = $value";
-};
-
-# Start the server (will use Netty if PLACK_SERVER=Netty or via plackup -s Netty)
-start;
+# Export PSGI app
+app->to_app;
