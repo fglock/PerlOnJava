@@ -1,12 +1,20 @@
 # Plack::Handler::Netty - PSGI Server Backend for PerlOnJava
 
-## Status: Phase 1 - Complete ✅
+## Status: Phase 1 - Complete ✅, Phase 2 - Blocker Fixed 🚧
 
 - **Module version**: Plack::Handler::Netty 0.01
 - **Date started**: 2026-05-06
 - **PR merged**: #662 (2026-05-06)
 - **Test location**: `examples/http_server_plack/test.pl`
 - **Build system**: Maven (pom.xml) + Gradle (build.gradle)
+
+## Recent Work
+
+**2026-05-06 - Fixed MIME::Base64.encode_base64url blocker**
+- Added URL-safe base64 encoding functions (RFC 4648)
+- Implemented `encode_base64url()` and `decode_base64url()` in Java backend
+- Dancer2 can now be imported without import errors
+- Session factories and components load successfully
 
 ## Progress Tracking
 
