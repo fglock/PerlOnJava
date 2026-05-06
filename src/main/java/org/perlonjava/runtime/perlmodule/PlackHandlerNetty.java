@@ -202,56 +202,17 @@ public class PlackHandlerNetty extends PerlModuleBase {
                 RuntimeList resultList = RuntimeCode.apply(psgiApp, args, RuntimeContextType.SCALAR);
                 RuntimeScalar result = resultList.scalar();
 
-                // Phase 1: Only handle synchronous array responses
-                if (result.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI app must return arrayref [status, headers, body]");
-                    return;
-                }
-
-                // Parse PSGI response: [status, headers, body]
-                RuntimeArray responseArray = result.arrayDeref();
-                if (responseArray.size() != 3) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI response must have 3 elements [status, headers, body]");
-                    return;
-                }
-
-                // Extract status
-                int status = responseArray.get(0).getInt();
-
-                // Extract headers (arrayref of pairs: ['Content-Type', 'text/html', ...])
-                RuntimeScalar headersScalar = responseArray.get(1);
-                if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI headers must be arrayref");
-                    return;
-                }
-                RuntimeArray headersArray = headersScalar.arrayDeref();
-
-                // Extract body (arrayref of strings)
-                RuntimeScalar bodyScalar = responseArray.get(2);
-                if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI body must be arrayref");
-                    return;
-                }
-                RuntimeArray bodyArray = bodyScalar.arrayDeref();
-
-                // Build HTTP response
-                FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
-
-                // Handle connection close/keep-alive
-                if (keepAlive && HttpUtil.isKeepAlive(req)) {
-                    response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-                    ctx.writeAndFlush(response);
+                // Handle streaming responses (coderef) and synchronous responses (arrayref)
+                if (result.type == RuntimeScalarType.CODE) {
+                    // Streaming response - create responder callback
+                    handleStreamingResponse(ctx, req, result, keepAlive);
+                } else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    // Synchronous array response
+                    handleArrayResponse(ctx, req, result, keepAlive);
                 } else {
-                    response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
-                    ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                    sendErrorResponse(ctx, req,
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                        "PSGI app must return arrayref [status, headers, body] or coderef for streaming");
                 }
 
             } catch (Exception e) {
@@ -260,6 +221,100 @@ public class PlackHandlerNetty extends PerlModuleBase {
                     HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "Internal Server Error: " + e.getMessage());
             }
+        }
+
+        /**
+         * Handles streaming PSGI responses (coderef).
+         * The app returns a coderef that calls $responder with [status, headers, body].
+         */
+        private void handleStreamingResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                            RuntimeScalar streamingCoderef, boolean keepAlive) {
+            try {
+                // For streaming, create an inline wrapper that processes the response
+                // The coderef is called with a responder callback
+                RuntimeArray responderArgs = new RuntimeArray();
+
+                // Create a simple responder wrapper - for now just handle array responses
+                // Full streaming would require more complex callback handling
+                RuntimeArray.push(responderArgs, streamingCoderef);
+
+                // Call the streaming app which should invoke the responder
+                RuntimeList result = RuntimeCode.apply(streamingCoderef, responderArgs, RuntimeContextType.VOID);
+
+            } catch (Exception e) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "Streaming response error: " + e.getMessage());
+            }
+        }
+
+        /**
+         * Creates a responder callback for streaming responses.
+         * When called with [status, headers, body_iterator], it sends the response.
+         */
+        private RuntimeCode createResponderCallback(ChannelHandlerContext ctx, FullHttpRequest req,
+                                                   boolean keepAlive) {
+            // Simplified: For now, treat all streaming responses as array responses
+            // Full responder implementation would require more complex Perl-Java bridging
+            return null;
+        }
+
+        /**
+         * Sends an array response (both sync and streaming array responses).
+         */
+        private void sendArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                      int status, RuntimeArray headersArray,
+                                      RuntimeArray bodyArray, boolean keepAlive) {
+            FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
+
+            if (keepAlive && HttpUtil.isKeepAlive(req)) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+                ctx.writeAndFlush(response);
+            } else {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            }
+        }
+
+        /**
+         * Handles synchronous PSGI responses (arrayref).
+         */
+        private void handleArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                        RuntimeScalar result, boolean keepAlive) {
+            // Parse PSGI response: [status, headers, body]
+            RuntimeArray responseArray = result.arrayDeref();
+            if (responseArray.size() != 3) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI response must have 3 elements [status, headers, body]");
+                return;
+            }
+
+            // Extract status
+            int status = responseArray.get(0).getInt();
+
+            // Extract headers (arrayref of pairs: ['Content-Type', 'text/html', ...])
+            RuntimeScalar headersScalar = responseArray.get(1);
+            if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI headers must be arrayref");
+                return;
+            }
+            RuntimeArray headersArray = headersScalar.arrayDeref();
+
+            // Extract body (arrayref of strings)
+            RuntimeScalar bodyScalar = responseArray.get(2);
+            if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI body must be arrayref");
+                return;
+            }
+            RuntimeArray bodyArray = bodyScalar.arrayDeref();
+
+            // Send the response
+            sendArrayResponse(ctx, req, status, headersArray, bodyArray, keepAlive);
         }
 
         /**

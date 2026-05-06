@@ -458,165 +458,141 @@ done_testing;
 
 **Status**: Partially implemented - code detects streaming responses but responder callback incomplete.
 
+**Approach**: Perl-side implementation (simpler, more maintainable, unblocks Phase 5)
+
 **Why Streaming Matters**:
 - Large file downloads (don't buffer entire file in memory)
 - Server-sent events (SSE)
 - Progressive rendering (send HTML as it's generated)
 - Framework compatibility (some frameworks use streaming internally)
 
-#### Task 3.1: Research RuntimeCode Callback Pattern
+**Why Perl-side Approach**:
+- Creating Perl callbacks is trivial in Perl but complex in Java
+- Iterator object support (Phase 5) requires calling Perl methods - works natively in Perl
+- Error handling, validation, closures all work naturally in Perl
+- Java side stays focused on HTTP/networking
+- Less coupling between Java and Perl code
 
-**Goal**: Understand how to create RuntimeCode instances that can be called from Perl.
+#### Task 3.1: Research Perl-Java Callback Passing (1-2 days)
+
+**Goal**: Understand how to pass callbacks between Perl and Java.
 
 **Files to examine**:
-- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - Constructor signatures
-- `src/main/java/org/perlonjava/runtime/runtimetypes/PerlSubroutine.java` - How builtin subs create coderefs
-- `src/main/java/org/perlonjava/runtime/perlmodule/*.java` - Examples of exposed callbacks
+- `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java` - How Java sees Perl coderefs
+- `src/main/java/org/perlonjava/runtime/perlmodule/*.java` - Examples of callbacks between Perl/Java
+- How to call Perl methods from Java using PerlModuleBase.getMethod()
+- How to pass Java objects to Perl as callable arguments
 
 **Search for**:
-- `new RuntimeCode(` - Find working constructor patterns
-- `PerlSubroutine` usage - How builtins wrap Java methods
-- `RuntimeCode.apply` implementations - Callback execution patterns
+- `RuntimeCode` constructor patterns and usage
+- `PerlModuleBase.getMethod()` examples
+- Existing patterns of Perl helpers called from Java
 
-**Expected findings**: Either:
-- A RuntimeCode constructor that accepts a lambda/callback
-- A PerlSubroutine pattern that wraps Java methods as Perl subs
-- A factory method for creating callable coderefs
+#### Task 3.2: Implement Streaming Handler (3 days)
 
-**Estimated effort**: 2 days
+**Files**:
+- `src/main/perl/lib/Plack/Handler/Netty.pm` - Add Perl helper function
+- `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java` - Add streaming detection and delegation
 
-#### Task 3.2: Implement Responder Callback
+**Perl side** (`_handle_streaming_response` function):
 
-**File**: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
-
-**Location**: Fix `createResponderCallback()` method (currently stub) and `handleStreamingResponse()` (lines 232-262)
-
-**Current Problem**: 
-```java
-// BROKEN - passes coderef to itself:
-RuntimeArray responderArgs = new RuntimeArray();
-RuntimeArray.push(responderArgs, streamingCoderef);
-RuntimeList result = RuntimeCode.apply(streamingCoderef, responderArgs, RuntimeContextType.VOID);
-```
-
-**Fix Required**:
-1. Create a responder callback that Perl can invoke: `$responder->([status, headers, body])`
-2. When responder is called, extract response components
-3. Send HTTP response via existing `sendArrayResponse()` method
-4. Pass responder (not coderef) to the app's streaming function
-
-**PSGI Streaming Contract**:
 ```perl
-# App returns coderef
-my $app = sub {
-    my ($env) = @_;
-    return sub {                        # Streaming response
-        my $responder = shift;          # Receive responder callback
+sub _handle_streaming_response {
+    my ($streaming_coderef, $send_response_callback) = @_;
+    
+    # Create responder as native Perl coderef
+    my $responder = sub {
+        my ($response_array) = @_;
         
-        $responder->([                  # Call responder with [status, headers, body]
-            200,
-            ['Content-Type' => 'text/plain'],
-            ['chunk1', 'chunk2']
-        ]);
+        # Validate [status, headers, body]
+        die "responder requires arrayref" 
+            unless ref($response_array) eq 'ARRAY' && @$response_array == 3;
+        
+        my ($status, $headers, $body) = @$response_array;
+        
+        # Call back to Java to send HTTP response
+        $send_response_callback->($status, $headers, $body);
     };
-};
+    
+    # Invoke app's streaming function with responder
+    $streaming_coderef->($responder);
+}
 ```
 
-**Implementation Pseudocode**:
+**Java side** (PlackHandlerNetty.java):
+
 ```java
-private void handleStreamingResponse(ChannelHandlerContext ctx, FullHttpRequest req,
-                                    RuntimeScalar streamingCoderef, boolean keepAlive) {
-    try {
-        // Create responder callback
-        RuntimeCode responder = createResponderCallback(ctx, req, keepAlive);
+// Detect streaming response:
+if (result.type == RuntimeScalarType.CODE) {
+    handleStreamingResponseViaPerl(ctx, req, result, keepAlive);
+} else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
+    handleArrayResponse(ctx, req, result, keepAlive);
+}
+
+// Delegate to Perl helper:
+private void handleStreamingResponseViaPerl(ChannelHandlerContext ctx,
+                                           FullHttpRequest req,
+                                           RuntimeScalar streamingCoderef,
+                                           boolean keepAlive) {
+    // Create Java callback for sending HTTP response
+    RuntimeCode sendResponseCallback = new CallableHttpResponse(ctx, req, keepAlive);
+    
+    // Call Perl helper with streaming coderef + response callback
+    RuntimeArray args = new RuntimeArray();
+    RuntimeArray.push(args, streamingCoderef);
+    RuntimeArray.push(args, sendResponseCallback);
+    
+    RuntimeCode handler = PerlModuleBase.getMethod(
+        "Plack::Handler::Netty", "_handle_streaming_response");
+    RuntimeCode.apply(handler, args, RuntimeContextType.VOID);
+}
+```
+
+**New inner class** (implements HTTP response sending):
+
+```java
+static class CallableHttpResponse extends RuntimeCode {
+    private final ChannelHandlerContext ctx;
+    private final FullHttpRequest req;
+    private final boolean keepAlive;
+    
+    CallableHttpResponse(ChannelHandlerContext ctx, FullHttpRequest req, boolean keepAlive) {
+        super("send_http_response");
+        this.ctx = ctx;
+        this.req = req;
+        this.keepAlive = keepAlive;
+    }
+    
+    @Override
+    public RuntimeList apply(RuntimeArray args, int context) {
+        // Extract [status, headers, body] from Perl responder call
+        int status = args.get(0).getInt();
+        RuntimeArray headersArray = args.get(1).arrayDeref();
+        RuntimeArray bodyArray = args.get(2).arrayDeref();
         
-        // Call streaming coderef with responder as argument
-        RuntimeArray args = new RuntimeArray();
-        RuntimeArray.push(args, responder);  // Pass responder, not streamingCoderef
-        
-        // Invoke: $streaming_coderef->($responder)
-        RuntimeCode.apply(streamingCoderef, args, RuntimeContextType.VOID);
-        
-    } catch (Exception e) {
-        sendErrorResponse(ctx, req, HttpResponseStatus.INTERNAL_SERVER_ERROR, 
-                         "Streaming response error: " + e.getMessage());
+        // Send HTTP response using existing method
+        sendArrayResponse(ctx, req, status, headersArray, bodyArray, keepAlive);
+        return new RuntimeList();
     }
 }
-
-private RuntimeCode createResponderCallback(ChannelHandlerContext ctx, 
-                                           FullHttpRequest req, boolean keepAlive) {
-    // Create callable that handles: $responder->([status, headers, body])
-    // Extract status/headers/body and send via sendArrayResponse()
-}
 ```
 
-**Estimated effort**: 3 days
-
-#### Task 3.3: Create Test Application
+#### Task 3.3: Create Test Application (1 day)
 
 **File**: `examples/http_server_plack/test_streaming.pl` (new)
 
-**Test cases**:
+Test cases:
+- Basic streaming response
+- Large response (1000 lines)
+- Conditional sync/streaming routes
+- Error handling
 
-1. **Basic streaming**:
-```perl
-my $app = sub {
-    my ($env) = @_;
-    return sub {
-        my $responder = shift;
-        $responder->([200, ['Content-Type' => 'text/plain'], 
-                     ["Hello ", "from ", "streaming!"]]);
-    };
-};
-```
+#### Task 3.4: Update Documentation (1 day)
 
-2. **Large response** (verify no buffering):
-```perl
-my $app = sub {
-    my ($env) = @_;
-    return sub {
-        my $responder = shift;
-        $responder->([200, ['Content-Type' => 'text/plain'],
-                     [map { "Line $_\n" } 1..1000]]);
-    };
-};
-```
-
-3. **Conditional streaming** (both sync and streaming paths):
-```perl
-my $app = sub {
-    my ($env) = @_;
-    
-    # Sync response for /sync
-    return [200, ['Content-Type' => 'text/plain'], ['Sync']]
-        if $env->{PATH_INFO} eq '/sync';
-    
-    # Streaming response for /stream
-    return sub {
-        my $responder = shift;
-        $responder->([200, ['Content-Type' => 'text/plain'], ['Stream']]);
-    } if $env->{PATH_INFO} eq '/stream';
-    
-    # 404
-    return [404, ['Content-Type' => 'text/plain'], ['Not found']];
-};
-```
-
-**Expected behavior**:
-- Streaming responses work identically to sync responses (same output)
-- Memory usage stays constant (no buffering entire body)
-- Both response types can coexist in same app
-
-**Estimated effort**: 1 day
-
-#### Task 3.4: Update Documentation
-
-**Files to update**:
-- `src/main/perl/lib/Plack/Handler/Netty.pm` - Add streaming section to POD
-- `examples/http_server_plack/README.md` - Document streaming support
-- `dev/modules/plack_handler_netty.md` - Mark Phase 3 complete
-
-**Estimated effort**: 1 day
+**Files**:
+- `src/main/perl/lib/Plack/Handler/Netty.pm` - POD
+- `examples/http_server_plack/README.md` - Streaming docs
+- `dev/modules/plack_handler_netty.md` - Phase 3 complete
 
 #### Verification Plan
 
@@ -626,7 +602,6 @@ my $app = sub {
 ./jperl examples/http_server_plack/test.pl &
 sleep 2
 curl http://localhost:5000/
-curl http://localhost:5000/json
 pkill -f test.pl
 ```
 
@@ -639,13 +614,13 @@ sleep 2
 curl http://localhost:5000/
 # Expected: "Hello from streaming!"
 
-# Test large response (verify no timeout/hang)
+# Test large response
 time curl http://localhost:5000/large
 # Expected: 1000 lines in reasonable time
 
 # Test conditional routing
-curl http://localhost:5000/sync    # Should use sync path
-curl http://localhost:5000/stream  # Should use streaming path
+curl http://localhost:5000/sync    # Sync path
+curl http://localhost:5000/stream  # Streaming path
 
 pkill -f test_streaming.pl
 ```
@@ -655,26 +630,8 @@ pkill -f test_streaming.pl
 - ✅ Synchronous responses unchanged (backward compatible)
 - ✅ Streaming responses work (test_streaming.pl)
 - ✅ Large responses don't hang or timeout
-- ✅ Both sync and streaming can coexist in same app
+- ✅ Both sync and streaming can coexist
 - ✅ Memory usage stays constant (no buffering)
-
-#### Out of Scope (Phase 3)
-
-1. **Iterator objects** - Body as Perl object with `getline()` method
-   - Complex: requires Perl method invocation from Java
-   - Rare in practice (most apps use arrayrefs)
-
-2. **Writer interface** - `$writer = $responder->([status, headers]); $writer->write(...)`
-   - PSGI 1.1 optional feature
-   - Requires returning writer object from responder
-
-3. **Delayed responses** - Calling responder after coderef returns
-   - Requires async coordination
-   - Different from streaming (streaming calls responder immediately)
-
-4. **Chunked transfer encoding** - HTTP chunked encoding
-   - Current implementation sends complete response at once
-   - Chunking happens at Netty level if enabled
 
 ### Phase 4: Production Features (Week 4)
 
