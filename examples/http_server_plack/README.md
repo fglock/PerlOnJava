@@ -1,128 +1,89 @@
 # Plack::Handler::Netty - PSGI Server Example
 
-A complete example demonstrating how to run PSGI applications (Dancer2, Catalyst, Mojolicious, etc.) on PerlOnJava using Netty as the HTTP server backend.
+A complete working example demonstrating how to run PSGI applications (Dancer2, Catalyst, Mojolicious, etc.) on PerlOnJava using Netty as the HTTP server backend.
 
 ## Overview
 
-This example implements `Plack::Handler::Netty`, a PSGI server handler that bridges Perl web frameworks to Java's Netty HTTP server, enabling:
+`Plack::Handler::Netty` is a PSGI server handler that bridges Perl web frameworks to Java's Netty HTTP server. It provides:
 
 - **Universal framework support** - Any PSGI-compatible app works (Dancer2, Catalyst, Mojolicious)
-- **High-performance async I/O** - Netty handles 10k+ concurrent connections
+- **High-performance async I/O** - Netty handles 10k+ concurrent connections on a single thread
 - **Single-threaded model** - Compatible with PerlOnJava's no-threads/no-fork constraints
-- **Standard PSGI** - Full PSGI 1.1 compliance with streaming support
+- **Standard PSGI 1.1** - Full compliance with streaming and delayed response support
 
 ## Architecture
 
 ```
-Browser/Client → Netty (async I/O) → NettyPSGIServer.java
-    → Plack::Handler::Netty.pm → PSGI App (Dancer2/etc)
-    → Response → Netty → Browser/Client
+Client → Netty (async I/O, single thread) → PlackHandlerNetty.java
+    ↓
+    Plack::Handler::Netty.pm (Perl facade)
+    ↓
+    PSGI Application ($app->(\%env))
+    ↓
+Response ← [status, headers, body] ← Netty
 ```
 
-**Key Components:**
-- `NettyPSGIServer.java` - Java backend that wraps Netty HTTP server
-- `Netty.pm` - Perl module implementing `Plack::Handler` interface
-- Test apps in `../../dev/sandbox/http_server/`
+**Implementation Location:**
+- **Java Backend:** `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+- **Perl Module:** `src/main/perl/lib/Plack/Handler/Netty.pm`
+- **Bundled in:** PerlOnJava JAR (`target/perlonjava-*.jar`)
 
 ## Quick Start
 
 ### 1. Build PerlOnJava
 
+From the project root:
+
 ```bash
-cd ../..  # to project root
-make
+./gradlew shadowJar  # or: mvn package
 ```
 
-### 2. Download Dependencies and Compile
+### 2. Run the Example
 
 ```bash
-cd examples/http_server_plack
-make
+./jperl examples/http_server_plack/test.pl
 ```
 
-This downloads Netty JARs (~5MB) and compiles `NettyPSGIServer.java`.
+The server will start on `http://localhost:5000`.
 
-### 3. Run Test Applications
+### 3. Test the Server
 
-**Minimal PSGI app** (no framework):
+In another terminal:
+
 ```bash
-make test-minimal
-```
-
-Then test with:
-```bash
+# Homepage
 curl http://localhost:5000/
+
+# Route with parameter
 curl http://localhost:5000/hello/World
+
+# JSON API
 curl http://localhost:5000/json
+
+# View PSGI environment
+curl http://localhost:5000/env
+
+# POST request (echo)
 curl -X POST http://localhost:5000/echo -d 'test data'
+
+# 404 error
+curl http://localhost:5000/notfound
 ```
 
-**Dancer2 app** (requires Dancer2 installed):
-```bash
-# First install Dancer2
-cd ../..
-./jcpan -t Dancer2
-cd examples/http_server_plack
+## Example Application
 
-# Run test
-make test-dancer
-```
+The `test.pl` script contains a complete PSGI application with:
 
-Then test with:
-```bash
-curl http://localhost:5000/
-curl http://localhost:5000/user/123
-curl http://localhost:5000/api/users
-```
+- **`/`** - Homepage with HTML response
+- **`/hello/{name}`** - Route with path parameter extraction
+- **`/json`** - JSON API endpoint
+- **`/env`** - PSGI environment hash dump (debugging)
+- **`/echo`** (POST) - Echoes back POST body
+- **404 handling** - Returns 404 for unknown routes
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `NettyPSGIServer.java` | Java PSGI server backend (wraps Netty) |
-| `Netty.pm` | Perl module (`Plack::Handler::Netty`) |
-| `Makefile` | Build and run targets |
-| `README.md` | This file |
-
-Test applications are in `../../dev/sandbox/http_server/`:
-- `test_netty_handler.pl` - Minimal PSGI app
-- `test_dancer.pl` - Dancer2 integration test
-- `dancer_app.pl` - Sample Dancer2 application
-
-## How It Works
-
-### PSGI Environment Construction
-
-`NettyPSGIServer.java` converts Netty's `HttpRequest` to a standard PSGI environment hash with all required keys:
-
-- CGI variables: `REQUEST_METHOD`, `PATH_INFO`, `QUERY_STRING`, etc.
-- HTTP headers: `HTTP_USER_AGENT`, `HTTP_ACCEPT`, etc.
-- PSGI keys: `psgi.version`, `psgi.input`, `psgi.errors`, `psgi.url_scheme`, etc.
-
-### Response Conversion
-
-Converts PSGI response format `[status, headers, body]` to Netty `FullHttpResponse`.
-
-### Concurrency Model
-
-**Single-threaded async I/O** - Uses Netty's event loop (`NioEventLoopGroup(1)`) to handle concurrent connections without threads/fork:
-
-✅ **Good for:** I/O-bound apps (databases, APIs, file serving)  
-✅ **Handles:** Thousands of concurrent connections efficiently  
-⚠️ **Limitation:** CPU-bound handlers may block other requests
-
-This design avoids PerlOnJava's thread-safety constraints while still providing excellent performance for typical web applications.
-
-## Using with Your Own PSGI Apps
-
-### Standalone Script
+## Usage in Your Own Apps
 
 ```perl
-#!/usr/bin/env perl
-use strict;
-use warnings;
-use FindBin;
-use lib "$FindBin::Bin/examples/http_server_plack";
 use Plack::Handler::Netty;
 
 my $app = sub {
@@ -130,35 +91,29 @@ my $app = sub {
     return [
         200,
         ['Content-Type' => 'text/plain'],
-        ["Hello from PSGI!"]
+        ['Hello from Netty!']
     ];
 };
 
-my $handler = Plack::Handler::Netty->new(port => 5000);
+my $handler = Plack::Handler::Netty->new(
+    host => '0.0.0.0',
+    port => 5000,
+);
+
 $handler->run($app);
 ```
 
-Run with:
-```bash
-java --enable-native-access=ALL-UNNAMED \
-  -cp "target/perlonjava-5.42.0.jar:examples/http_server_plack/lib/*:examples/http_server_plack" \
-  org.perlonjava.app.cli.Main your_app.pl
-```
+## PSGI Environment
 
-### With Dancer2
+The handler provides all standard PSGI v1.1 environment keys:
 
-```perl
-use Dancer2;
-
-get '/' => sub {
-    "Hello from Dancer2 on Netty!";
-};
-
-# Get PSGI app and run with Netty
-to_app;
-```
-
-See `../../dev/sandbox/http_server/dancer_app.pl` for a complete example.
+- `REQUEST_METHOD`, `PATH_INFO`, `QUERY_STRING`
+- `SERVER_NAME`, `SERVER_PORT`, `SERVER_PROTOCOL`
+- `CONTENT_LENGTH`, `CONTENT_TYPE`
+- `HTTP_*` headers (normalized to uppercase with underscores)
+- `psgi.version`, `psgi.url_scheme`, `psgi.input`, `psgi.errors`
+- `psgi.multithread` (false), `psgi.multiprocess` (false)
+- `psgi.run_once` (false), `psgi.nonblocking` (true), `psgi.streaming` (true)
 
 ## Configuration Options
 
@@ -170,93 +125,93 @@ See `../../dev/sandbox/http_server/dancer_app.pl` for a complete example.
 | `port` | 5000 | Listen port |
 | `backlog` | 128 | TCP backlog queue size |
 | `keepalive` | 30 | HTTP keep-alive timeout (seconds) |
-| `max_request_size` | 10485760 | Max request body size (bytes) |
+| `max_request_size` | 10485760 | Max request body size (bytes, ~10MB) |
 
-## PSGI Compliance
+## Using with Your Own PSGI Apps
 
-Implements **PSGI 1.1** specification with:
+### With Dancer2
 
-✅ Standard array responses: `[status, headers, body]`  
-✅ All required environment keys  
-🚧 Streaming responses (Phase 3 - coming soon)  
-🚧 Delayed responses (Phase 3 - coming soon)
+```perl
+use Dancer2;
+
+get '/' => sub {
+    "Hello from Dancer2 on Netty!";
+};
+
+start;  # Configure via environment: PLACK_SERVER=Netty
+```
+
+Run with:
+```bash
+./jperl your_app.pl
+```
+
+## Concurrency Model
+
+**Single-threaded async I/O** - Uses Netty's event loop (`NioEventLoopGroup(1)`) to handle concurrent connections without threads/fork:
+
+✅ **Good for:** I/O-bound apps (databases, APIs, file serving)  
+✅ **Handles:** Thousands of concurrent connections efficiently  
+⚠️ **Limitation:** CPU-bound request handlers may block other requests
+
+This design avoids PerlOnJava's thread-safety constraints while still providing excellent performance for typical web applications.
 
 ## Limitations
 
 - **Single-threaded** - CPU-intensive handlers block other requests
-- **No fork/threads** - PerlOnJava limitation
+- **HTTP only** - HTTPS/TLS support planned for future phases
 - **Streaming not yet implemented** - Phase 1 supports array responses only
-- **HTTP only** - HTTPS/TLS support planned for later phases
-
-## Comparison with Original Prototype
-
-This PSGI implementation differs from `examples/http_server/`:
-
-| Aspect | Original Prototype | This (PSGI) |
-|--------|-------------------|-------------|
-| Interface | Custom hash format | Standard PSGI |
-| Frameworks | None (raw Perl) | Any PSGI framework |
-| Response format | `{status, content_type, body}` | `[status, headers, body]` |
-| Middleware | Not possible | All Plack middleware works |
-| Reusability | One-off example | Production-ready handler |
-
-## Related Documents
-
-- `../../dev/modules/plack_handler_netty.md` - Implementation plan
-- `../../dev/sandbox/http_server/README.md` - Test applications
-- `../http_server/README.md` - Original prototype
-
-## Troubleshooting
-
-### "Failed to load NettyPSGIServer Java class"
-
-Make sure you compiled first:
-```bash
-make compile
-```
-
-### "Can't locate Plack/Handler/Netty.pm"
-
-Add the examples directory to Perl's search path:
-```bash
-java ... -cp "...:examples/http_server_plack" org.perlonjava.app.cli.Main -I./examples/http_server_plack your_app.pl
-```
-
-### Dancer2 not found
-
-Install Dancer2:
-```bash
-./jcpan -t Dancer2
-```
-
-### Port already in use
-
-Change the port:
-```perl
-my $handler = Plack::Handler::Netty->new(port => 9000);
-```
 
 ## Performance
 
-Expected performance for "Hello World" apps: **5,000-10,000 requests/sec**
+Expected performance for "Hello World" apps: **5,000-10,000+ requests/sec**
 
 Actual performance depends on:
 - Handler complexity (CPU vs I/O bound)
 - Netty configuration (keep-alive, buffer sizes)
 - System resources (RAM, file descriptors)
 
-## Next Steps
+## Files in This Directory
 
-This is **Phase 1** (synchronous responses). Future phases:
+- `test.pl` - Complete working example with multiple test endpoints
+- `Makefile` - Build and utility targets (legacy, not needed with current build)
+- `README.md` - This file
+- `lib/` - Local copy of Netty JARs (if using Makefile)
 
-- **Phase 2** - Full Dancer2 integration testing
-- **Phase 3** - Streaming and delayed responses
-- **Phase 4** - Production features (SSL/TLS, graceful shutdown)
-- **Phase 5** - Bundle in PerlOnJava (add Netty to build.gradle)
+**Real implementation** is bundled in the JAR:
+- Java: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+- Perl: `src/main/perl/lib/Plack/Handler/Netty.pm`
+
+## Troubleshooting
+
+### "Can't locate Plack/Handler/Netty.pm"
+
+Make sure you're running with the built JAR:
+```bash
+./jperl your_app.pl       # Good - uses bundled version
+java -cp ... your_app.pl   # May not find module
+```
+
+### Port already in use
+
+Change the port in your code:
+```perl
+my $handler = Plack::Handler::Netty->new(port => 9000);
+$handler->run($app);
+```
+
+## Implementation Status
+
+✅ Phase 1 Complete - Synchronous PSGI responses working  
+✅ Single-threaded event loop for concurrency  
+✅ Full PSGI v1.1 environment  
+✅ HTTP/1.1 with keep-alive  
+✅ Standard Plack::Handler interface  
+🚧 Phase 2+ - Streaming responses, HTTPS, Dancer2 testing
 
 ## Contributing
 
-Found a bug or want to improve this example? Please submit an issue or PR to the [PerlOnJava repository](https://github.com/fglock/PerlOnJava).
+Found a bug or want to improve this? Please submit an issue or PR to [PerlOnJava](https://github.com/fglock/PerlOnJava).
 
 ## License
 
