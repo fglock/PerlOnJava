@@ -209,7 +209,6 @@ This design avoids PerlOnJava's thread-safety constraints while still providing 
 ## Limitations
 
 - **Single-threaded** - CPU-intensive handlers block other requests
-- **Streaming responses** - Phase 3 adds support for PSGI streaming
 
 ## Performance
 
