@@ -1,8 +1,6 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use FindBin;
-use lib "$FindBin::Bin/../../../src/main/perl/lib";
 
 # Phase 1 Test: Minimal PSGI application with Plack::Handler::Netty
 #
@@ -81,6 +79,10 @@ my $app = sub {
     }
 };
 
+print STDERR "Netty PSGI Server starting on 0.0.0.0:5000\n";
+print STDERR "Thread model: Single event loop (async I/O)\n";
+print STDERR "Press Ctrl+C to stop\n";
+
 print "Starting server on http://localhost:5000\n";
 print "Test with:\n";
 print "  curl http://localhost:5000/\n";
@@ -94,5 +96,7 @@ my $handler = Plack::Handler::Netty->new(
     host => '0.0.0.0',
     port => 5000,
 );
+
+print STDERR "Plack::Handler::Netty: Accepting connections at http://0.0.0.0:5000/\n";
 
 $handler->run($app);
