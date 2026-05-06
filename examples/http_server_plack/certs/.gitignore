@@ -1,0 +1,6 @@
+# Ignore generated certificates
+server-cert.pem
+server-key.pem
+*.pem
+*.key
+*.crt

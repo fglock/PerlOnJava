@@ -18,6 +18,8 @@ XSLoader::load( 'MIME::Base64' );
 
 *encode = \&encode_base64;
 *decode = \&decode_base64;
+*encode_url = \&encode_base64url;
+*decode_url = \&decode_base64url;
 
 1;
 

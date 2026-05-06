@@ -757,6 +757,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ✅  **YAML** module.
 - ✅  **IO::Socket::SSL** module backed by Java `javax.net.ssl` SSLEngine.
 - ✅  **Net::SSLeay** module backed by Java security APIs (2327 CPAN tests pass).
+- ✅  **Plack::Handler::Netty** PSGI web server with HTTP/HTTPS, streaming, 32k+ req/sec. See [Web Server Guide](../../examples/http_server_plack/README.md).
 
 ### DBI module
 

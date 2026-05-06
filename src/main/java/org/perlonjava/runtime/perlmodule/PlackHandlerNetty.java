@@ -84,14 +84,109 @@ public class PlackHandlerNetty extends PerlModuleBase {
             }
         }
 
-        // Create a blessed hash with defaults
+        // Create a blessed hash with validated defaults
         RuntimeHash handler = new RuntimeHash();
-        String host = config.get("host").toString();
-        handler.put("host", host.isEmpty() ? new RuntimeScalar("0.0.0.0") : config.get("host"));
-        handler.put("port", config.get("port"));
-        handler.put("backlog", config.get("backlog"));
-        handler.put("keepalive", config.get("keepalive"));
-        handler.put("max_request_size", config.get("max_request_size"));
+
+        // Host - default to 0.0.0.0 (all interfaces)
+        RuntimeScalar hostScalar = config.get("host");
+        String host;
+        if (hostScalar != null && hostScalar.type != RuntimeScalarType.UNDEF && !hostScalar.toString().isEmpty()) {
+            host = hostScalar.toString();
+        } else {
+            host = "0.0.0.0";
+        }
+        handler.put("host", new RuntimeScalar(host));
+
+        // Port - default to 5000
+        RuntimeScalar portScalar = config.get("port");
+        int port;
+        if (portScalar != null && portScalar.type != RuntimeScalarType.UNDEF && portScalar.getInt() > 0) {
+            port = portScalar.getInt();
+        } else {
+            port = 5000;
+        }
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("Port must be between 1 and 65535, got: " + port);
+        }
+        handler.put("port", new RuntimeScalar(port));
+
+        // Backlog - default to 128 (standard value)
+        RuntimeScalar backlogScalar = config.get("backlog");
+        int backlog;
+        if (backlogScalar != null && backlogScalar.type != RuntimeScalarType.UNDEF && backlogScalar.getInt() > 0) {
+            backlog = backlogScalar.getInt();
+        } else {
+            backlog = 128;
+        }
+        handler.put("backlog", new RuntimeScalar(backlog));
+
+        // Keep-alive - default to 30 seconds (standard HTTP keep-alive)
+        RuntimeScalar keepaliveScalar = config.get("keepalive");
+        int keepalive;
+        if (keepaliveScalar != null && keepaliveScalar.type != RuntimeScalarType.UNDEF) {
+            keepalive = keepaliveScalar.getInt();
+        } else {
+            keepalive = 30;
+        }
+        handler.put("keepalive", new RuntimeScalar(keepalive));
+
+        // Max request size - default to 10MB (10485760 bytes)
+        RuntimeScalar maxRequestSizeScalar = config.get("max_request_size");
+        int maxRequestSize;
+        if (maxRequestSizeScalar != null && maxRequestSizeScalar.type != RuntimeScalarType.UNDEF && maxRequestSizeScalar.getInt() > 0) {
+            maxRequestSize = maxRequestSizeScalar.getInt();
+        } else {
+            maxRequestSize = 10485760;
+        }
+        handler.put("max_request_size", new RuntimeScalar(maxRequestSize));
+
+        // SSL/TLS - default to disabled
+        RuntimeScalar sslScalar = config.get("ssl");
+        boolean sslEnabled = false;
+        if (sslScalar != null && sslScalar.type != RuntimeScalarType.UNDEF) {
+            sslEnabled = sslScalar.getBoolean();
+        }
+        handler.put("ssl", new RuntimeScalar(sslEnabled));
+
+        // SSL certificate and key (required if ssl=1)
+        if (sslEnabled) {
+            RuntimeScalar certScalar = config.get("ssl_cert");
+            RuntimeScalar keyScalar = config.get("ssl_key");
+
+            if (certScalar == null || certScalar.type == RuntimeScalarType.UNDEF ||
+                certScalar.toString().isEmpty()) {
+                throw new IllegalArgumentException("ssl_cert is required when ssl=1");
+            }
+            if (keyScalar == null || keyScalar.type == RuntimeScalarType.UNDEF ||
+                keyScalar.toString().isEmpty()) {
+                throw new IllegalArgumentException("ssl_key is required when ssl=1");
+            }
+
+            String sslCert = certScalar.toString();
+            String sslKey = keyScalar.toString();
+            handler.put("ssl_cert", new RuntimeScalar(sslCert));
+            handler.put("ssl_key", new RuntimeScalar(sslKey));
+
+            // Optional: CA certificate for client verification
+            RuntimeScalar caCertScalar = config.get("ssl_ca");
+            if (caCertScalar != null && caCertScalar.type != RuntimeScalarType.UNDEF &&
+                !caCertScalar.toString().isEmpty()) {
+                handler.put("ssl_ca", new RuntimeScalar(caCertScalar.toString()));
+            }
+
+            // Optional: TLS protocol versions (arrayref)
+            RuntimeScalar protocolsScalar = config.get("ssl_protocols");
+            if (protocolsScalar != null && protocolsScalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                handler.put("ssl_protocols", protocolsScalar);
+            }
+
+            // Optional: Cipher suites (string)
+            RuntimeScalar ciphersScalar = config.get("ssl_ciphers");
+            if (ciphersScalar != null && ciphersScalar.type != RuntimeScalarType.UNDEF &&
+                !ciphersScalar.toString().isEmpty()) {
+                handler.put("ssl_ciphers", new RuntimeScalar(ciphersScalar.toString()));
+            }
+        }
 
         RuntimeScalar blessed = ReferenceOperators.bless(
             handler.createReferenceWithTrackedElements(),
@@ -118,8 +213,41 @@ public class PlackHandlerNetty extends PerlModuleBase {
         int keepalive = handler.get("keepalive").getInt();
         int maxRequestSize = handler.get("max_request_size").getInt();
 
+        // SSL configuration
+        boolean sslEnabled = handler.get("ssl").getBoolean();
+        String sslCert = null;
+        String sslKey = null;
+        String sslCa = null;
+        String[] sslProtocols = null;
+        String sslCiphers = null;
+
+        if (sslEnabled) {
+            sslCert = handler.get("ssl_cert").toString();
+            sslKey = handler.get("ssl_key").toString();
+
+            RuntimeScalar caCertScalar = handler.get("ssl_ca");
+            if (caCertScalar != null && caCertScalar.type != RuntimeScalarType.UNDEF) {
+                sslCa = caCertScalar.toString();
+            }
+
+            RuntimeScalar protocolsScalar = handler.get("ssl_protocols");
+            if (protocolsScalar != null && protocolsScalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                RuntimeArray protocolsArray = protocolsScalar.arrayDeref();
+                sslProtocols = new String[protocolsArray.size()];
+                for (int i = 0; i < protocolsArray.size(); i++) {
+                    sslProtocols[i] = protocolsArray.get(i).toString();
+                }
+            }
+
+            RuntimeScalar ciphersScalar = handler.get("ssl_ciphers");
+            if (ciphersScalar != null && ciphersScalar.type != RuntimeScalarType.UNDEF) {
+                sslCiphers = ciphersScalar.toString();
+            }
+        }
+
         try {
-            startNettyServer(port, host, psgiApp, maxRequestSize, keepalive > 0);
+            startNettyServer(port, host, psgiApp, backlog, maxRequestSize, keepalive > 0,
+                           sslEnabled, sslCert, sslKey, sslCa, sslProtocols, sslCiphers);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -128,16 +256,116 @@ public class PlackHandlerNetty extends PerlModuleBase {
     }
 
     /**
+     * Creates an SSL context from certificate and key files.
+     *
+     * @param certPath Path to SSL certificate file (PEM format)
+     * @param keyPath Path to SSL private key file (PEM format)
+     * @param caPath Optional path to CA certificate for client verification
+     * @param protocols Optional array of TLS protocol versions (e.g., "TLSv1.2", "TLSv1.3")
+     * @param ciphers Optional colon-separated list of cipher suites
+     * @return Configured SslContext
+     * @throws Exception if certificate/key loading fails
+     */
+    private static io.netty.handler.ssl.SslContext createSslContext(
+            String certPath, String keyPath, String caPath,
+            String[] protocols, String ciphers) throws Exception {
+
+        java.io.File certFile = new java.io.File(certPath);
+        java.io.File keyFile = new java.io.File(keyPath);
+
+        if (!certFile.exists()) {
+            throw new IllegalArgumentException("SSL certificate not found: " + certPath);
+        }
+        if (!keyFile.exists()) {
+            throw new IllegalArgumentException("SSL private key not found: " + keyPath);
+        }
+
+        io.netty.handler.ssl.SslContextBuilder builder =
+            io.netty.handler.ssl.SslContextBuilder.forServer(certFile, keyFile);
+
+        // Optional: Client certificate verification
+        if (caPath != null && !caPath.isEmpty()) {
+            java.io.File caFile = new java.io.File(caPath);
+            if (caFile.exists()) {
+                builder.trustManager(caFile);
+                builder.clientAuth(io.netty.handler.ssl.ClientAuth.OPTIONAL);
+            } else {
+                System.err.println("Warning: CA certificate not found: " + caPath);
+            }
+        }
+
+        // TLS protocol versions
+        if (protocols != null && protocols.length > 0) {
+            builder.protocols(protocols);
+        } else {
+            // Default to TLS 1.2 and 1.3 (secure modern protocols)
+            builder.protocols("TLSv1.2", "TLSv1.3");
+        }
+
+        // Cipher suites
+        if (ciphers != null && !ciphers.isEmpty()) {
+            builder.ciphers(java.util.Arrays.asList(ciphers.split(":")));
+        }
+
+        return builder.build();
+    }
+
+    /**
      * Starts the Netty PSGI server. This method blocks until the server is shut down.
      *
+     * @param port Listen port
+     * @param host Listen address
+     * @param psgiApp PSGI application coderef
+     * @param backlog TCP connection backlog queue size
+     * @param maxRequestSize Maximum HTTP request body size in bytes
+     * @param keepAlive Enable HTTP keep-alive connections
+     * @param sslEnabled Enable SSL/TLS
+     * @param sslCert Path to SSL certificate (PEM format)
+     * @param sslKey Path to SSL private key (PEM format)
+     * @param sslCa Optional CA certificate path
+     * @param sslProtocols Optional TLS protocol versions
+     * @param sslCiphers Optional cipher suites
      * @throws InterruptedException if the server is interrupted during startup or operation
      */
     private static void startNettyServer(int port, String host, RuntimeScalar psgiApp,
-                                        int maxRequestSize, boolean keepAlive) throws InterruptedException {
+                                        int backlog, int maxRequestSize, boolean keepAlive,
+                                        boolean sslEnabled, String sslCert, String sslKey,
+                                        String sslCa, String[] sslProtocols, String sslCiphers)
+                                        throws InterruptedException {
+
+        // Build SSL context if enabled
+        io.netty.handler.ssl.SslContext sslContext = null;
+        if (sslEnabled) {
+            try {
+                sslContext = createSslContext(sslCert, sslKey, sslCa, sslProtocols, sslCiphers);
+                System.err.println("SSL/TLS enabled with certificate: " + sslCert);
+                System.err.println("TLS protocols: " + String.join(", ",
+                    sslProtocols != null && sslProtocols.length > 0 ?
+                    sslProtocols : new String[]{"TLSv1.2", "TLSv1.3"}));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize SSL context: " + e.getMessage(), e);
+            }
+        }
+
+        final io.netty.handler.ssl.SslContext finalSslContext = sslContext;
+
         // Single-threaded event loop to avoid PerlOnJava thread-safety issues
         // This still handles many concurrent connections via async I/O
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup(1);
+
+        // Add shutdown hook for graceful shutdown on SIGTERM/SIGINT
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.err.println("Shutting down Netty PSGI server gracefully...");
+            try {
+                bossGroup.shutdownGracefully().sync();
+                workerGroup.shutdownGracefully().sync();
+                System.err.println("Server shut down complete.");
+            } catch (InterruptedException e) {
+                System.err.println("Shutdown interrupted: " + e.getMessage());
+                Thread.currentThread().interrupt();
+            }
+        }));
 
         try {
             ServerBootstrap b = new ServerBootstrap();
@@ -147,20 +375,42 @@ public class PlackHandlerNetty extends PerlModuleBase {
                  @Override
                  protected void initChannel(SocketChannel ch) {
                      ChannelPipeline pipeline = ch.pipeline();
+
+                     // Add SSL handler first if enabled
+                     if (finalSslContext != null) {
+                         pipeline.addLast("ssl", finalSslContext.newHandler(ch.alloc()));
+                     }
+
+                     // HTTP codec and aggregator
                      pipeline.addLast(new HttpServerCodec());
                      pipeline.addLast(new HttpObjectAggregator(maxRequestSize));
+
+                     // PSGI request handler
                      pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive));
                  }
              })
-             .option(ChannelOption.SO_BACKLOG, 128)
+             .option(ChannelOption.SO_BACKLOG, backlog)
              .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
+            String scheme = sslEnabled ? "https" : "http";
+            System.err.println("Binding to " + host + ":" + port + "...");
             ChannelFuture f = b.bind(host, port).sync();
+            System.err.println("Server started successfully on " + scheme + "://" + host + ":" + port);
 
+            // Wait until the server socket is closed
             f.channel().closeFuture().sync();
+        } catch (Exception e) {
+            System.err.println("Server startup failed: " + e.getMessage());
+            e.printStackTrace(System.err);
+            throw e;
         } finally {
-            workerGroup.shutdownGracefully();
-            bossGroup.shutdownGracefully();
+            // Shutdown event loops if not already shutdown
+            if (!bossGroup.isShutdown()) {
+                bossGroup.shutdownGracefully();
+            }
+            if (!workerGroup.isShutdown()) {
+                workerGroup.shutdownGracefully();
+            }
         }
     }
 
@@ -192,8 +442,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) {
             RuntimeHash env = null;
             try {
+                // Detect if connection is SSL/TLS by checking for SslHandler in pipeline
+                boolean isHttps = ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
+
                 // Build PSGI environment hash
-                env = buildPSGIEnvironment(req);
+                env = buildPSGIEnvironment(req, isHttps);
 
                 // Call PSGI app: $response = $app->($env)
                 RuntimeArray args = new RuntimeArray();
@@ -202,64 +455,132 @@ public class PlackHandlerNetty extends PerlModuleBase {
                 RuntimeList resultList = RuntimeCode.apply(psgiApp, args, RuntimeContextType.SCALAR);
                 RuntimeScalar result = resultList.scalar();
 
-                // Phase 1: Only handle synchronous array responses
-                if (result.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI app must return arrayref [status, headers, body]");
-                    return;
-                }
-
-                // Parse PSGI response: [status, headers, body]
-                RuntimeArray responseArray = result.arrayDeref();
-                if (responseArray.size() != 3) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI response must have 3 elements [status, headers, body]");
-                    return;
-                }
-
-                // Extract status
-                int status = responseArray.get(0).getInt();
-
-                // Extract headers (arrayref of pairs: ['Content-Type', 'text/html', ...])
-                RuntimeScalar headersScalar = responseArray.get(1);
-                if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI headers must be arrayref");
-                    return;
-                }
-                RuntimeArray headersArray = headersScalar.arrayDeref();
-
-                // Extract body (arrayref of strings)
-                RuntimeScalar bodyScalar = responseArray.get(2);
-                if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
-                    sendErrorResponse(ctx, req,
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                        "PSGI body must be arrayref");
-                    return;
-                }
-                RuntimeArray bodyArray = bodyScalar.arrayDeref();
-
-                // Build HTTP response
-                FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
-
-                // Handle connection close/keep-alive
-                if (keepAlive && HttpUtil.isKeepAlive(req)) {
-                    response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-                    ctx.writeAndFlush(response);
+                // Handle streaming responses (coderef) and synchronous responses (arrayref)
+                if (result.type == RuntimeScalarType.CODE) {
+                    // Streaming response - create responder callback
+                    handleStreamingResponse(ctx, req, result, keepAlive);
+                } else if (result.type == RuntimeScalarType.ARRAYREFERENCE) {
+                    // Synchronous array response
+                    handleArrayResponse(ctx, req, result, keepAlive);
                 } else {
-                    response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
-                    ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+                    sendErrorResponse(ctx, req,
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                        "PSGI app must return arrayref [status, headers, body] or coderef for streaming");
                 }
 
             } catch (Exception e) {
                 // Catch all exceptions from PSGI app and return 500
+                // Log the full stack trace for debugging
+                System.err.println("PSGI application error:");
+                System.err.println("  Request: " + req.method() + " " + req.uri());
+                System.err.println("  Exception: " + e.getClass().getName() + ": " + e.getMessage());
+                e.printStackTrace(System.err);
+
+                // Send user-friendly error response
+                String errorMessage = "Internal Server Error";
+                if (e.getMessage() != null && !e.getMessage().isEmpty()) {
+                    errorMessage += ": " + e.getMessage();
+                }
+
                 sendErrorResponse(ctx, req,
                     HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                    "Internal Server Error: " + e.getMessage());
+                    errorMessage);
             }
+        }
+
+        /**
+         * Handles streaming PSGI responses (coderef).
+         * The app returns a coderef that calls $responder with [status, headers, body].
+         *
+         * Strategy: Delegate to Perl helper function _handle_streaming_response()
+         * which creates a native Perl responder callback. This is vastly simpler
+         * than trying to create Perl-callable callbacks from Java.
+         */
+        private void handleStreamingResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                            RuntimeScalar streamingCoderef, boolean keepAlive) {
+            try {
+                // Create a Java-side callback that Perl can invoke to send HTTP response
+                CallableHttpResponse responseCallback = new CallableHttpResponse(ctx, req, keepAlive);
+
+                // Call Perl helper: Plack::Handler::Netty::_handle_streaming_response($coderef, $callback)
+                RuntimeArray args = new RuntimeArray();
+                RuntimeArray.push(args, streamingCoderef);
+                // Wrap the callback as a RuntimeScalar coderef
+                RuntimeArray.push(args, new RuntimeScalar(responseCallback));
+
+                // Get the Perl helper method and invoke it
+                RuntimeScalar helper = GlobalVariable.getGlobalCodeRef("Plack::Handler::Netty::_handle_streaming_response");
+                if (helper.type == RuntimeScalarType.CODE) {
+                    RuntimeCode.apply(helper, args, RuntimeContextType.VOID);
+                } else {
+                    sendErrorResponse(ctx, req,
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                        "Perl streaming helper not loaded");
+                }
+
+            } catch (Exception e) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "Streaming response error: " + e.getMessage());
+            }
+        }
+
+        /**
+         * Sends an array response (both sync and streaming array responses).
+         */
+        private void sendArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                      int status, RuntimeArray headersArray,
+                                      RuntimeArray bodyArray, boolean keepAlive) {
+            FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
+
+            if (keepAlive && HttpUtil.isKeepAlive(req)) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+                ctx.writeAndFlush(response);
+            } else {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            }
+        }
+
+        /**
+         * Handles synchronous PSGI responses (arrayref).
+         */
+        private void handleArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                        RuntimeScalar result, boolean keepAlive) {
+            // Parse PSGI response: [status, headers, body]
+            RuntimeArray responseArray = result.arrayDeref();
+            if (responseArray.size() != 3) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI response must have 3 elements [status, headers, body]");
+                return;
+            }
+
+            // Extract status
+            int status = responseArray.get(0).getInt();
+
+            // Extract headers (arrayref of pairs: ['Content-Type', 'text/html', ...])
+            RuntimeScalar headersScalar = responseArray.get(1);
+            if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI headers must be arrayref");
+                return;
+            }
+            RuntimeArray headersArray = headersScalar.arrayDeref();
+
+            // Extract body (arrayref of strings)
+            RuntimeScalar bodyScalar = responseArray.get(2);
+            if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                sendErrorResponse(ctx, req,
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                    "PSGI body must be arrayref");
+                return;
+            }
+            RuntimeArray bodyArray = bodyScalar.arrayDeref();
+
+            // Send the response
+            sendArrayResponse(ctx, req, status, headersArray, bodyArray, keepAlive);
         }
 
         /**
@@ -273,7 +594,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
          * @param req Netty FullHttpRequest
          * @return PSGI environment hash
          */
-        private RuntimeHash buildPSGIEnvironment(FullHttpRequest req) {
+        private RuntimeHash buildPSGIEnvironment(FullHttpRequest req, boolean isHttps) {
             RuntimeHash env = new RuntimeHash();
 
             // Parse URI into path and query string
@@ -294,6 +615,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
             env.put("SERVER_NAME", new RuntimeScalar(getServerName(req)));
             env.put("SERVER_PORT", new RuntimeScalar(serverPort));
             env.put("SERVER_PROTOCOL", new RuntimeScalar(req.protocolVersion().text()));
+
+            // HTTPS - CGI standard variable indicating secure connection
+            if (isHttps) {
+                env.put("HTTPS", new RuntimeScalar("on"));
+            }
 
             // Content-Length and Content-Type (not in HTTP_* namespace)
             String contentLength = req.headers().get(HttpHeaderNames.CONTENT_LENGTH);
@@ -323,10 +649,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
             RuntimeArray version = new RuntimeArray();
             RuntimeArray.push(version, new RuntimeScalar(1));
             RuntimeArray.push(version, new RuntimeScalar(1));
-            env.put("psgi.version", new RuntimeScalar(version));
+            env.put("psgi.version", version.createReference());
 
             // psgi.url_scheme - http or https
-            env.put("psgi.url_scheme", new RuntimeScalar("http")); // TODO: detect HTTPS
+            String urlScheme = isHttps ? "https" : "http";
+            env.put("psgi.url_scheme", new RuntimeScalar(urlScheme));
 
             // psgi.input - request body as IO::Handle
             ByteBuf content = req.content();
@@ -336,10 +663,12 @@ public class PlackHandlerNetty extends PerlModuleBase {
             RuntimeScalar bodyScalar = new RuntimeScalar(bodyString);
             ScalarBackedIO inputIO = new ScalarBackedIO(bodyScalar);
             RuntimeIO psgiInput = new RuntimeIO(inputIO);
-            env.put("psgi.input", psgiInput);
+            // Wrap in a new RuntimeScalar to ensure it's stored correctly
+            env.put("psgi.input", new RuntimeScalar(psgiInput));
 
             // psgi.errors - stderr for error logging
-            env.put("psgi.errors", RuntimeIO.stderr);
+            // Wrap in a new RuntimeScalar to ensure it's stored correctly
+            env.put("psgi.errors", new RuntimeScalar(RuntimeIO.stderr));
 
             // psgi.multithread - \0 (PerlOnJava doesn't support threads)
             env.put("psgi.multithread", new RuntimeScalar(0));
@@ -463,8 +792,151 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            cause.printStackTrace();
-            ctx.close();
+            // Log exception details
+            System.err.println("Channel exception caught:");
+            System.err.println("  Channel: " + ctx.channel().remoteAddress());
+            System.err.println("  Exception: " + cause.getClass().getName() + ": " + cause.getMessage());
+            cause.printStackTrace(System.err);
+
+            // Close the connection
+            if (ctx.channel().isActive()) {
+                ctx.close();
+            }
+        }
+    }
+
+    /**
+     * CallableHttpResponse - A RuntimeCode that can be invoked from Perl
+     * to send HTTP responses during streaming.
+     *
+     * Perl calls this with: $callback->([status, headers, body])
+     * and it sends the Netty HTTP response.
+     */
+    static class CallableHttpResponse extends RuntimeCode implements PerlSubroutine {
+        private final ChannelHandlerContext ctx;
+        private final FullHttpRequest req;
+        private final boolean keepAlive;
+
+        /**
+         * Create a responder callback for the given HTTP context.
+         *
+         * @param ctx      Netty channel context for sending response
+         * @param req      Original HTTP request (for keep-alive detection)
+         * @param keepAlive Whether to keep connection alive
+         */
+        public CallableHttpResponse(ChannelHandlerContext ctx, FullHttpRequest req, boolean keepAlive) {
+            // Pass 'this' as the PerlSubroutine implementation
+            super((PerlSubroutine) null, null);
+            // Set the subroutine after construction
+            this.subroutine = this;
+            this.ctx = ctx;
+            this.req = req;
+            this.keepAlive = keepAlive;
+        }
+
+        /**
+         * Invoke the responder with [status, headers, body].
+         * Called by Perl code: $responder->([200, ['Content-Type', 'text/plain'], ['Hello']])
+         */
+        @Override
+        public RuntimeList apply(RuntimeArray args, int context) {
+            try {
+                if (args.size() < 1) {
+                    throw new IllegalArgumentException("Responder requires at least 1 argument");
+                }
+
+                // First argument should be [status, headers, body] arrayref
+                RuntimeScalar arg = args.get(0);
+                if (arg.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Responder requires arrayref [status, headers, body], got " + arg.type);
+                }
+
+                RuntimeArray responseArray = arg.arrayDeref();
+                if (responseArray.size() != 3) {
+                    throw new IllegalArgumentException(
+                        "Responder requires [status, headers, body] (3 elements), got " +
+                        responseArray.size());
+                }
+
+                // Extract components
+                int status = responseArray.get(0).getInt();
+                RuntimeScalar headersScalar = responseArray.get(1);
+                RuntimeScalar bodyScalar = responseArray.get(2);
+
+                if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Headers must be arrayref, got " + headersScalar.type);
+                }
+                if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Body must be arrayref, got " + bodyScalar.type);
+                }
+
+                RuntimeArray headersArray = headersScalar.arrayDeref();
+                RuntimeArray bodyArray = bodyScalar.arrayDeref();
+
+                // Send the HTTP response
+                sendArrayResponse(ctx, req, status, headersArray, bodyArray, keepAlive);
+                return new RuntimeList();
+
+            } catch (Exception e) {
+                throw new RuntimeException("HTTP response error: " + e.getMessage(), e);
+            }
+        }
+
+        /**
+         * Builds and sends the HTTP response. Extracted from PSGIRequestHandler
+         * so both sync and streaming paths can use it.
+         */
+        private void sendArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                      int status, RuntimeArray headersArray,
+                                      RuntimeArray bodyArray, boolean keepAlive) {
+            FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
+
+            if (keepAlive && HttpUtil.isKeepAlive(req)) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+                ctx.writeAndFlush(response);
+            } else {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            }
+        }
+
+        /**
+         * Builds Netty HttpResponse from PSGI response array.
+         */
+        private FullHttpResponse buildHttpResponse(int status, RuntimeArray headersArray,
+                                                   RuntimeArray bodyArray) {
+            // Build response body by concatenating all body parts
+            StringBuilder bodyBuilder = new StringBuilder();
+            for (int i = 0; i < bodyArray.size(); i++) {
+                bodyBuilder.append(bodyArray.get(i).toString());
+            }
+
+            String bodyStr = bodyBuilder.toString();
+            FullHttpResponse response = new DefaultFullHttpResponse(
+                HttpVersion.HTTP_1_1,
+                HttpResponseStatus.valueOf(status),
+                Unpooled.copiedBuffer(bodyStr, CharsetUtil.UTF_8)
+            );
+
+            // Process PSGI headers (flat array of pairs: key1, val1, key2, val2, ...)
+            for (int i = 0; i < headersArray.size(); i += 2) {
+                if (i + 1 < headersArray.size()) {
+                    String headerName = headersArray.get(i).toString();
+                    String headerValue = headersArray.get(i + 1).toString();
+                    response.headers().set(headerName, headerValue);
+                }
+            }
+
+            // Set Content-Length if not already set
+            if (!response.headers().contains(HttpHeaderNames.CONTENT_LENGTH)) {
+                response.headers().set(HttpHeaderNames.CONTENT_LENGTH,
+                    response.content().readableBytes());
+            }
+
+            return response;
         }
     }
 }
