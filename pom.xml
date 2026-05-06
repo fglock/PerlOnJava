@@ -85,6 +85,11 @@
             <artifactId>bcpkix-jdk18on</artifactId>
             <version>1.78.1</version>
         </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http</artifactId>
+            <version>4.1.115.Final</version>
+        </dependency>
         <!-- JNR-POSIX removed - using Java FFM API for native access (Java 22+) -->
     </dependencies>
     <build>
