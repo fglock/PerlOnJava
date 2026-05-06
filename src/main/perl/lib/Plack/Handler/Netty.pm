@@ -536,7 +536,7 @@ Configure your load balancer to distribute across all instances.
 
 =item * B<PerlOnJava specific> - Requires PerlOnJava runtime, won't work with standard Perl.
 
-=item * B<No HTTPS yet> - TLS/SSL support planned for future release. Use reverse proxy for HTTPS now.
+=item * B<Single-threaded> - CPU-bound request handlers block other requests. Offload heavy computation to background workers.
 
 =back
 
