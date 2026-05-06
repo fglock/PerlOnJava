@@ -146,19 +146,14 @@ printf "Loaded %d unique distributions (%d total packages)\n",
     scalar @all_modules, scalar keys %module_to_dist;
 
 # Remove already-tested modules (only PASS — re-test FAILs in case deps are now available)
+# If --retest-age is set, only include modules tested N+ days ago instead
 my @candidates;
-for my $mod (@all_modules) {
-    next if $pass_modules{$mod};
-    next if $skip_modules{$mod};
-    push @candidates, $mod;
-}
 
-# If --retest-age is set, also include PASS and FAIL modules tested N+ days ago
 if ($retest_age > 0) {
+    # Restrict to modules last tested N+ days ago (for concurrent instance work)
     my $cutoff_date = cutoff_date_for_days_ago($retest_age);
-    my @retest_candidates;
     for my $mod (@all_modules) {
-        next if $skip_modules{$mod};  # Always skip XS-only modules
+        next if $skip_modules{$mod};
 
         my $record;
         if ($pass_modules{$mod}) {
@@ -166,25 +161,22 @@ if ($retest_age > 0) {
         } elsif ($fail_modules{$mod}) {
             $record = $fail_modules{$mod};
         } else {
-            next;
+            next;  # Skip untested
         }
 
         my $test_date = $record->{date} // '';
-        push @retest_candidates, $mod if $test_date lt $cutoff_date;
+        push @candidates, $mod if $test_date lt $cutoff_date;
     }
-
-    # Merge: candidates are untested, retest_candidates are old (both eligible for random pick)
-    my %seen;
-    for my $mod (@candidates) { $seen{$mod} = 1; }
-    for my $mod (@retest_candidates) {
-        push @candidates, $mod unless $seen{$mod}++;
+    printf "Candidates older than %d days: %d\n", $retest_age, scalar @candidates;
+} else {
+    # Default: untested + failures (in case their deps got installed)
+    for my $mod (@all_modules) {
+        next if $pass_modules{$mod};
+        next if $skip_modules{$mod};
+        push @candidates, $mod;
     }
-    printf "Retesting modules from >%d days ago: +%d candidates\n", $retest_age, scalar @retest_candidates;
+    printf "Candidates (not yet passing): %d\n", scalar @candidates;
 }
-
-printf "Candidates (not yet passing%s): %d\n",
-    $retest_age > 0 ? " or older than $retest_age days" : "",
-    scalar @candidates;
 
 if (!@candidates) {
     print "All modules have been tested! Use --report-only to regenerate the report.\n";
