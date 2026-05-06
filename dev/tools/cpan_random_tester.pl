@@ -178,6 +178,12 @@ if ($retest_age > 0) {
     printf "Candidates (not yet passing): %d\n", scalar @candidates;
 }
 
+# Shuffle candidates to ensure randomization (they may be in alphabetical order from @all_modules)
+for my $i (0 .. scalar(@candidates) - 1) {
+    my $j = $i + int(rand(scalar(@candidates) - $i));
+    @candidates[$i, $j] = @candidates[$j, $i];
+}
+
 if (!@candidates) {
     print "All modules have been tested! Use --report-only to regenerate the report.\n";
     generate_report();
