@@ -44,6 +44,7 @@ use File::Spec;
 use File::Path qw(make_path);
 use Getopt::Long;
 use POSIX qw(strftime WNOHANG);
+use Time::Local qw(timelocal);
 
 # ──────────────────────────────────────────────────────────────────────
 # Paths
@@ -69,6 +70,7 @@ my $count       = 10;
 my $timeout     = 300;
 my $report_only = 0;
 my $install     = 0;      # --install: use jcpan (install) instead of jcpan -t
+my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ago
 my $help        = 0;
 my $seed;
 
@@ -77,6 +79,7 @@ GetOptions(
     'timeout=i'    => \$timeout,
     'report-only'  => \$report_only,
     'install'      => \$install,
+    'retest-age=i' => \$retest_age,
     'seed=i'       => \$seed,
     'help|h'       => \$help,
 ) or die "Error in command line arguments\n";
@@ -149,7 +152,39 @@ for my $mod (@all_modules) {
     next if $skip_modules{$mod};
     push @candidates, $mod;
 }
-printf "Candidates (not yet passing): %d\n", scalar @candidates;
+
+# If --retest-age is set, also include PASS and FAIL modules tested N+ days ago
+if ($retest_age > 0) {
+    my $cutoff_date = cutoff_date_for_days_ago($retest_age);
+    my @retest_candidates;
+    for my $mod (@all_modules) {
+        next if $skip_modules{$mod};  # Always skip XS-only modules
+
+        my $record;
+        if ($pass_modules{$mod}) {
+            $record = $pass_modules{$mod};
+        } elsif ($fail_modules{$mod}) {
+            $record = $fail_modules{$mod};
+        } else {
+            next;
+        }
+
+        my $test_date = $record->{date} // '';
+        push @retest_candidates, $mod if $test_date lt $cutoff_date;
+    }
+
+    # Merge: candidates are untested, retest_candidates are old (both eligible for random pick)
+    my %seen;
+    for my $mod (@candidates) { $seen{$mod} = 1; }
+    for my $mod (@retest_candidates) {
+        push @candidates, $mod unless $seen{$mod}++;
+    }
+    printf "Retesting modules from >%d days ago: +%d candidates\n", $retest_age, scalar @retest_candidates;
+}
+
+printf "Candidates (not yet passing%s): %d\n",
+    $retest_age > 0 ? " or older than $retest_age days" : "",
+    scalar @candidates;
 
 if (!@candidates) {
     print "All modules have been tested! Use --report-only to regenerate the report.\n";
@@ -171,7 +206,6 @@ if ($count >= scalar @candidates) {
     }
     @selected = @pool[0 .. $count - 1];
 }
-@selected = sort @selected;
 
 printf "\nTesting %d randomly selected modules (timeout: %ds, commit: %s):\n",
     scalar @selected, $timeout, $git_commit;
@@ -790,6 +824,12 @@ sub categorize_error {
     return 'Other';
 }
 
+sub cutoff_date_for_days_ago {
+    my ($days_ago) = @_;
+    my $cutoff_seconds = time() - ($days_ago * 86400);
+    return strftime('%Y-%m-%d', localtime($cutoff_seconds));
+}
+
 sub print_usage {
     print <<'USAGE';
 cpan_random_tester.pl - Random CPAN Module Tester for PerlOnJava
@@ -804,6 +844,8 @@ Options:
   --install        Use jcpan (install) instead of jcpan -t (test only).
                    Deps stay installed for future runs, but already-installed
                    modules are skipped (no re-test).
+  --retest-age N   Include modules tested N or more days ago (re-randomizes pick).
+                   Useful for detecting regressions or improvements over time.
   --report-only    Regenerate .md report from existing .dat files
   --seed N         Random seed for reproducible module selection
   --help           Show this help
@@ -816,12 +858,15 @@ Behavior:
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
   - Results accumulate across runs (never discarded).
+  - Multiple instances can run concurrently; random selection minimizes
+    duplicate work. Each instance updates .dat files after each target.
 
 Examples:
   perl dev/tools/cpan_random_tester.pl                   # 10 targets
   perl dev/tools/cpan_random_tester.pl --count 50        # 50 targets
   perl dev/tools/cpan_random_tester.pl --seed 42 -n 20   # reproducible
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report
+  perl dev/tools/cpan_random_tester.pl --retest-age 7 -n 30  # test modules not tested in 7 days
 
 Output:
   dev/cpan-reports/cpan-compatibility.md         Markdown report
@@ -829,6 +874,13 @@ Output:
   dev/cpan-reports/cpan-compatibility-fail.dat   Fail list (TSV)
   dev/cpan-reports/cpan-compatibility-skip.dat   Skip list (TSV)
   /tmp/cpan_random_logs/                    Per-module logs
+
+Concurrent Execution:
+  Yes, multiple instances can run simultaneously. They will:
+  - Independently randomize which modules to test
+  - Each write results to the shared .dat files
+  - Minimize duplicate work (low probability of picking the same module)
+  - Share results across instances (each reads the latest .dat on startup)
 
 USAGE
 }
