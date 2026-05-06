@@ -70,6 +70,28 @@ See the design document for implementation details:
 
 ---
 
+## Plack::Handler::Netty — Web Server
+
+`Plack::Handler::Netty` provides a PSGI-compliant web server using Netty's async I/O.
+Supports HTTP/HTTPS, streaming responses, and runs any PSGI application.
+
+```perl
+use Plack::Handler::Netty;
+
+my $app = sub {
+    my ($env) = @_;
+    return [200, ['Content-Type' => 'text/plain'], ['Hello!']];
+};
+
+my $handler = Plack::Handler::Netty->new(port => 5000);
+$handler->run($app);
+```
+
+**Performance**: 32,000+ req/sec for simple responses. See full documentation:
+[examples/http_server_plack/README.md](../../examples/http_server_plack/README.md).
+
+---
+
 ## Moose / Class::MOP
 
 PerlOnJava bundles upstream **Moose 2.4000** in the JAR — `use Moose;`

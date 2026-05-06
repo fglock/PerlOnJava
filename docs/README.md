@@ -16,6 +16,7 @@ New to PerlOnJava? Start here:
 How-to guides for common tasks:
 
 - **[Database Access](guides/database-access.md)** - Using DBI with JDBC drivers
+- **[Web Server (PSGI)](../examples/http_server_plack/README.md)** - Run web apps with Plack::Handler::Netty
 - **[Java Integration](guides/java-integration.md)** - Call Perl from Java (JSR-223)
 - **[Using CPAN Modules](guides/using-cpan-modules.md)** - Install and use CPAN modules
 - **[Module Porting](guides/module-porting.md)** - Port Perl modules to PerlOnJava

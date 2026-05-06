@@ -177,6 +177,7 @@ Java implementations of Perl operators, organized by category.
 
 #### Perl Modules (`runtime/perlmodule/`)
 Java XS implementations for modules that normally use C XS code (DateTime, DBI, JSON, etc.).
+Includes **Plack::Handler::Netty** (PSGI web server) - see [Web Server Guide](../../examples/http_server_plack/README.md).
 
 #### Memory Management
 PerlOnJava relies on the JVM's tracing garbage collector for general memory
