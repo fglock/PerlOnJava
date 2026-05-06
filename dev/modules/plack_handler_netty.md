@@ -707,7 +707,458 @@ Add:
 
 **Estimated effort**: 1 day
 
-### Phase 5: Open Pull Request (Week 5)
+### Phase 5: HTTPS/TLS Support (Week 5)
+
+**Goal**: Add SSL/TLS support using Netty's SslHandler for secure HTTPS connections.
+
+**Why HTTPS matters**:
+- Production deployments require secure connections
+- Many APIs and authentication flows require HTTPS
+- Browser security policies (CORS, cookies, service workers) need HTTPS
+- Direct HTTPS avoids needing a reverse proxy for simple deployments
+
+**Architecture**:
+Netty provides `io.netty.handler.ssl.SslHandler` which wraps any channel with SSL/TLS.
+We'll configure it with Java's standard `SSLContext` and insert it into the channel pipeline.
+
+#### Task 5.1: Add SSL Configuration Options
+
+**File**: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+
+Add new configuration parameters to `new_handler()`:
+- `ssl` (boolean) - Enable HTTPS
+- `ssl_cert` (string) - Path to certificate file (PEM format)
+- `ssl_key` (string) - Path to private key file (PEM format)
+- `ssl_ca` (string, optional) - Path to CA certificate for client verification
+- `ssl_protocols` (arrayref, optional) - Allowed TLS versions (default: TLSv1.2, TLSv1.3)
+- `ssl_ciphers` (string, optional) - Cipher suite configuration
+
+**Configuration handling**:
+```java
+// In new_handler() method
+RuntimeScalar sslScalar = config.get("ssl");
+boolean sslEnabled = false;
+if (sslScalar != null && sslScalar.type != RuntimeScalarType.UNDEF) {
+    sslEnabled = sslScalar.getBoolean();
+}
+
+String sslCertPath = null;
+String sslKeyPath = null;
+if (sslEnabled) {
+    RuntimeScalar certScalar = config.get("ssl_cert");
+    RuntimeScalar keyScalar = config.get("ssl_key");
+    
+    if (certScalar == null || certScalar.type == RuntimeScalarType.UNDEF ||
+        keyScalar == null || keyScalar.type == RuntimeScalarType.UNDEF) {
+        throw new IllegalArgumentException(
+            "ssl_cert and ssl_key are required when ssl=1");
+    }
+    
+    sslCertPath = certScalar.toString();
+    sslKeyPath = keyScalar.toString();
+}
+
+handler.put("ssl", new RuntimeScalar(sslEnabled));
+if (sslEnabled) {
+    handler.put("ssl_cert", new RuntimeScalar(sslCertPath));
+    handler.put("ssl_key", new RuntimeScalar(sslKeyPath));
+}
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.2: Implement SSL Context Builder
+
+**File**: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+
+Create a method to build SSL context from certificate and key files:
+
+```java
+private static SslContext createSslContext(String certPath, String keyPath, 
+                                          String caPath, String[] protocols,
+                                          String ciphers) throws Exception {
+    File certFile = new File(certPath);
+    File keyFile = new File(keyPath);
+    
+    if (!certFile.exists()) {
+        throw new IllegalArgumentException("SSL certificate not found: " + certPath);
+    }
+    if (!keyFile.exists()) {
+        throw new IllegalArgumentException("SSL private key not found: " + keyPath);
+    }
+    
+    SslContextBuilder builder = SslContextBuilder.forServer(certFile, keyFile);
+    
+    // Optional: Client certificate verification
+    if (caPath != null && !caPath.isEmpty()) {
+        File caFile = new File(caPath);
+        if (caFile.exists()) {
+            builder.trustManager(caFile);
+            builder.clientAuth(ClientAuth.OPTIONAL); // or REQUIRE
+        }
+    }
+    
+    // Optional: Protocol versions
+    if (protocols != null && protocols.length > 0) {
+        builder.protocols(protocols);
+    } else {
+        // Default to TLS 1.2 and 1.3
+        builder.protocols("TLSv1.2", "TLSv1.3");
+    }
+    
+    // Optional: Cipher suites
+    if (ciphers != null && !ciphers.isEmpty()) {
+        builder.ciphers(Arrays.asList(ciphers.split(":")));
+    }
+    
+    return builder.build();
+}
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.3: Add SSL Handler to Pipeline
+
+**File**: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+
+Modify `startNettyServer()` to conditionally add SslHandler:
+
+```java
+private static void startNettyServer(int port, String host, 
+                                     RuntimeScalar psgiApp,
+                                     int backlog, int maxRequestSize, 
+                                     boolean keepAlive,
+                                     boolean sslEnabled,
+                                     String sslCert, String sslKey) 
+    throws InterruptedException {
+    
+    // Build SSL context if enabled
+    SslContext sslContext = null;
+    if (sslEnabled) {
+        try {
+            sslContext = createSslContext(sslCert, sslKey, null, null, null);
+            System.err.println("SSL/TLS enabled with certificate: " + sslCert);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize SSL context", e);
+        }
+    }
+    
+    final SslContext finalSslContext = sslContext;
+    
+    // ... existing Netty setup ...
+    
+    ServerBootstrap b = new ServerBootstrap();
+    b.group(bossGroup, workerGroup)
+     .channel(NioServerSocketChannel.class)
+     .childHandler(new ChannelInitializer<SocketChannel>() {
+         @Override
+         protected void initChannel(SocketChannel ch) {
+             ChannelPipeline pipeline = ch.pipeline();
+             
+             // Add SSL handler first if enabled
+             if (finalSslContext != null) {
+                 pipeline.addLast("ssl", finalSslContext.newHandler(ch.alloc()));
+             }
+             
+             // Existing HTTP handlers
+             pipeline.addLast("codec", new HttpServerCodec());
+             pipeline.addLast("aggregator", 
+                 new HttpObjectAggregator(maxRequestSize));
+             pipeline.addLast("handler", 
+                 new PSGIRequestHandler(psgiApp, port, keepAlive));
+         }
+     })
+     .option(ChannelOption.SO_BACKLOG, backlog)
+     .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
+}
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.4: Update PSGI Environment for HTTPS
+
+**File**: `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java`
+
+Modify `buildPSGIEnvironment()` to detect SSL:
+
+```java
+private RuntimeHash buildPSGIEnvironment(FullHttpRequest req, boolean isHttps) {
+    RuntimeHash env = new RuntimeHash();
+    
+    // ... existing environment building ...
+    
+    // psgi.url_scheme - http or https
+    String urlScheme = isHttps ? "https" : "http";
+    env.put("psgi.url_scheme", new RuntimeScalar(urlScheme));
+    
+    // HTTPS environment variable (CGI standard)
+    if (isHttps) {
+        env.put("HTTPS", new RuntimeScalar("on"));
+    }
+    
+    return env;
+}
+```
+
+And update `PSGIRequestHandler` to track SSL status:
+
+```java
+private static class PSGIRequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+    private final RuntimeScalar psgiApp;
+    private final int serverPort;
+    private final boolean keepAlive;
+    private final boolean isHttps;
+    
+    PSGIRequestHandler(RuntimeScalar psgiApp, int serverPort, 
+                      boolean keepAlive, boolean isHttps) {
+        this.psgiApp = psgiApp;
+        this.serverPort = serverPort;
+        this.keepAlive = keepAlive;
+        this.isHttps = isHttps;
+    }
+    
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) {
+        // Check if connection is SSL/TLS
+        boolean connectionIsSecure = ctx.pipeline().get(SslHandler.class) != null;
+        RuntimeHash env = buildPSGIEnvironment(req, connectionIsSecure);
+        // ... rest of handler ...
+    }
+}
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.5: Create Test Application and Certificates
+
+**Files**:
+- `examples/http_server_plack/test_https.pl` (new)
+- `examples/http_server_plack/certs/generate_test_cert.sh` (new)
+- `examples/http_server_plack/certs/README.md` (new)
+
+**Generate self-signed test certificates**:
+```bash
+#!/bin/bash
+# examples/http_server_plack/certs/generate_test_cert.sh
+
+openssl req -x509 -newkey rsa:4096 -keyout server-key.pem \
+    -out server-cert.pem -days 365 -nodes \
+    -subj "/C=US/ST=Test/L=Test/O=PerlOnJava/CN=localhost"
+
+echo "Generated test certificates:"
+echo "  server-cert.pem - Certificate"
+echo "  server-key.pem  - Private key"
+echo ""
+echo "WARNING: These are self-signed test certificates."
+echo "Do NOT use in production. Get proper certificates from Let's Encrypt."
+```
+
+**HTTPS test application**:
+```perl
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Plack::Handler::Netty;
+use FindBin;
+
+my $app = sub {
+    my ($env) = @_;
+    
+    my $scheme = $env->{'psgi.url_scheme'};
+    my $secure = $env->{'HTTPS'} ? 'YES' : 'NO';
+    
+    return [
+        200,
+        ['Content-Type' => 'text/plain'],
+        ["Secure connection: $secure\nURL scheme: $scheme\n"]
+    ];
+};
+
+print STDERR "Starting HTTPS server on https://localhost:8443\n";
+print STDERR "Using self-signed test certificates\n";
+print STDERR "Test with: curl -k https://localhost:8443/\n\n";
+
+my $handler = Plack::Handler::Netty->new(
+    host     => '0.0.0.0',
+    port     => 8443,
+    ssl      => 1,
+    ssl_cert => "$FindBin::Bin/certs/server-cert.pem",
+    ssl_key  => "$FindBin::Bin/certs/server-key.pem",
+);
+
+$handler->run($app);
+```
+
+**Test commands**:
+```bash
+# Generate test certificates
+cd examples/http_server_plack/certs
+./generate_test_cert.sh
+
+# Start HTTPS server
+cd ..
+../../jperl test_https.pl &
+
+# Test with curl (self-signed cert warning expected)
+curl -k https://localhost:8443/
+# Expected: "Secure connection: YES\nURL scheme: https"
+
+# Test with openssl s_client
+openssl s_client -connect localhost:8443 -showcerts
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.6: Update Documentation
+
+**Files**:
+- `src/main/perl/lib/Plack/Handler/Netty.pm` - Update HTTPS section in POD
+- `examples/http_server_plack/README.md` - Add HTTPS examples
+- `dev/modules/plack_handler_netty.md` - Mark Phase 5 complete
+
+**POD updates** (already has placeholder section, update it):
+```pod
+=head1 HTTPS/TLS SUPPORT
+
+SSL/TLS support is provided via Netty's SslHandler.
+
+=head2 Configuration
+
+    my $handler = Plack::Handler::Netty->new(
+        port     => 443,
+        ssl      => 1,
+        ssl_cert => '/path/to/cert.pem',
+        ssl_key  => '/path/to/key.pem',
+    );
+
+=head2 Certificate Formats
+
+Certificates must be in PEM format. Generate with:
+
+    # Self-signed (testing only)
+    openssl req -x509 -newkey rsa:4096 -keyout key.pem \
+        -out cert.pem -days 365 -nodes
+
+    # Let's Encrypt (production)
+    certbot certonly --standalone -d example.com
+
+=head2 Optional Parameters
+
+=over 4
+
+=item * C<ssl_ca> - CA certificate for client verification
+
+=item * C<ssl_protocols> - Arrayref of allowed TLS versions
+
+    ssl_protocols => ['TLSv1.2', 'TLSv1.3']
+
+=item * C<ssl_ciphers> - Colon-separated cipher suite list
+
+    ssl_ciphers => 'ECDHE-RSA-AES128-GCM-SHA256:...'
+
+=back
+
+=head2 Production Deployment
+
+For production, use proper certificates from:
+
+=over 4
+
+=item * Let's Encrypt (free, automated)
+
+=item * Commercial CA (paid, support)
+
+=back
+
+Self-signed certificates are only for testing.
+
+=cut
+```
+
+**Estimated effort**: 1 day
+
+#### Task 5.7: Integration Testing
+
+**Test scenarios**:
+1. HTTP-only server (existing behavior)
+2. HTTPS-only server (new)
+3. Both HTTP and HTTPS (run two instances)
+4. Invalid certificate handling
+5. Mixed content (ensure psgi.url_scheme is correct)
+6. HTTP to HTTPS redirect application
+
+**Integration test**:
+```bash
+# Start HTTPS server
+./jperl examples/http_server_plack/test_https.pl &
+HTTPS_PID=$!
+sleep 2
+
+# Test HTTPS works
+curl -k https://localhost:8443/ | grep "Secure connection: YES"
+
+# Test psgi.url_scheme
+curl -k https://localhost:8443/ | grep "URL scheme: https"
+
+# Kill server
+kill $HTTPS_PID
+
+# Start HTTP server for comparison
+./jperl examples/http_server_plack/test.pl &
+HTTP_PID=$!
+sleep 2
+
+# Test HTTP still works
+curl http://localhost:5000/ | grep "Hello from PSGI"
+
+kill $HTTP_PID
+```
+
+**Performance testing**:
+```bash
+# Benchmark HTTPS vs HTTP
+wrk -t4 -c100 -d10s http://localhost:5000/
+wrk -t4 -c100 -d10s https://localhost:8443/
+
+# Expect: ~10-20% overhead for SSL (acceptable)
+```
+
+**Estimated effort**: 1 day
+
+#### Verification Plan
+
+**Success criteria**:
+- ✅ HTTPS server starts and accepts connections
+- ✅ SSL handshake completes successfully
+- ✅ `psgi.url_scheme` correctly set to "https"
+- ✅ `HTTPS` environment variable present
+- ✅ HTTP server still works (no regression)
+- ✅ Self-signed certificates work for testing
+- ✅ Certificate validation errors are clear
+- ✅ Performance degradation < 20%
+
+**Security checklist**:
+- ✅ TLS 1.2 and 1.3 enabled by default
+- ✅ Weak ciphers disabled
+- ✅ Certificate validation works
+- ✅ Private key file permissions checked
+- ✅ Error messages don't leak sensitive info
+
+#### Dependencies
+
+**Required**:
+- Netty SSL/TLS support (included in netty-all.jar)
+- Java SSL/TLS stack (included in JDK)
+- OpenSSL (for certificate generation, not runtime)
+
+**Optional**:
+- netty-tcnative (for OpenSSL native bindings, better performance)
+  - Can be added later if needed
+  - Requires native library compilation
+
+**Estimated total effort**: 6 days
+
+### Phase 6: Open Pull Request (Week 6)
 
 **Goal**: Get code reviewed and merged into PerlOnJava main branch.
 
