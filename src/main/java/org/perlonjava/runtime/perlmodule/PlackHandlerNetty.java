@@ -469,7 +469,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
             RuntimeArray version = new RuntimeArray();
             RuntimeArray.push(version, new RuntimeScalar(1));
             RuntimeArray.push(version, new RuntimeScalar(1));
-            env.put("psgi.version", new RuntimeScalar(version));
+            env.put("psgi.version", version.createReference());
 
             // psgi.url_scheme - http or https
             env.put("psgi.url_scheme", new RuntimeScalar("http")); // TODO: detect HTTPS
@@ -482,10 +482,12 @@ public class PlackHandlerNetty extends PerlModuleBase {
             RuntimeScalar bodyScalar = new RuntimeScalar(bodyString);
             ScalarBackedIO inputIO = new ScalarBackedIO(bodyScalar);
             RuntimeIO psgiInput = new RuntimeIO(inputIO);
-            env.put("psgi.input", psgiInput);
+            // Wrap in a new RuntimeScalar to ensure it's stored correctly
+            env.put("psgi.input", new RuntimeScalar(psgiInput));
 
             // psgi.errors - stderr for error logging
-            env.put("psgi.errors", RuntimeIO.stderr);
+            // Wrap in a new RuntimeScalar to ensure it's stored correctly
+            env.put("psgi.errors", new RuntimeScalar(RuntimeIO.stderr));
 
             // psgi.multithread - \0 (PerlOnJava doesn't support threads)
             env.put("psgi.multithread", new RuntimeScalar(0));

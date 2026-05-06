@@ -69,17 +69,6 @@ Tests streaming response path with responder callbacks.
    - Expected for interpreted language
    - Still competitive with pure Perl servers
 
-## Comparison Context
-
-### Typical PSGI Server Performance (Reference)
-
-- **Starman** (pure Perl, prefork): 5,000-10,000 req/sec
-- **Gazelle** (pure Perl, prefork): 8,000-15,000 req/sec  
-- **Twiggy** (AnyEvent, async): 3,000-8,000 req/sec
-- **Plack::Handler::Netty**: **32,980 req/sec** (hello world)
-
-**Result**: Plack::Handler::Netty is 2-6x faster than typical pure Perl servers.
-
 ## Recommendations
 
 ### For Production Use
@@ -101,8 +90,6 @@ Tests streaming response path with responder callbacks.
    - SSE/long-polling: Low memory overhead per connection
 
 ## Conclusion
-
-Plack::Handler::Netty delivers **production-ready performance** for PSGI applications:
 
 ✅ **High throughput**: 30k+ req/sec for simple responses  
 ✅ **Low latency**: <5ms average response time  
