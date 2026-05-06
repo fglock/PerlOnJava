@@ -1,6 +1,8 @@
 # Test Certificates
 
-This directory contains self-signed SSL/TLS certificates for testing HTTPS support in Plack::Handler::Netty.
+This directory contains scripts to generate self-signed SSL/TLS certificates for testing HTTPS support in Plack::Handler::Netty.
+
+**Note:** Certificates are generated locally and not committed to git.
 
 ## Generating Certificates
 
@@ -13,6 +15,8 @@ Run the generation script:
 This creates:
 - `server-cert.pem` - SSL certificate
 - `server-key.pem` - Private key
+
+These files are gitignored and must be generated before running HTTPS tests.
 
 ## ⚠️ WARNING
 
