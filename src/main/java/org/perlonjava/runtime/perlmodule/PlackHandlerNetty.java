@@ -140,6 +140,54 @@ public class PlackHandlerNetty extends PerlModuleBase {
         }
         handler.put("max_request_size", new RuntimeScalar(maxRequestSize));
 
+        // SSL/TLS - default to disabled
+        RuntimeScalar sslScalar = config.get("ssl");
+        boolean sslEnabled = false;
+        if (sslScalar != null && sslScalar.type != RuntimeScalarType.UNDEF) {
+            sslEnabled = sslScalar.getBoolean();
+        }
+        handler.put("ssl", new RuntimeScalar(sslEnabled));
+
+        // SSL certificate and key (required if ssl=1)
+        if (sslEnabled) {
+            RuntimeScalar certScalar = config.get("ssl_cert");
+            RuntimeScalar keyScalar = config.get("ssl_key");
+
+            if (certScalar == null || certScalar.type == RuntimeScalarType.UNDEF ||
+                certScalar.toString().isEmpty()) {
+                throw new IllegalArgumentException("ssl_cert is required when ssl=1");
+            }
+            if (keyScalar == null || keyScalar.type == RuntimeScalarType.UNDEF ||
+                keyScalar.toString().isEmpty()) {
+                throw new IllegalArgumentException("ssl_key is required when ssl=1");
+            }
+
+            String sslCert = certScalar.toString();
+            String sslKey = keyScalar.toString();
+            handler.put("ssl_cert", new RuntimeScalar(sslCert));
+            handler.put("ssl_key", new RuntimeScalar(sslKey));
+
+            // Optional: CA certificate for client verification
+            RuntimeScalar caCertScalar = config.get("ssl_ca");
+            if (caCertScalar != null && caCertScalar.type != RuntimeScalarType.UNDEF &&
+                !caCertScalar.toString().isEmpty()) {
+                handler.put("ssl_ca", new RuntimeScalar(caCertScalar.toString()));
+            }
+
+            // Optional: TLS protocol versions (arrayref)
+            RuntimeScalar protocolsScalar = config.get("ssl_protocols");
+            if (protocolsScalar != null && protocolsScalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                handler.put("ssl_protocols", protocolsScalar);
+            }
+
+            // Optional: Cipher suites (string)
+            RuntimeScalar ciphersScalar = config.get("ssl_ciphers");
+            if (ciphersScalar != null && ciphersScalar.type != RuntimeScalarType.UNDEF &&
+                !ciphersScalar.toString().isEmpty()) {
+                handler.put("ssl_ciphers", new RuntimeScalar(ciphersScalar.toString()));
+            }
+        }
+
         RuntimeScalar blessed = ReferenceOperators.bless(
             handler.createReferenceWithTrackedElements(),
             new RuntimeScalar("Plack::Handler::Netty")
@@ -165,13 +213,101 @@ public class PlackHandlerNetty extends PerlModuleBase {
         int keepalive = handler.get("keepalive").getInt();
         int maxRequestSize = handler.get("max_request_size").getInt();
 
+        // SSL configuration
+        boolean sslEnabled = handler.get("ssl").getBoolean();
+        String sslCert = null;
+        String sslKey = null;
+        String sslCa = null;
+        String[] sslProtocols = null;
+        String sslCiphers = null;
+
+        if (sslEnabled) {
+            sslCert = handler.get("ssl_cert").toString();
+            sslKey = handler.get("ssl_key").toString();
+
+            RuntimeScalar caCertScalar = handler.get("ssl_ca");
+            if (caCertScalar != null && caCertScalar.type != RuntimeScalarType.UNDEF) {
+                sslCa = caCertScalar.toString();
+            }
+
+            RuntimeScalar protocolsScalar = handler.get("ssl_protocols");
+            if (protocolsScalar != null && protocolsScalar.type == RuntimeScalarType.ARRAYREFERENCE) {
+                RuntimeArray protocolsArray = protocolsScalar.arrayDeref();
+                sslProtocols = new String[protocolsArray.size()];
+                for (int i = 0; i < protocolsArray.size(); i++) {
+                    sslProtocols[i] = protocolsArray.get(i).toString();
+                }
+            }
+
+            RuntimeScalar ciphersScalar = handler.get("ssl_ciphers");
+            if (ciphersScalar != null && ciphersScalar.type != RuntimeScalarType.UNDEF) {
+                sslCiphers = ciphersScalar.toString();
+            }
+        }
+
         try {
-            startNettyServer(port, host, psgiApp, backlog, maxRequestSize, keepalive > 0);
+            startNettyServer(port, host, psgiApp, backlog, maxRequestSize, keepalive > 0,
+                           sslEnabled, sslCert, sslKey, sslCa, sslProtocols, sslCiphers);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
 
         return new RuntimeList();
+    }
+
+    /**
+     * Creates an SSL context from certificate and key files.
+     *
+     * @param certPath Path to SSL certificate file (PEM format)
+     * @param keyPath Path to SSL private key file (PEM format)
+     * @param caPath Optional path to CA certificate for client verification
+     * @param protocols Optional array of TLS protocol versions (e.g., "TLSv1.2", "TLSv1.3")
+     * @param ciphers Optional colon-separated list of cipher suites
+     * @return Configured SslContext
+     * @throws Exception if certificate/key loading fails
+     */
+    private static io.netty.handler.ssl.SslContext createSslContext(
+            String certPath, String keyPath, String caPath,
+            String[] protocols, String ciphers) throws Exception {
+
+        java.io.File certFile = new java.io.File(certPath);
+        java.io.File keyFile = new java.io.File(keyPath);
+
+        if (!certFile.exists()) {
+            throw new IllegalArgumentException("SSL certificate not found: " + certPath);
+        }
+        if (!keyFile.exists()) {
+            throw new IllegalArgumentException("SSL private key not found: " + keyPath);
+        }
+
+        io.netty.handler.ssl.SslContextBuilder builder =
+            io.netty.handler.ssl.SslContextBuilder.forServer(certFile, keyFile);
+
+        // Optional: Client certificate verification
+        if (caPath != null && !caPath.isEmpty()) {
+            java.io.File caFile = new java.io.File(caPath);
+            if (caFile.exists()) {
+                builder.trustManager(caFile);
+                builder.clientAuth(io.netty.handler.ssl.ClientAuth.OPTIONAL);
+            } else {
+                System.err.println("Warning: CA certificate not found: " + caPath);
+            }
+        }
+
+        // TLS protocol versions
+        if (protocols != null && protocols.length > 0) {
+            builder.protocols(protocols);
+        } else {
+            // Default to TLS 1.2 and 1.3 (secure modern protocols)
+            builder.protocols("TLSv1.2", "TLSv1.3");
+        }
+
+        // Cipher suites
+        if (ciphers != null && !ciphers.isEmpty()) {
+            builder.ciphers(java.util.Arrays.asList(ciphers.split(":")));
+        }
+
+        return builder.build();
     }
 
     /**
@@ -183,10 +319,36 @@ public class PlackHandlerNetty extends PerlModuleBase {
      * @param backlog TCP connection backlog queue size
      * @param maxRequestSize Maximum HTTP request body size in bytes
      * @param keepAlive Enable HTTP keep-alive connections
+     * @param sslEnabled Enable SSL/TLS
+     * @param sslCert Path to SSL certificate (PEM format)
+     * @param sslKey Path to SSL private key (PEM format)
+     * @param sslCa Optional CA certificate path
+     * @param sslProtocols Optional TLS protocol versions
+     * @param sslCiphers Optional cipher suites
      * @throws InterruptedException if the server is interrupted during startup or operation
      */
     private static void startNettyServer(int port, String host, RuntimeScalar psgiApp,
-                                        int backlog, int maxRequestSize, boolean keepAlive) throws InterruptedException {
+                                        int backlog, int maxRequestSize, boolean keepAlive,
+                                        boolean sslEnabled, String sslCert, String sslKey,
+                                        String sslCa, String[] sslProtocols, String sslCiphers)
+                                        throws InterruptedException {
+
+        // Build SSL context if enabled
+        io.netty.handler.ssl.SslContext sslContext = null;
+        if (sslEnabled) {
+            try {
+                sslContext = createSslContext(sslCert, sslKey, sslCa, sslProtocols, sslCiphers);
+                System.err.println("SSL/TLS enabled with certificate: " + sslCert);
+                System.err.println("TLS protocols: " + String.join(", ",
+                    sslProtocols != null && sslProtocols.length > 0 ?
+                    sslProtocols : new String[]{"TLSv1.2", "TLSv1.3"}));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize SSL context: " + e.getMessage(), e);
+            }
+        }
+
+        final io.netty.handler.ssl.SslContext finalSslContext = sslContext;
+
         // Single-threaded event loop to avoid PerlOnJava thread-safety issues
         // This still handles many concurrent connections via async I/O
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
@@ -213,17 +375,27 @@ public class PlackHandlerNetty extends PerlModuleBase {
                  @Override
                  protected void initChannel(SocketChannel ch) {
                      ChannelPipeline pipeline = ch.pipeline();
+
+                     // Add SSL handler first if enabled
+                     if (finalSslContext != null) {
+                         pipeline.addLast("ssl", finalSslContext.newHandler(ch.alloc()));
+                     }
+
+                     // HTTP codec and aggregator
                      pipeline.addLast(new HttpServerCodec());
                      pipeline.addLast(new HttpObjectAggregator(maxRequestSize));
+
+                     // PSGI request handler
                      pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive));
                  }
              })
              .option(ChannelOption.SO_BACKLOG, backlog)
              .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
+            String scheme = sslEnabled ? "https" : "http";
             System.err.println("Binding to " + host + ":" + port + "...");
             ChannelFuture f = b.bind(host, port).sync();
-            System.err.println("Server started successfully on " + host + ":" + port);
+            System.err.println("Server started successfully on " + scheme + "://" + host + ":" + port);
 
             // Wait until the server socket is closed
             f.channel().closeFuture().sync();
@@ -270,8 +442,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
         protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest req) {
             RuntimeHash env = null;
             try {
+                // Detect if connection is SSL/TLS by checking for SslHandler in pipeline
+                boolean isHttps = ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
+
                 // Build PSGI environment hash
-                env = buildPSGIEnvironment(req);
+                env = buildPSGIEnvironment(req, isHttps);
 
                 // Call PSGI app: $response = $app->($env)
                 RuntimeArray args = new RuntimeArray();
@@ -419,7 +594,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
          * @param req Netty FullHttpRequest
          * @return PSGI environment hash
          */
-        private RuntimeHash buildPSGIEnvironment(FullHttpRequest req) {
+        private RuntimeHash buildPSGIEnvironment(FullHttpRequest req, boolean isHttps) {
             RuntimeHash env = new RuntimeHash();
 
             // Parse URI into path and query string
@@ -440,6 +615,11 @@ public class PlackHandlerNetty extends PerlModuleBase {
             env.put("SERVER_NAME", new RuntimeScalar(getServerName(req)));
             env.put("SERVER_PORT", new RuntimeScalar(serverPort));
             env.put("SERVER_PROTOCOL", new RuntimeScalar(req.protocolVersion().text()));
+
+            // HTTPS - CGI standard variable indicating secure connection
+            if (isHttps) {
+                env.put("HTTPS", new RuntimeScalar("on"));
+            }
 
             // Content-Length and Content-Type (not in HTTP_* namespace)
             String contentLength = req.headers().get(HttpHeaderNames.CONTENT_LENGTH);
@@ -472,7 +652,8 @@ public class PlackHandlerNetty extends PerlModuleBase {
             env.put("psgi.version", version.createReference());
 
             // psgi.url_scheme - http or https
-            env.put("psgi.url_scheme", new RuntimeScalar("http")); // TODO: detect HTTPS
+            String urlScheme = isHttps ? "https" : "http";
+            env.put("psgi.url_scheme", new RuntimeScalar(urlScheme));
 
             // psgi.input - request body as IO::Handle
             ByteBuf content = req.content();
