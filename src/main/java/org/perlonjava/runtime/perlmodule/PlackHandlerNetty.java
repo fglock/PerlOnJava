@@ -226,37 +226,38 @@ public class PlackHandlerNetty extends PerlModuleBase {
         /**
          * Handles streaming PSGI responses (coderef).
          * The app returns a coderef that calls $responder with [status, headers, body].
+         *
+         * Strategy: Delegate to Perl helper function _handle_streaming_response()
+         * which creates a native Perl responder callback. This is vastly simpler
+         * than trying to create Perl-callable callbacks from Java.
          */
         private void handleStreamingResponse(ChannelHandlerContext ctx, FullHttpRequest req,
                                             RuntimeScalar streamingCoderef, boolean keepAlive) {
             try {
-                // For streaming, create an inline wrapper that processes the response
-                // The coderef is called with a responder callback
-                RuntimeArray responderArgs = new RuntimeArray();
+                // Create a Java-side callback that Perl can invoke to send HTTP response
+                CallableHttpResponse responseCallback = new CallableHttpResponse(ctx, req, keepAlive);
 
-                // Create a simple responder wrapper - for now just handle array responses
-                // Full streaming would require more complex callback handling
-                RuntimeArray.push(responderArgs, streamingCoderef);
+                // Call Perl helper: Plack::Handler::Netty::_handle_streaming_response($coderef, $callback)
+                RuntimeArray args = new RuntimeArray();
+                RuntimeArray.push(args, streamingCoderef);
+                // Wrap the callback as a RuntimeScalar coderef
+                RuntimeArray.push(args, new RuntimeScalar(responseCallback));
 
-                // Call the streaming app which should invoke the responder
-                RuntimeList result = RuntimeCode.apply(streamingCoderef, responderArgs, RuntimeContextType.VOID);
+                // Get the Perl helper method and invoke it
+                RuntimeScalar helper = GlobalVariable.getGlobalCodeRef("Plack::Handler::Netty::_handle_streaming_response");
+                if (helper.type == RuntimeScalarType.CODE) {
+                    RuntimeCode.apply(helper, args, RuntimeContextType.VOID);
+                } else {
+                    sendErrorResponse(ctx, req,
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                        "Perl streaming helper not loaded");
+                }
 
             } catch (Exception e) {
                 sendErrorResponse(ctx, req,
                     HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "Streaming response error: " + e.getMessage());
             }
-        }
-
-        /**
-         * Creates a responder callback for streaming responses.
-         * When called with [status, headers, body_iterator], it sends the response.
-         */
-        private RuntimeCode createResponderCallback(ChannelHandlerContext ctx, FullHttpRequest req,
-                                                   boolean keepAlive) {
-            // Simplified: For now, treat all streaming responses as array responses
-            // Full responder implementation would require more complex Perl-Java bridging
-            return null;
         }
 
         /**
@@ -520,6 +521,141 @@ public class PlackHandlerNetty extends PerlModuleBase {
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             cause.printStackTrace();
             ctx.close();
+        }
+    }
+
+    /**
+     * CallableHttpResponse - A RuntimeCode that can be invoked from Perl
+     * to send HTTP responses during streaming.
+     *
+     * Perl calls this with: $callback->([status, headers, body])
+     * and it sends the Netty HTTP response.
+     */
+    static class CallableHttpResponse extends RuntimeCode implements PerlSubroutine {
+        private final ChannelHandlerContext ctx;
+        private final FullHttpRequest req;
+        private final boolean keepAlive;
+
+        /**
+         * Create a responder callback for the given HTTP context.
+         *
+         * @param ctx      Netty channel context for sending response
+         * @param req      Original HTTP request (for keep-alive detection)
+         * @param keepAlive Whether to keep connection alive
+         */
+        public CallableHttpResponse(ChannelHandlerContext ctx, FullHttpRequest req, boolean keepAlive) {
+            // Pass 'this' as the PerlSubroutine implementation
+            super((PerlSubroutine) null, null);
+            // Set the subroutine after construction
+            this.subroutine = this;
+            this.ctx = ctx;
+            this.req = req;
+            this.keepAlive = keepAlive;
+        }
+
+        /**
+         * Invoke the responder with [status, headers, body].
+         * Called by Perl code: $responder->([200, ['Content-Type', 'text/plain'], ['Hello']])
+         */
+        @Override
+        public RuntimeList apply(RuntimeArray args, int context) {
+            try {
+                if (args.size() < 1) {
+                    throw new IllegalArgumentException("Responder requires at least 1 argument");
+                }
+
+                // First argument should be [status, headers, body] arrayref
+                RuntimeScalar arg = args.get(0);
+                if (arg.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Responder requires arrayref [status, headers, body], got " + arg.type);
+                }
+
+                RuntimeArray responseArray = arg.arrayDeref();
+                if (responseArray.size() != 3) {
+                    throw new IllegalArgumentException(
+                        "Responder requires [status, headers, body] (3 elements), got " +
+                        responseArray.size());
+                }
+
+                // Extract components
+                int status = responseArray.get(0).getInt();
+                RuntimeScalar headersScalar = responseArray.get(1);
+                RuntimeScalar bodyScalar = responseArray.get(2);
+
+                if (headersScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Headers must be arrayref, got " + headersScalar.type);
+                }
+                if (bodyScalar.type != RuntimeScalarType.ARRAYREFERENCE) {
+                    throw new IllegalArgumentException(
+                        "Body must be arrayref, got " + bodyScalar.type);
+                }
+
+                RuntimeArray headersArray = headersScalar.arrayDeref();
+                RuntimeArray bodyArray = bodyScalar.arrayDeref();
+
+                // Send the HTTP response
+                sendArrayResponse(ctx, req, status, headersArray, bodyArray, keepAlive);
+                return new RuntimeList();
+
+            } catch (Exception e) {
+                throw new RuntimeException("HTTP response error: " + e.getMessage(), e);
+            }
+        }
+
+        /**
+         * Builds and sends the HTTP response. Extracted from PSGIRequestHandler
+         * so both sync and streaming paths can use it.
+         */
+        private void sendArrayResponse(ChannelHandlerContext ctx, FullHttpRequest req,
+                                      int status, RuntimeArray headersArray,
+                                      RuntimeArray bodyArray, boolean keepAlive) {
+            FullHttpResponse response = buildHttpResponse(status, headersArray, bodyArray);
+
+            if (keepAlive && HttpUtil.isKeepAlive(req)) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+                ctx.writeAndFlush(response);
+            } else {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            }
+        }
+
+        /**
+         * Builds Netty HttpResponse from PSGI response array.
+         */
+        private FullHttpResponse buildHttpResponse(int status, RuntimeArray headersArray,
+                                                   RuntimeArray bodyArray) {
+            // Build response body by concatenating all body parts
+            StringBuilder bodyBuilder = new StringBuilder();
+            for (int i = 0; i < bodyArray.size(); i++) {
+                bodyBuilder.append(bodyArray.get(i).toString());
+            }
+
+            String bodyStr = bodyBuilder.toString();
+            FullHttpResponse response = new DefaultFullHttpResponse(
+                HttpVersion.HTTP_1_1,
+                HttpResponseStatus.valueOf(status),
+                Unpooled.copiedBuffer(bodyStr, CharsetUtil.UTF_8)
+            );
+
+            // Process PSGI headers (flat array of pairs: key1, val1, key2, val2, ...)
+            for (int i = 0; i < headersArray.size(); i += 2) {
+                if (i + 1 < headersArray.size()) {
+                    String headerName = headersArray.get(i).toString();
+                    String headerValue = headersArray.get(i + 1).toString();
+                    response.headers().set(headerName, headerValue);
+                }
+            }
+
+            // Set Content-Length if not already set
+            if (!response.headers().contains(HttpHeaderNames.CONTENT_LENGTH)) {
+                response.headers().set(HttpHeaderNames.CONTENT_LENGTH,
+                    response.content().readableBytes());
+            }
+
+            return response;
         }
     }
 }

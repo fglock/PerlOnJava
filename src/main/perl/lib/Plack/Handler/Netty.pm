@@ -9,12 +9,52 @@ our $VERSION = '0.01';
 require XSLoader;
 XSLoader::load(__PACKAGE__);
 
-# Java backend (org.perlonjava.runtime.perlmodule.NettyPSGIServer) provides:
+# Java backend (org.perlonjava.runtime.perlmodule.PlackHandlerNetty) provides:
 # - new(host => '...', port => ..., ...) - Perl-side factory
 # - run($app) - start the server
 # These are registered via XSLoader and PerlModuleBase
 
+# PSGI streaming response helper - called by Java when app returns a streaming coderef
+sub _handle_streaming_response {
+    my ($streaming_coderef, $send_response_callback) = @_;
+
+    # Create a native Perl responder coderef
+    # When called with [status, headers, body], it sends the HTTP response
+    my $responder = sub {
+        my ($response_array) = @_;
+
+        # Validate structure
+        die "responder requires arrayref argument"
+            unless ref($response_array) eq 'ARRAY';
+
+        die "responder requires 3-element array [status, headers, body]"
+            unless @$response_array == 3;
+
+        my ($status, $headers, $body) = @$response_array;
+
+        die "status must be numeric"
+            unless defined $status && $status =~ /^\d+$/;
+
+        die "headers must be arrayref"
+            unless ref($headers) eq 'ARRAY';
+
+        die "body must be arrayref"
+            unless ref($body) eq 'ARRAY';
+
+        # Call back to Java to send the HTTP response
+        $send_response_callback->([
+            $status,
+            $headers,
+            $body,
+        ]);
+    };
+
+    # Invoke the app's streaming function with our responder
+    $streaming_coderef->($responder);
+}
+
 1;
+
 
 __END__
 
