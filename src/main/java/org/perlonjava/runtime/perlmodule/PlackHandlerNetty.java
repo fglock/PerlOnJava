@@ -192,6 +192,19 @@ public class PlackHandlerNetty extends PerlModuleBase {
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
         EventLoopGroup workerGroup = new NioEventLoopGroup(1);
 
+        // Add shutdown hook for graceful shutdown on SIGTERM/SIGINT
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.err.println("Shutting down Netty PSGI server gracefully...");
+            try {
+                bossGroup.shutdownGracefully().sync();
+                workerGroup.shutdownGracefully().sync();
+                System.err.println("Server shut down complete.");
+            } catch (InterruptedException e) {
+                System.err.println("Shutdown interrupted: " + e.getMessage());
+                Thread.currentThread().interrupt();
+            }
+        }));
+
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -208,12 +221,24 @@ public class PlackHandlerNetty extends PerlModuleBase {
              .option(ChannelOption.SO_BACKLOG, backlog)
              .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
+            System.err.println("Binding to " + host + ":" + port + "...");
             ChannelFuture f = b.bind(host, port).sync();
+            System.err.println("Server started successfully on " + host + ":" + port);
 
+            // Wait until the server socket is closed
             f.channel().closeFuture().sync();
+        } catch (Exception e) {
+            System.err.println("Server startup failed: " + e.getMessage());
+            e.printStackTrace(System.err);
+            throw e;
         } finally {
-            workerGroup.shutdownGracefully();
-            bossGroup.shutdownGracefully();
+            // Shutdown event loops if not already shutdown
+            if (!bossGroup.isShutdown()) {
+                bossGroup.shutdownGracefully();
+            }
+            if (!workerGroup.isShutdown()) {
+                workerGroup.shutdownGracefully();
+            }
         }
     }
 
@@ -270,9 +295,21 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
             } catch (Exception e) {
                 // Catch all exceptions from PSGI app and return 500
+                // Log the full stack trace for debugging
+                System.err.println("PSGI application error:");
+                System.err.println("  Request: " + req.method() + " " + req.uri());
+                System.err.println("  Exception: " + e.getClass().getName() + ": " + e.getMessage());
+                e.printStackTrace(System.err);
+
+                // Send user-friendly error response
+                String errorMessage = "Internal Server Error";
+                if (e.getMessage() != null && !e.getMessage().isEmpty()) {
+                    errorMessage += ": " + e.getMessage();
+                }
+
                 sendErrorResponse(ctx, req,
                     HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                    "Internal Server Error: " + e.getMessage());
+                    errorMessage);
             }
         }
 
@@ -572,8 +609,16 @@ public class PlackHandlerNetty extends PerlModuleBase {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            cause.printStackTrace();
-            ctx.close();
+            // Log exception details
+            System.err.println("Channel exception caught:");
+            System.err.println("  Channel: " + ctx.channel().remoteAddress());
+            System.err.println("  Exception: " + cause.getClass().getName() + ": " + cause.getMessage());
+            cause.printStackTrace(System.err);
+
+            // Close the connection
+            if (ctx.channel().isActive()) {
+                ctx.close();
+            }
         }
     }
 
