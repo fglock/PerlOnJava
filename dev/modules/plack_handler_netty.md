@@ -1,11 +1,51 @@
 # Plack::Handler::Netty - PSGI Server Backend for PerlOnJava
 
-## Status: Phase 1 - Planning
+## Status: Phase 1 - Complete ✅
 
-- **Module version**: Plack::Handler::Netty 0.01 (new implementation)
+- **Module version**: Plack::Handler::Netty 0.01
 - **Date started**: 2026-05-06
-- **Test command**: `./jperl dev/sandbox/http_server/test_dancer.pl`
-- **Build system**: Custom (Java + Perl integration)
+- **PR merged**: #662 (2026-05-06)
+- **Test location**: `examples/http_server_plack/test.pl`
+- **Build system**: Maven (pom.xml) + Gradle (build.gradle)
+
+## Progress Tracking
+
+### Phase 1: Core PSGI Handler ✅ COMPLETE
+
+**Goal**: Implement basic Plack::Handler::Netty with synchronous response support.
+
+- [x] Java backend (PlackHandlerNetty.java) - Single-threaded Netty event loop
+- [x] Perl module (Plack::Handler::Netty.pm) - Standard Plack::Handler interface with XSLoader
+- [x] PSGI v1.1 environment construction from HTTP requests
+- [x] PSGI [status, headers, body] response handling
+- [x] HTTP/1.1 with keep-alive support
+- [x] Comprehensive error handling
+- [x] Test application with multiple endpoints
+- [x] Documentation (README.md, POD, examples)
+
+**PR #662**: All Phase 1 work merged to master.
+
+### Phase 2: Dancer2 Integration 🚧 PENDING
+
+**Goal**: Run a real Dancer2 application on Plack::Handler::Netty.
+
+This phase will validate that the implementation works with a real framework before
+moving to more complex features like streaming.
+
+**Recommended next step**: Create a Dancer2 example application to test:
+- Framework routing
+- PSGI environment consumption
+- Parameter extraction
+- Response generation
+
+Once Dancer2 works, the same handler automatically supports other PSGI frameworks.
+
+### Phase 3+: Advanced Features (Future)
+
+- **Streaming responses** - PSGI streaming callback support
+- **Delayed responses** - Async response generation
+- **HTTPS/TLS** - SSL termination via Netty SslHandler
+- **Production features** - Graceful shutdown, metrics, performance tuning
 
 ## Background
 
