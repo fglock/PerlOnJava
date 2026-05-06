@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use FindBin;
-use lib "$FindBin::Bin/../../../src/main/perl/lib";
+use lib "$FindBin::Bin/../../../examples/http_server_plack";
 
 # Phase 1 Test: Minimal PSGI application with Plack::Handler::Netty
 #

@@ -223,7 +223,7 @@ dependencies {
     implementation libs.sqlite.jdbc                    // SQLite JDBC driver
     implementation libs.bcprov                         // Bouncy Castle crypto (SHA-3, Keccak, etc.)
     implementation libs.bcpkix                         // Bouncy Castle PEM/PKCS parsing
-    // JNR-POSIX removed - using Java FFM API for native access (Java 22+)
+    implementation 'io.netty:netty-codec-http:4.1.115.Final'  // Netty HTTP codec for PSGI server
 
     // Testing dependencies
     testImplementation libs.junit.jupiter.api
