@@ -118,10 +118,6 @@ public class PlackHandlerNetty extends PerlModuleBase {
         int keepalive = handler.get("keepalive").getInt();
         int maxRequestSize = handler.get("max_request_size").getInt();
 
-        System.err.println("Netty PSGI Server starting on " + host + ":" + port);
-        System.err.println("Thread model: Single event loop (async I/O)");
-        System.err.println("Press Ctrl+C to stop");
-
         try {
             startNettyServer(port, host, psgiApp, maxRequestSize, keepalive > 0);
         } catch (InterruptedException e) {
@@ -160,8 +156,6 @@ public class PlackHandlerNetty extends PerlModuleBase {
              .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
             ChannelFuture f = b.bind(host, port).sync();
-            System.err.println(
-                "Plack::Handler::Netty: Accepting connections at http://" + host + ":" + port + "/");
 
             f.channel().closeFuture().sync();
         } finally {
