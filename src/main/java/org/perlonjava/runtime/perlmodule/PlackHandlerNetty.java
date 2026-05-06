@@ -84,14 +84,61 @@ public class PlackHandlerNetty extends PerlModuleBase {
             }
         }
 
-        // Create a blessed hash with defaults
+        // Create a blessed hash with validated defaults
         RuntimeHash handler = new RuntimeHash();
-        String host = config.get("host").toString();
-        handler.put("host", host.isEmpty() ? new RuntimeScalar("0.0.0.0") : config.get("host"));
-        handler.put("port", config.get("port"));
-        handler.put("backlog", config.get("backlog"));
-        handler.put("keepalive", config.get("keepalive"));
-        handler.put("max_request_size", config.get("max_request_size"));
+
+        // Host - default to 0.0.0.0 (all interfaces)
+        RuntimeScalar hostScalar = config.get("host");
+        String host;
+        if (hostScalar != null && hostScalar.type != RuntimeScalarType.UNDEF && !hostScalar.toString().isEmpty()) {
+            host = hostScalar.toString();
+        } else {
+            host = "0.0.0.0";
+        }
+        handler.put("host", new RuntimeScalar(host));
+
+        // Port - default to 5000
+        RuntimeScalar portScalar = config.get("port");
+        int port;
+        if (portScalar != null && portScalar.type != RuntimeScalarType.UNDEF && portScalar.getInt() > 0) {
+            port = portScalar.getInt();
+        } else {
+            port = 5000;
+        }
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException("Port must be between 1 and 65535, got: " + port);
+        }
+        handler.put("port", new RuntimeScalar(port));
+
+        // Backlog - default to 128 (standard value)
+        RuntimeScalar backlogScalar = config.get("backlog");
+        int backlog;
+        if (backlogScalar != null && backlogScalar.type != RuntimeScalarType.UNDEF && backlogScalar.getInt() > 0) {
+            backlog = backlogScalar.getInt();
+        } else {
+            backlog = 128;
+        }
+        handler.put("backlog", new RuntimeScalar(backlog));
+
+        // Keep-alive - default to 30 seconds (standard HTTP keep-alive)
+        RuntimeScalar keepaliveScalar = config.get("keepalive");
+        int keepalive;
+        if (keepaliveScalar != null && keepaliveScalar.type != RuntimeScalarType.UNDEF) {
+            keepalive = keepaliveScalar.getInt();
+        } else {
+            keepalive = 30;
+        }
+        handler.put("keepalive", new RuntimeScalar(keepalive));
+
+        // Max request size - default to 10MB (10485760 bytes)
+        RuntimeScalar maxRequestSizeScalar = config.get("max_request_size");
+        int maxRequestSize;
+        if (maxRequestSizeScalar != null && maxRequestSizeScalar.type != RuntimeScalarType.UNDEF && maxRequestSizeScalar.getInt() > 0) {
+            maxRequestSize = maxRequestSizeScalar.getInt();
+        } else {
+            maxRequestSize = 10485760;
+        }
+        handler.put("max_request_size", new RuntimeScalar(maxRequestSize));
 
         RuntimeScalar blessed = ReferenceOperators.bless(
             handler.createReferenceWithTrackedElements(),
@@ -119,7 +166,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
         int maxRequestSize = handler.get("max_request_size").getInt();
 
         try {
-            startNettyServer(port, host, psgiApp, maxRequestSize, keepalive > 0);
+            startNettyServer(port, host, psgiApp, backlog, maxRequestSize, keepalive > 0);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -130,10 +177,16 @@ public class PlackHandlerNetty extends PerlModuleBase {
     /**
      * Starts the Netty PSGI server. This method blocks until the server is shut down.
      *
+     * @param port Listen port
+     * @param host Listen address
+     * @param psgiApp PSGI application coderef
+     * @param backlog TCP connection backlog queue size
+     * @param maxRequestSize Maximum HTTP request body size in bytes
+     * @param keepAlive Enable HTTP keep-alive connections
      * @throws InterruptedException if the server is interrupted during startup or operation
      */
     private static void startNettyServer(int port, String host, RuntimeScalar psgiApp,
-                                        int maxRequestSize, boolean keepAlive) throws InterruptedException {
+                                        int backlog, int maxRequestSize, boolean keepAlive) throws InterruptedException {
         // Single-threaded event loop to avoid PerlOnJava thread-safety issues
         // This still handles many concurrent connections via async I/O
         EventLoopGroup bossGroup = new NioEventLoopGroup(1);
@@ -152,7 +205,7 @@ public class PlackHandlerNetty extends PerlModuleBase {
                      pipeline.addLast(new PSGIRequestHandler(psgiApp, host, port, keepAlive));
                  }
              })
-             .option(ChannelOption.SO_BACKLOG, 128)
+             .option(ChannelOption.SO_BACKLOG, backlog)
              .childOption(ChannelOption.SO_KEEPALIVE, keepAlive);
 
             ChannelFuture f = b.bind(host, port).sync();

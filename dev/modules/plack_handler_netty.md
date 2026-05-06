@@ -1,20 +1,25 @@
 # Plack::Handler::Netty - PSGI Server Backend for PerlOnJava
 
-## Status: Phase 1 - Complete ✅, Phase 2 - Blocker Fixed 🚧
+## Status: Phase 3 - Complete ✅, Phase 4 - In Progress 🚧
 
 - **Module version**: Plack::Handler::Netty 0.01
 - **Date started**: 2026-05-06
-- **PR merged**: #662 (2026-05-06)
-- **Test location**: `examples/http_server_plack/test.pl`
+- **PR merged**: #662 (Phase 1), #663 (Phase 3)
+- **Test location**: `examples/http_server_plack/test.pl`, `examples/http_server_plack/test_streaming.pl`
 - **Build system**: Maven (pom.xml) + Gradle (build.gradle)
 
 ## Recent Work
 
+**2026-05-06 - Phase 3 Complete: PSGI Streaming Response Support**
+- Implemented streaming responses using Perl-side responder callbacks
+- Added CallableHttpResponse inner class for Java-to-Perl HTTP response sending
+- Created _handle_streaming_response() Perl helper function
+- All streaming tests passing (basic, large responses, conditional routing)
+- Both sync and streaming responses coexist seamlessly
+
 **2026-05-06 - Fixed MIME::Base64.encode_base64url blocker**
 - Added URL-safe base64 encoding functions (RFC 4648)
 - Implemented `encode_base64url()` and `decode_base64url()` in Java backend
-- Dancer2 can now be imported without import errors
-- Session factories and components load successfully
 
 ## Progress Tracking
 
@@ -47,6 +52,30 @@ moving to more complex features like streaming.
 - Response generation
 
 Once Dancer2 works, the same handler automatically supports other PSGI frameworks.
+
+### Phase 3: Streaming Responses ✅ COMPLETE
+
+**Goal**: Support PSGI streaming responses (coderef callbacks) for memory-efficient large file serving and progressive rendering.
+
+**Completed**: 2026-05-06 (PR #663)
+
+**Implementation approach**: Perl-side responder callbacks
+- CallableHttpResponse inner class implements PerlSubroutine
+- _handle_streaming_response() Perl helper creates native responder coderefs
+- Java delegates streaming logic to Perl (simpler, more maintainable)
+- Responder validates [status, headers, body] and sends HTTP response
+
+**Test results**:
+- ✅ Basic streaming responses work correctly
+- ✅ Large responses (1000+ lines) stream without buffering
+- ✅ Synchronous responses remain fully compatible
+- ✅ Both response types coexist in same application
+- ✅ Memory usage stays constant (no buffering)
+
+**Files**:
+- `src/main/java/org/perlonjava/runtime/perlmodule/PlackHandlerNetty.java` - CallableHttpResponse class
+- `src/main/perl/lib/Plack/Handler/Netty.pm` - _handle_streaming_response() helper
+- `examples/http_server_plack/test_streaming.pl` - Comprehensive tests
 
 ### Phase 3+: Advanced Features (Future)
 
