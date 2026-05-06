@@ -263,14 +263,14 @@ my $handler = Plack::Handler::Netty->new(port => 5000);
 $handler->run($app);
 ```
 
-Run with: `./jperl examples/http_server_plack/catalyst_runtime_test.pl`
+Run with: `./jperl examples/http_server_plack/catalyst_example.pl`
 
 ## Testing Framework Compatibility
 
 Run the automated compatibility test:
 
 ```bash
-./jperl examples/http_server_plack/framework_test_updated.pl
+./jperl examples/http_server_plack/test_frameworks.pl
 ```
 
 Expected output:
