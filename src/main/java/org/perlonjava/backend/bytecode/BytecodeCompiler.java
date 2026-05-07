@@ -6242,6 +6242,11 @@ public class BytecodeCompiler implements Visitor {
             Node arg = labelNode.elements.getFirst();
             if (arg instanceof IdentifierNode) {
                 labelStr = ((IdentifierNode) arg).name;
+            } else if (arg instanceof StringNode stringNode) {
+                // Constant string label expression (e.g. next "LOOP")
+                // is equivalent to a static label and should not force
+                // dynamic non-local control flow.
+                labelStr = stringNode.value;
             } else {
                 // Dynamic label: last EXPR, next EXPR, redo EXPR
                 // Evaluate expression at runtime to get label string
@@ -6253,6 +6258,38 @@ public class BytecodeCompiler implements Visitor {
 
         // Dynamic label always uses non-local control flow
         if (isDynamicLabel) {
+            // Dynamic label expression:
+            // 1) Try matching in-scope labeled true loops at runtime.
+            // 2) If no match, propagate non-local control flow marker.
+            List<Integer> localMatchPatchPositions = new ArrayList<>();
+            List<LoopInfo> localMatchLoops = new ArrayList<>();
+            for (int i = loopStack.size() - 1; i >= 0; i--) {
+                LoopInfo loop = loopStack.get(i);
+                if (!loop.isTrueLoop || loop.label == null) {
+                    continue;
+                }
+
+                int labelConstReg = allocateRegister();
+                emit(Opcodes.LOAD_STRING);
+                emitReg(labelConstReg);
+                emit(addToStringPool(loop.label));
+
+                int eqReg = allocateRegister();
+                emit(Opcodes.EQ_STR);
+                emitReg(eqReg);
+                emitReg(dynamicLabelReg);
+                emitReg(labelConstReg);
+
+                emit(Opcodes.GOTO_IF_TRUE);
+                emitReg(eqReg);
+                int matchPatchPos = bytecode.size();
+                emitInt(0); // patched to local handler for this matched label
+
+                localMatchPatchPositions.add(matchPatchPos);
+                localMatchLoops.add(loop);
+            }
+
+            // Fallback: non-local control flow marker when no local loop label matches.
             short createDynOp = op.equals("last") ? Opcodes.CREATE_LAST_DYNAMIC
                     : op.equals("next") ? Opcodes.CREATE_NEXT_DYNAMIC
                     : Opcodes.CREATE_REDO_DYNAMIC;
@@ -6262,6 +6299,28 @@ public class BytecodeCompiler implements Visitor {
             emitReg(dynamicLabelReg);
             emit(Opcodes.RETURN);
             emitReg(rd);
+
+            // Local handlers for each runtime-matched label.
+            short localOpcode = op.equals("last") ? Opcodes.LAST
+                    : op.equals("next") ? Opcodes.NEXT
+                    : Opcodes.REDO;
+            for (int i = 0; i < localMatchPatchPositions.size(); i++) {
+                int matchPatchPos = localMatchPatchPositions.get(i);
+                LoopInfo targetLoop = localMatchLoops.get(i);
+                patchJump(matchPatchPos, bytecode.size());
+
+                emitWithToken(localOpcode, node.getIndex());
+                int patchPc = bytecode.size();
+                emitInt(0); // patched when loop boundaries are finalized
+
+                if (op.equals("last")) {
+                    targetLoop.breakPcs.add(patchPc);
+                } else if (op.equals("next")) {
+                    targetLoop.nextPcs.add(patchPc);
+                } else {
+                    targetLoop.redoPcs.add(patchPc);
+                }
+            }
             return;
         }
 
