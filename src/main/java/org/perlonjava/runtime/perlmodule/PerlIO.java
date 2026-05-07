@@ -25,7 +25,7 @@ public class PerlIO extends PerlModuleBase {
         PerlIO perlio = new PerlIO();
         try {
             perlio.registerMethod("PerlIO::Layer::find", "find", "$");
-            perlio.registerMethod("get_layers", "$;@");
+            perlio.registerMethod("get_layers", "*;@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing PerlIO method: " + e.getMessage());
         }
