@@ -478,7 +478,7 @@ my @copy = @{$z};         # ERROR
 - ✅  **`goto` operator**: `goto LABEL` with literal labels and `goto EXPR` with dynamic expressions are implemented.
 - ✅  **`goto &name`**: Tail call optimization with trampoline is implemented.
 - ✅  **`goto __SUB__`**: Recursive tail call is implemented.
-- ❌  **loop control operators**: `next EXPR`, `last EXPR`, `redo EXPR` with dynamic expressions (e.g., `$label = "OUTER"; next $label`) are not implemented.
+- ✅  **loop control operators**: `next EXPR`, `last EXPR`, `redo EXPR` with dynamic expressions (e.g., `$label = "OUTER"; next $label`) are implemented.
 - ✅  **setting `$_` in `while` loop with `<>`**: automatic setting `$_` in `while` loops is implemented.
 - ✅  **`do BLOCK while`**: `do` executes once before the conditional is evaluated.
 - ✅  **`...` ellipsis statement**: `...` is supported.

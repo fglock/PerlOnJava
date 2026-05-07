@@ -25,6 +25,23 @@ OUTER_LOOP: for my $x (1..3) {
 }
 ok(!($counter != 9), '`next LABEL` in nested `for` loop <$counter>');
 
+# Test `next EXPR` with a constant string label
+my @expr_label_seen;
+LOOP_EXPR: for my $n (1..3) {
+    push @expr_label_seen, $n;
+    next "LOOP_EXPR";
+}
+is_deeply(\@expr_label_seen, [1, 2, 3], '`next "LABEL"` uses label expression correctly');
+
+# Test `next EXPR` with a dynamic label variable
+my $dyn_label = 'LOOP_DYN';
+my @dyn_label_seen;
+LOOP_DYN: for my $n (1..3) {
+    push @dyn_label_seen, $n;
+    next $dyn_label;
+}
+is_deeply(\@dyn_label_seen, [1, 2, 3], '`next $label` uses dynamic label expression correctly');
+
 ###################
 # Perl `redo` Tests
 
@@ -36,6 +53,16 @@ for my $i (1..3) {
     last if $redo_count == 3;  # Exit loop when count reaches 3
 }
 ok(!($redo_count != 3), 'Simple `redo` in `for` loop');
+
+# Test `redo EXPR` with a dynamic label variable
+my $redo_label = 'REDO_LOOP';
+my @redo_expr_seen;
+my $redo_once = 0;
+REDO_LOOP: for my $n (1..3) {
+    push @redo_expr_seen, $n;
+    redo $redo_label if $n == 2 && !$redo_once++;
+}
+is_deeply(\@redo_expr_seen, [1, 2, 2, 3], '`redo $label` uses dynamic label expression correctly');
 
 ###################
 # Perl `last` Tests
@@ -57,5 +84,27 @@ OUTER_LOOP: for my $a (1..3) {
     }
 }
 ok(!($last_count != 2), '`last LABEL` in nested loop');
+
+# Test `last EXPR` with a dynamic label variable
+my $last_label = 'LAST_LOOP';
+my @last_expr_seen;
+LAST_LOOP: for my $n (1..5) {
+    push @last_expr_seen, $n;
+    last $last_label if $n == 3;
+}
+is_deeply(\@last_expr_seen, [1, 2, 3], '`last $label` uses dynamic label expression correctly');
+
+###################
+# Perl `goto` Tests
+
+# Test `goto EXPR` with a dynamic label variable
+my $goto_label = 'GOTO_TARGET';
+my @goto_expr_seen;
+push @goto_expr_seen, 'before';
+goto $goto_label;
+push @goto_expr_seen, 'skipped';
+GOTO_TARGET:
+push @goto_expr_seen, 'after';
+is_deeply(\@goto_expr_seen, ['before', 'after'], '`goto $label` uses dynamic label expression correctly');
 
 done_testing();
