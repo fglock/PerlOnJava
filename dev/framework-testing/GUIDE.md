@@ -102,13 +102,11 @@ Testing frameworks                  FINAL_RESULTS.md → How to Test
 TEST SCRIPTS
 
 Run the automated framework compatibility test:
-  ./jperl framework_test_updated.pl
+  ./jperl ../../dev/sandbox/http_server/<compatibility-script>.pl
 
 Run examples:
-  ./jperl dancer_example.pl          (Dancer2)
-  ./jperl catalyst_runtime_test.pl   (Catalyst)
+  ./jperl ../../dev/sandbox/http_server/<framework-example>.pl
   ./jperl test.pl                    (Basic PSGI)
-  ./jperl test_https.pl              (HTTPS)
   ./jperl test_streaming.pl          (Streaming)
 
 ================================================================================

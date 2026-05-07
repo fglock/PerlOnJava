@@ -28,11 +28,10 @@ From project root:
 
 ```bash
 # Run compatibility test
-./jperl examples/http_server_plack/framework_test_updated.pl
+./jperl dev/sandbox/http_server/<compatibility-script>.pl
 
-# Run examples
-./jperl examples/http_server_plack/dancer_example.pl
-./jperl examples/http_server_plack/catalyst_runtime_test.pl
+# Run framework examples (sandbox)
+./jperl dev/sandbox/http_server/<framework-example>.pl
 ```
 
 ## Examples Directory
@@ -43,14 +42,13 @@ examples/http_server_plack/
 ├── README.md                      (General reference)
 ├── PERFORMANCE.md                 (Benchmarks)
 ├── test.pl                        (Basic PSGI)
-├── dancer_example.pl              (Dancer2)
-├── catalyst_runtime_test.pl       (Catalyst)
-├── framework_test_updated.pl      (Compatibility test)
-├── test_https.pl                  (HTTPS)
 └── test_streaming.pl              (Streaming)
 ```
 
 See `examples/http_server_plack/README.md` for general usage.
+
+Framework-specific compatibility scripts are kept in:
+`dev/sandbox/http_server/`
 
 ## Key Findings
 

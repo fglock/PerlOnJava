@@ -11,6 +11,9 @@ This directory contains test applications and examples for Plack::Handler::Netty
 ### Phase 2: Dancer2 Integration
 - `dancer_app.pl` - Sample Dancer2 application
 - `test_dancer.pl` - Dancer2 integration tests
+- `dancer_example.pl` - Dancer2 compatibility example moved from `examples/http_server_plack/`
+- `catalyst_example.pl` - Catalyst compatibility example moved from `examples/http_server_plack/`
+- `test_frameworks.pl` - Framework compatibility script moved from `examples/http_server_plack/`
 
 ### Phase 3: Streaming
 - `test_streaming.pl` - Streaming response tests

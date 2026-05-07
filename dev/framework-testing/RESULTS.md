@@ -35,7 +35,7 @@ Expected output:
 ### Dancer2 Example
 ```bash
 # Start server
-./jperl examples/http_server_plack/dancer_example.pl
+./jperl dev/sandbox/http_server/<dancer-compatibility-example>.pl
 
 # In another terminal, test with:
 curl http://localhost:5000/
@@ -46,7 +46,7 @@ curl http://localhost:5000/json
 ### Catalyst Example
 ```bash
 # Start server
-./jperl examples/http_server_plack/catalyst_runtime_test.pl
+./jperl dev/sandbox/http_server/<catalyst-compatibility-example>.pl
 
 # Test with:
 curl http://127.0.0.1:6401/
@@ -243,11 +243,8 @@ Use `jcpan` to install or update modules:
 ## Files Reference
 
 ### Test Scripts
-- **`framework_test_updated.pl`** - Automated framework compatibility test
+- **`dev/sandbox/http_server/`** - Framework compatibility scripts (sandbox)
 - **`test.pl`** - Basic PSGI application example
-- **`dancer_example.pl`** - Working Dancer2 web app
-- **`catalyst_runtime_test.pl`** - Working Catalyst app
-- **`test_https.pl`** - HTTPS/TLS test server
 - **`test_streaming.pl`** - Streaming response examples
 
 ### Documentation

@@ -1,12 +1,12 @@
 # Plack::Handler::Netty - PSGI Server Example
 
-A complete working example demonstrating how to run PSGI applications (Dancer2, Catalyst, Mojolicious, etc.) on PerlOnJava using Netty as the HTTP server backend.
+A complete working example demonstrating how to run PSGI applications on PerlOnJava using Netty as the HTTP server backend.
 
 ## Overview
 
-`Plack::Handler::Netty` is a PSGI server handler that bridges Perl web frameworks to Java's Netty HTTP server. It provides:
+`Plack::Handler::Netty` is a PSGI server handler that bridges PSGI apps to Java's Netty HTTP server. It provides:
 
-- **Universal framework support** - Any PSGI-compatible app works (Dancer2, Catalyst, Mojolicious)
+- **General PSGI support** - Any PSGI-compatible app can be adapted
 - **High-performance async I/O** - Netty handles 10k+ concurrent connections on a single thread
 - **Single-threaded model** - Compatible with PerlOnJava's no-threads/no-fork constraints
 - **Standard PSGI 1.1** - Full compliance with streaming and delayed response support
@@ -179,22 +179,9 @@ certbot certonly --standalone -d yourdomain.com
 
 ## Using with Your Own PSGI Apps
 
-### With Dancer2
+Use your own PSGI app coderef with `Plack::Handler::Netty->run($app)` as shown in the generic example above.
 
-```perl
-use Dancer2;
-
-get '/' => sub {
-    "Hello from Dancer2 on Netty!";
-};
-
-start;  # Configure via environment: PLACK_SERVER=Netty
-```
-
-Run with:
-```bash
-./jperl your_app.pl
-```
+Framework-specific experiments are kept in `dev/sandbox/http_server/` until they are stable.
 
 ## Concurrency Model
 
@@ -221,78 +208,15 @@ Benchmark results (Apple Silicon):
 
 See `PERFORMANCE.md` for detailed benchmarks.
 
-## Framework Compatibility
-
-Testing shows that multiple Perl web frameworks work seamlessly with Netty:
-
-| Framework | Status | Notes |
-|-----------|--------|-------|
-| **Dancer2** | ✓ Fully Compatible | Recommended, ~25,000 req/s |
-| **Catalyst::Runtime** | ✓ Fully Compatible | Enterprise-grade, ~25,000 req/s |
-| **Mojolicious** | ⚠ Module Available | Lite mode has limitations, needs workaround |
-
-### Dancer2 Example
-
-```perl
-use Dancer2;
-
-get '/' => sub { 'Hello from Dancer2' };
-get '/api/:name' => sub {
-    my $name = route_parameters->get('name');
-    "Hello, $name!";
-};
-
-my $handler = Plack::Handler::Netty->new(port => 5000);
-$handler->run(app->to_app);
-```
-
-Run with: `./jperl examples/http_server_plack/dancer_example.pl`
-
-### Catalyst Example
-
-```perl
-use Catalyst::Runtime;
-
-my $app = sub {
-    my ($env) = @_;
-    return [200, ['Content-Type' => 'text/plain'], ['Hello']];
-};
-
-my $handler = Plack::Handler::Netty->new(port => 5000);
-$handler->run($app);
-```
-
-Run with: `./jperl examples/http_server_plack/catalyst_example.pl`
-
-## Testing Framework Compatibility
-
-Run the automated compatibility test:
-
-```bash
-./jperl examples/http_server_plack/test_frameworks.pl
-```
-
-Expected output:
-```
-✓ Catalyst::Runtime        : PASS
-✓ Dancer2                  : PASS
-⚠ Mojolicious              : PARTIAL
-```
-
 ## Files in This Directory
 
 ### Test Scripts
 - `test.pl` - Complete working PSGI example with multiple test endpoints
-- `dancer_example.pl` - Working Dancer2 web application
-- `catalyst_runtime_test.pl` - Working Catalyst application
-- `test_https.pl` - HTTPS test server with self-signed certificates
 - `test_streaming.pl` - PSGI streaming response examples
-- `framework_test_updated.pl` - Automated framework compatibility test
 
 ### Documentation
 - `README.md` - This file (main documentation)
 - `PERFORMANCE.md` - Detailed performance benchmarks
-- `../../FRAMEWORK_TEST_RESULTS.md` - Framework compatibility test results (in project root)
 
 ### Supporting Files
 - `certs/` - Test SSL certificates and generation scripts
@@ -318,14 +242,6 @@ Change the port in your code:
 my $handler = Plack::Handler::Netty->new(port => 9000);
 $handler->run($app);
 ```
-
-## Implementation Status
-
-✅ Phase 1 Complete - Synchronous PSGI responses  
-✅ Phase 3 Complete - Streaming responses  
-✅ Phase 4 Complete - Production features (config, error handling, graceful shutdown)  
-✅ Phase 5 Complete - HTTPS/TLS support  
-🚧 Phase 2+ - Dancer2 testing (pending symbol table performance fixes)
 
 ## Contributing
 
