@@ -215,9 +215,7 @@ Each framework should be tested for:
 - Test results: `dev/framework-testing/RESULTS.md`
 - Navigation guide: `dev/framework-testing/GUIDE.md`
 - Examples: `examples/http_server_plack/`
-  - `dancer_example.pl`
-  - `catalyst_example.pl`
-  - `test_frameworks.pl`
+- Framework compatibility sandbox scripts: `dev/sandbox/http_server/`
 
 ## Notes
 

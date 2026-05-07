@@ -44,6 +44,7 @@ perl5_t/
 *_failures.txt
 debug_*.pl
 test_*.pl
+!dev/sandbox/http_server/test_frameworks.pl
 *_copy.t
 *.tmp
 test_*.tmp
