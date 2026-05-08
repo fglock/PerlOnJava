@@ -1,6 +1,6 @@
 # Starman Support for PerlOnJava
 
-## Status: Phase 0 Baseline Pending
+## Status: Phase 4 Complete (2026-05-08)
 
 - **Module**: `Starman`
 - **Primary command**: `./jcpan -t Starman`
@@ -75,16 +75,46 @@ actionable on PerlOnJava.
 
 ## Baseline Results
 
-Pending Phase 1 execution.
+Command:
+
+```bash
+timeout 1800 ./jcpan -t Starman > /tmp/starman_jcpan_baseline.log 2>&1
+```
+
+Observed result:
+
+- `HTTP::Parser::XS` dependency passed in pure-Perl fallback mode.
+- `Starman` reached `Build test` but failed (`Result: FAIL`).
+- First hard failure in `Starman::Server` load chain:
+  - `get_addr_info is not a valid Socket macro nor defined by Net::Server::Proto`
+- Many Starman tests were already skipped with:
+  - `fork() not supported on this platform (Java/JVM)`
+
+Failure summary from baseline:
+
+- Files: 18
+- Tests executed: 1
+- Failed test programs: 4 (all parse failures from early compile abort)
+- Primary failure class: module compatibility in `Net::Server::Proto` imports
 
 ## Dependency Chain Notes
 
-To be filled from baseline logs. Expected hotspots include:
+Actual chain observed during fixes:
 
-- `Plack` integration modules
-- `Net::Server`/`Net::Server::PreFork`
-- `Server::Starter`
-- process and TAP execution paths used by `jcpan -t`
+1. `Starman` test invokes `Starman::Server`.
+2. `Starman::Server` depends on `Net::Server::PreFork` / `Net::Server`.
+3. `Net::Server` imports helper symbols from `Net::Server::Proto`.
+4. `Net::Server::Proto` import-time export validation rejected helper symbols
+   missing from `@EXPORT_OK` (`get_addr_info`, then `ipv6_package`).
+5. After `Net::Server::Proto` import was fixed, Starman then failed on
+   `Global symbol "$CRLF" requires explicit package name`, caused by missing
+   scalar CRLF exports in PerlOnJava's `Socket.pm` for `IO::Socket qw(:crlf)`.
+
+Blocker classes:
+
+- **Module compatibility bug**: `Net::Server::Proto` export list/invocation model
+- **Runtime/module compatibility bug**: `Socket.pm` missing `$CR/$LF/$CRLF` scalar exports
+- **Platform limitation**: expected `fork`-based tests skipped
 
 ## Exit Criteria
 
@@ -92,29 +122,86 @@ To be filled from baseline logs. Expected hotspots include:
 - remaining failures are reduced to explicit, reproducible platform limits with
   actionable operator guidance and no untriaged blockers.
 
+## Implementation Notes
+
+### Fixes Applied
+
+1. **Socket compatibility alias**
+   - File: `src/main/perl/lib/Socket.pm`
+   - Added `get_addr_info` alias to `getaddrinfo` to satisfy older
+     `Net::Server::Proto` import behavior during early triage.
+
+2. **Net::Server distropref + patch bootstrap**
+   - File: `src/main/perl/lib/CPAN/Config.pm`
+   - Added bundled distropref `Net-Server.yml` and patch bootstrap entry for:
+     - `Net-Server-2.018/Proto.pm.patch`
+
+3. **Net::Server::Proto export-list patch**
+   - File: `src/main/perl/lib/CPAN/Config.pm` (inline patch payload in `_bootstrap_patches`)
+   - Added missing helper symbols to `@EXPORT_OK`:
+     - `get_addr_info`
+     - `safe_name_info`
+     - `parse_info`
+     - `object`
+     - `ipv6_package`
+
+4. **Force-installed patched Net::Server**
+   - Command: `./jcpan -fi Net::Server`
+   - Reason: ensure patched `Net::Server::Proto.pm` is actually installed to
+     `~/.perlonjava/lib/` even when upstream Net::Server test suite remains red.
+
+5. **CRLF scalar export parity**
+   - File: `src/main/perl/lib/Socket.pm`
+   - Added scalar exports and values:
+     - `$CR`, `$LF`, `$CRLF`
+   - Added them to `@EXPORT` and `:crlf` export tag for
+     `IO::Socket qw(:crlf)` compatibility.
+
+### Final Verification
+
+Command:
+
+```bash
+timeout 1800 ./jcpan -t Starman > /tmp/starman_jcpan_final6.log 2>&1
+```
+
+Result:
+
+- `Result: PASS`
+- `Files=18, Tests=2` (remaining Starman tests are skipped due to unsupported `fork`)
+- Exit: `0`
+
+Project regression verification:
+
+```bash
+timeout 5400 make > /tmp/make_starman_final.log 2>&1
+```
+
+- Exit: `0`
+
 ## Progress Tracking
 
-### Current Status: Phase 0 in progress
+### Current Status: Completed and passing
 
 ### Completed Phases
 
-- [ ] Phase 1: Baseline and failure capture
-- [ ] Phase 2: Dependency and root-cause classification
-- [ ] Phase 3: Targeted fix streams
-- [ ] Phase 4: Full verification and documentation
+- [x] Phase 1: Baseline and failure capture (2026-05-08)
+- [x] Phase 2: Dependency and root-cause classification (2026-05-08)
+- [x] Phase 3: Targeted fix streams (2026-05-08)
+- [x] Phase 4: Full verification and documentation (2026-05-08)
 
 ### Next Steps
 
-1. Capture baseline run log and first failure point.
-2. Build blocker map and prioritize highest-leverage fix stream.
-3. Implement targeted fixes and rerun Starman and `make`.
+1. If desired, reduce noisy `Net::Server::Proto` redefinition/prototype warnings.
+2. Optionally add a dedicated regression test for `IO::Socket qw(:crlf)` scalar exports.
+3. Keep `Net-Server.yml` distropref and patch synced if upstream Net::Server version changes.
 
 ### Open Questions
 
-- Does the current Starman failure (if any) come from Starman itself or from a
-  transitive dependency test?
-- Are remaining failures reducible without `fork`, or should they be documented
-  as prefork limitations with Netty migration guidance?
+- Should we suppress known benign `Net::Server::Proto` redefinition warnings to
+  reduce log noise in CPAN runs?
+- Do we want a distropref for Starman itself to explicitly annotate expected
+  `fork`-related skips in test output?
 
 ## Related Documents
 
