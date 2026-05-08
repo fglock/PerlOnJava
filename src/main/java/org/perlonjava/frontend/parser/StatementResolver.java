@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
@@ -28,6 +29,18 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * It handles various types of statements such as control structures, declarations, and expressions.
  */
 public class StatementResolver {
+
+    /**
+     * Builtins often followed by a string argument with no {@code ,} or {@code (} between
+     * (e.g. {@code like "...\x{100}" ...}). During {@link #isHashLiteral} pre-scan, the opening
+     * {@code "} must start quoted-string mode; otherwise {@code \x{...}} is seen as raw
+     * brace tokens, brace depth desynchronizes, and {@code =>} inside a later
+     * {@code map { sprintf "%s" => $_ }} is misread as a hash fat comma at depth 1.
+     */
+    private static final Set<String> IDENTIFIER_BEFORE_BARE_STRING_ARG = Set.of(
+            "like", "unlike", "ok", "is", "isnt", "cmp_ok", "can_ok", "isa_ok",
+            "pass", "fail", "require", "diag", "note", "explain",
+            "warning_like", "warning_is", "warnings_like");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -858,6 +871,12 @@ public class StatementResolver {
         boolean hasBlockIndicator = false; // Found ;, or statement modifier
         boolean hasContent = false; // Track if we've seen any content
         boolean firstTokenIsSigil = false; // Track if first token is % or @ (hash/array)
+        boolean inQuotedString = false; // Ignore hash/block indicators inside simple quoted strings
+        String quoteDelimiter = null;
+        String quoteOpenDelimiter = null;
+        int quoteNesting = 0;
+        boolean quoteEscapeNext = false;
+        boolean awaitingQuoteLikeDelimiter = false;
 
         // Extra bits for the "{'a','b'}" / "{1,2}" / "{foo,1}" rule: real Perl
         // treats a braced expression as a hashref when the FIRST content token
@@ -910,9 +929,123 @@ public class StatementResolver {
                 break; // Let caller handle EOF error
             }
 
-            // Track if we've seen any non-brace content
-            if (!token.text.equals("}")) {
+            // Any non-trivial token means the brace pair is not literally `{}`, even when
+            // later branches `continue` (quote-like / string skip). Without this,
+            // `{ q=bar= }` never sets hasContent and wrongly hits the empty-hashref rule.
+            if (token.type != LexerTokenType.WHITESPACE && !token.text.equals("}")) {
                 hasContent = true;
+            }
+
+            if (awaitingQuoteLikeDelimiter) {
+                if (token.type == LexerTokenType.WHITESPACE) {
+                    continue;
+                }
+                awaitingQuoteLikeDelimiter = false;
+                inQuotedString = true;
+                quoteOpenDelimiter = token.text;
+                quoteDelimiter = switch (token.text) {
+                    case "(" -> ")";
+                    case "[" -> "]";
+                    case "{" -> "}";
+                    case "<" -> ">";
+                    default -> token.text;
+                };
+                quoteNesting = quoteOpenDelimiter.equals(quoteDelimiter) ? 0 : 1;
+                quoteEscapeNext = false;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral entering quote-like string with delimiters " + quoteOpenDelimiter + " ... " + quoteDelimiter);
+                continue;
+            }
+
+            // If we're currently scanning inside a simple quoted string, ignore all
+            // disambiguation signals until we reach the closing delimiter.
+            if (inQuotedString) {
+                if (quoteOpenDelimiter != null && !quoteOpenDelimiter.equals(quoteDelimiter)) {
+                    // Paired delimiter mode ((), {}, [], <>): track nesting.
+                    if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteOpenDelimiter)) {
+                        quoteNesting++;
+                    } else if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteDelimiter)) {
+                        quoteNesting--;
+                        if (quoteNesting <= 0) {
+                            inQuotedString = false;
+                            quoteDelimiter = null;
+                            quoteOpenDelimiter = null;
+                            quoteNesting = 0;
+                            quoteEscapeNext = false;
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral leaving paired quoted string");
+                        }
+                    }
+                } else if (quoteEscapeNext) {
+                    quoteEscapeNext = false;
+                } else if (token.type == LexerTokenType.OPERATOR && token.text.equals("\\")) {
+                    quoteEscapeNext = true;
+                } else if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteDelimiter)) {
+                    // Single delimiter mode ("...", '...', `...`, /.../, etc.)
+                    inQuotedString = false;
+                    quoteDelimiter = null;
+                    quoteOpenDelimiter = null;
+                    quoteNesting = 0;
+                    quoteEscapeNext = false;
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral leaving quoted string");
+                }
+                continue;
+            }
+
+            if (token.type == LexerTokenType.IDENTIFIER
+                    && (token.text.equals("q") || token.text.equals("qq"))) {
+                // Only treat as quote-like operators when a real delimiter follows.
+                // Bareword `q` / `qq` before `,` / `=>` / `;` / closing paren is not q():
+                //   { q,'bar', }  { q   => 'bar' } first line is a block; second is a hash key.
+                int peekIdx = parser.tokenIndex;
+                while (peekIdx < parser.tokens.size()
+                        && parser.tokens.get(peekIdx).type == LexerTokenType.WHITESPACE) {
+                    peekIdx++;
+                }
+                if (peekIdx < parser.tokens.size()) {
+                    String nextText = parser.tokens.get(peekIdx).text;
+                    if (nextText.equals(",") || nextText.equals("=>") || nextText.equals(";")
+                            || nextText.equals(")") || nextText.equals("}")) {
+                        // Fall through: process `q` / `qq` like any other identifier.
+                    } else {
+                        awaitingQuoteLikeDelimiter = true;
+                        continue;
+                    }
+                } else {
+                    awaitingQuoteLikeDelimiter = true;
+                    continue;
+                }
+            }
+
+            // Enter simple quoted string scanning mode. This prevents punctuation
+            // inside string literals (for example ';' in "x; y") from being
+            // misinterpreted as block syntax at depth 1.
+            if (token.type == LexerTokenType.OPERATOR
+                    && (token.text.equals("\"") || token.text.equals("'") || token.text.equals("`"))) {
+                int prevIndex = parser.tokenIndex - 2;
+                while (prevIndex >= currentIndex
+                        && parser.tokens.get(prevIndex).type == LexerTokenType.WHITESPACE) {
+                    prevIndex--;
+                }
+                LexerToken prevToken = prevIndex >= currentIndex ? parser.tokens.get(prevIndex) : null;
+
+                // Only treat quote as opening when context suggests a string start.
+                // This avoids latching onto trailing quote tokens emitted after
+                // already-parsed quoted keys/values.
+                boolean isLikelyOpeningQuote =
+                        prevToken == null
+                                || (prevToken.type != LexerTokenType.IDENTIFIER
+                                && prevToken.type != LexerTokenType.NUMBER
+                                && prevToken.type != LexerTokenType.STRING)
+                                || IDENTIFIER_BEFORE_BARE_STRING_ARG.contains(prevToken.text);
+                if (!isLikelyOpeningQuote) {
+                    continue;
+                }
+
+                inQuotedString = true;
+                quoteDelimiter = token.text;
+                quoteOpenDelimiter = token.text;
+                quoteEscapeNext = false;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral entering quoted string with delimiter " + token.text);
+                continue;
             }
 
             // Update brace count based on token
@@ -943,6 +1076,17 @@ public class StatementResolver {
                         hasBlockIndicator = true;
                     }
                     case "=" -> {
+                        // Some lexer paths split fat-comma `=>` into separate `=` and `>` tokens.
+                        // In that case this is a hash key/value separator, not assignment.
+                        if (parser.tokenIndex < parser.tokens.size()) {
+                            LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+                            if (nextToken.text.equals(">")) {
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found = followed by > (fat comma split), treating as hash indicator");
+                                hasHashIndicator = true;
+                                break;
+                            }
+                        }
+
                         // Assign is a block indicator, but be more conservative
                         // Look at the tokens we've seen to determine if this might be a q-string pattern
                         boolean isQStringDelimiter = false;
@@ -996,7 +1140,10 @@ public class StatementResolver {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found keyword '" + token.text + "', next token: '" + nextToken.text + "'");
-                        if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
+                        // If we've already seen a fat-comma hash indicator at depth 1,
+                        // keep preferring hash interpretation. This avoids false block
+                        // classification when keyword-like words leak from quoted payload.
+                        if (!hasHashIndicator && !nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
                             // Statement modifier - definitive block indicator
                             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
                             hasBlockIndicator = true;

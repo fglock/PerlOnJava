@@ -1,6 +1,7 @@
 use strict;
 use warnings;
-use Test::More tests => 14;
+use Test::More tests => 18;
+use File::Temp qw(tempfile);
 
 # Regression tests for block-vs-hashref disambiguation inside `{ ... }`.
 # Real Perl treats `{ KEY, VALUE, ... }` as an anonymous hash when the
@@ -49,3 +50,53 @@ is(ref($r), 'HASH', 'return {...} still a hashref');
 # Block with a leading keyword and comma expression
 my @x = do { "foo", "bar" };
 is_deeply(\@x, ["foo","bar"], 'do { "foo", "bar" } is a block (list context)');
+
+# --- top-level do-file hashrefs ---
+
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print {$fh} "{\n";
+    print {$fh} "  \"a\" => \"x; y\",\n";
+    print {$fh} "  \"b\" => [1, 2],\n";
+    print {$fh} "}\n";
+    close $fh;
+
+    my $result = do $filename;
+    is(ref($result), 'HASH', 'do-file top-level hash with semicolon string is hashref');
+}
+
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print {$fh} "{\n";
+    print {$fh} "  \"if\" => \"literal { braces } while text\",\n";
+    print {$fh} "  \"k\" => \"v\",\n";
+    print {$fh} "}\n";
+    close $fh;
+
+    my $result = do $filename;
+    is(ref($result), 'HASH', 'do-file top-level hash with keyword-like text is hashref');
+}
+
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print {$fh} "{\n";
+    print {$fh} "  \"k\" => q(a; b),\n";
+    print {$fh} "  \"v\" => 1,\n";
+    print {$fh} "}\n";
+    close $fh;
+
+    my $result = do $filename;
+    is(ref($result), 'HASH', 'do-file top-level hash with q(...) payload is hashref');
+}
+
+{
+    my ($fh, $filename) = tempfile(SUFFIX => '.pl', UNLINK => 1);
+    print {$fh} "{\n";
+    print {$fh} "  \"k\" => qq(x; y),\n";
+    print {$fh} "  \"v\" => 1,\n";
+    print {$fh} "}\n";
+    close $fh;
+
+    my $result = do $filename;
+    is(ref($result), 'HASH', 'do-file top-level hash with qq(...) payload is hashref');
+}
