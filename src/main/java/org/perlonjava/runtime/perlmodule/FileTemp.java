@@ -205,8 +205,9 @@ public class FileTemp extends PerlModuleBase {
             String namePrefix;
             
             if (prefix.isEmpty()) {
-                // No directory specified, use temp dir
-                dir = Paths.get(getTempDir());
+                // Template is only trailing X's (e.g. "XXXXXX") with no path: Perl creates
+                // the file in the current working directory, not File::Spec->tmpdir.
+                dir = Paths.get(System.getProperty("user.dir"));
                 namePrefix = "";
             } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
                 // Prefix is a directory path with trailing separator
@@ -221,7 +222,8 @@ public class FileTemp extends PerlModuleBase {
                         templatePath.getFileName().toString() : "";
                 
                 if (dir == null) {
-                    dir = Paths.get(getTempDir());
+                    // Relative name prefix only (e.g. "fooXXXXXX"): parent is cwd, not tmpdir.
+                    dir = Paths.get(System.getProperty("user.dir"));
                 }
             }
 
@@ -301,8 +303,7 @@ public class FileTemp extends PerlModuleBase {
             String namePrefix;
             
             if (prefix.isEmpty()) {
-                // No directory specified, use temp dir
-                parentDir = Paths.get(getTempDir());
+                parentDir = Paths.get(System.getProperty("user.dir"));
                 namePrefix = "";
             } else if (prefix.endsWith("/") || prefix.endsWith("\\")) {
                 // Prefix is a directory path with trailing separator
@@ -316,7 +317,7 @@ public class FileTemp extends PerlModuleBase {
                         templatePath.getFileName().toString() : "";
                 
                 if (parentDir == null) {
-                    parentDir = Paths.get(getTempDir());
+                    parentDir = Paths.get(System.getProperty("user.dir"));
                 }
             }
 
