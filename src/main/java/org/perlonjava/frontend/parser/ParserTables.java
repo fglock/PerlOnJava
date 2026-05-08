@@ -30,7 +30,7 @@ public class ParserTables {
             "die", "do", "dump",
             "exec", "exit",
             "fork",
-            "getpwuid", "glob",
+            "gethostbyname", "getpwuid", "glob",
             "hex",
             "kill",
             "oct", "open",

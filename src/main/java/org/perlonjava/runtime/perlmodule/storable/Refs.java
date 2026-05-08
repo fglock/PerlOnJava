@@ -1,7 +1,5 @@
 package org.perlonjava.runtime.perlmodule.storable;
 
-import org.perlonjava.runtime.runtimetypes.RuntimeArray;
-import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -154,15 +152,12 @@ public final class Refs {
      */
     private static void installReferent(RuntimeScalar refScalar, RuntimeScalar referent, boolean bodyWasBare) {
         if (bodyWasBare) {
-            // Bare-container body: collapse the redundant SX_REF wrap.
-            // The fresh reference we attach must point at the SAME
-            // underlying RuntimeArray/RuntimeHash as `referent` so
-            // mutations through either alias (or backref tags pointing
-            // at the seen-table entry of the container) stay coherent.
-            if (referent.value instanceof RuntimeArray arr) {
-                refScalar.set(arr.createReference());
-            } else if (referent.value instanceof RuntimeHash hash) {
-                refScalar.set(hash.createReference());
+            // Bare body: collapse the redundant SX_REF wrap. The fresh
+            // reference we attach must preserve the SAME reference shape
+            // and underlying referent, so mutations and blessing remain
+            // coherent for arrays, hashes, scalar hooks, and backrefs.
+            if (RuntimeScalarType.isReference(referent)) {
+                refScalar.set(referent);
             } else {
                 // Bare flag set but not a recognised container — fall
                 // back to a fresh scalar reference. Defensive; should

@@ -255,7 +255,8 @@ public class EmitLiteral {
             return;
         }
 
-        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource) {
+        if (node.forceByteString
+                || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource)) {
             // Under `no utf8` - create an octet string, unless it contains wide characters (> 255)
             // Wide characters (like \x{100}) force the string to be UTF-8 even without `use utf8`
             boolean hasWideChars = false;

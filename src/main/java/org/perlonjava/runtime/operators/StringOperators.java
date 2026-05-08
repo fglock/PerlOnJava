@@ -142,6 +142,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the case-folded string
      */
     public static RuntimeScalar fc(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            return caseFoldBytesAsciiOnly(runtimeScalar);
+        }
         String str = runtimeScalar.toString();
         // Perform full Unicode case folding using ICU4J CaseMap
         // Note: We do NOT use NFKC normalization because Perl's fc() preserves
@@ -174,6 +177,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the lowercase string
      */
     public static RuntimeScalar lc(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            return caseFoldBytesAsciiOnly(runtimeScalar);
+        }
         // Convert the string to lowercase using ICU4J for proper Unicode handling
         String str = UCharacter.toLowerCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -196,6 +202,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the first character in lowercase
      */
     public static RuntimeScalar lcfirst(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            return lcfirstBytes(runtimeScalar);
+        }
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
@@ -218,6 +227,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the uppercase string
      */
     public static RuntimeScalar uc(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            return uppercaseBytesAsciiOnly(runtimeScalar);
+        }
         // Convert the string to uppercase using ICU4J for proper Unicode handling
         String str = UCharacter.toUpperCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -232,6 +244,9 @@ public class StringOperators {
      * @return a {@link RuntimeScalar} with the first character in titlecase
      */
     public static RuntimeScalar ucfirst(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
+            return ucfirstBytes(runtimeScalar);
+        }
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {

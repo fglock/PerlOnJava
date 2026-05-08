@@ -92,8 +92,14 @@ public class Directory {
         File absoluteDir = RuntimeIO.resolveFile(dirName);
 
         if (absoluteDir.exists() && absoluteDir.isDirectory()) {
-            // Normalize the path to remove redundant . and .. components
-            System.setProperty("user.dir", absoluteDir.toPath().normalize().toString());
+            try {
+                // Match getcwd(3): collapse . and .., and resolve symlinks like
+                // macOS /var -> /private/var after chdir().
+                System.setProperty("user.dir", absoluteDir.getCanonicalPath());
+            } catch (IOException e) {
+                handleIOException(e, "chdir failed");
+                return scalarFalse;
+            }
             return scalarTrue;
         } else {
             // Set errno to ENOENT (No such file or directory)

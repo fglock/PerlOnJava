@@ -21,6 +21,13 @@ public class StringNode extends AbstractNode {
     public final boolean isVString;
 
     /**
+     * Force this literal to be emitted as a byte string even in a C<use utf8>
+     * scope. Perl keeps ASCII and fixed-byte escapes such as "\xFC" unupgraded;
+     * actual non-ASCII source characters still use normal UTF-8 string emission.
+     */
+    public final boolean forceByteString;
+
+    /**
      * Constructs a new StringNode with the specified string value.
      *
      * @param value the string value to be stored in this node
@@ -29,6 +36,7 @@ public class StringNode extends AbstractNode {
         this.value = value;
         this.tokenIndex = tokenIndex;
         this.isVString = false;
+        this.forceByteString = false;
     }
 
     /**
@@ -42,6 +50,14 @@ public class StringNode extends AbstractNode {
         this.value = value;
         this.tokenIndex = tokenIndex;
         this.isVString = isVString;
+        this.forceByteString = false;
+    }
+
+    public StringNode(String value, boolean isVString, boolean forceByteString, int tokenIndex) {
+        this.value = value;
+        this.tokenIndex = tokenIndex;
+        this.isVString = isVString;
+        this.forceByteString = forceByteString;
     }
 
     /**
@@ -67,4 +83,3 @@ public class StringNode extends AbstractNode {
         visitor.visit(this);
     }
 }
-

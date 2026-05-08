@@ -1,17 +1,50 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 public class RegexQuoteMeta {
     public static String escapeQ(String s) {
         StringBuilder sb = new StringBuilder();
         int len = s.length();
         int offset = 0;
+        boolean inCharClass = false;
+        boolean charClassFirst = false;
+        boolean escaped = false;
 
         // Predefined set of regex metacharacters
         final String regexMetacharacters = "-.+*?[](){}^$|\\";
 
         while (offset < len) {
             char c = s.charAt(offset);
+            if (escaped) {
+                if (inCharClass && (c == 'Q' || c == 'E')) {
+                    warnUnrecognizedCharClassEscape(c);
+                    sb.append(c);
+                    if (charClassFirst && c != '^') {
+                        charClassFirst = false;
+                    }
+                    escaped = false;
+                    offset++;
+                    continue;
+                }
+                sb.append('\\');
+                sb.append(c);
+                escaped = false;
+                offset++;
+                continue;
+            }
+
             if (c == '\\' && offset + 1 < len && s.charAt(offset + 1) == 'Q') {
+                if (inCharClass) {
+                    warnUnrecognizedCharClassEscape('Q');
+                    sb.append('Q');
+                    if (charClassFirst) {
+                        charClassFirst = false;
+                    }
+                    offset += 2;
+                    continue;
+                }
                 // Skip past \Q
                 offset += 2;
 
@@ -32,11 +65,34 @@ public class RegexQuoteMeta {
                     offset++;
                 }
             } else {
+                if (c == '\\') {
+                    escaped = true;
+                    offset++;
+                    continue;
+                }
+                if (c == '[' && !inCharClass) {
+                    inCharClass = true;
+                    charClassFirst = true;
+                } else if (c == ']' && inCharClass && !charClassFirst) {
+                    inCharClass = false;
+                } else if (inCharClass && charClassFirst && c != '^') {
+                    charClassFirst = false;
+                }
                 sb.append(c);
                 offset++;
             }
         }
+        if (escaped) {
+            sb.append('\\');
+        }
 
         return sb.toString();
+    }
+
+    private static void warnUnrecognizedCharClassEscape(char c) {
+        WarnDie.warn(
+                new RuntimeScalar("Unrecognized escape \\" + c
+                        + " in character class passed through in regex\n"),
+                new RuntimeScalar(""));
     }
 }

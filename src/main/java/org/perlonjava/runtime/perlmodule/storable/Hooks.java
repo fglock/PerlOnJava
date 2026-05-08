@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.perlonjava.runtime.operators.ModuleOperators;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
@@ -130,6 +132,8 @@ public final class Hooks {
             }
         }
 
+        requireClassForHook(classname);
+
         // Step 6a: if the class defines STORABLE_attach, prefer that over
         // STORABLE_thaw. The attach hook is a CLASS method that returns a
         // fully-formed object; we replace the placeholder with the
@@ -251,6 +255,19 @@ public final class Hooks {
         String name = new String(nameBytes, StandardCharsets.US_ASCII);
         c.recordClass(name);
         return name;
+    }
+
+    private static void requireClassForHook(String classname) {
+        if (classname == null || classname.isEmpty()) return;
+        if (classname.equals("main") || classname.equals("UNIVERSAL")) return;
+        String filename = classname.replace("::", "/").replace("'", "/") + ".pm";
+        RuntimeHash inc = GlobalVariable.getGlobalHash("main::INC");
+        if (inc.exists(new RuntimeScalar(filename)).getBoolean()) return;
+        try {
+            ModuleOperators.require(new RuntimeScalar(filename));
+        } catch (Exception ignored) {
+            // Some blessed data-only packages have no loadable module.
+        }
     }
 
     private static void invokeThaw(String classname, RuntimeScalar self,

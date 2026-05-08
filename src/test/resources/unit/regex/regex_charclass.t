@@ -60,4 +60,19 @@ subtest 'bracketed \c? matches DEL only' => sub {
     ok("color"  =~ /colou?r/, "? quantifier still works (absent)");
 };
 
+subtest 'bracketed \Q and \E are literal with warnings' => sub {
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
+
+    my $re = qr/[\Qabc\E]/;
+    ok("Q" =~ $re, '\Q is passed through as literal Q in a character class');
+    ok("E" =~ $re, '\E is passed through as literal E in a character class');
+    ok("a" =~ $re, 'character class contents still match');
+    ok("d" !~ $re, 'characters outside the class do not match');
+    like(join("", @warnings), qr/Unrecognized escape \\Q in character class passed through in regex/,
+         '\Q warning is emitted');
+    like(join("", @warnings), qr/Unrecognized escape \\E in character class passed through in regex/,
+         '\E warning is emitted');
+};
+
 done_testing();
