@@ -785,6 +785,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             AutovivificationHash.vivify(this);
         }
 
+        if (this.type == TIED_HASH) {
+            return getSlice(value);
+        }
+
         RuntimeList result = new RuntimeList();
         List<RuntimeBase> outElements = result.elements;
         for (RuntimeScalar runtimeScalar : value) {

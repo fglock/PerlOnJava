@@ -454,11 +454,11 @@ public class UnicodeResolver {
             return userPropertyCache.get(subName);
         }
 
-        // Look up the subroutine
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
-        if (codeRef == null || !codeRef.getDefinedBoolean()) {
+        // Look up the subroutine without autovivifying an empty CODE slot.
+        if (!GlobalVariable.isGlobalCodeRefDefined(subName)) {
             return null;
         }
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
         try {
             // Call the subroutine with an empty argument list

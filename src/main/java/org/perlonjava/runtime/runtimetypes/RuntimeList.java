@@ -789,10 +789,10 @@ public class RuntimeList extends RuntimeBase {
      */
     @Override
     public void dynamicRestoreState() {
-        // Note: this method is probably not needed,
-        // because the elements are handled by their respective classes.
-        for (RuntimeBase elem : elements) {
-            elem.dynamicRestoreState();
+        // Save pushes element state left-to-right onto per-type stacks; restore
+        // must unwind right-to-left so same-type elements get their own state.
+        for (int i = elements.size() - 1; i >= 0; i--) {
+            elements.get(i).dynamicRestoreState();
         }
     }
 
