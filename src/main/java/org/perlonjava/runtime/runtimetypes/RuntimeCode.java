@@ -78,7 +78,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static final boolean EVAL_TRACE =
             System.getenv("JPERL_EVAL_TRACE") != null;
     /**
-     * ThreadLocal storage for runtime values of captured variables during eval STRING compilation.
+     * ThreadLocal stack for runtime values of captured variables during eval STRING compilation.
      * <p>
      * PROBLEM: In perl5, BEGIN blocks inside eval STRING can access outer lexical variables' runtime values:
      * my @imports = qw(a b);
@@ -87,7 +87,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * In PerlOnJava, BEGIN blocks execute during parsing (before the eval class is instantiated),
      * so they couldn't access runtime values - they would see empty variables.
      * <p>
-     * SOLUTION: When evalStringHelper() is called, the runtime values are stored in this ThreadLocal.
+     * SOLUTION: When evalStringHelper() is called, the runtime values are pushed onto this ThreadLocal stack.
      * During parsing, when SpecialBlockParser sets up BEGIN blocks, it can access these runtime values
      * and use them to initialize the special globals that lexical variables become in BEGIN blocks.
      * <p>
@@ -97,10 +97,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * - runtimeValues: Object[] of captured variable values
      * - capturedEnv: String[] of captured variable names (matching array indices)
      * <p>
-     * Thread-safety: Each thread's eval compilation uses its own ThreadLocal storage, so parallel
-     * eval compilations don't interfere with each other.
+     * Thread-safety: Each thread's eval compilation uses its own ThreadLocal stack, so parallel
+     * eval compilations don't interfere with each other. A stack is required because eval STRING
+     * compilation can re-enter eval STRING compilation via BEGIN/use/require.
      */
-    private static final ThreadLocal<EvalRuntimeContext> evalRuntimeContext = new ThreadLocal<>();
+    private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> evalRuntimeContextStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -680,7 +682,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The current eval runtime context, or null if not in eval STRING compilation
      */
     public static EvalRuntimeContext getEvalRuntimeContext() {
-        return evalRuntimeContext.get();
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        return stack.isEmpty() ? null : stack.peekFirst();
     }
 
     /**
@@ -691,9 +694,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return The saved eval runtime context (may be null)
      */
     public static EvalRuntimeContext saveAndClearEvalRuntimeContext() {
-        EvalRuntimeContext saved = evalRuntimeContext.get();
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        if (stack.isEmpty()) {
+            return null;
+        }
+        EvalRuntimeContext saved = stack.removeFirst();
+        if (stack.isEmpty()) {
+            evalRuntimeContextStack.remove();
+        }
+        return saved;
+    }
+
+    public static EvalRuntimeContext saveAndClearEvalRuntimeContextAndAliases() {
+        EvalRuntimeContext saved = saveAndClearEvalRuntimeContext();
         if (saved != null) {
-            evalRuntimeContext.remove();
+            deactivateEvalRuntimeAliases(saved);
         }
         return saved;
     }
@@ -705,7 +720,79 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void restoreEvalRuntimeContext(EvalRuntimeContext saved) {
         if (saved != null) {
-            evalRuntimeContext.set(saved);
+            evalRuntimeContextStack.get().addFirst(saved);
+            reactivateEvalRuntimeAliases(saved);
+        }
+    }
+
+    private static void pushEvalRuntimeContext(EvalRuntimeContext context) {
+        evalRuntimeContextStack.get().addFirst(context);
+    }
+
+    private static void popEvalRuntimeContext(EvalRuntimeContext context) {
+        ArrayDeque<EvalRuntimeContext> stack = evalRuntimeContextStack.get();
+        if (!stack.isEmpty()) {
+            if (stack.peekFirst() == context) {
+                stack.removeFirst();
+            } else {
+                for (Iterator<EvalRuntimeContext> it = stack.iterator(); it.hasNext(); ) {
+                    if (it.next() == context) {
+                        it.remove();
+                        break;
+                    }
+                }
+            }
+        }
+        if (stack.isEmpty()) {
+            evalRuntimeContextStack.remove();
+        }
+    }
+
+    private static void registerEvalRuntimeAlias(EvalRuntimeContext context, char sigil, String fullName, RuntimeBase value) {
+        context.aliases().add(new EvalRuntimeAlias(sigil, fullName, value));
+    }
+
+    private static void deactivateEvalRuntimeAliases(EvalRuntimeContext context) {
+        for (EvalRuntimeAlias alias : context.aliases()) {
+            if (!alias.active) {
+                continue;
+            }
+            switch (alias.sigil) {
+                case '$' -> {
+                    if (GlobalVariable.globalVariables.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalVariables.remove(alias.fullName);
+                    }
+                }
+                case '@' -> {
+                    if (GlobalVariable.globalArrays.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalArrays.remove(alias.fullName);
+                    }
+                }
+                case '%' -> {
+                    if (GlobalVariable.globalHashes.get(alias.fullName) == alias.value) {
+                        GlobalVariable.globalHashes.remove(alias.fullName);
+                    }
+                }
+            }
+            alias.active = false;
+        }
+    }
+
+    private static void reactivateEvalRuntimeAliases(EvalRuntimeContext context) {
+        for (EvalRuntimeAlias alias : context.aliases()) {
+            if (alias.active) {
+                continue;
+            }
+            boolean installed = switch (alias.sigil) {
+                case '$' -> alias.value instanceof RuntimeScalar scalar
+                        && GlobalVariable.globalVariables.putIfAbsent(alias.fullName, scalar) == null;
+                case '@' -> alias.value instanceof RuntimeArray array
+                        && GlobalVariable.globalArrays.putIfAbsent(alias.fullName, array) == null;
+                case '%' -> alias.value instanceof RuntimeHash hash
+                        && GlobalVariable.globalHashes.putIfAbsent(alias.fullName, hash) == null;
+                default -> false;
+            };
+            alias.active = installed;
         }
     }
 
@@ -726,7 +813,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         anonSubs.clear();
         interpretedSubs.clear();
         evalContext.clear();
-        evalRuntimeContext.remove();
+        evalRuntimeContextStack.remove();
     }
 
     public static void copy(RuntimeCode code, RuntimeCode codeFrom) {
@@ -814,7 +901,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ctx.capturedEnv,  // Variable names in same order as runtimeValues
                 evalTag
         );
-        evalRuntimeContext.set(runtimeCtx);
+        pushEvalRuntimeContext(runtimeCtx);
 
         try {
             // Check if the eval string contains non-ASCII characters
@@ -925,7 +1012,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // We create: globalArrays["BEGIN_PKG_x::@arr"] = (the runtime @arr object)
             // Then when "say @arr" is parsed in the BEGIN, it resolves to BEGIN_PKG_x::@arr
             // which is aliased to the runtime array with values (a, b).
-            List<String> evalAliasKeys = new ArrayList<>();
             Map<Integer, SymbolTable.SymbolEntry> capturedVars = capturedSymbolTable.getAllVisibleVariables();
             for (SymbolTable.SymbolEntry entry : capturedVars.values()) {
                 if (!entry.name().equals("@_") && !entry.decl().isEmpty() && !entry.name().startsWith("&")) {
@@ -964,7 +1050,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     }
                                 }
                                 if (installed) {
-                                    evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                    registerEvalRuntimeAlias(runtimeCtx, entry.name().charAt(0), fullName, (RuntimeBase) runtimeValue);
                                 }
                             }
                         }
@@ -1103,14 +1189,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // if a recursive call re-enters the same function and its `my` declaration
                 // calls retrieveBeginScalar, finding the stale alias instead of creating
                 // a fresh variable.
-                for (String key : evalAliasKeys) {
-                    String fullName = key.substring(1);
-                    switch (key.charAt(0)) {
-                        case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                        case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                        case '%' -> GlobalVariable.globalHashes.remove(fullName);
-                    }
-                }
+                deactivateEvalRuntimeAliases(runtimeCtx);
+                runtimeCtx.aliases().clear();
 
                 // Store source lines in symbol table if $^P flags are set
                 // Do this on both success and failure paths when flags require retention
@@ -1132,11 +1212,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This MUST be in the outer finally to handle both cache hits and compilation paths.
             setCurrentScope(savedCurrentScope);
 
-            // Clean up ThreadLocal to prevent memory leaks
-            // IMPORTANT: Always clean up ThreadLocal in finally block to ensure it's removed
-            // even if compilation fails. Failure to do so could cause memory leaks in
-            // long-running applications with thread pools.
-            evalRuntimeContext.remove();
+            // Clean up this eval's ThreadLocal stack entry to prevent memory leaks.
+            // IMPORTANT: Always pop in the finally block even if compilation fails.
+            popEvalRuntimeContext(runtimeCtx);
         }
     }
 
@@ -1302,7 +1380,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ctx.capturedEnv,
                 evalTag
         );
-        evalRuntimeContext.set(runtimeCtx);
+        pushEvalRuntimeContext(runtimeCtx);
 
         InterpretedCode interpretedCode = null;
         RuntimeList result;
@@ -1310,7 +1388,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Declare these outside try block so they're accessible in finally block for debugger support
         Node ast = null;
         List<LexerToken> tokens = null;
-        List<String> evalAliasKeys = new ArrayList<>();
 
         // Save dynamic variable level to restore after eval.
         // IMPORTANT: Scope InterpreterState.currentPackage around eval execution.
@@ -1401,7 +1478,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     }
                                 }
                                 if (installed) {
-                                    evalAliasKeys.add(entry.name().charAt(0) + fullName);
+                                    registerEvalRuntimeAlias(runtimeCtx, entry.name().charAt(0), fullName, (RuntimeBase) runtimeValue);
                                 }
                             }
                         }
@@ -1586,15 +1663,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // GlobalVariable during execution, a recursive call that re-enters the same
             // function would find the alias via retrieveBeginScalar, sharing the same
             // RuntimeScalar object instead of creating a fresh one.
-            for (String key : evalAliasKeys) {
-                String fullName = key.substring(1);
-                switch (key.charAt(0)) {
-                    case '$' -> GlobalVariable.globalVariables.remove(fullName);
-                    case '@' -> GlobalVariable.globalArrays.remove(fullName);
-                    case '%' -> GlobalVariable.globalHashes.remove(fullName);
-                }
-            }
-            evalAliasKeys.clear();
+            deactivateEvalRuntimeAliases(runtimeCtx);
+            runtimeCtx.aliases().clear();
 
             // Execute the interpreted code
             // Track eval depth for $^S support
@@ -1678,8 +1748,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 storeSourceLines(code.toString(), evalFilename, ast, tokens);
             }
 
-            // Clean up ThreadLocal
-            evalRuntimeContext.remove();
+            // Clean up this eval's ThreadLocal stack entry.
+            popEvalRuntimeContext(runtimeCtx);
         }
     }
 
@@ -3939,34 +4009,55 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-         * Container for runtime context during eval STRING compilation.
-         * Holds both the runtime values and variable names so SpecialBlockParser can
-         * match variables to their values.
-         */
-        public record EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
+     * Tracks one temporary BEGIN-package alias installed for eval STRING parsing.
+     */
+    public static final class EvalRuntimeAlias {
+        final char sigil;
+        final String fullName;
+        final RuntimeBase value;
+        boolean active = true;
+
+        EvalRuntimeAlias(char sigil, String fullName, RuntimeBase value) {
+            this.sigil = sigil;
+            this.fullName = fullName;
+            this.value = value;
+        }
+    }
+
+    /**
+     * Container for runtime context during eval STRING compilation.
+     * Holds both the runtime values and variable names so SpecialBlockParser can
+     * match variables to their values.
+     */
+    public record EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag,
+                                     List<EvalRuntimeAlias> aliases) {
+
+        public EvalRuntimeContext(Object[] runtimeValues, String[] capturedEnv, String evalTag) {
+            this(runtimeValues, capturedEnv, evalTag, new ArrayList<>());
+        }
 
         /**
-             * Get the runtime value for a variable by name.
-             * <p>
-             * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
-             * but runtimeValues array skips the first skipVariables (currently 3).
-             * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
-             *
-             * @param varName The variable name (e.g., "@imports", "$scalar")
-             * @return The runtime value, or null if not found
-             */
-            public Object getRuntimeValue(String varName) {
-                int skipVariables = 3; // 'this', '@_', 'wantarray'
-                for (int i = skipVariables; i < capturedEnv.length; i++) {
-                    if (varName.equals(capturedEnv[i])) {
-                        int runtimeIndex = i - skipVariables;
-                        if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
-                            return runtimeValues[runtimeIndex];
-                        }
+         * Get the runtime value for a variable by name.
+         * <p>
+         * IMPORTANT: The capturedEnv array includes all variables (including 'this', '@_', 'wantarray'),
+         * but runtimeValues array skips the first skipVariables (currently 3).
+         * So if @imports is at capturedEnv[5], its value is at runtimeValues[5-3=2].
+         *
+         * @param varName The variable name (e.g., "@imports", "$scalar")
+         * @return The runtime value, or null if not found
+         */
+        public Object getRuntimeValue(String varName) {
+            int skipVariables = 3; // 'this', '@_', 'wantarray'
+            for (int i = skipVariables; i < capturedEnv.length; i++) {
+                if (varName.equals(capturedEnv[i])) {
+                    int runtimeIndex = i - skipVariables;
+                    if (runtimeIndex >= 0 && runtimeIndex < runtimeValues.length) {
+                        return runtimeValues[runtimeIndex];
                     }
                 }
-                return null;
             }
+            return null;
         }
+    }
 
 }
