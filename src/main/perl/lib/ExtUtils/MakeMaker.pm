@@ -588,7 +588,7 @@ sub _create_install_makefile {
         unless ($dirs_seen{$dir}++) {
             push @install_cmds, _shell_mkdir($dir);
         }
-        push @install_cmds, _shell_cp($src, $dest);
+        push @install_cmds, _shell_cp($src, $dest, "$INSTALL_BASE/auto");
         
         # Build blib/lib copy command: derive relative path from source
         # Source is like "lib/Text/CSV.pm" -> blib dest is "blib/lib/Text/CSV.pm"
@@ -607,7 +607,7 @@ sub _create_install_makefile {
             unless ($blib_dirs_seen{$blib_dir}++) {
                 push @blib_cmds, _shell_mkdir($blib_dir);
             }
-            push @blib_cmds, _shell_cp($src, $blib_dest);
+            push @blib_cmds, _shell_cp($src, $blib_dest, 'blib/lib/auto');
         }
     }
     
@@ -646,6 +646,11 @@ sub _create_install_makefile {
     my $script_cmds_str = join("\n", @script_cmds) || "\t\@true";
     my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
+
+    my $pm_deps_str = join(' ', sort keys %$pm);
+    $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
+
+    my $depend_rules_str = _make_depend_rules($args->{depend});
     
     # Build PL_FILES commands (prefixed with - so failures are non-fatal;
     # many .PL scripts generate optional CLI tools that aren't needed for
@@ -733,11 +738,12 @@ $extra_macros_str
 all:: pm_to_blib pure_all pl_files blib_scripts config
 \t\@echo "PerlOnJava: $name v$version built ($file_count files in ./blib)"
 
+$depend_rules_str
 # pm_to_blib: stage module/data files into ./blib/lib (matches standard
 # ExtUtils::MakeMaker). Files are NOT copied to INSTALLSITELIB here;
 # that happens in the 'install' target.
 # Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both).
-pm_to_blib::
+pm_to_blib::$pm_deps_str
 \t\@mkdir -p blib/arch
 $blib_cmds_str
 
@@ -817,10 +823,28 @@ sub _shell_mkdir {
 # PerlOnJava cannot run them. We skip missing sources with a warning
 # rather than failing the whole install.
 sub _shell_cp {
-    my ($src, $dest) = @_;
+    my ($src, $dest, $autosplit_dir) = @_;
+    my $autosplit = '';
+    if (defined $autosplit_dir && $src =~ /\.pm$/i) {
+        $autosplit_dir =~ s/'/'\\''/g;
+        $autosplit = " && \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'";
+    }
     $src =~ s/'/'\\''/g;
     $dest =~ s/'/'\\''/g;
-    return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'; else echo 'PerlOnJava: skipping missing source: $src'; fi";
+    return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
+}
+
+sub _make_depend_rules {
+    my ($depend) = @_;
+    return '' unless ref $depend eq 'HASH' && %$depend;
+
+    my $rules = "# Dependencies from WriteMakefile depend\n";
+    for my $target (sort keys %$depend) {
+        my $deps = $depend->{$target};
+        next unless defined $target && defined $deps;
+        $rules .= "$target : $deps\n";
+    }
+    return "$rules\n";
 }
 
 # Write a tiny `Build` script that delegates to make targets. Some CPAN
