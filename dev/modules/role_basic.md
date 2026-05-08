@@ -1,6 +1,6 @@
 # Role::Basic (CPAN) on PerlOnJava
 
-Documentation-only deliverable: this file is the **plan** (symptom, bisection, hypothesized fix, verification). Landing the **`RuntimeCode` `EvalRuntimeContext` stack** (or another confirmed fix) is a **follow-up** change once `timeout 600 ./jcpan -t Role::Basic` passes.
+Implemented deliverable: `Role::Basic` passes under PerlOnJava after fixing nested eval runtime context handling in `RuntimeCode`.
 
 ## Acceptance
 
@@ -23,7 +23,7 @@ Upstream logic (simplified): after `eval "use $role $version"`, code does `retur
 - Bisection on a forked `Role/Basic.pm`: removing the stash preamble (`my $stash = do { no strict 'refs'; \%{"${role}::"} };` and related `%INC` logic) made jperl match stock perl — implicating **interaction** of that block with **nested compilation**, not `"\%{"${role}::"}"` vs `$role . '::'` alone (a minimal two-level reentrancy test with only interpolation can still pass).
 - Copying stash keys in `HashSpecialVariable.getStash` / `GlobalVariable.getGlobalHash` did **not** fix jcpan; treat as unrelated unless a future test proves otherwise.
 
-## Root cause (target fix)
+## Root Cause And Fix
 
 **Nested `eval STRING` compilation** uses a single `ThreadLocal` for `EvalRuntimeContext` in [`RuntimeCode.java`](../../src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java): inner `evalStringHelper` / `evalStringWithInterpreter` **overwrites** the context and the outer `finally` block calls **`remove()`**, dropping the outer eval’s context while outer compilation may still run (e.g. `use` during compile → nested `_load_role` → nested `eval`). That matches the BEGIN-alias cleanup comment in the same file about **recursive** eval corrupting globals.
 
@@ -35,6 +35,8 @@ Upstream logic (simplified): after `eval "use $role $version"`, code does `retur
 - `clearCaches()` → `evalRuntimeContextStack.remove()`  
 
 Apply consistently in both `evalStringHelper` and `evalStringWithInterpreter`.
+
+The passing implementation also tracks the BEGIN-package aliases installed for eval parsing and deactivates them when `saveAndClearEvalRuntimeContext()` is used around `require` / `do` compilation. The stack alone preserves the runtime context, but Role::Basic also needed those temporary aliases hidden while a `use $role` compile re-enters `_load_role`; otherwise the inner call retrieves and mutates the outer eval's `$role` scalar.
 
 ## Neutral regression tests
 
@@ -54,8 +56,27 @@ Apply consistently in both `evalStringHelper` and `evalStringWithInterpreter`.
 4. Branch from `master`, commit with [AI_POLICY.md](../AI_POLICY.md) attribution (`git commit -F file`).  
 5. Push and `gh pr create --body-file /tmp/pr_body.md` (never `--body` with inline backticks).
 
-## Progress
+## Progress Tracking
 
-| Date       | Status |
-|------------|--------|
-| 2026-05-08 | Plan documented in-repo (`role_basic.md` only). Runtime fix pending (jcpan still fails `t/exceptions.t` test 1 until verified). |
+### Current Status: Completed 2026-05-08
+
+### Completed Work
+
+- [x] Implemented eval runtime context stack in [`RuntimeCode.java`](../../src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java)
+- [x] Tracked eval BEGIN aliases so they can be temporarily hidden around nested module compilation
+- [x] Added neutral regression test [`eval_context_stack_reentrancy.t`](../../src/test/resources/unit/eval_context_stack_reentrancy.t)
+
+### Verification
+
+- `make` -> pass
+- `timeout 60 ./jperl src/test/resources/unit/eval_context_stack_reentrancy.t` -> pass
+- `timeout 600 ./jcpan -t Role::Basic` -> pass, 16 files / 304 tests
+
+### Next Steps
+
+1. Commit the fix on `fix/role-basic-eval-context-stack`.
+2. Open a PR with the verification above.
+
+### Open Questions
+
+- None.
