@@ -714,13 +714,16 @@ public class Operator {
         // Preserve null elements (deleted array elements) so that
         // @a = reverse @a maintains sparse array structure.
         // null = deleted (exists returns false), undef = defined but undef
+        //
+        // Keep the same RuntimeScalar (or other RuntimeBase) instances as the
+        // source array — Perl's list-context reverse only reverses order; it does
+        // not copy SVs. This matters for foreach: `for my $x (reverse @a) { ... }`
+        // aliases $x to each original slot so mutations (e.g. substr four-arg
+        // prepend on split whitespace chunks) update @a in place.
         RuntimeArray result = new RuntimeArray();
-        for (RuntimeBase element : array.elements) {
-            if (element != null) {
-                result.elements.add(new RuntimeScalar((RuntimeScalar) element));
-            } else {
-                result.elements.add(null);
-            }
+        for (RuntimeScalar element : array.elements) {
+            // Plain-array slots are RuntimeScalar or null (sparse hole).
+            result.elements.add(element);
         }
         Collections.reverse(result.elements);
         RuntimeList list = new RuntimeList();
