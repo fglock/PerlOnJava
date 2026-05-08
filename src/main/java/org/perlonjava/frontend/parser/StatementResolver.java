@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
@@ -28,6 +29,18 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * It handles various types of statements such as control structures, declarations, and expressions.
  */
 public class StatementResolver {
+
+    /**
+     * Builtins often followed by a string argument with no {@code ,} or {@code (} between
+     * (e.g. {@code like "...\x{100}" ...}). During {@link #isHashLiteral} pre-scan, the opening
+     * {@code "} must start quoted-string mode; otherwise {@code \x{...}} is seen as raw
+     * brace tokens, brace depth desynchronizes, and {@code =>} inside a later
+     * {@code map { sprintf "%s" => $_ }} is misread as a hash fat comma at depth 1.
+     */
+    private static final Set<String> IDENTIFIER_BEFORE_BARE_STRING_ARG = Set.of(
+            "like", "unlike", "ok", "is", "isnt", "cmp_ok", "can_ok", "isa_ok",
+            "pass", "fail", "require", "diag", "note", "explain",
+            "warning_like", "warning_is", "warnings_like");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -1021,7 +1034,8 @@ public class StatementResolver {
                         prevToken == null
                                 || (prevToken.type != LexerTokenType.IDENTIFIER
                                 && prevToken.type != LexerTokenType.NUMBER
-                                && prevToken.type != LexerTokenType.STRING);
+                                && prevToken.type != LexerTokenType.STRING)
+                                || IDENTIFIER_BEFORE_BARE_STRING_ARG.contains(prevToken.text);
                 if (!isLikelyOpeningQuote) {
                     continue;
                 }
