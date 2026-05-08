@@ -58,4 +58,4 @@ Apply consistently in both `evalStringHelper` and `evalStringWithInterpreter`.
 
 | Date       | Status |
 |------------|--------|
-| 2026-05-08 | Plan documented in-repo (`role_basic.md` + modules README). Runtime fix pending (jcpan still fails `t/exceptions.t` test 1 until verified). |
+| 2026-05-08 | Plan documented in-repo (`role_basic.md` only). Runtime fix pending (jcpan still fails `t/exceptions.t` test 1 until verified). |
