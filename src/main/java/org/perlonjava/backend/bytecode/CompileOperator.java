@@ -970,8 +970,9 @@ public class CompileOperator {
             }
             case "rand" -> {
                 int rd = bytecodeCompiler.allocateOutputRegister();
-                if (node.operand != null) {
-                    node.operand.accept(bytecodeCompiler);
+                if (node.operand != null
+                        && !(node.operand instanceof ListNode listNode && listNode.elements.isEmpty())) {
+                    compileScalarOperand(bytecodeCompiler, node, "rand");
                     int maxReg = bytecodeCompiler.lastResultReg;
                     bytecodeCompiler.emit(Opcodes.RAND);
                     bytecodeCompiler.emitReg(rd);

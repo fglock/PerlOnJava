@@ -1003,7 +1003,7 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int maxReg = bytecode[pc++];
 
-        RuntimeScalar max = (RuntimeScalar) registers[maxReg];
+        RuntimeScalar max = registers[maxReg].scalar();
         registers[rd] = Random.rand(max);
         return pc;
     }
