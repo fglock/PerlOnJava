@@ -96,7 +96,7 @@ public class PerlLanguageProvider {
         // local variables in required modules to the eval's captured variables when
         // they share the same name (e.g., $caller in constant.pm vs $caller in eval scope).
         RuntimeCode.EvalRuntimeContext savedEvalRuntimeContext =
-                RuntimeCode.saveAndClearEvalRuntimeContext();
+                RuntimeCode.saveAndClearEvalRuntimeContextAndAliases();
 
         // Store the isMainProgram flag in CompilerOptions for use during code generation
         compilerOptions.isMainProgram = isTopLevelScript;

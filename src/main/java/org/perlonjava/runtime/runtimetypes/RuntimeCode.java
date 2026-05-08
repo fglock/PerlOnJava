@@ -699,9 +699,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return null;
         }
         EvalRuntimeContext saved = stack.removeFirst();
-        deactivateEvalRuntimeAliases(saved);
         if (stack.isEmpty()) {
             evalRuntimeContextStack.remove();
+        }
+        return saved;
+    }
+
+    public static EvalRuntimeContext saveAndClearEvalRuntimeContextAndAliases() {
+        EvalRuntimeContext saved = saveAndClearEvalRuntimeContext();
+        if (saved != null) {
+            deactivateEvalRuntimeAliases(saved);
         }
         return saved;
     }

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 2;
+use Test::More tests => 3;
 use File::Path qw(make_path);
 
 BEGIN {
@@ -121,3 +121,13 @@ like(
     "after eval role=[$EvalContextStackRepro::Registry::AFTER_EVAL_ROLE], "
       . "early return role=[$EvalContextStackRepro::Registry::EARLY_RETURN_ROLE]"
 );
+
+my @begin_seen;
+eval q{
+    BEGIN { @begin_seen = map { $_ => eval { die } || -1 } qw(ABC XYZ); }
+};
+is(
+    "@begin_seen",
+    "ABC -1 XYZ -1",
+    'BEGIN execution keeps eval lexical aliases visible'
+) or diag $@;
