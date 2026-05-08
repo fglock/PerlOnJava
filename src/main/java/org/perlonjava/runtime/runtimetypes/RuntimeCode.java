@@ -358,7 +358,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public String subName;
     // Source package for imported forward declarations (used for AUTOLOAD resolution)
     public String sourcePackage = null;
-    // Flag to indicate this is a symbolic reference created by \&{string} that should always be "defined"
+    // Historical marker for symbolic references created by \&{string}. A CODE
+    // scalar is defined as a scalar value even when its underlying subroutine is
+    // only declared; RuntimeCode.defined() still reports whether the subroutine
+    // itself has an implementation.
     public boolean isSymbolicReference = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
@@ -649,6 +652,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return lookupPackage + "::AUTOLOAD";
     }
 
+    public static boolean isCodeDefined(RuntimeScalar codeRef) {
+        return codeRef != null
+                && codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode code
+                && code.defined();
+    }
+
+    private static RuntimeScalar findImportedStubAutoload(RuntimeCode code, String fullSubName) {
+        if (code.packageName == null || code.packageName.isEmpty()
+                || fullSubName == null || fullSubName.isEmpty()) {
+            return null;
+        }
+        int sep = fullSubName.lastIndexOf("::");
+        if (sep < 0) {
+            return null;
+        }
+        String lookupPackage = fullSubName.substring(0, sep);
+        if (code.packageName.equals(lookupPackage)) {
+            return null;
+        }
+
+        String shortName = fullSubName.substring(sep + 2);
+        String sourceSubName = (code.subName != null
+                && !code.subName.isEmpty()
+                && !"__ANON__".equals(code.subName))
+                ? code.subName
+                : shortName;
+        String sourceAutoloadString = code.packageName + "::AUTOLOAD";
+        RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+        if (!isCodeDefined(sourceAutoload)) {
+            return null;
+        }
+
+        getGlobalVariable(autoloadVarFor(sourceAutoload, code.packageName))
+                .set(code.packageName + "::" + sourceSubName);
+        return sourceAutoload;
+    }
+
     /**
      * Check if AUTOLOAD exists for a given RuntimeCode's package.
      * Checks source package first (for imported subs), then current package.
@@ -664,14 +705,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
             String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
             RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-            if (sourceAutoload.getDefinedBoolean()) {
+            if (isCodeDefined(sourceAutoload)) {
                 return true;
             }
         }
         // Then check current package AUTOLOAD
         String autoloadString = code.packageName + "::AUTOLOAD";
         RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-        return autoload.getDefinedBoolean();
+        return isCodeDefined(autoload);
     }
 
 
@@ -2205,7 +2246,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String shortMethod   = methodName.substring(sep + 2);
                 method = InheritanceResolver.findMethodInHierarchy(
                         shortMethod, targetPackage, methodName, 0);
-                if (method == null || !method.getDefinedBoolean()) {
+                if (method == null || !isCodeDefined(method)) {
                     throw new PerlCompilerException("Undefined subroutine &" + methodName + " called");
                 }
             }
@@ -2680,7 +2721,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
                         String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
                         RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-                        if (sourceAutoload.getDefinedBoolean()) {
+                        if (isCodeDefined(sourceAutoload)) {
                             // Set $AUTOLOAD name to the original package function name
                             String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
                             getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
@@ -2693,7 +2734,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Then check if AUTOLOAD exists in the current package
                     String autoloadString = code.packageName + "::AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                    if (autoload.getDefinedBoolean()) {
+                    if (isCodeDefined(autoload)) {
                         // Set $AUTOLOAD — in the package where the AUTOLOAD sub
                         // was compiled, not in the package we looked it up from
                         // (see autoloadVarFor() for details).
@@ -3067,12 +3108,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
 
             if (!fullSubName.isEmpty()) {
+                RuntimeScalar importedStubAutoload = findImportedStubAutoload(code, fullSubName);
+                if (importedStubAutoload != null) {
+                    return apply(importedStubAutoload, a, callContext);
+                }
+
                 // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                 // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                 if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
                     String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
                     RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-                    if (sourceAutoload.getDefinedBoolean()) {
+                    if (isCodeDefined(sourceAutoload)) {
                         // Set $AUTOLOAD name to the original package function name
                         String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
                         getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
@@ -3084,7 +3130,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Then check if AUTOLOAD exists in the current package
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                if (autoload.getDefinedBoolean()) {
+                if (isCodeDefined(autoload)) {
                     // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
                     // (see autoloadVarFor() for the reasoning).
                     String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
@@ -3293,11 +3339,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : subroutineName;
 
             if (!fullSubName.isEmpty() && fullSubName.contains("::")) {
+                RuntimeScalar importedStubAutoload = findImportedStubAutoload(code, fullSubName);
+                if (importedStubAutoload != null) {
+                    return apply(importedStubAutoload, a, callContext);
+                }
+
                 // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                 if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
                     String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
                     RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-                    if (sourceAutoload.getDefinedBoolean()) {
+                    if (isCodeDefined(sourceAutoload)) {
                         String sourceSubroutineName = code.sourcePackage + "::" + code.subName;
                         getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
                         return apply(sourceAutoload, a, callContext);
@@ -3307,7 +3358,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Check if AUTOLOAD exists in the current package
                 String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                 RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                if (autoload.getDefinedBoolean()) {
+                if (isCodeDefined(autoload)) {
                     // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
                     // (see autoloadVarFor() for the reasoning).
                     String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
@@ -3457,17 +3508,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
 
-        // Check if this is a constant subroutine
-        if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode) {
-            // Mark this as a symbolic reference created by \&{string} pattern
-            // This ensures defined(\&{nonexistent}) returns true to match standard Perl behavior
-            runtimeCode.isSymbolicReference = true;
-            
-            // Note: We used to return a reference to the constant value here, but that
-            // breaks Exporter which does `*{$pkg::$sym} = \&{$src::$sym}`. The glob
-            // assignment expects a CODE reference, not a scalar reference.
-            // The constant value optimization is handled separately when calling the sub.
+        if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode runtimeCode
+                && !runtimeCode.defined()) {
+            runtimeCode.isDeclared = true;
         }
+
+        // Note: We used to return a reference to the constant value here, but that
+        // breaks Exporter which does `*{$pkg::$sym} = \&{$src::$sym}`. The glob
+        // assignment expects a CODE reference, not a scalar reference.
+        // The constant value optimization is handled separately when calling the sub.
 
         // Return a snapshot of the current code reference, not the global entry itself.
         // This ensures that saved code references (\&sub) point to the current RuntimeCode
@@ -3600,17 +3649,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public boolean defined() {
-        // Symbolic references created by \&{string} are always considered "defined" to match standard Perl
-        if (this.isSymbolicReference) {
-            return true;
-        }
         // Built-in operators are always considered "defined"
         if (this.isBuiltin) {
             return true;
         }
         // Note: isDeclared is NOT checked here. In Perl 5, defined(&foo) returns
         // false for forward declarations (sub foo;). The isDeclared flag is used
-        // only by RuntimeGlob.getGlobSlot("CODE") for *foo{CODE} visibility.
+        // by RuntimeGlob.getGlobSlot("CODE") and exists(&foo), both of which see
+        // a declared-but-undefined CODE slot.
         return this.constantValue != null || this.compilerSupplier != null 
                 || this.subroutine != null || this.methodHandle != null;
     }
@@ -3656,7 +3702,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (this.sourcePackage != null && !this.sourcePackage.isEmpty()) {
                         String sourceAutoloadString = this.sourcePackage + "::AUTOLOAD";
                         RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-                        if (sourceAutoload.getDefinedBoolean()) {
+                        if (isCodeDefined(sourceAutoload)) {
                             String sourceSubroutineName = this.sourcePackage + "::" + this.subName;
                             getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
                             return apply(sourceAutoload, a, callContext);
@@ -3664,7 +3710,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                    if (autoload.getDefinedBoolean()) {
+                    if (isCodeDefined(autoload)) {
                         // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
                         // (see autoloadVarFor() for the reasoning).
                         String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
@@ -3765,7 +3811,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (this.sourcePackage != null && !this.sourcePackage.isEmpty()) {
                         String sourceAutoloadString = this.sourcePackage + "::AUTOLOAD";
                         RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
-                        if (sourceAutoload.getDefinedBoolean()) {
+                        if (isCodeDefined(sourceAutoload)) {
                             String sourceSubroutineName = this.sourcePackage + "::" + this.subName;
                             getGlobalVariable(sourceAutoloadString).set(sourceSubroutineName);
                             return apply(sourceAutoload, a, callContext);
@@ -3773,7 +3819,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     String autoloadString = fullSubName.substring(0, fullSubName.lastIndexOf("::") + 2) + "AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
-                    if (autoload.getDefinedBoolean()) {
+                    if (isCodeDefined(autoload)) {
                         // Set $AUTOLOAD in the AUTOLOAD sub's compile-time package
                         // (see autoloadVarFor() for the reasoning).
                         String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));

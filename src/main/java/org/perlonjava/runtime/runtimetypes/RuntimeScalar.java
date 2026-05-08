@@ -2629,8 +2629,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case DUALVAR -> ((DualVar) this.value).stringValue().getDefinedBoolean(); // 10
             case FORMAT -> ((RuntimeFormat) value).getDefinedBoolean(); // 11
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).getDefinedBoolean(); // 12
+            case CODE -> true;
             // Reference types (with REFERENCE_BIT) fall through to default
-            default -> type != CODE || ((RuntimeCode) value).defined();
+            default -> true;
         };
     }
 

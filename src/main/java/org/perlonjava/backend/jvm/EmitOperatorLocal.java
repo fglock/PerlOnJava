@@ -219,6 +219,9 @@ public class EmitOperatorLocal {
                     && binNode.left instanceof OperatorNode sigNode && sigNode.operator.equals("$")
                     && sigNode.operand instanceof IdentifierNode) {
                 Dereference.handleHashElementOperator(emitterVisitor.with(lvalueContext), binNode, "getForLocal");
+            } else if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("{")
+                    && binNode.left instanceof OperatorNode sigNode && sigNode.operator.equals("@")) {
+                Dereference.handleHashElementOperator(emitterVisitor.with(lvalueContext), binNode, "getForLocal");
             } else if (varToLocal instanceof BinaryOperatorNode binNode && binNode.operator.equals("->")
                     && binNode.right instanceof HashLiteralNode) {
                 // For arrow hash dereference (local $ref->{key}), use getForLocal via arrow deref path.

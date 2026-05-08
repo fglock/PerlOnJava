@@ -755,14 +755,16 @@ public class GlobalVariable {
         return false;
     }
 
+    private static boolean codeSlotExists(RuntimeScalar var) {
+        return var != null
+                && var.type == RuntimeScalarType.CODE
+                && var.value instanceof RuntimeCode runtimeCode
+                && (runtimeCode.defined() || runtimeCode.isDeclared);
+    }
+
     public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
         RuntimeScalar var = globalCodeRefs.get(key);
-        if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
-            // Use the RuntimeCode.defined() method to check if the subroutine actually exists
-            // This checks methodHandle, constantValue, and compilerSupplier
-            return runtimeCode.defined() ? scalarTrue : scalarFalse;
-        }
-        return scalarFalse;
+        return codeSlotExists(var) ? scalarTrue : scalarFalse;
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
@@ -772,8 +774,7 @@ public class GlobalVariable {
         }
         // Handle RuntimeCode objects by extracting the subroutine name
         if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
-            // Use the RuntimeCode.defined() method to check if the subroutine actually exists
-            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+            return (runtimeCode.defined() || runtimeCode.isDeclared) ? scalarTrue : scalarFalse;
         }
         return existsGlobalCodeRefAsScalar(key.toString());
     }
