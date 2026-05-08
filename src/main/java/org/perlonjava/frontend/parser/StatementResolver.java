@@ -858,6 +858,12 @@ public class StatementResolver {
         boolean hasBlockIndicator = false; // Found ;, or statement modifier
         boolean hasContent = false; // Track if we've seen any content
         boolean firstTokenIsSigil = false; // Track if first token is % or @ (hash/array)
+        boolean inQuotedString = false; // Ignore hash/block indicators inside simple quoted strings
+        String quoteDelimiter = null;
+        String quoteOpenDelimiter = null;
+        int quoteNesting = 0;
+        boolean quoteEscapeNext = false;
+        boolean awaitingQuoteLikeDelimiter = false;
 
         // Extra bits for the "{'a','b'}" / "{1,2}" / "{foo,1}" rule: real Perl
         // treats a braced expression as a hashref when the FIRST content token
@@ -910,6 +916,100 @@ public class StatementResolver {
                 break; // Let caller handle EOF error
             }
 
+            if (awaitingQuoteLikeDelimiter) {
+                if (token.type == LexerTokenType.WHITESPACE) {
+                    continue;
+                }
+                awaitingQuoteLikeDelimiter = false;
+                inQuotedString = true;
+                quoteOpenDelimiter = token.text;
+                quoteDelimiter = switch (token.text) {
+                    case "(" -> ")";
+                    case "[" -> "]";
+                    case "{" -> "}";
+                    case "<" -> ">";
+                    default -> token.text;
+                };
+                quoteNesting = quoteOpenDelimiter.equals(quoteDelimiter) ? 0 : 1;
+                quoteEscapeNext = false;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral entering quote-like string with delimiters " + quoteOpenDelimiter + " ... " + quoteDelimiter);
+                continue;
+            }
+
+            // If we're currently scanning inside a simple quoted string, ignore all
+            // disambiguation signals until we reach the closing delimiter.
+            if (inQuotedString) {
+                if (quoteOpenDelimiter != null && !quoteOpenDelimiter.equals(quoteDelimiter)) {
+                    // Paired delimiter mode ((), {}, [], <>): track nesting.
+                    if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteOpenDelimiter)) {
+                        quoteNesting++;
+                    } else if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteDelimiter)) {
+                        quoteNesting--;
+                        if (quoteNesting <= 0) {
+                            inQuotedString = false;
+                            quoteDelimiter = null;
+                            quoteOpenDelimiter = null;
+                            quoteNesting = 0;
+                            quoteEscapeNext = false;
+                            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral leaving paired quoted string");
+                        }
+                    }
+                } else if (quoteEscapeNext) {
+                    quoteEscapeNext = false;
+                } else if (token.type == LexerTokenType.OPERATOR && token.text.equals("\\")) {
+                    quoteEscapeNext = true;
+                } else if (token.type == LexerTokenType.OPERATOR && token.text.equals(quoteDelimiter)) {
+                    // Single delimiter mode ("...", '...', `...`, /.../, etc.)
+                    inQuotedString = false;
+                    quoteDelimiter = null;
+                    quoteOpenDelimiter = null;
+                    quoteNesting = 0;
+                    quoteEscapeNext = false;
+                    if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral leaving quoted string");
+                }
+                continue;
+            }
+
+            if (token.type == LexerTokenType.IDENTIFIER
+                    && (token.text.equals("q") || token.text.equals("qq"))) {
+                // Skip quote-like payloads for q()/qq() so punctuation inside
+                // their bodies (for example ';') does not affect disambiguation.
+                awaitingQuoteLikeDelimiter = true;
+                continue;
+            }
+
+            // Enter simple quoted string scanning mode. This prevents punctuation
+            // inside string literals (for example ';' in "x; y") from being
+            // misinterpreted as block syntax at depth 1.
+            if (token.type == LexerTokenType.OPERATOR
+                    && (token.text.equals("\"") || token.text.equals("'") || token.text.equals("`"))) {
+                int prevIndex = parser.tokenIndex - 2;
+                while (prevIndex >= currentIndex
+                        && parser.tokens.get(prevIndex).type == LexerTokenType.WHITESPACE) {
+                    prevIndex--;
+                }
+                LexerToken prevToken = prevIndex >= currentIndex ? parser.tokens.get(prevIndex) : null;
+
+                // Only treat quote as opening when context suggests a string start.
+                // This avoids latching onto trailing quote tokens emitted after
+                // already-parsed quoted keys/values.
+                boolean isLikelyOpeningQuote =
+                        prevToken == null
+                                || (prevToken.type != LexerTokenType.IDENTIFIER
+                                && prevToken.type != LexerTokenType.NUMBER
+                                && prevToken.type != LexerTokenType.STRING);
+                if (!isLikelyOpeningQuote) {
+                    continue;
+                }
+
+                inQuotedString = true;
+                quoteDelimiter = token.text;
+                quoteOpenDelimiter = token.text;
+                quoteEscapeNext = false;
+                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral entering quoted string with delimiter " + token.text);
+                continue;
+            }
+
             // Track if we've seen any non-brace content
             if (!token.text.equals("}")) {
                 hasContent = true;
@@ -943,6 +1043,17 @@ public class StatementResolver {
                         hasBlockIndicator = true;
                     }
                     case "=" -> {
+                        // Some lexer paths split fat-comma `=>` into separate `=` and `>` tokens.
+                        // In that case this is a hash key/value separator, not assignment.
+                        if (parser.tokenIndex < parser.tokens.size()) {
+                            LexerToken nextToken = parser.tokens.get(parser.tokenIndex);
+                            if (nextToken.text.equals(">")) {
+                                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found = followed by > (fat comma split), treating as hash indicator");
+                                hasHashIndicator = true;
+                                break;
+                            }
+                        }
+
                         // Assign is a block indicator, but be more conservative
                         // Look at the tokens we've seen to determine if this might be a q-string pattern
                         boolean isQStringDelimiter = false;
@@ -996,7 +1107,10 @@ public class StatementResolver {
                         // Check if this is a hash key (followed by =>) or statement modifier
                         LexerToken nextToken = TokenUtils.peek(parser);
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found keyword '" + token.text + "', next token: '" + nextToken.text + "'");
-                        if (!nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
+                        // If we've already seen a fat-comma hash indicator at depth 1,
+                        // keep preferring hash interpretation. This avoids false block
+                        // classification when keyword-like words leak from quoted payload.
+                        if (!hasHashIndicator && !nextToken.text.equals("=>") && !nextToken.text.equals(",")) {
                             // Statement modifier - definitive block indicator
                             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral found statement modifier (block indicator)");
                             hasBlockIndicator = true;
