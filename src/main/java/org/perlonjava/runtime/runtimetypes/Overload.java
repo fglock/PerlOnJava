@@ -73,7 +73,7 @@ public class Overload {
         try {
             // Prepare overload context and check if object is eligible for overloading
             int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-            if (blessId < 0) {
+            if (blessId != 0) {
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {
                     // Try primary overload method
@@ -116,13 +116,13 @@ public class Overload {
             System.err.println("  Input scalar: " + runtimeScalar);
             System.err.println("  Input type: " + runtimeScalar.type);
             System.err.println("  blessId: " + blessId);
-            if (blessId < 0) {
+            if (blessId != 0) {
                 System.err.println("  Blessed as: " + NameNormalizer.getBlessStr(blessId));
             }
             System.err.flush();
         }
 
-        if (blessId < 0) {
+        if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
 
             if (TRACE_OVERLOAD) {
@@ -182,7 +182,7 @@ public class Overload {
     public static RuntimeScalar boolify(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-        if (blessId < 0) {
+        if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try primary overload method
@@ -211,7 +211,7 @@ public class Overload {
     public static RuntimeScalar bool_not(RuntimeScalar runtimeScalar) {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-        if (blessId < 0) {
+        if (blessId != 0) {
             OverloadContext ctx = OverloadContext.prepare(blessId);
             if (ctx != null) {
                 // Try primary overload method

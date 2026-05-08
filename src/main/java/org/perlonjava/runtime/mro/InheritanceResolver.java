@@ -378,7 +378,7 @@ public class InheritanceResolver {
 
             if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
                 RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                if (!codeRef.getDefinedBoolean()) {
+                if (!RuntimeCode.isCodeDefined(codeRef)) {
                     continue;
                 }
                 cacheMethod(cacheKey, codeRef);
@@ -400,7 +400,7 @@ public class InheritanceResolver {
                 String autoloadName = (effectiveClassName.endsWith("::") ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
                 if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
-                    if (autoload.getDefinedBoolean()) {
+                    if (RuntimeCode.isCodeDefined(autoload)) {
                         // Use the AUTOLOAD sub's CvSTASH (packageName) for $AUTOLOAD,
                         // not the glob's package. Perl sets $AUTOLOAD in the package
                         // where the AUTOLOAD sub was compiled, which matters for closures

@@ -261,11 +261,12 @@ public class EmitOperatorDeleteExists {
     private static void handleExistsSubroutine(EmitterVisitor emitterVisitor, String operator, OperatorNode operatorNode) {
         // exists &{"sub"}
         operatorNode.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.pushCurrentPackage();
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
                 operator + "GlobalCodeRefAsScalar",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
     }

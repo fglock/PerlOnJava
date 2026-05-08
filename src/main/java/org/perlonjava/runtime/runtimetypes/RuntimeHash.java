@@ -771,6 +771,33 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     }
 
     /**
+     * Slices the hash for {@code local @hash{...}}.
+     *
+     * <p>Unlike {@link #getSlice(RuntimeList)}, this returns key-aware proxy
+     * entries so dynamic restore can reinsert deleted keys into the parent hash.
+     *
+     * @param value The RuntimeList containing the keys to slice.
+     * @return A RuntimeList containing localized proxy entries for the keys.
+     */
+    public RuntimeList getForLocalSlice(RuntimeList value) {
+
+        if (this.type == AUTOVIVIFY_HASH) {
+            AutovivificationHash.vivify(this);
+        }
+
+        if (this.type == TIED_HASH) {
+            return getSlice(value);
+        }
+
+        RuntimeList result = new RuntimeList();
+        List<RuntimeBase> outElements = result.elements;
+        for (RuntimeScalar runtimeScalar : value) {
+            outElements.add(this.getForLocal(runtimeScalar));
+        }
+        return result;
+    }
+
+    /**
      * Key-value slice of the hash: %x{"a", "b"}
      *
      * @param value The RuntimeList containing the keys to slice.
