@@ -19,6 +19,7 @@ public class Subs extends PerlModuleBase {
     public static void initialize() {
         Subs subs = new Subs();
         try {
+            GlobalVariable.getGlobalVariable("subs::VERSION").set(new RuntimeScalar("1.04"));
             subs.registerMethod("import", "importSubs", ";$");
             subs.registerMethod("mark_overridable", "markOverridable", "$$");
         } catch (NoSuchMethodException e) {
@@ -45,7 +46,10 @@ public class Subs extends PerlModuleBase {
         for (RuntimeScalar variableObj : args.elements) {
             String variableString = variableObj.toString();
             String fullName = caller + "::" + variableString;
-            GlobalVariable.getGlobalCodeRef(fullName);
+            RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            if (codeRef.value instanceof RuntimeCode code) {
+                code.isDeclared = true;
+            }
             GlobalVariable.isSubs.put(fullName, true);
         }
 

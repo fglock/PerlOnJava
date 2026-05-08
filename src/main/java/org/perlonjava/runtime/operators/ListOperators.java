@@ -45,6 +45,9 @@ public class ListOperators {
         List<RuntimeBase> transformedElements = new ArrayList<>();
 
         RuntimeScalar saveValue = getGlobalVariable("main::_");
+        // Map results are captured by the caller after the operator returns;
+        // flushing between iterations can destroy blessed return values early.
+        boolean wasFlushing = MortalList.suppressFlush(true);
 
         try {
             // Use the outer @_ instead of an empty array
@@ -87,6 +90,7 @@ public class ListOperators {
                 return transformedList;
             }
         } finally {
+            MortalList.suppressFlush(wasFlushing);
             GlobalVariable.aliasGlobalVariable("main::_", saveValue);
             releaseEphemeralCaptures(perlMapClosure);
         }
