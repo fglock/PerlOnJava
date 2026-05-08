@@ -55,6 +55,7 @@ our @EXPORT = qw(
     WNOHANG WUNTRACED
     SEEK_CUR SEEK_END SEEK_SET
     F_OK R_OK W_OK X_OK
+    mktime strftime
 );
 our @EXPORT_OK = qw(
     # Process functions
