@@ -916,6 +916,13 @@ public class StatementResolver {
                 break; // Let caller handle EOF error
             }
 
+            // Any non-trivial token means the brace pair is not literally `{}`, even when
+            // later branches `continue` (quote-like / string skip). Without this,
+            // `{ q=bar= }` never sets hasContent and wrongly hits the empty-hashref rule.
+            if (token.type != LexerTokenType.WHITESPACE && !token.text.equals("}")) {
+                hasContent = true;
+            }
+
             if (awaitingQuoteLikeDelimiter) {
                 if (token.type == LexerTokenType.WHITESPACE) {
                     continue;
@@ -972,10 +979,27 @@ public class StatementResolver {
 
             if (token.type == LexerTokenType.IDENTIFIER
                     && (token.text.equals("q") || token.text.equals("qq"))) {
-                // Skip quote-like payloads for q()/qq() so punctuation inside
-                // their bodies (for example ';') does not affect disambiguation.
-                awaitingQuoteLikeDelimiter = true;
-                continue;
+                // Only treat as quote-like operators when a real delimiter follows.
+                // Bareword `q` / `qq` before `,` / `=>` / `;` / closing paren is not q():
+                //   { q,'bar', }  { q   => 'bar' } first line is a block; second is a hash key.
+                int peekIdx = parser.tokenIndex;
+                while (peekIdx < parser.tokens.size()
+                        && parser.tokens.get(peekIdx).type == LexerTokenType.WHITESPACE) {
+                    peekIdx++;
+                }
+                if (peekIdx < parser.tokens.size()) {
+                    String nextText = parser.tokens.get(peekIdx).text;
+                    if (nextText.equals(",") || nextText.equals("=>") || nextText.equals(";")
+                            || nextText.equals(")") || nextText.equals("}")) {
+                        // Fall through: process `q` / `qq` like any other identifier.
+                    } else {
+                        awaitingQuoteLikeDelimiter = true;
+                        continue;
+                    }
+                } else {
+                    awaitingQuoteLikeDelimiter = true;
+                    continue;
+                }
             }
 
             // Enter simple quoted string scanning mode. This prevents punctuation
@@ -1008,11 +1032,6 @@ public class StatementResolver {
                 quoteEscapeNext = false;
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral entering quoted string with delimiter " + token.text);
                 continue;
-            }
-
-            // Track if we've seen any non-brace content
-            if (!token.text.equals("}")) {
-                hasContent = true;
             }
 
             // Update brace count based on token
