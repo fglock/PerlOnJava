@@ -61,6 +61,8 @@ public class StringParser {
         int state = START;  // Initial state of the FSM
         int parenLevel = 0;  // Parenthesis nesting level
         boolean isPair = false;  // Flag to indicate if the delimiters are a pair
+        char secondBufferStartDelim = ' ';
+        char secondBufferEndDelim = ' ';
         StringBuilder buffer = new StringBuilder();  // Buffer to hold the parsed string
         StringBuilder remain = new StringBuilder();  // Buffer to hold the remaining string
         ArrayList<String> buffers = new ArrayList<>();
@@ -148,6 +150,8 @@ public class StringParser {
                                     // Restart FSM for another string
                                     buffer.append(pendingBuffer);  // Flush pending
                                     buffers.add(buffer.toString());
+                                    secondBufferStartDelim = startDelim;
+                                    secondBufferEndDelim = endDelim;
                                     buffer = new StringBuilder();
                                     pendingBuffer.setLength(0);
                                     break;  // Exit the loop to restart FSM
@@ -271,7 +275,7 @@ public class StringParser {
             }
             tokens.get(tokPos).text = remainStr;  // Put the remaining string back in the tokens list
         }
-        return new ParsedString(index, tokPos, buffers, startDelim, endDelim, ' ', ' ');
+        return new ParsedString(index, tokPos, buffers, startDelim, endDelim, secondBufferStartDelim, secondBufferEndDelim);
     }
 
     public static ParsedString parseRawStrings(Parser parser, EmitterContext ctx, List<LexerToken> tokens, int tokenIndex, int stringCount) {
@@ -804,4 +808,3 @@ public class StringParser {
         }
     }
 }
-
