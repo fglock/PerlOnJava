@@ -173,6 +173,7 @@ subtest 'Array length operations' => sub {
     
     my $aref = [10, 20, 30, 40];
     is("$#{$aref} ", "3 ", "Array reference variable last index");
+    is("^$#$aref^", "^3^", "Unbraced \$#\$aref last index (SQL::Parser style)");
 };
 
 subtest 'Escape sequences in interpolation' => sub {

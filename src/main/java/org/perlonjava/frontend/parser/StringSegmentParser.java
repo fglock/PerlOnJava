@@ -464,6 +464,27 @@ public abstract class StringSegmentParser {
                     return new OperatorNode(sigil, new OperatorNode("$", new IdentifierNode(identifier, tokenIndex), tokenIndex), tokenIndex);
                 }
             }
+            // $#$var / $#${expr} — last index of the array referenced by the scalar.
+            // Operand must be the scalar $var (not @-wrapped): JVM codegen adds @ for $# (EmitOperatorNode).
+            if ("$#".equals(sigil) && parser.tokenIndex < parser.tokens.size()) {
+                LexerToken nextTok = parser.tokens.get(parser.tokenIndex);
+                if (nextTok.text.startsWith("$")) {
+                    TokenUtils.consume(parser);
+                    if (parser.tokenIndex < parser.tokens.size()
+                            && parser.tokens.get(parser.tokenIndex).text.equals("{")) {
+                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true);
+                        return new OperatorNode("$#", scalarExpr, tokenIndex);
+                    }
+                    identifier = IdentifierParser.parseComplexIdentifier(parser);
+                    if (identifier == null || identifier.isEmpty()) {
+                        throw new PerlCompilerException(tokenIndex, "Missing identifier after $", ctx.errorUtil);
+                    }
+                    IdentifierParser.validateIdentifier(parser, identifier, startIndex);
+                    Node scalarVar =
+                            new OperatorNode("$", new IdentifierNode(identifier, tokenIndex), tokenIndex);
+                    return new OperatorNode("$#", scalarVar, tokenIndex);
+                }
+            }
             if (!"$".equals(sigil)) {
                 throw new PerlCompilerException(tokenIndex, "Missing identifier after " + sigil, ctx.errorUtil);
             }
