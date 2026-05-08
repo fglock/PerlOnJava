@@ -14,6 +14,7 @@ use warnings;
 use strict;
 
 our $VERSION = '2.038';
+our ($CR, $LF, $CRLF) = ("\015", "\012", "\015\012");
 
 XSLoader::load('Socket');
 
@@ -24,7 +25,7 @@ our @EXPORT = qw(
     pack_sockaddr_in unpack_sockaddr_in
     pack_sockaddr_in6 unpack_sockaddr_in6
     pack_sockaddr_un unpack_sockaddr_un
-    inet_aton inet_ntoa inet_pton inet_ntop getnameinfo getaddrinfo
+    inet_aton inet_ntoa inet_pton inet_ntop getnameinfo getaddrinfo get_addr_info
     sockaddr_in sockaddr_un sockaddr_family
     AF_INET AF_INET6 AF_UNIX
     PF_INET PF_INET6 PF_UNIX PF_UNSPEC
@@ -42,6 +43,7 @@ our @EXPORT = qw(
     NI_NUMERICHOST NI_NUMERICSERV NI_DGRAM
     NIx_NOHOST NIx_NOSERV
     EAI_NONAME
+    $CR $LF $CRLF
     CR LF CRLF
 );
 
@@ -50,8 +52,14 @@ our @EXPORT_OK = @EXPORT;
 our %EXPORT_TAGS = (
     all => \@EXPORT,
     DEFAULT => [qw(pack_sockaddr_in unpack_sockaddr_in inet_aton inet_ntoa)],
-    crlf => [qw(CR LF CRLF)],
+    crlf => [qw($CR $LF $CRLF CR LF CRLF)],
 );
+
+# Net::Server expects a get_addr_info symbol from Socket-like providers.
+# Perl core exposes getaddrinfo; provide an alias for compatibility.
+sub get_addr_info {
+    return getaddrinfo(@_);
+}
 
 1;
 

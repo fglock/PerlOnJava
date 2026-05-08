@@ -210,6 +210,26 @@ comment: |
 match:
   distribution: "^SHLOMIF/XML-LibXML-"
 YAML
+        'Net-Server.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for Net::Server.
+
+  Net::Server 2.018's Net::Server::Proto import-time validation only allows
+  symbols listed in @EXPORT_OK. Several helper subs used by Net::Server.pm
+  (`get_addr_info`, `safe_name_info`, `parse_info`, `object`, `ipv6_package`)
+  are defined later in the file but missing from that list, so PerlOnJava dies
+  during `use Net::Server::Proto qw[...]` with:
+
+    "<symbol> is not a valid Socket macro nor defined by Net::Server::Proto..."
+
+  Apply a tiny source patch that adds these symbols to @EXPORT_OK so import
+  works and Starman tests can proceed (with expected fork-related skips).
+match:
+  distribution: "^BBB/Net-Server-2\\.018"
+patches:
+  - "Net-Server-2.018/Proto.pm.patch"
+YAML
     );
 
     # Create prefs directory if needed
@@ -251,6 +271,22 @@ _bootstrap_prefs();
 # relative to $CPAN::Config->{patches_dir}.
 sub _bootstrap_patches {
     my $patches_dir = File::Spec->catdir($cpan_home, 'patches');
+    my $net_server_proto_patch = <<'PATCH';
+--- lib/Net/Server/Proto.pm.orig
++++ lib/Net/Server/Proto.pm
+@@ -92,6 +92,11 @@ BEGIN {
+         inet_aton
+         getaddrinfo
+         getnameinfo
++        get_addr_info
++        safe_name_info
++        parse_info
++        object
++        ipv6_package
+     ];
+
+     # Load just in time once explicitly invoked.
+PATCH
 
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
     # (or on-disk dev tree during `make`). The source is located via @INC.
@@ -259,6 +295,9 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/DBI-1.647/DBI.pm.patch' ],
         [ 'DBI-1.647/PurePerl.pm.patch',
           'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
+        [ 'Net-Server-2.018/Proto.pm.patch',
+          undef,
+          $net_server_proto_patch ],
     );
 
     # Fast path: if every target exists, skip everything.
@@ -272,9 +311,20 @@ sub _bootstrap_patches {
 
     require File::Path;
     for my $pair (@bundled) {
-        my ($rel, $src_rel) = @$pair;
+        my ($rel, $src_rel, $inline_content) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
         next if -f $dest;
+
+        my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
+        File::Path::make_path($dest_dir) unless -d $dest_dir;
+
+        if (defined $inline_content) {
+            if (open my $out, '>', $dest) {
+                print $out $inline_content;
+                close $out;
+            }
+            next;
+        }
 
         # Locate the source file in @INC (finds either jar:PERL5LIB/… at
         # runtime or src/main/perl/lib/… during make/test).
@@ -284,9 +334,6 @@ sub _bootstrap_patches {
             if (-f $candidate) { $src = $candidate; last }
         }
         next unless defined $src;
-
-        my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
-        File::Path::make_path($dest_dir) unless -d $dest_dir;
 
         # Slurp + write — the JAR resource reader is opaque to File::Copy.
         if (open my $in, '<', $src) {
