@@ -12,7 +12,7 @@ PR [#700](https://github.com/fglock/PerlOnJava/pull/700) addresses **spurious CP
 
 | Topic | Problem | Approach |
 |-------|---------|------------|
-| `Subroutine … redefined` / `Constant subroutine … redefined` | `warnings`-helper logic treated `globalWarningsEnabled` like “almost every category on”, unlike Perl’s `$^W` + `${^WARNING_BITS}` | Added `WarningFlags.ckWarnForScope()` and use it for compile-time redefine checks |
+| `Subroutine … redefined` / `Constant subroutine … redefined` | `warnings`-helper logic treated `globalWarningsEnabled` like “almost every category on”, unlike Perl’s `$^W` + `${^WARNING_BITS}` | `ckWarnForScope('redefine')` for non-constant redefine; constant redefine warns unless `no warnings 'redefine'` (even when `$^W` is 0); detect prior constant via prototype **`()`** |
 | `"my" … masks earlier declaration` | Wrong category (`redefine`) + unconditional warn in one parser path | Gate with `ckWarnForScope(..., "shadow")` |
 | `Warning: AutoSplit had to create top-level blib/lib/auto unexpectedly` | PerlOnJava MakeMaker only `mkdir -p blib/arch` before `pm_to_blib`; AutoSplit then creates `blib/lib/auto` | Emit `mkdir -p blib/lib/auto` before staging (matches typical EU::MM ordering) |
 
