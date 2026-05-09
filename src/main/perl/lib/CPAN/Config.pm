@@ -230,6 +230,34 @@ match:
 patches:
   - "Net-Server-2.018/Proto.pm.patch"
 YAML
+        'CPAN-FindDependencies.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for CPAN::FindDependencies.
+
+  CPAN::FindDependencies::MakeMaker uses fork/exec to run Makefile.PL
+  under a timeout while capturing output. PerlOnJava has no fork(), so
+  the helper either emits a TAP skip before tests run or execs Makefile.PL
+  in place and loses the parent process. Patch the helper to use a timed
+  subprocess when running under jperl.
+match:
+  distribution: "^DCANTRELL/CPAN-FindDependencies-3\\.13"
+patches:
+  - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"
+YAML
+    );
+    my %bundled_dd = (
+        'CPAN-FindDependencies.dd' => <<'DD',
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for CPAN::FindDependencies. Patch MakeMaker helper to avoid fork() under jperl.',
+  'match' => {
+    'distribution' => '^DCANTRELL/CPAN-FindDependencies-3\\.13'
+  },
+  'patches' => [
+    'CPAN-FindDependencies-3.13/MakeMaker.pm.patch'
+  ]
+};
+DD
     );
 
     # Create prefs directory if needed
@@ -253,6 +281,20 @@ YAML
         }
         if (open my $fh, '>', $dest) {
             print $fh $bundled{$file};
+            close $fh;
+        }
+    }
+    for my $file (keys %bundled_dd) {
+        my $dest = File::Spec->catfile($prefs_dir, $file);
+        if (-f $dest) {
+            open my $rfh, '<', $dest or next;
+            my $existing = do { local $/; <$rfh> };
+            close $rfh;
+            next unless $existing =~ /PerlOnJava/;
+            next if $existing eq $bundled_dd{$file};
+        }
+        if (open my $fh, '>', $dest) {
+            print $fh $bundled_dd{$file};
             close $fh;
         }
     }
@@ -287,6 +329,39 @@ sub _bootstrap_patches {
 
      # Load just in time once explicitly invoked.
 PATCH
+    my $cpan_finddeps_makemaker_patch = <<'PATCH';
+--- lib/CPAN/FindDependencies/MakeMaker.pm.orig
++++ lib/CPAN/FindDependencies/MakeMaker.pm
+@@ -61,6 +61,28 @@ sub getreqs_from_mm {
+             return "Makefile.PL didn't finish in a reasonable time\n";
+         }
+     } else {
++        if ($Config{perlpath} =~ /(?:^|[\/\\])jperl(?:\.bat)?$/) {
++            my @cmd = ($Config{perlpath}, 'Makefile.PL');
++            unshift(@cmd, 'timeout', '10') unless $^O eq 'MSWin32';
++            my $status;
++            eval { capture { $status = system(@cmd); } };
++            if ($@) {
++                chdir($cwd);
++                return $@;
++            }
++
++            my $exit = defined($status) ? ($status >> 8) : -1;
++            if ($exit == 124) {
++                chdir($cwd);
++                return "Makefile.PL didn't finish in a reasonable time\n";
++            }
++
++            open($MKFH, 'Makefile') || warn "Can't read Makefile\n";
++            my $makefile_str = <$MKFH>;
++            close($MKFH);
++            chdir($cwd);
++            return _parse_makefile( $makefile_str );
++        }
+         # execute, suppressing noise ...
+         eval { capture {
+             if(my $pid = fork()) { # parent
+PATCH
 
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
     # (or on-disk dev tree during `make`). The source is located via @INC.
@@ -298,14 +373,23 @@ PATCH
         [ 'Net-Server-2.018/Proto.pm.patch',
           undef,
           $net_server_proto_patch ],
+        [ 'CPAN-FindDependencies-3.13/MakeMaker.pm.patch',
+          undef,
+          $cpan_finddeps_makemaker_patch ],
     );
 
-    # Fast path: if every target exists, skip everything.
+    # Fast path: if every target exists and inline targets are current, skip everything.
     my $needs_write = 0;
     for my $pair (@bundled) {
-        my ($rel, undef) = @$pair;
+        my ($rel, undef, $inline_content) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
         unless (-f $dest) { $needs_write = 1; last }
+        if (defined $inline_content) {
+            open my $in, '<', $dest or do { $needs_write = 1; last };
+            my $existing = do { local $/; <$in> };
+            close $in;
+            if ($existing ne $inline_content) { $needs_write = 1; last }
+        }
     }
     return unless $needs_write;
 
@@ -313,18 +397,24 @@ PATCH
     for my $pair (@bundled) {
         my ($rel, $src_rel, $inline_content) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
-        next if -f $dest;
-
         my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
         File::Path::make_path($dest_dir) unless -d $dest_dir;
 
         if (defined $inline_content) {
+            if (-f $dest) {
+                open my $in, '<', $dest or next;
+                my $existing = do { local $/; <$in> };
+                close $in;
+                next if $existing eq $inline_content;
+            }
             if (open my $out, '>', $dest) {
                 print $out $inline_content;
                 close $out;
             }
             next;
         }
+
+        next if -f $dest;
 
         # Locate the source file in @INC (finds either jar:PERL5LIB/… at
         # runtime or src/main/perl/lib/… during make/test).

@@ -43,6 +43,28 @@ our @EXPORT_OK = ( map { @$_ } values %EXPORT_TAGS );
 $EXPORT_TAGS{'all'} = [ @EXPORT_OK ];
 our @EXPORT = qw();
 
+package Compress::Bzip2::bzFile;
+
+sub read {
+    my $self = $_[0];
+    my $size = $_[2];
+    $size = 4096 unless defined $size;
+    my $n = $self->bzread($_[1], $size);
+    return undef if !defined($n) || $n < 0;
+    return $n;
+}
+
+sub close {
+    my $self = shift;
+    return $self->bzclose == 0;
+}
+
+sub print {
+    my $self = shift;
+    my $data = join '', @_;
+    return $self->bzwrite($data) == length($data);
+}
+
 1;
 
 __END__
