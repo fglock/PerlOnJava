@@ -138,17 +138,20 @@ public class CoreOperatorResolver {
         String operator = token.text;
         String fq = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
 
+        String coreProto = CORE_PROTOTYPES.get(operator);
         boolean packageSubOverrides = false;
-        String prototype = CORE_PROTOTYPES.get(operator);
+        String prototype = coreProto;
 
-        // A defined subroutine in the current package shadows CORE for compile-time
-        // prototype checking only when:
-        // (1) Perl has a CORE keyword with that name (CORE_PROTOTYPES contains it),
-        // (2) the package CV has an explicit prototype (e.g. Net::hostent's
-        //     gethostbyaddr ($;$) vs CORE's $$).
-        // Without (1), names like Exporter::export or constants like IS_WIN32 would
-        // wrongly go through this path when they carry an empty prototype "()", etc.
-        if (CORE_PROTOTYPES.containsKey(operator)
+        // Shadow CORE's compile-time prototype only for builtins that *have* a CORE
+        // prototype string (e.g. gethostbyaddr $$). Keywords listed under CORE_PROTOTYPES
+        // with a null entry (INIT, chomp, delete, …) are parsed/styled specially; a
+        // package subroutine or constant with the same name (use constant INIT => 5; sub
+        // INIT { }) must still resolve via SubroutineParser, not as OperatorNode — otherwise
+        // we emit bogus core ops ("INIT doesn't have JVM descriptor").
+        //
+        // When coreProto != null, a defined package CV with an explicit prototype overrides
+        // arity checking (Net::hostent gethostbyaddr ($;$) vs CORE $$).
+        if (coreProto != null
                 && GlobalVariable.existsGlobalCodeRef(fq)) {
             RuntimeScalar ref = GlobalVariable.getGlobalCodeRef(fq);
             if (ref.type == RuntimeScalarType.CODE && ref.value instanceof RuntimeCode code && code.defined()
@@ -158,8 +161,7 @@ public class CoreOperatorResolver {
             }
         }
 
-        boolean coreUsesPrototypeParsing =
-                CORE_PROTOTYPES.containsKey(operator) && CORE_PROTOTYPES.get(operator) != null;
+        boolean coreUsesPrototypeParsing = coreProto != null;
         if (!packageSubOverrides && !coreUsesPrototypeParsing) {
             return null;
         }
