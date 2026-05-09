@@ -523,61 +523,23 @@ public class ModuleOperators {
                     // Check if this @INC entry is a CODE reference, ARRAY reference, or blessed object
                     if (isHook) {
 
-                        RuntimeBase hookResult = tryIncHook(dirScalar, fileName);
+                        RuntimeList hookResult = tryIncHook(dirScalar, fileName);
                         if (hookResult != null) {
-                            // Hook returned something useful
-                            RuntimeScalar hookResultScalar = hookResult.scalar();
-
-                            // Check if it's a filehandle (GLOB), array ref with filehandle, or scalar ref with code
-                            RuntimeScalar filehandle = null;
-
-                            if (hookResultScalar.type == RuntimeScalarType.GLOB ||
-                                    hookResultScalar.type == RuntimeScalarType.GLOBREFERENCE) {
-                                filehandle = hookResultScalar;
-                            } else if (hookResultScalar.type == RuntimeScalarType.REFERENCE) {
-                                // Hook returned a scalar reference - treat the dereferenced value as code
-                                RuntimeScalar derefValue = hookResultScalar.scalarDeref();
-                                code = derefValue.toString();
-                                actualFileName = fileName;
-                                incHookRef = dirScalar;
-                                break;
-                            } else if (hookResultScalar.type == RuntimeScalarType.ARRAYREFERENCE &&
-                                    hookResultScalar.value instanceof RuntimeArray resultArray) {
-                                if (resultArray.size() > 0) {
-                                    RuntimeScalar firstElem = resultArray.get(0);
-                                    if (firstElem.type == RuntimeScalarType.GLOB ||
-                                            firstElem.type == RuntimeScalarType.GLOBREFERENCE) {
-                                        filehandle = firstElem;
-                                    }
+                            IncHookSource hookSource;
+                            try {
+                                hookSource = readIncHookSource(hookResult);
+                            } catch (PerlExitException e) {
+                                throw e;
+                            } catch (Throwable t) {
+                                if (isRequire && setINC) {
+                                    getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
                                 }
+                                GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
+                                return new RuntimeScalar();
                             }
-
-                            if (filehandle != null) {
-                                // Read content from the filehandle using the same method as STEP 4
-                                try {
-                                    code = Readline.readline(filehandle, RuntimeContextType.LIST).toString();
-                                    actualFileName = fileName;
-                                    incHookRef = dirScalar;
-                                    break;
-                                } catch (Exception e) {
-                                    // Continue to next @INC entry
-                                }
-                            } else if (hookResultScalar.type == RuntimeScalarType.CODE) {
-                                // Hook returned a CODE reference (line-reader sub)
-                                // Perl calls this repeatedly; the sub sets $_ to each line
-                                // and returns true for more data, false to stop
-                                RuntimeCode lineReader = (RuntimeCode) hookResultScalar.value;
-                                RuntimeScalar dollarUnderscore = GlobalVariable.getGlobalVariable("main::_");
-                                StringBuilder codeBuilder = new StringBuilder();
-                                while (true) {
-                                    RuntimeArray readerArgs = new RuntimeArray();
-                                    RuntimeBase result = lineReader.apply(readerArgs, RuntimeContextType.SCALAR);
-                                    if (result == null || !result.scalar().getBoolean()) {
-                                        break;
-                                    }
-                                    codeBuilder.append(dollarUnderscore.toString()).append("\n");
-                                }
-                                code = codeBuilder.toString();
+                            if (hookSource != null) {
+                                code = hookSource.code;
+                                shouldApplyFilters = shouldApplyFilters || hookSource.applySourceFilters;
                                 actualFileName = fileName;
                                 incHookRef = dirScalar;
                                 break;
@@ -985,16 +947,18 @@ public class ModuleOperators {
      *
      * <p>The hook can return:
      * <ul>
-     *   <li>undef: this hook can't handle it, continue to next @INC entry</li>
-     *   <li>A filehandle: read the module code from this filehandle</li>
-     *   <li>An array ref [$fh, \&filter, state...]: filehandle with optional filter and state</li>
+     *   <li>empty list or undef: this hook can't handle it, continue to next @INC entry</li>
+     *   <li>a scalar reference containing source to prepend</li>
+     *   <li>a filehandle to read</li>
+     *   <li>a code reference that generates lines or filters filehandle lines</li>
+     *   <li>optional state passed to the code reference as $_[1]</li>
      * </ul>
      *
      * @param hook     The @INC hook (CODE, ARRAY, or blessed reference)
      * @param fileName The file name being required
-     * @return The result from the hook (undef, filehandle, or array ref), or null if hook can't be called
+     * @return The list returned by the hook, or null if hook can't handle this file
      */
-    private static RuntimeBase tryIncHook(RuntimeScalar hook, String fileName) {
+    private static RuntimeList tryIncHook(RuntimeScalar hook, String fileName) {
         RuntimeCode codeRef = null;
         RuntimeScalar selfArg = hook;
 
@@ -1057,13 +1021,189 @@ public class ModuleOperators {
 
         // Call the hook - if it throws an exception, propagate it
         // This matches Perl's behavior where die() in an @INC hook stops require
-        RuntimeBase result = codeRef.apply(args, RuntimeContextType.SCALAR);
+        RuntimeList result = codeRef.apply(args, RuntimeContextType.LIST);
 
-        // If result is undef, return null to continue to next @INC entry
-        if (result == null || !result.scalar().defined().getBoolean()) {
+        // If result is empty or undef, return null to continue to next @INC entry
+        if (result == null || result.isEmpty()
+                || (result.size() == 1 && !result.scalar().defined().getBoolean())) {
             return null;
         }
 
         return result;
+    }
+
+    private static class IncHookSource {
+        final String code;
+        final boolean applySourceFilters;
+
+        IncHookSource(String code, boolean applySourceFilters) {
+            this.code = code;
+            this.applySourceFilters = applySourceFilters;
+        }
+    }
+
+    private static IncHookSource readIncHookSource(RuntimeList hookResult) {
+        if (hookResult == null || hookResult.isEmpty()) {
+            return null;
+        }
+
+        // Keep compatibility with older internal handling that accepted an
+        // array ref from hooks, while the documented Perl API returns a list.
+        if (hookResult.size() == 1) {
+            RuntimeScalar scalar = hookResult.scalar();
+            if (scalar.type == RuntimeScalarType.ARRAYREFERENCE
+                    && scalar.value instanceof RuntimeArray array) {
+                return readIncHookSource(array);
+            }
+        }
+
+        return readIncHookSource(new IncHookValues(hookResult));
+    }
+
+    private static IncHookSource readIncHookSource(RuntimeArray hookResult) {
+        if (hookResult == null || hookResult.size() == 0) {
+            return null;
+        }
+
+        return readIncHookSource(new IncHookValues(hookResult));
+    }
+
+    private static IncHookSource readIncHookSource(IncHookValues values) {
+        StringBuilder prefix = new StringBuilder();
+        RuntimeScalar filehandle = null;
+        RuntimeCode sourceSub = null;
+        RuntimeScalar state = null;
+
+        RuntimeScalar first = values.get(0);
+        if (first == null || !first.defined().getBoolean()) {
+            return null;
+        }
+
+        if (isFilehandle(first)) {
+            filehandle = first;
+        } else if (first.type == RuntimeScalarType.REFERENCE) {
+            RuntimeScalar deref = first.scalarDeref();
+            if (deref != null) {
+                prefix.append(deref);
+            }
+        } else if (first.type == RuntimeScalarType.CODE) {
+            sourceSub = (RuntimeCode) first.value;
+        } else {
+            return null;
+        }
+
+        RuntimeScalar second = values.get(1);
+        if (second != null && isFilehandle(second)) {
+            filehandle = second;
+        }
+
+        RuntimeScalar third = values.get(2);
+        if (third != null && third.type == RuntimeScalarType.CODE) {
+            sourceSub = (RuntimeCode) third.value;
+        }
+
+        state = values.get(3);
+
+        if (filehandle != null) {
+            String body = readIncHookFilehandle(filehandle, sourceSub, state);
+            return new IncHookSource(prefix + body, true);
+        }
+
+        if (sourceSub != null) {
+            return new IncHookSource(prefix + readIncHookGenerator(sourceSub, state), true);
+        }
+
+        if (!prefix.isEmpty()) {
+            return new IncHookSource(prefix.toString(), true);
+        }
+
+        return null;
+    }
+
+    private static String readIncHookFilehandle(RuntimeScalar filehandle, RuntimeCode filterSub, RuntimeScalar state) {
+        if (filterSub == null) {
+            return Readline.readline(filehandle, RuntimeContextType.LIST).toString();
+        }
+
+        StringBuilder codeBuilder = new StringBuilder();
+        RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+        try {
+            RuntimeBase lineBase;
+            while ((lineBase = Readline.readline(filehandle, RuntimeContextType.SCALAR)) != null) {
+                RuntimeScalar line = lineBase.scalar();
+                if (line.type == RuntimeScalarType.UNDEF) {
+                    break;
+                }
+
+                GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(line.toString()));
+                RuntimeBase result = filterSub.apply(incHookFilterArgs(state), RuntimeContextType.SCALAR);
+                if (result != null && result.scalar().defined().getBoolean()
+                        && !result.scalar().getBoolean()) {
+                    break;
+                }
+                codeBuilder.append(GlobalVariable.getGlobalVariable("main::_"));
+            }
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
+        }
+        return codeBuilder.toString();
+    }
+
+    private static String readIncHookGenerator(RuntimeCode sourceSub, RuntimeScalar state) {
+        StringBuilder codeBuilder = new StringBuilder();
+        RuntimeScalar savedDefaultVar = GlobalVariable.getGlobalVariable("main::_");
+        try {
+            while (true) {
+                GlobalVariable.aliasGlobalVariable("main::_", new RuntimeScalar(""));
+                RuntimeBase result = sourceSub.apply(incHookFilterArgs(state), RuntimeContextType.SCALAR);
+                if (result == null || !result.scalar().getBoolean()) {
+                    break;
+                }
+                String line = GlobalVariable.getGlobalVariable("main::_").toString();
+                codeBuilder.append(line);
+                if (!line.endsWith("\n")) {
+                    codeBuilder.append("\n");
+                }
+            }
+        } finally {
+            GlobalVariable.aliasGlobalVariable("main::_", savedDefaultVar);
+        }
+        return codeBuilder.toString();
+    }
+
+    private static RuntimeArray incHookFilterArgs(RuntimeScalar state) {
+        RuntimeArray args = new RuntimeArray();
+        args.push(new RuntimeScalar(0));
+        if (state != null) {
+            args.push(state);
+        }
+        return args;
+    }
+
+    private static boolean isFilehandle(RuntimeScalar scalar) {
+        return scalar.type == RuntimeScalarType.GLOB
+                || scalar.type == RuntimeScalarType.GLOBREFERENCE;
+    }
+
+    private static class IncHookValues {
+        private final RuntimeList list;
+        private final RuntimeArray array;
+
+        IncHookValues(RuntimeList list) {
+            this.list = list;
+            this.array = null;
+        }
+
+        IncHookValues(RuntimeArray array) {
+            this.list = null;
+            this.array = array;
+        }
+
+        RuntimeScalar get(int index) {
+            if (list != null) {
+                return index < list.size() ? list.elements.get(index).scalar() : null;
+            }
+            return index < array.size() ? array.get(index) : null;
+        }
     }
 }

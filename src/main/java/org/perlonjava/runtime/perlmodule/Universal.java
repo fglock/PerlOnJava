@@ -183,13 +183,13 @@ public class Universal extends PerlModuleBase {
         String normalizedName = NameNormalizer.normalizeVariableName(methodName, perlClassName);
         if (GlobalVariable.existsGlobalCodeRef(normalizedName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedName);
-            if (codeRef.getDefinedBoolean()) {
+            if (codeRef.value instanceof RuntimeCode rc && rc.isDeclared) {
                 return codeRef.getList();
             }
-            // Forward declarations (sub foo;) should be visible to can()
-            // even though defined(&foo) returns false.
-            // Perl 5: can() returns a code ref for forward-declared subs.
-            if (codeRef.value instanceof RuntimeCode rc && rc.isDeclared) {
+            if (codeRef.value instanceof RuntimeCode rc && rc.defined()) {
+                return codeRef.getList();
+            }
+            if (!(codeRef.value instanceof RuntimeCode) && codeRef.getDefinedBoolean()) {
                 return codeRef.getList();
             }
         }

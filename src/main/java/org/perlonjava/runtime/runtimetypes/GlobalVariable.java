@@ -39,6 +39,9 @@ public class GlobalVariable {
     // and should survive stash deletion. This matches Perl's behavior where
     // compiled bytecode holds direct references to CVs that survive stash deletion.
     private static final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
+    private static final Set<String> deletedCodeRefPins = new HashSet<>();
+    private static final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
+    private static int nextCompiledCodeRefId = 1;
 
     // Stash aliasing: `*{Dst::} = *{Src::}` effectively makes Dst:: symbol table
     // behave like Src:: for method lookup and stash operations.
@@ -124,6 +127,9 @@ public class GlobalVariable {
         globalHashes.clear();
         globalCodeRefs.clear();
         pinnedCodeRefs.clear();
+        deletedCodeRefPins.clear();
+        compiledCodeRefs.clear();
+        nextCompiledCodeRefId = 1;
         globalIORefs.clear();
         globalFormatRefs.clear();
         globalGlobs.clear();
@@ -649,43 +655,79 @@ public class GlobalVariable {
                 }
             }
         }
-        // First check if we have a pinned reference that survives stash deletion
+        // First check if we have a pinned reference that survives stash deletion.
+        // Runtime lookups emitted into already-compiled code use this path so
+        // those call sites keep their original CV even after delete $Pkg::{sub}.
         RuntimeScalar pinned = pinnedCodeRefs.get(key);
         if (pinned != null) {
-            // Return the pinned ref so compiled code keeps working, but do NOT
-            // re-add to globalCodeRefs. If it was deleted from the stash (e.g., by
-            // namespace::clean), that deletion should be respected for method
-            // resolution via can() and the inheritance hierarchy.
             return pinned;
         }
 
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
-            var = new RuntimeScalar();
-            var.type = RuntimeScalarType.CODE;  // value is null
-            RuntimeCode runtimeCode = new RuntimeCode((String) null, null);
-
-            // Parse the key to extract package and subroutine names
-            // key format is typically "Package::SubroutineName"
-            int lastColonIndex = key.lastIndexOf("::");
-            if (lastColonIndex > 0) {
-                runtimeCode.packageName = key.substring(0, lastColonIndex);
-                runtimeCode.subName = key.substring(lastColonIndex + 2);
-            } else {
-                runtimeCode.packageName = "main";
-                runtimeCode.subName = key;
-            }
-
-            // Note: We don't set isSymbolicReference here by default
-            // It will be set specifically for \&{string} patterns in createCodeReference
-
-            var.value = runtimeCode;
+            var = createEmptyCodeRef(key);
             globalCodeRefs.put(key, var);
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
         pinnedCodeRefs.put(key, var);
 
+        return var;
+    }
+
+    private static RuntimeScalar createEmptyCodeRef(String key) {
+        RuntimeScalar var = new RuntimeScalar();
+        var.type = RuntimeScalarType.CODE;  // value is null
+        RuntimeCode runtimeCode = new RuntimeCode((String) null, null);
+
+        // Parse the key to extract package and subroutine names
+        // key format is typically "Package::SubroutineName"
+        int lastColonIndex = key.lastIndexOf("::");
+        if (lastColonIndex > 0) {
+            runtimeCode.packageName = key.substring(0, lastColonIndex);
+            runtimeCode.subName = key.substring(lastColonIndex + 2);
+        } else {
+            runtimeCode.packageName = "main";
+            runtimeCode.subName = key;
+        }
+
+        // Note: We don't set isSymbolicReference here by default
+        // It will be set specifically for \&{string} patterns in createCodeReference
+
+        var.value = runtimeCode;
+        return var;
+    }
+
+    /**
+     * Looks up a CODE slot for newly compiled/eval'd code. Unlike
+     * getGlobalCodeRef(), this must not resurrect an old pinned CV after
+     * delete $Pkg::{sub}; it should see the currently visible stash.
+     */
+    public static RuntimeScalar getGlobalCodeRefForFreshLookup(String key) {
+        if (key == null) {
+            return new RuntimeScalar();
+        }
+        if (!stashAliases.isEmpty()) {
+            String resolvedKey = resolveAliasedFqn(key);
+            if (resolvedKey != key) {
+                RuntimeScalar resolvedVar = globalCodeRefs.get(resolvedKey);
+                if (resolvedVar != null) {
+                    if (!deletedCodeRefPins.contains(resolvedKey)) {
+                        pinnedCodeRefs.put(resolvedKey, resolvedVar);
+                    }
+                    return resolvedVar;
+                }
+            }
+        }
+
+        RuntimeScalar var = globalCodeRefs.get(key);
+        if (var == null) {
+            var = createEmptyCodeRef(key);
+            globalCodeRefs.put(key, var);
+        }
+        if (!deletedCodeRefPins.contains(key)) {
+            pinnedCodeRefs.put(key, var);
+        }
         return var;
     }
 
@@ -702,12 +744,42 @@ public class GlobalVariable {
         // For defines, always resolve through stash aliases: `*Dst:: = *Src::`
         // followed by `sub Dst::foo {}` should install the sub in Src::foo.
         String resolvedKey = resolveAliasedFqn(key);
-        RuntimeScalar ref = getGlobalCodeRef(resolvedKey);
+        RuntimeScalar ref = globalCodeRefs.get(resolvedKey);
+        if (ref == null) {
+            RuntimeScalar pinned = pinnedCodeRefs.get(resolvedKey);
+            if (pinned != null
+                    && pinned.type == RuntimeScalarType.CODE
+                    && pinned.value instanceof RuntimeCode pinnedCode
+                    && !pinnedCode.defined()) {
+                // A parser/compiler lookup may have created an undefined CV
+                // placeholder before a later compile-time import installs the
+                // real sub. Fill that placeholder so already-compiled call
+                // sites keep the CV even if a following `no Module` deletes
+                // the visible stash entry before runtime.
+                ref = pinned;
+                globalCodeRefs.put(resolvedKey, ref);
+            } else {
+                ref = getGlobalCodeRefForFreshLookup(resolvedKey);
+            }
+        }
         // Ensure it's in globalCodeRefs so method resolution finds it
         if (!globalCodeRefs.containsKey(resolvedKey)) {
             globalCodeRefs.put(resolvedKey, ref);
         }
+        deletedCodeRefPins.remove(resolvedKey);
+        pinnedCodeRefs.put(resolvedKey, ref);
         return ref;
+    }
+
+    public static synchronized int registerCompiledCodeRef(RuntimeScalar ref) {
+        int id = nextCompiledCodeRefId++;
+        compiledCodeRefs.put(id, ref);
+        return id;
+    }
+
+    public static RuntimeScalar getCompiledCodeRef(int id) {
+        RuntimeScalar ref = compiledCodeRefs.get(id);
+        return ref != null ? ref : new RuntimeScalar();
     }
 
     /**
@@ -780,6 +852,15 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
+        // Handle values that are already CODE/GLOB scalars before falling back
+        // to package-relative symbolic name lookup.
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return existsGlobalCodeRefAsScalar(glob.globName);
+        }
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            return (runtimeCode.defined() || runtimeCode.isDeclared) ? scalarTrue : scalarFalse;
+        }
+
         // Use proper package name resolution like createCodeReference
         String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
         return existsGlobalCodeRefAsScalar(name);
@@ -824,6 +905,16 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar definedGlobalCodeRefAsScalar(RuntimeScalar key, String packageName) {
+        // Handle values that are already CODE/GLOB scalars before falling back
+        // to package-relative symbolic name lookup. This covers `defined &$coderef`,
+        // where the parser passes the CODE scalar rather than a symbolic name.
+        if (key.type == RuntimeScalarType.GLOB && key.value instanceof RuntimeGlob glob) {
+            return definedGlobalCodeRefAsScalar(glob.globName);
+        }
+        if (key.type == RuntimeScalarType.CODE && key.value instanceof RuntimeCode runtimeCode) {
+            return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
+
         // Use proper package name resolution like createCodeReference
         String name = NameNormalizer.normalizeVariableName(key.toString(), packageName);
 
@@ -833,14 +924,23 @@ public class GlobalVariable {
     }
 
 
-    public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
+    public static RuntimeScalar removeGlobalCodeRefForStashDelete(String key) {
         RuntimeScalar deleted = globalCodeRefs.remove(key);
+        if (deleted != null || pinnedCodeRefs.containsKey(key)) {
+            deletedCodeRefPins.add(key);
+            clearPackageCache();
+        }
         // Decrement stashRefCount on the removed CODE ref
         if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {
             if (removedCode.stashRefCount > 0) {
                 removedCode.stashRefCount--;
             }
         }
+        return deleted;
+    }
+
+    public static RuntimeScalar deleteGlobalCodeRefAsScalar(String key) {
+        RuntimeScalar deleted = removeGlobalCodeRefForStashDelete(key);
         return deleted != null ? deleted : scalarFalse;
     }
 
@@ -872,6 +972,7 @@ public class GlobalVariable {
      */
     public static void clearPinnedCodeRefsForNamespace(String prefix) {
         pinnedCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        deletedCodeRefPins.removeIf(k -> k.startsWith(prefix));
     }
 
     /**

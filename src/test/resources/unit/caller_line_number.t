@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 10;
 
 # Test caller() returns correct line numbers, especially for deeper stack frames.
 # This tests the fix for the bug where caller($level) with level > 1 returned
@@ -82,5 +82,24 @@ ok($result3 < $approx_file_end - 20,
 # Test 8: Verify the line numbers are reasonable (not 0 or negative)
 ok($result3 > 0 && $result3 < 100, 
    "caller(2) line ($result3) is a reasonable positive number");
+
+sub multiline_direct_caller { return (caller(0))[2]; }
+my $expected_line_9 = __LINE__ + 3;
+my $result9 = multiline_direct_caller(
+    sub { 1 }
+);
+is($result9, $expected_line_9, "caller(0) reports closing line for multiline direct call");
+
+{
+    package CallerLineNumber::Obj;
+    sub new { bless {}, shift }
+    sub multiline_method_caller { return (caller(0))[2]; }
+}
+
+my $expected_line_10 = __LINE__ + 3;
+my $result10 = CallerLineNumber::Obj->new->multiline_method_caller(
+    sub { 1 }
+);
+is($result10, $expected_line_10, "caller(0) reports closing line for multiline method call");
 
 # End of tests

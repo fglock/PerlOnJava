@@ -11,9 +11,11 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -523,7 +525,19 @@ public class EmitSubroutine {
             }
         }
 
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
+        if (node.left instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("&")
+                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+            int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
+            mv.visitLdcInsn(codeRefId);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getCompiledCodeRef",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
+        }
 
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)
@@ -710,11 +724,14 @@ public class EmitSubroutine {
             }
         }
 
-        // Set debug line number to the call site (the function name/reference expression),
-        // so that caller() inside the called subroutine reports the correct source line.
-        // Without this, the JVM frame reports the line of the closing ')' instead.
-        if (node.left != null && node.left.getIndex() > 0) {
-            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+        // Set debug line number to the call site. Perl reports the line where a
+        // multi-line call expression completes, not the line containing the
+        // function name. The argument ListNode is indexed at the closing token.
+        int callSiteIndex = node.right != null && node.right.getIndex() > 0
+                ? node.right.getIndex()
+                : (node.getIndex() > 0 ? node.getIndex() : (node.left != null ? node.left.getIndex() : -1));
+        if (callSiteIndex > 0) {
+            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
 
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);

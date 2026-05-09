@@ -128,7 +128,11 @@ sub _method_check {
             $methods{meta} = 1
                 if $meta->isa('Moose::Meta::Role')
                 && eval { Moose->VERSION } < 0.90;
-            return sub { $_[0] =~ /^\(/ || $methods{$_[0]} };
+            return sub {
+                return 1 if $_[0] =~ /^\(/ || $methods{$_[0]};
+                return 1 if $constant::declared{"${package}::$_[0]"};
+                return 0;
+            };
         }
     }
 
@@ -142,6 +146,7 @@ sub _method_check {
 
         my $coderef = do { no strict 'refs'; \&{"${package}::$_[0]"} };
         my $fullname = Sub::Util::subname($coderef);
+        return 1 if $constant::declared{"${package}::$_[0]"};
         return 1 unless defined $fullname;  # Can't determine origin, keep it
 
         my ($code_stash) = $fullname =~ /\A(.*)::/s;

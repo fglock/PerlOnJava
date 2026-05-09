@@ -2287,10 +2287,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar undefine() {
         // Special handling for CODE type - don't set the ref to undef,
-        // just clear the code from the global symbol table
+        // just clear the code from the global symbol table.
+        //
+        // Do not release closure captures unconditionally here. CODE refs can
+        // be copied into another lexical/container while a temporary argument
+        // scalar is later undef'd; releasing captures from that temporary would
+        // make the still-live callback forget the variables it closed over.
+        // Captures are released when the CODE object's counted references
+        // truly reach zero.
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code) {
-            // Release captured variables before discarding this CODE ref
-            code.releaseCaptures();
+            if (this.refCountOwned && code.refCount > 0) {
+                this.refCountOwned = false;
+                code.releaseActiveOwner(this);
+                if (--code.refCount == 0) {
+                    code.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(code);
+                }
+            }
             // Clear the code value but keep the type as CODE
             this.value = new RuntimeCode((String) null, null);
             // Invalidate the method resolution cache

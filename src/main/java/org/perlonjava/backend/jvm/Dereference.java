@@ -971,11 +971,21 @@ public class Dereference {
 
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId++;
-            // Set debug line number to the call site (the object/receiver expression),
-            // so that caller() inside the called method reports the correct source line.
-            // Without this, the JVM frame reports the line of the closing ')' instead.
-            if (node.left.getIndex() > 0) {
-                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
+            // Set debug line number to the whole method call. Perl's caller()
+            // reports the closing line for a multi-line call expression, which
+            // is carried by the "->" node or its argument ListNode.
+            int callSiteIndex = node.getIndex();
+            if (node.right instanceof BinaryOperatorNode callNode
+                    && "(".equals(callNode.operator)
+                    && callNode.right != null
+                    && callNode.right.getIndex() > 0) {
+                callSiteIndex = callNode.right.getIndex();
+            }
+            if (callSiteIndex <= 0 && node.left.getIndex() > 0) {
+                callSiteIndex = node.left.getIndex();
+            }
+            if (callSiteIndex > 0) {
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
             }
 
             mv.visitLdcInsn(callsiteId);

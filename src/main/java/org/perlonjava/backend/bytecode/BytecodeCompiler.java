@@ -4544,7 +4544,10 @@ public class BytecodeCompiler implements Visitor {
                 // Cache the RuntimeScalar code reference at compile time.
                 // This matches Perl's behavior where the CV (code value) is cached
                 // in the compiled bytecode, surviving stash entry deletion.
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
+                Object parseTimeCodeRef = node.getAnnotation("parseTimeCodeRef");
+                RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
+                        ? runtimeScalar
+                        : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
 
                 // Allocate register and load from constant pool
                 int rd = allocateOutputRegister();
@@ -4558,7 +4561,7 @@ public class BytecodeCompiler implements Visitor {
             } else if (node.operand instanceof StringNode strNode) {
                 // Symbolic ref: &{'name'} — look up global code reference by string name
                 String globalName = NameNormalizer.normalizeVariableName(strNode.value, getCurrentPackage());
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(globalName);
+                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(globalName);
                 int rd = allocateOutputRegister();
                 int constIdx = addToConstantPool(codeRef);
                 emit(Opcodes.LOAD_CONST);
@@ -4597,7 +4600,10 @@ public class BytecodeCompiler implements Visitor {
                         // loading, so defined(\&Name) returns true
                         String subName = NameNormalizer.normalizeVariableName(
                                 idNode.name, getCurrentPackage());
-                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
+                        Object parseTimeCodeRef = operandOp.getAnnotation("parseTimeCodeRef");
+                        RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
+                                ? runtimeScalar
+                                : GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                         if (codeRef.type == RuntimeScalarType.CODE
                                 && codeRef.value instanceof RuntimeCode rc) {
                             rc.isSymbolicReference = true;

@@ -588,55 +588,53 @@ public class MortalList {
         return flushReachableCache.contains(base);
     }
 
+    private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
+        if (base.refCount > 0) {
+            base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
+        }
+        if (base.refCount > 0 && --base.refCount == 0) {
+            if (base.localBindingExists) {
+                // Named container: local variable may still exist. Skip callDestroy.
+                // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                //
+                // Do NOT clear weak refs here for normal flush paths:
+                // localBindingExists=true means the container is still alive via
+                // its lexical slot. Test op/hashassign.t 218 (bug #76716,
+                // "undef %hash should not zap weak refs") requires that
+                // `is $p, \%tb; undef %tb;` does not zap the weak ref $p to %tb.
+                if (clearWeakRefsForLocalBinding) {
+                    WeakRefRegistry.clearWeakRefsTo(base);
+                }
+            } else if (base.blessId == 0
+                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && ReachabilityWalker.hasStrongCycle(base)) {
+                // Unblessed self-retaining cycles are intentionally leaked by
+                // Perl's refcounting. AnyEvent timers use this shape: the weak
+                // timer queue points at an array whose callback closes over the
+                // scalar holding that same array.
+                base.refCount = 1;
+            } else if (base.blessId != 0
+                    && base.storedInPackageGlobal
+                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && isReachableCached(base)) {
+                // Module-global metadata such as Moose/Class::MOP metaclasses
+                // can transiently hit zero in the selective refcount model.
+                // If the walker can still reach the object from Perl-visible
+                // roots, keep weak links to it intact.
+            } else {
+                base.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(base);
+            }
+        }
+    }
+
     public static void flush() {
         if (!active || pending.isEmpty() || flushing) return;
         flushing = true;
         try {
             // Process list — DESTROY may add new entries, so use index-based loop
             for (int i = 0; i < pending.size(); i++) {
-                RuntimeBase base = pending.get(i);
-                if (base.refCount > 0) {
-                    base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
-                }
-                if (base.refCount > 0 && --base.refCount == 0) {
-                    if (base.localBindingExists) {
-                        // Named container: local variable may still exist. Skip callDestroy.
-                        // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                        //
-                        // Do NOT clear weak refs here: localBindingExists=true means
-                        // the container is still alive via its lexical slot. Test
-                        // op/hashassign.t 218 (bug #76716, "undef %hash should not
-                        // zap weak refs") requires that `is $p, \%tb; undef %tb;`
-                        // does not zap the weak ref $p to %tb — the `\%tb` inside
-                        // `is(...)` triggers a deferred decrement whose refCount
-                        // transition 1→0 lands here, but the hash is still alive.
-                        // An earlier "Fix 10a" cleared weak refs here for anon-hash
-                        // leak-tracing scenarios; those scenarios now use
-                        // createAnonymousReference() (localBindingExists stays false)
-                        // so the clear is no longer needed and broke #76716.
-                    } else if (base.blessId != 0
-                            && base.storedInPackageGlobal
-                            && WeakRefRegistry.hasWeakRefsTo(base)
-                            && isReachableCached(base)) {
-                        // D-W6.18: property-based walker gate.
-                        // Replaces the class-name heuristic
-                        // (classNeedsWalkerGate). Object's lifetime is
-                        // module-global metadata (stored in a package-
-                        // global hash like %METAS), so selective
-                        // refCount transient zeros must not fire DESTROY.
-                        // Walker confirms reachability; suppress destroy.
-                        // D-W6.16: heuristic walker gate (primary).
-                        // The new reachableOwnerCount() infrastructure
-                        // (D-W6.14/16) handles Class::MOP/Moose correctly
-                        // without needing this heuristic, but DBIC's
-                        // row-leak tests still over-rescue when using it
-                        // as the only gate. Heuristic stays as primary
-                        // until the over-rescue is fixed (D-W6.17).
-                    } else {
-                        base.refCount = Integer.MIN_VALUE;
-                        DestroyDispatch.callDestroy(base);
-                    }
-                }
+                processDeferredBase(pending.get(i), false);
             }
             pending.clear();
             marks.clear(); // All entries drained; marks are meaningless now
@@ -706,17 +704,13 @@ public class MortalList {
         if (startIdx < 0) startIdx = 0;
         // Loop because DESTROY may add further entries
         int i = startIdx;
-        while (i < pending.size()) {
-            RuntimeBase base = pending.get(i);
-            i++;
-            if (base.refCount > 0 && --base.refCount == 0) {
-                if (base.localBindingExists) {
-                    WeakRefRegistry.clearWeakRefsTo(base);
-                } else {
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
-                }
+        try {
+            while (i < pending.size()) {
+                processDeferredBase(pending.get(i), true);
+                i++;
             }
+        } finally {
+            flushReachableCache = null;
         }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
@@ -771,15 +765,7 @@ public class MortalList {
         flushing = true;
         try {
             for (int i = mark; i < pending.size(); i++) {
-                RuntimeBase base = pending.get(i);
-                if (base.refCount > 0 && --base.refCount == 0) {
-                    if (base.localBindingExists) {
-                        // Named container: local variable may still exist.
-                    } else {
-                        base.refCount = Integer.MIN_VALUE;
-                        DestroyDispatch.callDestroy(base);
-                    }
-                }
+                processDeferredBase(pending.get(i), false);
             }
             // Remove only entries above the mark
             while (pending.size() > mark) {
@@ -787,6 +773,7 @@ public class MortalList {
             }
         } finally {
             flushing = false;
+            flushReachableCache = null;
         }
     }
 
@@ -808,20 +795,13 @@ public class MortalList {
         }
         // Process entries from mark onwards (DESTROY may add new entries)
         for (int i = mark; i < pending.size(); i++) {
-            RuntimeBase base = pending.get(i);
-            if (base.refCount > 0 && --base.refCount == 0) {
-                if (base.localBindingExists) {
-                    // Named container: local variable may still exist. Skip callDestroy.
-                } else {
-                    base.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(base);
-                }
-            }
+            processDeferredBase(pending.get(i), false);
         }
         // Remove only the entries we processed (keep entries before mark)
         while (pending.size() > mark) {
             pending.removeLast();
         }
+        flushReachableCache = null;
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures();

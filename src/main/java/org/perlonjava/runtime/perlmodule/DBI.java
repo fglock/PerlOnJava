@@ -800,7 +800,8 @@ public class DBI extends PerlModuleBase {
      * - INTEGER → Long (preserves exact integer values)
      * - DOUBLE → Long if whole number, else Double (matches Perl's stringification: 10.0 → "10")
      * - UNDEF → null (SQL NULL)
-     * - STRING/BYTE_STRING → String
+     * - STRING → String
+     * - BYTE_STRING → String for valid UTF-8 bytes, byte[] for binary bytes
      * - References/blessed objects → String via toString() (triggers overload "" if present)
      */
     private static Object toJdbcValue(RuntimeScalar scalar) {
@@ -829,9 +830,9 @@ public class DBI extends PerlModuleBase {
                 //   INSERT: bytes → UTF-8 decode → chars → JDBC → SQLite
                 //   SELECT: SQLite → JDBC → chars → UTF-8 encode → bytes (same)
                 //
-                // If the bytes are not valid UTF-8 (e.g., raw Latin-1 like "\xE9"), we
-                // fall back to passing the char values as-is. This preserves the current
-                // behavior for non-UTF-8 byte strings.
+                // If the bytes are not valid UTF-8, pass them as bytes. Passing the
+                // ISO-8859-1 carrier String to JDBC makes drivers encode high bytes as
+                // UTF-8 text, corrupting binary payloads such as Storable streams.
                 String s = (String) scalar.value;
                 byte[] rawBytes = s.getBytes(StandardCharsets.ISO_8859_1);
                 String decoded = new String(rawBytes, StandardCharsets.UTF_8);
@@ -840,7 +841,7 @@ public class DBI extends PerlModuleBase {
                 if (decoded.indexOf('\uFFFD') < 0) {
                     yield decoded;
                 } else {
-                    yield s;
+                    yield rawBytes;
                 }
             }
             default -> scalar.toString(); // Triggers overload "" for blessed refs

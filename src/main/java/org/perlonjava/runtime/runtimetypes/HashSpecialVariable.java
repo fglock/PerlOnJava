@@ -338,16 +338,10 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 return scalarUndef;
             }
 
-            // Get references to all the slots before deleting
-            // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
-            // to continue calling the subroutine (Perl caches CVs at compile time)
-            RuntimeScalar code = GlobalVariable.globalCodeRefs.remove(fullKey);
-            // Decrement stashRefCount on the removed CODE ref
-            if (code != null && code.value instanceof RuntimeCode removedCode) {
-                if (removedCode.stashRefCount > 0) {
-                    removedCode.stashRefCount--;
-                }
-            }
+            // Remove only from the visible stash, not from pinned code refs:
+            // compiled call sites keep their CV, while future lookups must see
+            // the deletion and create an undefined slot.
+            RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);

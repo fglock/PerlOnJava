@@ -330,6 +330,94 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Return true if {@code target} can reach itself through strong Perl
+     * references. Weak scalars are ignored. This models Perl's refcount
+     * behavior for unblessed self-cycles: they remain alive even when no
+     * package/global root points at them.
+     */
+    public static boolean hasStrongCycle(RuntimeBase target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        if (enqueueStrongEdges(target, target, seen, todo)) {
+            return true;
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (enqueueStrongEdges(cur, target, seen, todo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean enqueueStrongEdges(RuntimeBase cur, RuntimeBase target,
+                                              Set<RuntimeBase> seen,
+                                              java.util.ArrayDeque<RuntimeBase> todo) {
+        if (cur instanceof RuntimeHash h) {
+            for (RuntimeScalar v : h.elements.values()) {
+                if (enqueueStrongScalar(v, target, seen, todo)) return true;
+            }
+        } else if (cur instanceof RuntimeArray a) {
+            for (RuntimeScalar v : a.elements) {
+                if (enqueueStrongScalar(v, target, seen, todo)) return true;
+            }
+        } else if (cur instanceof RuntimeCode code) {
+            if (code.capturedScalars != null) {
+                for (RuntimeScalar cap : code.capturedScalars) {
+                    if (enqueueStrongScalar(cap, target, seen, todo)) return true;
+                }
+            }
+            if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                    && interpreted.capturedVars != null) {
+                for (RuntimeBase cap : interpreted.capturedVars) {
+                    if (cap instanceof RuntimeScalar scalar) {
+                        if (enqueueStrongScalar(scalar, target, seen, todo)) return true;
+                    } else if (cap != null) {
+                        if (cap == target) return true;
+                        if (seen.add(cap)) todo.addLast(cap);
+                    }
+                }
+            }
+            Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
+            if (closureObject != null) {
+                try {
+                    for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
+                        if (field.getType() == RuntimeScalar.class && !"__SUB__".equals(field.getName())) {
+                            RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
+                            if (enqueueStrongScalar(cap, target, seen, todo)) return true;
+                        }
+                    }
+                } catch (IllegalAccessException ignored) {
+                    // Generated closure fields are public. If another
+                    // implementation denies access, fall back to the explicit
+                    // capturedScalars / capturedVars metadata above.
+                }
+            }
+        } else if (cur instanceof RuntimeScalar s) {
+            return enqueueStrongScalar(s, target, seen, todo);
+        }
+        return false;
+    }
+
+    private static boolean enqueueStrongScalar(RuntimeScalar s, RuntimeBase target,
+                                               Set<RuntimeBase> seen,
+                                               java.util.ArrayDeque<RuntimeBase> todo) {
+        if (s == null || WeakRefRegistry.isweak(s)) return false;
+        if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && s.value instanceof RuntimeBase b) {
+            if (b == target) return true;
+            if (seen.add(b)) todo.addLast(b);
+        }
+        return false;
+    }
+
+    /**
      * Lightweight per-object reachability query: walk from Perl-visible
      * roots and return {@code true} as soon as {@code target} is found,
      * without enumerating the full live set.

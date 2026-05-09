@@ -182,16 +182,10 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
-        // Delete all slots from GlobalVariable
-        // Only remove from globalCodeRefs, NOT pinnedCodeRefs, to allow compiled code
-        // to continue calling the subroutine (Perl caches CVs at compile time)
-        GlobalVariable.globalCodeRefs.remove(fullKey);
-        // Decrement stashRefCount on the removed CODE ref
-        if (savedCode != null && savedCode.value instanceof RuntimeCode removedCode) {
-            if (removedCode.stashRefCount > 0) {
-                removedCode.stashRefCount--;
-            }
-        }
+        // Delete all slots from GlobalVariable. The CODE slot helper removes
+        // the visible stash entry while keeping already-pinned CVs alive for
+        // previously compiled call sites.
+        GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
         GlobalVariable.globalVariables.remove(fullKey);
         GlobalVariable.globalArrays.remove(fullKey);
         GlobalVariable.globalHashes.remove(fullKey);
