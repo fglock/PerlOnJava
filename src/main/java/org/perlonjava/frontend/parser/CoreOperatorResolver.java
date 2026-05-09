@@ -5,7 +5,11 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.frontend.parser.PrototypeArgs.consumeArgsWithPrototype;
@@ -132,22 +136,46 @@ public class CoreOperatorResolver {
 
     private static Node parseWithPrototype(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
+        String fq = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
+
+        boolean packageSubOverrides = false;
         String prototype = CORE_PROTOTYPES.get(operator);
 
-        if (prototype != null) {
-            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("CORE operator " + operator + " with prototype " + prototype);
-            // Set the operator name as the subroutine name for better error messages
-            String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
-            parser.ctx.symbolTable.setCurrentSubroutine(operator);
-            try {
-                ListNode arguments = consumeArgsWithPrototype(parser, prototype);
-                return new OperatorNode(operator, arguments, currentIndex);
-            } finally {
-                // Restore the previous subroutine name
-                parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+        // A defined subroutine in the current package shadows CORE for compile-time
+        // prototype checking only when:
+        // (1) Perl has a CORE keyword with that name (CORE_PROTOTYPES contains it),
+        // (2) the package CV has an explicit prototype (e.g. Net::hostent's
+        //     gethostbyaddr ($;$) vs CORE's $$).
+        // Without (1), names like Exporter::export or constants like IS_WIN32 would
+        // wrongly go through this path when they carry an empty prototype "()", etc.
+        if (CORE_PROTOTYPES.containsKey(operator)
+                && GlobalVariable.existsGlobalCodeRef(fq)) {
+            RuntimeScalar ref = GlobalVariable.getGlobalCodeRef(fq);
+            if (ref.type == RuntimeScalarType.CODE && ref.value instanceof RuntimeCode code && code.defined()
+                    && code.prototype != null) {
+                packageSubOverrides = true;
+                prototype = code.prototype;
             }
         }
-        return null;
+
+        boolean coreUsesPrototypeParsing =
+                CORE_PROTOTYPES.containsKey(operator) && CORE_PROTOTYPES.get(operator) != null;
+        if (!packageSubOverrides && !coreUsesPrototypeParsing) {
+            return null;
+        }
+
+        if (CompilerOptions.DEBUG_ENABLED) {
+            parser.ctx.logDebug("operator " + operator + " with prototype " + prototype
+                    + (packageSubOverrides ? " (package sub)" : " (CORE)"));
+        }
+        String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
+        parser.ctx.symbolTable.setCurrentSubroutine(operator);
+        try {
+            ListNode arguments = consumeArgsWithPrototype(parser, prototype);
+            return new OperatorNode(operator, arguments, currentIndex);
+        } finally {
+            parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+        }
     }
 
     private static void handleEmptyParentheses(Parser parser) {
