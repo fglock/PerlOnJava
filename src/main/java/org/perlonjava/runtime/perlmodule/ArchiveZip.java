@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.ReferenceOperators;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.*;
@@ -562,21 +563,31 @@ public class ArchiveZip extends PerlModuleBase {
         }
 
         RuntimeHash self = args.get(0).hashDeref();
-        String regex = args.get(1).toString();
+        RuntimeScalar regex = args.get(1);
+        if (regex.type == RuntimeScalarType.HASHREFERENCE) {
+            RuntimeScalar hashRegex = regex.hashDeref().get("regex");
+            if (hashRegex == null) {
+                return new RuntimeList();
+            }
+            regex = hashRegex;
+        }
         RuntimeArray members = getMembers(self);
 
         RuntimeList result = new RuntimeList();
         try {
-            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
             for (int i = 0; i < members.size(); i++) {
                 RuntimeHash member = members.get(i).hashDeref();
                 RuntimeScalar memberName = member.get("_name");
-                if (memberName != null && pattern.matcher(memberName.toString()).find()) {
+                if (memberName != null && RuntimeRegex.matchRegex(
+                        regex, memberName, RuntimeContextType.SCALAR).scalar().getBoolean()) {
                     result.add(members.get(i));
                 }
             }
         } catch (Exception e) {
             // Invalid regex, return empty list
+        }
+        if (ctx == RuntimeContextType.SCALAR) {
+            return new RuntimeScalar(result.size()).getList();
         }
         return result;
     }
@@ -1008,6 +1019,10 @@ public class ArchiveZip extends PerlModuleBase {
             }
             
             RuntimeScalar contents = member.get("_contents");
+            if (ctx == RuntimeContextType.SCALAR) {
+                return (contents != null ? contents : scalarUndef).getList();
+            }
+
             // Return (content, status) in list context
             RuntimeList result = new RuntimeList();
             result.add(contents != null ? contents : scalarUndef);
