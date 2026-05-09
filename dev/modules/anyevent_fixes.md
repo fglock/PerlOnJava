@@ -4,6 +4,53 @@ This document tracks the work needed to make `./jcpan -t AnyEvent` pass
 all 83 test programs. The project policy requires all tests to pass,
 including low-priority ones.
 
+## Discussion — jcpan noise & signals (2026-05-09, PR #700)
+
+PR [#700](https://github.com/fglock/PerlOnJava/pull/700) addresses **spurious CPAN-time warnings** when installing/testing AnyEvent (and similar dists), not the functional gaps below.
+
+### What that PR fixes
+
+| Topic | Problem | Approach |
+|-------|---------|------------|
+| `Subroutine … redefined` / `Constant subroutine … redefined` | `warnings`-helper logic treated `globalWarningsEnabled` like “almost every category on”, unlike Perl’s `$^W` + `${^WARNING_BITS}` | Added `WarningFlags.ckWarnForScope()` and use it for compile-time redefine checks |
+| `"my" … masks earlier declaration` | Wrong category (`redefine`) + unconditional warn in one parser path | Gate with `ckWarnForScope(..., "shadow")` |
+| `Warning: AutoSplit had to create top-level blib/lib/auto unexpectedly` | PerlOnJava MakeMaker only `mkdir -p blib/arch` before `pm_to_blib`; AutoSplit then creates `blib/lib/auto` | Emit `mkdir -p blib/lib/auto` before staging (matches typical EU::MM ordering) |
+
+### `t/02_signals.t` — `Bail out! No signal caught.`
+
+**What the test does** (`t/02_signals.t`): registers an **`INT`** watcher (`AnyEvent->signal`), arms a **5s bailout** timer, prints **`ok 2`**, then **`kill 'INT', $$`**. The handler should **`syswrite`** one byte on an internal pipe; **`AnyEvent::Loop`** **`select`** sees the fd; the **`io`** callback runs **`_signal_exec`**, which invokes AE callbacks → **`ok 3`**. If the pipe never wakes the loop, the timer prints bailout.
+
+**Failure modes on PerlOnJava**
+
+1. **Forward subroutine reference / GV stub (primary, reproducible)**  
+   `AnyEvent::Base::signal` is built inside `eval q{ ... }` and registers **`AE::io(..., \&_signal_exec)` before** **`*_signal_exec = sub { ... }`**. On Perl 5, **` \&_signal_exec`** taken early still calls the body installed later (same GV). On **`jperl`**, invoking that early coderef **does not** run the assigned sub:
+
+   ```perl
+   package AnyEvent::Base;
+   eval q{
+     my $cb = \&_signal_exec;
+     *_signal_exec = sub { print "ok\n" };
+     $cb->();
+   };
+   ```
+
+   Stock **`perl`** prints **`ok`**; **`jperl`** prints nothing. The event loop’s stored **`io`** callback can therefore be a no-op / wrong resolution, matching runtime errors such as **`Undefined subroutine &AnyEvent::Base::_signal_exec`** when **`AnyEvent::Loop`** invokes **`$_->[2]()`** on the watcher.
+
+   **Fix direction:** **`RuntimeCode` / GV / coderef identity** — ensure **` \&pkg::name`** created before **`*pkg::name = sub { ... }`** shares the callable cell with Perl 5 (stub upgrade when the glob is filled).
+
+2. **POSIX signals on the JVM (secondary)**  
+   Even with (1) fixed, **`kill 'INT', $$`** must run Perl’s **`%SIG`** handler in a process-compatible way. Expect further gaps vs Unix Perl.
+
+**Workarounds today**
+
+- Treat **`t/02_signals.t`** / **`t/03_child.t`** (fork) as **expected gaps** until **`fork`** and signal/coderef semantics match Perl.
+- Run signal-heavy upstream suites with **`perl`**, not **`jperl`**, where policy allows (same theme as **`AGENTS.md`** fork note).
+- Optional: **distroprefs** patch to early-exit **`t/02_signals.t`** on **`jperl`** (maintenance cost).
+
+**Earlier note on `weaken`:** an older hypothesis tied **`t/02_signals`** to **`weaken`** + **`select`** watchers. The **` \&_signal_exec`** stub issue is a better match for **`Undefined … _signal_exec`** and should be verified first after any GV fix.
+
+---
+
 ## Status
 
 | Date | Failed | Passed | Subtests running | Subtests failed |
@@ -165,10 +212,13 @@ minimal reproduction in `AnyEvent::Socket::parse_address` and fix.
 
 ### H — `t/09_multi.t` and `t/02_signals.t`: signal delivery / Ctrl+C
 
-Exit 130 is SIGINT. The test's timer/signal infrastructure is probably
-reaching a deadlock and the outer harness sends SIGINT. Likely related
-to AnyEvent::Base using `pipe` + signals, which now compiles but may
-not actually wake up the select loop.
+**Update (2026-05-09):** `t/02_signals.t` fails with **`Bail out! No signal caught.`**
+(the 5s timer). Root cause analysis: **`AnyEvent::Base`** installs **` \&_signal_exec`**
+before **`*_signal_exec = sub { ... }`**; **`jperl`** does not upgrade the early coderef
+when the glob is filled — see **Discussion — jcpan noise & signals** above. Fix **`GV`/stub
+coderef parity** first; then re-evaluate JVM **`kill`** / **`%SIG`**.
+
+`Exit 130` / harness SIGINT may still appear when tests hang once the stub bug is fixed.
 
 ### I — `t/13_weaken.t`: 3 subtests — weaken semantics
 
@@ -208,6 +258,10 @@ Low priority, narrow after A–I land.
 ## Progress Tracking
 
 ### Current status
+
+- **2026-05-09:** Document updated with PR [#700](https://github.com/fglock/PerlOnJava/pull/700)
+  discussion (warnings/`${^WARNING_BITS}`, AutoSplit **`blib/lib/auto`**, constant redefine)
+  and clarified **`t/02_signals.t`** analysis (forward **` \&_signal_exec`** stub vs **`weaken`**).
 
 Tier 1 fixes landed. Remaining work:
 
