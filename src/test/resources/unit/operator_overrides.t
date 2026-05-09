@@ -189,4 +189,20 @@ subtest 'sleep operator override' => sub {
     is_deeply(\@sleep_args, [5], 'sleep override saw the right argument');
 };
 
+subtest 'gethostbyname operator override' => sub {
+    plan tests => 2;
+
+    BEGIN {
+        *CORE::GLOBAL::gethostbyname = sub {
+            die "unexpected list context" if wantarray;
+            return "mocked:$_[0]";
+        };
+    }
+
+    is(gethostbyname("www.perl.org."), "mocked:www.perl.org.",
+       'gethostbyname overridden globally');
+    ok(defined CORE::gethostbyname("localhost"),
+       'CORE::gethostbyname still bypasses override');
+};
+
 done_testing();

@@ -1507,7 +1507,7 @@ public class EmitOperator {
         } else {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
-                    "fc",
+                    isUnicodeStringsEnabled(emitterVisitor) ? "fcUnicode" : "fc",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
@@ -1531,7 +1531,7 @@ public class EmitOperator {
         } else {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
-                    "lc",
+                    isUnicodeStringsEnabled(emitterVisitor) ? "lcUnicode" : "lc",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
@@ -1555,7 +1555,7 @@ public class EmitOperator {
         } else {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
-                    "uc",
+                    isUnicodeStringsEnabled(emitterVisitor) ? "ucUnicode" : "uc",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
@@ -1579,7 +1579,7 @@ public class EmitOperator {
         } else {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
-                    "lcfirst",
+                    isUnicodeStringsEnabled(emitterVisitor) ? "lcfirstUnicode" : "lcfirst",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
@@ -1603,11 +1603,16 @@ public class EmitOperator {
         } else {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/operators/StringOperators",
-                    "ucfirst",
+                    isUnicodeStringsEnabled(emitterVisitor) ? "ucfirstUnicode" : "ucfirst",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
         handleVoidContext(emitterVisitor);
+    }
+
+    private static boolean isUnicodeStringsEnabled(EmitterVisitor emitterVisitor) {
+        return emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings");
     }
 
     /**

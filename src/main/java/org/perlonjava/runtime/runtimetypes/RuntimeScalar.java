@@ -1261,10 +1261,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
 
-        // Flush deferred mortal decrements. This is the primary flush point for
-        // the mortal mechanism — called after every assignment involving references.
+        // Flush deferred mortal decrements from the current function scope.
+        // Entries below the current MortalList mark belong to the caller, and
+        // must survive through nested calls such as chained AUTOLOAD dispatch.
         // Cost when MortalList.active is false: one boolean check (trivially predicted).
-        MortalList.flush();
+        MortalList.flushAboveMark();
 
         return this;
     }

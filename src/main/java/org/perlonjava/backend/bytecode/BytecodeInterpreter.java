@@ -2056,7 +2056,10 @@ public class BytecodeInterpreter {
                                  Opcodes.ABS, Opcodes.BINARY_NOT, Opcodes.BITWISE_NOT, Opcodes.INTEGER_BITWISE_NOT, Opcodes.ORD,
                                  Opcodes.ORD_BYTES, Opcodes.OCT, Opcodes.HEX, Opcodes.SRAND, Opcodes.CHR,
                                  Opcodes.CHR_BYTES, Opcodes.LENGTH_BYTES, Opcodes.QUOTEMETA, Opcodes.FC, Opcodes.LC,
-                                 Opcodes.LCFIRST, Opcodes.UC, Opcodes.UCFIRST, Opcodes.SLEEP, Opcodes.TELL,
+                                 Opcodes.LCFIRST, Opcodes.UC, Opcodes.UCFIRST, Opcodes.FC_BYTES, Opcodes.LC_BYTES,
+                                 Opcodes.LCFIRST_BYTES, Opcodes.UC_BYTES, Opcodes.UCFIRST_BYTES, Opcodes.FC_UNICODE,
+                                 Opcodes.LC_UNICODE, Opcodes.LCFIRST_UNICODE, Opcodes.UC_UNICODE, Opcodes.UCFIRST_UNICODE,
+                                 Opcodes.TO_BYTES_STRING, Opcodes.SLEEP, Opcodes.TELL,
                                  Opcodes.RMDIR, Opcodes.CLOSEDIR, Opcodes.REWINDDIR, Opcodes.TELLDIR, Opcodes.CHDIR,
                                  Opcodes.EXIT -> {
                                 pc = ScalarUnaryOpcodeHandler.execute(opcode, bytecode, pc, registers);

@@ -43,14 +43,19 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.QUOTEMETA -> StringOperators.quotemeta((RuntimeScalar) registers[rs]);
             case Opcodes.FC -> StringOperators.fc((RuntimeScalar) registers[rs]);
             case Opcodes.FC_BYTES -> StringOperators.fcBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.FC_UNICODE -> StringOperators.fcUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.LC -> StringOperators.lc((RuntimeScalar) registers[rs]);
             case Opcodes.LC_BYTES -> StringOperators.lcBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.LC_UNICODE -> StringOperators.lcUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.LCFIRST -> StringOperators.lcfirst((RuntimeScalar) registers[rs]);
             case Opcodes.LCFIRST_BYTES -> StringOperators.lcfirstBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.LCFIRST_UNICODE -> StringOperators.lcfirstUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.UC -> StringOperators.uc((RuntimeScalar) registers[rs]);
             case Opcodes.UC_BYTES -> StringOperators.ucBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.UC_UNICODE -> StringOperators.ucUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.UCFIRST -> StringOperators.ucfirst((RuntimeScalar) registers[rs]);
             case Opcodes.UCFIRST_BYTES -> StringOperators.ucfirstBytes((RuntimeScalar) registers[rs]);
+            case Opcodes.UCFIRST_UNICODE -> StringOperators.ucfirstUnicode((RuntimeScalar) registers[rs]);
             case Opcodes.TO_BYTES_STRING -> StringOperators.toBytesString((RuntimeScalar) registers[rs]);
             case Opcodes.SLEEP -> Time.sleep((RuntimeScalar) registers[rs]);
             case Opcodes.TELL -> IOOperator.tell((RuntimeScalar) registers[rs]);
@@ -104,18 +109,28 @@ public class ScalarUnaryOpcodeHandler {
             case Opcodes.FC -> sb.append("FC r").append(rd).append(" = fc(r").append(rs).append(")\n");
             case Opcodes.FC_BYTES ->
                     sb.append("FC_BYTES r").append(rd).append(" = fcBytes(r").append(rs).append(")\n");
+            case Opcodes.FC_UNICODE ->
+                    sb.append("FC_UNICODE r").append(rd).append(" = fcUnicode(r").append(rs).append(")\n");
             case Opcodes.LC -> sb.append("LC r").append(rd).append(" = lc(r").append(rs).append(")\n");
             case Opcodes.LC_BYTES ->
                     sb.append("LC_BYTES r").append(rd).append(" = lcBytes(r").append(rs).append(")\n");
+            case Opcodes.LC_UNICODE ->
+                    sb.append("LC_UNICODE r").append(rd).append(" = lcUnicode(r").append(rs).append(")\n");
             case Opcodes.LCFIRST -> sb.append("LCFIRST r").append(rd).append(" = lcfirst(r").append(rs).append(")\n");
             case Opcodes.LCFIRST_BYTES ->
                     sb.append("LCFIRST_BYTES r").append(rd).append(" = lcfirstBytes(r").append(rs).append(")\n");
+            case Opcodes.LCFIRST_UNICODE ->
+                    sb.append("LCFIRST_UNICODE r").append(rd).append(" = lcfirstUnicode(r").append(rs).append(")\n");
             case Opcodes.UC -> sb.append("UC r").append(rd).append(" = uc(r").append(rs).append(")\n");
             case Opcodes.UC_BYTES ->
                     sb.append("UC_BYTES r").append(rd).append(" = ucBytes(r").append(rs).append(")\n");
+            case Opcodes.UC_UNICODE ->
+                    sb.append("UC_UNICODE r").append(rd).append(" = ucUnicode(r").append(rs).append(")\n");
             case Opcodes.UCFIRST -> sb.append("UCFIRST r").append(rd).append(" = ucfirst(r").append(rs).append(")\n");
             case Opcodes.UCFIRST_BYTES ->
                     sb.append("UCFIRST_BYTES r").append(rd).append(" = ucfirstBytes(r").append(rs).append(")\n");
+            case Opcodes.UCFIRST_UNICODE ->
+                    sb.append("UCFIRST_UNICODE r").append(rd).append(" = ucfirstUnicode(r").append(rs).append(")\n");
             case Opcodes.TO_BYTES_STRING ->
                     sb.append("TO_BYTES_STRING r").append(rd).append(" = toBytesString(r").append(rs).append(")\n");
             case Opcodes.SLEEP -> sb.append("SLEEP r").append(rd).append(" = sleep(r").append(rs).append(")\n");

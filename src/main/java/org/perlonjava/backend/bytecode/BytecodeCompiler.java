@@ -1384,6 +1384,8 @@ public class BytecodeCompiler implements Visitor {
         short opcode;
         if (node.isVString) {
             opcode = Opcodes.LOAD_VSTRING;
+        } else if (node.forceByteString) {
+            opcode = Opcodes.LOAD_BYTE_STRING;
         } else if (emitterContext != null && emitterContext.symbolTable != null
                 && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
                 && !emitterContext.compilerOptions.isUnicodeSource) {

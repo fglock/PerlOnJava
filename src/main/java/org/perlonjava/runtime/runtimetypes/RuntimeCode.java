@@ -2011,13 +2011,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     }
                                 }
                                 
-                                // Prefer PerlSubroutine interface over MethodHandle
-                                if (cachedCode.subroutine != null) {
-                                    return cachedCode.subroutine.apply(a, callContext);
-                                } else if (cachedCode.isStatic) {
-                                    return (RuntimeList) cachedCode.methodHandle.invoke(a, callContext);
-                                } else {
-                                    return (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, callContext);
+                                MortalList.pushMark();
+                                try {
+                                    // Prefer PerlSubroutine interface over MethodHandle
+                                    if (cachedCode.subroutine != null) {
+                                        return cachedCode.subroutine.apply(a, callContext);
+                                    } else if (cachedCode.isStatic) {
+                                        return (RuntimeList) cachedCode.methodHandle.invoke(a, callContext);
+                                    } else {
+                                        return (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, callContext);
+                                    }
+                                } finally {
+                                    MortalList.popMark();
                                 }
                             } catch (Throwable e) {
                                 if (e instanceof RuntimeException) throw (RuntimeException) e;

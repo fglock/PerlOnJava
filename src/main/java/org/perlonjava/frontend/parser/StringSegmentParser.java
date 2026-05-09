@@ -20,6 +20,7 @@ import java.util.List;
 
 import static org.perlonjava.frontend.parser.ParseBlock.parseBlock;
 import static org.perlonjava.frontend.parser.Variable.parseArrayHashAccess;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 
 /**
  * Base class for parsing strings with segments and variable interpolation.
@@ -74,6 +75,9 @@ public abstract class StringSegmentParser {
      * Buffer for accumulating literal text segments
      */
     protected final StringBuilder currentSegment;
+    private boolean currentSegmentHasSourceNonAscii = false;
+    private boolean inRegexCharClass = false;
+    private boolean regexCharClassFirst = false;
     /**
      * List of AST nodes representing string segments (literals and interpolated expressions)
      */
@@ -128,6 +132,35 @@ public abstract class StringSegmentParser {
         currentSegment.append(text);
     }
 
+    protected void appendLiteralToCurrentSegment(String text) {
+        appendToCurrentSegment(text);
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            updateRegexCharClassState(c);
+            if (c > 127) {
+                currentSegmentHasSourceNonAscii = true;
+            }
+        }
+    }
+
+    protected boolean isInsideRegexCharClass() {
+        return isRegex && inRegexCharClass;
+    }
+
+    private void updateRegexCharClassState(char c) {
+        if (!isRegex) {
+            return;
+        }
+        if (c == '[' && !inRegexCharClass) {
+            inRegexCharClass = true;
+            regexCharClassFirst = true;
+        } else if (c == ']' && inRegexCharClass && !regexCharClassFirst) {
+            inRegexCharClass = false;
+        } else if (inRegexCharClass && regexCharClassFirst && c != '^') {
+            regexCharClassFirst = false;
+        }
+    }
+
     /**
      * Adds a string segment node to the segments list.
      *
@@ -150,9 +183,28 @@ public abstract class StringSegmentParser {
      */
     protected void flushCurrentSegment() {
         if (!currentSegment.isEmpty()) {
-            addStringSegment(new StringNode(currentSegment.toString(), tokenIndex));
+            String value = currentSegment.toString();
+            boolean forceByteString = shouldForceByteStringLiteral(value);
+            addStringSegment(new StringNode(value, false, forceByteString, tokenIndex));
             currentSegment.setLength(0);
+            currentSegmentHasSourceNonAscii = false;
         }
+    }
+
+    private boolean shouldForceByteStringLiteral(String value) {
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                && !ctx.compilerOptions.isUnicodeSource) {
+            return false;
+        }
+        if (currentSegmentHasSourceNonAscii) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -639,7 +691,7 @@ public abstract class StringSegmentParser {
                     continue;
                 } else {
                     // No heredocs pending, append the newline normally
-                    appendToCurrentSegment(token.text);
+                    appendLiteralToCurrentSegment(token.text);
                 }
                 continue;
             }
@@ -650,7 +702,7 @@ public abstract class StringSegmentParser {
             }
 
             // Default: append literal text to current segment
-            appendToCurrentSegment(text);
+            appendLiteralToCurrentSegment(text);
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("StringSegmentParser.parse: Finished parsing, segments count: " + segments.size());

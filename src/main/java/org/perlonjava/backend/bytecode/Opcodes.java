@@ -2321,6 +2321,31 @@ public class Opcodes {
      */
     public static final short HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL = 484;
 
+    /**
+     * Fold case under unicode_strings: rd = StringOperators.fcUnicode(rs)
+     */
+    public static final short FC_UNICODE = 485;
+
+    /**
+     * Lowercase under unicode_strings: rd = StringOperators.lcUnicode(rs)
+     */
+    public static final short LC_UNICODE = 486;
+
+    /**
+     * Lowercase first under unicode_strings: rd = StringOperators.lcfirstUnicode(rs)
+     */
+    public static final short LCFIRST_UNICODE = 487;
+
+    /**
+     * Uppercase under unicode_strings: rd = StringOperators.ucUnicode(rs)
+     */
+    public static final short UC_UNICODE = 488;
+
+    /**
+     * Uppercase first under unicode_strings: rd = StringOperators.ucfirstUnicode(rs)
+     */
+    public static final short UCFIRST_UNICODE = 489;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

@@ -20,6 +20,16 @@ public class CompileOperator {
         }
     }
 
+    private static short selectCaseOpcode(BytecodeCompiler bc, short normalOpcode, short bytesOpcode, short unicodeOpcode) {
+        if (bc.isBytesEnabled()) {
+            return bytesOpcode;
+        }
+        if (bc.symbolTable != null && bc.symbolTable.isFeatureCategoryEnabled("unicode_strings")) {
+            return unicodeOpcode;
+        }
+        return normalOpcode;
+    }
+
     private static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess, int tokenIndex) {
         if (!(arrayAccess.left instanceof OperatorNode leftOp) || !leftOp.operator.equals("$")
                 || !(leftOp.operand instanceof IdentifierNode)) {
@@ -682,11 +692,16 @@ public class CompileOperator {
             case "chrBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CHR_BYTES);
             case "lengthBytes" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.LENGTH_BYTES);
             case "quotemeta" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.QUOTEMETA);
-            case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.FC_BYTES : Opcodes.FC);
-            case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.LC_BYTES : Opcodes.LC);
-            case "lcfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.LCFIRST_BYTES : Opcodes.LCFIRST);
-            case "uc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.UC_BYTES : Opcodes.UC);
-            case "ucfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, bytecodeCompiler.isBytesEnabled() ? Opcodes.UCFIRST_BYTES : Opcodes.UCFIRST);
+            case "fc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    selectCaseOpcode(bytecodeCompiler, Opcodes.FC, Opcodes.FC_BYTES, Opcodes.FC_UNICODE));
+            case "lc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    selectCaseOpcode(bytecodeCompiler, Opcodes.LC, Opcodes.LC_BYTES, Opcodes.LC_UNICODE));
+            case "lcfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    selectCaseOpcode(bytecodeCompiler, Opcodes.LCFIRST, Opcodes.LCFIRST_BYTES, Opcodes.LCFIRST_UNICODE));
+            case "uc" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    selectCaseOpcode(bytecodeCompiler, Opcodes.UC, Opcodes.UC_BYTES, Opcodes.UC_UNICODE));
+            case "ucfirst" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node,
+                    selectCaseOpcode(bytecodeCompiler, Opcodes.UCFIRST, Opcodes.UCFIRST_BYTES, Opcodes.UCFIRST_UNICODE));
             case "tell" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.TELL);
             case "rmdir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.RMDIR);
             case "closedir" -> visitSimpleUnaryWithDefault(bytecodeCompiler, node, Opcodes.CLOSEDIR);

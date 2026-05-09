@@ -179,11 +179,18 @@ subtest 'Escape sequences vs source encoding' => sub {
         my $hex = "\x{100}";  # Creates Unicode string
         is(length($hex), 1, 'Unicode escape creates single character with utf8');
         is(ord($hex), 256, 'Unicode escape value with utf8');
-        
+
+        my $byte_escape = "B\xFCcher";
+        ok(!utf8::is_utf8($byte_escape), 'fixed byte escape is not UTF-8 flagged under utf8');
+        is(lc("\xC3\xBCri"), "\xC3\xBCri", 'lc preserves non-ASCII bytes from fixed byte escapes');
+
         # Literal source is treated as characters
         my $literal = "Ā";
         is(length($literal), 1, 'Literal Ā is 1 character with utf8');
         is(ord($literal), 256, 'Literal Ā has correct value with utf8');
+
+        my $latin1_literal = "ü";
+        ok(utf8::is_utf8($latin1_literal), 'literal non-ASCII source is UTF-8 flagged under utf8');
     }
 };
 
@@ -257,4 +264,3 @@ subtest 'Octet vs character semantics' => sub {
 };
 
 done_testing();
-

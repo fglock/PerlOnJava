@@ -583,6 +583,7 @@ public class Encode extends PerlModuleBase {
         StringBuilder result = new StringBuilder();
         CharBuffer input = CharBuffer.wrap(string);
         ByteBuffer output = ByteBuffer.allocate((int) (string.length() * encoder.maxBytesPerChar()) + 4);
+        boolean stoppedOnError = false;
 
         while (input.hasRemaining()) {
             encoder.reset();
@@ -600,6 +601,7 @@ public class Encode extends PerlModuleBase {
                 int badChar = input.get(); // consume the bad character
                 String replacement = handleEncodingError(check, codeRef, badChar, encodingName, true);
                 if (replacement == null) {
+                    stoppedOnError = true;
                     // FB_QUIET: stop processing, put back unprocessed chars
                     if ((check & LEAVE_SRC) == 0 && srcArgs != null && srcArgs.size() > srcArgIndex) {
                         StringBuilder remaining = new StringBuilder();
@@ -635,7 +637,7 @@ public class Encode extends PerlModuleBase {
         resultScalar.value = result.toString();
 
         // Update source if LEAVE_SRC is not set (remove processed chars)
-        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0
+        if ((check & LEAVE_SRC) == 0 && !stoppedOnError
                 && srcArgs != null && srcArgs.size() > srcArgIndex) {
             srcArgs.get(srcArgIndex).set("");
         }
@@ -707,6 +709,7 @@ public class Encode extends PerlModuleBase {
         ByteBuffer input = ByteBuffer.wrap(bytes);
         CharBuffer output = CharBuffer.allocate(bytes.length * 2 + 4);
         StringBuilder result = new StringBuilder();
+        boolean stoppedOnError = false;
 
         while (input.hasRemaining()) {
             decoder.reset();
@@ -724,6 +727,7 @@ public class Encode extends PerlModuleBase {
                 }
                 String replacement = handleEncodingError(check, codeRef, badBytes, encodingName, false);
                 if (replacement == null) {
+                    stoppedOnError = true;
                     // FB_QUIET: stop processing
                     if ((check & LEAVE_SRC) == 0 && srcArgs != null && srcArgs.size() > srcArgIndex) {
                         byte[] remaining = new byte[input.remaining() + malformedLen];
@@ -751,7 +755,7 @@ public class Encode extends PerlModuleBase {
         result.append(output);
 
         // Update source if LEAVE_SRC is not set
-        if ((check & LEAVE_SRC) == 0 && (check & RETURN_ON_ERR) == 0
+        if ((check & LEAVE_SRC) == 0 && !stoppedOnError
                 && srcArgs != null && srcArgs.size() > srcArgIndex) {
             srcArgs.get(srcArgIndex).set("");
         }

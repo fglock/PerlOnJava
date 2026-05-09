@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use Storable qw(store retrieve nstore freeze thaw nfreeze dclone);
 
 # Test plan
-plan tests => 10;
+plan tests => 11;
 
 subtest 'Basic scalar serialization' => sub {
     plan tests => 6;
@@ -317,6 +317,38 @@ subtest 'STORABLE_freeze nested hook cookie round-trip (binary-safe)' => sub {
     is($thawed->{name},  'outer', 'outer name attribute survives');
     is($thawed->{count}, 42,      'outer count attribute survives');
     isa_ok($thawed->{inner}, '_StTestInner', 'inner hooked object survives');
+};
+
+subtest 'STORABLE_freeze scalar hook keeps one ref level' => sub {
+    plan tests => 3;
+
+    package _StScalarHook;
+    use overload '""' => sub { ${ $_[0] } }, fallback => 1;
+
+    sub new {
+        my ($class, $value) = @_;
+        return bless \$value, $class;
+    }
+
+    sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
+        return $$self;
+    }
+
+    sub STORABLE_thaw {
+        my ($self, $cloning, $ice) = @_;
+        $$self = $ice;
+    }
+
+    package main;
+
+    my $frozen = freeze([ _StScalarHook->new("http://search.cpan.org") ]);
+    my $thawed = thaw($frozen);
+    my $obj = $thawed->[0];
+
+    is(ref($obj), '_StScalarHook', 'scalar hook object class survives');
+    is($$obj, 'http://search.cpan.org', 'scalar hook referent survives');
+    is("$obj", 'http://search.cpan.org', 'scalar hook overload sees one ref level');
 };
 
 done_testing();
