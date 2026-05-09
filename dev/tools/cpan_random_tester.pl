@@ -18,6 +18,8 @@
 # Usage:
 #   perl dev/tools/cpan_random_tester.pl                   # Test 10 random modules
 #   perl dev/tools/cpan_random_tester.pl --count 50        # Test 50 random modules
+#   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Test specific modules
+#   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
 #   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min timeout per module
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
@@ -71,6 +73,7 @@ my $timeout     = 300;
 my $report_only = 0;
 my $install     = 0;      # --install: use jcpan (install) instead of jcpan -t
 my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ago
+my $modules_arg = '';     # --modules: comma-separated list or file path
 my $help        = 0;
 my $seed;
 
@@ -80,6 +83,7 @@ GetOptions(
     'report-only'  => \$report_only,
     'install'      => \$install,
     'retest-age=i' => \$retest_age,
+    'modules=s'    => \$modules_arg,
     'seed=i'       => \$seed,
     'help|h'       => \$help,
 ) or die "Error in command line arguments\n";
@@ -149,7 +153,11 @@ printf "Loaded %d unique distributions (%d total packages)\n",
 # If --retest-age is set, only include modules tested N+ days ago instead
 my @candidates;
 
-if ($retest_age > 0) {
+if ($modules_arg) {
+    # User provided specific module list
+    @candidates = parse_module_list($modules_arg);
+    printf "Testing %d user-specified modules\n", scalar @candidates;
+} elsif ($retest_age > 0) {
     # Restrict to modules last tested N+ days ago (for concurrent instance work)
     my $cutoff_date = cutoff_date_for_days_ago($retest_age);
     for my $mod (@all_modules) {
@@ -194,7 +202,10 @@ if (!@candidates) {
 # Randomly select modules to test
 # ──────────────────────────────────────────────────────────────────────
 my @selected;
-if ($count >= scalar @candidates) {
+if ($modules_arg) {
+    # Already selected by user
+    @selected = @candidates;
+} elsif ($count >= scalar @candidates) {
     @selected = @candidates;
 } else {
     my @pool = @candidates;
@@ -521,6 +532,32 @@ sub parse_all_module_results {
 # Helpers
 # ══════════════════════════════════════════════════════════════════════
 
+# Parse --modules argument: either comma-separated list or file path
+sub parse_module_list {
+    my ($arg) = @_;
+    my @modules;
+
+    if (-f $arg) {
+        open my $fh, '<', $arg or die "Cannot read module list file '$arg': $!\n";
+        while (<$fh>) {
+            chomp;
+            s/^\s+|\s+$//g;  # trim whitespace
+            next if !$_ || /^#/;  # skip empty lines and comments
+            push @modules, $_;
+        }
+        close $fh;
+    } else {
+        # Treat as comma-separated list
+        @modules = split /,/, $arg;
+        for my $m (@modules) {
+            $m =~ s/^\s+|\s+$//g;  # trim whitespace
+        }
+    }
+
+    die "No modules specified in '$arg'\n" unless @modules;
+    return @modules;
+}
+
 # Run a command with a hard timeout.  On timeout, kills the entire
 # process group so no orphaned jperl/java children survive.
 # Returns ($output, $timed_out).
@@ -838,6 +875,10 @@ Usage:
 Options:
   --count N, -n N  Number of random target modules to test (default: 10)
                    Dependencies are tested too, so actual module count is higher.
+  --modules LIST   Test specific modules instead of random selection.
+                   Can be:
+                     - Comma-separated: --modules Foo::Bar,Baz::Qux
+                     - File path: --modules modules.txt (one per line, # for comments)
   --timeout N      Timeout per target module in seconds (default: 300)
   --install        Use jcpan (install) instead of jcpan -t (test only).
                    Deps stay installed for future runs, but already-installed
@@ -850,7 +891,8 @@ Options:
 
 Behavior:
   - Default: uses jcpan -t (always runs tests, even for installed modules).
-  - Targets are randomly chosen from modules that haven't passed yet.
+  - Targets are randomly chosen from modules that haven't passed yet
+    (or from --modules if specified).
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
   - If a previously-failed module now passes (e.g., its deps got
     installed), the record is upgraded from FAIL to PASS.
@@ -862,6 +904,8 @@ Behavior:
 Examples:
   perl dev/tools/cpan_random_tester.pl                   # 10 targets
   perl dev/tools/cpan_random_tester.pl --count 50        # 50 targets
+  perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Specific modules
+  perl dev/tools/cpan_random_tester.pl --modules list.txt # From file
   perl dev/tools/cpan_random_tester.pl --seed 42 -n 20   # reproducible
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report
   perl dev/tools/cpan_random_tester.pl --retest-age 7 -n 30  # test modules not tested in 7 days
