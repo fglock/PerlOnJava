@@ -724,9 +724,30 @@ public class EmitSubroutine {
             }
         }
 
+        // Undefined direct-call diagnostics report the line containing the
+        // function token, while caller() inside a successfully entered sub sees
+        // the completed call expression's closing line. Keep those as two
+        // separate bytecode locations.
+        int errorSiteIndex = node.left != null && node.left.getIndex() > 0
+                ? node.left.getIndex()
+                : (node.getIndex() > 0 ? node.getIndex() : -1);
+        if (errorSiteIndex > 0) {
+            ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, errorSiteIndex);
+        }
+
+        mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
+        mv.visitMethodInsn(
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "throwIfDirectCallUndefined",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
+                false);
+
         // Set debug line number to the call site. Perl reports the line where a
-        // multi-line call expression completes, not the line containing the
-        // function name. The argument ListNode is indexed at the closing token.
+        // multi-line call expression completes for caller(), not the line
+        // containing the function name. The argument ListNode is indexed at the
+        // closing token.
         int callSiteIndex = node.right != null && node.right.getIndex() > 0
                 ? node.right.getIndex()
                 : (node.getIndex() > 0 ? node.getIndex() : (node.left != null ? node.left.getIndex() : -1));

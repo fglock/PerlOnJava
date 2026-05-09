@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 10;
+use Test::More tests => 11;
 
 # Test caller() returns correct line numbers, especially for deeper stack frames.
 # This tests the fix for the bug where caller($level) with level > 1 returned
@@ -101,5 +101,15 @@ my $result10 = CallerLineNumber::Obj->new->multiline_method_caller(
     sub { 1 }
 );
 is($result10, $expected_line_10, "caller(0) reports closing line for multiline method call");
+
+my $expected_line_11 = __LINE__ + 3;
+eval {
+    *{
+        CallerLineNumber::Missing::for_line_test()
+    };
+};
+like($@,
+     qr/Undefined subroutine &CallerLineNumber::Missing::for_line_test called at .* line $expected_line_11\./,
+     "undefined multiline direct call reports function line");
 
 # End of tests
