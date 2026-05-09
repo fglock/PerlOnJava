@@ -13,7 +13,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * bzeof / bzclose / bzerror methods, matching the OO API of the upstream
  * Compress::Bzip2 CPAN module.
  *
- * <p>Mirrors the pattern of {@link CompressZlibGzFile} for consistency.
+ * <p>Mirrors the pattern of {@link CompressZlibGzFile} for consistency. The
+ * {@code gz*} names match upstream Compress::Bzip2 (Zlib compatibility) and
+ * {@code CPAN::Tarzip}, which call {@code gzread} / {@code gzclose} on bzip2
+ * handles.
  */
 public class CompressBzip2BzFile extends PerlModuleBase {
 
@@ -33,6 +36,13 @@ public class CompressBzip2BzFile extends PerlModuleBase {
             bz.registerMethod("bzeof", null);
             bz.registerMethod("bzclose", null);
             bz.registerMethod("bzerror", null);
+            // Compress::Zlib-compatible aliases (used by CPAN::Tarzip for .bz2 handles)
+            bz.registerMethod("gzread", "bzread", null);
+            bz.registerMethod("gzwrite", "bzwrite", null);
+            bz.registerMethod("gzreadline", "bzreadline", null);
+            bz.registerMethod("gzeof", "bzeof", null);
+            bz.registerMethod("gzclose", "bzclose", null);
+            bz.registerMethod("gzerror", "bzerror", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Compress::Bzip2::bzFile method: " + e.getMessage());
         }

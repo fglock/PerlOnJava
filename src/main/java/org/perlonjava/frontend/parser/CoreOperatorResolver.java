@@ -5,7 +5,11 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlJavaUnimplementedException;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.frontend.parser.PrototypeArgs.consumeArgsWithPrototype;
@@ -132,22 +136,48 @@ public class CoreOperatorResolver {
 
     private static Node parseWithPrototype(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
-        String prototype = CORE_PROTOTYPES.get(operator);
+        String fq = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
 
-        if (prototype != null) {
-            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("CORE operator " + operator + " with prototype " + prototype);
-            // Set the operator name as the subroutine name for better error messages
-            String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
-            parser.ctx.symbolTable.setCurrentSubroutine(operator);
-            try {
-                ListNode arguments = consumeArgsWithPrototype(parser, prototype);
-                return new OperatorNode(operator, arguments, currentIndex);
-            } finally {
-                // Restore the previous subroutine name
-                parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+        String coreProto = CORE_PROTOTYPES.get(operator);
+        boolean packageSubOverrides = false;
+        String prototype = coreProto;
+
+        // Shadow CORE's compile-time prototype only for builtins that *have* a CORE
+        // prototype string (e.g. gethostbyaddr $$). Keywords listed under CORE_PROTOTYPES
+        // with a null entry (INIT, chomp, delete, …) are parsed/styled specially; a
+        // package subroutine or constant with the same name (use constant INIT => 5; sub
+        // INIT { }) must still resolve via SubroutineParser, not as OperatorNode — otherwise
+        // we emit bogus core ops ("INIT doesn't have JVM descriptor").
+        //
+        // When coreProto != null, a defined package CV with an explicit prototype overrides
+        // arity checking (Net::hostent gethostbyaddr ($;$) vs CORE $$).
+        if (coreProto != null
+                && GlobalVariable.existsGlobalCodeRef(fq)) {
+            RuntimeScalar ref = GlobalVariable.getGlobalCodeRef(fq);
+            if (ref.type == RuntimeScalarType.CODE && ref.value instanceof RuntimeCode code && code.defined()
+                    && code.prototype != null) {
+                packageSubOverrides = true;
+                prototype = code.prototype;
             }
         }
-        return null;
+
+        boolean coreUsesPrototypeParsing = coreProto != null;
+        if (!packageSubOverrides && !coreUsesPrototypeParsing) {
+            return null;
+        }
+
+        if (CompilerOptions.DEBUG_ENABLED) {
+            parser.ctx.logDebug("operator " + operator + " with prototype " + prototype
+                    + (packageSubOverrides ? " (package sub)" : " (CORE)"));
+        }
+        String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
+        parser.ctx.symbolTable.setCurrentSubroutine(operator);
+        try {
+            ListNode arguments = consumeArgsWithPrototype(parser, prototype);
+            return new OperatorNode(operator, arguments, currentIndex);
+        } finally {
+            parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+        }
     }
 
     private static void handleEmptyParentheses(Parser parser) {
