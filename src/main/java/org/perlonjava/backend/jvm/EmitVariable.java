@@ -10,7 +10,6 @@ import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -1423,8 +1422,8 @@ public class EmitVariable {
                     String var = sigil + name;
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("MY " + operator + " " + sigil + name);
                     
-                    // Check for redeclaration warnings
-                    if (Warnings.warningManager.isWarningEnabled("redefine")) {
+                    // Check for redeclaration warnings (Perl category "shadow", not "redefine")
+                    if (WarningFlags.ckWarnForScope(emitterVisitor.ctx.symbolTable, "shadow")) {
                         // Skip warning for state variables that were already hoisted by EmitBlock.
                         // The hoisted declaration pre-allocates the JVM local slot, so the original
                         // declaration sees it as a duplicate. This is not a real user-level redeclaration.

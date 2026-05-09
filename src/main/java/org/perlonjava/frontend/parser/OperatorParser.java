@@ -357,8 +357,9 @@ public class OperatorParser {
                                         "\"our\" variable " + var + " redeclared"));
                     }
                 } else {
-                    // For 'my'/'local', warn if redeclared in the same scope
-                    if (ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
+                    // For 'my'/'local', warn if redeclared in the same scope (warnings 'shadow')
+                    if (WarningFlags.ckWarnForScope(ctx.symbolTable, "shadow")
+                            && ctx.symbolTable.getVariableIndexInCurrentScope(var) != -1) {
                         System.err.println(
                                 ctx.errorUtil.errorMessage(node.getIndex(),
                                         "\"" + operator + "\" variable " + var + " masks earlier declaration in same scope"));

@@ -1157,7 +1157,6 @@ public class SubroutineParser {
             }
 
             // Prototype mismatch is a default warning (always on unless explicitly disabled)
-            boolean dollarW = GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean();
             {
                 // Perl format: "sub NAME: none vs (new)" or "sub NAME (old) vs none"
                 // When prototype is null, display as ": none"; when defined, display as " (proto)"
@@ -1177,8 +1176,7 @@ public class SubroutineParser {
                 String msg = "Constant subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
-            } else if (!Warnings.warningManager.isWarningDisabled("redefine")
-                    && (dollarW || Warnings.warningManager.isWarningEnabled("redefine"))) {
+            } else if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
                 String msg = "Subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
