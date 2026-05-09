@@ -659,6 +659,139 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && code.defined();
     }
 
+    /**
+     * Preflight for generated direct subroutine calls. Perl reports an
+     * undefined direct call at the line containing the function token, but
+     * caller() inside a successfully entered multiline call sees the closing
+     * call-site line. The emitter calls this while the bytecode line is still
+     * the function-token line, then moves the real apply() instruction to the
+     * call-site line.
+     */
+    public static void throwIfDirectCallUndefined(RuntimeScalar runtimeScalar, String subroutineName) {
+        RuntimeScalar curScalar = runtimeScalar;
+
+        while (curScalar != null) {
+            if (curScalar.type == RuntimeScalarType.TIED_SCALAR) {
+                curScalar = curScalar.tiedFetch();
+                continue;
+            }
+            if (curScalar.type == READONLY_SCALAR) {
+                curScalar = (RuntimeScalar) curScalar.value;
+                continue;
+            }
+            if (curScalar.type == RuntimeScalarType.UNDEF) {
+                return;
+            }
+
+            if (curScalar.type == RuntimeScalarType.CODE) {
+                RuntimeCode code = (RuntimeCode) curScalar.value;
+
+                if (code.isClosurePrototype) {
+                    return;
+                }
+
+                if (code.compilerSupplier != null) {
+                    RuntimeList savedConstantValue = code.constantValue;
+                    java.util.List<String> savedAttributes = code.attributes;
+                    code.compilerSupplier.get();
+                    code = (RuntimeCode) curScalar.value;
+                    if (savedConstantValue != null && code.constantValue == null) {
+                        code.constantValue = savedConstantValue;
+                    }
+                    if (savedAttributes != null && code.attributes == null) {
+                        code.attributes = savedAttributes;
+                    }
+                }
+
+                if (!code.defined() && "CORE".equals(code.packageName) && code.subName != null) {
+                    if (CoreSubroutineGenerator.generateWrapper(code.subName)) {
+                        curScalar = GlobalVariable.getGlobalCodeRef("CORE::" + code.subName);
+                        if (curScalar.type == RuntimeScalarType.CODE) {
+                            code = (RuntimeCode) curScalar.value;
+                        }
+                    }
+                }
+
+                if (code.defined()) {
+                    return;
+                }
+
+                String fullSubName = subroutineName;
+                if ((fullSubName == null || fullSubName.isEmpty()) && code.packageName != null && code.subName != null) {
+                    fullSubName = code.packageName + "::" + code.subName;
+                }
+
+                if (fullSubName != null && !fullSubName.isEmpty()) {
+                    RuntimeScalar importedStubAutoload = findImportedStubAutoload(code, fullSubName);
+                    if (importedStubAutoload != null) {
+                        return;
+                    }
+
+                    if (code.sourcePackage != null && !code.sourcePackage.isEmpty()) {
+                        String sourceAutoloadString = code.sourcePackage + "::AUTOLOAD";
+                        RuntimeScalar sourceAutoload = GlobalVariable.getGlobalCodeRef(sourceAutoloadString);
+                        if (isCodeDefined(sourceAutoload)) {
+                            return;
+                        }
+                    }
+
+                    int sep = fullSubName.lastIndexOf("::");
+                    if (sep >= 0) {
+                        String autoloadString = fullSubName.substring(0, sep + 2) + "AUTOLOAD";
+                        RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
+                        if (isCodeDefined(autoload)) {
+                            return;
+                        }
+                    }
+
+                    throw new PerlCompilerException(gotoErrorPrefix(subroutineName)
+                            + "ndefined subroutine &" + fullSubName + " called");
+                }
+                return;
+            }
+
+            if (curScalar.type == RuntimeScalarType.GLOB) {
+                RuntimeGlob glob = (RuntimeGlob) curScalar.value;
+                if (glob.globName != null) {
+                    curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
+                    continue;
+                }
+                if (glob.codeSlot != null) {
+                    curScalar = glob.codeSlot;
+                    continue;
+                }
+                return;
+            }
+
+            if ((curScalar.type == RuntimeScalarType.REFERENCE || curScalar.type == RuntimeScalarType.GLOBREFERENCE)
+                    && curScalar.value instanceof RuntimeGlob glob) {
+                if (glob.globName != null) {
+                    curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
+                    continue;
+                }
+                if (glob.codeSlot != null) {
+                    curScalar = glob.codeSlot;
+                    continue;
+                }
+                return;
+            }
+
+            if (curScalar.type == STRING || curScalar.type == BYTE_STRING) {
+                String varName = NameNormalizer.normalizeVariableName(curScalar.toString(), "main");
+                curScalar = GlobalVariable.getGlobalCodeRef(varName);
+                continue;
+            }
+
+            RuntimeScalar overloadedCode = handleCodeOverload(curScalar);
+            if (overloadedCode != null) {
+                curScalar = overloadedCode;
+                continue;
+            }
+
+            return;
+        }
+    }
+
     private static RuntimeScalar findImportedStubAutoload(RuntimeCode code, String fullSubName) {
         if (code.packageName == null || code.packageName.isEmpty()
                 || fullSubName == null || fullSubName.isEmpty()) {

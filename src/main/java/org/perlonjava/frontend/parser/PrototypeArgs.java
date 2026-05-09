@@ -292,6 +292,10 @@ public class PrototypeArgs {
             parser.throwError("syntax error");
         }
 
+        // Preserve the end of the parsed argument list for call-site line
+        // reporting. caller() uses this to match Perl's behavior for
+        // multi-line direct sub calls.
+        args.setIndex(parser.tokenIndex);
         return args;
     }
 

@@ -177,8 +177,10 @@ public class SubroutineParser {
         boolean subExists = isNewMethod;
         String prototype = null;
         List<String> attributes = null;
+        RuntimeScalar parseTimeCodeRef = null;
         if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
+            parseTimeCodeRef = codeRef;
             if (codeRef.value instanceof RuntimeCode runtimeCode) {
                 prototype = runtimeCode.prototype;
                 attributes = runtimeCode.attributes;
@@ -549,8 +551,12 @@ public class SubroutineParser {
             }
 
             // Rewrite and return the subroutine call as `&name(arguments)`
+            OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
+            if (parseTimeCodeRef != null) {
+                codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
+            }
             return new BinaryOperatorNode("(",
-                    new OperatorNode("&", nameNode, currentIndex),
+                    codeRefNode,
                     arguments,
                     currentIndex);
         } finally {
