@@ -79,24 +79,33 @@ my $app = sub {
     }
 };
 
-print STDERR "Netty PSGI Server starting on 0.0.0.0:5000\n";
+
+use Getopt::Long;
+
+my $host = '0.0.0.0';
+my $port = 8080;
+GetOptions(
+    'host=s' => \$host,
+    'port=i' => \$port,
+) or die "Usage: $0 [--host HOST] [--port PORT]\n";
+
+print STDERR "Netty PSGI Server starting on $host:$port\n";
 print STDERR "Thread model: Single event loop (async I/O)\n";
 print STDERR "Press Ctrl+C to stop\n";
-
-print "Starting server on http://localhost:5000\n";
+print "Starting server on http://$host:$port\n";
 print "Test with:\n";
-print "  curl http://localhost:5000/\n";
-print "  curl http://localhost:5000/hello/World\n";
-print "  curl http://localhost:5000/json\n";
-print "  curl http://localhost:5000/env\n";
-print "  curl -X POST http://localhost:5000/echo -d 'test data'\n";
+print "  curl http://$host:$port/\n";
+print "  curl http://$host:$port/hello/World\n";
+print "  curl http://$host:$port/json\n";
+print "  curl http://$host:$port/env\n";
+print "  curl -X POST http://$host:$port/echo -d 'test data'\n";
 print "\n";
 
 my $handler = Plack::Handler::Netty->new(
-    host => '0.0.0.0',
-    port => 5000,
+    host => $host,
+    port => $port,
 );
 
-print STDERR "Plack::Handler::Netty: Accepting connections at http://0.0.0.0:5000/\n";
+print STDERR "Plack::Handler::Netty: Accepting connections at http://0.0.0.0:$port/\n";
 
 $handler->run($app);

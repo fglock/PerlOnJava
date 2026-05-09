@@ -17,7 +17,15 @@ Three test routes:
 
 =cut
 
+use Getopt::Long;
 use Plack::Handler::Netty;
+
+my $host = '0.0.0.0';
+my $port = 5000;
+GetOptions(
+    'host=s' => \$host,
+    'port=i' => \$port,
+) or die "Usage: $0 [--host HOST] [--port PORT]\n";
 
 # PSGI app that supports both sync and streaming responses
 my $app = sub {
@@ -81,14 +89,14 @@ my $app = sub {
 print STDERR "Test Streaming Response Server\n";
 print STDERR "================================\n\n";
 print STDERR "Test endpoints:\n";
-print STDERR "  GET http://localhost:5000/          - Streaming response\n";
-print STDERR "  GET http://localhost:5000/large     - Large streaming response\n";
-print STDERR "  GET http://localhost:5000/sync      - Synchronous response\n";
-print STDERR "  GET http://localhost:5000/json      - JSON streaming\n\n";
+print STDERR "  GET http://$host:$port/          - Streaming response\n";
+print STDERR "  GET http://$host:$port/large     - Large streaming response\n";
+print STDERR "  GET http://$host:$port/sync      - Synchronous response\n";
+print STDERR "  GET http://$host:$port/json      - JSON streaming\n\n";
 
 my $handler = Plack::Handler::Netty->new(
-    host => '0.0.0.0',
-    port => 5000,
+    host => $host,
+    port => $port,
 );
 
 $handler->run($app);

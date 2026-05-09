@@ -358,8 +358,8 @@ public class PlackHandlerNetty extends PerlModuleBase {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.err.println("Shutting down Netty PSGI server gracefully...");
             try {
-                bossGroup.shutdownGracefully().sync();
-                workerGroup.shutdownGracefully().sync();
+                bossGroup.shutdownGracefully(100, 2000, java.util.concurrent.TimeUnit.MILLISECONDS).sync();
+                workerGroup.shutdownGracefully(100, 2000, java.util.concurrent.TimeUnit.MILLISECONDS).sync();
                 System.err.println("Server shut down complete.");
             } catch (InterruptedException e) {
                 System.err.println("Shutdown interrupted: " + e.getMessage());
@@ -406,10 +406,10 @@ public class PlackHandlerNetty extends PerlModuleBase {
         } finally {
             // Shutdown event loops if not already shutdown
             if (!bossGroup.isShutdown()) {
-                bossGroup.shutdownGracefully();
+                bossGroup.shutdownGracefully(100, 2000, java.util.concurrent.TimeUnit.MILLISECONDS);
             }
             if (!workerGroup.isShutdown()) {
-                workerGroup.shutdownGracefully();
+                workerGroup.shutdownGracefully(100, 2000, java.util.concurrent.TimeUnit.MILLISECONDS);
             }
         }
     }

@@ -128,3 +128,8 @@ src/main/java/org/perlonjava/core/Configuration.java
 /store[0-9]*
 /integer.[0-9]*
 /utfhash.po
+.vscode
+.metals/metals.lock.db
+.gitignore
+.metals/metals.mv.db
+examples/http_server_plack/.vscode/settings.json
