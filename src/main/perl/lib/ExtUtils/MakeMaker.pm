@@ -743,8 +743,12 @@ $depend_rules_str
 # ExtUtils::MakeMaker). Files are NOT copied to INSTALLSITELIB here;
 # that happens in the 'install' target.
 # Also create blib/arch so that "use blib" / "-Mblib" works (blib.pm requires both).
+# Pre-create blib/lib/auto before AutoSplit runs (each staged .pm may call autosplit into it).
+# Without this, AutoSplit::autosplit_file creates the dir and prints a warning — stock
+# EU::MakeMaker typically creates blib dirs earlier via blibdirs / pm_to_blib ordering.
 pm_to_blib::$pm_deps_str
 \t\@mkdir -p blib/arch
+\t\@mkdir -p blib/lib/auto
 $blib_cmds_str
 
 # pure_all is an alias target some postambles (File::ShareDir::Install,

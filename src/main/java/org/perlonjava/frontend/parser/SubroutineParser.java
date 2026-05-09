@@ -1170,14 +1170,12 @@ public class SubroutineParser {
                 }
             }
 
-            // "Constant subroutine X redefined" is a default warning (always on)
-            // "Subroutine X redefined" requires -w or use warnings 'redefine'
-            if (isConstantSub) {
-                String msg = "Constant subroutine " + subName + " redefined" + location;
-                org.perlonjava.runtime.operators.WarnDie.warn(
-                        new RuntimeScalar(msg), new RuntimeScalar(""));
-            } else if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
-                String msg = "Subroutine " + subName + " redefined" + location;
+            // "Constant subroutine X redefined" and "Subroutine X redefined" both use the
+            // redefine category ($^W or lexical 'redefine' in ${^WARNING_BITS}), same as perl.
+            if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
+                String msg = isConstantSub
+                        ? ("Constant subroutine " + subName + " redefined" + location)
+                        : ("Subroutine " + subName + " redefined" + location);
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
             }
