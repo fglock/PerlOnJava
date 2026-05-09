@@ -1140,8 +1140,8 @@ public class SubroutineParser {
                     || existingCode.compilerSupplier != null;
             if (isRedefinition) {
                 oldPrototype = existingCode.prototype;
-                // A constant sub has empty prototype "()" - detect for "Constant subroutine" warning
-                isConstantSub = "".equals(oldPrototype);
+                // Previous sub was compile-time constant iff prototype is "()". (Perl stores "()", not "")
+                isConstantSub = "()".equals(oldPrototype) || "".equals(oldPrototype);
                 // Java-registered methods (via registerMethod) have isStatic=true and methodHandle set
                 isBuiltinSub = existingCode.isStatic && existingCode.methodHandle != null;
             }
@@ -1157,7 +1157,6 @@ public class SubroutineParser {
             }
 
             // Prototype mismatch is a default warning (always on unless explicitly disabled)
-            boolean dollarW = GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean();
             {
                 // Perl format: "sub NAME: none vs (new)" or "sub NAME (old) vs none"
                 // When prototype is null, display as ": none"; when defined, display as " (proto)"
@@ -1171,14 +1170,16 @@ public class SubroutineParser {
                 }
             }
 
-            // "Constant subroutine X redefined" is a default warning (always on)
-            // "Subroutine X redefined" requires -w or use warnings 'redefine'
+            // "Subroutine X redefined": ckWARN('redefine') — $^W or lexical 'redefine' in ${^WARNING_BITS}.
+            // "Constant subroutine X redefined": still emitted when $^W is 0 (e.g. eval under local $^W=0);
+            // only suppressed by lexical no warnings 'redefine' / no warnings. See perl5_t/t/comp/redef.t.
             if (isConstantSub) {
-                String msg = "Constant subroutine " + subName + " redefined" + location;
-                org.perlonjava.runtime.operators.WarnDie.warn(
-                        new RuntimeScalar(msg), new RuntimeScalar(""));
-            } else if (!Warnings.warningManager.isWarningDisabled("redefine")
-                    && (dollarW || Warnings.warningManager.isWarningEnabled("redefine"))) {
+                if (!Warnings.warningManager.isWarningDisabled("redefine")) {
+                    String msg = "Constant subroutine " + subName + " redefined" + location;
+                    org.perlonjava.runtime.operators.WarnDie.warn(
+                            new RuntimeScalar(msg), new RuntimeScalar(""));
+                }
+            } else if (WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
                 String msg = "Subroutine " + subName + " redefined" + location;
                 org.perlonjava.runtime.operators.WarnDie.warn(
                         new RuntimeScalar(msg), new RuntimeScalar(""));
