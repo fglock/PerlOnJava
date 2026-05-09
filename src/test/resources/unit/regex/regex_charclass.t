@@ -60,19 +60,38 @@ subtest 'bracketed \c? matches DEL only' => sub {
     ok("color"  =~ /colou?r/, "? quantifier still works (absent)");
 };
 
-subtest 'bracketed \Q and \E are literal with warnings' => sub {
+subtest 'bracketed \Q...\E applies quotemeta' => sub {
     my @warnings;
     local $SIG{__WARN__} = sub { push @warnings, @_ };
 
     my $re = qr/[\Qabc\E]/;
-    ok("Q" =~ $re, '\Q is passed through as literal Q in a character class');
-    ok("E" =~ $re, '\E is passed through as literal E in a character class');
-    ok("a" =~ $re, 'character class contents still match');
+    ok("a" =~ $re, '\Q...\E contents match in a character class');
+    ok("b" =~ $re, 'middle contents match');
+    ok("c" =~ $re, 'last contents match');
+    ok("Q" !~ $re, '\Q marker is not a literal Q');
+    ok("E" !~ $re, '\E marker is not a literal E');
     ok("d" !~ $re, 'characters outside the class do not match');
+
+    my $bracket = qr/[a\Q]\E]c/;
+    ok("ac" =~ $bracket, 'plain character still matches');
+    ok("]c" =~ $bracket, 'quoted closing bracket remains inside the class');
+    is(join("", @warnings), "", 'no warnings are emitted');
+};
+
+subtest 'interpolated bracketed \Q and \E are literal with warnings' => sub {
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
+
+    my $chars = '\Qabc\E';
+    my $re = qr/[$chars]/;
+    ok("Q" =~ $re, 'interpolated \Q is passed through as literal Q');
+    ok("E" =~ $re, 'interpolated \E is passed through as literal E');
+    ok("a" =~ $re, 'interpolated character class contents still match');
+    ok("d" !~ $re, 'characters outside the interpolated class do not match');
     like(join("", @warnings), qr/Unrecognized escape \\Q in character class passed through in regex/,
-         '\Q warning is emitted');
+         'interpolated \Q warning is emitted');
     like(join("", @warnings), qr/Unrecognized escape \\E in character class passed through in regex/,
-         '\E warning is emitted');
+         'interpolated \E warning is emitted');
 };
 
 done_testing();

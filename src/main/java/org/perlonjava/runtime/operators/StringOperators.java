@@ -101,10 +101,19 @@ public class StringOperators {
      */
     private static RuntimeScalar makeStringResult(String value, RuntimeScalar source) {
         RuntimeScalar result = new RuntimeScalar(value);
-        if (source.type == RuntimeScalarType.BYTE_STRING) {
+        if (source.type == RuntimeScalarType.BYTE_STRING && canRepresentAsByteString(value)) {
             result.type = RuntimeScalarType.BYTE_STRING;
         }
         return result;
+    }
+
+    private static boolean canRepresentAsByteString(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 0xFF) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -145,6 +154,14 @@ public class StringOperators {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return caseFoldBytesAsciiOnly(runtimeScalar);
         }
+        return fcUnicode(runtimeScalar);
+    }
+
+    /**
+     * Performs full Unicode case folding, including Latin-1 byte strings.
+     * This is used under the unicode_strings feature.
+     */
+    public static RuntimeScalar fcUnicode(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Perform full Unicode case folding using ICU4J CaseMap
         // Note: We do NOT use NFKC normalization because Perl's fc() preserves
@@ -180,6 +197,14 @@ public class StringOperators {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return caseFoldBytesAsciiOnly(runtimeScalar);
         }
+        return lcUnicode(runtimeScalar);
+    }
+
+    /**
+     * Converts to lowercase using Unicode semantics, including Latin-1 byte strings.
+     * This is used under the unicode_strings feature.
+     */
+    public static RuntimeScalar lcUnicode(RuntimeScalar runtimeScalar) {
         // Convert the string to lowercase using ICU4J for proper Unicode handling
         String str = UCharacter.toLowerCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -205,6 +230,14 @@ public class StringOperators {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return lcfirstBytes(runtimeScalar);
         }
+        return lcfirstUnicode(runtimeScalar);
+    }
+
+    /**
+     * Converts the first character to lowercase using Unicode semantics.
+     * This is used under the unicode_strings feature.
+     */
+    public static RuntimeScalar lcfirstUnicode(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
@@ -230,6 +263,14 @@ public class StringOperators {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return uppercaseBytesAsciiOnly(runtimeScalar);
         }
+        return ucUnicode(runtimeScalar);
+    }
+
+    /**
+     * Converts to uppercase using Unicode semantics, including Latin-1 byte strings.
+     * This is used under the unicode_strings feature.
+     */
+    public static RuntimeScalar ucUnicode(RuntimeScalar runtimeScalar) {
         // Convert the string to uppercase using ICU4J for proper Unicode handling
         String str = UCharacter.toUpperCase(runtimeScalar.toString());
         return makeStringResult(str, runtimeScalar);
@@ -247,10 +288,18 @@ public class StringOperators {
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return ucfirstBytes(runtimeScalar);
         }
+        return ucfirstUnicode(runtimeScalar);
+    }
+
+    /**
+     * Converts the first character to titlecase using Unicode semantics.
+     * This is used under the unicode_strings feature.
+     */
+    public static RuntimeScalar ucfirstUnicode(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
         // Check if the string is empty
         if (str.isEmpty()) {
-            return new RuntimeScalar(str);
+            return makeStringResult(str, runtimeScalar);
         }
         int firstCodePoint = str.codePointAt(0);
         int charCount = Character.charCount(firstCodePoint);

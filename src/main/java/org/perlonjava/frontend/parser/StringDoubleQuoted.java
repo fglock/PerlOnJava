@@ -419,10 +419,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
         switch (escape) {
             // Case modification end marker
             case "E" -> {
-                if (isInsideRegexCharClass()) {
-                    appendToCurrentSegment("\\E");
-                    return;
-                }
                 // Flush any pending literal text
                 flushCurrentSegment();
                 // Pop and apply the most recent case modifier
@@ -440,10 +436,6 @@ public class StringDoubleQuoted extends StringSegmentParser {
 
             // Quotemeta modifier
             case "Q" -> {
-                if (isInsideRegexCharClass()) {
-                    appendToCurrentSegment("\\Q");
-                    return;
-                }
                 flushCurrentSegment();
                 caseModifiers.push(new CaseModifier("Q", false));
             }
