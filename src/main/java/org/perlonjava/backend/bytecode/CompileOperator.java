@@ -20,6 +20,45 @@ public class CompileOperator {
         }
     }
 
+    private static Node singleUndefOperand(Node operand) {
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            return list.elements.get(0);
+        }
+        return operand;
+    }
+
+    private static boolean isScalarUndefTarget(Node operand) {
+        if (operand instanceof OperatorNode op) {
+            return op.operator.equals("$")
+                    || op.operator.equals("pos")
+                    || op.operator.equals("substr")
+                    || op.operator.equals("vec");
+        }
+        if (operand instanceof BinaryOperatorNode bin) {
+            return bin.operator.equals("[")
+                    || bin.operator.equals("{")
+                    || bin.operator.equals("->")
+                    || bin.operator.equals("(");
+        }
+        return operand instanceof TernaryOperatorNode;
+    }
+
+    private static void compileScalarUndefTarget(BytecodeCompiler bc, Node operand) {
+        int context = RuntimeContextType.SCALAR;
+        if (operand instanceof BinaryOperatorNode bin) {
+            boolean lvalueCall = bin.operator.equals("(")
+                    || (bin.operator.equals("->")
+                    && (bin.right instanceof ListNode
+                    || (bin.right instanceof BinaryOperatorNode call && call.operator.equals("("))));
+            if (lvalueCall) {
+                context = RuntimeContextType.LVALUE;
+            }
+        } else if (operand instanceof TernaryOperatorNode) {
+            context = RuntimeContextType.LVALUE;
+        }
+        bc.compileNode(operand, -1, context);
+    }
+
     private static short selectCaseOpcode(BytecodeCompiler bc, short normalOpcode, short bytesOpcode, short unicodeOpcode) {
         if (bc.isBytesEnabled()) {
             return bytesOpcode;
@@ -1162,10 +1201,24 @@ public class CompileOperator {
             }
             case "undef" -> {
                 if (node.operand != null) {
-                    node.operand.accept(bytecodeCompiler);
-                    int operandReg = bytecodeCompiler.lastResultReg;
-                    bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
-                    bytecodeCompiler.emitReg(operandReg);
+                    Node undefTarget = singleUndefOperand(node.operand);
+                    if (isScalarUndefTarget(undefTarget)) {
+                        compileScalarUndefTarget(bytecodeCompiler, undefTarget);
+                        int operandReg = bytecodeCompiler.lastResultReg;
+                        int valueReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        bytecodeCompiler.emitReg(operandReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                    } else {
+                        // Container/code-slot targets keep the explicit undefine
+                        // path: undef @array, undef %hash, undef *glob, undef &sub.
+                        bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.LIST);
+                        int operandReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                        bytecodeCompiler.emitReg(operandReg);
+                    }
                 }
                 int undefReg = bytecodeCompiler.allocateRegister();
                 if (bytecodeCompiler.currentCallContext == RuntimeContextType.LIST) {

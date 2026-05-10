@@ -1,0 +1,14 @@
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for IO::Async. Set IO_ASYNC_NO_FORK during tests because PerlOnJava does not implement POSIX fork().',
+  'match' => {
+    'distribution' => '^PEVANS/IO-Async-'
+  },
+  'patches' => [
+    'IO-Async-0.805/NoFork.patch'
+  ],
+  'test' => {
+    'env' => {
+      'IO_ASYNC_NO_FORK' => 1
+    }
+  }
+};

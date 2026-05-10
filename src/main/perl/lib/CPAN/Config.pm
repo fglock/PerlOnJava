@@ -245,6 +245,24 @@ match:
 patches:
   - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"
 YAML
+        'IO-Async.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for IO::Async.
+
+  PerlOnJava does not implement POSIX fork(); CORE::fork returns undef with
+  EAGAIN. IO::Async normally assumes fork support on Unix-like systems unless
+  IO_ASYNC_NO_FORK is set. Tell IO::Async's own test suite the real platform
+  capability so fork/process/routine tests skip instead of failing after the
+  runtime correctly rejects fork().
+match:
+  distribution: "^PEVANS/IO-Async-"
+patches:
+  - "IO-Async-0.805/NoFork.patch"
+test:
+  env:
+    IO_ASYNC_NO_FORK: 1
+YAML
     );
     my %bundled_dd = (
         'CPAN-FindDependencies.dd' => <<'DD',
@@ -256,6 +274,22 @@ $VAR1 = {
   'patches' => [
     'CPAN-FindDependencies-3.13/MakeMaker.pm.patch'
   ]
+};
+DD
+        'IO-Async.dd' => <<'DD',
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for IO::Async. Set IO_ASYNC_NO_FORK during tests because PerlOnJava does not implement POSIX fork().',
+  'match' => {
+    'distribution' => '^PEVANS/IO-Async-'
+  },
+  'patches' => [
+    'IO-Async-0.805/NoFork.patch'
+  ],
+  'test' => {
+    'env' => {
+      'IO_ASYNC_NO_FORK' => 1
+    }
+  }
 };
 DD
     );
@@ -358,9 +392,51 @@ PATCH
 +            chdir($cwd);
 +            return _parse_makefile( $makefile_str );
 +        }
-         # execute, suppressing noise ...
-         eval { capture {
-             if(my $pid = fork()) { # parent
+        # execute, suppressing noise ...
+        eval { capture {
+            if(my $pid = fork()) { # parent
+PATCH
+    my $io_async_no_fork_patch = <<'PATCH';
+--- lib/IO/Async/Routine.pm.orig
++++ lib/IO/Async/Routine.pm
+@@ -209,7 +209,7 @@
+ use constant PREFERRED_MODEL =>
+    IO::Async::OS->HAVE_POSIX_FORK ? "fork" :
+    IO::Async::OS->HAVE_THREADS    ? "thread" :
+-      die "No viable Routine models";
++      undef;
+@@ -217,6 +217,7 @@
+ sub _init
+ {
+    my $self = shift;
+    my ( $params ) = @_;
+    $params->{model} ||= $ENV{IO_ASYNC_ROUTINE_MODEL} || PREFERRED_MODEL;
++   defined $params->{model} or croak "No viable Routine models";
+    $self->SUPER::_init( @_ );
+ }
+--- t/14loop-poll-process.t.orig
++++ t/14loop-poll-process.t
+@@ -6,3 +6,5 @@
+ use Test2::V0;
++use IO::Async::OS;
++plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
+ use IO::Async::LoopTests;
+ run_tests( 'IO::Async::Loop::Poll', 'process' );
+--- t/14loop-select-process.t.orig
++++ t/14loop-select-process.t
+@@ -6,3 +6,5 @@
+ use Test2::V0;
++use IO::Async::OS;
++plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
+ use IO::Async::LoopTests;
+ run_tests( 'IO::Async::Loop::Select', 'process' );
+--- t/26pid.t.orig
++++ t/26pid.t
+@@ -14,3 +14,5 @@
+ use IO::Async::Loop;
++use IO::Async::OS;
++plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
+ my $loop = IO::Async::Loop->new_builtin;
 PATCH
 
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
@@ -376,6 +452,9 @@ PATCH
         [ 'CPAN-FindDependencies-3.13/MakeMaker.pm.patch',
           undef,
           $cpan_finddeps_makemaker_patch ],
+        [ 'IO-Async-0.805/NoFork.patch',
+          undef,
+          $io_async_no_fork_patch ],
     );
 
     # Fast path: if every target exists and inline targets are current, skip everything.

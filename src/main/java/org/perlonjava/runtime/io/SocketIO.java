@@ -578,6 +578,37 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
+            // SocketChannel-backed handles, including socketpair() sockets,
+            // may not have Java stream wrappers. Readline still needs to work
+            // on them because IO::Socket exposes getline() for sockets.
+            if (socketChannel != null) {
+                if (!ensureConnected()) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxBytes);
+                int bytesRead = socketChannel.read(buf);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+                if (bytesRead == 0) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar("");
+                }
+
+                byte[] buffer = new byte[bytesRead];
+                buf.flip();
+                buf.get(buffer);
+
+                if (decoderHelper == null) {
+                    decoderHelper = new CharsetDecoderHelper();
+                }
+                String decoded = decoderHelper.decode(buffer, bytesRead, charset);
+                return new RuntimeScalar(decoded);
+            }
+
             if (inputStream != null) {
                 if (decoderHelper == null) {
                     decoderHelper = new CharsetDecoderHelper();

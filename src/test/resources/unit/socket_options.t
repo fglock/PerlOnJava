@@ -20,6 +20,9 @@ SKIP: {
     my $opt = getsockopt($left, SOL_SOCKET, SO_TYPE);
     ok defined($opt), 'getsockopt(SO_TYPE) returns a value';
     is unpack("i", $opt), SOCK_STREAM, 'SO_TYPE reports SOCK_STREAM';
+
+    syswrite($right, "ready\n");
+    is scalar(<$left>), "ready\n", 'readline works on socketpair handles';
 }
 
 SKIP: {

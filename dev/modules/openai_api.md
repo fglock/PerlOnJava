@@ -6,8 +6,9 @@
 OpenAI::API itself. The class/parser/runtime fixes now let the run progress
 past `Struct::Dumb` and `Test::Metrics::Any`. The active blocker is
 `IO::Async`; the suite now parses and runs far enough to exercise sockets,
-weak-reference/refcount behavior, notifier lifetimes, stream decoding, POSIX
-and Socket constants, and a few remaining parser constructs.
+weak-reference/refcount behavior, notifier lifetimes, stream decoding,
+metrics, signal delivery, Routine/Function no-fork paths, and connect/listen
+behavior.
 
 ## Completed
 
@@ -61,9 +62,22 @@ and Socket constants, and a few remaining parser constructs.
 - Fixed SKIP-block hash/block disambiguation for `skip "reason", $n if ...`
   followed by method calls whose named arguments include keyword-like values
   such as `model => "fork"`.
+- Added IO::Async CPAN distroprefs (`.yml` plus `.dd` fallback) that set
+  `IO_ASYNC_NO_FORK=1` during its test phase. PerlOnJava's `fork`
+  intentionally returns undef, and IO::Async already uses this environment
+  variable to skip POSIX-fork-dependent tests.
+- Added an IO::Async source patch for the no-fork test path so
+  `IO::Async::Routine` loads without a compile-time fork/thread model and the
+  two raw-fork process tests skip when `HAVE_POSIX_FORK` is false.
+- Fixed readline on `socketpair` handles backed by `SocketChannel`, allowing
+  IO::Async readiness callbacks to read line-oriented data from socketpair
+  handles.
+- Fixed scalar-lvalue `undef` for JVM and bytecode backends so
+  `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
+  to real undef values while `undef &sub` keeps the code-slot path.
 - Added focused unit coverage for Socket options, IPv6 constants, weak probe
-  copies, tail-call argument cleanup, SKIP-block disambiguation, and the new
-  Socket/POSIX constants.
+  copies, tail-call argument cleanup, SKIP-block disambiguation, scalar-lvalue
+  `undef`, and the new Socket/POSIX constants.
 - Verified `IO::Async` focused tests `t/02os.t` and `t/04notifier.t` now pass
   under escalated runs.
 
@@ -74,16 +88,22 @@ and Socket constants, and a few remaining parser constructs.
 2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
    `IO::Async` suite to start running its tests.
 3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   36 failing files after the weak-reference, tail-call cleanup, constant
-   export, and SKIP-block parser fixes. The latest run is
-   `/tmp/io_async_after_skip_einprogress.log`: `Failed 36/64 test programs.
-   40/969 subtests failed`.
-4. The previous missing constant errors are cleared. `t/63handle-connect.t` now
-   passes, and the previous parser errors in `t/41routine.t`, `t/42function.t`,
-   and `t/51loop-connect.t` are gone.
-5. The remaining short-term blockers are runtime gaps around signal/process
-   tests, stream UTF-8 decoding, stdio handle identity, socket/listener readiness
-   and sockname behavior, and notifier/future/protocol refcounts.
+   20 failing files after weak-reference, tail-call cleanup, constant export,
+   SKIP-block parser, no-fork distroprefs, socketpair readline, and scalar
+   `undef` lvalue fixes. The latest run is
+   `/tmp/jcpan_io_async_after_undef_lvalue.log`: `Failed 20/64 test programs.
+   39/1109 subtests failed`.
+4. The previous missing constant errors are cleared. `t/10loop-poll-io.t`,
+   `t/10loop-select-io.t`, `t/20handle.t`, `t/24listener.t`,
+   `t/61protocol-stream.t`, `t/62protocol-linestream.t`,
+   `t/63handle-connect.t`, and `t/64handle-bind.t` now pass.
+5. Process/fork tests now skip under `IO_ASYNC_NO_FORK` plus the IO::Async
+   no-fork patch. Remaining Routine/Function failures are no-fork constructor
+   paths not covered by IO::Async's existing skips.
+6. The remaining short-term blockers are `t/25socket.t` sockaddr structure
+   handling, `t/51loop-connect.t` connect readiness, signal tests, metrics,
+   stream UTF-8 decoding, stdio handle identity, Routine/Function no-fork
+   paths, file stream readiness, and notifier/future/protocol refcounts.
 
 ## Verification Targets
 
@@ -100,20 +120,24 @@ and Socket constants, and a few remaining parser constructs.
 8. `IO::Async` parser checks for `t/41routine.t`, `t/42function.t`, and
    `t/51loop-connect.t` pass under `./jperl --parse`.
 9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
-   to documented PerlOnJava gaps.
+   to documented PerlOnJava gaps. Current checkpoint:
+   `/tmp/jcpan_io_async_after_undef_lvalue.log`.
 10. `make` passes.
 11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
    subsequent dependency failures should be documented here before fixing.
 
 ## Next Steps
 
-- Investigate the IO::Async process/fork failures; many currently report
-  `Cannot fork() - Resource temporarily unavailable`, which may be a missing
-  PerlOnJava process primitive, handle exhaustion, or leaked process state from
-  earlier tests.
-- Fix the remaining stream/socket blockers: stdio handle identity,
-  partial UTF-8 decoding, listener `sockname`, and connect readiness.
+- Fix the remaining socket blockers: `t/25socket.t` invalid
+  `sockaddr_in` structure handling and `t/51loop-connect.t` connect readiness.
+- Fix the remaining stream blockers: stdio handle identity and partial UTF-8
+  decoding.
+- Patch or implement the remaining IO::Async no-fork Routine/Function paths so
+  tests that require a fork/thread model skip cleanly instead of dying with
+  `No viable Routine models`.
 - Investigate the notifier/future/protocol refcount mismatches that remain in
   `t/05*`, `t/06*`, `t/07*`, `t/21*`, `t/28*`, and `t/60protocol.t`.
 - Rerun `IO::Async` and then `OpenAI::API`.
-- Keep PR #702 updated from the feature branch.
+- Keep PR #702 updated from the feature branch. After the OpenAI::API path is
+  stable, evaluate bundling YAML so CPAN can read `.yml` distroprefs directly;
+  keep using `.dd` fallbacks for this fix.
