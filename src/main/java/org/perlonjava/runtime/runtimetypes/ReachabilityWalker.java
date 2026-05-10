@@ -182,6 +182,17 @@ public class ReachabilityWalker {
                         visitScalar(cap, todo);
                     }
                 }
+                if (walkCaptures
+                        && cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    for (RuntimeBase cap : interpreted.capturedVars) {
+                        if (cap instanceof RuntimeScalar scalar) {
+                            visitScalar(scalar, todo);
+                        } else if (cap != null) {
+                            addReachable(cap, todo);
+                        }
+                    }
+                }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
             }
@@ -283,6 +294,21 @@ public class ReachabilityWalker {
                     String sub = code.subName == null ? "(anon)" : code.subName;
                     for (RuntimeScalar cap : code.capturedScalars) {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
+                    }
+                }
+                if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    int i = 0;
+                    String name = code.packageName == null ? "?" : code.packageName;
+                    String sub = code.subName == null ? "(anon)" : code.subName;
+                    for (RuntimeBase cap : interpreted.capturedVars) {
+                        String path = curPath + "<interpreted closure " + name + "::" + sub
+                                + " cap#" + (i++) + ">";
+                        if (cap instanceof RuntimeScalar scalar) {
+                            visitScalarPath(scalar, path, howReached, todo);
+                        } else if (cap != null && howReached.putIfAbsent(cap, path) == null) {
+                            todo.add(cap);
+                        }
                     }
                 }
             }
@@ -571,6 +597,11 @@ public class ReachabilityWalker {
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
             seedTarget(e.getValue(), target, seen, todo);
             if (seen.contains(target)) return true;
+            if (!globalOnly
+                    && e.getValue() != null
+                    && e.getValue().value instanceof RuntimeCode code) {
+                if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
+            }
         }
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
             seedTarget(e.getValue(), target, seen, todo);
@@ -688,6 +719,28 @@ public class ReachabilityWalker {
                 && s.value instanceof RuntimeBase b) {
             if (b == target) return true;
             if (seen.add(b)) todo.addLast(b);
+        }
+        return false;
+    }
+
+    private static boolean followGlobalCodeCaptures(RuntimeCode code, RuntimeBase target,
+                                                    Set<RuntimeBase> seen,
+                                                    java.util.ArrayDeque<RuntimeBase> todo) {
+        if (code.capturedScalars != null) {
+            for (RuntimeScalar cap : code.capturedScalars) {
+                if (followScalar(cap, target, seen, todo)) return true;
+            }
+        }
+        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (RuntimeBase cap : interpreted.capturedVars) {
+                if (cap instanceof RuntimeScalar scalar) {
+                    if (followScalar(scalar, target, seen, todo)) return true;
+                } else if (cap != null) {
+                    if (cap == target) return true;
+                    if (seen.add(cap)) todo.addLast(cap);
+                }
+            }
         }
         return false;
     }

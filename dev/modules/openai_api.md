@@ -88,12 +88,17 @@ behavior.
 - Closed `DatagramChannel` handles correctly and added socketpair peer-error
   readiness for connected UDP pairs, clearing the exceptional-socket checks in
   `t/10loop-poll-io.t` and `t/10loop-select-io.t`.
+- Fixed lazy named-sub capture metadata so package subs that close over file
+  lexicals expose those scalar captures to the weak-ref reachability rescue.
+  This prevents Test::Refcount-style weak probe copies from firing `DESTROY`
+  while a captured file lexical still holds the object.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
 - Added focused unit coverage for Socket options, IPv6 constants, weak probe
-  copies, tail-call argument cleanup, SKIP-block disambiguation, scalar-lvalue
-  `undef`, and the new Socket/POSIX constants.
+  copies, captured-lexical weak probe copies, tail-call argument cleanup,
+  SKIP-block disambiguation, scalar-lvalue `undef`, and the new Socket/POSIX
+  constants.
 - Verified `IO::Async` focused tests `t/02os.t` and `t/04notifier.t` now pass
   under escalated runs.
 
@@ -104,24 +109,24 @@ behavior.
 2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
    `IO::Async` suite to start running its tests.
 3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   14 failing files after weak-reference, tail-call cleanup, constant export,
+   10 failing files after weak-reference, tail-call cleanup, constant export,
    SKIP-block parser, no-fork distroprefs, socketpair readline, scalar `undef`
-   lvalue, connected datagram socketpair, and no-fork Routine/Function skip
-   fixes plus UDP connect and datagram peer-error readiness support. The latest
-   run is `/tmp/jcpan_io_async_after_dgram_error.log`: `Failed 14/64 test
-   programs. 39/1125 subtests failed`.
+   lvalue, connected datagram socketpair, no-fork Routine/Function skips, UDP
+   connect, datagram peer-error readiness, and named-sub capture metadata fixes.
+   The latest run is `/tmp/jcpan_io_async_after_named_capture.log`: `Failed
+   10/64 test programs. 23/1125 subtests failed`.
 4. The previous missing constant errors are cleared. `t/24listener.t`,
    `t/25socket.t`, `t/61protocol-stream.t`, `t/62protocol-linestream.t`,
    `t/63handle-connect.t`, and `t/64handle-bind.t` now pass in the latest full
    checkpoint; `t/02os.t`, `t/10loop-poll-io.t`, `t/10loop-select-io.t`,
-   `t/20handle.t`, `t/25socket.t`, and `t/51loop-connect.t` pass when run
-   focused.
+   `t/16loop-poll-metrics.t`, `t/16loop-select-metrics.t`, `t/20handle.t`,
+   `t/25socket.t`, and `t/51loop-connect.t` pass when run focused.
 5. Process/fork tests now skip under `IO_ASYNC_NO_FORK` plus the IO::Async
    no-fork patch. Routine/Function/Resolver tests that require a fork/thread
    worker model also skip when no model is available.
-6. The remaining short-term blockers are signal tests, metrics, stream UTF-8
-   decoding, stdio handle identity, file stream readiness, and
-   notifier/future/protocol refcounts.
+6. Signal and metrics tests are now green in the latest full checkpoint. The
+   remaining short-term blockers are notifier/test/protocol refcounts, stdio
+   handle identity, partial UTF-8 stream decoding, and file stream readiness.
 
 ## Verification Targets
 
@@ -140,18 +145,18 @@ behavior.
    `t/51loop-connect.t` pass under `./jperl --parse`.
 9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
    to documented PerlOnJava gaps. Current checkpoint:
-   `/tmp/jcpan_io_async_after_dgram_error.log`.
+   `/tmp/jcpan_io_async_after_named_capture.log`.
 10. `make` passes.
 11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
    subsequent dependency failures should be documented here before fixing.
 
 ## Next Steps
 
-- Fix the remaining loop blockers: signal delivery and metrics setup.
-- Fix the remaining stream blockers: stdio handle identity and partial UTF-8
-  decoding.
-- Investigate the notifier/future/protocol refcount mismatches that remain in
-  `t/05*`, `t/06*`, `t/07*`, `t/21*`, `t/28*`, and `t/60protocol.t`.
+- Fix the remaining stream blockers: stdio handle identity, partial UTF-8
+  decoding, and file stream readiness.
+- Investigate the notifier/test/protocol refcount mismatches that remain in
+  `t/05*`, `t/06*`, `t/07*`, `t/19test.t`, `t/21*`, `t/28*`, and
+  `t/60protocol.t`.
 - Rerun `IO::Async` and then `OpenAI::API`.
 - Keep PR #702 updated from the feature branch. After the OpenAI::API path is
   stable, evaluate bundling YAML so CPAN can read `.yml` distroprefs directly;
