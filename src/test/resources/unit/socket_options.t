@@ -55,6 +55,26 @@ SKIP: {
 }
 
 SKIP: {
+    socket(my $udp, AF_INET, SOCK_DGRAM, 0)
+        or skip "inet dgram socket unavailable: $!", 3;
+    socket(my $peer, AF_INET, SOCK_DGRAM, 0)
+        or skip "inet dgram peer unavailable: $!", 3;
+    bind($peer, sockaddr_in(0, INADDR_LOOPBACK))
+        or skip "inet dgram peer bind unavailable: $!", 3;
+
+    my @peer_addr = unpack_sockaddr_in(getsockname($peer));
+    connect($udp, getsockname($peer))
+        or skip "inet dgram connect unavailable: $!", 3;
+
+    is_deeply [ unpack_sockaddr_in(getpeername($udp)) ], \@peer_addr, 'connected dgram socket reports peer address';
+    send($udp, "direct", 0);
+    my $buf = "";
+    my $sender = recv($peer, $buf, 1024, 0);
+    is $buf, "direct", 'connected dgram socket sends without destination';
+    ok defined($sender), 'connected dgram peer receives sender address';
+}
+
+SKIP: {
     socket(my $server, AF_INET, SOCK_STREAM, 0)
         or skip "socket unavailable: $!", 2;
     setsockopt($server, SOL_SOCKET, SO_REUSEADDR, pack("i", 1));

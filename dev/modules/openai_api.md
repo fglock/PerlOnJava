@@ -82,6 +82,9 @@ behavior.
 - Extended the IO::Async no-fork patch so Routine/Function/Resolver tests that
   require a fork/thread worker model skip cleanly when neither model is
   available.
+- Added connected UDP `connect()` support and mapped blocking
+  `ConnectException` to `ECONNREFUSED`, allowing IO::Async UDP connect and
+  refused-connect error tests to match their own baseline.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
@@ -98,24 +101,23 @@ behavior.
 2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
    `IO::Async` suite to start running its tests.
 3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   18 failing files after weak-reference, tail-call cleanup, constant export,
+   16 failing files after weak-reference, tail-call cleanup, constant export,
    SKIP-block parser, no-fork distroprefs, socketpair readline, scalar `undef`
    lvalue, connected datagram socketpair, and no-fork Routine/Function skip
-   fixes. The latest run is `/tmp/jcpan_io_async_after_routine_skip.log`:
-   `Failed 18/64 test programs. 43/1113 subtests failed`.
+   fixes plus UDP connect support. The latest run is
+   `/tmp/jcpan_io_async_after_udp_connect.log`: `Failed 16/64 test programs.
+   41/1125 subtests failed`.
 4. The previous missing constant errors are cleared. `t/24listener.t`,
    `t/25socket.t`, `t/61protocol-stream.t`, `t/62protocol-linestream.t`,
    `t/63handle-connect.t`, and `t/64handle-bind.t` now pass in the latest full
-   checkpoint; `t/02os.t`, `t/20handle.t`, and `t/25socket.t` pass when run
-   focused.
+   checkpoint; `t/02os.t`, `t/20handle.t`, `t/25socket.t`, and
+   `t/51loop-connect.t` pass when run focused.
 5. Process/fork tests now skip under `IO_ASYNC_NO_FORK` plus the IO::Async
    no-fork patch. Routine/Function/Resolver tests that require a fork/thread
    worker model also skip when no model is available.
-6. The remaining short-term blockers are `t/51loop-connect.t` connect
-   readiness, signal tests, metrics, stream UTF-8 decoding, stdio handle
-   identity, file stream readiness, exceptional socket readiness in
-   `t/10loop-*-io.t`, state-sensitive handle behavior in the full suite, and
-   notifier/future/protocol refcounts.
+6. The remaining short-term blockers are signal tests, metrics, stream UTF-8
+   decoding, stdio handle identity, file stream readiness, exceptional socket
+   readiness in `t/10loop-*-io.t`, and notifier/future/protocol refcounts.
 
 ## Verification Targets
 
@@ -133,21 +135,19 @@ behavior.
    `t/51loop-connect.t` pass under `./jperl --parse`.
 9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
    to documented PerlOnJava gaps. Current checkpoint:
-   `/tmp/jcpan_io_async_after_routine_skip.log`.
+   `/tmp/jcpan_io_async_after_udp_connect.log`.
 10. `make` passes.
 11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
    subsequent dependency failures should be documented here before fixing.
 
 ## Next Steps
 
-- Fix the remaining socket blockers: `t/51loop-connect.t` connect readiness and
-  the exceptional-socket readiness check in `t/10loop-*-io.t`.
+- Fix the remaining socket blocker: the exceptional-socket readiness check in
+  `t/10loop-*-io.t`.
 - Fix the remaining stream blockers: stdio handle identity and partial UTF-8
   decoding.
 - Investigate the notifier/future/protocol refcount mismatches that remain in
   `t/05*`, `t/06*`, `t/07*`, `t/21*`, `t/28*`, and `t/60protocol.t`.
-- Investigate the state-sensitive `t/20handle.t` failures that appeared in the
-  latest full suite run but do not reproduce when `t/20handle.t` is run alone.
 - Rerun `IO::Async` and then `OpenAI::API`.
 - Keep PR #702 updated from the feature branch. After the OpenAI::API path is
   stable, evaluate bundling YAML so CPAN can read `.yml` distroprefs directly;

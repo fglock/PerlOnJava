@@ -165,11 +165,16 @@ public class SocketIO implements IOHandle {
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     public RuntimeScalar connect(String address, int port) {
-        if (socket == null && socketChannel == null) {
+        if (socket == null && socketChannel == null && datagramChannel == null) {
             throw new IllegalStateException("No socket available to connect");
         }
         try {
             InetSocketAddress target = new InetSocketAddress(address, port);
+
+            if (datagramChannel != null) {
+                datagramChannel.connect(target);
+                return scalarTrue;
+            }
 
             // Use SocketChannel for non-blocking connect support
             if (socketChannel != null && !blocking) {
@@ -250,6 +255,9 @@ public class SocketIO implements IOHandle {
             this.inputStream = socket.getInputStream();
             this.outputStream = socket.getOutputStream();
             return scalarTrue;
+        } catch (java.net.ConnectException e) {
+            getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+            return scalarUndef;
         } catch (IOException e) {
             // Perl 5's connect() returns undef on failure (not false).
             // IO::Socket::IP relies on `defined connect(...)` to detect failure.
