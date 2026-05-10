@@ -327,7 +327,7 @@ public class InheritanceResolver {
 
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
-            cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+            cacheKey = normalizeMethodName(methodName, perlClassName);
         }
         // Use a separate cache slot for no-AUTOLOAD lookups so they don't
         // pollute (or get polluted by) normal lookups which DO promote AUTOLOAD.
@@ -368,7 +368,7 @@ public class InheritanceResolver {
             String className = linearizedClasses.get(i);
             for (String lookupClassName : packageLookupAliases(className)) {
                 String effectiveClassName = GlobalVariable.resolveStashAlias(lookupClassName);
-                String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, effectiveClassName);
+                String normalizedClassMethodName = normalizeMethodName(methodName, effectiveClassName);
 
                 if (TRACE_METHOD_RESOLUTION) {
                     System.err.println("  Checking class: '" + lookupClassName + "'");
@@ -442,6 +442,21 @@ public class InheritanceResolver {
         }
 
         return aliases;
+    }
+
+    private static String normalizeMethodName(String methodName, String className) {
+        if (methodName.startsWith("::")) {
+            return "main" + methodName;
+        }
+        if (methodName.contains("::")) {
+            return methodName;
+        }
+
+        String normalizedClass = NameNormalizer.normalizePackageName(className);
+        if (normalizedClass.endsWith("::")) {
+            return normalizedClass + methodName;
+        }
+        return normalizedClass + "::" + methodName;
     }
 
     // MRO algorithm selection

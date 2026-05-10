@@ -153,22 +153,19 @@ public class FieldParser {
         // Check for attribute value in parentheses
         String attrValue = "";
         if (TokenUtils.peek(parser).text.equals("(")) {
-            TokenUtils.consume(parser); // consume '('
-
-            // Check for empty parens
-            if (!TokenUtils.peek(parser).text.equals(")")) {
-                // Parse attribute value (usually an identifier)
-                token = TokenUtils.peek(parser);
-                if (token.type == LexerTokenType.IDENTIFIER) {
-                    attrValue = token.text;
-                    TokenUtils.consume(parser);
-                } else {
-                    throw new PerlCompilerException(parser.tokenIndex,
-                            "Expected identifier in attribute value", parser.ctx.errorUtil);
+            try {
+                StringParser.ParsedString rawStr = StringParser.parseRawStrings(
+                        parser, parser.ctx, parser.tokens, parser.tokenIndex, 1);
+                parser.tokenIndex = rawStr.next;
+                attrValue = rawStr.buffers.getFirst();
+            } catch (PerlCompilerException e) {
+                if (e.getMessage() != null && e.getMessage().contains("Can't find string terminator")) {
+                    String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
+                    throw new PerlCompilerException(
+                            "Unterminated attribute parameter in attribute list" + loc + ".\n");
                 }
+                throw e;
             }
-
-            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         }
 
         // Add attribute to field node as annotation

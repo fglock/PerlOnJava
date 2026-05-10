@@ -1195,12 +1195,14 @@ public class BytecodeInterpreter {
                                     // Fast path for InterpretedCode: call execute() directly,
                                     // bypassing RuntimeCode.apply() indirection chain
                                     if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                        RuntimeCode.requireLvalueCallable(interpCode, context, null);
+                                        int effectiveContext = RuntimeCode.effectiveCallContext(context);
                                         // Direct call to interpreter - skip RuntimeCode.apply overhead
                                         // Push args to argsStack for getCallerArgs() support (used by List::Util::any/all/etc.)
                                         RuntimeCode.pushArgs(callArgs);
                                         try {
                                             // Pass null for subroutineName to enable frame caching
-                                            result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                            result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
                                         } finally {
                                             RuntimeCode.popArgs();
                                         }
@@ -1223,10 +1225,12 @@ public class BytecodeInterpreter {
                                             callArgs = flow.getTailCallArgs();
                                             // Use fast path for InterpretedCode
                                             if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof InterpretedCode interpCode) {
+                                                RuntimeCode.requireLvalueCallable(interpCode, context, "tailcall");
+                                                int effectiveContext = RuntimeCode.effectiveCallContext(context);
                                                 // Push args for tail call too
                                                 RuntimeCode.pushArgs(callArgs);
                                                 try {
-                                                    result = BytecodeInterpreter.execute(interpCode, callArgs, context, null);
+                                                    result = BytecodeInterpreter.execute(interpCode, callArgs, effectiveContext, null);
                                                 } finally {
                                                     RuntimeCode.popArgs();
                                                 }
@@ -1243,8 +1247,8 @@ public class BytecodeInterpreter {
                                     CallerStack.pop();
                                 }
 
-                                // Convert to scalar if called in scalar context
-                                if (context == RuntimeContextType.SCALAR) {
+                                // Convert to scalar if called in scalar or lvalue context
+                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
                                     registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {
@@ -1363,8 +1367,8 @@ public class BytecodeInterpreter {
                                     CallerStack.pop();
                                 }
 
-                                // Convert to scalar if called in scalar context
-                                if (context == RuntimeContextType.SCALAR) {
+                                // Convert to scalar if called in scalar or lvalue context
+                                if (context == RuntimeContextType.SCALAR || context == RuntimeContextType.LVALUE) {
                                     RuntimeBase scalarResult = result.scalar();
                                     registers[rd] = (isImmutableProxy(scalarResult)) ? ensureMutableScalar(scalarResult) : scalarResult;
                                 } else {

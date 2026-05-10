@@ -37,6 +37,7 @@ public class SocketIO implements IOHandle {
     private OutputStream outputStream;
     private boolean isEOF;
     private boolean blocking = true;
+    private int socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
     private CharsetDecoderHelper decoderHelper;
     // Track the protocol family for server socket conversion in listen()
     private ProtocolFamily protocolFamily;
@@ -55,6 +56,7 @@ public class SocketIO implements IOHandle {
     public SocketIO(Socket socket) {
         this.socket = socket;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
         try {
             if (this.socket != null) {
                 this.inputStream = this.socket.getInputStream();
@@ -75,6 +77,7 @@ public class SocketIO implements IOHandle {
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
         // Get the server socket channel for native socket option support
         this.serverSocketChannel = this.serverSocket.getChannel();
     }
@@ -89,6 +92,7 @@ public class SocketIO implements IOHandle {
         this.serverSocket = serverSocket;
         this.serverSocketChannel = serverSocketChannel;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
     }
 
     /**
@@ -100,10 +104,15 @@ public class SocketIO implements IOHandle {
      * @param family  the protocol family (INET, INET6, etc.)
      */
     public SocketIO(SocketChannel channel, ProtocolFamily family) {
+        this(channel, family, org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM);
+    }
+
+    public SocketIO(SocketChannel channel, ProtocolFamily family, int socketType) {
         this.socketChannel = channel;
         this.socket = channel.socket();
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
+        this.socketType = socketType;
     }
 
     /**
@@ -116,6 +125,7 @@ public class SocketIO implements IOHandle {
         this.datagramChannel = channel;
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_DGRAM;
     }
 
     /**
@@ -497,6 +507,7 @@ public class SocketIO implements IOHandle {
                 SocketIO clientIO = new SocketIO(clientSocket);
                 // Ensure the channel is set on the new SocketIO
                 clientIO.socketChannel = clientChannel;
+                clientIO.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
                 return clientIO;
             }
             // Fallback to blocking accept
@@ -1013,6 +1024,15 @@ public class SocketIO implements IOHandle {
      * @return the option value, or 0 if not set
      */
     public int getSocketOption(int level, int optname) {
+        if (level == org.perlonjava.runtime.perlmodule.Socket.SOL_SOCKET) {
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_TYPE) {
+                return socketType;
+            }
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_ACCEPTCONN) {
+                return serverSocket != null && serverSocket.isBound() && !serverSocket.isClosed() ? 1 : 0;
+            }
+        }
+
         try {
             // Try to use Java's native socket option support first
             SocketOption<?> javaOption = mapToJavaSocketOption(level, optname);

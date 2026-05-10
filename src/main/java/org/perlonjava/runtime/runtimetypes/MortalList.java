@@ -614,6 +614,16 @@ public class MortalList {
                 // scalar holding that same array.
                 base.refCount = 1;
             } else if (base.blessId != 0
+                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && !blessedClassHasDestroy(base)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // A weakened probe copy can make the selective count reach
+                // zero while an ordinary blessed object is still held by a
+                // live lexical. Test::Refcount exercises this shape; clearing
+                // weak refs here drops callback invocants that should remain
+                // valid. Classes with DESTROY keep the stricter path below.
+                base.refCount = 1;
+            } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && WeakRefRegistry.hasWeakRefsTo(base)
                     && isReachableCached(base)) {
@@ -626,6 +636,11 @@ public class MortalList {
                 DestroyDispatch.callDestroy(base);
             }
         }
+    }
+
+    private static boolean blessedClassHasDestroy(RuntimeBase base) {
+        String className = NameNormalizer.getBlessStr(base.blessId);
+        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
     }
 
     public static void flush() {

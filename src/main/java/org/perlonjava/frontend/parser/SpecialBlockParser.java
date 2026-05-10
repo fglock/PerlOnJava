@@ -216,6 +216,10 @@ public class SpecialBlockParser {
                 if (entry.name().startsWith("&")) {
                     continue;
                 }
+                if (entry.decl().equals("field") || entry.name().isEmpty()
+                        || "$@%*".indexOf(entry.name().charAt(0)) < 0) {
+                    continue;
+                }
 
                 String packageName;
                 boolean isFromOuterScope = false;

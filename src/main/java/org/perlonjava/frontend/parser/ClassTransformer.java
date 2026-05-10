@@ -403,7 +403,11 @@ public class ClassTransformer {
     private static Node generateFieldInitialization(OperatorNode field) {
         String sigil = (String) field.getAnnotation("sigil");
         String name = (String) field.getAnnotation("name");
-        boolean hasParam = field.getAnnotation("attr:param") != null;
+        String paramName = (String) field.getAnnotation("attr:param");
+        boolean hasParam = paramName != null;
+        if (paramName == null || paramName.isEmpty()) {
+            paramName = name;
+        }
         boolean hasDefault = field.getBooleanAnnotation("hasDefault");
         String defaultOperator = (String) field.getAnnotation("defaultOperator"); // =, //=, or ||=
         Node defaultValue = field.operand; // The default value if hasDefault is true
@@ -430,17 +434,17 @@ public class ClassTransformer {
         // Use the correct AST structure: $self -> HashLiteralNode([IdentifierNode])
         OperatorNode selfVar = new OperatorNode("$", new IdentifierNode("self", 0), 0);
         List<Node> keyList = new ArrayList<>();
-        keyList.add(new IdentifierNode(name, 0));  // Use IdentifierNode, not StringNode!
+        keyList.add(new StringNode(name, 0));
         HashLiteralNode hashSubscript = new HashLiteralNode(keyList, 0);
         BinaryOperatorNode selfField = new BinaryOperatorNode("->", selfVar, hashSubscript, 0);
 
         Node value;
         if (hasParam) {
-            // $args{fieldname} // default_or_undef
+            // $args{paramname} // default_or_undef
             // Use correct structure: %args becomes $args in hash access
             OperatorNode argsVar = new OperatorNode("$", new IdentifierNode("args", 0), 0);
             List<Node> argKeyList = new ArrayList<>();
-            argKeyList.add(new IdentifierNode(name, 0));  // Use IdentifierNode, not StringNode!
+            argKeyList.add(new StringNode(paramName, 0));
             HashLiteralNode argHashSubscript = new HashLiteralNode(argKeyList, 0);
             BinaryOperatorNode argsAccess = new BinaryOperatorNode("{", argsVar, argHashSubscript, 0);
 
@@ -557,6 +561,9 @@ public class ClassTransformer {
      * This modifies the method in place.
      */
     private static void transformMethod(SubroutineNode method, List<OperatorNode> fields) {
+        if (method.getBooleanAnnotation("methodSelfInjected")) {
+            return;
+        }
         if (method.block == null || !(method.block instanceof BlockNode methodBody)) {
             return;
         }

@@ -40,5 +40,12 @@ public class RuntimeContextType {
      * determined during the execution of the program.
      */
     public static final int RUNTIME = 3;
-}
 
+    /**
+     * Represents scalar lvalue context for subroutine and method calls used on
+     * the left-hand side of assignment. The callee still executes in scalar
+     * context, but the runtime verifies that the called code has the :lvalue
+     * attribute before allowing assignment through its return value.
+     */
+    public static final int LVALUE = 4;
+}

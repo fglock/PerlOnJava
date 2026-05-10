@@ -627,7 +627,8 @@ public class EmitSubroutine {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
 
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                    || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
@@ -659,7 +660,8 @@ public class EmitSubroutine {
             // Registry-based non-local control flow check (for next/last/redo LABEL from closures)
             emitControlFlowCheck(emitterVisitor.ctx);
 
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                    || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                         "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
                         "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
@@ -865,7 +867,8 @@ public class EmitSubroutine {
             }
         }
 
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
             // Transform the value in the stack to RuntimeScalar
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

@@ -3031,6 +3031,7 @@ public class IOOperator {
             // The first two arguments are the socket handle scalars
             RuntimeScalar sock1Handle = args[0].scalar();
             RuntimeScalar sock2Handle = args[1].scalar();
+            int type = args[3].scalar().getInt();
 
             // Use NIO SocketChannels so that select() can monitor these sockets
             ServerSocketChannel serverChannel = ServerSocketChannel.open();
@@ -3049,11 +3050,11 @@ public class IOOperator {
 
             // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET);
+            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET, type);
             io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET);
+            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET, type);
             io2.assignFileno();
 
             // Set IO slot on each handle, following the same pattern as socket()

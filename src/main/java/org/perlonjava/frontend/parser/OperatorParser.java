@@ -1064,12 +1064,18 @@ public class OperatorParser {
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
             var op = separator;
-            // Unwrap my/our/local declarations to get to the underlying array
+            // Unwrap my/our/local declarations to get to the underlying array.
+            // Parenthesized declarations such as push our(@A), $x parse as
+            // our(ListNode(@A)); Perl still treats that as an array lvalue.
             if (op instanceof OperatorNode operatorNode && 
                     (operatorNode.operator.equals("my") || 
                      operatorNode.operator.equals("our") || 
                      operatorNode.operator.equals("local"))) {
                 op = operatorNode.operand;
+                if (op instanceof ListNode listNode && listNode.elements.size() == 1) {
+                    op = listNode.elements.get(0);
+                    operatorNode.operand = op;
+                }
             }
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
                 // Perl 5.24+: pushing/unshifting onto scalar variable or expression is forbidden
