@@ -4,6 +4,7 @@ use warnings;
 
 use Errno qw(EAGAIN EWOULDBLOCK);
 use IO::Handle;
+use IO::Poll qw(POLLERR POLLIN);
 use Test::More;
 use Socket qw(
     AF_INET AF_UNIX PF_UNSPEC SOCK_DGRAM SOCK_STREAM
@@ -52,6 +53,27 @@ SKIP: {
     my $empty = recv($left, $buf, 1024, 0);
     ok !defined($empty), 'nonblocking dgram recv returns undef when empty';
     ok $! == EAGAIN || $! == EWOULDBLOCK, 'nonblocking dgram recv reports EAGAIN';
+}
+
+SKIP: {
+    socketpair(my $left, my $right, AF_INET, SOCK_DGRAM, PF_UNSPEC)
+        or skip "inet dgram socketpair unavailable: $!", 4;
+
+    $_->blocking(0) for $left, $right;
+    close($right);
+
+    ok syswrite($left, "Boo!"), 'syswrite to closed dgram peer reports sent bytes';
+
+    my $rvec = "";
+    vec($rvec, fileno($left), 1) = 1;
+    my $ready = select($rvec, undef, undef, 0.1);
+    ok $ready >= 1, 'select reports closed dgram peer as ready';
+    ok vec($rvec, fileno($left), 1), 'select keeps closed dgram peer in read vector';
+
+    my $poll = IO::Poll->new;
+    $poll->mask($left => POLLIN);
+    $ready = $poll->poll(0.1);
+    ok $ready >= 1 && ($poll->events($left) & (POLLIN | POLLERR)), 'poll reports closed dgram peer as ready';
 }
 
 SKIP: {

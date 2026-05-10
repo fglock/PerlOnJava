@@ -129,6 +129,7 @@ public class IOOperator {
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
             List<Integer> pollableFds = new ArrayList<>();
+            Set<Integer> immediateReadReadyFds = new HashSet<>();
             int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
@@ -179,8 +180,14 @@ public class IOOperator {
                         madeNonBlocking.add(ch);
                     }
 
+                    boolean readReadyNow = wantRead && socketIO.hasPendingDatagramError();
+                    if (readReadyNow) {
+                        immediateReadReadyFds.add(fd);
+                        nonSocketReady++;
+                    }
+
                     int ops = 0;
-                    if (wantRead) {
+                    if (wantRead && !readReadyNow) {
                         ops |= (ch instanceof ServerSocketChannel)
                                 ? SelectionKey.OP_ACCEPT
                                 : SelectionKey.OP_READ;
@@ -318,6 +325,15 @@ public class IOOperator {
                 }
                 if (isBitSet(wdata, fd) && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
                     setBit(wresult, fd); totalReady++;
+                }
+            }
+
+            // Synthetic socket readiness that Java NIO does not expose, such as
+            // connected UDP socketpair peer-closed errors.
+            for (int fd : immediateReadReadyFds) {
+                if (isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
                 }
             }
 
@@ -3048,12 +3064,17 @@ public class IOOperator {
                 channel1.connect(channel2.getLocalAddress());
                 channel2.connect(channel1.getLocalAddress());
 
+                SocketIO socket1 = new SocketIO(channel1, family);
+                SocketIO socket2 = new SocketIO(channel2, family);
+                socket1.setDatagramPeer(socket2);
+                socket2.setDatagramPeer(socket1);
+
                 RuntimeIO io1 = new RuntimeIO();
-                io1.ioHandle = new SocketIO(channel1, family);
+                io1.ioHandle = socket1;
                 io1.assignFileno();
 
                 RuntimeIO io2 = new RuntimeIO();
-                io2.ioHandle = new SocketIO(channel2, family);
+                io2.ioHandle = socket2;
                 io2.assignFileno();
 
                 setSocketOnHandle(sock1Handle, io1);

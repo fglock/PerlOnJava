@@ -47,6 +47,11 @@ public class SocketIO implements IOHandle {
     private DatagramChannel datagramChannel;
     // Last received sender address for recv() return value
     private SocketAddress lastReceivedFrom;
+    // Datagram socketpair peer tracking. Java UDP channels do not report the
+    // local peer-closed error that Perl's poll/select tests rely on.
+    private SocketIO datagramPeer;
+    private boolean closed;
+    private boolean datagramErrorPending;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -126,6 +131,24 @@ public class SocketIO implements IOHandle {
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
         this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_DGRAM;
+    }
+
+    public void setDatagramPeer(SocketIO peer) {
+        this.datagramPeer = peer;
+    }
+
+    public boolean hasPendingDatagramError() {
+        return datagramErrorPending;
+    }
+
+    private boolean hasClosedDatagramPeer() {
+        return datagramPeer != null && datagramPeer.closed;
+    }
+
+    private RuntimeScalar consumeDatagramConnectionRefused() {
+        datagramErrorPending = false;
+        getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+        return scalarUndef;
     }
 
     /**
@@ -760,6 +783,9 @@ public class SocketIO implements IOHandle {
             }
 
             if (datagramChannel != null) {
+                if (datagramErrorPending) {
+                    return consumeDatagramConnectionRefused();
+                }
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
                 lastReceivedFrom = datagramChannel.receive(buf);
                 if (lastReceivedFrom == null) {
@@ -806,6 +832,8 @@ public class SocketIO implements IOHandle {
                 return new RuntimeScalar(result);
             }
             throw new IllegalStateException("No input stream available");
+        } catch (PortUnreachableException e) {
+            return consumeDatagramConnectionRefused();
         } catch (IOException e) {
             return handleIOException(e, "sysread operation failed");
         }
@@ -833,6 +861,10 @@ public class SocketIO implements IOHandle {
             }
 
             if (datagramChannel != null) {
+                if (hasClosedDatagramPeer()) {
+                    datagramErrorPending = true;
+                    return new RuntimeScalar(bytes.length);
+                }
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
                 int written = datagramChannel.write(buf);
                 if (written == 0) {
@@ -862,6 +894,9 @@ public class SocketIO implements IOHandle {
                 return new RuntimeScalar(bytes.length);
             }
             throw new IllegalStateException("No output stream available");
+        } catch (PortUnreachableException e) {
+            datagramErrorPending = true;
+            return new RuntimeScalar(data.length());
         } catch (IOException e) {
             return handleIOException(e, "syswrite operation failed");
         }
@@ -885,6 +920,7 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar close() {
         try {
+            closed = true;
             if (socket != null) {
                 socket.close();
                 socket = null;
@@ -892,6 +928,10 @@ public class SocketIO implements IOHandle {
             if (serverSocket != null) {
                 serverSocket.close();
                 serverSocket = null;
+            }
+            if (datagramChannel != null) {
+                datagramChannel.close();
+                datagramChannel = null;
             }
             return scalarTrue;
         } catch (IOException e) {
@@ -1013,6 +1053,10 @@ public class SocketIO implements IOHandle {
         if (datagramChannel == null) {
             throw new IllegalStateException("Not a datagram socket");
         }
+        if (hasClosedDatagramPeer()) {
+            datagramErrorPending = true;
+            return data.length;
+        }
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
         return datagramChannel.write(buf);
     }
@@ -1027,8 +1071,17 @@ public class SocketIO implements IOHandle {
         if (datagramChannel == null) {
             throw new IllegalStateException("Not a datagram socket");
         }
+        if (datagramErrorPending) {
+            consumeDatagramConnectionRefused();
+            return null;
+        }
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
-        lastReceivedFrom = datagramChannel.receive(buf);
+        try {
+            lastReceivedFrom = datagramChannel.receive(buf);
+        } catch (PortUnreachableException e) {
+            consumeDatagramConnectionRefused();
+            return null;
+        }
         if (lastReceivedFrom == null) {
             getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
             return null;
