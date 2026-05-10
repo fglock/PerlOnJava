@@ -111,11 +111,19 @@ public class ScalarUtil extends PerlModuleBase {
             case ARRAYREFERENCE:
             case HASHREFERENCE:
             case CODE:
-            case GLOB:
-            case GLOBREFERENCE:
             case FORMAT:
             case REGEX:
                 // Return identity of the underlying value object
+                return new RuntimeScalar(System.identityHashCode(scalar.value)).getList();
+            case GLOB:
+            case GLOBREFERENCE:
+                if (scalar.value instanceof RuntimeGlob glob) {
+                    // Named globs can be represented by detached RuntimeGlob
+                    // instances that intentionally compare/stringify by name.
+                    // Use the same stable glob identity here so refaddr(\*STDIN)
+                    // agrees across repeated references.
+                    return new RuntimeScalar(Integer.toUnsignedLong(glob.hashCode())).getList();
+                }
                 return new RuntimeScalar(System.identityHashCode(scalar.value)).getList();
             default:
                 // Return undef for non-references

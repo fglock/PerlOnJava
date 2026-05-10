@@ -92,6 +92,10 @@ behavior.
   lexicals expose those scalar captures to the weak-ref reachability rescue.
   This prevents Test::Refcount-style weak probe copies from firing `DESTROY`
   while a captured file lexical still holds the object.
+- Fixed `Scalar::Util::refaddr` for named glob references so repeated
+  references such as `\*STDIN` report the same stable glob identity. This
+  clears the IO::Async stream stdio handle identity checks that use Test2's
+  reference comparison.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
@@ -125,8 +129,10 @@ behavior.
    no-fork patch. Routine/Function/Resolver tests that require a fork/thread
    worker model also skip when no model is available.
 6. Signal and metrics tests are now green in the latest full checkpoint. The
-   remaining short-term blockers are notifier/test/protocol refcounts, stdio
-   handle identity, partial UTF-8 stream decoding, and file stream readiness.
+   stdio identity checks in `t/21stream-1read.t`, `t/21stream-2write.t`, and
+   `t/21stream-3split.t` pass focused after the glob `refaddr` fix; the
+   remaining short-term blockers are notifier/test/protocol refcounts, partial
+   UTF-8 stream decoding, and file stream readiness.
 
 ## Verification Targets
 
@@ -152,8 +158,8 @@ behavior.
 
 ## Next Steps
 
-- Fix the remaining stream blockers: stdio handle identity, partial UTF-8
-  decoding, and file stream readiness.
+- Fix the remaining stream blockers: partial UTF-8 decoding and file stream
+  readiness.
 - Investigate the notifier/test/protocol refcount mismatches that remain in
   `t/05*`, `t/06*`, `t/07*`, `t/19test.t`, `t/21*`, `t/28*`, and
   `t/60protocol.t`.
