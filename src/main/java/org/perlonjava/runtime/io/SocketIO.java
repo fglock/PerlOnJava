@@ -374,6 +374,9 @@ public class SocketIO implements IOHandle {
             if (serverSocketChannel != null) {
                 serverSocketChannel.configureBlocking(newBlocking);
             }
+            if (datagramChannel != null) {
+                datagramChannel.configureBlocking(newBlocking);
+            }
         } catch (IOException e) {
             // Silently ignore — the blocking field still tracks the desired state
         }
@@ -748,6 +751,19 @@ public class SocketIO implements IOHandle {
                 return scalarUndef;
             }
 
+            if (datagramChannel != null) {
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
+                lastReceivedFrom = datagramChannel.receive(buf);
+                if (lastReceivedFrom == null) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+                buf.flip();
+                byte[] result = new byte[buf.remaining()];
+                buf.get(result);
+                return new RuntimeScalar(result);
+            }
+
             // Use channel-based I/O for non-blocking sockets to avoid
             // IllegalBlockingModeException from stream-based I/O.
             // Also use channel I/O when inputStream is not available
@@ -806,6 +822,16 @@ public class SocketIO implements IOHandle {
             byte[] bytes = new byte[data.length()];
             for (int i = 0; i < data.length(); i++) {
                 bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+
+            if (datagramChannel != null) {
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
+                int written = datagramChannel.write(buf);
+                if (written == 0) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+                return new RuntimeScalar(written);
             }
 
             // Use channel-based I/O for non-blocking sockets to avoid
@@ -899,6 +925,12 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getpeername() {
         try {
+            if (datagramChannel != null && datagramChannel.getRemoteAddress() instanceof InetSocketAddress remoteAddress) {
+                return packSockaddrIn(remoteAddress);
+            }
+            if (socketChannel != null && socketChannel.getRemoteAddress() instanceof InetSocketAddress remoteAddress) {
+                return packSockaddrIn(remoteAddress);
+            }
             if (socket != null && socket.getRemoteSocketAddress() instanceof InetSocketAddress remoteAddress) {
                 return packSockaddrIn(remoteAddress);
             }
@@ -964,6 +996,20 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Send a datagram on a connected UDP socket.
+     *
+     * @param data the data to send
+     * @return number of bytes sent
+     */
+    public int sendDatagram(byte[] data) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
+        return datagramChannel.write(buf);
+    }
+
+    /**
      * Receive a datagram. Stores the sender address accessible via getLastReceivedFrom().
      *
      * @param maxLength maximum number of bytes to receive
@@ -976,6 +1022,7 @@ public class SocketIO implements IOHandle {
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
         lastReceivedFrom = datagramChannel.receive(buf);
         if (lastReceivedFrom == null) {
+            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
             return null;
         }
         buf.flip();

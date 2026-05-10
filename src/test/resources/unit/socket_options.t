@@ -2,12 +2,14 @@
 use strict;
 use warnings;
 
+use Errno qw(EAGAIN EWOULDBLOCK);
+use IO::Handle;
 use Test::More;
 use Socket qw(
-    AF_INET AF_UNIX PF_UNSPEC SOCK_STREAM
+    AF_INET AF_UNIX PF_UNSPEC SOCK_DGRAM SOCK_STREAM
     SOL_SOCKET SO_ACCEPTCONN SO_REUSEADDR SO_TYPE
     INADDR_LOOPBACK IN6ADDR_ANY IN6ADDR_LOOPBACK
-    sockaddr_in
+    sockaddr_in unpack_sockaddr_in
 );
 
 is length(IN6ADDR_ANY), 16, 'IN6ADDR_ANY is a 16-byte packed address';
@@ -23,6 +25,33 @@ SKIP: {
 
     syswrite($right, "ready\n");
     is scalar(<$left>), "ready\n", 'readline works on socketpair handles';
+}
+
+SKIP: {
+    socketpair(my $left, my $right, AF_INET, SOCK_DGRAM, PF_UNSPEC)
+        or skip "inet dgram socketpair unavailable: $!", 6;
+
+    my @right_addr = unpack_sockaddr_in(getsockname($right));
+    send($right, "packet", 0);
+    my $buf = "";
+    my $sender = recv($left, $buf, 1024, 0);
+    is $buf, "packet", 'inet dgram socketpair receives payload';
+    is_deeply [ unpack_sockaddr_in($sender) ], \@right_addr, 'inet dgram socketpair reports sender address';
+
+    syswrite($right, "sys");
+    my $sysbuf = "";
+    sysread($left, $sysbuf, 1024);
+    is $sysbuf, "sys", 'inet dgram socketpair supports sysread/syswrite';
+    syswrite($left, "back");
+    $sysbuf = "";
+    sysread($right, $sysbuf, 1024);
+    is $sysbuf, "back", 'inet dgram socketpair sysread/syswrite is bidirectional';
+
+    $left->blocking(0);
+    $! = 0;
+    my $empty = recv($left, $buf, 1024, 0);
+    ok !defined($empty), 'nonblocking dgram recv returns undef when empty';
+    ok $! == EAGAIN || $! == EWOULDBLOCK, 'nonblocking dgram recv reports EAGAIN';
 }
 
 SKIP: {

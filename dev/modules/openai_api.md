@@ -69,9 +69,16 @@ behavior.
 - Added an IO::Async source patch for the no-fork test path so
   `IO::Async::Routine` loads without a compile-time fork/thread model and the
   two raw-fork process tests skip when `HAVE_POSIX_FORK` is false.
+- Moved the IO::Async no-fork source patch into
+  `PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch` and taught CPAN patch
+  bootstrapping to refresh stale bundled patch copies, avoiding malformed
+  inline patch heredocs in `CPAN::Config`.
 - Fixed readline on `socketpair` handles backed by `SocketChannel`, allowing
   IO::Async readiness callbacks to read line-oriented data from socketpair
   handles.
+- Added connected UDP `socketpair` support for `send`/`recv` and
+  `sysread`/`syswrite`, including nonblocking `EAGAIN` handling and peer
+  sockaddr reporting for datagram socketpairs.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
@@ -88,22 +95,23 @@ behavior.
 2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
    `IO::Async` suite to start running its tests.
 3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   20 failing files after weak-reference, tail-call cleanup, constant export,
-   SKIP-block parser, no-fork distroprefs, socketpair readline, and scalar
-   `undef` lvalue fixes. The latest run is
-   `/tmp/jcpan_io_async_after_undef_lvalue.log`: `Failed 20/64 test programs.
-   39/1109 subtests failed`.
+   21 failing files after weak-reference, tail-call cleanup, constant export,
+   SKIP-block parser, no-fork distroprefs, socketpair readline, scalar `undef`
+   lvalue, and connected datagram socketpair fixes. The latest run is
+   `/tmp/jcpan_io_async_after_dgram_sysread.log`: `Failed 21/64 test programs.
+   41/1143 subtests failed`.
 4. The previous missing constant errors are cleared. `t/10loop-poll-io.t`,
-   `t/10loop-select-io.t`, `t/20handle.t`, `t/24listener.t`,
+   `t/10loop-select-io.t`, `t/20handle.t`, `t/24listener.t`, `t/25socket.t`,
    `t/61protocol-stream.t`, `t/62protocol-linestream.t`,
    `t/63handle-connect.t`, and `t/64handle-bind.t` now pass.
 5. Process/fork tests now skip under `IO_ASYNC_NO_FORK` plus the IO::Async
    no-fork patch. Remaining Routine/Function failures are no-fork constructor
    paths not covered by IO::Async's existing skips.
-6. The remaining short-term blockers are `t/25socket.t` sockaddr structure
-   handling, `t/51loop-connect.t` connect readiness, signal tests, metrics,
-   stream UTF-8 decoding, stdio handle identity, Routine/Function no-fork
-   paths, file stream readiness, and notifier/future/protocol refcounts.
+6. The remaining short-term blockers are `t/51loop-connect.t` connect
+   readiness, signal tests, metrics, stream UTF-8 decoding, stdio handle
+   identity, Routine/Function no-fork paths, file stream readiness, exceptional
+   socket readiness in `t/10loop-*-io.t`, and notifier/future/protocol
+   refcounts.
 
 ## Verification Targets
 
@@ -115,21 +123,21 @@ behavior.
    directory.
 5. Focused `push` declaration-array unit tests pass under `make`.
 6. Socket/POSIX constant smoke tests pass under `./jperl`.
-7. `IO::Async` focused socket and notifier tests `t/02os.t` and
-   `t/04notifier.t` pass under escalated runs.
+7. `IO::Async` focused socket tests `t/02os.t` and `t/25socket.t` pass under
+   escalated runs; `t/04notifier.t` also passes under escalated runs.
 8. `IO::Async` parser checks for `t/41routine.t`, `t/42function.t`, and
    `t/51loop-connect.t` pass under `./jperl --parse`.
 9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
    to documented PerlOnJava gaps. Current checkpoint:
-   `/tmp/jcpan_io_async_after_undef_lvalue.log`.
+   `/tmp/jcpan_io_async_after_dgram_sysread.log`.
 10. `make` passes.
 11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
    subsequent dependency failures should be documented here before fixing.
 
 ## Next Steps
 
-- Fix the remaining socket blockers: `t/25socket.t` invalid
-  `sockaddr_in` structure handling and `t/51loop-connect.t` connect readiness.
+- Fix the remaining socket blockers: `t/51loop-connect.t` connect readiness and
+  the exceptional-socket readiness check in `t/10loop-*-io.t`.
 - Fix the remaining stream blockers: stdio handle identity and partial UTF-8
   decoding.
 - Patch or implement the remaining IO::Async no-fork Routine/Function paths so

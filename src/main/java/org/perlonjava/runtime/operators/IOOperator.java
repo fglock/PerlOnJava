@@ -2501,6 +2501,7 @@ public class IOOperator {
 
             // Check if this is a UDP socket with a TO address (4th arg)
             if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                 if (args.length >= 4) {
                     // 4th arg is packed sockaddr_in (destination address)
                     String packedAddr = args[3].toString();
@@ -2511,14 +2512,12 @@ public class IOOperator {
                                 addrBytes[4] & 0xFF, addrBytes[5] & 0xFF,
                                 addrBytes[6] & 0xFF, addrBytes[7] & 0xFF);
                         InetSocketAddress target = new InetSocketAddress(ip, port);
-                        byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                         int sent = sio.sendTo(data, target);
                         return new RuntimeScalar(sent);
                     }
                 }
-                // No TO address — send to connected peer (not typical for UDP)
-                getGlobalVariable("main::!").set("send: UDP requires destination address");
-                return scalarUndef;
+                int sent = sio.sendDatagram(data);
+                return new RuntimeScalar(sent);
             }
 
             // TCP: ignore flags and TO address - send via stream
@@ -3031,7 +3030,37 @@ public class IOOperator {
             // The first two arguments are the socket handle scalars
             RuntimeScalar sock1Handle = args[0].scalar();
             RuntimeScalar sock2Handle = args[1].scalar();
+            int domain = args[2].scalar().getInt();
             int type = args[3].scalar().getInt();
+
+            if (type == Socket.SOCK_DGRAM) {
+                ProtocolFamily family = domain == Socket.AF_INET6
+                        ? StandardProtocolFamily.INET6
+                        : StandardProtocolFamily.INET;
+                InetAddress loopback = domain == Socket.AF_INET6
+                        ? InetAddress.getByName("::1")
+                        : InetAddress.getLoopbackAddress();
+
+                DatagramChannel channel1 = DatagramChannel.open(family);
+                DatagramChannel channel2 = DatagramChannel.open(family);
+                channel1.bind(new InetSocketAddress(loopback, 0));
+                channel2.bind(new InetSocketAddress(loopback, 0));
+                channel1.connect(channel2.getLocalAddress());
+                channel2.connect(channel1.getLocalAddress());
+
+                RuntimeIO io1 = new RuntimeIO();
+                io1.ioHandle = new SocketIO(channel1, family);
+                io1.assignFileno();
+
+                RuntimeIO io2 = new RuntimeIO();
+                io2.ioHandle = new SocketIO(channel2, family);
+                io2.assignFileno();
+
+                setSocketOnHandle(sock1Handle, io1);
+                setSocketOnHandle(sock2Handle, io2);
+
+                return scalarTrue;
+            }
 
             // Use NIO SocketChannels so that select() can monitor these sockets
             ServerSocketChannel serverChannel = ServerSocketChannel.open();

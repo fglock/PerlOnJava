@@ -1,0 +1,22 @@
+--- lib/IO/Async/Routine.pm.orig
++++ lib/IO/Async/Routine.pm
+@@ -214 +214 @@
+-      die "No viable Routine models";
++      undef;
+@@ -221,0 +222 @@
++   defined $params->{model} or croak "No viable Routine models";
+--- t/14loop-poll-process.t.orig
++++ t/14loop-poll-process.t
+@@ -6,0 +7,2 @@
++use IO::Async::OS;
++plan('skip_all' => "POSIX fork() is not available") unless IO::Async::OS->HAVE_POSIX_FORK;
+--- t/14loop-select-process.t.orig
++++ t/14loop-select-process.t
+@@ -6,0 +7,2 @@
++use IO::Async::OS;
++plan('skip_all' => "POSIX fork() is not available") unless IO::Async::OS->HAVE_POSIX_FORK;
+--- t/26pid.t.orig
++++ t/26pid.t
+@@ -14,0 +15,2 @@
++use IO::Async::OS;
++plan('skip_all' => "POSIX fork() is not available") unless IO::Async::OS->HAVE_POSIX_FORK;

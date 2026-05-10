@@ -396,48 +396,6 @@ PATCH
         eval { capture {
             if(my $pid = fork()) { # parent
 PATCH
-    my $io_async_no_fork_patch = <<'PATCH';
---- lib/IO/Async/Routine.pm.orig
-+++ lib/IO/Async/Routine.pm
-@@ -209,7 +209,7 @@
- use constant PREFERRED_MODEL =>
-    IO::Async::OS->HAVE_POSIX_FORK ? "fork" :
-    IO::Async::OS->HAVE_THREADS    ? "thread" :
--      die "No viable Routine models";
-+      undef;
-@@ -217,6 +217,7 @@
- sub _init
- {
-    my $self = shift;
-    my ( $params ) = @_;
-    $params->{model} ||= $ENV{IO_ASYNC_ROUTINE_MODEL} || PREFERRED_MODEL;
-+   defined $params->{model} or croak "No viable Routine models";
-    $self->SUPER::_init( @_ );
- }
---- t/14loop-poll-process.t.orig
-+++ t/14loop-poll-process.t
-@@ -6,3 +6,5 @@
- use Test2::V0;
-+use IO::Async::OS;
-+plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
- use IO::Async::LoopTests;
- run_tests( 'IO::Async::Loop::Poll', 'process' );
---- t/14loop-select-process.t.orig
-+++ t/14loop-select-process.t
-@@ -6,3 +6,5 @@
- use Test2::V0;
-+use IO::Async::OS;
-+plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
- use IO::Async::LoopTests;
- run_tests( 'IO::Async::Loop::Select', 'process' );
---- t/26pid.t.orig
-+++ t/26pid.t
-@@ -14,3 +14,5 @@
- use IO::Async::Loop;
-+use IO::Async::OS;
-+plan skip_all => "POSIX fork() is not available" unless IO::Async::OS->HAVE_POSIX_FORK;
- my $loop = IO::Async::Loop->new_builtin;
-PATCH
 
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
     # (or on-disk dev tree during `make`). The source is located via @INC.
@@ -453,21 +411,45 @@ PATCH
           undef,
           $cpan_finddeps_makemaker_patch ],
         [ 'IO-Async-0.805/NoFork.patch',
-          undef,
-          $io_async_no_fork_patch ],
+          'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
     );
 
-    # Fast path: if every target exists and inline targets are current, skip everything.
+    my $slurp = sub {
+        my ($path) = @_;
+        open my $fh, '<', $path or return undef;
+        my $content = do { local $/; <$fh> };
+        close $fh;
+        return $content;
+    };
+
+    my $find_source = sub {
+        my ($src_rel) = @_;
+        return undef unless defined $src_rel;
+        for my $inc (@INC) {
+            my $candidate = File::Spec->catfile($inc, $src_rel);
+            return $candidate if -f $candidate;
+        }
+        return undef;
+    };
+
+    # Fast path: if every target exists and bundled targets are current, skip everything.
     my $needs_write = 0;
     for my $pair (@bundled) {
-        my ($rel, undef, $inline_content) = @$pair;
+        my ($rel, $src_rel, $inline_content) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
         unless (-f $dest) { $needs_write = 1; last }
-        if (defined $inline_content) {
-            open my $in, '<', $dest or do { $needs_write = 1; last };
-            my $existing = do { local $/; <$in> };
-            close $in;
-            if ($existing ne $inline_content) { $needs_write = 1; last }
+
+        my $expected_content = $inline_content;
+        if (!defined $expected_content) {
+            my $src = $find_source->($src_rel);
+            $expected_content = $slurp->($src) if defined $src;
+        }
+        next unless defined $expected_content;
+
+        my $existing = $slurp->($dest);
+        if (!defined($existing) || $existing ne $expected_content) {
+            $needs_write = 1;
+            last;
         }
     }
     return unless $needs_write;
@@ -479,39 +461,21 @@ PATCH
         my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
         File::Path::make_path($dest_dir) unless -d $dest_dir;
 
-        if (defined $inline_content) {
-            if (-f $dest) {
-                open my $in, '<', $dest or next;
-                my $existing = do { local $/; <$in> };
-                close $in;
-                next if $existing eq $inline_content;
-            }
-            if (open my $out, '>', $dest) {
-                print $out $inline_content;
-                close $out;
-            }
-            next;
+        my $content = $inline_content;
+        if (!defined $content) {
+            # Locate the source file in @INC (finds either jar:PERL5LIB/… at
+            # runtime or src/main/perl/lib/… during make/test).
+            my $src = $find_source->($src_rel);
+            $content = $slurp->($src) if defined $src;
         }
+        next unless defined $content;
 
-        next if -f $dest;
+        my $existing = -f $dest ? $slurp->($dest) : undef;
+        next if defined($existing) && $existing eq $content;
 
-        # Locate the source file in @INC (finds either jar:PERL5LIB/… at
-        # runtime or src/main/perl/lib/… during make/test).
-        my $src;
-        for my $inc (@INC) {
-            my $candidate = File::Spec->catfile($inc, $src_rel);
-            if (-f $candidate) { $src = $candidate; last }
-        }
-        next unless defined $src;
-
-        # Slurp + write — the JAR resource reader is opaque to File::Copy.
-        if (open my $in, '<', $src) {
-            if (open my $out, '>', $dest) {
-                local $/;
-                print $out scalar <$in>;
-                close $out;
-            }
-            close $in;
+        if (open my $out, '>', $dest) {
+            print $out $content;
+            close $out;
         }
     }
 }
