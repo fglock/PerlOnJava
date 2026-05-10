@@ -188,8 +188,8 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.MORTAL_FLUSH -> {
-                                // Flush deferred mortal decrements (FREETMPS equivalent)
-                                MortalList.flush();
+                                // Statement-boundary FREETMPS for the current function scope.
+                                MortalList.flushAboveMark();
                             }
 
                             case Opcodes.MORTAL_PUSH_MARK -> {

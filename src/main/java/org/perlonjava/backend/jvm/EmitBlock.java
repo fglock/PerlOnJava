@@ -391,6 +391,14 @@ public class EmitBlock {
                     }
                 }
 
+                if (i < lastNonNullIndex) {
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/MortalList",
+                            "flushAboveMark",
+                            "()V",
+                            false);
+                }
+
             }
         } finally {
             if (preEvalForNode != null) {

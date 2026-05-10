@@ -1166,6 +1166,10 @@ public class BytecodeCompiler implements Visitor {
                 savedLastResultReg = lastResultReg;
             }
 
+            if (i < lastMeaningfulIndex) {
+                emit(Opcodes.MORTAL_FLUSH);
+            }
+
             // Recycle temporary registers after each statement
             // enterScope() protects registers allocated before entering a scope
             recycleTemporaryRegisters();

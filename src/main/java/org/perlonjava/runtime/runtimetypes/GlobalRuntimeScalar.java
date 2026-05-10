@@ -116,16 +116,25 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     return;
                 }
 
-                // Decrement refCount of the CURRENT (local) value being displaced.
+                // Decrement refCount of the CURRENT (local) value being displaced
+                // only if this scalar owns a counted reference. Implicit-$_ foreach
+                // aliases the global slot directly to each iterator element; that
+                // alias does not increment refCount, so restoring $_ must not
+                // consume one of the caller's real owners.
                 // Do NOT increment the restored value — it already has the correct
                 // refCount from its original counting.
                 RuntimeScalar currentVar = GlobalVariable.globalVariables.get(saved.fullName);
                 if (currentVar != null
+                        && currentVar.refCountOwned
                         && (currentVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && currentVar.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                    displacedBase.refCount = Integer.MIN_VALUE;
-                    DestroyDispatch.callDestroy(displacedBase);
+                        && displacedBase.refCount > 0) {
+                    currentVar.refCountOwned = false;
+                    displacedBase.releaseActiveOwner(currentVar);
+                    if (--displacedBase.refCount == 0) {
+                        displacedBase.refCount = Integer.MIN_VALUE;
+                        DestroyDispatch.callDestroy(displacedBase);
+                    }
                 }
 
                 // Restore the internal separator values if this was an output separator variable
@@ -155,4 +164,3 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             RuntimeScalar savedTiedValue) {
     }
 }
-

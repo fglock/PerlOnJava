@@ -36,6 +36,29 @@ sub ref_ok($;$$) {
 }
 
 sub ref_is($$;$@) {
+    if( defined &Internals::jperl_refstate_str ) {
+        my $name = $_[2];
+        my @diag = @_[3 .. $#_];
+        my $ctx = context();
+
+        my $bool = 0;
+        if (!ref($_[0])) {
+            my $got = defined($_[0]) ? $_[0] : '<undef>';
+            $ctx->ok(0, $name, ["First argument '$got' is not a reference", @diag]);
+        }
+        elsif(!ref($_[1])) {
+            my $exp = defined($_[1]) ? $_[1] : '<undef>';
+            $ctx->ok(0, $name, ["Second argument '$exp' is not a reference", @diag]);
+        }
+        else {
+            $bool = refaddr($_[0]) == refaddr($_[1]);
+            $ctx->ok($bool, $name, ["'$_[0]' is not the same reference as '$_[1]'", @diag]);
+        }
+
+        $ctx->release;
+        return $bool ? 1 : 0;
+    }
+
     my ($got, $exp, $name, @diag) = @_;
     my $ctx = context();
 
@@ -60,6 +83,29 @@ sub ref_is($$;$@) {
 }
 
 sub ref_is_not($$;$) {
+    if( defined &Internals::jperl_refstate_str ) {
+        my $name = $_[2];
+        my @diag = @_[3 .. $#_];
+        my $ctx = context();
+
+        my $bool = 0;
+        if (!ref($_[0])) {
+            my $got = defined($_[0]) ? $_[0] : '<undef>';
+            $ctx->ok(0, $name, ["First argument '$got' is not a reference", @diag]);
+        }
+        elsif(!ref($_[1])) {
+            my $exp = defined($_[1]) ? $_[1] : '<undef>';
+            $ctx->ok(0, $name, ["Second argument '$exp' is not a reference", @diag]);
+        }
+        else {
+            $bool = refaddr($_[0]) != refaddr($_[1]);
+            $ctx->ok($bool, $name, ["'$_[0]' is the same reference as '$_[1]'", @diag]);
+        }
+
+        $ctx->release;
+        return $bool ? 1 : 0;
+    }
+
     my ($got, $exp, $name, @diag) = @_;
     my $ctx = context();
 

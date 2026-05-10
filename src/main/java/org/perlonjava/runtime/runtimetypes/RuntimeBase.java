@@ -315,6 +315,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public RuntimeArray getArrayOfAlias() {
         RuntimeArray arr = new RuntimeArray();
         this.setArrayOfAlias(arr);
+        arr.elementsOwned = false;
+        arr.elementsAliased = true;
         return arr;
     }
 
