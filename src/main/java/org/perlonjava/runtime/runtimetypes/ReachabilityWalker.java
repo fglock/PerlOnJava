@@ -470,6 +470,52 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Lightweight fallback for {@link WeakRefRegistry#weaken}: check whether a
+     * target is still reachable from a JVM-live scalar even when that scalar is
+     * not a counted owner. Test2::Tools::Refcount weakens a local probe copy
+     * before reading B::REFCNT; if selective refcounting has drifted to zero,
+     * clearing every weak callback at that point is premature while the caller's
+     * lexical still points at the object.
+     *
+     * <p>This is deliberately separate from the normal sweep/root query. It
+     * force-prunes stale weak-map keys first, only follows non-weak scalars, and
+     * is used only at the immediate weaken() zero-count decision.</p>
+     */
+    public static boolean isReachableFromLiveScalarRegistry(RuntimeBase target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+            if (sc == null) continue;
+            if (sc.captureCount > 0) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if (sc.scopeExited) continue;
+            if (followScalar(sc, target, seen, todo)) return true;
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (cur == target) return true;
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash h) {
+                for (RuntimeScalar v : h.elements.values()) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * D-W6.14: check if a specific RuntimeScalar instance is reachable
      * from package globals or live lexical roots. Used at refCount→0
      * transitions to verify that surviving "owner" scalars in the

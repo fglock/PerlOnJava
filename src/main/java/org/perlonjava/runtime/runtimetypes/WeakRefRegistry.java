@@ -121,7 +121,9 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (hasWeakRefsTo(base) && ReachabilityWalker.isReachableFromRoots(base)) {
+                } else if (hasWeakRefsTo(base)
+                        && (ReachabilityWalker.isReachableFromRoots(base)
+                        || ReachabilityWalker.isReachableFromLiveScalarRegistry(base))) {
                     // A temporary probe can be weakened without owning the last
                     // strong Perl reference. Test::Refcount does this when it
                     // weakens a local copy before calling B::svref_2object().
