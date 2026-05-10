@@ -40,7 +40,7 @@ public class StatementResolver {
     private static final Set<String> IDENTIFIER_BEFORE_BARE_STRING_ARG = Set.of(
             "like", "unlike", "ok", "is", "isnt", "cmp_ok", "can_ok", "isa_ok",
             "pass", "fail", "require", "diag", "note", "explain",
-            "warning_like", "warning_is", "warnings_like");
+            "skip", "warning_like", "warning_is", "warnings_like");
 
     /**
      * Parses a single statement from the parser's token stream.

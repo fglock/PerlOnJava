@@ -187,6 +187,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_ERANGE", "const_ERANGE", null);
             module.registerMethod("_const_EWOULDBLOCK", "const_EWOULDBLOCK", null);
             module.registerMethod("_const_ECONNRESET", "const_ECONNRESET", null);
+            module.registerMethod("_const_EINPROGRESS", "const_EINPROGRESS", null);
 
             // uname
             module.registerMethod("_uname", "uname", null);
@@ -1482,6 +1483,9 @@ public class POSIX extends PerlModuleBase {
     }
     public static RuntimeList const_ECONNRESET(RuntimeArray a, int c) {
         return new RuntimeScalar(IS_WINDOWS ? 10054 : IS_MAC ? 54 : 104).getList();
+    }
+    public static RuntimeList const_EINPROGRESS(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 10036 : IS_MAC ? 36 : 115).getList();
     }
 
     /**

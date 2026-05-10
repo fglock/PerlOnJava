@@ -55,8 +55,15 @@ and Socket constants, and a few remaining parser constructs.
 - Added missing Socket/POSIX compatibility exports used by IO::Async:
   `Socket::EAI_FAIL`, `POSIX::EWOULDBLOCK`, `POSIX::ECONNRESET`, and
   `POSIX::nice`.
+- Added `POSIX::EINPROGRESS` constant generation/export so
+  `use POSIX qw(EINPROGRESS)` installs the unqualified constant used by
+  `IO::Async::Internals::Connector`.
+- Fixed SKIP-block hash/block disambiguation for `skip "reason", $n if ...`
+  followed by method calls whose named arguments include keyword-like values
+  such as `model => "fork"`.
 - Added focused unit coverage for Socket options, IPv6 constants, weak probe
-  copies, tail-call argument cleanup, and the new Socket/POSIX constants.
+  copies, tail-call argument cleanup, SKIP-block disambiguation, and the new
+  Socket/POSIX constants.
 - Verified `IO::Async` focused tests `t/02os.t` and `t/04notifier.t` now pass
   under escalated runs.
 
@@ -67,17 +74,16 @@ and Socket constants, and a few remaining parser constructs.
 2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
    `IO::Async` suite to start running its tests.
 3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   38 failing files after the weak-reference, tail-call cleanup, and constant
-   export fixes. The latest run is
-   `/tmp/io_async_after_constants_parser.log`: `Failed 38/64 test programs.
-   40/936 subtests failed`.
+   36 failing files after the weak-reference, tail-call cleanup, constant
+   export, and SKIP-block parser fixes. The latest run is
+   `/tmp/io_async_after_skip_einprogress.log`: `Failed 36/64 test programs.
+   40/969 subtests failed`.
 4. The previous missing constant errors are cleared. `t/63handle-connect.t` now
-   gets past `POSIX::EWOULDBLOCK`, but still exposes missing unqualified import
-   behavior for `EINPROGRESS`.
-5. The remaining short-term blockers are parser failures in `t/41routine.t`,
-   `t/42function.t`, and `t/51loop-connect.t`, plus runtime gaps around
-   signal/process tests, stream UTF-8 decoding, stdio handle identity, and
-   notifier/future/protocol refcounts.
+   passes, and the previous parser errors in `t/41routine.t`, `t/42function.t`,
+   and `t/51loop-connect.t` are gone.
+5. The remaining short-term blockers are runtime gaps around signal/process
+   tests, stream UTF-8 decoding, stdio handle identity, socket/listener readiness
+   and sockname behavior, and notifier/future/protocol refcounts.
 
 ## Verification Targets
 
@@ -91,20 +97,23 @@ and Socket constants, and a few remaining parser constructs.
 6. Socket/POSIX constant smoke tests pass under `./jperl`.
 7. `IO::Async` focused socket and notifier tests `t/02os.t` and
    `t/04notifier.t` pass under escalated runs.
-8. `IO::Async`'s `Build test` either passes or has remaining failures reduced
+8. `IO::Async` parser checks for `t/41routine.t`, `t/42function.t`, and
+   `t/51loop-connect.t` pass under `./jperl --parse`.
+9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
    to documented PerlOnJava gaps.
-9. `make` passes.
-10. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
+10. `make` passes.
+11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
    subsequent dependency failures should be documented here before fixing.
 
 ## Next Steps
 
-- Fix the remaining parser rejects in `IO::Async`'s routine/function/connect
-  tests if they reduce to Perl grammar gaps rather than module-side issues.
-- Fix POSIX import/constant generation so `use POSIX qw(EINPROGRESS)` installs
-  an unqualified `EINPROGRESS` callable for IO::Async's connector.
-- Recheck the process/fork failures after parser and import fixes; many are
-  currently `Cannot fork() - Resource temporarily unavailable`.
+- Investigate the IO::Async process/fork failures; many currently report
+  `Cannot fork() - Resource temporarily unavailable`, which may be a missing
+  PerlOnJava process primitive, handle exhaustion, or leaked process state from
+  earlier tests.
+- Fix the remaining stream/socket blockers: stdio handle identity,
+  partial UTF-8 decoding, listener `sockname`, and connect readiness.
+- Investigate the notifier/future/protocol refcount mismatches that remain in
+  `t/05*`, `t/06*`, `t/07*`, `t/21*`, `t/28*`, and `t/60protocol.t`.
 - Rerun `IO::Async` and then `OpenAI::API`.
-- Open a PR from the feature branch with the module plan and implementation
-  commits.
+- Keep PR #702 updated from the feature branch.
