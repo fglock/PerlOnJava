@@ -20,3 +20,22 @@
 @@ -14,0 +15,2 @@
 +use IO::Async::OS;
 +plan('skip_all' => "POSIX fork() is not available") unless IO::Async::OS->HAVE_POSIX_FORK;
+--- t/41routine.t.orig
++++ t/41routine.t
+@@ -8,0 +9,2 @@
++use IO::Async::OS;
++plan('skip_all' => "No viable Routine models") unless IO::Async::OS->HAVE_POSIX_FORK || IO::Async::OS->HAVE_THREADS;
+--- t/42function.t.orig
++++ t/42function.t
+@@ -16,0 +17 @@
++plan('skip_all' => "No viable Routine models") unless IO::Async::OS->HAVE_POSIX_FORK || IO::Async::OS->HAVE_THREADS;
+--- t/50resolver.t.orig
++++ t/50resolver.t
+@@ -10,0 +11,2 @@
++use IO::Async::OS;
++plan('skip_all' => "No viable Routine models") unless IO::Async::OS->HAVE_POSIX_FORK || IO::Async::OS->HAVE_THREADS;
+--- t/52loop-listen.t.orig
++++ t/52loop-listen.t
+@@ -8,0 +9,2 @@
++use IO::Async::OS;
++plan('skip_all' => "No viable Routine models") unless IO::Async::OS->HAVE_POSIX_FORK || IO::Async::OS->HAVE_THREADS;
