@@ -710,10 +710,12 @@ public class Encode extends PerlModuleBase {
         CharBuffer output = CharBuffer.allocate(bytes.length * 2 + 4);
         StringBuilder result = new StringBuilder();
         boolean stoppedOnError = false;
+        boolean stopAtPartial = (check & STOP_AT_PARTIAL) != 0;
+        byte[] remainingBytes = null;
 
         while (input.hasRemaining()) {
             decoder.reset();
-            CoderResult cr = decoder.decode(input, output, true);
+            CoderResult cr = decoder.decode(input, output, !stopAtPartial);
             output.flip();
             result.append(output);
             output.clear();
@@ -743,21 +745,37 @@ public class Encode extends PerlModuleBase {
                 result.append(replacement);
             } else if (cr.isOverflow()) {
                 output = CharBuffer.allocate(output.capacity() * 2);
+            } else if (cr.isUnderflow()) {
+                if (stopAtPartial && input.hasRemaining()) {
+                    remainingBytes = new byte[input.remaining()];
+                    input.get(remainingBytes);
+                }
+                break;
             }
         }
 
-        // Flush decoder
-        decoder.reset();
-        output.clear();
-        decoder.decode(ByteBuffer.allocate(0), output, true);
-        decoder.flush(output);
-        output.flip();
-        result.append(output);
+        // Flush decoder. STOP_AT_PARTIAL deliberately leaves a trailing
+        // incomplete sequence in the source scalar, so there is no end-of-input
+        // flush in that mode.
+        if (!stopAtPartial) {
+            decoder.reset();
+            output.clear();
+            decoder.decode(ByteBuffer.allocate(0), output, true);
+            decoder.flush(output);
+            output.flip();
+            result.append(output);
+        }
 
         // Update source if LEAVE_SRC is not set
         if ((check & LEAVE_SRC) == 0 && !stoppedOnError
                 && srcArgs != null && srcArgs.size() > srcArgIndex) {
-            srcArgs.get(srcArgIndex).set("");
+            RuntimeScalar src = srcArgs.get(srcArgIndex);
+            if (remainingBytes != null) {
+                src.set(new String(remainingBytes, StandardCharsets.ISO_8859_1));
+                src.type = BYTE_STRING;
+            } else {
+                src.set("");
+            }
         }
 
         return new RuntimeScalar(result.toString());
