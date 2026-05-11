@@ -1,0 +1,8 @@
+--- lib/OpenAI/API/Request.pm.orig
++++ lib/OpenAI/API/Request.pm
+@@ -181,2 +181,0 @@ sub _send_request {
+-    my $loop = IO::Async::Loop->new();
+-
+@@ -185 +183 @@ sub _send_request {
+-    $loop->await($future);
++    $self->event_loop->await($future);

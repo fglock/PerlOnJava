@@ -129,7 +129,9 @@ public class IOOperator {
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
             List<Integer> pollableFds = new ArrayList<>();
+            List<Integer> pollableSslFds = new ArrayList<>();
             Set<Integer> immediateReadReadyFds = new HashSet<>();
+            Set<Integer> immediateWriteReadyFds = new HashSet<>();
             int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
@@ -143,33 +145,31 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        // SSL-wrapped sockets have no NIO channel.
-                        // Check readiness via InputStream.available() for reads,
-                        // and assume always writable for writes.
-                        boolean ready = false;
+                        // SSL sockets created without an underlying SocketChannel
+                        // cannot be registered with a Selector. Poll decrypted
+                        // bytes via pending()/available(); never report read
+                        // readiness solely because the handle is SSL-wrapped.
+                        boolean readReady = false;
+                        boolean writeReady = false;
                         if (wantRead) {
                             try {
-                                java.io.InputStream is = socketIO.getSocket() != null
-                                        ? socketIO.getSocket().getInputStream() : null;
-                                if (is != null && is.available() > 0) {
-                                    ready = true;
-                                } else {
-                                    // For SSL sockets, available() may return 0 even when
-                                    // data is waiting in the SSL layer. Assume readable
-                                    // to avoid blocking in select() — worst case, the
-                                    // subsequent read will block briefly.
-                                    if (socketIO.getSocket() instanceof javax.net.ssl.SSLSocket) {
-                                        ready = true;
-                                    }
-                                }
+                                readReady = socketIO.available() > 0;
                             } catch (Exception e) {
-                                ready = true; // Err on the side of reporting ready
+                                readReady = true; // Err on the side of surfacing the read error
                             }
                         }
                         if (wantWrite) {
-                            ready = true; // SSL sockets are always writable
+                            writeReady = true; // Blocking SSL sockets are writable for select() purposes
                         }
-                        if (ready) {
+                        if (readReady) {
+                            immediateReadReadyFds.add(fd);
+                        } else if (wantRead) {
+                            pollableSslFds.add(fd);
+                        }
+                        if (writeReady) {
+                            immediateWriteReadyFds.add(fd);
+                        }
+                        if (readReady || writeReady) {
                             nonSocketReady++;
                         }
                         continue;
@@ -236,7 +236,7 @@ public class IOOperator {
 
             if (nonSocketReady > 0 && channelToFd.isEmpty()) {
                 // Some non-socket handles already ready, no NIO channels — return immediately
-            } else if (!channelToFd.isEmpty() || !pollableFds.isEmpty()) {
+            } else if (!channelToFd.isEmpty() || !pollableFds.isEmpty() || !pollableSslFds.isEmpty()) {
                 // Poll loop: check both NIO selector and pollable fds
                 long deadlineMs = (timeoutSec < 0) ? Long.MAX_VALUE
                         : System.currentTimeMillis() + (long) (timeoutSec * 1000);
@@ -265,6 +265,19 @@ public class IOOperator {
                             nonSocketReady++;
                         }
                         if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                            nonSocketReady++;
+                        }
+                    }
+                    for (int fd : pollableSslFds) {
+                        RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                        if (rio == null || !(rio.ioHandle instanceof SocketIO socketIO)) continue;
+                        try {
+                            if (socketIO.available() > 0) {
+                                immediateReadReadyFds.add(fd);
+                                nonSocketReady++;
+                            }
+                        } catch (Exception e) {
+                            immediateReadReadyFds.add(fd);
                             nonSocketReady++;
                         }
                     }
@@ -309,11 +322,12 @@ public class IOOperator {
                     // Only handle SocketIO with null channel (SSL sockets)
                     if (socketIO.getSelectableChannel() != null) continue;
 
-                    // SSL socket: set bits based on readiness
-                    if (isBitSet(rdata, fd)) {
+                    // SSL socket without a selectable channel: set only the
+                    // readiness bits discovered above.
+                    if (isBitSet(rdata, fd) && immediateReadReadyFds.contains(fd)) {
                         setBit(rresult, fd); totalReady++;
                     }
-                    if (isBitSet(wdata, fd)) {
+                    if (isBitSet(wdata, fd) && immediateWriteReadyFds.contains(fd)) {
                         setBit(wresult, fd); totalReady++;
                     }
                     continue;

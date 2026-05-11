@@ -32,6 +32,7 @@ public class SocketIO implements IOHandle {
     private Socket socket;
     private ServerSocket serverSocket;
     private SocketChannel socketChannel;
+    private SelectableChannel sslSelectChannel;
     private ServerSocketChannel serverSocketChannel;
     private InputStream inputStream;
     private OutputStream outputStream;
@@ -316,10 +317,22 @@ public class SocketIO implements IOHandle {
      * @throws java.io.IOException if getting streams from the socket fails
      */
     public void replaceSocket(Socket newSocket) throws java.io.IOException {
+        SelectableChannel selectChannel = this.socketChannel;
+        if (selectChannel == null && this.socket != null) {
+            selectChannel = this.socket.getChannel();
+        }
         this.socket = newSocket;
         this.inputStream = newSocket.getInputStream();
         this.outputStream = newSocket.getOutputStream();
+        this.sslSelectChannel = selectChannel;
         this.socketChannel = null; // NIO not usable after SSL wrapping
+    }
+
+    public int available() throws IOException {
+        if (inputStream != null) {
+            return inputStream.available();
+        }
+        return 0;
     }
 
     /**
@@ -362,11 +375,18 @@ public class SocketIO implements IOHandle {
         // Perform the TLS handshake
         sslSocket.startHandshake();
 
+        SelectableChannel selectChannel = this.socketChannel;
+        if (selectChannel == null && this.socket != null) {
+            selectChannel = this.socket.getChannel();
+        }
+
         // Replace socket and streams — all subsequent I/O goes through SSL
         this.socket = sslSocket;
         this.inputStream = sslSocket.getInputStream();
         this.outputStream = sslSocket.getOutputStream();
-        // NIO SocketChannel is no longer usable after SSL wrapping
+        // Keep the original channel only for select()/poll readiness.
+        // Reads and writes must continue through the SSLSocket streams.
+        this.sslSelectChannel = selectChannel;
         this.socketChannel = null;
 
         return true;
@@ -612,6 +632,9 @@ public class SocketIO implements IOHandle {
         if (socketChannel != null) {
             return socketChannel;
         }
+        if (sslSelectChannel != null) {
+            return sslSelectChannel;
+        }
         if (datagramChannel != null) {
             return datagramChannel;
         }
@@ -834,7 +857,14 @@ public class SocketIO implements IOHandle {
             }
 
             if (inputStream != null) {
-                byte[] buffer = new byte[length];
+                int readLength = length;
+                if (socket instanceof javax.net.ssl.SSLSocket) {
+                    int pending = inputStream.available();
+                    if (pending > 0 && pending < readLength) {
+                        readLength = pending;
+                    }
+                }
+                byte[] buffer = new byte[readLength];
                 int bytesRead = inputStream.read(buffer);
                 if (bytesRead == -1) {
                     isEOF = true;
@@ -942,6 +972,7 @@ public class SocketIO implements IOHandle {
                 socket.close();
                 socket = null;
             }
+            sslSelectChannel = null;
             if (serverSocket != null) {
                 serverSocket.close();
                 serverSocket = null;

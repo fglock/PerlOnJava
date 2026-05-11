@@ -273,9 +273,14 @@ comment: |
   should not depend on reaching the external OpenAI service during CPAN
   installation, especially without an OPENAI_API_KEY. Set the standard
   Test::RequiresInternet flag so network tests skip and offline validation
-  tests still run.
+  tests still run. For an explicit live run, set
+  PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell;
+  CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.
 match:
   distribution: "^NFERRAZ/OpenAI-API-"
+patches:
+  - "OpenAI-API-0.37/EventLoop.patch"
+  - "OpenAI-API-0.37/NoNetworkTests.patch"
 test:
   env:
     NO_NETWORK_TESTING: 1
@@ -312,10 +317,14 @@ $VAR1 = {
 DD
         'OpenAI-API.dd' => <<'DD',
 $VAR1 = {
-  'comment' => 'PerlOnJava distroprefs for OpenAI::API. Set NO_NETWORK_TESTING during tests so live external API checks skip during CPAN installation.',
+  'comment' => 'PerlOnJava distroprefs for OpenAI::API. Set NO_NETWORK_TESTING during tests so live external API checks skip during CPAN installation. For an explicit live run, set PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell; CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.',
   'match' => {
     'distribution' => '^NFERRAZ/OpenAI-API-'
   },
+  'patches' => [
+    'OpenAI-API-0.37/EventLoop.patch',
+    'OpenAI-API-0.37/NoNetworkTests.patch'
+  ],
   'test' => {
     'env' => {
       'NO_NETWORK_TESTING' => 1
@@ -324,6 +333,35 @@ $VAR1 = {
 };
 DD
     );
+
+    if ($ENV{PERLONJAVA_OPENAI_LIVE_TESTING}) {
+        $bundled{'OpenAI-API.yml'} = <<'YAML';
+---
+comment: |
+  PerlOnJava distroprefs for OpenAI::API live testing.
+
+  PERLONJAVA_OPENAI_LIVE_TESTING is set, so PerlOnJava does not inject
+  NO_NETWORK_TESTING. OpenAI::API's live API tests still require the caller to
+  provide OPENAI_API_KEY explicitly in the environment.
+match:
+  distribution: "^NFERRAZ/OpenAI-API-"
+patches:
+  - "OpenAI-API-0.37/EventLoop.patch"
+  - "OpenAI-API-0.37/NoNetworkTests.patch"
+YAML
+        $bundled_dd{'OpenAI-API.dd'} = <<'DD';
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for OpenAI::API live testing. PERLONJAVA_OPENAI_LIVE_TESTING is set, so NO_NETWORK_TESTING is not injected; live API tests still require an explicit OPENAI_API_KEY.',
+  'match' => {
+    'distribution' => '^NFERRAZ/OpenAI-API-'
+  },
+  'patches' => [
+    'OpenAI-API-0.37/EventLoop.patch',
+    'OpenAI-API-0.37/NoNetworkTests.patch'
+  ]
+};
+DD
+    }
 
     # Create prefs directory if needed
     unless (-d $prefs_dir) {
@@ -445,6 +483,10 @@ PATCH
           'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
         [ 'IO-Async-0.805/PerlOnJava.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/PerlOnJava.patch' ],
+        [ 'OpenAI-API-0.37/EventLoop.patch',
+          'PerlOnJava/CpanPatches/OpenAI-API-0.37/EventLoop.patch' ],
+        [ 'OpenAI-API-0.37/NoNetworkTests.patch',
+          'PerlOnJava/CpanPatches/OpenAI-API-0.37/NoNetworkTests.patch' ],
     );
 
     my $slurp = sub {

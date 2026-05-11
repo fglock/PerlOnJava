@@ -1,0 +1,7 @@
+--- t/20-pod-synopsis.t.orig
++++ t/20-pod-synopsis.t
+@@ -7,0 +8,4 @@ use Test::More;
++if ( $ENV{NO_NETWORK_TESTING} ) {
++    plan skip_all => 'NO_NETWORK_TESTING';
++}
++

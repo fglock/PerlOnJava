@@ -6,7 +6,11 @@
 fixes let the run progress past `Struct::Dumb`, `Test::Metrics::Any`, and
 `IO::Async`; the final `OpenAI::API` test phase skips live external network
 tests with the standard `NO_NETWORK_TESTING=1` flag while still running local
-validation tests.
+validation tests. Explicit live runs can opt out of that safety with
+`PERLONJAVA_OPENAI_LIVE_TESTING=1`; the live API-key-gated tests still require
+the caller to provide `OPENAI_API_KEY` in the shell. Live testing is diagnostic
+only for this module because OpenAI::API 0.37 still exercises deprecated
+OpenAI models such as `text-davinci-003`.
 
 ## Completed
 
@@ -145,6 +149,39 @@ validation tests.
   `NO_NETWORK_TESTING=1` during test phase. This prevents CPAN installation
   from depending on live OpenAI API calls while leaving local validation tests
   enabled.
+- Added an opt-in `PERLONJAVA_OPENAI_LIVE_TESTING=1` mode for OpenAI::API
+  CPAN distroprefs. In that mode CPAN bootstraps a live OpenAI::API pref
+  without `NO_NETWORK_TESTING`, so live network tests are not skipped for that
+  reason; API-key-gated tests still require an explicit `OPENAI_API_KEY`.
+- Added an OpenAI::API patch file that makes the synchronous request path wait
+  on the same `IO::Async` event loop used to schedule the HTTP request. This
+  prevents live unauthenticated exception tests from hanging once
+  `NO_NETWORK_TESTING` is disabled.
+- Added an OpenAI::API test patch so `t/20-pod-synopsis.t` also honors
+  `NO_NETWORK_TESTING`. Without this, a shell-level `OPENAI_API_KEY` makes the
+  synopsis test execute live API calls even in the default offline CPAN path,
+  which can turn offline verification into slow DNS/network failures.
+- Compared live OpenAI::API behavior with Homebrew Perl via `cpan -t
+  OpenAI::API`. The CPAN run first failed before live OpenAI tests because
+  upstream `IO::Async` failed `t/25socket.t` on this machine, leaving
+  `IO::Async::Loop` unavailable to OpenAI::API. Running the matching
+  OpenAI::API tests directly under the same Homebrew Perl with the CPAN build
+  `blib` paths confirmed the expected live behavior: both
+  `t/01-completions-raw.t` and `t/01-completions-string-overload.t` exit
+  quickly with `404 Not Found` for `text-davinci-003` rather than hanging.
+- Reproduced PerlOnJava's live-only behavior outside the CPAN harness with a
+  single `OpenAI::API::Request::Completion` call. A focused `jstack` showed the
+  process blocking in SSL socket `sysread`; the earlier CPAN harness sample
+  also exposed a separate error-path spin in `RuntimeArray.setArrayOfAlias`
+  while building the `Throwable`/Moo exception path.
+- Fixed SSL socket readiness so `select()` on TLS sockets uses the underlying
+  raw `SocketChannel` for readiness polling instead of marking SSL handles as
+  always readable. `SocketIO` now preserves that channel only for
+  `select()`/`poll`, while reads and writes continue through the `SSLSocket`
+  streams; `IO::Socket::SSL::pending` now reports decrypted bytes already
+  buffered by Java TLS. This makes the live OpenAI::API completion path fail
+  quickly with `404 Not Found`, matching standard Perl, instead of hanging in
+  socket reads or retry sleeps.
 - Verified the final escalated OpenAI::API run with
   `/tmp/jcpan_openai_api_no_network_pref_escalated.log`: IO::Async
   `Files=64`, `Tests=1134`, `Result: PASS`; OpenAI::API `Files=22`,
@@ -163,7 +200,15 @@ validation tests.
    test` passes under PerlOnJava with the bundled patches.
 2. `OpenAI::API` now passes its CPAN test path under PerlOnJava with
    `NO_NETWORK_TESTING=1` supplied by bundled distroprefs.
-3. No active dependency blocker remains for the current `OpenAI::API` target.
+3. Live OpenAI::API runs are opt-in with
+   `PERLONJAVA_OPENAI_LIVE_TESTING=1`; this removes the distropref-supplied
+   `NO_NETWORK_TESTING`, but it does not synthesize an `OPENAI_API_KEY`.
+4. Live OpenAI::API runs are not a pass criterion because OpenAI::API 0.37
+   still uses deprecated upstream models, but the focused live PerlOnJava
+   completion path now matches standard Perl by failing quickly with
+   `404 Not Found` instead of hanging.
+5. No active dependency blocker remains for the default current
+   `OpenAI::API` target.
 
 ## Verification Targets
 
@@ -196,9 +241,41 @@ validation tests.
     `/tmp/pr702_regressed_files_final.log` reports `op/sub_lval.t` `50/215`,
     `op/loopctl.t` `54/69`, `class/gh22169.t` `8/8`, `op/localref.t` `46/64`,
     `op/ref.t` `244/265`, and `re/pat_advanced.t` `1355/1678`.
+15. Standard Perl comparison:
+    `/tmp/cpan_openai_api_system_perl_live_escalated.log` shows `cpan -t
+    OpenAI::API` failing because upstream `IO::Async` did not pass locally;
+    `/tmp/system_perl_openai_api_01_completions_raw_homebrew.log` and
+    `/tmp/system_perl_openai_api_01_completions_string_overload_homebrew.log`
+    show the OpenAI::API live completion tests failing quickly with
+    `404 Not Found`.
+16. PerlOnJava focused live reproducer after the SSL select fix:
+    `/tmp/jperl_openai_completion_raw_single_after_ssl_select_fix.log` exits
+    with `Error: '404 Not Found'` and `EXIT: 255`, matching the standard Perl
+    live behavior for the deprecated model test.
+17. Direct PerlOnJava LWP/OpenAI request path after the SSL select fix:
+    `/tmp/jperl_openai_direct_http_send_request_after_ssl_select_fix.log`
+    returns `404 Not Found`, response body length `258`, and `EXIT: 0`.
+18. Direct OpenAI::API dist test after the no-network synopsis patch:
+    `/tmp/openai_api_make_test_no_network_after_nonetwork_patch.log` passes
+    with `Files=22`, `Tests=8`, `Result: PASS`, `EXIT: 0` in 31 seconds while
+    `OPENAI_API_KEY` is present.
+19. Fresh-patch dry run:
+    `/tmp/openai_api_nonetwork_patch_dryrun.log` shows
+    `NoNetworkTests.patch` applies cleanly to an unmodified
+    `OpenAI-API-0.37` extraction.
+20. Final bundled patch asset dry run:
+    `/tmp/openai_api_patch_assets_dryrun_zero_context.log` shows both
+    `EventLoop.patch` and `NoNetworkTests.patch` apply cleanly from a fresh
+    `OpenAI-API-0.37.tar.gz` extraction.
 
 ## Next Steps
 
 - Keep PR #702 updated from the feature branch and monitor review/CI.
+- Keep default OpenAI::API CPAN testing offline with `NO_NETWORK_TESTING=1`;
+  treat `PERLONJAVA_OPENAI_LIVE_TESTING=1` as a diagnostic mode until the
+  stale upstream model tests are updated or patched.
+- If live OpenAI::API testing is needed again, run the focused completion
+  reproducer first to confirm it still fails quickly with the expected
+  `404 Not Found` response.
 - After the OpenAI::API path is stable, evaluate bundling YAML so CPAN can read
   `.yml` distroprefs directly; keep using `.dd` fallbacks for this fix.
