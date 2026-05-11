@@ -346,6 +346,31 @@ public class WarningFlags {
         
         return new String(bytes, StandardCharsets.ISO_8859_1);
     }
+
+    /**
+     * Perl compile-time {@code ckWARN}-style check: honor {@code no warnings 'category'},
+     * then {@code $^W (-w)}, then the category's enabled bit in the scope's
+     * {@code ${^WARNING_BITS}} string.
+     *
+     * <p>Do not use {@link #warningManager}{@code .isWarningEnabled()} for compile-time
+     * diagnostics: when {@link #globalWarningsEnabled} is true (after a bare {@code use warnings}
+     * anywhere in the process), that helper incorrectly treats almost every category as on unless
+     * explicitly disabled, which breaks modules that set warning state only via
+     * {@code ${^WARNING_BITS}} (e.g. AnyEvent's generated {@code AnyEvent::common_sense}).
+     */
+    public static boolean ckWarnForScope(ScopedSymbolTable scope, String category) {
+        if (scope != null && scope.isWarningCategoryDisabled(category)) {
+            return false;
+        }
+        if (GlobalVariable.getGlobalVariable("main::" + Character.toString('W' - 'A' + 1))
+                .getBoolean()) {
+            return true;
+        }
+        if (scope == null) {
+            return false;
+        }
+        return isEnabledInBits(scope.getWarningBitsString(), category);
+    }
     
     /**
      * Perl compile-time {@code ckWARN}-style check: honor {@code no warnings 'category'},

@@ -663,7 +663,7 @@ public class CompileOperator {
                 return;
             }
         }
-        node.operand.accept(bc);
+        bc.compileNode(node.operand, -1, RuntimeContextType.LVALUE);
         int operandReg = bc.lastResultReg;
         if (isPostfix) {
             int resultReg = bc.allocateRegister();

@@ -1170,7 +1170,7 @@ public class SubroutineParser {
                 }
             }
 
-            // "Subroutine X redefined": ckWARN('redefine') — $^W or lexical 'redefine' in ${^WARNING_BITS}.
+            // "Subroutine X redefined": ckWARN('redefine') - $^W or lexical 'redefine' in ${^WARNING_BITS}.
             // "Constant subroutine X redefined": still emitted when $^W is 0 (e.g. eval under local $^W=0);
             // only suppressed by lexical no warnings 'redefine' / no warnings. See perl5_t/t/comp/redef.t.
             if (isConstantSub) {

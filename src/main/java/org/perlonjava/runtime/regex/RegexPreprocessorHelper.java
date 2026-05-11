@@ -1,5 +1,8 @@
 package org.perlonjava.runtime.regex;
 
+import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -1006,6 +1009,9 @@ public class RegexPreprocessorHelper {
         String positiveFlags = parts[0];
         String negativeFlags = parts.length > 1 ? parts[1] : "";
 
+        warnForUselessMatchOnlyFlags(positiveFlags, false);
+        warnForUselessMatchOnlyFlags(negativeFlags, true);
+
         // Check for mutually exclusive modifiers
         if (positiveFlags.contains("l") && positiveFlags.contains("u")) {
             // Find position of second flag
@@ -1108,6 +1114,23 @@ public class RegexPreprocessorHelper {
         }
         sb.append(')');
         return offset;
+    }
+
+    private static void warnForUselessMatchOnlyFlags(String flags, boolean negative) {
+        boolean suppressNegativeG = negative && flags.indexOf('c') >= 0;
+        for (int i = 0; i < flags.length(); i++) {
+            char flag = flags.charAt(i);
+            if (flag != 'c' && flag != 'g' && flag != 'o') {
+                continue;
+            }
+            if (negative && flag == 'g' && suppressNegativeG) {
+                continue;
+            }
+            String prefix = negative ? "?-" : "?";
+            WarnDie.warn(
+                    new RuntimeScalar("Useless (" + prefix + flag + ")"),
+                    new RuntimeScalar(""));
+        }
     }
 
     /**

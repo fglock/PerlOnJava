@@ -6309,6 +6309,7 @@ public class BytecodeCompiler implements Visitor {
             emit(createDynOp);
             emitReg(rd);
             emitReg(dynamicLabelReg);
+            emit(Opcodes.MORTAL_FLUSH);
             emit(Opcodes.RETURN);
             emitReg(rd);
 
@@ -6321,6 +6322,7 @@ public class BytecodeCompiler implements Visitor {
                 LoopInfo targetLoop = localMatchLoops.get(i);
                 patchJump(matchPatchPos, bytecode.size());
 
+                emit(Opcodes.MORTAL_FLUSH);
                 emitWithToken(localOpcode, node.getIndex());
                 int patchPc = bytecode.size();
                 emitInt(0); // patched when loop boundaries are finalized
@@ -6369,6 +6371,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(rd);
             int labelIdx = labelStr != null ? addToStringPool(labelStr) : 255;
             emitReg(labelIdx);
+            emit(Opcodes.MORTAL_FLUSH);
             emit(Opcodes.RETURN);
             emitReg(rd);
             return;
@@ -6384,6 +6387,7 @@ public class BytecodeCompiler implements Visitor {
                 : op.equals("next") ? Opcodes.NEXT
                 : Opcodes.REDO;
 
+        emit(Opcodes.MORTAL_FLUSH);
         emitWithToken(opcode, node.getIndex());
 
         // Record the PC to be patched (it's the PC of the jump offset operand)

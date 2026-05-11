@@ -62,6 +62,11 @@ public class WeakRefRegistry {
      * deterministically (see Strategy A in weaken-destroy.md).
      */
     public static void weaken(RuntimeScalar ref) {
+        if (ref.destroySelfArgument
+                || ref instanceof RuntimeScalarReadOnly
+                || ref.type == RuntimeScalarType.READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         if (!RuntimeScalarType.isReference(ref)) {
             if (ref.type == RuntimeScalarType.UNDEF) return;  // weaken(undef) is a no-op
             throw new PerlCompilerException("Can't weaken a nonreference");

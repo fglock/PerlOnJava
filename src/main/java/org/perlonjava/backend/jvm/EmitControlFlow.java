@@ -131,8 +131,10 @@ public class EmitControlFlow {
             // bypass the cleanup at returnLabel, leaving `local` variables un-restored.
             if (ctx.javaClassInfo.returnLabel != null) {
                 ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+                emitMortalFlushAboveMark(ctx);
                 ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
             } else {
+                emitMortalFlushAboveMark(ctx);
                 ctx.mv.visitInsn(Opcodes.ARETURN);
             }
             return;
@@ -150,7 +152,16 @@ public class EmitControlFlow {
         Label label = operator.equals("next") ? loopLabels.nextLabel
                 : operator.equals("last") ? loopLabels.lastLabel
                 : loopLabels.redoLabel;
+        emitMortalFlushAboveMark(ctx);
         ctx.mv.visitJumpInsn(Opcodes.GOTO, label);
+    }
+
+    private static void emitMortalFlushAboveMark(EmitterContext ctx) {
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/MortalList",
+                "flushAboveMark",
+                "()V",
+                false);
     }
 
     /**

@@ -102,6 +102,16 @@ validation tests.
   weak callback captures while the caller's lexical still holds the object.
   This clears `t/28filestream.t`, including filename-following and rename
   readiness.
+- Fixed PR #702 regression fallout against PR #700:
+  bytecode lvalue assignment now treats unary `+` as transparent, prefix and
+  postfix increment compile callable lvalue operands in lvalue context,
+  incomplete class blocks no longer leak methods/accessors before the parser
+  reports the missing brace, dynamic `local` restore runs scalar-reference
+  cleanup after the restored value is visible to `DESTROY`, `weaken($_[0])`
+  rejects DESTROY's read-only invocant, loop-control exits flush statement
+  temporaries before jumping, PR #700's lexical warning-bit checks are retained,
+  and regex preprocessing now emits Perl's useless `(?c)`, `(?g)`, and `(?o)`
+  warnings.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
@@ -181,6 +191,11 @@ validation tests.
 13. `timeout 1800 ./jcpan -t OpenAI::API` passes with the OpenAI::API
     distropref active:
     `/tmp/jcpan_openai_api_no_network_pref_escalated.log`.
+14. PR #702 regression comparison targets now meet or exceed the PR #700 pass
+    counts:
+    `/tmp/pr702_regressed_files_final.log` reports `op/sub_lval.t` `50/215`,
+    `op/loopctl.t` `54/69`, `class/gh22169.t` `8/8`, `op/localref.t` `46/64`,
+    `op/ref.t` `244/265`, and `re/pat_advanced.t` `1355/1678`.
 
 ## Next Steps
 

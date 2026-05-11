@@ -1058,6 +1058,16 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("+")) {
+                    // Unary plus is transparent for lvalue assignment, matching LValueVisitor.
+                    bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.LVALUE);
+                    int lvalueReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to

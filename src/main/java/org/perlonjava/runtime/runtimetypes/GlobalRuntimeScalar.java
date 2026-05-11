@@ -116,25 +116,23 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     return;
                 }
 
-                // Decrement refCount of the CURRENT (local) value being displaced
-                // only if this scalar owns a counted reference. Implicit-$_ foreach
-                // aliases the global slot directly to each iterator element; that
-                // alias does not increment refCount, so restoring $_ must not
-                // consume one of the caller's real owners.
-                // Do NOT increment the restored value — it already has the correct
-                // refCount from its original counting.
                 RuntimeScalar currentVar = GlobalVariable.globalVariables.get(saved.fullName);
+                RuntimeBase displacedBase = null;
+                RuntimeScalar scalarReferenceContents = null;
                 if (currentVar != null
                         && currentVar.refCountOwned
                         && (currentVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && currentVar.value instanceof RuntimeBase displacedBase
-                        && displacedBase.refCount > 0) {
+                        && currentVar.value instanceof RuntimeBase base
+                        && base.refCount > 0) {
+                    displacedBase = base;
                     currentVar.refCountOwned = false;
                     displacedBase.releaseActiveOwner(currentVar);
-                    if (--displacedBase.refCount == 0) {
-                        displacedBase.refCount = Integer.MIN_VALUE;
-                        DestroyDispatch.callDestroy(displacedBase);
-                    }
+                }
+                if (currentVar != null
+                        && currentVar.ownsScalarReferenceContents
+                        && currentVar.type == RuntimeScalarType.REFERENCE
+                        && currentVar.value instanceof RuntimeScalar scalarReferent) {
+                    scalarReferenceContents = scalarReferent;
                 }
 
                 // Restore the internal separator values if this was an output separator variable
@@ -153,6 +151,40 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     if (!alias.equals(saved.fullName)) {
                         GlobalVariable.globalVariables.put(alias, saved.originalVariable);
                     }
+                }
+
+                // Decrement refCount of the displaced local value after restoring
+                // the global slot, so DESTROY sees the restored variable state.
+                boolean displacedWillDestroy = false;
+                if (displacedBase != null && displacedBase.refCount == 1) {
+                    String className = NameNormalizer.getBlessStr(displacedBase.blessId);
+                    displacedWillDestroy = className != null && !className.isEmpty()
+                            && DestroyDispatch.classHasDestroy(displacedBase.blessId, className);
+                }
+                if ((displacedWillDestroy || scalarReferenceContents != null)
+                        && currentVar != null && currentVar != saved.originalVariable) {
+                    // Compiled code may still hold the localized scalar object
+                    // directly. Mirror the restored value into it just before
+                    // DESTROY so both lookup paths observe the restored state.
+                    if (saved.originalVariable == null) {
+                        currentVar.type = RuntimeScalarType.UNDEF;
+                        currentVar.value = null;
+                        currentVar.blessId = 0;
+                    } else {
+                        currentVar.type = saved.originalVariable.type;
+                        currentVar.value = saved.originalVariable.value;
+                        currentVar.blessId = saved.originalVariable.blessId;
+                    }
+                    currentVar.refCountOwned = false;
+                }
+                if (currentVar != null) {
+                    currentVar.ownsScalarReferenceContents = false;
+                }
+                RuntimeScalar.releaseScalarReferenceContents(scalarReferenceContents);
+                if (displacedBase != null && displacedBase.refCount > 0
+                        && --displacedBase.refCount == 0) {
+                    displacedBase.refCount = Integer.MIN_VALUE;
+                    DestroyDispatch.callDestroy(displacedBase);
                 }
             }
         }
