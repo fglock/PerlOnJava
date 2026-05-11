@@ -1,0 +1,19 @@
+---
+comment: |
+  PerlOnJava distroprefs for OpenAI::API.
+
+  OpenAI::API's test suite includes live network/API exception tests. Those
+  should not depend on reaching the external OpenAI service during CPAN
+  installation, especially without an OPENAI_API_KEY. Set the standard
+  Test::RequiresInternet flag so network tests skip and offline validation
+  tests still run. For an explicit live run, set
+  PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell;
+  CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.
+match:
+  distribution: "^NFERRAZ/OpenAI-API-"
+patches:
+  - "OpenAI-API-0.37/EventLoop.patch"
+  - "OpenAI-API-0.37/NoNetworkTests.patch"
+test:
+  env:
+    NO_NETWORK_TESTING: 1

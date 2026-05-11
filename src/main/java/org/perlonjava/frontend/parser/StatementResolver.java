@@ -40,7 +40,7 @@ public class StatementResolver {
     private static final Set<String> IDENTIFIER_BEFORE_BARE_STRING_ARG = Set.of(
             "like", "unlike", "ok", "is", "isnt", "cmp_ok", "can_ok", "isa_ok",
             "pass", "fail", "require", "diag", "note", "explain",
-            "warning_like", "warning_is", "warnings_like");
+            "skip", "warning_like", "warning_is", "warnings_like");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -162,8 +162,22 @@ public class StatementResolver {
                             consume(parser);
                         }
 
-                        // Parse signature if present (optional)
+                        // Parse attributes before the optional signature/block.
                         String prototype = null;
+                        List<String> attributes = new ArrayList<>();
+                        String attrDisplayName = methodName != null
+                                ? NameNormalizer.normalizeVariableName(methodName, parser.ctx.symbolTable.getCurrentPackage())
+                                : parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+                        String prevAttrProto = null;
+                        while (peek(parser).text.equals(":")) {
+                            String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                    prototype, attrDisplayName, prevAttrProto);
+                            if (attrProto != null) {
+                                prevAttrProto = prototype;
+                                prototype = attrProto;
+                            }
+                        }
+
                         ListNode signatureAST = null;
 
                         // Enter a scope for the implicit $self and any signature parameters.
@@ -180,6 +194,20 @@ public class StatementResolver {
                         }
 
                         try {
+                        // Parse attributes after the optional signature as well.
+                        while (peek(parser).text.equals(":")) {
+                            String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                    prototype, attrDisplayName, prevAttrProto);
+                            if (attrProto != null) {
+                                prevAttrProto = prototype;
+                                prototype = attrProto;
+                            }
+                        }
+
+                        if (!attributes.isEmpty()) {
+                            org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+                        }
+
                         // Check for forward declaration (method name;) or full definition (method name {...})
                         if (peek(parser).text.equals(";")) {
                             // Forward declaration - just consume the semicolon
@@ -191,7 +219,7 @@ public class StatementResolver {
                             SubroutineNode method = new SubroutineNode(
                                     methodName,
                                     prototype,
-                                    null,  // attributes
+                                    attributes.isEmpty() ? null : attributes,
                                     emptyBlock,
                                     false, // useTryCatch
                                     parser.tokenIndex
@@ -218,7 +246,7 @@ public class StatementResolver {
                             SubroutineNode method = new SubroutineNode(
                                     methodName,
                                     prototype,
-                                    null,  // attributes
+                                    attributes.isEmpty() ? null : attributes,
                                     block,
                                     false, // useTryCatch
                                     parser.tokenIndex
@@ -499,6 +527,21 @@ public class StatementResolver {
                             // Generate unique hidden variable name
                             String hiddenVarName = methodName + "__lexmethod_" + parser.tokenIndex;
 
+                            // Parse attributes before the optional signature/block.
+                            String prototype = null;
+                            List<String> attributes = new ArrayList<>();
+                            String attrDisplayName = NameNormalizer.normalizeVariableName(methodName,
+                                    parser.ctx.symbolTable.getCurrentPackage());
+                            String prevAttrProto = null;
+                            while (peek(parser).text.equals(":")) {
+                                String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                        prototype, attrDisplayName, prevAttrProto);
+                                if (attrProto != null) {
+                                    prevAttrProto = prototype;
+                                    prototype = attrProto;
+                                }
+                            }
+
                             // Enter scope for $self and signature parameters early,
                             // so they are visible during parse-time strict vars check.
                             int scopeIndex = parser.ctx.symbolTable.enterScope();
@@ -515,6 +558,20 @@ public class StatementResolver {
                             }
 
                             try {
+                            // Parse attributes after the optional signature as well.
+                            while (peek(parser).text.equals(":")) {
+                                String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                                        prototype, attrDisplayName, prevAttrProto);
+                                if (attrProto != null) {
+                                    prevAttrProto = prototype;
+                                    prototype = attrProto;
+                                }
+                            }
+
+                            if (!attributes.isEmpty()) {
+                                org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+                            }
+
                             // Parse the method body
                             BlockNode block = null;
                             if (peek(parser).text.equals("{")) {
@@ -545,8 +602,8 @@ public class StatementResolver {
                             // Create anonymous method
                             SubroutineNode anonMethod = new SubroutineNode(
                                     null, // anonymous
-                                    null, // prototype
-                                    null, // attributes
+                                    prototype,
+                                    attributes.isEmpty() ? null : attributes,
                                     block,
                                     false, // useTryCatch
                                     parser.tokenIndex

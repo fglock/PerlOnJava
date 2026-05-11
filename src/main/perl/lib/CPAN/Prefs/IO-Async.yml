@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for IO::Async.
+
+  PerlOnJava does not implement POSIX fork(); CORE::fork returns undef with
+  EAGAIN. IO::Async normally assumes fork support on Unix-like systems unless
+  IO_ASYNC_NO_FORK is set. Tell IO::Async's own test suite the real platform
+  capability so fork/process/routine tests skip instead of failing after the
+  runtime correctly rejects fork().
+match:
+  distribution: "^PEVANS/IO-Async-"
+patches:
+  - "IO-Async-0.805/NoFork.patch"
+  - "IO-Async-0.805/PerlOnJava.patch"
+test:
+  env:
+    IO_ASYNC_NO_FORK: 1

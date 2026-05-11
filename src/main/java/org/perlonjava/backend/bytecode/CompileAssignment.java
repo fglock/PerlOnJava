@@ -1058,6 +1058,16 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = globReg;
+                } else if (leftOp.operator.equals("+")) {
+                    // Unary plus is transparent for lvalue assignment, matching LValueVisitor.
+                    bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.LVALUE);
+                    int lvalueReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = valueReg;
                 } else if (leftOp.operator.equals("pos")) {
                     // pos($var) = value - lvalue assignment to regex position
                     // pos() returns a PosLvalueScalar that can be assigned to
@@ -1746,24 +1756,31 @@ public class CompileAssignment {
                     }
                 }
 
-                // Handle lvalue subroutine: f() = value
-                // When a function is called in lvalue context, it returns a RuntimeBaseProxy
-                // that wraps a mutable reference. We can assign to it using SET_SCALAR.
-                if (leftBin.operator.equals("(")) {
-                    // Call the function (which returns a RuntimeBaseProxy in lvalue context)
-                    bytecodeCompiler.compileNode(node.left, -1, rhsContext);
+                // Handle lvalue method/code-reference calls: $obj->method() = value, $code->() = value
+                if (leftBin.operator.equals("->")
+                        && (leftBin.right instanceof ListNode
+                        || (leftBin.right instanceof BinaryOperatorNode call && call.operator.equals("(")))) {
+                    bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.LVALUE);
                     int lvalueReg = bytecodeCompiler.lastResultReg;
 
-                    // Compile RHS
-                    bytecodeCompiler.compileNode(node.right, -1, rhsContext);
-                    int rhsReg = bytecodeCompiler.lastResultReg;
-
-                    // Assign to the lvalue using SET_SCALAR
                     bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                     bytecodeCompiler.emitReg(lvalueReg);
-                    bytecodeCompiler.emitReg(rhsReg);
+                    bytecodeCompiler.emitReg(valueReg);
 
-                    bytecodeCompiler.lastResultReg = rhsReg;
+                    bytecodeCompiler.lastResultReg = valueReg;
+                    return;
+                }
+
+                // Handle lvalue subroutine: f() = value
+                if (leftBin.operator.equals("(")) {
+                    bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.LVALUE);
+                    int lvalueReg = bytecodeCompiler.lastResultReg;
+
+                    bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                    bytecodeCompiler.emitReg(lvalueReg);
+                    bytecodeCompiler.emitReg(valueReg);
+
+                    bytecodeCompiler.lastResultReg = valueReg;
                     
                     return;
                 }
@@ -1933,4 +1950,3 @@ public class CompileAssignment {
         return -1;
     }
 }
-

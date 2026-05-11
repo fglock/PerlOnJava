@@ -99,6 +99,46 @@ Test that $object has $count references to it.
 
 sub is_refcount($$;$)
 {
+   if( defined &Internals::jperl_refstate_str ) {
+      # PerlOnJava: use the aliased argument directly. Copying it into a local
+      # and then clearing @_ can consume one real counted owner after the helper
+      # returns, while refcount($_[0]) already reports the caller-visible count.
+      my $count = $_[1];
+      my $name = $_[2];
+      my $is_ref = ref $_[0];
+      my $REFCNT = $is_ref ? refcount( $_[0] ) : undef;
+
+      my $ctx = context();
+
+      if( !$is_ref ) {
+         my $ok = $ctx->ok( 0, $name );
+         $ctx->diag( "  expected a reference, was not given one" );
+         $ctx->release;
+         return $ok;
+      }
+
+      my $ok = $ctx->ok( $REFCNT == $count, $name );
+
+      unless( $ok->pass ) {
+         $ctx->diag( "  expected $count references, found $REFCNT" );
+
+         if( HAVE_DEVEL_MAT_DUMPER ) {
+            my $file = $0;
+            my $hub = $ctx->hub;
+            my $num = $hub->count;
+
+            $file =~ s/\.(?:t|pm|pl)$//;
+            $file .= "-$num\.pmat";
+            $ctx->diag( sprintf "SV address is 0x%x", refaddr $_[0] );
+            $ctx->diag( "Writing heap dump to $file" );
+            Devel::MAT::Dumper::dump( $file );
+         }
+      }
+
+      $ctx->release;
+      return $ok;
+   }
+
    my ( $object, $count, $name ) = @_;
    @_ = ();
 
@@ -148,6 +188,10 @@ Assert that the $object has only 1 reference to it.
 
 sub is_oneref($;$)
 {
+   if( defined &Internals::jperl_refstate_str ) {
+      return is_refcount( $_[0], 1, $_[1] );
+   }
+
    splice( @_, 1, 0, ( 1 ) );
    goto &is_refcount;
 }

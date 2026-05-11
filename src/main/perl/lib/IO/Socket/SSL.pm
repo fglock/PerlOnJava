@@ -94,6 +94,8 @@ sub configure {
         return;
     }
 
+    ${*$self}{'io_socket_timeout'} = $timeout;
+
     return $self;
 }
 
@@ -218,7 +220,7 @@ sub is_SSL {
 # Return SSL data still in buffer (needed by Net::HTTP::Methods)
 sub pending {
     my ($self) = @_;
-    return 0;
+    return IO::Socket::SSL::_pending($self) || 0;
 }
 
 # Stop SSL on this connection (not truly supported with SSLSocket wrapping)

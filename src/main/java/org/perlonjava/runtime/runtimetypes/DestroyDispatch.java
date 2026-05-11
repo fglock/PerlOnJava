@@ -335,9 +335,13 @@ public class DestroyDispatch {
                 self.type = RuntimeScalarType.REFERENCE; // fallback
             }
             self.value = referent;
+            self.destroySelfArgument = true;
 
             RuntimeArray args = new RuntimeArray();
             args.push(self);
+            if (!args.elements.isEmpty()) {
+                args.elements.get(args.elements.size() - 1).destroySelfArgument = true;
+            }
             // Phase 3: Snapshot pending size so we can drain only the entries
             // added during apply (shift @_, $self scope exit) without
             // clobbering outer-scope pending entries.

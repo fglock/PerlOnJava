@@ -32,6 +32,19 @@ subtest 'Typeglob stringification' => sub {
     like($fh2, qr/^GLOB\(/, "typeglob reference stringifies to GLOB(...)");
 };
 
+subtest 'Scalar::Util::refaddr for named glob references' => sub {
+    require Scalar::Util;
+
+    my $stdin_a = \*STDIN;
+    my $stdin_b = \*STDIN;
+    is(Scalar::Util::refaddr($stdin_a), Scalar::Util::refaddr($stdin_b),
+        'repeated STDIN glob refs report the same refaddr');
+
+    my $stdout = \*STDOUT;
+    isnt(Scalar::Util::refaddr($stdin_a), Scalar::Util::refaddr($stdout),
+        'different named glob refs report different refaddrs');
+};
+
 subtest 'Using typeglobs as file handles' => sub {
     my $fh = *STDOUT;
     my $fh2 = \*STDOUT;

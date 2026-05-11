@@ -940,7 +940,10 @@ public class EmitVariable {
                     // Fall through for unsupported ref aliasing targets (global vars, etc.)
                 }
 
-                node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the variable
+                int lhsContext = isCallableLvalueTarget(node.left)
+                        ? RuntimeContextType.LVALUE
+                        : RuntimeContextType.SCALAR;
+                node.left.accept(emitterVisitor.with(lhsContext));   // emit the variable
 
                 if (spillRhs) {
                     mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
@@ -1042,6 +1045,20 @@ public class EmitVariable {
             return innerContext == RuntimeContextType.LIST;
         }
         return false;
+    }
+
+    private static boolean isCallableLvalueTarget(Node node) {
+        if (!(node instanceof BinaryOperatorNode binop)) {
+            return false;
+        }
+        if (binop.operator.equals("(")) {
+            return true;
+        }
+        if (!binop.operator.equals("->")) {
+            return false;
+        }
+        return binop.right instanceof ListNode
+                || (binop.right instanceof BinaryOperatorNode call && call.operator.equals("("));
     }
 
     /**

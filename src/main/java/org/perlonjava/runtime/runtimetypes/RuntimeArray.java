@@ -36,6 +36,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // (setArrayOfAlias) without refCount increments. Checked by pop/shift to decide
     // whether to mortal-ize removed elements.
     public boolean elementsOwned;
+    // True for arrays populated as aliases (not counted stores), such as @_.
+    // Direct lvalue stores into ordinary arrays can flip elementsOwned on, but
+    // alias arrays must stay non-owning so shift/pop do not consume caller refs.
+    public boolean elementsAliased;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
 
@@ -217,6 +221,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     RuntimeScalar.incrementRefCountForContainerStore(runtimeArray.elements.get(i));
                 }
                 runtimeArray.elementsOwned = true;
+                runtimeArray.elementsAliased = false;
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -249,6 +254,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeArray arr = new RuntimeArray();
                 RuntimeArray.push(arr, value);
                 runtimeArray.elements.addAll(0, arr.elements);
+                runtimeArray.elementsOwned = true;
+                runtimeArray.elementsAliased = false;
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -776,6 +783,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
                 this.elementsOwned = true;
+                this.elementsAliased = false;
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -862,6 +870,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (elem != null) elem.refCountOwned = false;
         }
         this.elementsOwned = false;
+        this.elementsAliased = true;
         return this;
     }
 
@@ -1245,6 +1254,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 arr.elements.add(element);
             }
         }
+        arr.elementsOwned = false;
+        arr.elementsAliased = true;
         return arr;
     }
 

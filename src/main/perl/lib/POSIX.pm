@@ -62,7 +62,7 @@ our @EXPORT_OK = qw(
     _exit abort access alarm chdir chmod chown close ctermid dup dup2
     execl execle execlp execv execve execvp
     fork fpathconf getcwd getegid geteuid getgid getgroups getlogin
-    getpgrp getpid getppid getuid isatty kill link lseek mkdir mkfifo
+    getpgrp getpid getppid getuid isatty kill link lseek mkdir mkfifo nice
     pathconf pause pipe read rename rmdir setgid setpgid setsid setuid
     sleep sysconf tcdrain tcflow tcflush tcgetpgrp tcsendbreak
     tcsetpgrp time times ttyname tzname umask uname unlink utime wait waitpid write
@@ -290,6 +290,7 @@ sub getgid { POSIX::_getgid() }
 sub getegid { POSIX::_getegid() }
 sub setuid { POSIX::_setuid(@_) }
 sub setgid { POSIX::_setgid(@_) }
+sub nice { return 1 }
 
 # Locale support (stubbed — PerlOnJava does not switch C library locales,
 # but many modules rely on these existing and being callable).
@@ -568,7 +569,7 @@ for my $const (qw(
     EINTR ENOENT ESRCH EIO ENXIO E2BIG ENOEXEC EBADF ECHILD EAGAIN
     ENOMEM EACCES EFAULT ENOTBLK EBUSY EEXIST EXDEV ENODEV ENOTDIR
     EISDIR EINVAL ENFILE EMFILE ENOTTY ETXTBSY EFBIG ENOSPC ESPIPE
-    EROFS EMLINK EPIPE EDOM ERANGE EPERM
+    EROFS EMLINK EPIPE EDOM ERANGE EPERM EWOULDBLOCK ECONNRESET EINPROGRESS
 
     SEEK_SET SEEK_CUR SEEK_END
 

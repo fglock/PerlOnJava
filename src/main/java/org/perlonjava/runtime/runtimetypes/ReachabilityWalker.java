@@ -182,6 +182,17 @@ public class ReachabilityWalker {
                         visitScalar(cap, todo);
                     }
                 }
+                if (walkCaptures
+                        && cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    for (RuntimeBase cap : interpreted.capturedVars) {
+                        if (cap instanceof RuntimeScalar scalar) {
+                            visitScalar(scalar, todo);
+                        } else if (cap != null) {
+                            addReachable(cap, todo);
+                        }
+                    }
+                }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
             }
@@ -283,6 +294,21 @@ public class ReachabilityWalker {
                     String sub = code.subName == null ? "(anon)" : code.subName;
                     for (RuntimeScalar cap : code.capturedScalars) {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
+                    }
+                }
+                if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                        && interpreted.capturedVars != null) {
+                    int i = 0;
+                    String name = code.packageName == null ? "?" : code.packageName;
+                    String sub = code.subName == null ? "(anon)" : code.subName;
+                    for (RuntimeBase cap : interpreted.capturedVars) {
+                        String path = curPath + "<interpreted closure " + name + "::" + sub
+                                + " cap#" + (i++) + ">";
+                        if (cap instanceof RuntimeScalar scalar) {
+                            visitScalarPath(scalar, path, howReached, todo);
+                        } else if (cap != null && howReached.putIfAbsent(cap, path) == null) {
+                            todo.add(cap);
+                        }
                     }
                 }
             }
@@ -444,6 +470,52 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Lightweight fallback for {@link WeakRefRegistry#weaken}: check whether a
+     * target is still reachable from a JVM-live scalar even when that scalar is
+     * not a counted owner. Test2::Tools::Refcount weakens a local probe copy
+     * before reading B::REFCNT; if selective refcounting has drifted to zero,
+     * clearing every weak callback at that point is premature while the caller's
+     * lexical still points at the object.
+     *
+     * <p>This is deliberately separate from the normal sweep/root query. It
+     * force-prunes stale weak-map keys first, only follows non-weak scalars, and
+     * is used only at the immediate weaken() zero-count decision.</p>
+     */
+    public static boolean isReachableFromLiveScalarRegistry(RuntimeBase target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+            if (sc == null) continue;
+            if (sc.captureCount > 0) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if (sc.scopeExited) continue;
+            if (followScalar(sc, target, seen, todo)) return true;
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (cur == target) return true;
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash h) {
+                for (RuntimeScalar v : h.elements.values()) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * D-W6.14: check if a specific RuntimeScalar instance is reachable
      * from package globals or live lexical roots. Used at refCount→0
      * transitions to verify that surviving "owner" scalars in the
@@ -571,6 +643,11 @@ public class ReachabilityWalker {
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
             seedTarget(e.getValue(), target, seen, todo);
             if (seen.contains(target)) return true;
+            if (!globalOnly
+                    && e.getValue() != null
+                    && e.getValue().value instanceof RuntimeCode code) {
+                if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
+            }
         }
         for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
             seedTarget(e.getValue(), target, seen, todo);
@@ -688,6 +765,28 @@ public class ReachabilityWalker {
                 && s.value instanceof RuntimeBase b) {
             if (b == target) return true;
             if (seen.add(b)) todo.addLast(b);
+        }
+        return false;
+    }
+
+    private static boolean followGlobalCodeCaptures(RuntimeCode code, RuntimeBase target,
+                                                    Set<RuntimeBase> seen,
+                                                    java.util.ArrayDeque<RuntimeBase> todo) {
+        if (code.capturedScalars != null) {
+            for (RuntimeScalar cap : code.capturedScalars) {
+                if (followScalar(cap, target, seen, todo)) return true;
+            }
+        }
+        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (RuntimeBase cap : interpreted.capturedVars) {
+                if (cap instanceof RuntimeScalar scalar) {
+                    if (followScalar(scalar, target, seen, todo)) return true;
+                } else if (cap != null) {
+                    if (cap == target) return true;
+                    if (seen.add(cap)) todo.addLast(cap);
+                }
+            }
         }
         return false;
     }

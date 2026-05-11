@@ -30,6 +30,15 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         // Note: this.type is RuntimeScalarType.UNDEF
     }
 
+    @Override
+    public RuntimeScalar set(RuntimeScalar value) {
+        RuntimeScalar result = super.set(value);
+        if (!parent.elementsAliased) {
+            parent.elementsOwned = true;
+        }
+        return result;
+    }
+
     /**
      * Creates a reference to the underlying lvalue, vivifying it first.
      * In Perl, \$arr[$i] auto-vivifies the array element so that the reference

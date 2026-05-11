@@ -327,7 +327,7 @@ public class InheritanceResolver {
 
         if (cacheKey == null) {
             // Normalize the method name for consistent caching
-            cacheKey = NameNormalizer.normalizeVariableName(methodName, perlClassName);
+            cacheKey = normalizeMethodName(methodName, perlClassName);
         }
         // Use a separate cache slot for no-AUTOLOAD lookups so they don't
         // pollute (or get polluted by) normal lookups which DO promote AUTOLOAD.
@@ -366,27 +366,29 @@ public class InheritanceResolver {
         // AUTOLOAD is only checked after the entire hierarchy has been searched.
         for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
             String className = linearizedClasses.get(i);
-            String effectiveClassName = GlobalVariable.resolveStashAlias(className);
-            String normalizedClassMethodName = NameNormalizer.normalizeVariableName(methodName, effectiveClassName);
+            for (String lookupClassName : packageLookupAliases(className)) {
+                String effectiveClassName = GlobalVariable.resolveStashAlias(lookupClassName);
+                String normalizedClassMethodName = normalizeMethodName(methodName, effectiveClassName);
 
-            if (TRACE_METHOD_RESOLUTION) {
-                System.err.println("  Checking class: '" + className + "'");
-                System.err.println("  Normalized name: '" + normalizedClassMethodName + "'");
-                System.err.println("  Exists: " + GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName));
-                System.err.flush();
-            }
-
-            if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
-                RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
-                if (!RuntimeCode.isCodeDefined(codeRef)) {
-                    continue;
-                }
-                cacheMethod(cacheKey, codeRef);
                 if (TRACE_METHOD_RESOLUTION) {
-                    System.err.println("  FOUND method!");
+                    System.err.println("  Checking class: '" + lookupClassName + "'");
+                    System.err.println("  Normalized name: '" + normalizedClassMethodName + "'");
+                    System.err.println("  Exists: " + GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName));
                     System.err.flush();
                 }
-                return codeRef;
+
+                if (GlobalVariable.existsGlobalCodeRef(normalizedClassMethodName)) {
+                    RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(normalizedClassMethodName);
+                    if (!RuntimeCode.isCodeDefined(codeRef)) {
+                        continue;
+                    }
+                    cacheMethod(cacheKey, codeRef);
+                    if (TRACE_METHOD_RESOLUTION) {
+                        System.err.println("  FOUND method!");
+                        System.err.flush();
+                    }
+                    return codeRef;
+                }
             }
         }
 
@@ -396,24 +398,26 @@ public class InheritanceResolver {
         if (autoloadEnabled && checkAutoload && !methodName.startsWith("(")) {
             for (int i = startFromIndex; i < linearizedClasses.size(); i++) {
                 String className = linearizedClasses.get(i);
-                String effectiveClassName = GlobalVariable.resolveStashAlias(className);
-                String autoloadName = (effectiveClassName.endsWith("::") ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
-                if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
-                    RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
-                    if (RuntimeCode.isCodeDefined(autoload)) {
-                        // Use the AUTOLOAD sub's CvSTASH (packageName) for $AUTOLOAD,
-                        // not the glob's package. Perl sets $AUTOLOAD in the package
-                        // where the AUTOLOAD sub was compiled, which matters for closures
-                        // installed in proxy namespaces (e.g., Template::Plugin::Procedural).
-                        RuntimeCode autoloadCode = (RuntimeCode) autoload.value;
-                        String cvStash = autoloadCode.packageName;
-                        if (cvStash != null && !cvStash.isEmpty()) {
-                            autoloadCode.autoloadVariableName = cvStash + "::AUTOLOAD";
-                        } else {
-                            autoloadCode.autoloadVariableName = autoloadName;
+                for (String lookupClassName : packageLookupAliases(className)) {
+                    String effectiveClassName = GlobalVariable.resolveStashAlias(lookupClassName);
+                    String autoloadName = (effectiveClassName.endsWith("::") ? effectiveClassName : effectiveClassName + "::") + "AUTOLOAD";
+                    if (GlobalVariable.existsGlobalCodeRef(autoloadName)) {
+                        RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadName);
+                        if (RuntimeCode.isCodeDefined(autoload)) {
+                            // Use the AUTOLOAD sub's CvSTASH (packageName) for $AUTOLOAD,
+                            // not the glob's package. Perl sets $AUTOLOAD in the package
+                            // where the AUTOLOAD sub was compiled, which matters for closures
+                            // installed in proxy namespaces (e.g., Template::Plugin::Procedural).
+                            RuntimeCode autoloadCode = (RuntimeCode) autoload.value;
+                            String cvStash = autoloadCode.packageName;
+                            if (cvStash != null && !cvStash.isEmpty()) {
+                                autoloadCode.autoloadVariableName = cvStash + "::AUTOLOAD";
+                            } else {
+                                autoloadCode.autoloadVariableName = autoloadName;
+                            }
+                            cacheMethod(cacheKey, autoload);
+                            return autoload;
                         }
-                        cacheMethod(cacheKey, autoload);
-                        return autoload;
                     }
                 }
             }
@@ -422,6 +426,37 @@ public class InheritanceResolver {
         // Cache the fact that method was not found (using null)
         methodCache.put(cacheKey, null);
         return null;
+    }
+
+    private static List<String> packageLookupAliases(String className) {
+        String normalized = NameNormalizer.normalizePackageName(className);
+        List<String> aliases = new ArrayList<>(2);
+        aliases.add(normalized);
+
+        if (normalized.startsWith("main::") && normalized.length() > 6) {
+            aliases.add(normalized.substring(6));
+        } else if (normalized.startsWith("::") && normalized.length() > 2) {
+            aliases.add("main::" + normalized.substring(2));
+        } else if (!normalized.contains("::")) {
+            aliases.add("main::" + normalized);
+        }
+
+        return aliases;
+    }
+
+    private static String normalizeMethodName(String methodName, String className) {
+        if (methodName.startsWith("::")) {
+            return "main" + methodName;
+        }
+        if (methodName.contains("::")) {
+            return methodName;
+        }
+
+        String normalizedClass = NameNormalizer.normalizePackageName(className);
+        if (normalizedClass.endsWith("::")) {
+            return normalizedClass + methodName;
+        }
+        return normalizedClass + "::" + methodName;
     }
 
     // MRO algorithm selection

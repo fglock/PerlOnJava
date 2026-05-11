@@ -40,6 +40,7 @@ public class Socket extends PerlModuleBase {
     public static final int SO_BROADCAST = (IS_MAC || IS_WINDOWS) ? 0x20 : 6;
     public static final int SO_LINGER = (IS_MAC || IS_WINDOWS) ? 0x80 : 13;
     public static final int SO_ERROR = (IS_MAC || IS_WINDOWS) ? 0x1007 : 4;
+    public static final int SO_ACCEPTCONN = IS_MAC ? 2 : IS_WINDOWS ? 2 : 30;
     public static final int SO_RCVBUF = (IS_MAC || IS_WINDOWS) ? 0x1002 : 8;
     public static final int SO_SNDBUF = (IS_MAC || IS_WINDOWS) ? 0x1001 : 7;
     public static final int SO_TYPE = (IS_MAC || IS_WINDOWS) ? 0x1008 : 3;
@@ -65,6 +66,7 @@ public class Socket extends PerlModuleBase {
     public static final int NIx_NOHOST = 1;
     public static final int NIx_NOSERV = 2;
     public static final int EAI_NONAME = IS_WINDOWS ? 11001 : 8;
+    public static final int EAI_FAIL = IS_WINDOWS ? 11003 : IS_MAC ? 4 : -4;
     // IPV6 constants
     public static final int IPV6_V6ONLY = (IS_MAC || IS_WINDOWS) ? 27 : 26;
     public static final int SO_REUSEPORT = IS_MAC ? 0x0200 : 15;  // not available on Windows
@@ -77,6 +79,8 @@ public class Socket extends PerlModuleBase {
     public static final String INADDR_ANY = "\0\0\0\0";           // 0.0.0.0
     public static final String INADDR_LOOPBACK = "\177\0\0\1";    // 127.0.0.1
     public static final String INADDR_BROADCAST = "\377\377\377\377"; // 255.255.255.255
+    public static final String IN6ADDR_ANY = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+    public static final String IN6ADDR_LOOPBACK = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1";
 
     public Socket() {
         super("Socket", false);
@@ -121,6 +125,7 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("SO_BROADCAST", "");
             socket.registerMethod("SO_LINGER", "");
             socket.registerMethod("SO_ERROR", "");
+            socket.registerMethod("SO_ACCEPTCONN", "");
             socket.registerMethod("SO_TYPE", "");
             socket.registerMethod("TCP_NODELAY", "");
             socket.registerMethod("IPPROTO_TCP", "");
@@ -136,6 +141,8 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("INADDR_ANY", "");
             socket.registerMethod("INADDR_LOOPBACK", "");
             socket.registerMethod("INADDR_BROADCAST", "");
+            socket.registerMethod("IN6ADDR_ANY", "");
+            socket.registerMethod("IN6ADDR_LOOPBACK", "");
             socket.registerMethod("AI_PASSIVE", "");
             socket.registerMethod("AI_CANONNAME", "");
             socket.registerMethod("AI_NUMERICHOST", "");
@@ -146,6 +153,7 @@ public class Socket extends PerlModuleBase {
             socket.registerMethod("NIx_NOHOST", "");
             socket.registerMethod("NIx_NOSERV", "");
             socket.registerMethod("EAI_NONAME", "");
+            socket.registerMethod("EAI_FAIL", "");
             socket.registerMethod("IPV6_V6ONLY", "");
             socket.registerMethod("SO_REUSEPORT", "");
             socket.registerMethod("SO_RCVBUF", "");
@@ -469,14 +477,7 @@ public class Socket extends PerlModuleBase {
                 if (ipBytes.length != 16) {
                     return scalarUndef.getList();
                 }
-                InetAddress addr = InetAddress.getByAddress(ipBytes);
-                // Java's getHostAddress may include scope id, strip it
-                String result = addr.getHostAddress();
-                int pctIdx = result.indexOf('%');
-                if (pctIdx >= 0) {
-                    result = result.substring(0, pctIdx);
-                }
-                return new RuntimeScalar(result).getList();
+                return new RuntimeScalar(formatIPv6Address(ipBytes)).getList();
             } else {
                 return scalarUndef.getList();
             }
@@ -484,6 +485,55 @@ public class Socket extends PerlModuleBase {
         } catch (Exception e) {
             return scalarUndef.getList();
         }
+    }
+
+    private static String formatIPv6Address(byte[] ipBytes) {
+        int[] hextets = new int[8];
+        for (int i = 0; i < 8; i++) {
+            hextets[i] = ((ipBytes[i * 2] & 0xFF) << 8) | (ipBytes[i * 2 + 1] & 0xFF);
+        }
+
+        int bestStart = -1;
+        int bestLength = 0;
+        for (int i = 0; i < hextets.length; ) {
+            if (hextets[i] != 0) {
+                i++;
+                continue;
+            }
+            int start = i;
+            while (i < hextets.length && hextets[i] == 0) {
+                i++;
+            }
+            int length = i - start;
+            if (length > bestLength && length >= 2) {
+                bestStart = start;
+                bestLength = length;
+            }
+        }
+
+        if (bestStart == 0 && bestLength == hextets.length) {
+            return "::";
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < hextets.length; i++) {
+            if (i == bestStart) {
+                if (result.length() == 0) {
+                    result.append("::");
+                } else if (result.charAt(result.length() - 1) == ':') {
+                    result.append(':');
+                } else {
+                    result.append("::");
+                }
+                i += bestLength - 1;
+                continue;
+            }
+            if (i > 0 && result.length() > 0 && result.charAt(result.length() - 1) != ':') {
+                result.append(':');
+            }
+            result.append(Integer.toHexString(hextets[i]));
+        }
+        return result.toString();
     }
 
     /**
@@ -630,6 +680,10 @@ public class Socket extends PerlModuleBase {
         return new RuntimeScalar(SO_ERROR).getList();
     }
 
+    public static RuntimeList SO_ACCEPTCONN(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(SO_ACCEPTCONN).getList();
+    }
+
     public static RuntimeList SO_TYPE(RuntimeArray args, int ctx) {
         return new RuntimeScalar(SO_TYPE).getList();
     }
@@ -688,6 +742,14 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList INADDR_BROADCAST(RuntimeArray args, int ctx) {
         return new RuntimeScalar(INADDR_BROADCAST).getList();
+    }
+
+    public static RuntimeList IN6ADDR_ANY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IN6ADDR_ANY).getList();
+    }
+
+    public static RuntimeList IN6ADDR_LOOPBACK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(IN6ADDR_LOOPBACK).getList();
     }
 
     /**
@@ -969,6 +1031,10 @@ public class Socket extends PerlModuleBase {
 
     public static RuntimeList EAI_NONAME(RuntimeArray args, int ctx) {
         return new RuntimeScalar(EAI_NONAME).getList();
+    }
+
+    public static RuntimeList EAI_FAIL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(EAI_FAIL).getList();
     }
 
     public static RuntimeList IPV6_V6ONLY(RuntimeArray args, int ctx) {

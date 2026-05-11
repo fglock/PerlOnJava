@@ -1228,6 +1228,19 @@ public class StatementParser {
             // Insert packageNode as first statement in block
             block.elements.addFirst(packageNode);
 
+            // Validate the closing brace before transforming/registering class methods.
+            // An incomplete class block must not leak methods or generated accessors.
+            token = TokenUtils.peek(parser);
+            if (!(token.type == LexerTokenType.OPERATOR && token.text.equals("}"))) {
+                if (isClass && blockScopeIndex >= 0) {
+                    parser.ctx.symbolTable.exitScope(blockScopeIndex);
+                }
+                parser.ctx.symbolTable.setCurrentPackage(previousPackage, previousPackageIsClass);
+                parser.ctx.symbolTable.exitScope(scopeIndex);
+                HintHashRegistry.exitScope();
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            }
+
             // Transform class blocks
             // For classes: scope is still active, methods can capture lexicals
             // For packages: subroutines were already registered during parseBlock
