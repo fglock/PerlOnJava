@@ -3,6 +3,8 @@ package org.perlonjava.frontend.lexer;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -163,7 +165,12 @@ public class Lexer {
             return consumeOperator();
         } else {
             int start = position;
-            advanceCodePoint(currentCp);
+            int markerEnd = PerlUtfString.markerEndExclusive(input, position);
+            if (markerEnd > position) {
+                position = markerEnd;
+            } else {
+                advanceCodePoint(currentCp);
+            }
             return new LexerToken(LexerTokenType.STRING, input.substring(start, position));
         }
     }

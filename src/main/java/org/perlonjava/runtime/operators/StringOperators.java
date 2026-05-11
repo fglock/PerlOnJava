@@ -619,14 +619,16 @@ public class StringOperators {
             return new RuntimeScalar(new String(Character.toChars(codePoint)));
         }
 
-        // Surrogate scalars (U+D800..U+DFFF) and beyond-Unicode UVs: internal FFFD<hex> marker
-        // so Perl distinguishes chr(D800).chr(DC00) from U+10000 (same UTF-16 in Java).
+        // Surrogate scalars U+D800..U+DFFF: one UTF-16 code unit (matches Perl PV and
+        // uni/variables.t — marker encoding would make chr() length 7 and break XIDS checks).
+        if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
+            return new RuntimeScalar(String.valueOf((char) codePoint));
+        }
+
+        // Beyond-Unicode UVs: internal FFFD<hex> marker (Perl distinguishes from valid text).
         RuntimeScalar res = new RuntimeScalar();
         res.type = RuntimeScalarType.STRING;
-        res.value =
-                codePoint <= 0x10FFFF
-                        ? PerlUtfString.encodeSurrogateScalar(codePoint)
-                        : PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(codePoint));
+        res.value = PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(codePoint));
         return res;
     }
 
