@@ -62,13 +62,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             // (`return unless defined $_[1];`).
             originalVariable.tiedStore(RuntimeScalarCache.scalarUndef);
             localizedStack.push(
-                    new SavedGlobalState(fullName, originalVariable, savedValue));
+                    new SavedGlobalState(fullName, originalVariable, savedValue, null));
             // Do NOT replace the slot — the tied scalar stays in place so
             // that the subsequent `= value` assignment dispatches STORE.
             return;
         }
-
-        localizedStack.push(new SavedGlobalState(fullName, originalVariable, null));
 
         // Create a new variable for the localized scope.
         // For output separator variables, create the matching special type so that
@@ -84,6 +82,8 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         } else {
             newLocal = new GlobalRuntimeScalar(fullName);
         }
+
+        localizedStack.push(new SavedGlobalState(fullName, originalVariable, null, newLocal));
 
         // Replace this variable in the global symbol table with the new one
         GlobalVariable.globalVariables.put(fullName, newLocal);
@@ -116,22 +116,26 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                     return;
                 }
 
-                RuntimeScalar currentVar = GlobalVariable.globalVariables.get(saved.fullName);
+                // The global slot may currently be aliased to a foreach element
+                // (notably localized $_). Clean up only the scalar object that
+                // local() installed; mutating the current slot can corrupt the
+                // aliased iterator value.
+                RuntimeScalar localVar = saved.localizedVariable;
                 RuntimeBase displacedBase = null;
                 RuntimeScalar scalarReferenceContents = null;
-                if (currentVar != null
-                        && currentVar.refCountOwned
-                        && (currentVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                        && currentVar.value instanceof RuntimeBase base
+                if (localVar != null
+                        && localVar.refCountOwned
+                        && (localVar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && localVar.value instanceof RuntimeBase base
                         && base.refCount > 0) {
                     displacedBase = base;
-                    currentVar.refCountOwned = false;
-                    displacedBase.releaseActiveOwner(currentVar);
+                    localVar.refCountOwned = false;
+                    displacedBase.releaseActiveOwner(localVar);
                 }
-                if (currentVar != null
-                        && currentVar.ownsScalarReferenceContents
-                        && currentVar.type == RuntimeScalarType.REFERENCE
-                        && currentVar.value instanceof RuntimeScalar scalarReferent) {
+                if (localVar != null
+                        && localVar.ownsScalarReferenceContents
+                        && localVar.type == RuntimeScalarType.REFERENCE
+                        && localVar.value instanceof RuntimeScalar scalarReferent) {
                     scalarReferenceContents = scalarReferent;
                 }
 
@@ -162,23 +166,23 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
                             && DestroyDispatch.classHasDestroy(displacedBase.blessId, className);
                 }
                 if ((displacedWillDestroy || scalarReferenceContents != null)
-                        && currentVar != null && currentVar != saved.originalVariable) {
+                        && localVar != null && localVar != saved.originalVariable) {
                     // Compiled code may still hold the localized scalar object
                     // directly. Mirror the restored value into it just before
                     // DESTROY so both lookup paths observe the restored state.
                     if (saved.originalVariable == null) {
-                        currentVar.type = RuntimeScalarType.UNDEF;
-                        currentVar.value = null;
-                        currentVar.blessId = 0;
+                        localVar.type = RuntimeScalarType.UNDEF;
+                        localVar.value = null;
+                        localVar.blessId = 0;
                     } else {
-                        currentVar.type = saved.originalVariable.type;
-                        currentVar.value = saved.originalVariable.value;
-                        currentVar.blessId = saved.originalVariable.blessId;
+                        localVar.type = saved.originalVariable.type;
+                        localVar.value = saved.originalVariable.value;
+                        localVar.blessId = saved.originalVariable.blessId;
                     }
-                    currentVar.refCountOwned = false;
+                    localVar.refCountOwned = false;
                 }
-                if (currentVar != null) {
-                    currentVar.ownsScalarReferenceContents = false;
+                if (localVar != null) {
+                    localVar.ownsScalarReferenceContents = false;
                 }
                 RuntimeScalar.releaseScalarReferenceContents(scalarReferenceContents);
                 if (displacedBase != null && displacedBase.refCount > 0
@@ -193,6 +197,7 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
     private record SavedGlobalState(
             String fullName,
             RuntimeScalar originalVariable,
-            RuntimeScalar savedTiedValue) {
+            RuntimeScalar savedTiedValue,
+            RuntimeScalar localizedVariable) {
     }
 }

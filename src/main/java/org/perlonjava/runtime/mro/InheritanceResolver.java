@@ -160,7 +160,12 @@ public class InheritanceResolver {
         methodCache.entrySet().removeIf(entry ->
                 entry.getKey().startsWith(className + "::") || entry.getKey().contains("::" + className + "::"));
 
-        // Could also notify dependents here if we had that information
+        // @ISA changes can make an existing package inherit overloads after it
+        // was first blessed; force the next bless/overload check to reclassify.
+        overloadContextCache.clear();
+        NameNormalizer.invalidateBlessIdCache();
+        RuntimeCode.clearInlineMethodCache();
+        DestroyDispatch.invalidateCache();
     }
 
     /**
@@ -172,6 +177,7 @@ public class InheritanceResolver {
         linearizedClassesCache.clear();
         overloadContextCache.clear();
         isaStateCache.clear();
+        NameNormalizer.invalidateBlessIdCache();
         // Also clear the inline method cache in RuntimeCode
         RuntimeCode.clearInlineMethodCache();
         // Clear DESTROY-related caches (destroyClasses BitSet and destroyMethodCache)

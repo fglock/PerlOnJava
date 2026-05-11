@@ -74,6 +74,32 @@ public class NameNormalizer {
         return id;
     }
 
+    public static void invalidateBlessIdCache() {
+        blessIdCache.clear();
+    }
+
+    /**
+     * Existing objects keep the id they received at bless time, but overload
+     * and @ISA edits can change whether their class is overloaded. Method-cache
+     * invalidation clears className->id mappings; recompute that mapping here
+     * so older objects follow the class's current overload state.
+     */
+    public static int getEffectiveBlessId(int id) {
+        if (id == 0) return id;
+
+        String className = blessStrCache.get(id);
+        if (className == null || "__ANON__".equals(className)) {
+            return id;
+        }
+
+        Integer cached = blessIdCache.get(className);
+        if (cached != null && cached < 0) {
+            return cached;
+        }
+
+        return cached != null ? cached : getBlessId(className);
+    }
+
     /**
      * Quick check if a class has an overload marker using full MRO resolution.
      * A class is considered overloaded if either of the following markers is
@@ -114,13 +140,24 @@ public class NameNormalizer {
 
     public static void anonymizeBlessId(String className) {
         Integer id = blessIdCache.get(className);
-        if (id == null) {
+        boolean foundExistingId = false;
+        for (Map.Entry<Integer, String> entry : blessStrCache.entrySet()) {
+            if (className.equals(entry.getValue())) {
+                if (id == null) {
+                    id = entry.getKey();
+                }
+                entry.setValue("__ANON__");
+                foundExistingId = true;
+            }
+        }
+        if (!foundExistingId) {
             // Ensure subsequent blesses into this name also become anonymous
             // (until a NEW `bless` rebinds the cache via the
             // anonymized-cache-entry detection in getBlessId above).
             id = getBlessId(className);
+            blessStrCache.put(id, "__ANON__");
         }
-        blessStrCache.put(id, "__ANON__");
+        blessIdCache.put(className, id);
         // Note: we deliberately keep the className→id mapping in
         // blessIdCache so that *glob{PACKAGE} on a glob in this stash
         // (and ref() of objects already blessed into this id) continue
