@@ -39,3 +39,19 @@
 @@ -8,0 +9,2 @@
 +use IO::Async::OS;
 +plan('skip_all' => "No viable Routine models") unless IO::Async::OS->HAVE_POSIX_FORK || IO::Async::OS->HAVE_THREADS;
+--- t/70future-io.t.orig
++++ t/70future-io.t
+@@ -68,10 +68,11 @@
+-run_tests qw(
++my @future_io_tests = qw(
+    sleep
+    poll_no_hup
+    read sysread write syswrite
+    connect accept
+    send recv
+-   waitpid
+ );
++push @future_io_tests, "waitpid" if IO::Async::OS->HAVE_POSIX_FORK;
++run_tests @future_io_tests;
+ 
+ done_testing;

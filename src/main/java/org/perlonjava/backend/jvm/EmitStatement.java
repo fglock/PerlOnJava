@@ -89,9 +89,9 @@ public class EmitStatement {
      */
     static void emitScopeExitNullStores(EmitterContext ctx, int scopeIndex, boolean flush) {
         // Gather variable indices for this scope first, to determine if cleanup is needed.
-        java.util.List<Integer> scalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex);
-        java.util.List<Integer> hashIndices = ctx.symbolTable.getMyHashIndicesInScope(scopeIndex);
-        java.util.List<Integer> arrayIndices = ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex);
+        java.util.List<Integer> scalarIndices = withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(scopeIndex));
+        java.util.List<Integer> hashIndices = withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(scopeIndex));
+        java.util.List<Integer> arrayIndices = withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
 
         // Record my-variable indices for eval exception cleanup.
         // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
@@ -172,7 +172,7 @@ public class EmitStatement {
         // Phase 2: Null all my variable slots to help GC collect associated objects.
         // For anonymous filehandle globs, this makes them unreachable so the
         // PhantomReference-based fd recycling in RuntimeIO can close the IO stream.
-        java.util.List<Integer> allIndices = ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex);
+        java.util.List<Integer> allIndices = withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
         // Phase E (refcount_alignment_52leaks_plan.md): deregister each
         // my-variable from MyVarCleanupStack before nulling the local slot.
         // Without this, the static stack holds strong references to
@@ -225,6 +225,19 @@ public class EmitStatement {
                     "()V",
                     false);
         }
+    }
+
+    static java.util.List<Integer> withoutCaptured(EmitterContext ctx, java.util.List<Integer> indices) {
+        if (indices.isEmpty() || ctx.javaClassInfo.capturedVariableIndices.isEmpty()) {
+            return indices;
+        }
+        java.util.List<Integer> filtered = new java.util.ArrayList<>(indices.size());
+        for (int idx : indices) {
+            if (!ctx.javaClassInfo.isCapturedVariableIndex(idx)) {
+                filtered.add(idx);
+            }
+        }
+        return filtered;
     }
 
     /**

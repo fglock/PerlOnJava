@@ -1894,12 +1894,6 @@ public class IOOperator {
      */
     private static String[] parseSockaddrIn(String packedAddress) {
         try {
-            // Quick check: if it looks like a text string (contains ':' or '.'), 
-            // it's probably not a binary sockaddr_in structure
-            if (packedAddress.contains(":") || packedAddress.matches(".*[0-9]+\\.[0-9]+.*")) {
-                return null; // This is a text address, not binary sockaddr_in
-            }
-
             byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1); // Get raw bytes
 
             if (bytes.length < 8) {
@@ -2144,7 +2138,7 @@ public class IOOperator {
             }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
-            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream(InternalPipeHandle.PIPE_SIZE);
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
             // Create IOHandle implementations for the pipe ends.
@@ -2542,7 +2536,9 @@ public class IOOperator {
             if (result != null && !result.equals(scalarFalse)) {
                 return new RuntimeScalar(message.length()); // Return number of bytes sent
             } else {
-                getGlobalVariable("main::!").set("Send failed");
+                if (getGlobalVariable("main::!").toString().isEmpty()) {
+                    getGlobalVariable("main::!").set("Send failed");
+                }
                 return scalarUndef;
             }
 
@@ -3095,16 +3091,26 @@ public class IOOperator {
             // Accept the connection to get the second socket channel
             SocketChannel channel2 = serverChannel.accept();
 
+            // This emulates socketpair() with loopback TCP. Disable Nagle so
+            // small writes behave like local socketpair writes under load.
+            channel1.setOption(StandardSocketOptions.TCP_NODELAY, true);
+            channel2.setOption(StandardSocketOptions.TCP_NODELAY, true);
+
             // Close the server channel as we no longer need it
             serverChannel.close();
 
+            SocketIO socket1 = new SocketIO(channel1, StandardProtocolFamily.INET, type);
+            SocketIO socket2 = new SocketIO(channel2, StandardProtocolFamily.INET, type);
+            socket1.setStreamPeer(socket2);
+            socket2.setStreamPeer(socket1);
+
             // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET, type);
+            io1.ioHandle = socket1;
             io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET, type);
+            io2.ioHandle = socket2;
             io2.assignFileno();
 
             // Set IO slot on each handle, following the same pattern as socket()

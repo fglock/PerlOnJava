@@ -11,6 +11,7 @@ match:
   distribution: "^PEVANS/IO-Async-"
 patches:
   - "IO-Async-0.805/NoFork.patch"
+  - "IO-Async-0.805/PerlOnJava.patch"
 test:
   env:
     IO_ASYNC_NO_FORK: 1

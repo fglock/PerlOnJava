@@ -259,9 +259,26 @@ match:
   distribution: "^PEVANS/IO-Async-"
 patches:
   - "IO-Async-0.805/NoFork.patch"
+  - "IO-Async-0.805/PerlOnJava.patch"
 test:
   env:
     IO_ASYNC_NO_FORK: 1
+YAML
+        'OpenAI-API.yml' => <<'YAML',
+---
+comment: |
+  PerlOnJava distroprefs for OpenAI::API.
+
+  OpenAI::API's test suite includes live network/API exception tests. Those
+  should not depend on reaching the external OpenAI service during CPAN
+  installation, especially without an OPENAI_API_KEY. Set the standard
+  Test::RequiresInternet flag so network tests skip and offline validation
+  tests still run.
+match:
+  distribution: "^NFERRAZ/OpenAI-API-"
+test:
+  env:
+    NO_NETWORK_TESTING: 1
 YAML
     );
     my %bundled_dd = (
@@ -283,11 +300,25 @@ $VAR1 = {
     'distribution' => '^PEVANS/IO-Async-'
   },
   'patches' => [
-    'IO-Async-0.805/NoFork.patch'
+    'IO-Async-0.805/NoFork.patch',
+    'IO-Async-0.805/PerlOnJava.patch'
   ],
   'test' => {
     'env' => {
       'IO_ASYNC_NO_FORK' => 1
+    }
+  }
+};
+DD
+        'OpenAI-API.dd' => <<'DD',
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for OpenAI::API. Set NO_NETWORK_TESTING during tests so live external API checks skip during CPAN installation.',
+  'match' => {
+    'distribution' => '^NFERRAZ/OpenAI-API-'
+  },
+  'test' => {
+    'env' => {
+      'NO_NETWORK_TESTING' => 1
     }
   }
 };
@@ -412,6 +443,8 @@ PATCH
           $cpan_finddeps_makemaker_patch ],
         [ 'IO-Async-0.805/NoFork.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
+        [ 'IO-Async-0.805/PerlOnJava.patch',
+          'PerlOnJava/CpanPatches/IO-Async-0.805/PerlOnJava.patch' ],
     );
 
     my $slurp = sub {

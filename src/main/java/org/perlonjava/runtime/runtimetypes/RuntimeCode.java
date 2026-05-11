@@ -3376,10 +3376,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 result = apply(codeRef, "tailcall", tailArgs, callContext);
             } finally {
-                MortalList.scopeExitCleanupArray(tailArgs);
+                cleanupTailCallArgs(tailArgs);
             }
         }
         return result;
+    }
+
+    public static void cleanupTailCallArgs(RuntimeArray tailArgs) {
+        if (tailArgs == null) return;
+        boolean oldOwned = tailArgs.elementsOwned;
+        try {
+            // Tail-call args are a transfer array: the callee's @_ aliases them,
+            // but this array is responsible for releasing any owned temporaries
+            // inserted by the trampoline (for example `unshift @_, $weakself`).
+            tailArgs.elementsOwned = true;
+            MortalList.scopeExitCleanupArray(tailArgs);
+        } finally {
+            tailArgs.elementsOwned = oldOwned;
+        }
     }
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)

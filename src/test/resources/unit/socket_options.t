@@ -18,7 +18,7 @@ is IN6ADDR_LOOPBACK, ("\0" x 15) . "\1", 'IN6ADDR_LOOPBACK is packed ::1';
 
 SKIP: {
     socketpair(my $left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
-        or skip "socketpair unavailable: $!", 2;
+        or skip "socketpair unavailable: $!", 4;
 
     my $opt = getsockopt($left, SOL_SOCKET, SO_TYPE);
     ok defined($opt), 'getsockopt(SO_TYPE) returns a value';
@@ -26,6 +26,12 @@ SKIP: {
 
     syswrite($right, "ready\n");
     is scalar(<$left>), "ready\n", 'readline works on socketpair handles';
+
+    close($left);
+    local $SIG{PIPE} = 'IGNORE';
+    my $sent = send($right, "closed", 0);
+    ok !defined($sent), 'send on closed socketpair peer returns undef';
+    like "$!", qr/Broken pipe/i, 'send on closed socketpair peer reports Broken pipe';
 }
 
 SKIP: {
@@ -94,6 +100,14 @@ SKIP: {
     my $sender = recv($peer, $buf, 1024, 0);
     is $buf, "direct", 'connected dgram socket sends without destination';
     ok defined($sender), 'connected dgram peer receives sender address';
+}
+
+SKIP: {
+    socket(my $udp, AF_INET, SOCK_DGRAM, 0)
+        or skip "inet dgram socket unavailable: $!", 1;
+
+    my $addr = sockaddr_in(12346, INADDR_LOOPBACK);
+    ok connect($udp, $addr), 'connect parses packed sockaddr with colon byte in port';
 }
 
 SKIP: {

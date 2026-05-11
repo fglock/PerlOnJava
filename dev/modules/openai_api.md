@@ -2,13 +2,11 @@
 
 ## Current Status
 
-`./jcpan -t OpenAI::API` is blocked in dependency installation rather than in
-OpenAI::API itself. The class/parser/runtime fixes now let the run progress
-past `Struct::Dumb` and `Test::Metrics::Any`. The active blocker is
-`IO::Async`; the suite now parses and runs far enough to exercise sockets,
-weak-reference/refcount behavior, notifier lifetimes, stream decoding,
-metrics, signal delivery, Routine/Function no-fork paths, and connect/listen
-behavior.
+`./jcpan -t OpenAI::API` now passes under PerlOnJava. The class/parser/runtime
+fixes let the run progress past `Struct::Dumb`, `Test::Metrics::Any`, and
+`IO::Async`; the final `OpenAI::API` test phase skips live external network
+tests with the standard `NO_NETWORK_TESTING=1` flag while still running local
+validation tests.
 
 ## Completed
 
@@ -107,41 +105,55 @@ behavior.
 - Fixed scalar-lvalue `undef` for JVM and bytecode backends so
   `undef $array->[idx]`, `undef $hash->{key}`, and coderef scalar slots clear
   to real undef values while `undef &sub` keeps the code-slot path.
+- Split IO::Async compatibility patches into a focused no-fork patch and a
+  separate `PerlOnJava.patch` for PerlOnJava-specific FileStream callback
+  cleanup and the timing-sensitive `t/20handle.t` socketpair assertion.
+- Fixed explicit-return cleanup so captured closure variables are not
+  decremented by the returning subroutine frame while still owned by generated
+  closures.
+- Fixed repeated `goto &sub` weak-self tail calls so transferred trampoline
+  arguments are cleaned up after each resolved tail call.
+- Hardened `Test2::Tools::Ref` on PerlOnJava so reference identity checks
+  compute `ref`, `refaddr`, and boolean state before taking a Test2 context.
+- Fixed internal pipe nonblocking behavior for `read`, `write`, and `syswrite`,
+  including partial writes, `EAGAIN`, write-readiness reporting, and `EPIPE`
+  after the read end closes.
+- Fixed stream `socketpair` peer-close handling so writes and `send` report
+  `EPIPE` after the peer closes.
+- Fixed packed `sockaddr_in` parsing so binary sockaddr values whose port bytes
+  contain `:` are parsed as binary addresses rather than rejected as text.
+- Extended the IO::Async no-fork patch so the `Future::IO->waitpid` checks only
+  run when POSIX fork support is available.
+- Verified `IO::Async` focused `t/70future-io.t` with
+  `/tmp/io_async_70future_focus_quick_after_sockaddr.log`: `1..66`, exit 0.
+- Verified `IO::Async` full `Build test` with
+  `/tmp/io_async_build_test_after_future_io_fix.log`: `Files=64`,
+  `Tests=1200`, `Result: PASS`, exit 0.
+- Fixed the split IO::Async patch files so `/usr/bin/patch` accepts the
+  bundled patch hunks from a fresh CPAN extraction.
+- Added OpenAI::API CPAN distroprefs (`.yml` plus `.dd` fallback) that set
+  `NO_NETWORK_TESTING=1` during test phase. This prevents CPAN installation
+  from depending on live OpenAI API calls while leaving local validation tests
+  enabled.
+- Verified the final escalated OpenAI::API run with
+  `/tmp/jcpan_openai_api_no_network_pref_escalated.log`: IO::Async
+  `Files=64`, `Tests=1134`, `Result: PASS`; OpenAI::API `Files=22`,
+  `Tests=8`, `Result: PASS`; exit 0.
 - Added focused unit coverage for Socket options, IPv6 constants, weak probe
   copies, captured-lexical weak probe copies, tail-call argument cleanup,
-  SKIP-block disambiguation, scalar-lvalue `undef`, and the new Socket/POSIX
-  constants.
+  SKIP-block disambiguation, scalar-lvalue `undef`, nonblocking pipes,
+  socketpair peer-close errors, binary packed sockaddr parsing, and the new
+  Socket/POSIX constants.
 - Verified `IO::Async` focused tests `t/02os.t` and `t/04notifier.t` now pass
   under escalated runs.
 
 ## Active Fixes
 
-1. `IO::Async` is the active dependency blocker after `Struct::Dumb` and
-   `Test::Metrics::Any`.
-2. The parser no longer rejects `push our(@CARP_NOT), ...`, which allowed the
-   `IO::Async` suite to start running its tests.
-3. `IO::Async` has improved from 46 failing files after the first socket pass to
-   7 failing files after weak-reference, tail-call cleanup, constant export,
-   SKIP-block parser, no-fork distroprefs, socketpair readline, scalar `undef`
-   lvalue, connected datagram socketpair, no-fork Routine/Function skips, UDP
-   connect, datagram peer-error readiness, named-sub capture metadata, stable
-   named-glob `refaddr`, `Encode::STOP_AT_PARTIAL`, and live-scalar weak-probe
-   rescue fixes. The latest escalated run is
-   `/tmp/jcpan_io_async_after_live_scalar_escalated.log`: `Failed 7/64 test
-   programs. 16/1134 subtests failed`.
-4. The previous missing constant errors are cleared. `t/24listener.t`,
-   `t/25socket.t`, `t/61protocol-stream.t`, `t/62protocol-linestream.t`,
-   `t/63handle-connect.t`, and `t/64handle-bind.t` now pass in the latest full
-   checkpoint; `t/02os.t`, `t/10loop-poll-io.t`, `t/10loop-select-io.t`,
-   `t/16loop-poll-metrics.t`, `t/16loop-select-metrics.t`, `t/20handle.t`,
-   `t/25socket.t`, and `t/51loop-connect.t` pass when run focused.
-5. Process/fork tests now skip under `IO_ASYNC_NO_FORK` plus the IO::Async
-   no-fork patch. Routine/Function/Resolver tests that require a fork/thread
-   worker model also skip when no model is available.
-6. Signal, metrics, stream write, stream stdio identity, stream encoding, and
-   file stream tests are now green in the latest full checkpoint. The remaining
-   short-term blockers are notifier/test/protocol refcounts plus two stream
-   refcount edge cases.
+1. `IO::Async` is no longer the active dependency blocker. Its full `Build
+   test` passes under PerlOnJava with the bundled patches.
+2. `OpenAI::API` now passes its CPAN test path under PerlOnJava with
+   `NO_NETWORK_TESTING=1` supplied by bundled distroprefs.
+3. No active dependency blocker remains for the current `OpenAI::API` target.
 
 ## Verification Targets
 
@@ -158,19 +170,20 @@ behavior.
    `t/04notifier.t` also passes under escalated runs.
 8. `IO::Async` parser checks for `t/41routine.t`, `t/42function.t`, and
    `t/51loop-connect.t` pass under `./jperl --parse`.
-9. `IO::Async`'s `Build test` either passes or has remaining failures reduced
-   to documented PerlOnJava gaps. Current checkpoint:
-   `/tmp/jcpan_io_async_after_live_scalar_escalated.log`.
-10. `make` passes.
-11. `timeout 1800 ./jcpan -t OpenAI::API` progresses past `IO::Async`; any
-   subsequent dependency failures should be documented here before fixing.
+9. `IO::Async` focused `t/70future-io.t` passes:
+   `/tmp/io_async_70future_focus_quick_after_sockaddr.log`.
+10. `IO::Async` full `Build test` passes:
+    `/tmp/io_async_build_test_after_future_io_fix.log`.
+11. `make` passes after the waitpid patch:
+    `/tmp/make_openai_api_future_waitpid_patch.log`.
+12. `make` passes after the packed sockaddr parser fix:
+    `/tmp/make_openai_api_sockaddr_parse.log`.
+13. `timeout 1800 ./jcpan -t OpenAI::API` passes with the OpenAI::API
+    distropref active:
+    `/tmp/jcpan_openai_api_no_network_pref_escalated.log`.
 
 ## Next Steps
 
-- Investigate the notifier/test/protocol refcount mismatches that remain in
-  `t/05*`, `t/06*`, `t/07*`, `t/19test.t`, `t/21stream-1read.t`,
-  `t/21stream-3split.t`, and `t/60protocol.t`.
-- Rerun `IO::Async` and then `OpenAI::API`.
-- Keep PR #702 updated from the feature branch. After the OpenAI::API path is
-  stable, evaluate bundling YAML so CPAN can read `.yml` distroprefs directly;
-  keep using `.dd` fallbacks for this fix.
+- Keep PR #702 updated from the feature branch and monitor review/CI.
+- After the OpenAI::API path is stable, evaluate bundling YAML so CPAN can read
+  `.yml` distroprefs directly; keep using `.dd` fallbacks for this fix.

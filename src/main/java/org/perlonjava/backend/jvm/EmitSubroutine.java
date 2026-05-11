@@ -202,6 +202,15 @@ public class EmitSubroutine {
             newJavaClassInfo.isInEvalBlock = true;
         }
 
+        java.util.Set<Integer> capturedVariableIndices = new java.util.HashSet<>();
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            int capturedIndex = newSymbolTable.getVariableIndex(entry.name());
+            if (capturedIndex >= EmitterMethodCreator.skipVariables) {
+                capturedVariableIndices.add(capturedIndex);
+            }
+        }
+        newJavaClassInfo.capturedVariableIndices = capturedVariableIndices;
+
         // Check if this subroutine is a map/grep block - return should propagate non-locally
         Boolean isMapGrepBlock = (Boolean) node.getAnnotation("isMapGrepBlock");
         if (isMapGrepBlock != null && isMapGrepBlock) {

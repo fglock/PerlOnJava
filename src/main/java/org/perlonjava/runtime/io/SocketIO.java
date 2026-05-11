@@ -50,6 +50,7 @@ public class SocketIO implements IOHandle {
     // Datagram socketpair peer tracking. Java UDP channels do not report the
     // local peer-closed error that Perl's poll/select tests rely on.
     private SocketIO datagramPeer;
+    private SocketIO streamPeer;
     private boolean closed;
     private boolean datagramErrorPending;
 
@@ -137,12 +138,20 @@ public class SocketIO implements IOHandle {
         this.datagramPeer = peer;
     }
 
+    public void setStreamPeer(SocketIO peer) {
+        this.streamPeer = peer;
+    }
+
     public boolean hasPendingDatagramError() {
         return datagramErrorPending;
     }
 
     private boolean hasClosedDatagramPeer() {
         return datagramPeer != null && datagramPeer.closed;
+    }
+
+    private boolean hasClosedStreamPeer() {
+        return streamPeer != null && streamPeer.closed;
     }
 
     private RuntimeScalar consumeDatagramConnectionRefused() {
@@ -694,6 +703,10 @@ public class SocketIO implements IOHandle {
                 getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
                 return scalarFalse;
             }
+            if (hasClosedStreamPeer()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EPIPE());
+                return scalarFalse;
+            }
 
             // Use channel-based I/O for non-blocking sockets to avoid
             // IllegalBlockingModeException from stream-based I/O,
@@ -852,6 +865,10 @@ public class SocketIO implements IOHandle {
             // Ensure non-blocking connect has completed before writing
             if (!ensureConnected()) {
                 getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarUndef;
+            }
+            if (hasClosedStreamPeer()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EPIPE());
                 return scalarUndef;
             }
 

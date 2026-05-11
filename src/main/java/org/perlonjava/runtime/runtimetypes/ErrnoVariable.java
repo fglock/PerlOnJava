@@ -41,6 +41,7 @@ public class ErrnoVariable extends RuntimeScalar {
     private static volatile int _ENETUNREACH = -1;
     private static volatile int _ECONNRESET = -1;
     private static volatile int _ECONNABORTED = -1;
+    private static volatile int _EPIPE = -1;
     private static volatile int _EADDRINUSE = -1;
     private static volatile int _EADDRNOTAVAIL = -1;
     private static volatile int _EISCONN = -1;
@@ -55,6 +56,7 @@ public class ErrnoVariable extends RuntimeScalar {
         Map.entry("ENETUNREACH", "network is unreachable"),
         Map.entry("ECONNRESET", "connection reset"),
         Map.entry("ECONNABORTED", "connection abort"),
+        Map.entry("EPIPE", "broken pipe"),
         Map.entry("EADDRINUSE", "address already in use"),
         Map.entry("EADDRNOTAVAIL", "assign requested address"),
         Map.entry("EISCONN", "already connected")
@@ -156,6 +158,11 @@ public class ErrnoVariable extends RuntimeScalar {
     public static int ECONNABORTED() {
         int v = _ECONNABORTED;
         if (v == -1) { v = _ECONNABORTED = lookupErrnoConstant("ECONNABORTED"); }
+        return v;
+    }
+    public static int EPIPE() {
+        int v = _EPIPE;
+        if (v == -1) { v = _EPIPE = lookupErrnoConstant("EPIPE"); }
         return v;
     }
     public static int EADDRINUSE() {
@@ -362,4 +369,3 @@ public class ErrnoVariable extends RuntimeScalar {
         }
     }
 }
-

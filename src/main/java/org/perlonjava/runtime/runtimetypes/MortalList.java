@@ -346,6 +346,10 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0) return;
+        // Alias arrays such as @_ do not own their elements. They can contain
+        // RuntimeScalar instances whose refCountOwned flag belongs to another
+        // container, so walking them here would consume that other owner's count.
+        if (arr.elementsAliased && !arr.elementsOwned) return;
         // Quick scan: check if any element either:
         //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
         //   2. Is a direct blessed reference (blessId != 0), OR

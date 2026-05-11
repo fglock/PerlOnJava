@@ -1,0 +1,11 @@
+$VAR1 = {
+  'comment' => 'PerlOnJava distroprefs for OpenAI::API. Set NO_NETWORK_TESTING during tests so live external API checks skip during CPAN installation.',
+  'match' => {
+    'distribution' => '^NFERRAZ/OpenAI-API-'
+  },
+  'test' => {
+    'env' => {
+      'NO_NETWORK_TESTING' => 1
+    }
+  }
+};

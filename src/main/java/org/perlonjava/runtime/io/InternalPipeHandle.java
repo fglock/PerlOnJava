@@ -21,9 +21,12 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
  */
 public class InternalPipeHandle implements IOHandle {
 
+    public static final int PIPE_SIZE = 65536;
+
     private final PipedInputStream inputStream;
     private final PipedOutputStream outputStream;
     private final boolean isReader;
+    private final int pipeSize;
     private boolean isClosed = false;
     private boolean isEOF = false;
     private boolean blocking = true;
@@ -33,13 +36,16 @@ public class InternalPipeHandle implements IOHandle {
     // returns 0 for both "no data yet" and "writer closed", so we need
     // this extra signal to distinguish the two cases.
     private final AtomicBoolean writerClosed;
+    private final AtomicBoolean readerClosed;
 
     private InternalPipeHandle(PipedInputStream inputStream, PipedOutputStream outputStream,
-                               boolean isReader, AtomicBoolean writerClosed) {
+                               boolean isReader, AtomicBoolean writerClosed, AtomicBoolean readerClosed, int pipeSize) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.isReader = isReader;
         this.writerClosed = writerClosed;
+        this.readerClosed = readerClosed;
+        this.pipeSize = pipeSize;
     }
 
     /**
@@ -47,10 +53,11 @@ public class InternalPipeHandle implements IOHandle {
      * Both ends share a writerClosed flag so the reader can detect EOF.
      */
     public static InternalPipeHandle[] createPair(PipedInputStream inputStream, PipedOutputStream outputStream) {
-        AtomicBoolean shared = new AtomicBoolean(false);
+        AtomicBoolean writerClosed = new AtomicBoolean(false);
+        AtomicBoolean readerClosed = new AtomicBoolean(false);
         return new InternalPipeHandle[]{
-                new InternalPipeHandle(inputStream, null, true, shared),
-                new InternalPipeHandle(null, outputStream, false, shared),
+                new InternalPipeHandle(inputStream, null, true, writerClosed, readerClosed, PIPE_SIZE),
+                new InternalPipeHandle(inputStream, outputStream, false, writerClosed, readerClosed, PIPE_SIZE),
         };
     }
 
@@ -58,14 +65,14 @@ public class InternalPipeHandle implements IOHandle {
      * Creates a reader end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createReader(PipedInputStream inputStream) {
-        return new InternalPipeHandle(inputStream, null, true, new AtomicBoolean(false));
+        return new InternalPipeHandle(inputStream, null, true, new AtomicBoolean(false), new AtomicBoolean(false), PIPE_SIZE);
     }
 
     /**
      * Creates a writer end of an internal pipe (legacy, without shared flag).
      */
     public static InternalPipeHandle createWriter(PipedOutputStream outputStream) {
-        return new InternalPipeHandle(null, outputStream, false, new AtomicBoolean(false));
+        return new InternalPipeHandle(null, outputStream, false, new AtomicBoolean(false), new AtomicBoolean(false), PIPE_SIZE);
     }
 
     /**
@@ -123,6 +130,12 @@ public class InternalPipeHandle implements IOHandle {
                     return new RuntimeScalar("");
                 }
 
+                if (!blocking) {
+                    getGlobalVariable("main::!").set(
+                            org.perlonjava.runtime.runtimetypes.ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar();
+                }
+
                 // No data available - short sleep to avoid busy-wait
                 try {
                     Thread.sleep(10);
@@ -148,12 +161,37 @@ public class InternalPipeHandle implements IOHandle {
             return handleIOException(new IOException("Cannot write to closed pipe"), "write to closed pipe failed");
         }
 
+        if (readerClosed.get()) {
+            getGlobalVariable("main::!").set(
+                    org.perlonjava.runtime.runtimetypes.ErrnoVariable.EPIPE());
+            return new RuntimeScalar();
+        }
+
         try {
             byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
+            if (!blocking && inputStream != null) {
+                int free = pipeSize - inputStream.available();
+                if (free <= 0) {
+                    getGlobalVariable("main::!").set(
+                            org.perlonjava.runtime.runtimetypes.ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar();
+                }
+
+                int writeLength = Math.min(bytes.length, free);
+                outputStream.write(bytes, 0, writeLength);
+                outputStream.flush();
+                return scalarTrue;
+            }
+
             outputStream.write(bytes);
             outputStream.flush();
             return scalarTrue;
         } catch (IOException e) {
+            if (isBrokenPipe(e)) {
+                getGlobalVariable("main::!").set(
+                        org.perlonjava.runtime.runtimetypes.ErrnoVariable.EPIPE());
+                return new RuntimeScalar();
+            }
             return handleIOException(e, "Write to pipe failed");
         }
     }
@@ -167,6 +205,7 @@ public class InternalPipeHandle implements IOHandle {
         try {
             if (isReader && inputStream != null) {
                 inputStream.close();
+                readerClosed.set(true);
             } else if (!isReader && outputStream != null) {
                 outputStream.close();
                 writerClosed.set(true);  // Signal EOF to the reader end
@@ -236,12 +275,41 @@ public class InternalPipeHandle implements IOHandle {
             return new RuntimeScalar(); // undef
         }
 
+        if (readerClosed.get()) {
+            getGlobalVariable("main::!").set(
+                    org.perlonjava.runtime.runtimetypes.ErrnoVariable.EPIPE());
+            return new RuntimeScalar(); // undef
+        }
+
         try {
             byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
+            if (bytes.length == 0) {
+                return new RuntimeScalar(0);
+            }
+
+            if (!blocking && inputStream != null) {
+                int free = pipeSize - inputStream.available();
+                if (free <= 0) {
+                    getGlobalVariable("main::!").set(
+                            org.perlonjava.runtime.runtimetypes.ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar(); // undef
+                }
+
+                int writeLength = Math.min(bytes.length, free);
+                outputStream.write(bytes, 0, writeLength);
+                outputStream.flush();
+                return new RuntimeScalar(writeLength);
+            }
+
             outputStream.write(bytes);
             outputStream.flush();
             return new RuntimeScalar(bytes.length);
         } catch (IOException e) {
+            if (isBrokenPipe(e)) {
+                getGlobalVariable("main::!").set(
+                        org.perlonjava.runtime.runtimetypes.ErrnoVariable.EPIPE());
+                return new RuntimeScalar(); // undef
+            }
             getGlobalVariable("main::!").set(e.getMessage());
             return new RuntimeScalar(); // undef
         }
@@ -329,5 +397,25 @@ public class InternalPipeHandle implements IOHandle {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    public boolean hasWriteCapacity() {
+        if (isClosed || isReader || outputStream == null) return false;
+        if (readerClosed.get()) return true;
+        if (inputStream == null) return true;
+        try {
+            return inputStream.available() < pipeSize;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static boolean isBrokenPipe(IOException e) {
+        String msg = e.getMessage();
+        return msg != null && (
+                msg.contains("Pipe closed") ||
+                msg.contains("Read end dead") ||
+                msg.contains("Broken pipe")
+        );
     }
 }

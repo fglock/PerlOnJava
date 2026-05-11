@@ -119,6 +119,17 @@ public class JavaClassInfo {
     public boolean cleanupNeeded = true;
 
     /**
+     * JVM local slots initialized from closure fields. These are aliases to
+     * outer lexical variables, not my-variables declared by this generated
+     * method, so scope-exit cleanup must not consume their refcount owners.
+     */
+    public Set<Integer> capturedVariableIndices = Collections.emptySet();
+
+    public boolean isCapturedVariableIndex(int index) {
+        return capturedVariableIndices.contains(index);
+    }
+
+    /**
      * JVM local variable indices of my-variables (scalar, hash, array) allocated
      * inside the eval body. Used by the eval catch handler to emit scope-exit
      * cleanup when die unwinds through eval. Populated during compilation by
