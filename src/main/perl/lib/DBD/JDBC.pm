@@ -53,6 +53,10 @@ use strict;
 # normal method-resolution finds the Java-registered methods.
 
 # data_sources can be overridden by subclasses.
+sub connect {
+    my ($drh, $jdbc_url, $user, $pass, $attr) = @_;
+    return DBI::_jdbc_connect($drh, $jdbc_url, $user, $pass, $attr);
+}
 
 # ---------------------------------------------------------------------
 package DBD::JDBC::db;
