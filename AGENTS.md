@@ -261,6 +261,10 @@ PerlOnJava does **not** implement the following Perl features:
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 | `threads` | Perl threads not supported; use Java threading via inline Java if needed |
 
+### Parity with standard Perl (`perl`)
+
+When fixing behaviour (operators, builtins, library semantics, `@INC`, coercions, error messages, …), **match stock Perl 5** — the reference people get from `perl` on a typical Unix/macOS install. Many details look arbitrary or “wrong” from a Java or “clean design” perspective (precedence quirks, shadowing rules, legacy corners). **Still match Perl**; do not “improve” or simplify because the spec feels odd. If behaviour is unclear, reproduce with `perl -e` / `perl` on a minimal script and compare to `jperl`. Only diverge when this file or an explicit `dev/` design note documents the feature as intentionally unimplemented or different.
+
 ### Testing
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).

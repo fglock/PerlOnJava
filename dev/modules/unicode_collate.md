@@ -37,6 +37,10 @@ PerlOnJava follows the same policy (see `GlobalContext.initializeGlobals`):
 
 **Stale or conflicting installs** under `~/.perlonjava/lib/` behave like a stale **`site_perl`** tree on system Perl: they shadow the bundled/JAR copy until the user **removes** them or **reinstalls** with `jcpan` (same idea as `cpanm` / `cpan` fixing site).
 
+To drop only a bad **`Unicode::Collate`** shadow (e.g. after `Undefined subroutine &Unicode::Collate::_fetch_rest`), run:
+
+`perl dev/tools/clean_perlonjava_unicode_collate.pl` (use `--dry-run` first to list paths).
+
 **Bundled module tests** (`ModuleTestExecutionTest`) prepend the checkout’s `src/main/perl/lib` via `CompilerOptions.inc` for that JVM only. That is the same idea as running `perl -I/path/to/lib t/foo.t` or setting `PERL5LIB` for one command — an **explicit** test harness override, not a change to global `@INC` policy for interactive `jperl`.
 
 ---
