@@ -98,25 +98,17 @@ public class DigestMD5 extends PerlModuleBase {
 
         try {
             MessageDigest md = getMessageDigest(self);
-            RuntimeIO fh = null;
 
-            // Check if argument is a reference (filehandle)
-            if (!RuntimeScalarType.isReference(fileArg)) {
-                // Not a reference at all - this should croak
-                throw new PerlCompilerException("Not a GLOB reference");
-            }
-
-            // Extract the filehandle from the reference
-            fh = RuntimeIO.getRuntimeIO(fileArg);
+            // Bareword/typeglob handles (e.g. addfile(F)) are not "references" but
+            // RuntimeIO.getRuntimeIO resolves globs, \*FH, strings like "Pkg::FH", etc.
+            // Unlike Digest::SHA, Digest::MD5 does not accept a plain filesystem path.
+            RuntimeIO fh = RuntimeIO.getRuntimeIO(fileArg);
             if (fh == null) {
-                // It's a reference but not a valid filehandle
                 throw new PerlCompilerException("Not a GLOB reference");
             }
 
-            // The filehandle should already be in the appropriate mode
-            // The caller is responsible for setting binmode if needed
+            fh.binmode(":raw");
 
-            // Read the file content in chunks
             byte[] buffer = new byte[8192];
             try {
                 while (true) {
@@ -130,14 +122,12 @@ public class DigestMD5 extends PerlModuleBase {
                     updateBlockCount(self, bytes.length);
                 }
             } catch (Exception e) {
-                // If reading fails, the state is unpredictable as documented
                 throw new PerlCompilerException("Read error in addfile: " + e.getMessage());
             }
 
             return self.createReference().getList();
 
         } catch (PerlCompilerException e) {
-            // Re-throw PerlCompilerException as-is
             throw e;
         } catch (Exception e) {
             throw new PerlCompilerException("Digest::MD5 addfile failed: " + e.getMessage());
