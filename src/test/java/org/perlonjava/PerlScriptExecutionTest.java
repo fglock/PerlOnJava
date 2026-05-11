@@ -69,6 +69,16 @@ public class PerlScriptExecutionTest {
         return getPerlScripts(true);
     }
 
+    /** See {@link ModuleTestExecutionTest#jperlTestFilter()} (same semantics). */
+    private static String jperlTestFilter() {
+        String e = System.getenv("JPERL_TEST_FILTER");
+        if (e != null && !e.isEmpty()) {
+            return e;
+        }
+        String p = System.getProperty("jperl.moduleTest.filter");
+        return p != null ? p : "";
+    }
+
     /**
      * Helper method to get Perl scripts, optionally filtered to unit tests only.
      *
@@ -109,8 +119,8 @@ public class PerlScriptExecutionTest {
                 .sorted() // Ensure deterministic order
                 .collect(Collectors.toList());
 
-        String testFilter = System.getenv("JPERL_TEST_FILTER");
-        if (testFilter != null && !testFilter.isEmpty()) {
+        String testFilter = jperlTestFilter();
+        if (!testFilter.isEmpty()) {
             sortedScripts = sortedScripts.stream()
                     .filter(s -> s.contains(testFilter))
                     .collect(Collectors.toList());

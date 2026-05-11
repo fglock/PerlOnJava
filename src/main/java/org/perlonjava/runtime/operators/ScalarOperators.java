@@ -109,11 +109,11 @@ public class ScalarOperators {
 
     public static RuntimeScalar ord(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
-        int i;
+        long i;
         if (str.isEmpty()) {
             i = 0;
         } else {
-            i = str.codePointAt(0);
+            i = PerlUtfString.firstCodePointPerlUnsigned(str);
         }
         return getScalarInt(i);
     }

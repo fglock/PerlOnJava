@@ -31,7 +31,7 @@ public class StringOperators {
         }
         // Convert the RuntimeScalar to a string and return its length in codepoints
         String str = runtimeScalar.toString();
-        return getScalarInt(str.codePointCount(0, str.length()));
+        return getScalarInt(PerlUtfString.codePointCountPerl(str));
     }
 
     /**
@@ -602,41 +602,33 @@ public class StringOperators {
         // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
 
-        // For values 0-0x10FFFF that Java accepts, use Java's built-in support
-        if (Character.isValidCodePoint(codePoint) && codePoint <= 0x10FFFF) {
-            RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
-            // Only mark as BYTE_STRING for values 0-255
+        // BMP and supplementary scalars (not UTF-16 surrogate halves).
+        if (Character.isValidCodePoint(codePoint)
+                && codePoint <= 0x10FFFF
+                && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
+            // U+00..U+FF: Perl chr() yields a Latin-1 octet string with the UTF-8 flag off
+            // (Text::CSV_PP and other code use utf8::is_utf8 on the *record* to decide whether
+            // "binary off" allows high-bit bytes in unquoted fields).
             if (codePoint <= 0xFF) {
+                RuntimeScalar res = new RuntimeScalar(String.valueOf((char) codePoint));
                 res.type = BYTE_STRING;
+                return res;
             }
-            return res;
+            // Above Latin-1: UTF-16 string (not BYTE_STRING) so RuntimeRegex uses the Unicode
+            // pattern for /u and \\p{} (uni/variables.t, use feature 'unicode_strings').
+            return new RuntimeScalar(new String(Character.toChars(codePoint)));
         }
 
-        // For surrogates (0xD800-0xDFFF) and values beyond Unicode (> 0x10FFFF),
-        // Perl still creates a character with that code point. We store it as a
-        // special marker that will be properly encoded when converted to UTF-8.
-        // For now, we create a string with the code point value, which will be
-        // handled by the UTF-8 encoding logic in pack/unpack.
-
-        // Create a character using the code point directly
-        // Note: This may create invalid Unicode, but that's what Perl does
-        if (codePoint <= 0x10FFFF) {
-            // Surrogates: Java won't let us create these with Character.toChars,
-            // but we can store the value for later UTF-8 encoding
-            RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
-            return res;
+        // Surrogate scalars U+D800..U+DFFF: one UTF-16 code unit (matches Perl PV and
+        // uni/variables.t — marker encoding would make chr() length 7 and break XIDS checks).
+        if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
+            return new RuntimeScalar(String.valueOf((char) codePoint));
         }
 
-        // For values beyond 0x10FFFF, Java's String can't represent them.
-        // We need to store the code point value separately so UnpackState can encode it.
-        // As a workaround, we'll store a special marker string with the code point embedded.
-        // Format: "\uFFFD" + 4-byte big-endian int representation
-        // This is a hack, but it allows us to preserve the value for unpack.
+        // Beyond-Unicode UVs: internal FFFD<hex> marker (Perl distinguishes from valid text).
         RuntimeScalar res = new RuntimeScalar();
         res.type = RuntimeScalarType.STRING;
-        // Store as a special format that UnpackState will recognize
-        // Use a marker followed by the code point value
-        res.value = "\uFFFD" + String.format("<%08X>", codePoint);
+        res.value = PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(codePoint));
         return res;
     }
 

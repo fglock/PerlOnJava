@@ -6,10 +6,12 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 /**
  * The IdentifierParser class is responsible for parsing complex Perl identifiers
@@ -247,10 +249,16 @@ public class IdentifierParser {
         }
 
         if (token.type == LexerTokenType.STRING) {
-            // Assert valid Unicode start of identifier - \p{XID_Start}
+            // Assert valid Unicode start of identifier - \p{XID_Start}. Use Perl logical first
+            // character (U+FFFD<HEX> markers decode to their UV) so uni/variables.t matches Perl.
             String id = token.text;
-            int cp = id.codePointAt(0);
-            boolean valid = cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START);
+            long cpL = PerlUtfString.firstCodePointPerlUnsigned(id);
+            int firstJavaCp = id.codePointAt(0);
+            boolean invalidPlane =
+                    Long.compareUnsigned(cpL, 0x10FFFFL) > 0 || (cpL >= 0xD800L && cpL <= 0xDFFFL);
+            int cp = (int) cpL;
+            boolean valid =
+                    !invalidPlane && (cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START));
 
             // Under 'no utf8', Perl allows many non-ASCII bytes as length-1 variables.
             // Only enforce XID_START there for multi-character identifiers.
@@ -267,21 +275,22 @@ public class IdentifierParser {
             // for length-1 variables.
             boolean rejectEvenAsLengthOne = !utf8Enabled
                     && id.length() == 1
-                    && (UCharacter.hasBinaryProperty(cp, UProperty.WHITE_SPACE)
-                    || UCharacter.getType(cp) == UCharacter.FORMAT
-                    || UCharacter.getType(cp) == UCharacter.CONTROL);
+                    && Character.charCount(firstJavaCp) == id.length()
+                    && (UCharacter.hasBinaryProperty(firstJavaCp, UProperty.WHITE_SPACE)
+                    || UCharacter.getType(firstJavaCp) == UCharacter.FORMAT
+                    || UCharacter.getType(firstJavaCp) == UCharacter.CONTROL);
 
-            if (cp == 0xFFFD
-                    || cp < 32
-                    || cp == 127
-                    || (cp >= 0x80 && cp <= 0x9F)
+            if (invalidPlane
+                    || firstJavaCp == 0xFFFD
+                    || firstJavaCp < 32
+                    || firstJavaCp == 127
+                    || (firstJavaCp >= 0x80 && firstJavaCp <= 0x9F)
                     || rejectEvenAsLengthOne
                     || (mustValidateStart && !valid)) {
                 String hex;
-                // Special case: if we got the Unicode replacement character (0xFFFD),
-                // it likely means the original was an invalid UTF-8 byte sequence.
-                // For Perl compatibility, we should report a representative invalid byte.
-                if (cp == 0xFFFD) {
+                if (invalidPlane || (mustValidateStart && !valid && cpL >= 0x100)) {
+                    hex = "\\x{" + Long.toUnsignedString(cpL, 16).toLowerCase(Locale.ROOT) + "}";
+                } else if (firstJavaCp == 0xFFFD) {
                     hex = utf8Enabled ? "\\x{fffd}" : "\\xB6";
                 } else {
                     if (cp < 32 || cp == 127) {
@@ -315,14 +324,21 @@ public class IdentifierParser {
             // expected Perl diagnostic (comp/parser_run.t test 66).
             String id = token.text;
             if (!id.isEmpty()) {
-                int cp = id.codePointAt(0);
-                boolean valid = cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START);
+                long cpL = PerlUtfString.firstCodePointPerlUnsigned(id);
+                int firstJavaCp = id.codePointAt(0);
+                boolean invalidPlane =
+                        Long.compareUnsigned(cpL, 0x10FFFFL) > 0 || (cpL >= 0xD800L && cpL <= 0xDFFFL);
+                int cp = (int) cpL;
+                boolean valid =
+                        !invalidPlane && (cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_START));
 
                 boolean mustValidateStart = utf8Enabled || id.length() > 1;
 
                 if (mustValidateStart && !valid) {
                     String hex;
-                    if (cp == 0xFFFD) {
+                    if (invalidPlane || cpL >= 0x100) {
+                        hex = "\\x{" + Long.toUnsignedString(cpL, 16).toLowerCase(Locale.ROOT) + "}";
+                    } else if (firstJavaCp == 0xFFFD) {
                         hex = "\\xB6";
                     } else if (cp <= 255) {
                         hex = String.format("\\\\x%02X", cp);

@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import com.ibm.icu.lang.UCharacter;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -13,6 +14,9 @@ import java.text.Normalizer.Form;
  * <p>Extends {@link PerlModuleBase} to leverage module initialization and method registration.</p>
  */
 public class UnicodeNormalize extends PerlModuleBase {
+
+    /** Kept in sync with {@code Unicode/Normalize.pm} for {@code XSLoader::load} checks. */
+    public static final String XS_VERSION = "1.32";
 
     /**
      * Constructor for UnicodeNormalize.
@@ -82,9 +86,26 @@ public class UnicodeNormalize extends PerlModuleBase {
             unicodeNormalize.registerMethod("NFC", "$");
             unicodeNormalize.registerMethod("NFKD", "$");
             unicodeNormalize.registerMethod("NFKC", "$");
+            unicodeNormalize.registerMethod("getCombinClass", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Unicode::Normalize method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Canonical combining class (UCD) for a single code point.
+     * {@link Unicode::Collate} calls this with numeric code points from {@code unpack_U}.
+     */
+    public static RuntimeList getCombinClass(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeList(new RuntimeScalar(0));
+        }
+        int cp = args.get(0).getInt();
+        if (cp < 0 || cp > Character.MAX_CODE_POINT) {
+            return new RuntimeList(new RuntimeScalar(0));
+        }
+        int cc = UCharacter.getCombiningClass(cp);
+        return new RuntimeList(new RuntimeScalar(cc));
     }
 
     // Normalization Form D
@@ -124,12 +145,13 @@ public class UnicodeNormalize extends PerlModuleBase {
         RuntimeScalar formArg = args.get(0);
         RuntimeScalar inputArg = args.get(1);
 
-        String form = formArg.toString();
-        return switch (form.toUpperCase()) {
-            case "D" -> NFD(new RuntimeArray(inputArg), ctx);
-            case "C" -> NFC(new RuntimeArray(inputArg), ctx);
-            case "KD" -> NFKD(new RuntimeArray(inputArg), ctx);
-            case "KC" -> NFKC(new RuntimeArray(inputArg), ctx);
+        String form = formArg.toString().toUpperCase();
+        // Perl Unicode::Normalize accepts both short names (D, C, …) and long (NFD, NFC, …).
+        return switch (form) {
+            case "D", "NFD" -> NFD(new RuntimeArray(inputArg), ctx);
+            case "C", "NFC" -> NFC(new RuntimeArray(inputArg), ctx);
+            case "KD", "NFKD" -> NFKD(new RuntimeArray(inputArg), ctx);
+            case "KC", "NFKC" -> NFKC(new RuntimeArray(inputArg), ctx);
             default -> throw new IllegalArgumentException("Invalid normalization form: " + form);
         };
     }

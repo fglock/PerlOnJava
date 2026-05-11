@@ -55,6 +55,17 @@ sub parse_yaml {
     return \@imports;
 }
 
+# True if $path is $dir or a proper child (same path or $dir/...). Avoids the
+# false positive where index($path, $dir)==0 matches siblings like
+# perl5_t/ticket when $dir is perl5_t/t (prefix without following slash).
+sub path_is_under_dir {
+    my ($dir, $path) = @_;
+    return 0 unless defined $dir && defined $path && length $dir && length $path;
+    for ($dir, $path) { s{//+}{/}g; s{/+\z}{} }
+    return 1 if $path eq $dir;
+    return $path =~ m{^\Q$dir\E/};
+}
+
 # Apply a patch file to a target
 sub apply_patch {
     my ($target, $patch_file) = @_;
@@ -84,11 +95,13 @@ sub copy_directory {
             # protected_path is relative to project root, need to make it absolute
             my $abs_protected = File::Spec->catfile($project_root, $protected_path);
             
-            # Calculate relative path from target directory
-            if (index($abs_protected, $target) == 0) {
-                # Extract relative path by removing target prefix and leading slash
-                my $rel_path = substr($abs_protected, length($target));
-                $rel_path =~ s{^/+}{};  # Remove leading slashes
+            # Calculate relative path from target directory (strict prefix)
+            if (path_is_under_dir($target, $abs_protected)) {
+                my $dir = $target;
+                my $p = $abs_protected;
+                for ($dir, $p) { s{//+}{/}g; s{/+\z}{} }
+                next if $p eq $dir;
+                my $rel_path = substr($p, length($dir) + 1);
                 if ($rel_path) {
                     $cmd .= " --exclude='$rel_path'";
                     print "  Excluding protected file: $rel_path\n";

@@ -7,6 +7,7 @@ import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.regex.CaptureNameEncoder;
 import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.UnicodeResolver;
@@ -15,6 +16,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarCache;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -1229,15 +1231,20 @@ public abstract class StringSegmentParser {
 
         if (!hexStr.isEmpty()) {
             try {
-                var hexValue = Integer.parseInt(hexStr.toString(), 16);
-                if (!Character.isValidCodePoint(hexValue)) {
-                    // Invalid Unicode code point (outside 0x0 to 0x10FFFF range), treat as null
-                    appendToCurrentSegment("\0");
+                String hs = hexStr.toString();
+                BigInteger bi = new BigInteger(hs, 16);
+                long hexUv =
+                        bi.and(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)).longValue();
+                if (Long.compareUnsigned(hexUv, 0x10FFFFL) > 0) {
+                    appendToCurrentSegment(PerlUtfString.encodeBeyondUnicode(hexUv));
+                } else if (hexUv >= 0xD800L && hexUv <= 0xDFFFL) {
+                    // One UTF-16 code unit (same as Perl chr / string literal); marker would
+                    // break uni/variables.t length-1 identifier diagnostics.
+                    appendToCurrentSegment(String.valueOf((char) hexUv));
+                } else if (hexUv <= 0xFFFFL) {
+                    appendToCurrentSegment(String.valueOf((char) hexUv));
                 } else {
-                    var result = hexValue <= 0xFFFF
-                            ? String.valueOf((char) hexValue)
-                            : new String(Character.toChars(hexValue));
-                    appendToCurrentSegment(result);
+                    appendToCurrentSegment(new String(Character.toChars((int) hexUv)));
                 }
             } catch (NumberFormatException e) {
                 // Invalid hex sequence, treat as literal

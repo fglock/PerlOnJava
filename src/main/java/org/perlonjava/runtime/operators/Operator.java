@@ -346,7 +346,7 @@ public class Operator {
      */
     private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled, RuntimeBase... args) {
         String str = args[0].toString();
-        int strLength = str.codePointCount(0, str.length());
+        int strLength = PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
         int offset = ((RuntimeScalar) args[1]).getInt();
@@ -438,9 +438,9 @@ public class Operator {
             return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
         }
 
-        // Extract the substring (offset/length are in Unicode code points)
-        int startIndex = str.offsetByCodePoints(0, offset);
-        int endIndex = str.offsetByCodePoints(startIndex, length);
+        // Extract the substring (offset/length are in Perl logical characters)
+        int startIndex = PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
+        int endIndex = PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
         String result = str.substring(startIndex, endIndex);
 
         // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string

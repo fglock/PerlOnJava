@@ -108,8 +108,8 @@ public class ModuleTestExecutionTest {
                 .sorted()
                 .collect(Collectors.toList());
 
-        String testFilter = System.getenv("JPERL_TEST_FILTER");
-        if (testFilter != null && !testFilter.isEmpty()) {
+        String testFilter = jperlTestFilter();
+        if (!testFilter.isEmpty()) {
             sortedScripts = sortedScripts.stream()
                     .filter(s -> s.contains(testFilter))
                     .collect(Collectors.toList());
@@ -119,6 +119,21 @@ public class ModuleTestExecutionTest {
         }
 
         return sortedScripts.stream();
+    }
+
+    /**
+     * Substring filter for which bundled tests to run.
+     * Prefer {@code JPERL_TEST_FILTER} (shell / Gradle {@code environment}) so a
+     * mistaken {@code -Djperl.moduleTest.filter=} value cannot override it; use
+     * {@code jperl.moduleTest.filter} only when the env var is unset (e.g. IDE).
+     */
+    private static String jperlTestFilter() {
+        String e = System.getenv("JPERL_TEST_FILTER");
+        if (e != null && !e.isEmpty()) {
+            return e;
+        }
+        String p = System.getProperty("jperl.moduleTest.filter");
+        return p != null ? p : "";
     }
 
     @BeforeEach

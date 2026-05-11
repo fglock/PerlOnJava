@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.operators.WarnDie;
 
 /**
@@ -80,7 +81,7 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
 
         String parentValue = lvalue.toString();
         String newValue = this.toString();
-        int strLength = parentValue.codePointCount(0, parentValue.length());
+        int strLength = PerlUtfString.codePointCountPerl(parentValue);
 
         // Calculate the actual offset, handling negative offsets
         int actualOffset = offset < 0 ? strLength + offset : offset;
@@ -112,9 +113,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
 
         StringBuilder updatedValue = new StringBuilder(parentValue);
 
-        // Convert code point offsets to UTF-16 indices for StringBuilder operations
-        int startIndex = parentValue.offsetByCodePoints(0, actualOffset);
-        int endIndex = parentValue.offsetByCodePoints(startIndex, actualLength);
+        // Convert Perl logical offsets to UTF-16 indices for StringBuilder operations
+        int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, actualOffset);
+        int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, actualLength);
 
         // Handle the case where the offset is beyond the current string length
         if (actualOffset >= strLength) {

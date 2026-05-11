@@ -83,25 +83,16 @@ public class UnpackState {
         this.dataString = dataString;
         this.characterMode = !startsWithU;
 
-        // Check for special marker format for code points > 0x10FFFF
-        // Format: "\uFFFD<XXXXXXXX>" where XXXXXXXX is hex code point
+        // Beyond-Unicode scalars use PerlUtfString sentinel: U+FFFD + "<" + hex + ">".
         java.util.List<Integer> codePointList = new java.util.ArrayList<>();
         int i = 0;
         while (i < dataString.length()) {
-            if (i < dataString.length() - 10 &&
-                    dataString.charAt(i) == '\uFFFD' &&
-                    dataString.charAt(i + 1) == '<' &&
-                    dataString.charAt(i + 10) == '>') {
-                // Extract the hex code point
-                String hexStr = dataString.substring(i + 2, i + 10);
-                try {
-                    int cp = Integer.parseUnsignedInt(hexStr, 16);
-                    codePointList.add(cp);
-                    i += 11; // Skip the marker
-                    continue;
-                } catch (NumberFormatException e) {
-                    // Not a valid marker, treat as regular character
-                }
+            int markerEnd = PerlUtfString.markerEndExclusive(dataString, i);
+            if (markerEnd > 0) {
+                long cp = PerlUtfString.markerCodePoint(dataString, i);
+                codePointList.add((int) cp);
+                i = markerEnd;
+                continue;
             }
             codePointList.add(dataString.codePointAt(i));
             i += Character.charCount(dataString.codePointAt(i));

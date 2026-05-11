@@ -1,0 +1,18 @@
+--- perl5/cpan/Unicode-Collate/Collate.pm
++++ src/main/perl/lib/Unicode/Collate.pm
+@@ -269,13 +269,8 @@
+     my $self = bless { @_ }, $class;
+ 
+ ### begin XS only ###
+-    if (! exists $self->{table}     && !defined $self->{rewrite} &&
+-	!defined $self->{undefName} && !defined $self->{ignoreName} &&
+-	!defined $self->{undefChar} && !defined $self->{ignoreChar}) {
+-	$self->{__useXS} = \&_fetch_simple;
+-    } else {
+-	$self->{__useXS} = undef;
+-    }
++    # PerlOnJava: no ucatbl trie -- always load DUCET from Unicode/Collate/*.txt on @INC.
++    $self->{__useXS} = undef;
+ ### end XS only ###
+ 
+     # keys of $self->{suppressHash} are $self->{suppress}.
