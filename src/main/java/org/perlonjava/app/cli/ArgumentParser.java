@@ -197,6 +197,10 @@ public class ArgumentParser {
 
                 if (arg.equals("--")) {
                     // "--" indicates the end of switch arguments; subsequent arguments are treated as non-switch
+                    if (parsedArgs.rudimentarySwitchParsing) {
+                        processRudimentarySwitchArguments(args, parsedArgs, i + 1);
+                        break;
+                    }
                     readingArgv = true;
                     continue;
                 }
@@ -1289,6 +1293,19 @@ public class ArgumentParser {
                 .append(" = '")
                 .append(varValue.replace("'", "\\'"))
                 .append("';\n");
+    }
+
+    private static void processRudimentarySwitchArguments(String[] args, CompilerOptions parsedArgs, int startIndex) {
+        for (int i = startIndex; i < args.length; i++) {
+            String arg = args[i];
+            if (arg.equals("--") || !arg.startsWith("-")) {
+                for (int j = i; j < args.length; j++) {
+                    RuntimeArray.push(parsedArgs.argumentList, new RuntimeScalar(args[j]));
+                }
+                return;
+            }
+            processRudimentarySwitch(arg, parsedArgs);
+        }
     }
 
     /**

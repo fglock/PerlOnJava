@@ -422,13 +422,15 @@ public class RuntimeStash extends RuntimeHash {
 
         this.elements.clear();
 
-        // Make existing blessed objects become anonymous (__ANON__).
-        // namespace is stored with trailing "::".
+        // Method resolution depends on the stash. This clears the class-name
+        // bless-id cache, so do it before installing the anonymous mapping below.
+        InheritanceResolver.invalidateCache();
+
+        // Make existing blessed objects and glob PACKAGE lookups become
+        // anonymous (__ANON__). namespace is stored with trailing "::".
         String className = prefix.endsWith("::") ? prefix.substring(0, prefix.length() - 2) : prefix;
         NameNormalizer.anonymizeBlessId(className);
 
-        // Method resolution depends on the stash.
-        InheritanceResolver.invalidateCache();
         GlobalVariable.clearPackageCache();
         return this;
     }

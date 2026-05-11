@@ -1,7 +1,9 @@
 package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.regex.UnicodeResolver;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
@@ -166,6 +168,11 @@ public class RuntimeTransliterate {
 
         // Handle the /r modifier - return the transliterated string without modifying original
         if (returnOriginal) {
+            if (ctx == RuntimeContextType.VOID) {
+                Warnings.emitCategoryWarning(
+                        "void",
+                        "Useless use of non-destructive transliteration (tr///r)");
+            }
             RuntimeScalar rv = new RuntimeScalar(resultString);
             // Preserve BYTE_STRING type from input
             if (originalString.type == RuntimeScalarType.BYTE_STRING) {

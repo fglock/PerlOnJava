@@ -647,6 +647,8 @@ public class StatementParser {
 
         // Capture token index for caller() before consuming any tokens
         int useTokenIndex = parser.tokenIndex;
+        String usePackage = ctx.symbolTable.getCurrentPackage();
+        GlobalVariable.getGlobalIO(usePackage + "::BEGIN");
         
         TokenUtils.consume(parser);   // "use"
         token = TokenUtils.peek(parser);
@@ -1294,6 +1296,9 @@ public class StatementParser {
             parser.ctx.symbolTable.exitScope(scopeIndex);
             HintHashRegistry.exitScope(); // Restore compile-time %^H
 
+            if (!(TokenUtils.peek(parser).type == LexerTokenType.OPERATOR && TokenUtils.peek(parser).text.equals("}"))) {
+                parser.throwCleanError("Missing right curly");
+            }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
             block.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
             return block;
