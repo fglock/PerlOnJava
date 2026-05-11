@@ -323,9 +323,12 @@ public class ParsePrimary {
                     String afterIdentifier = lookAhead < parser.tokens.size() ? 
                                             parser.tokens.get(lookAhead).text : "";
                     
-                    // Check if the sub exists at compile time
+                    // Check if the sub exists at compile time. Do NOT use getGlobalCodeRef() here:
+                    // it autovivifies an undefined CV placeholder, and RuntimeScalar.getDefinedBoolean()
+                    // returns true for every CODE slot — so ::e was always treated as main::e (Mo.pm
+                    // and other minified sources use $pkg.$_.::e → must stay bareword "::e").
                     String fullSubName = "main::" + identifierName;
-                    boolean subExists = GlobalVariable.getGlobalCodeRef(fullSubName).getDefinedBoolean();
+                    boolean subExists = GlobalVariable.isGlobalCodeRefDefined(fullSubName);
                     
                     if (afterIdentifier.equals("(") || subExists) {
                         // Function call: ::foo() or ::foo (when sub exists)

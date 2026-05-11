@@ -602,12 +602,20 @@ public class StringOperators {
         // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
 
-        // BMP and supplementary scalars (not UTF-16 surrogate halves): normal UTF-16 string.
+        // BMP and supplementary scalars (not UTF-16 surrogate halves).
         if (Character.isValidCodePoint(codePoint)
                 && codePoint <= 0x10FFFF
                 && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
-            // Do not use BYTE_STRING here: RuntimeRegex picks the Unicode pattern only for
-            // STRING; BYTE_STRING kept /\p{...}/u on the ASCII variant (uni/variables.t).
+            // U+00..U+FF: Perl chr() yields a Latin-1 octet string with the UTF-8 flag off
+            // (Text::CSV_PP and other code use utf8::is_utf8 on the *record* to decide whether
+            // "binary off" allows high-bit bytes in unquoted fields).
+            if (codePoint <= 0xFF) {
+                RuntimeScalar res = new RuntimeScalar(String.valueOf((char) codePoint));
+                res.type = BYTE_STRING;
+                return res;
+            }
+            // Above Latin-1: UTF-16 string (not BYTE_STRING) so RuntimeRegex uses the Unicode
+            // pattern for /u and \\p{} (uni/variables.t, use feature 'unicode_strings').
             return new RuntimeScalar(new String(Character.toChars(codePoint)));
         }
 

@@ -12,6 +12,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class MathOperators {
 
+    /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
+    private static final double MAX_EXACT_DOUBLE_INT = 9007199254740992.0;
+
     /**
      * Adds an integer to a RuntimeScalar and returns the result.
      *
@@ -342,7 +345,8 @@ public class MathOperators {
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a * (double) b);
+                // Widen to long — int*int product always fits in long; avoid double mantissa loss.
+                return new RuntimeScalar((long) a * (long) b);
             }
         }
 
@@ -388,7 +392,7 @@ public class MathOperators {
             try {
                 return getScalarInt(Math.multiplyExact(a, b));
             } catch (ArithmeticException ignored) {
-                return new RuntimeScalar((double) a * (double) b);
+                return new RuntimeScalar((long) a * (long) b);
             }
         }
 
@@ -508,24 +512,7 @@ public class MathOperators {
         }
 
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
-            // Use double arithmetic when either argument is a double
-            double dividend = arg1.getDouble();
-            double divisor = arg2.getDouble();
-
-            // Handle division by zero
-            if (divisor == 0.0) {
-                throw new PerlCompilerException("Division by zero in modulus operation");
-            }
-
-            // Calculate modulus using double precision
-            double result = truncate(dividend) % truncate(divisor);
-
-            // Adjust result for Perl-style modulus behavior
-            // In Perl, the result has the same sign as the divisor
-            if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
-                result += divisor;
-            }
-            return new RuntimeScalar(result);
+            return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
         }
 
         // Use long arithmetic to handle large integers (beyond int range)
@@ -567,24 +554,7 @@ public class MathOperators {
         arg2 = arg2.getNumberWarn("modulus (%)");
 
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
-            // Use double arithmetic when either argument is a double
-            double dividend = arg1.getDouble();
-            double divisor = arg2.getDouble();
-
-            // Handle division by zero
-            if (divisor == 0.0) {
-                throw new PerlCompilerException("Division by zero in modulus operation");
-            }
-
-            // Calculate modulus using double precision
-            double result = truncate(dividend) % truncate(divisor);
-
-            // Adjust result for Perl-style modulus behavior
-            // In Perl, the result has the same sign as the divisor
-            if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
-                result += divisor;
-            }
-            return new RuntimeScalar(result);
+            return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
         }
 
         // Use long arithmetic to handle large integers (beyond int range)
@@ -911,6 +881,31 @@ public class MathOperators {
         }
 
         long result = dividend % divisor;
+        return new RuntimeScalar(result);
+    }
+
+    /** Modulus when at least one operand is already a DOUBLE (see {@link #modulus}). */
+    private static RuntimeScalar modulusFromDoubles(double dividend, double divisor) {
+        if (divisor == 0.0) {
+            throw new PerlCompilerException("Division by zero in modulus operation");
+        }
+        if (dividend == Math.rint(dividend) && divisor == Math.rint(divisor)
+                && Math.abs(dividend) < MAX_EXACT_DOUBLE_INT && Math.abs(divisor) < MAX_EXACT_DOUBLE_INT) {
+            long la = (long) dividend;
+            long lb = (long) divisor;
+            long result = la % lb;
+            if (result != 0 && ((lb > 0 && result < 0) || (lb < 0 && result > 0))) {
+                result += lb;
+            }
+            if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
+                return getScalarInt((int) result);
+            }
+            return new RuntimeScalar((double) result);
+        }
+        double result = truncate(dividend) % truncate(divisor);
+        if (result != 0.0 && ((divisor > 0.0 && result < 0.0) || (divisor < 0.0 && result > 0.0))) {
+            result += divisor;
+        }
         return new RuntimeScalar(result);
     }
 
@@ -1262,9 +1257,15 @@ public class MathOperators {
             return switch (op) {
                 case 0 -> new RuntimeScalar(x + y);
                 case 1 -> new RuntimeScalar(x - y);
-                case 2 -> new RuntimeScalar(x * y);
+                case 2 -> {
+                    if (x == Math.rint(x) && y == Math.rint(y)
+                            && Math.abs(x) < MAX_EXACT_DOUBLE_INT && Math.abs(y) < MAX_EXACT_DOUBLE_INT) {
+                        yield new RuntimeScalar((double) ((long) x * (long) y));
+                    }
+                    yield new RuntimeScalar(x * y);
+                }
                 case 3 -> new RuntimeScalar(x / y);
-                case 4 -> new RuntimeScalar(x % y);
+                case 4 -> modulusFromDoubles(x, y);
                 case 5 -> new RuntimeScalar(Math.pow(x, y));
                 default -> throw new IllegalStateException();
             };
@@ -1285,7 +1286,15 @@ public class MathOperators {
                 default -> throw new IllegalStateException();
             };
         } catch (ArithmeticException ignored) {
-            return new RuntimeScalar((double) x + (double) y);
+            return switch (op) {
+                case 0 -> new RuntimeScalar((double) x + (double) y);
+                case 1 -> new RuntimeScalar((double) x - (double) y);
+                case 2 -> new RuntimeScalar((double) x * (double) y);
+                case 3 -> new RuntimeScalar((double) x / (double) y);
+                case 4 -> new RuntimeScalar((double) x % (double) y);
+                case 5 -> new RuntimeScalar(Math.pow((double) x, (double) y));
+                default -> throw new IllegalStateException();
+            };
         }
     }
 
