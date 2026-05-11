@@ -6,6 +6,27 @@ use XSLoader;
 use Exporter 'import';
 
 our $VERSION = '1.643';
+our $stderr = 2000000000;
+our ($err, $errstr, $state);
+our %InstalledDrivers;
+our $SqlEngineStorePatched;
+our $AnyDataDestroyPatched;
+our $SqlStatementTermPatched;
+our %DriverPrefix = (
+    AnyData   => 'ad_',
+    File      => 'f_',
+    JDBC      => 'jdbc_',
+    SQLite    => 'sqlite_',
+    SqlEngine => 'sql_',
+    Sponge    => 'sponge_',
+);
+
+# References to the Java-backed DBI methods installed by XSLoader::load().
+# Perl-level wrappers use these for JDBC handles, while pure-Perl DBD handles
+# dispatch through their ImplementorClass packages.
+our ($JDBC_CONNECT, $JDBC_PREPARE, $JDBC_EXECUTE, $JDBC_FINISH,
+     $JDBC_DISCONNECT, $JDBC_PING, $JDBC_FETCHROW_ARRAYREF,
+     $JDBC_FETCHROW_HASHREF);
 
 # SQL type constants exported on demand, e.g. `use DBI qw(SQL_BLOB SQL_VARCHAR)`
 # or via the :sql_types tag. Mirrors real DBI's export interface so modules
@@ -29,14 +50,18 @@ our %EXPORT_TAGS = (
 
 XSLoader::load( 'DBI' );
 
-# DBI::db and DBI::st inherit from DBI so method dispatch works
+# DBI handle classes inherit from DBI so method dispatch works
 # when handles are blessed into subclass packages
+@DBI::dr::ISA = ('DBI');
 @DBI::db::ISA = ('DBI');
 @DBI::st::ISA = ('DBI');
 
-# Return a hash of loaded driver name => driver handle.
-# In PerlOnJava, JDBC manages drivers internally so we return empty.
-sub installed_drivers { return () }
+# Upstream DBI exposes DBD::_::* base classes for driver shims.  PerlOnJava
+# handles are plain blessed hashes, so these only need inheritance.
+@DBD::_::common::ISA = ('DBI');
+@DBD::_::dr::ISA = ('DBI::dr');
+@DBD::_::db::ISA = ('DBI::db');
+@DBD::_::st::ISA = ('DBI::st');
 
 # Wrap Java DBI methods with HandleError support and DBI attribute tracking.
 # In real DBI, HandleError is called from C before RaiseError/die.
@@ -44,19 +69,26 @@ sub installed_drivers { return () }
 # to intercept the die and call HandleError from Perl context (where
 # caller() works correctly for DBIC's __find_caller).
 {
-    my $orig_prepare = \&DBI::prepare;
-    my $orig_execute = \&DBI::execute;
-    my $orig_finish  = \&DBI::finish;
-    my $orig_disconnect = \&DBI::disconnect;
+    $JDBC_CONNECT = \&DBI::connect;
+    $JDBC_PREPARE = \&DBI::prepare;
+    $JDBC_EXECUTE = \&DBI::execute;
+    $JDBC_FINISH  = \&DBI::finish;
+    $JDBC_DISCONNECT = \&DBI::disconnect;
+    $JDBC_PING = \&DBI::ping;
+    $JDBC_FETCHROW_ARRAYREF = \&DBI::fetchrow_arrayref;
+    $JDBC_FETCHROW_HASHREF = \&DBI::fetchrow_hashref;
 
     no warnings 'redefine';
 
     *DBI::prepare = sub {
+        if (!_is_jdbc_handle($_[0])) {
+            return _dispatch_implementor_method($_[0], 'prepare', @_[1..$#_]);
+        }
         if ($ENV{DBI_TRACE_DESTROY}) {
             my $sql_preview = substr($_[1] // '', 0, 60);
             warn "DBI::prepare on dbh=" . ($_[0]+0) . " Active=" . ($_[0]->{Active}//0) . " SQL: $sql_preview\n";
         }
-        my $result = eval { $orig_prepare->(@_) };
+        my $result = eval { $JDBC_PREPARE->(@_) };
         if ($@) {
             if ($ENV{DBI_TRACE_DESTROY}) {
                 warn "DBI::prepare FAILED on dbh=" . ($_[0]+0) . ": $@\n";
@@ -79,7 +111,7 @@ sub installed_drivers { return () }
             if (my $root = $dbh->{RootClass}) {
                 my $st_class = "${root}::st";
                 if (UNIVERSAL::isa($st_class, 'DBI::st')) {
-                    bless $result, $st_class;
+                    $result = bless $result, $st_class;
                 }
             }
         }
@@ -87,7 +119,12 @@ sub installed_drivers { return () }
     };
 
     *DBI::execute = sub {
-        my $result = eval { $orig_execute->(@_) };
+        if (!_is_jdbc_handle($_[0])) {
+            my $result = _dispatch_implementor_method($_[0], 'execute', @_[1..$#_]);
+            _populate_statement_metadata($_[0]) if defined $result;
+            return $result;
+        }
+        my $result = eval { $JDBC_EXECUTE->(@_) };
         if ($@) {
             # For sth errors, try HandleError on the parent dbh first, then sth
             my $sth_handle = $_[0];
@@ -122,16 +159,22 @@ sub installed_drivers { return () }
     };
 
     *DBI::finish = sub {
+        if (!_is_jdbc_handle($_[0])) {
+            return _dispatch_implementor_method($_[0], 'finish', @_[1..$#_]);
+        }
         my $sth = $_[0];
         if ($sth->{Active} && $sth->{Database}) {
             my $active = $sth->{Database}{ActiveKids} || 0;
             $sth->{Database}{ActiveKids} = $active > 0 ? $active - 1 : 0;
             $sth->{Active} = 0;
         }
-        return $orig_finish->(@_);
+        return $JDBC_FINISH->(@_);
     };
 
     *DBI::disconnect = sub {
+        if (!_is_jdbc_handle($_[0])) {
+            return _dispatch_implementor_method($_[0], 'disconnect', @_[1..$#_]);
+        }
         my $dbh = $_[0];
         if ($ENV{DBI_TRACE_DESTROY}) {
             my @trace;
@@ -143,7 +186,18 @@ sub installed_drivers { return () }
             warn "DBI::disconnect on dbh=" . ($dbh+0) . " from: " . join(" <- ", @trace) . "\n";
         }
         $dbh->{Active} = 0;
-        return $orig_disconnect->(@_);
+        return $JDBC_DISCONNECT->(@_);
+    };
+
+    *DBI::ping = sub {
+        if (!_is_jdbc_handle($_[0])) {
+            my $impl = $_[0]->{ImplementorClass};
+            if ($impl && (my $code = $impl->can('ping'))) {
+                return $code->(@_);
+            }
+            return $_[0]->{Active} ? 1 : 0;
+        }
+        return $JDBC_PING->(@_);
     };
 }
 
@@ -237,6 +291,297 @@ sub _handle_error_with_handler {
     return undef;
 }
 
+sub _append_isa {
+    my ($pkg, $base) = @_;
+    no strict 'refs';
+    for my $existing (@{"${pkg}::ISA"}) {
+        return if $existing eq $base;
+    }
+    push @{"${pkg}::ISA"}, $base;
+}
+
+sub setup_driver {
+    my ($class, $driver_class) = @_;
+    _append_isa("${driver_class}::dr", 'DBI::dr');
+    _append_isa("${driver_class}::db", 'DBI::db');
+    _append_isa("${driver_class}::st", 'DBI::st');
+    return 1;
+}
+
+sub driver_prefix {
+    my ($class, $driver_class) = @_;
+    $driver_class =~ s/^DBD:://;
+    $driver_class =~ s/^DBI::DBD:://;
+    return $DriverPrefix{$driver_class} if exists $DriverPrefix{$driver_class};
+    my $prefix = lc $driver_class;
+    $prefix =~ s/\W+/_/g;
+    return "${prefix}_";
+}
+
+sub install_driver {
+    my ($class, $driver) = @_;
+    $driver =~ s/^DBD:://;
+    return $InstalledDrivers{$driver} if $InstalledDrivers{$driver};
+
+    my $driver_class = "DBD::$driver";
+    eval "require $driver_class";
+    die $@ if $@;
+    _patch_sqlengine_store_aliases();
+    _patch_anydata_table_destroy();
+    _patch_sqlstatement_term_owner();
+    die "Can't locate driver method for $driver_class\n"
+        unless $driver_class->can('driver');
+
+    my $drh = $driver_class->driver;
+    die "$driver_class->driver did not return a handle\n" unless $drh;
+    $InstalledDrivers{$driver} = $drh;
+    return $drh;
+}
+
+sub _patch_sqlengine_store_aliases {
+    return if $SqlEngineStorePatched;
+    no strict 'refs';
+    return unless defined &{'DBI::DBD::SqlEngine::st::STORE'};
+    no warnings 'redefine';
+    *{'DBI::DBD::SqlEngine::st::STORE'} = sub {
+        my ($sth, $attrib, $value) = @_;
+        $sth->{$attrib} = $value;
+        $sth->{sql_stmt} = $value if $attrib eq 'f_stmt' && !exists $sth->{sql_stmt};
+        $sth->{f_stmt} = $value if $attrib eq 'sql_stmt' && !exists $sth->{f_stmt};
+        $sth->{sql_params} = $value if $attrib eq 'f_params' && !exists $sth->{sql_params};
+        $sth->{f_params} = $value if $attrib eq 'sql_params' && !exists $sth->{f_params};
+        return 1;
+    };
+    $SqlEngineStorePatched = 1;
+}
+
+sub _patch_anydata_table_destroy {
+    return if $AnyDataDestroyPatched;
+    no strict 'refs';
+    return unless defined &{'DBD::AnyData::Statement::open_table'};
+    no warnings 'redefine';
+    my $orig_open_table = \&{'DBD::AnyData::Statement::open_table'};
+    *{'DBD::AnyData::Statement::open_table'} = sub {
+        my $table = $orig_open_table->(@_);
+        my $data = $_[1];
+        if (ref($data) && ref($table)) {
+            push @{$data->{_dbi_anydata_live_refs}}, $table;
+            push @{$data->{_dbi_anydata_live_refs}}, $table->{ad}
+                if ref($table->{ad});
+            push @{$data->{_dbi_anydata_live_refs}}, $table->{ad}{storage}{fh}
+                if ref($table->{ad}) && ref($table->{ad}{storage}{fh});
+        }
+        return $table;
+    };
+    if (defined &{'DBD::AnyData::Table::DESTROY'}) {
+        *{'DBD::AnyData::Table::DESTROY'} = sub {
+            return 1;
+        };
+    }
+    $AnyDataDestroyPatched = 1;
+}
+
+sub _patch_sqlstatement_term_owner {
+    return if $SqlStatementTermPatched;
+    no strict 'refs';
+    return unless defined &{'SQL::Statement::Term::new'};
+    no warnings 'redefine';
+    my $orig_new = \&{'SQL::Statement::Term::new'};
+    *{'SQL::Statement::Term::new'} = sub {
+        my $self = $orig_new->(@_);
+        $self->{OWNER} = $_[1] if ref($self) && ref($_[1]);
+        return $self;
+    };
+    if (defined &{'SQL::Statement::Term::DESTROY'}) {
+        *{'SQL::Statement::Term::DESTROY'} = sub {
+            return 1;
+        };
+    }
+    $SqlStatementTermPatched = 1;
+}
+
+sub installed_drivers {
+    return wantarray ? %InstalledDrivers : { %InstalledDrivers };
+}
+
+sub _init_handle_attrs {
+    my ($h, $attrs) = @_;
+    $attrs ||= {};
+    %$h = (%$h, %$attrs);
+    $h->{Active} = 1 unless exists $h->{Active};
+    $h->{Kids} = 0 unless exists $h->{Kids};
+    $h->{ActiveKids} = 0 unless exists $h->{ActiveKids};
+    $h->{CachedKids} ||= {};
+    $h->{AutoCommit} = 1 unless exists $h->{AutoCommit};
+    $h->{PrintError} = 0 unless exists $h->{PrintError};
+    $h->{RaiseError} = 0 unless exists $h->{RaiseError};
+    return $h;
+}
+
+sub _new_drh {
+    my ($imp_class, $attr) = @_;
+    if (defined($imp_class) && $imp_class eq __PACKAGE__) {
+        ($imp_class, $attr) = @_[1, 2];
+    }
+    $attr ||= {};
+    my $drh = {};
+    _init_handle_attrs($drh, $attr);
+    $drh->{Type} = 'dr';
+    $drh->{ImplementorClass} = $imp_class;
+    $drh = bless $drh, $imp_class;
+    return wantarray ? ($drh, $drh) : $drh;
+}
+
+sub _new_dbh {
+    my ($drh, $attr) = @_;
+    $attr ||= {};
+    my $dr_class = ref($drh) || $drh->{ImplementorClass} || '';
+    my $db_class = $dr_class;
+    $db_class =~ s/::dr$/::db/;
+    my $dbh = {};
+    _init_handle_attrs($dbh, $attr);
+    $dbh->{Type} = 'db';
+    $dbh->{Driver} = $drh;
+    $dbh->{ImplementorClass} = $db_class;
+    $dbh = bless $dbh, $db_class;
+    return wantarray ? ($dbh, $dbh) : $dbh;
+}
+
+sub _new_sth {
+    my ($dbh, $attr) = @_;
+    $attr ||= {};
+    my $db_class = $dbh->{ImplementorClass} || ref($dbh) || '';
+    my $st_class = $db_class;
+    $st_class =~ s/::db$/::st/;
+
+    my $sth = {};
+    _init_handle_attrs($sth, $attr);
+    $sth->{Type} = 'st';
+    $sth->{Active} = 0;
+    $sth->{Database} = $dbh;
+    Scalar::Util::weaken($sth->{Database}) if ref($sth->{Database});
+    $sth->{ImplementorClass} = $st_class;
+    $dbh->{Kids} = ($dbh->{Kids} || 0) + 1;
+
+    if (my $root = $dbh->{RootClass}) {
+        my $root_st = "${root}::st";
+        eval "require $root" unless $root->isa('DBI');
+        $sth = bless $sth, $root_st;
+    } else {
+        $sth = bless $sth, $st_class;
+    }
+    return wantarray ? ($sth, $sth) : $sth;
+}
+
+sub _dispatch_implementor_method {
+    my ($handle, $method, @args) = @_;
+    my $impl = ref($handle) ? $handle->{ImplementorClass} : undef;
+    die "No DBI implementor class for $method\n" unless $impl;
+    my $code = $impl->can($method);
+    die "Can't locate object method \"$method\" via package \"$impl\"\n"
+        unless $code;
+    return $code->($handle, @args);
+}
+
+sub _is_jdbc_handle {
+    my ($handle) = @_;
+    return 0 unless ref($handle);
+    return 1 if exists $handle->{connection} || exists $handle->{statement};
+    my $impl = $handle->{ImplementorClass} || ref($handle);
+    return $impl =~ /^DBD::(?:JDBC|SQLite)::/ || ref($handle) =~ /^DBI::(?:db|st)$/;
+}
+
+sub _apply_root_class {
+    my ($dbh, $attr) = @_;
+    return $dbh unless $dbh && ref($dbh) && $attr && $attr->{RootClass};
+    my $root = $attr->{RootClass};
+    eval "require $root" unless $root->isa('DBI');
+    $dbh = bless $dbh, "${root}::db";
+    $dbh->{RootClass} = $root;
+    return $dbh;
+}
+
+sub _jdbc_connect {
+    my ($drh, $jdbc_url, $user, $pass, $attr) = @_;
+    my $dbh = $JDBC_CONNECT->('DBI', $jdbc_url, $user, $pass, $attr || {});
+    if ($dbh) {
+        $dbh = bless $dbh, 'DBD::JDBC::db' if ref($dbh) eq 'DBI::db';
+        $dbh->{Driver} = $drh if $drh;
+        $dbh->{ImplementorClass} = ref($dbh);
+        $dbh->{Kids} = 0 unless exists $dbh->{Kids};
+        $dbh->{ActiveKids} = 0 unless exists $dbh->{ActiveKids};
+        $dbh->{Statement} = '' unless exists $dbh->{Statement};
+    }
+    return $dbh;
+}
+
+sub _populate_statement_metadata {
+    my ($sth) = @_;
+    return unless ref($sth) && (($sth->{Type} || '') eq 'st');
+
+    my $names = $sth->{NAME};
+    if (!$names || ref($names) ne 'ARRAY' || !@$names) {
+        my $stmt = $sth->{sql_stmt} || $sth->{f_stmt};
+        $names = $stmt->{NAME} if ref($stmt) && ref($stmt->{NAME}) eq 'ARRAY' && @{$stmt->{NAME}};
+        if ((!$names || ref($names) ne 'ARRAY' || !@$names) && ref($stmt) && $stmt->can('column_names')) {
+            my @cols = eval { $stmt->column_names() };
+            $names = \@cols if @cols;
+        }
+        if ((!$names || ref($names) ne 'ARRAY' || !@$names) && $sth->{ImplementorClass}) {
+            if (my $fetch = $sth->{ImplementorClass}->can('FETCH')) {
+                my $got = eval { $fetch->($sth, 'NAME') };
+                $names = $got if ref($got) eq 'ARRAY' && @$got;
+            }
+        }
+    }
+
+    if ($names && ref($names) eq 'ARRAY' && @$names) {
+        $sth->{NAME} = $names;
+        $sth->{NAME_lc} = [ map { lc $_ } @$names ];
+        $sth->{NAME_uc} = [ map { uc $_ } @$names ];
+        $sth->{NUM_OF_FIELDS} = scalar @$names unless $sth->{NUM_OF_FIELDS};
+    }
+    return 1;
+}
+
+sub install_method {
+    return 1;
+}
+
+sub _install_method {
+    return 1;
+}
+
+sub func {
+    my $handle = shift;
+    my $method = pop;
+    my $code = $handle->can($method);
+    if (!$code && ref($handle) && $handle->{ImplementorClass}) {
+        $code = $handle->{ImplementorClass}->can($method);
+    }
+    $code or return $handle->set_err($stderr, "Can't locate DBI private method $method");
+    return $code->($handle, @_);
+}
+
+sub set_err {
+    my ($handle, $code, $message, $sqlstate) = @_;
+    $message = '' unless defined $message;
+    $sqlstate = 'S1000' unless defined $sqlstate;
+    if (ref($handle)) {
+        $handle->{err} = $code;
+        $handle->{errstr} = $message;
+        $handle->{state} = $sqlstate;
+    }
+    $DBI::err = $code;
+    $DBI::errstr = $message;
+    $DBI::state = $sqlstate;
+    if (ref($handle) && $handle->{RaiseError}) {
+        die "$message\n";
+    }
+    warn "$message\n" if ref($handle) && $handle->{PrintError};
+    return undef;
+}
+
 # NOTE: The rest of the code is in file:
 #       src/main/java/org/perlonjava/runtime/perlmodule/DBI.java
 
@@ -293,7 +638,6 @@ use constant {
 # Handles attribute syntax: dbi:Driver(RaiseError=1):rest
 {
     no warnings 'redefine';
-    my $orig_connect = \&connect;
     *connect = sub {
         my ($class, $dsn, $user, $pass, $attr) = @_;
 
@@ -304,8 +648,13 @@ use constant {
         $user = '' unless defined $user;
         $pass = '' unless defined $pass;
         $attr = {} unless ref $attr eq 'HASH';
-        my $driver_name;
-        my $dsn_rest;
+
+        # DBI subclasses such as DBIx::ContextualFetch call ->connect directly.
+        # Real DBI treats that as a RootClass request.
+        if (defined($class) && $class ne 'DBI' && !$attr->{RootClass}) {
+            $attr->{RootClass} = $class;
+        }
+
         if ($dsn =~ /^dbi:(\w*)(?:\(([^)]*)\))?:(.*)$/i) {
             my ($driver, $dsn_attrs, $rest) = ($1, $2, $3);
 
@@ -317,53 +666,27 @@ use constant {
                 die "I can't work out what driver to use (no driver in DSN and DBI_DRIVER env var not set)\n";
             }
 
-            $driver_name = $driver;
-            $dsn_rest = $rest;
-
-            # Parse DSN-embedded attributes like (RaiseError=1,PrintError=0)
+            # Parse DSN-embedded attributes like (RaiseError=1,PrintError=>0)
             if (defined $dsn_attrs && length $dsn_attrs) {
                 for my $pair (split /,/, $dsn_attrs) {
-                    if ($pair =~ /^\s*(\w+)\s*=\s*(.*?)\s*$/) {
+                    if ($pair =~ /^\s*(\w+)\s*=>?\s*(.*?)\s*$/) {
                         $attr->{$1} = $2 unless exists $attr->{$1};
                     }
                 }
             }
 
-            my $dbd_class = "DBD::$driver";
-            eval "require $dbd_class";
-            if ($dbd_class->can('_dsn_to_jdbc')) {
-                $dsn = $dbd_class->_dsn_to_jdbc($rest);
+            my $drh = $class->install_driver($driver);
+            my $dbh = $drh->connect($rest, $user, $pass, $attr);
+            if ($dbh) {
+                $dbh->{Name} = $rest if !exists $dbh->{Name};
+                $dbh->{Driver} = $drh if !exists $dbh->{Driver};
+                _apply_root_class($dbh, $attr);
             }
+            return $dbh;
         }
-        my $dbh = $orig_connect->($class, $dsn, $user, $pass, $attr);
-        if ($dbh && $driver_name) {
-            # Set Driver attribute so DBIx::Class can detect the driver
-            # (e.g. $dbh->{Driver}{Name} returns "SQLite")
-            $dbh->{Driver} = bless { Name => $driver_name }, 'DBI::dr';
-            # Initialize DBI handle tracking attributes
-            $dbh->{Kids} = 0;
-            $dbh->{ActiveKids} = 0;
-            $dbh->{Statement} = '';
-            # Set Name to DSN rest (after driver:), not the JDBC URL
-            $dbh->{Name} = $dsn_rest if defined $dsn_rest;
-        }
-        # RootClass support: re-bless the database handle into the subclass
-        # specified by the RootClass attribute. This is used by CDBI compat
-        # (via Ima::DBI) which sets RootClass => 'DBIx::ContextualFetch'.
-        # The RootClass module provides ::db and ::st subclasses that add
-        # methods like select_row, select_hash, etc. to statement handles.
-        # Without this, handles are always DBI::db/DBI::st and those methods
-        # are unavailable, breaking t/cdbi/ tests with:
-        #   "Can't locate object method select_row via package DBI::st"
-        if ($dbh && $attr->{RootClass}) {
-            my $root = $attr->{RootClass};
-            eval "require $root" unless $root->isa('DBI');
-            my $db_class = "${root}::db";
-            if ($db_class->isa('DBI::db') || eval { require $root; $db_class->isa('DBI::db') }) {
-                bless $dbh, $db_class;
-            }
-            $dbh->{RootClass} = $root;
-        }
+
+        my $dbh = $JDBC_CONNECT->($class, $dsn, $user, $pass, $attr);
+        _apply_root_class($dbh, $attr);
         return $dbh;
     };
 }
@@ -397,6 +720,13 @@ sub FETCH {
 sub STORE {
     my ($self, $key, $value) = @_;
     $self->{$key} = $value;
+    if (($self->{Type} || '') eq 'st') {
+        $self->{sql_stmt} = $value if $key eq 'f_stmt' && !exists $self->{sql_stmt};
+        $self->{f_stmt} = $value if $key eq 'sql_stmt' && !exists $self->{f_stmt};
+        $self->{sql_params} = $value if $key eq 'f_params' && !exists $self->{sql_params};
+        $self->{f_params} = $value if $key eq 'sql_params' && !exists $self->{f_params};
+    }
+    return 1;
 }
 
 sub do {
@@ -410,7 +740,18 @@ sub do {
 
 sub finish {
     my ($sth) = @_;
+    if (_is_jdbc_handle($sth) && $JDBC_FINISH) {
+        return $JDBC_FINISH->(@_);
+    }
+    if (!$sth->{_dbi_finish_dispatching} && $sth->{ImplementorClass}) {
+        local $sth->{_dbi_finish_dispatching} = 1;
+        my $impl = $sth->{ImplementorClass};
+        if (my $code = $impl->can('finish')) {
+            return $code->(@_) unless $code == \&finish;
+        }
+    }
     $sth->{Active} = 0;
+    return 1;
 }
 
 # Batch execution: calls $fetch_tuple->() repeatedly to get parameter arrays,
@@ -524,6 +865,55 @@ sub selectrow_hashref {
     my $sth = $dbh->prepare($statement, $attr) or return undef;
     $sth->execute(@params) or return undef;
     return $sth->fetchrow_hashref();
+}
+
+sub fetchrow_arrayref {
+    my ($sth, @args) = @_;
+    return $JDBC_FETCHROW_ARRAYREF->($sth, @args) if _is_jdbc_handle($sth);
+
+    my $impl = $sth->{ImplementorClass} || ref($sth);
+    if (my $code = $impl->can('fetch')) {
+        return $code->($sth, @args);
+    }
+    if (my $code = $impl->can('fetchrow_arrayref')) {
+        return $code->($sth, @args);
+    }
+    die "Can't locate object method \"fetch\" via package \"$impl\"\n";
+}
+
+sub fetchrow_hashref {
+    my ($sth, $name) = @_;
+    return $JDBC_FETCHROW_HASHREF->($sth, $name) if _is_jdbc_handle($sth);
+
+    my $row = $sth->fetchrow_arrayref;
+    return undef unless $row;
+    my $fields = $sth->{$name || $sth->{FetchHashKeyName} || 'NAME'} || $sth->{NAME};
+    my %hash;
+    for my $i (0 .. $#$row) {
+        my $key = $fields && defined $fields->[$i] ? $fields->[$i] : $i + 1;
+        $hash{$key} = $row->[$i];
+    }
+    return \%hash;
+}
+
+sub _set_fbav {
+    my ($sth, $row) = @_;
+    $sth->{_fbav} = $row;
+    if (my $bound = $sth->{bound_columns}) {
+        for my $idx (keys %$bound) {
+            my $ref = $bound->{$idx} or next;
+            $$ref = $row->[$idx - 1] if ref($ref) eq 'SCALAR';
+        }
+    }
+    return $row;
+}
+
+sub bind_col {
+    my ($sth, $col, $ref) = @_;
+    return undef unless $col && ref($ref) eq 'SCALAR';
+    $sth->{bound_columns} ||= {};
+    $sth->{bound_columns}{$col} = $ref;
+    return 1;
 }
 
 sub selectrow_array {
@@ -851,6 +1241,60 @@ sub connect_cached {
 
     $CACHED_CONNECTIONS{$cache_key} = $dbh;
     return $dbh;
+}
+
+{
+    no warnings 'redefine';
+    my $fetchrow_arrayref = sub {
+        my ($sth, @args) = @_;
+        return $JDBC_FETCHROW_ARRAYREF->($sth, @args) if _is_jdbc_handle($sth);
+
+        my $impl = $sth->{ImplementorClass} || ref($sth);
+        if (my $code = $impl->can('fetch')) {
+            return $code->($sth, @args);
+        }
+        if (my $code = $impl->can('fetchrow_arrayref')) {
+            return $code->($sth, @args);
+        }
+        die "Can't locate object method \"fetch\" via package \"$impl\"\n";
+    };
+
+    my $fetchrow_hashref = sub {
+        my ($sth, $name) = @_;
+        return $JDBC_FETCHROW_HASHREF->($sth, $name) if _is_jdbc_handle($sth);
+
+        my $row = $sth->fetchrow_arrayref;
+        return undef unless $row;
+        my $fields = $sth->{$name || $sth->{FetchHashKeyName} || 'NAME'} || $sth->{NAME};
+        my %hash;
+        for my $i (0 .. $#$row) {
+            my $key = $fields && defined $fields->[$i] ? $fields->[$i] : $i + 1;
+            $hash{$key} = $row->[$i];
+        }
+        return \%hash;
+    };
+
+    my $fetchrow_array = sub {
+        my $arr = fetchrow_arrayref(@_);
+        return $arr ? @$arr : ();
+    };
+
+    my $fetch = sub {
+        return fetchrow_arrayref(@_);
+    };
+
+    *DBI::fetchrow_arrayref = $fetchrow_arrayref;
+    *DBI::fetchrow_hashref  = $fetchrow_hashref;
+    *DBI::fetchrow_array    = $fetchrow_array;
+    *DBI::fetch             = $fetch;
+    *DBI::st::fetchrow_arrayref = \&DBI::fetchrow_arrayref;
+    *DBI::st::fetchrow_array    = \&DBI::fetchrow_array;
+    *DBI::st::fetchrow_hashref  = \&DBI::fetchrow_hashref;
+    *DBI::st::fetch             = \&DBI::fetch;
+    *DBI::st::fetchall_arrayref = \&DBI::fetchall_arrayref;
+    *DBI::st::fetchall_hashref  = \&DBI::fetchall_hashref;
+    *DBI::st::bind_col          = \&DBI::bind_col;
+    *DBI::st::bind_columns      = \&DBI::bind_columns;
 }
 
 1;

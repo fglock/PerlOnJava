@@ -34,7 +34,7 @@ our @ISA = ('DBD::JDBC');
             # The Java layer blesses the dbh into DBD::JDBC::db; re-bless
             # into DBD::SQLite::db so ref($dbh) eq 'DBD::SQLite::db' and
             # any SQLite-specific method dispatch resolves on MRO.
-            bless $dbh, 'DBD::SQLite::db';
+            $dbh = bless $dbh, 'DBD::SQLite::db';
             # Back-reference from dbh to its drh. Java's connect() doesn't
             # set this; without it, DBIx::Class::Storage::DBI::_determine_driver
             # can't read $dbh->{Driver}{Name} and falls back to the GenericSubQ
