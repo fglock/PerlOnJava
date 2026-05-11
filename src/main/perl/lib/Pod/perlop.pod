@@ -1654,7 +1654,7 @@ X<\o{}>
     \r                  return            (CR)
     \f                  form feed         (FF)
     \b                  backspace         (BS)
-    \a                  alert (bell)      (BEL)
+    \a                  alarm (bell)      (BEL)
     \e                  escape            (ESC)
     \x{263A}     [1,8]  hex char          (example shown: SMILEY)
     \x{ 263A }          Same, but shows optional blanks inside and
@@ -3077,7 +3077,7 @@ delimiter) will be preserved:
      This text is indented with two spaces
 		This line is indented with two tabs, though those may
                 have been converted to spaces by various filters by
-                the time you read this.
+                the time you read this. 
    EOF
 
 =back

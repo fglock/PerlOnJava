@@ -691,8 +691,7 @@ public class Disassemble {
                         rs2 = interpretedCode.bytecode[pc++];  // replacement
                         int rs3 = interpretedCode.bytecode[pc++];  // flags
                         int callerArgsReg = interpretedCode.bytecode[pc++];  // caller @_
-                        int implicitUQr = interpretedCode.bytecode[pc++];
-                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(") implicitU=").append(implicitUQr).append("\n");
+                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(")\n");
                         break;
                     case Opcodes.SUBSTR_VAR:
                         rd = interpretedCode.bytecode[pc++];
@@ -1176,19 +1175,16 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int patternReg = interpretedCode.bytecode[pc++];
                         int flagsReg = interpretedCode.bytecode[pc++];
-                        int implicitU = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
-                                .append("}r").append(flagsReg).append(" implicitU=").append(implicitU).append("\n");
+                                .append("}r").append(flagsReg).append("\n");
                         break;
                     case Opcodes.QUOTE_REGEX_O:
                         rd = interpretedCode.bytecode[pc++];
                         patternReg = interpretedCode.bytecode[pc++];
                         flagsReg = interpretedCode.bytecode[pc++];
                         int callsiteId = interpretedCode.bytecode[pc++];
-                        implicitU = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
-                                .append("}r").append(flagsReg).append(" callsite=").append(callsiteId)
-                                .append(" implicitU=").append(implicitU).append("\n");
+                                .append("}r").append(flagsReg).append(" callsite=").append(callsiteId).append("\n");
                         break;
                     case Opcodes.ITERATOR_CREATE:
                         rd = interpretedCode.bytecode[pc++];

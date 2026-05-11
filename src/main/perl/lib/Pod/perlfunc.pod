@@ -296,7 +296,7 @@ current scope.
 =for Pod::Functions =Namespace
 
 L<C<caller>|/caller EXPR>,
-L<C<class>|/class NAMESPACE>,
+L<C<class>|/class NAMESPACE>, 
 L<C<field>|/field VARNAME>,
 L<C<import>|/import LIST>,
 L<C<local>|/local EXPR>,
@@ -6691,8 +6691,6 @@ including:
 =back
 
 =over
-
-=item * L<Crypt::SysRandom>
 
 =item * L<Crypt::URandom>
 

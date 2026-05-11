@@ -935,7 +935,7 @@ public class Opcodes {
 
     /**
      * Quote regex operator: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg)
-     * Format: QUOTE_REGEX rd pattern_reg flags_reg implicit_unicode_strings_u (0 or 1)
+     * Format: QUOTE_REGEX rd pattern_reg flags_reg
      */
     public static final short QUOTE_REGEX = 159;
 
@@ -1385,7 +1385,7 @@ public class Opcodes {
 
     /**
      * Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
      */
     public static final short GET_REPLACEMENT_REGEX = 236;
 
@@ -1834,7 +1834,7 @@ public class Opcodes {
 
     /**
      * Quote regex with /o modifier support: rd = RuntimeRegex.getQuotedRegex(pattern_reg, flags_reg, callsite_id)
-     * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id implicit_unicode_strings_u
+     * Format: QUOTE_REGEX_O rd pattern_reg flags_reg callsite_id
      */
     public static final short QUOTE_REGEX_O = 374;
 

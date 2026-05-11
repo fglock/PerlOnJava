@@ -205,11 +205,6 @@ public class CompileOperator {
         return locationReg;
     }
 
-    /** 1 when {@code use feature 'unicode_strings'} adds implicit {@code /u} to regex literals. */
-    private static int unicodeStringsImplicitUFlag(BytecodeCompiler bc) {
-        return (bc.symbolTable != null && bc.symbolTable.isFeatureCategoryEnabled("unicode_strings")) ? 1 : 0;
-    }
-
     private static int loadDefaultUnderscore(BytecodeCompiler bc) {
         if (bc.hasVariable("$_")) {
             return bc.getVariableRegister("$_");
@@ -244,13 +239,11 @@ public class CompileOperator {
             bc.emitReg(patternReg);
             bc.emitReg(flagsReg);
             bc.emitReg(callsiteId);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
             bc.emitReg(regexReg);
             bc.emitReg(patternReg);
             bc.emitReg(flagsReg);
-            bc.emit(unicodeStringsImplicitUFlag(bc));
         }
         int stringReg;
         if (args.elements.size() > 2) {
@@ -294,7 +287,6 @@ public class CompileOperator {
         bc.emitReg(replacementReg);
         bc.emitReg(flagsReg);
         bc.emitReg(1);  // @_ register - pass caller's args for replacement code
-        bc.emit(unicodeStringsImplicitUFlag(bc));
         int stringReg;
         if (args.elements.size() > 3) {
             bc.compileNode(args.elements.get(3), -1, RuntimeContextType.SCALAR);
@@ -933,13 +925,11 @@ public class CompileOperator {
                     bytecodeCompiler.emitReg(patternReg);
                     bytecodeCompiler.emitReg(flagsReg);
                     bytecodeCompiler.emitReg(callsiteId);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
                     bytecodeCompiler.emitReg(patternReg);
                     bytecodeCompiler.emitReg(flagsReg);
-                    bytecodeCompiler.emit(unicodeStringsImplicitUFlag(bytecodeCompiler));
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }

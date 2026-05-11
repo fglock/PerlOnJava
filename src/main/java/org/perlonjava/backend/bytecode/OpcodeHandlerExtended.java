@@ -56,7 +56,7 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute get replacement regex operation.
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg
      *
      * @param bytecode  The bytecode array
      * @param pc        Current program counter
@@ -69,14 +69,10 @@ public class OpcodeHandlerExtended {
         int replacementReg = bytecode[pc++];
         int flagsReg = bytecode[pc++];
         int argsReg = bytecode[pc++];
-        int implicitU = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
         RuntimeScalar flags = (RuntimeScalar) registers[flagsReg];
-        if (implicitU != 0) {
-            flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
-        }
         RuntimeArray callerArgs = (registers[argsReg] instanceof RuntimeArray) ? (RuntimeArray) registers[argsReg] : new RuntimeArray();
 
         registers[rd] = RuntimeRegex.getReplacementRegex(pattern, replacement, flags, callerArgs);

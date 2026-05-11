@@ -385,23 +385,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @param modifiers     Modifiers for the regex pattern (e.g., "i", "g").
      * @return A RuntimeScalar.
      */
-    /**
-     * Under {@code use feature 'unicode_strings'}, Perl applies Unicode semantics to regex
-     * literals as if {@code /u} were present, so stringified {@code qr//} shows {@code (?^u:...)}.
-     * Do not add implicit {@code u} when {@code /a} (ASCII restrict), explicit {@code /u}, or
-     * {@code /d} (deprecated default rules) is already in the modifier string.
-     */
-    public static RuntimeScalar applyUnicodeStringsFeatureToModifiers(RuntimeScalar modifiers) {
-        String m = modifiers == null ? "" : modifiers.toString();
-        if (m.indexOf('a') >= 0 || m.indexOf('u') >= 0 || m.indexOf('d') >= 0) {
-            return modifiers;
-        }
-        if (m.isEmpty()) {
-            return new RuntimeScalar("u");
-        }
-        return new RuntimeScalar(m + "u");
-    }
-
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
         String modifierStr = modifiers.toString();
 
@@ -620,22 +603,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Fast path: no alarm active, use direct matching
         RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx);
         return result;
-    }
-
-    /**
-     * Perl GH #16894 / Java JDK-7145888: under a quantified non-capturing group, alternating captures
-     * inside a positive lookahead can leave a stale Java {@code Matcher} value for the left branch
-     * even when Perl clears it. Mirror Perl for the re/pat.t regression case.
-     */
-    private static void fixPerl16894AlternateCaptureInLookahead(RuntimeRegex regex, String inputStr) {
-        if (lastCaptureGroups == null || regex == null || regex.patternString == null) {
-            return;
-        }
-        if ("(?:[^b]*(?=(b)|(a))ab)*".equals(regex.patternString)
-                && "abab".equals(inputStr)
-                && lastCaptureGroups.length >= 2) {
-            lastCaptureGroups[0] = null;
-        }
     }
 
     /**
@@ -989,7 +956,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (found) {
-            fixPerl16894AlternateCaptureInLookahead(regex, inputStr);
             regex.matched = true; // Counter for m?PAT?
             lastMatchUsedPFlag = regex.hasPreservesMatch;
             lastSuccessfulPattern = regex;

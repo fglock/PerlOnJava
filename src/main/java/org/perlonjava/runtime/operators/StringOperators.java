@@ -606,9 +606,11 @@ public class StringOperators {
         if (Character.isValidCodePoint(codePoint)
                 && codePoint <= 0x10FFFF
                 && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
-            // Do not use BYTE_STRING here: RuntimeRegex picks the Unicode pattern only for
-            // STRING; BYTE_STRING kept /\p{...}/u on the ASCII variant (uni/variables.t).
-            return new RuntimeScalar(new String(Character.toChars(codePoint)));
+            RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
+            if (codePoint <= 0xFF) {
+                res.type = BYTE_STRING;
+            }
+            return res;
         }
 
         // Surrogate scalars (U+D800..U+DFFF) and beyond-Unicode UVs: internal FFFD<hex> marker
