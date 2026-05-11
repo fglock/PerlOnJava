@@ -304,12 +304,9 @@ public class ParsePrimary {
 
             case "::":
                 // Leading :: can mean either:
-                // 1. Function call: ::foo() -> main::foo() (with explicit parens only)
-                // 2. Bareword string: ::foo -> '::foo' (default)
-                //
-                // The original Perl behavior (calling main::foo if the sub exists) was causing
-                // issues in expression contexts like &{...} where barewords need to remain as strings.
-                // So we now only treat ::identifier as a function call if it has explicit parens.
+                // 1. Function call: ::foo() -> main::foo()
+                // 2. Function call: ::foo if main::foo exists at compile time
+                // 3. Bareword string: ::foo when no such sub exists
                 LexerToken nextToken2 = peek(parser);
                 if (nextToken2.type == LexerTokenType.IDENTIFIER) {
                     String identifierName = nextToken2.text;

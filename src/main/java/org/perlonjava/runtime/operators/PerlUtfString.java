@@ -5,11 +5,9 @@ import java.util.Locale;
 /**
  * Perl-style logical characters on top of Java {@link String} (UTF-16).
  *
- * <p>Beyond-Unicode UVs ({@code > U+10FFFF}) are stored as {@code U+FFFD + '<' + HEX + '>'} (one
- * logical Perl character). Surrogate scalars ({@code U+D800..U+DFFF}) from {@code chr()} and
- * {@code \\x{}} escapes are stored as a single UTF-16 code unit so identifier rules match stock
- * Perl ({@code uni/variables.t}). Valid supplementary scalars (e.g. {@code \\x{10000}}) use normal
- * UTF-16 pairs.
+ * <p>Beyond-Unicode UVs ({@code > U+10FFFF}) and surrogate scalars
+ * ({@code U+D800..U+DFFF}) are stored as {@code U+FFFD + '<' + HEX + '>'} (one logical Perl
+ * character). Valid supplementary scalars (e.g. {@code \\x{10000}}) use normal UTF-16 pairs.
  *
  * <p>Used by escapes, {@code chr()}, {@code ord}, {@code length}, {@code substr}, and
  * {@link UnpackState} for {@code unpack("U*", ...)}.
@@ -22,10 +20,20 @@ public final class PerlUtfString {
 
     private PerlUtfString() {}
 
-    /** Encode a Perl UV not representable as a single Java code point ({@code > 0x10FFFF}). */
-    public static String encodeBeyondUnicode(long unsignedCodePoint) {
+    /** Encode a Perl UV that cannot safely be represented as normal Java UTF-16 text. */
+    public static String encodeInternalCodePoint(long unsignedCodePoint) {
         String hex = Long.toUnsignedString(unsignedCodePoint, 16).toUpperCase(Locale.ROOT);
         return String.valueOf(MARKER_LEAD) + "<" + hex + ">";
+    }
+
+    /** Encode a Perl UV not representable as a Java code point ({@code > 0x10FFFF}). */
+    public static String encodeBeyondUnicode(long unsignedCodePoint) {
+        return encodeInternalCodePoint(unsignedCodePoint);
+    }
+
+    /** Encode a Perl surrogate scalar without letting Java combine adjacent surrogates. */
+    public static String encodeSurrogate(long unsignedCodePoint) {
+        return encodeInternalCodePoint(unsignedCodePoint);
     }
 
     /**

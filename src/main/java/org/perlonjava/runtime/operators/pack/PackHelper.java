@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators.pack;
 
 import org.perlonjava.runtime.operators.Pack;
+import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.operators.Unpack;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -332,14 +333,14 @@ public class PackHelper {
         // Check for Inf/NaN first, before any other processing
         handleInfinity(value, 'U');
 
-        int codePoint1;
+        long codePointLong;
         String strValue1 = value.toString();
         if (!strValue1.isEmpty() && !Character.isDigit(strValue1.charAt(0))) {
             // If it's a character, get its code point
-            codePoint1 = strValue1.codePointAt(0);
+            codePointLong = PerlUtfString.firstCodePointPerlUnsigned(strValue1);
         } else {
             // If it's a number, use it directly
-            codePoint1 = value.getInt();
+            codePointLong = Integer.toUnsignedLong(value.getInt());
         }
 
         // Track if U is used in character mode (not byte mode)
@@ -350,7 +351,8 @@ public class PackHelper {
         // U format behavior depends on mode:
         // - Character mode: write character code (PackBuffer will handle UTF-8 upgrade)
         // - Byte mode: write UTF-8 bytes directly (for binary compatibility)
-        if (Character.isValidCodePoint(codePoint1)) {
+        if (Long.compareUnsigned(codePointLong, 0x10FFFFL) <= 0) {
+            int codePoint1 = (int) codePointLong;
             if (byteMode) {
                 // Byte mode: write UTF-8 bytes
                 String unicodeChar = new String(Character.toChars(codePoint1));
@@ -361,7 +363,7 @@ public class PackHelper {
                 output.writeCharacter(codePoint1);
             }
         } else {
-            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePoint1);
+            throw new PerlCompilerException("pack: invalid Unicode code point: " + codePointLong);
         }
         return hasUnicodeInNormalMode;
     }

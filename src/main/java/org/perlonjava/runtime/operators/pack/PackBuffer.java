@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.operators.pack;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -115,9 +117,12 @@ public class PackBuffer {
             // All values become characters: bytes 0-255 map to U+0000-U+00FF
             // Character codes > 255 are already Unicode characters
             if (value > 0x10FFFF) {
-                value = value & 0x10FFFF; // Ensure valid Unicode range
+                sb.append(PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(value)));
+            } else if (value >= 0xD800 && value <= 0xDFFF) {
+                sb.append(PerlUtfString.encodeSurrogate(Integer.toUnsignedLong(value)));
+            } else {
+                sb.appendCodePoint(value);
             }
-            sb.appendCodePoint(value);
         }
         return sb.toString();
     }
