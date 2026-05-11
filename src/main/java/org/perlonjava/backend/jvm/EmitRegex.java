@@ -20,6 +20,22 @@ public class EmitRegex {
     // Callsite ID counter for /o modifier support (unique across all JVM compilations)
     private static int nextCallsiteId = 100000;  // Start at 100000 to avoid collision with interpreter IDs
 
+    private static boolean unicodeStringsEnabled(EmitterVisitor emitterVisitor) {
+        return emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings");
+    }
+
+    /** Stack: ... flags → ... mergedFlags when {@code use feature 'unicode_strings'} is active. */
+    private static void maybeApplyUnicodeStringsRegexModifiers(EmitterVisitor emitterVisitor) {
+        if (unicodeStringsEnabled(emitterVisitor)) {
+            emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/regex/RuntimeRegex",
+                    "applyUnicodeStringsFeatureToModifiers",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+    }
+
     /**
      * Handles the binding regex operation where a variable is bound to a regex operation.
      * This method processes the binary operator node representing the binding operation.
@@ -200,6 +216,7 @@ public class EmitRegex {
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
         operand.elements.get(2).accept(scalarVisitor);  // Flags
+        maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
 
         // Push the caller's @_ so $_[0] etc. work in s/// replacement
         // @_ is at local variable slot 1 in subroutines
@@ -244,6 +261,7 @@ public class EmitRegex {
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Flags
+        maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
 
         // Create the quoted regex
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
@@ -277,6 +295,7 @@ public class EmitRegex {
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         flagsNode.accept(scalarVisitor);  // Flags
+        maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
 
         // Create the regex matcher (use 3-argument version for /o or m?PAT?)
         if (needsCallsiteCache) {

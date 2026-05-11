@@ -2108,7 +2108,7 @@ public class BytecodeInterpreter {
 
                             case Opcodes.GET_REPLACEMENT_REGEX -> {
                                 // Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
-                                // Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg
+                                // Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_u
                                 pc = OpcodeHandlerExtended.executeGetReplacementRegex(bytecode, pc, registers);
                             }
 
@@ -2856,7 +2856,12 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int patternReg = bytecode[pc++];
                 int flagsReg = bytecode[pc++];
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), registers[flagsReg].scalar());
+                int implicitU = bytecode[pc++];
+                RuntimeScalar flags = registers[flagsReg].scalar();
+                if (implicitU != 0) {
+                    flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
+                }
+                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
                 return pc;
             }
             case Opcodes.QUOTE_REGEX_O -> {
@@ -2864,7 +2869,12 @@ public class BytecodeInterpreter {
                 int patternReg = bytecode[pc++];
                 int flagsReg = bytecode[pc++];
                 int callsiteId = bytecode[pc++];
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), registers[flagsReg].scalar(), callsiteId);
+                int implicitU = bytecode[pc++];
+                RuntimeScalar flags = registers[flagsReg].scalar();
+                if (implicitU != 0) {
+                    flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
+                }
+                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
                 return pc;
             }
             default -> throw new RuntimeException("Unknown type opcode: " + opcode);
