@@ -123,10 +123,7 @@ public class ReachabilityWalker {
                 // walker roots falsely pins their referents and breaks
                 // DBIC's leak tracer.
                 if (MortalList.isDeferredCapture(sc)) continue;
-                if (!MyVarCleanupStack.isLive(sc)) {
-                    if (sc.scopeExited) continue;
-                    if (!sc.refCountOwned) continue;
-                }
+                if (!MyVarCleanupStack.isLive(sc)) continue;
                 visitScalar(sc, todo);
             }
 
@@ -152,6 +149,9 @@ public class ReachabilityWalker {
             }
             for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
                 addReachable(args, todo);
+            }
+            for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
+                addReachable(tempRoot, todo);
             }
         }
 
@@ -941,13 +941,6 @@ public class ReachabilityWalker {
         }
         int cleared = 0;
         for (RuntimeBase referent : toClear) {
-            if (quiet && referent.blessId != 0) {
-                String className = NameNormalizer.getBlessStr(referent.blessId);
-                if (className != null
-                        && DestroyDispatch.classHasDestroy(referent.blessId, className)) {
-                    continue;
-                }
-            }
             // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
             // unreachable objects and sets refCount=MIN_VALUE — matching
             // non-quiet jperl_gc behaviour. Previously quiet mode was

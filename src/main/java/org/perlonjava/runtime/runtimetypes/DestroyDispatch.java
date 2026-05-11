@@ -67,6 +67,10 @@ public class DestroyDispatch {
         }
     }
 
+    public static boolean hasRescuedObjects() {
+        return !rescuedObjects.isEmpty();
+    }
+
     /**
      * Check whether the class identified by blessId defines DESTROY (or AUTOLOAD).
      * Result is cached in the destroyClasses BitSet.

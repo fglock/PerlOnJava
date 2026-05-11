@@ -1347,7 +1347,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Entries below the current MortalList mark belong to the caller, and
         // must survive through nested calls such as chained AUTOLOAD dispatch.
         // Cost when MortalList.active is false: one boolean check (trivially predicted).
-        MortalList.flushAboveMark();
+        MortalList.pushTemporaryRoot(this);
+        MortalList.pushTemporaryRoot(value);
+        try {
+            MortalList.flushAboveMark();
+        } finally {
+            MortalList.popTemporaryRoot(value);
+            MortalList.popTemporaryRoot(this);
+        }
 
         return this;
     }

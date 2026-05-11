@@ -44,6 +44,28 @@ public class MortalList {
     // from Perl's view, only held Java-alive by this static list.
     private static final java.util.IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new java.util.IdentityHashMap<>();
 
+    private static final ThreadLocal<ArrayDeque<RuntimeBase>> temporaryRoots =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    public static void pushTemporaryRoot(RuntimeBase root) {
+        if (root != null) {
+            temporaryRoots.get().push(root);
+        }
+    }
+
+    public static void popTemporaryRoot(RuntimeBase root) {
+        if (root != null) {
+            ArrayDeque<RuntimeBase> roots = temporaryRoots.get();
+            if (!roots.isEmpty()) {
+                roots.pop();
+            }
+        }
+    }
+
+    public static java.util.List<RuntimeBase> snapshotTemporaryRoots() {
+        return new java.util.ArrayList<>(temporaryRoots.get());
+    }
+
     /**
      * Phase I: O(1) check whether the given scalar is in
      * {@link #deferredCaptures}. Used by the reachability walker to
@@ -711,6 +733,7 @@ public class MortalList {
         if (pending.isEmpty() || flushing) {
             if (!flushing) {
                 processReadyDeferredCaptures();
+                maybeAutoSweepAfterFlush();
             }
             return;
         }
@@ -727,8 +750,7 @@ public class MortalList {
             flushReachableCache = null;
         }
         processReadyDeferredCaptures();
-        // Phase B2a: guarded auto-sweep.
-        maybeAutoSweep();
+        maybeAutoSweepAfterFlush();
     }
 
     private static void maybeAutoSweep() {
@@ -750,11 +772,7 @@ public class MortalList {
         }
         inAutoSweep = true;
         try {
-            // Quiet mode: only clear weak refs for unreachable objects,
-            // don't fire DESTROY. DESTROY cascades can re-enter DBIC/
-            // Moo code that isn't prepared for mid-statement cleanup.
-            // Explicit Internals::jperl_gc() still fires DESTROY for
-            // callers that want full cleanup.
+            // Quiet mode handles ordinary statement-boundary checks.
             int cleared = ReachabilityWalker.sweepWeakRefs(true);
             if (AUTO_GC_DEBUG) {
                 System.err.println("DBG auto-sweep cleared=" + cleared);
@@ -762,6 +780,10 @@ public class MortalList {
         } finally {
             inAutoSweep = false;
         }
+    }
+
+    private static void maybeAutoSweepAfterFlush() {
+        maybeAutoSweep();
     }
 
     /**
@@ -846,15 +868,22 @@ public class MortalList {
      */
     public static void flushAboveMark() {
         if (!active) return;
+        boolean topLevel = marks.isEmpty();
         if (pending.isEmpty() || flushing) {
             if (!flushing) {
                 processReadyDeferredCaptures();
+                if (topLevel) {
+                    maybeAutoSweep();
+                }
             }
             return;
         }
         int mark = marks.isEmpty() ? 0 : marks.getLast();
         if (pending.size() <= mark) {
             processReadyDeferredCaptures();
+            if (topLevel) {
+                maybeAutoSweep();
+            }
             return;
         }
         flushing = true;
@@ -871,6 +900,9 @@ public class MortalList {
             flushReachableCache = null;
         }
         processReadyDeferredCaptures();
+        if (topLevel) {
+            maybeAutoSweep();
+        }
     }
 
     /**
