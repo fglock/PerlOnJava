@@ -946,6 +946,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.hadCountedReference = true;
             base.recordOwner(scalar, "incrementRefCountForContainerStore");
             base.recordActiveOwner(scalar);
             scalar.refCountOwned = true;
@@ -974,6 +975,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeBase inner = (RuntimeBase) scalarReferent.value;
         inner.traceRefCount(+1, "RuntimeScalar.retainScalarReferenceContents");
         inner.refCount++;
+        inner.hadCountedReference = true;
         this.ownsScalarReferenceContents = true;
     }
 
@@ -1209,6 +1211,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 nb.recordOwner(this, "setLargeRefCounted store");
                 nb.recordActiveOwner(this);
                 nb.refCount++;
+                nb.hadCountedReference = true;
                 newOwned = true;
             }
         }
@@ -1255,6 +1258,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 base.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (rescue increment)");
                 base.refCount++;
             }
+            base.hadCountedReference = true;
             base.recordOwner(this, "rescue from currentDestroyTarget");
             newOwned = true;
         }
@@ -1281,14 +1285,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
-                } else if (oldBase.blessId != 0
-                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
-                        && ReachabilityWalker.isReachableFromLiveScalarRegistry(oldBase)) {
-                    // Mirror MortalList.flush(): overwriting one counted scalar
-                    // can transiently zero the selective count while another live
-                    // lexical still reaches the object. Preserve weak refs until
-                    // the actual owner leaves scope.
-                    oldBase.refCount = 1;
                 } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)

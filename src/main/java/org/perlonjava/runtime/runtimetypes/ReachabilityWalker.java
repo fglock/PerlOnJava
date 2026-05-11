@@ -150,6 +150,9 @@ public class ReachabilityWalker {
                     addReachable(rb, todo);
                 }
             }
+            for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
+                addReachable(args, todo);
+            }
         }
 
         bfs(todo, walkCodeCaptures);
@@ -169,6 +172,7 @@ public class ReachabilityWalker {
             // so iterating them here is redundant work.
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) continue;
                 for (RuntimeScalar v : h.elements.values()) {
                     visitScalar(v, todo);
                 }
@@ -741,6 +745,72 @@ public class ReachabilityWalker {
         }        return false;
     }
 
+    /**
+     * Return true when {@code target} is held by a live reference scalar other
+     * than its own named my-variable slot. This is deliberately narrower than a
+     * full root walk: scope cleanup calls it often, and DBIC can have thousands
+     * of live roots by the time its leak tests initialize.
+     */
+    public static boolean isReachableFromExternalRoot(RuntimeBase target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+            seedTarget(e.getValue(), target, seen, todo);
+            if (seen.contains(target)) return true;
+        }
+        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
+            seedTarget(e.getValue(), target, seen, todo);
+            if (seen.contains(target)) return true;
+        }
+        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+            if (e.getValue() == target) return true;
+            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
+            if (e.getValue() == target) return true;
+            if (seen.add(e.getValue())) todo.addLast(e.getValue());
+        }
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            if (rescued == target) return true;
+            if (seen.add(rescued)) todo.addLast(rescued);
+        }
+
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar == target) continue;
+            if (liveVar instanceof RuntimeScalar sc) {
+                seedTarget(sc, target, seen, todo);
+                if (seen.contains(target)) return true;
+            } else if (liveVar instanceof RuntimeBase rb) {
+                if (seen.add(rb)) todo.addLast(rb);
+            }
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (cur == target) return true;
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) continue;
+                for (RuntimeScalar v : h.elements.values()) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                if (followScalar(sc, target, seen, todo)) return true;
+            }
+        }
+        return false;
+    }
+
     private static void seedTarget(RuntimeScalar s, RuntimeBase target,
                                    Set<RuntimeBase> seen,
                                    java.util.ArrayDeque<RuntimeBase> todo) {
@@ -820,12 +890,12 @@ public class ReachabilityWalker {
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
         ScalarRefRegistry.forceGcAndSnapshot();
-        // Phase H1: drain rescued objects in BOTH quiet and non-quiet modes.
-        // Rescued objects are blessed-with-DESTROY objects that self-saved
-        // during their DESTROY body. Clearing their weak refs from auto-
-        // sweep matches Perl's behavior: once the last user-visible strong
-        // ref goes, weak refs to the self-rescued object clear.
-        DestroyDispatch.clearRescuedWeakRefs();
+        if (!quiet) {
+            // Explicit sweeps drain rescued objects. Quiet auto-sweeps run
+            // during user workflows and must not clear DBIC Schema rescue
+            // links while later chained calls still rely on them.
+            DestroyDispatch.clearRescuedWeakRefs();
+        }
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
@@ -871,6 +941,13 @@ public class ReachabilityWalker {
         }
         int cleared = 0;
         for (RuntimeBase referent : toClear) {
+            if (quiet && referent.blessId != 0) {
+                String className = NameNormalizer.getBlessStr(referent.blessId);
+                if (className != null
+                        && DestroyDispatch.classHasDestroy(referent.blessId, className)) {
+                    continue;
+                }
+            }
             // Phase I: auto-sweep (quiet) now fires DESTROY on blessed
             // unreachable objects and sets refCount=MIN_VALUE — matching
             // non-quiet jperl_gc behaviour. Previously quiet mode was

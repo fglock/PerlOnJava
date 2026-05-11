@@ -192,6 +192,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return stack.isEmpty() ? null : stack.peek();
     }
 
+    public static java.util.List<RuntimeArray> snapshotArgsStack() {
+        return new java.util.ArrayList<>(argsStack.get());
+    }
+
+    public static int argsStackDepth() {
+        return argsStack.get().size();
+    }
+
     /**
      * Get the caller's @_ array (one level up from current).
      * Used by Java-implemented functions (like List::Util::any) that need to pass
@@ -592,7 +600,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && s.value instanceof RuntimeBase rb
                                 && rb.blessId != 0) {
-                            MortalList.deferDecrementIfTracked(s);
+                            MortalList.releaseCapturedDecrement(s);
                         }
                     }
                 }
@@ -2542,11 +2550,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 String pkg = stackTrace.get(frame).getFirst();
-                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));
+                res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
                 String pkg = frameInfo.get(0);
-                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
+                res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
 
@@ -2749,15 +2757,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
             if (info != null) {
                 if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
                 } else {
-                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
                     res.add(new RuntimeScalar(info.filename()));
                     res.add(new RuntimeScalar(info.line()));
                 }
             }
         }
         return res;
+    }
+
+    private static String normalizeCallerPackage(String packageName) {
+        return packageName == null || packageName.isEmpty() ? "main" : packageName;
     }
 
     /**

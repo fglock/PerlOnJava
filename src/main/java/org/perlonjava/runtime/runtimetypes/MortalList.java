@@ -195,6 +195,33 @@ public class MortalList {
     }
 
     /**
+     * Release a scope-exited closure capture. This is normally the same as
+     * {@link #deferDecrementIfTracked}, but DBIC's leak tracer can wrap
+     * Try::Tiny blocks with {@code goto} and weak refs, making a captured
+     * temporary consume the counted owner of an outer lexical that is still
+     * live. In that case, transfer the counted owner to the still-live scalar
+     * by clearing this capture's ownership without decrementing the referent.
+     */
+    public static void releaseCapturedDecrement(RuntimeScalar scalar) {
+        if (!active || scalar == null) return;
+        if (!scalar.refCountOwned) return;
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.blessId != 0
+                && WeakRefRegistry.hasWeakRefsTo(base)
+                && ReachabilityWalker.isReachableFromLiveScalarRegistry(base)) {
+            scalar.refCountOwned = false;
+            if (base.refCountTrace) {
+                base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
+                base.releaseOwner(scalar, "releaseCapturedDecrement transfer");
+            }
+            base.releaseActiveOwner(scalar);
+            return;
+        }
+        deferDecrementIfTracked(scalar);
+    }
+
+    /**
      * Like {@link #deferDecrementIfTracked}, but delegates to
      * {@link RuntimeScalar#scopeExitCleanup} if the scalar is captured
      * by a closure ({@code captureCount > 0}).
@@ -281,6 +308,7 @@ public class MortalList {
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
+        boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
@@ -321,6 +349,11 @@ public class MortalList {
             }
         }
         if (!needsWalk) return;
+        // Refcount drift can miss an escaped hash reference. DBIC's
+        // source_registrations hash is assigned into the live schema while the
+        // original hash later exits; walking it here would destroy ResultSources
+        // still reachable through the schema.
+        if (ReachabilityWalker.isReachableFromExternalRoot(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }
@@ -645,16 +678,6 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
-                    && ReachabilityWalker.isReachableFromLiveScalarRegistry(base)) {
-                // A closure/callback cleanup can transiently consume the counted
-                // owners of a blessed object while an outer lexical still holds it.
-                // DBIC's leak tracer exposes this by weakening schema backrefs and
-                // wrapping Try::Tiny blocks with goto. If a live scalar still reaches
-                // the object, keep the weak refs valid and wait for the real owner
-                // scope to exit.
-                base.refCount = 1;
-            } else if (base.blessId != 0
-                    && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // A weakened probe copy can make the selective count reach
@@ -719,6 +742,7 @@ public class MortalList {
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
+        if (RuntimeCode.argsStackDepth() > 1) return;
         if (!FORCE_SWEEP_EVERY_FLUSH) {
             long now = System.nanoTime();
             if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;

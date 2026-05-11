@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 7;
+use Test::More tests => 8;
 
 {
     package Pr709AnonPkg;
@@ -52,3 +52,20 @@ my $eval_runtime_error = do {
 };
 like $eval_runtime_error, qr/^Can't call method "resultset" on an undefined value/,
     "eval replaces stale \$@ for runtime method-call exceptions";
+
+{
+    package Pr709StorableCaller;
+
+    sub STORABLE_freeze {
+        my @caller = caller(0);
+        die "caller package was empty" unless defined $caller[0] && length $caller[0];
+        return "serialized";
+    }
+}
+
+my $storable_caller_ok = eval {
+    require Storable;
+    Storable::dclone(bless {}, "Pr709StorableCaller");
+    1;
+};
+ok $storable_caller_ok, "Storable hook caller frame has a package";
