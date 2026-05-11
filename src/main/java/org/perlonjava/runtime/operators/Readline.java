@@ -337,6 +337,10 @@ public class Readline {
         }
 
         RuntimeScalar readResult = fh.ioHandle.read(lengthValue);
+        if (!readResult.getDefinedBoolean()) {
+            return new RuntimeScalar();
+        }
+
         boolean isByteData = readResult.type == RuntimeScalarType.BYTE_STRING;
         String readData = readResult.toString();
         int charsRead = readData.length();

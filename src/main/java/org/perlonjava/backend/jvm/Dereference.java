@@ -1142,7 +1142,8 @@ public class Dereference {
             if (pooledObject) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
-            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                    || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
                 // Transform the value in the stack to RuntimeScalar
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

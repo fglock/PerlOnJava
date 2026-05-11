@@ -62,6 +62,11 @@ public class WeakRefRegistry {
      * deterministically (see Strategy A in weaken-destroy.md).
      */
     public static void weaken(RuntimeScalar ref) {
+        if (ref.destroySelfArgument
+                || ref instanceof RuntimeScalarReadOnly
+                || ref.type == RuntimeScalarType.READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
         if (!RuntimeScalarType.isReference(ref)) {
             if (ref.type == RuntimeScalarType.UNDEF) return;  // weaken(undef) is a no-op
             throw new PerlCompilerException("Can't weaken a nonreference");
@@ -121,6 +126,16 @@ public class WeakRefRegistry {
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
+                } else if (hasWeakRefsTo(base)
+                        && (ReachabilityWalker.isReachableFromRoots(base)
+                        || ReachabilityWalker.isReachableFromLiveScalarRegistry(base))) {
+                    // A temporary probe can be weakened without owning the last
+                    // strong Perl reference. Test::Refcount does this when it
+                    // weakens a local copy before calling B::svref_2object().
+                    // If another strong lexical/global path is still reachable,
+                    // keep existing weak refs intact instead of treating this
+                    // selective refCount==0 as object death.
+                    base.refCount = 1;
                 } else {
                     // No local binding: refCount==0 means truly no strong refs.
                     // Trigger DESTROY + clear weak refs.

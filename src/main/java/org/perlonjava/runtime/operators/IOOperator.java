@@ -129,6 +129,9 @@ public class IOOperator {
         try {
             Map<SelectableChannel, Integer> channelToFd = new HashMap<>();
             List<Integer> pollableFds = new ArrayList<>();
+            List<Integer> pollableSslFds = new ArrayList<>();
+            Set<Integer> immediateReadReadyFds = new HashSet<>();
+            Set<Integer> immediateWriteReadyFds = new HashSet<>();
             int nonSocketReady = 0;
 
             for (int fd = 0; fd < maxFd; fd++) {
@@ -142,33 +145,31 @@ public class IOOperator {
                 if (rio.ioHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
-                        // SSL-wrapped sockets have no NIO channel.
-                        // Check readiness via InputStream.available() for reads,
-                        // and assume always writable for writes.
-                        boolean ready = false;
+                        // SSL sockets created without an underlying SocketChannel
+                        // cannot be registered with a Selector. Poll decrypted
+                        // bytes via pending()/available(); never report read
+                        // readiness solely because the handle is SSL-wrapped.
+                        boolean readReady = false;
+                        boolean writeReady = false;
                         if (wantRead) {
                             try {
-                                java.io.InputStream is = socketIO.getSocket() != null
-                                        ? socketIO.getSocket().getInputStream() : null;
-                                if (is != null && is.available() > 0) {
-                                    ready = true;
-                                } else {
-                                    // For SSL sockets, available() may return 0 even when
-                                    // data is waiting in the SSL layer. Assume readable
-                                    // to avoid blocking in select() — worst case, the
-                                    // subsequent read will block briefly.
-                                    if (socketIO.getSocket() instanceof javax.net.ssl.SSLSocket) {
-                                        ready = true;
-                                    }
-                                }
+                                readReady = socketIO.available() > 0;
                             } catch (Exception e) {
-                                ready = true; // Err on the side of reporting ready
+                                readReady = true; // Err on the side of surfacing the read error
                             }
                         }
                         if (wantWrite) {
-                            ready = true; // SSL sockets are always writable
+                            writeReady = true; // Blocking SSL sockets are writable for select() purposes
                         }
-                        if (ready) {
+                        if (readReady) {
+                            immediateReadReadyFds.add(fd);
+                        } else if (wantRead) {
+                            pollableSslFds.add(fd);
+                        }
+                        if (writeReady) {
+                            immediateWriteReadyFds.add(fd);
+                        }
+                        if (readReady || writeReady) {
                             nonSocketReady++;
                         }
                         continue;
@@ -179,8 +180,14 @@ public class IOOperator {
                         madeNonBlocking.add(ch);
                     }
 
+                    boolean readReadyNow = wantRead && socketIO.hasPendingDatagramError();
+                    if (readReadyNow) {
+                        immediateReadReadyFds.add(fd);
+                        nonSocketReady++;
+                    }
+
                     int ops = 0;
-                    if (wantRead) {
+                    if (wantRead && !readReadyNow) {
                         ops |= (ch instanceof ServerSocketChannel)
                                 ? SelectionKey.OP_ACCEPT
                                 : SelectionKey.OP_READ;
@@ -229,7 +236,7 @@ public class IOOperator {
 
             if (nonSocketReady > 0 && channelToFd.isEmpty()) {
                 // Some non-socket handles already ready, no NIO channels — return immediately
-            } else if (!channelToFd.isEmpty() || !pollableFds.isEmpty()) {
+            } else if (!channelToFd.isEmpty() || !pollableFds.isEmpty() || !pollableSslFds.isEmpty()) {
                 // Poll loop: check both NIO selector and pollable fds
                 long deadlineMs = (timeoutSec < 0) ? Long.MAX_VALUE
                         : System.currentTimeMillis() + (long) (timeoutSec * 1000);
@@ -258,6 +265,19 @@ public class IOOperator {
                             nonSocketReady++;
                         }
                         if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                            nonSocketReady++;
+                        }
+                    }
+                    for (int fd : pollableSslFds) {
+                        RuntimeIO rio = RuntimeIO.getByFileno(fd);
+                        if (rio == null || !(rio.ioHandle instanceof SocketIO socketIO)) continue;
+                        try {
+                            if (socketIO.available() > 0) {
+                                immediateReadReadyFds.add(fd);
+                                nonSocketReady++;
+                            }
+                        } catch (Exception e) {
+                            immediateReadReadyFds.add(fd);
                             nonSocketReady++;
                         }
                     }
@@ -302,11 +322,12 @@ public class IOOperator {
                     // Only handle SocketIO with null channel (SSL sockets)
                     if (socketIO.getSelectableChannel() != null) continue;
 
-                    // SSL socket: set bits based on readiness
-                    if (isBitSet(rdata, fd)) {
+                    // SSL socket without a selectable channel: set only the
+                    // readiness bits discovered above.
+                    if (isBitSet(rdata, fd) && immediateReadReadyFds.contains(fd)) {
                         setBit(rresult, fd); totalReady++;
                     }
-                    if (isBitSet(wdata, fd)) {
+                    if (isBitSet(wdata, fd) && immediateWriteReadyFds.contains(fd)) {
                         setBit(wresult, fd); totalReady++;
                     }
                     continue;
@@ -318,6 +339,15 @@ public class IOOperator {
                 }
                 if (isBitSet(wdata, fd) && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
                     setBit(wresult, fd); totalReady++;
+                }
+            }
+
+            // Synthetic socket readiness that Java NIO does not expose, such as
+            // connected UDP socketpair peer-closed errors.
+            for (int fd : immediateReadReadyFds) {
+                if (isBitSet(rdata, fd)) {
+                    setBit(rresult, fd);
+                    totalReady++;
                 }
             }
 
@@ -1878,12 +1908,6 @@ public class IOOperator {
      */
     private static String[] parseSockaddrIn(String packedAddress) {
         try {
-            // Quick check: if it looks like a text string (contains ':' or '.'), 
-            // it's probably not a binary sockaddr_in structure
-            if (packedAddress.contains(":") || packedAddress.matches(".*[0-9]+\\.[0-9]+.*")) {
-                return null; // This is a text address, not binary sockaddr_in
-            }
-
             byte[] bytes = packedAddress.getBytes(StandardCharsets.ISO_8859_1); // Get raw bytes
 
             if (bytes.length < 8) {
@@ -2128,7 +2152,7 @@ public class IOOperator {
             }
 
             // Create connected pipes using Java's PipedInputStream/PipedOutputStream
-            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream();
+            java.io.PipedInputStream pipeIn = new java.io.PipedInputStream(InternalPipeHandle.PIPE_SIZE);
             java.io.PipedOutputStream pipeOut = new java.io.PipedOutputStream(pipeIn);
 
             // Create IOHandle implementations for the pipe ends.
@@ -2501,6 +2525,7 @@ public class IOOperator {
 
             // Check if this is a UDP socket with a TO address (4th arg)
             if (socketIO.ioHandle instanceof SocketIO sio && sio.isDatagramSocket()) {
+                byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                 if (args.length >= 4) {
                     // 4th arg is packed sockaddr_in (destination address)
                     String packedAddr = args[3].toString();
@@ -2511,14 +2536,12 @@ public class IOOperator {
                                 addrBytes[4] & 0xFF, addrBytes[5] & 0xFF,
                                 addrBytes[6] & 0xFF, addrBytes[7] & 0xFF);
                         InetSocketAddress target = new InetSocketAddress(ip, port);
-                        byte[] data = message.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
                         int sent = sio.sendTo(data, target);
                         return new RuntimeScalar(sent);
                     }
                 }
-                // No TO address — send to connected peer (not typical for UDP)
-                getGlobalVariable("main::!").set("send: UDP requires destination address");
-                return scalarUndef;
+                int sent = sio.sendDatagram(data);
+                return new RuntimeScalar(sent);
             }
 
             // TCP: ignore flags and TO address - send via stream
@@ -2527,7 +2550,9 @@ public class IOOperator {
             if (result != null && !result.equals(scalarFalse)) {
                 return new RuntimeScalar(message.length()); // Return number of bytes sent
             } else {
-                getGlobalVariable("main::!").set("Send failed");
+                if (getGlobalVariable("main::!").toString().isEmpty()) {
+                    getGlobalVariable("main::!").set("Send failed");
+                }
                 return scalarUndef;
             }
 
@@ -3031,6 +3056,42 @@ public class IOOperator {
             // The first two arguments are the socket handle scalars
             RuntimeScalar sock1Handle = args[0].scalar();
             RuntimeScalar sock2Handle = args[1].scalar();
+            int domain = args[2].scalar().getInt();
+            int type = args[3].scalar().getInt();
+
+            if (type == Socket.SOCK_DGRAM) {
+                ProtocolFamily family = domain == Socket.AF_INET6
+                        ? StandardProtocolFamily.INET6
+                        : StandardProtocolFamily.INET;
+                InetAddress loopback = domain == Socket.AF_INET6
+                        ? InetAddress.getByName("::1")
+                        : InetAddress.getLoopbackAddress();
+
+                DatagramChannel channel1 = DatagramChannel.open(family);
+                DatagramChannel channel2 = DatagramChannel.open(family);
+                channel1.bind(new InetSocketAddress(loopback, 0));
+                channel2.bind(new InetSocketAddress(loopback, 0));
+                channel1.connect(channel2.getLocalAddress());
+                channel2.connect(channel1.getLocalAddress());
+
+                SocketIO socket1 = new SocketIO(channel1, family);
+                SocketIO socket2 = new SocketIO(channel2, family);
+                socket1.setDatagramPeer(socket2);
+                socket2.setDatagramPeer(socket1);
+
+                RuntimeIO io1 = new RuntimeIO();
+                io1.ioHandle = socket1;
+                io1.assignFileno();
+
+                RuntimeIO io2 = new RuntimeIO();
+                io2.ioHandle = socket2;
+                io2.assignFileno();
+
+                setSocketOnHandle(sock1Handle, io1);
+                setSocketOnHandle(sock2Handle, io2);
+
+                return scalarTrue;
+            }
 
             // Use NIO SocketChannels so that select() can monitor these sockets
             ServerSocketChannel serverChannel = ServerSocketChannel.open();
@@ -3044,16 +3105,26 @@ public class IOOperator {
             // Accept the connection to get the second socket channel
             SocketChannel channel2 = serverChannel.accept();
 
+            // This emulates socketpair() with loopback TCP. Disable Nagle so
+            // small writes behave like local socketpair writes under load.
+            channel1.setOption(StandardSocketOptions.TCP_NODELAY, true);
+            channel2.setOption(StandardSocketOptions.TCP_NODELAY, true);
+
             // Close the server channel as we no longer need it
             serverChannel.close();
 
+            SocketIO socket1 = new SocketIO(channel1, StandardProtocolFamily.INET, type);
+            SocketIO socket2 = new SocketIO(channel2, StandardProtocolFamily.INET, type);
+            socket1.setStreamPeer(socket2);
+            socket2.setStreamPeer(socket1);
+
             // Create RuntimeIO objects for both sockets using NIO channels
             RuntimeIO io1 = new RuntimeIO();
-            io1.ioHandle = new SocketIO(channel1, StandardProtocolFamily.INET);
+            io1.ioHandle = socket1;
             io1.assignFileno();
 
             RuntimeIO io2 = new RuntimeIO();
-            io2.ioHandle = new SocketIO(channel2, StandardProtocolFamily.INET);
+            io2.ioHandle = socket2;
             io2.assignFileno();
 
             // Set IO slot on each handle, following the same pattern as socket()

@@ -346,7 +346,7 @@ public class WarningFlags {
         
         return new String(bytes, StandardCharsets.ISO_8859_1);
     }
-    
+
     /**
      * Perl compile-time {@code ckWARN}-style check: honor {@code no warnings 'category'},
      * then {@code $^W (-w)}, then the category's enabled bit in the scope's
@@ -371,7 +371,7 @@ public class WarningFlags {
         }
         return isEnabledInBits(scope.getWarningBitsString(), category);
     }
-
+    
     /**
      * Checks if a category is enabled in a warning bits string.
      *

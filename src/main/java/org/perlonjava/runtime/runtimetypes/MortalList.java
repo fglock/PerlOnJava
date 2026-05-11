@@ -346,6 +346,10 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0) return;
+        // Alias arrays such as @_ do not own their elements. They can contain
+        // RuntimeScalar instances whose refCountOwned flag belongs to another
+        // container, so walking them here would consume that other owner's count.
+        if (arr.elementsAliased && !arr.elementsOwned) return;
         // Quick scan: check if any element either:
         //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
         //   2. Is a direct blessed reference (blessId != 0), OR
@@ -488,13 +492,30 @@ public class MortalList {
         for (RuntimeBase elem : result.elements) {
             if (elem instanceof RuntimeScalar scalar
                     && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase base
-                    && base.blessId != 0 && base.refCount == 0) {
-                if (base.refCountTrace) {
-                    base.traceRefCount(+1, "MortalList.mortalizeForVoidDiscard (refCount=1 bump+queue)");
+                    && scalar.value instanceof RuntimeBase base) {
+                boolean unblessedDiscardableContainer = base.blessId == 0
+                        && (base instanceof RuntimeHash
+                        || base instanceof RuntimeArray
+                        || base instanceof RuntimeCode);
+                if (scalar.refCountOwned && base.refCount > 0 && unblessedDiscardableContainer) {
+                    scalar.refCountOwned = false;
+                    if (base.refCountTrace) {
+                        base.traceRefCount(0, "MortalList.mortalizeForVoidDiscard (queued owned container discard)");
+                        base.releaseOwner(scalar, "mortalizeForVoidDiscard container");
+                    }
+                    base.releaseActiveOwner(scalar);
+                    pending.add(base);
+                } else if (base.refCount == 0
+                        && (base.blessId != 0
+                        || base instanceof RuntimeHash
+                        || base instanceof RuntimeArray
+                        || base instanceof RuntimeCode)) {
+                    if (base.refCountTrace) {
+                        base.traceRefCount(+1, "MortalList.mortalizeForVoidDiscard (refCount=1 bump+queue)");
+                    }
+                    base.refCount = 1;
+                    pending.add(base);
                 }
-                base.refCount = 1;
-                pending.add(base);
             }
         }
     }
@@ -614,6 +635,16 @@ public class MortalList {
                 // scalar holding that same array.
                 base.refCount = 1;
             } else if (base.blessId != 0
+                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && !blessedClassHasDestroy(base)
+                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                // A weakened probe copy can make the selective count reach
+                // zero while an ordinary blessed object is still held by a
+                // live lexical. Test::Refcount exercises this shape; clearing
+                // weak refs here drops callback invocants that should remain
+                // valid. Classes with DESTROY keep the stricter path below.
+                base.refCount = 1;
+            } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && WeakRefRegistry.hasWeakRefsTo(base)
                     && isReachableCached(base)) {
@@ -628,8 +659,19 @@ public class MortalList {
         }
     }
 
+    private static boolean blessedClassHasDestroy(RuntimeBase base) {
+        String className = NameNormalizer.getBlessStr(base.blessId);
+        return className != null && DestroyDispatch.classHasDestroy(base.blessId, className);
+    }
+
     public static void flush() {
-        if (!active || pending.isEmpty() || flushing) return;
+        if (!active) return;
+        if (pending.isEmpty() || flushing) {
+            if (!flushing) {
+                processReadyDeferredCaptures();
+            }
+            return;
+        }
         flushing = true;
         try {
             // Process list — DESTROY may add new entries, so use index-based loop
@@ -642,6 +684,7 @@ public class MortalList {
             flushing = false;
             flushReachableCache = null;
         }
+        processReadyDeferredCaptures();
         // Phase B2a: guarded auto-sweep.
         maybeAutoSweep();
     }
@@ -759,9 +802,18 @@ public class MortalList {
      * If no mark exists (top-level code), behaves like {@link #flush()}.
      */
     public static void flushAboveMark() {
-        if (!active || pending.isEmpty() || flushing) return;
+        if (!active) return;
+        if (pending.isEmpty() || flushing) {
+            if (!flushing) {
+                processReadyDeferredCaptures();
+            }
+            return;
+        }
         int mark = marks.isEmpty() ? 0 : marks.getLast();
-        if (pending.size() <= mark) return;
+        if (pending.size() <= mark) {
+            processReadyDeferredCaptures();
+            return;
+        }
         flushing = true;
         try {
             for (int i = mark; i < pending.size(); i++) {
@@ -775,6 +827,7 @@ public class MortalList {
             flushing = false;
             flushReachableCache = null;
         }
+        processReadyDeferredCaptures();
     }
 
     /**

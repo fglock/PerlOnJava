@@ -292,11 +292,50 @@ public class PrototypeArgs {
             parser.throwError("syntax error");
         }
 
-        // Preserve the end of the parsed argument list for call-site line
-        // reporting. caller() uses this to match Perl's behavior for
-        // multi-line direct sub calls.
-        args.setIndex(parser.tokenIndex);
+        // Preserve the parser's existing multi-line direct call behaviour, but
+        // match Perl for calls whose first prototype slot is `&`: once a normal
+        // argument follows the code block, caller() reports that argument line.
+        int callSiteIndex = firstNonCodeArgIndexAfterAmpersandPrototype(prototype, args);
+        args.setIndex(callSiteIndex > 0 ? callSiteIndex : parser.tokenIndex);
         return args;
+    }
+
+    private static int firstNonCodeArgIndexAfterAmpersandPrototype(String prototype, ListNode args) {
+        if (prototype == null || args.elements.size() < 2) {
+            return -1;
+        }
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+            if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                continue;
+            }
+            if (c != '&') {
+                return -1;
+            }
+
+            Node firstNonCodeArg = args.elements.get(1);
+            if (firstNonCodeArg == null) {
+                return -1;
+            }
+            Object argumentStartIndex = firstNonCodeArg.getAnnotation("argumentStartIndex");
+            if (argumentStartIndex instanceof Integer index) {
+                return index;
+            }
+            return firstNonCodeArg.getIndex();
+        }
+
+        return -1;
+    }
+
+    private static void copyArgumentStartIndex(Node from, Node to) {
+        if (from == null || to == null || from == to) {
+            return;
+        }
+        Object argumentStartIndex = from.getAnnotation("argumentStartIndex");
+        if (argumentStartIndex != null) {
+            to.setAnnotation("argumentStartIndex", argumentStartIndex);
+        }
     }
 
     /**
@@ -477,6 +516,7 @@ public class PrototypeArgs {
                 }
             }
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+            copyArgumentStartIndex(arg, scalarArg);
             scalarArg.setAnnotation("context", "SCALAR");
             args.elements.add(scalarArg);
         }
@@ -510,6 +550,7 @@ public class PrototypeArgs {
             return;
         }
         Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+        copyArgumentStartIndex(arg, scalarArg);
         scalarArg.setAnnotation("context", "SCALAR");
         args.elements.add(scalarArg);
     }
@@ -788,6 +829,7 @@ public class PrototypeArgs {
             args.elements.add(refArg);
         } else {
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
+            copyArgumentStartIndex(arg, scalarArg);
             scalarArg.setAnnotation("context", "SCALAR");
             args.elements.add(scalarArg);
         }
@@ -1052,11 +1094,14 @@ public class PrototypeArgs {
             }
             throwNotEnoughArgumentsError(parser);
         }
+        int argumentStartIndex = parser.tokenIndex;
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr == null) {
             if (!isOptional) {
                 throwNotEnoughArgumentsError(parser);
             }
+        } else {
+            expr.setAnnotation("argumentStartIndex", argumentStartIndex);
         }
         return expr;
     }

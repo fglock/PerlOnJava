@@ -156,6 +156,9 @@ public class FileDescriptorTable {
         if (handle instanceof DupIOHandle dupHandle) {
             return isReadReady(dupHandle.getDelegate());
         }
+        if (handle instanceof BorrowedIOHandle borrowedHandle) {
+            return isReadReady(borrowedHandle.getDelegate());
+        }
         if (handle instanceof InternalPipeHandle pipeHandle) {
             return pipeHandle.hasDataAvailable();
         }
@@ -181,7 +184,16 @@ public class FileDescriptorTable {
      * @return true if the handle can accept writes
      */
     public static boolean isWriteReady(IOHandle handle) {
-        // Pipes and most handles can always accept writes (they buffer internally)
+        if (handle instanceof DupIOHandle dupHandle) {
+            return isWriteReady(dupHandle.getDelegate());
+        }
+        if (handle instanceof BorrowedIOHandle borrowedHandle) {
+            return isWriteReady(borrowedHandle.getDelegate());
+        }
+        if (handle instanceof InternalPipeHandle pipeHandle) {
+            return pipeHandle.hasWriteCapacity();
+        }
+        // Most handles can accept writes (they buffer internally)
         return true;
     }
 }

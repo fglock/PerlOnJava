@@ -37,6 +37,7 @@ public class IOSocketSSL extends PerlModuleBase {
             mod.registerMethod("_peer_certificate", null);
             mod.registerMethod("_stop_ssl", null);
             mod.registerMethod("_is_ssl", null);
+            mod.registerMethod("_pending", null);
             mod.registerMethod("can_client_sni", "");
             mod.registerMethod("can_server_sni", "");
             mod.registerMethod("can_alpn", "");
@@ -247,6 +248,23 @@ public class IOSocketSSL extends PerlModuleBase {
             SocketIO socketIO = getSocketIO(args.get(0));
             if (socketIO != null && socketIO.getSocket() instanceof SSLSocket) {
                 return new RuntimeScalar(1).getList();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    /**
+     * Return bytes already decrypted and buffered by the Java TLS layer.
+     * This mirrors IO::Socket::SSL::pending, which Net::HTTP checks before
+     * using select() on the underlying socket.
+     */
+    public static RuntimeList _pending(RuntimeArray args, int ctx) {
+        try {
+            SocketIO socketIO = getSocketIO(args.get(0));
+            if (socketIO != null && socketIO.getSocket() instanceof SSLSocket) {
+                return new RuntimeScalar(socketIO.available()).getList();
             }
         } catch (Exception e) {
             // ignore

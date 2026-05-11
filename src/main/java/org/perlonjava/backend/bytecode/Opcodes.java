@@ -2199,8 +2199,8 @@ public class Opcodes {
     public static final short RETURN_NONLOCAL = 461;
 
     /**
-     * Flush deferred mortal decrements at statement boundary.
-     * Equivalent to Perl 5's FREETMPS.
+     * Flush deferred mortal decrements from the current function scope at
+     * statement boundary. Equivalent to Perl 5's FREETMPS.
      * Format: MORTAL_FLUSH (no operands)
      */
     public static final short MORTAL_FLUSH = 462;

@@ -122,6 +122,16 @@ public class IOPoll extends PerlModuleBase {
                         madeNonBlocking.add(ch);
                     }
 
+                    boolean pendingDatagramError = socketIO.hasPendingDatagramError();
+                    if (pendingDatagramError) {
+                        revents[i] |= POLLERR;
+                        if ((events & (POLLIN | POLLPRI)) != 0) {
+                            revents[i] |= POLLIN;
+                        }
+                        readyCount++;
+                        continue;
+                    }
+
                     int ops = 0;
                     if ((events & (POLLIN | POLLPRI)) != 0) {
                         ops |= (ch instanceof ServerSocketChannel)

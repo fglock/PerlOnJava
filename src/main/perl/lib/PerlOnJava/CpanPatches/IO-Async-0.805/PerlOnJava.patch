@@ -1,0 +1,23 @@
+--- lib/IO/Async/FileStream.pm.orig
++++ lib/IO/Async/FileStream.pm
+@@ -182,2 +182,5 @@
+-      local $self->{running_initial} = 1;
+-      $self->maybe_invoke_event( on_initial => $size );
++      local $self->{running_initial} = 1;
++      if( my $code = $self->can_event( "on_initial" ) ) {
++         my $ret = $code->( $self, $size );
++         undef $ret;
++      }
+--- t/20handle.t.orig
++++ t/20handle.t
+@@ -287,7 +287,9 @@
+    wait_for { $writeready };
+    is( $writeready, 1, '$writeready after ->close_read' );
+ 
+    $handle->write_handle->syswrite( "Still works\n" );
+-   is( $Swr2->getline, "Still works\n", 'write handle still works' );
++   my $still_works;
++   wait_for { defined( $still_works = $Swr2->getline ) && length $still_works };
++   is( $still_works, "Still works\n", 'write handle still works' );
+ 
+    is( $closed, 0, 'not $closed after ->close_read' );

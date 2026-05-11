@@ -1209,6 +1209,19 @@ public class EmitOperator {
             }
         }
 
+        Node undefTarget = singleUndefOperand(node.operand);
+        if (isScalarUndefTarget(undefTarget)) {
+            emitScalarUndefAssignment(emitterVisitor, undefTarget);
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                mv.visitInsn(Opcodes.POP);
+            } else {
+                mv.visitInsn(Opcodes.POP);
+                emitUndef(mv);
+            }
+            return;
+        }
+
         // Use LIST context to avoid runtime context conversion that would convert
         // hashes/arrays to scalars when the containing subroutine is called in scalar context.
         // The undef operator needs the actual container to call undefine() on it.
@@ -1219,6 +1232,54 @@ public class EmitOperator {
                 "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false);
         handleVoidContext(emitterVisitor);
+    }
+
+    private static Node singleUndefOperand(Node operand) {
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            return list.elements.getFirst();
+        }
+        return operand;
+    }
+
+    private static boolean isScalarUndefTarget(Node operand) {
+        if (operand instanceof OperatorNode op) {
+            return op.operator.equals("$")
+                    || op.operator.equals("pos")
+                    || op.operator.equals("substr")
+                    || op.operator.equals("vec");
+        }
+        if (operand instanceof BinaryOperatorNode bin) {
+            return bin.operator.equals("[")
+                    || bin.operator.equals("{")
+                    || bin.operator.equals("->")
+                    || bin.operator.equals("(");
+        }
+        return operand instanceof TernaryOperatorNode;
+    }
+
+    private static void emitScalarUndefAssignment(EmitterVisitor emitterVisitor, Node operand) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int context = RuntimeContextType.SCALAR;
+        if (operand instanceof BinaryOperatorNode bin) {
+            boolean lvalueCall = bin.operator.equals("(")
+                    || (bin.operator.equals("->")
+                    && (bin.right instanceof ListNode
+                    || (bin.right instanceof BinaryOperatorNode call && call.operator.equals("("))));
+            if (lvalueCall) {
+                context = RuntimeContextType.LVALUE;
+            }
+        } else if (operand instanceof TernaryOperatorNode) {
+            context = RuntimeContextType.LVALUE;
+        }
+        operand.accept(emitterVisitor.with(context));
+        emitUndef(mv);
+        mv.visitInsn(Opcodes.SWAP);
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "addToScalar",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
     }
 
     static void handleTimeRelatedOperator(EmitterVisitor emitterVisitor, OperatorNode node) {

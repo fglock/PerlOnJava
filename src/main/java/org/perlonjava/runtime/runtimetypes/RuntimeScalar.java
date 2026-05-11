@@ -111,6 +111,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean refCountOwned;
 
+    /**
+     * True for the synthetic {@code $_[0]} scalar passed to DESTROY.
+     * Perl treats that invocant as read-only for operations such as
+     * {@code weaken($_[0])}, but normal reads and method dispatch still
+     * need the lightweight mutable RuntimeScalar representation.
+     */
+    public boolean destroySelfArgument;
+
+    /**
+     * True when this scalar owns a counted reference through a scalar
+     * reference, e.g. the outer variable in {@code $x = \ bless {}, "X"}.
+     * The counted referent is inside the RuntimeScalar pointed to by this
+     * scalar, so regular {@code refCountOwned} cannot describe it.
+     */
+    public boolean ownsScalarReferenceContents;
+
     // Constructors
     public RuntimeScalar() {
         this.type = UNDEF;
@@ -939,6 +955,57 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    private static boolean scalarReferenceContentsNeedRetain(RuntimeScalar value) {
+        return value != null
+                && value.type == REFERENCE
+                && value.value instanceof RuntimeScalar scalarReferent
+                && !WeakRefRegistry.isweak(scalarReferent)
+                && !scalarReferent.refCountOwned
+                && (scalarReferent.type & REFERENCE_BIT) != 0
+                && scalarReferent.value instanceof RuntimeBase inner
+                && inner.refCount >= 0;
+    }
+
+    private void retainScalarReferenceContents(RuntimeScalar value) {
+        this.ownsScalarReferenceContents = false;
+        if (!scalarReferenceContentsNeedRetain(value)) return;
+        RuntimeScalar scalarReferent = (RuntimeScalar) value.value;
+        RuntimeBase inner = (RuntimeBase) scalarReferent.value;
+        inner.traceRefCount(+1, "RuntimeScalar.retainScalarReferenceContents");
+        inner.refCount++;
+        this.ownsScalarReferenceContents = true;
+    }
+
+    private static RuntimeScalar scalarReferenceContentsReferent(RuntimeScalar owner) {
+        if (owner != null
+                && owner.ownsScalarReferenceContents
+                && owner.type == REFERENCE
+                && owner.value instanceof RuntimeScalar scalarReferent) {
+            return scalarReferent;
+        }
+        return null;
+    }
+
+    public static void releaseScalarReferenceContents(RuntimeScalar scalarReferent) {
+        if (scalarReferent == null
+                || (scalarReferent.type & REFERENCE_BIT) == 0
+                || !(scalarReferent.value instanceof RuntimeBase inner)
+                || inner.refCount <= 0) {
+            return;
+        }
+        inner.traceRefCount(-1, "RuntimeScalar.releaseScalarReferenceContents");
+        if (--inner.refCount == 0) {
+            inner.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(inner);
+        }
+    }
+
+    public void releaseOwnedScalarReferenceContents() {
+        RuntimeScalar scalarReferent = scalarReferenceContentsReferent(this);
+        this.ownsScalarReferenceContents = false;
+        releaseScalarReferenceContents(scalarReferent);
+    }
+
     // Inlineable fast path for set(RuntimeScalar)
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
@@ -1039,7 +1106,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
         // tracking, WeakRefRegistry checks, and MortalList flush.
-        if (!this.refCountOwned && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
+        boolean scalarRefContentTrackingNeeded =
+                this.ownsScalarReferenceContents || scalarReferenceContentsNeedRetain(value);
+        if (!scalarRefContentTrackingNeeded
+                && !this.refCountOwned && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
                     || this.value == null
@@ -1117,6 +1187,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
             oldBase = (RuntimeBase) this.value;
         }
+        boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
+        RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
@@ -1249,6 +1321,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
 
+        if (oldOwnedScalarReferenceContents) {
+            releaseScalarReferenceContents(oldScalarReferenceContents);
+        }
+
         // WEAKLY_TRACKED objects: do NOT clear weak refs on overwrite.
         // These objects have refCount == -2 and their strong refs don't have
         // refCountOwned=true (they were set before tracking started).
@@ -1260,6 +1336,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
+        retainScalarReferenceContents(value);
 
         // Flush deferred mortal decrements from the current function scope.
         // Entries below the current MortalList mark belong to the caller, and
@@ -2493,7 +2570,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // - refCountOwned=false → deferDecrementIfTracked returns immediately
         // - captureCount=0 → capture handling branch not taken
         // - ioOwner=false → IO fd recycling branch not taken
-        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner) {
+        if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner
+                && !scalar.ownsScalarReferenceContents) {
             // Special case: CODE refs with unreleased captures that were never
             // stored via set() (e.g., anonymous subs passed directly as arguments).
             // These have refCount=0 (from makeCodeObject) and refCountOwned=false
@@ -2510,6 +2588,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             return;
         }
+
+        scalar.releaseOwnedScalarReferenceContents();
 
         // If this variable is captured by a closure, mark it so releaseCaptures
         // knows the scope has exited. But still proceed with refCount cleanup below
@@ -3112,12 +3192,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         currentState.type = this.type;
         currentState.value = this.value;
         currentState.blessId = this.blessId;
+        currentState.ownsScalarReferenceContents = this.ownsScalarReferenceContents;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
         // Clear the current type and value
         this.type = UNDEF;
         this.value = null;
         this.blessId = 0;
+        this.ownsScalarReferenceContents = false;
     }
 
     /**
@@ -3132,20 +3214,29 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
 
-            // Decrement refCount of the CURRENT value being displaced.
-            // Do NOT increment the restored value — it already has the correct
-            // refCount from its original counting (it was never decremented during save).
+            RuntimeBase displacedBase = null;
             if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && this.value instanceof RuntimeBase displacedBase
-                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
-                displacedBase.refCount = Integer.MIN_VALUE;
-                DestroyDispatch.callDestroy(displacedBase);
+                    && this.value instanceof RuntimeBase base) {
+                displacedBase = base;
             }
+            RuntimeScalar scalarReferenceContents = scalarReferenceContentsReferent(this);
 
             // Restore the type, value from the saved state
             this.type = previousState.type;
             this.value = previousState.value;
             this.blessId = previousState.blessId;
+            this.ownsScalarReferenceContents = previousState.ownsScalarReferenceContents;
+
+            releaseScalarReferenceContents(scalarReferenceContents);
+
+            // Decrement refCount of the value displaced by local restoration
+            // after restoring the old scalar state, so DESTROY sees the restored
+            // variable rather than the dying localized value.
+            if (displacedBase != null
+                    && displacedBase.refCount > 0 && --displacedBase.refCount == 0) {
+                displacedBase.refCount = Integer.MIN_VALUE;
+                DestroyDispatch.callDestroy(displacedBase);
+            }
         }
     }
 

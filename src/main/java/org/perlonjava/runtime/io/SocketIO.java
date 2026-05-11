@@ -32,11 +32,13 @@ public class SocketIO implements IOHandle {
     private Socket socket;
     private ServerSocket serverSocket;
     private SocketChannel socketChannel;
+    private SelectableChannel sslSelectChannel;
     private ServerSocketChannel serverSocketChannel;
     private InputStream inputStream;
     private OutputStream outputStream;
     private boolean isEOF;
     private boolean blocking = true;
+    private int socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
     private CharsetDecoderHelper decoderHelper;
     // Track the protocol family for server socket conversion in listen()
     private ProtocolFamily protocolFamily;
@@ -46,6 +48,12 @@ public class SocketIO implements IOHandle {
     private DatagramChannel datagramChannel;
     // Last received sender address for recv() return value
     private SocketAddress lastReceivedFrom;
+    // Datagram socketpair peer tracking. Java UDP channels do not report the
+    // local peer-closed error that Perl's poll/select tests rely on.
+    private SocketIO datagramPeer;
+    private SocketIO streamPeer;
+    private boolean closed;
+    private boolean datagramErrorPending;
 
     /**
      * Constructs a SocketIO instance for a client socket.
@@ -55,6 +63,7 @@ public class SocketIO implements IOHandle {
     public SocketIO(Socket socket) {
         this.socket = socket;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
         try {
             if (this.socket != null) {
                 this.inputStream = this.socket.getInputStream();
@@ -75,6 +84,7 @@ public class SocketIO implements IOHandle {
     public SocketIO(ServerSocket serverSocket) {
         this.serverSocket = serverSocket;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
         // Get the server socket channel for native socket option support
         this.serverSocketChannel = this.serverSocket.getChannel();
     }
@@ -89,6 +99,7 @@ public class SocketIO implements IOHandle {
         this.serverSocket = serverSocket;
         this.serverSocketChannel = serverSocketChannel;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
     }
 
     /**
@@ -100,10 +111,15 @@ public class SocketIO implements IOHandle {
      * @param family  the protocol family (INET, INET6, etc.)
      */
     public SocketIO(SocketChannel channel, ProtocolFamily family) {
+        this(channel, family, org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM);
+    }
+
+    public SocketIO(SocketChannel channel, ProtocolFamily family, int socketType) {
         this.socketChannel = channel;
         this.socket = channel.socket();
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
+        this.socketType = socketType;
     }
 
     /**
@@ -116,6 +132,33 @@ public class SocketIO implements IOHandle {
         this.datagramChannel = channel;
         this.protocolFamily = family;
         this.socketOptions = new HashMap<>();
+        this.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_DGRAM;
+    }
+
+    public void setDatagramPeer(SocketIO peer) {
+        this.datagramPeer = peer;
+    }
+
+    public void setStreamPeer(SocketIO peer) {
+        this.streamPeer = peer;
+    }
+
+    public boolean hasPendingDatagramError() {
+        return datagramErrorPending;
+    }
+
+    private boolean hasClosedDatagramPeer() {
+        return datagramPeer != null && datagramPeer.closed;
+    }
+
+    private boolean hasClosedStreamPeer() {
+        return streamPeer != null && streamPeer.closed;
+    }
+
+    private RuntimeScalar consumeDatagramConnectionRefused() {
+        datagramErrorPending = false;
+        getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+        return scalarUndef;
     }
 
     /**
@@ -155,11 +198,16 @@ public class SocketIO implements IOHandle {
      * @return a RuntimeScalar indicating success (true) or failure (false)
      */
     public RuntimeScalar connect(String address, int port) {
-        if (socket == null && socketChannel == null) {
+        if (socket == null && socketChannel == null && datagramChannel == null) {
             throw new IllegalStateException("No socket available to connect");
         }
         try {
             InetSocketAddress target = new InetSocketAddress(address, port);
+
+            if (datagramChannel != null) {
+                datagramChannel.connect(target);
+                return scalarTrue;
+            }
 
             // Use SocketChannel for non-blocking connect support
             if (socketChannel != null && !blocking) {
@@ -240,6 +288,9 @@ public class SocketIO implements IOHandle {
             this.inputStream = socket.getInputStream();
             this.outputStream = socket.getOutputStream();
             return scalarTrue;
+        } catch (java.net.ConnectException e) {
+            getGlobalVariable("main::!").set(ErrnoVariable.ECONNREFUSED());
+            return scalarUndef;
         } catch (IOException e) {
             // Perl 5's connect() returns undef on failure (not false).
             // IO::Socket::IP relies on `defined connect(...)` to detect failure.
@@ -266,10 +317,22 @@ public class SocketIO implements IOHandle {
      * @throws java.io.IOException if getting streams from the socket fails
      */
     public void replaceSocket(Socket newSocket) throws java.io.IOException {
+        SelectableChannel selectChannel = this.socketChannel;
+        if (selectChannel == null && this.socket != null) {
+            selectChannel = this.socket.getChannel();
+        }
         this.socket = newSocket;
         this.inputStream = newSocket.getInputStream();
         this.outputStream = newSocket.getOutputStream();
+        this.sslSelectChannel = selectChannel;
         this.socketChannel = null; // NIO not usable after SSL wrapping
+    }
+
+    public int available() throws IOException {
+        if (inputStream != null) {
+            return inputStream.available();
+        }
+        return 0;
     }
 
     /**
@@ -312,11 +375,18 @@ public class SocketIO implements IOHandle {
         // Perform the TLS handshake
         sslSocket.startHandshake();
 
+        SelectableChannel selectChannel = this.socketChannel;
+        if (selectChannel == null && this.socket != null) {
+            selectChannel = this.socket.getChannel();
+        }
+
         // Replace socket and streams — all subsequent I/O goes through SSL
         this.socket = sslSocket;
         this.inputStream = sslSocket.getInputStream();
         this.outputStream = sslSocket.getOutputStream();
-        // NIO SocketChannel is no longer usable after SSL wrapping
+        // Keep the original channel only for select()/poll readiness.
+        // Reads and writes must continue through the SSLSocket streams.
+        this.sslSelectChannel = selectChannel;
         this.socketChannel = null;
 
         return true;
@@ -363,6 +433,9 @@ public class SocketIO implements IOHandle {
             }
             if (serverSocketChannel != null) {
                 serverSocketChannel.configureBlocking(newBlocking);
+            }
+            if (datagramChannel != null) {
+                datagramChannel.configureBlocking(newBlocking);
             }
         } catch (IOException e) {
             // Silently ignore — the blocking field still tracks the desired state
@@ -497,6 +570,7 @@ public class SocketIO implements IOHandle {
                 SocketIO clientIO = new SocketIO(clientSocket);
                 // Ensure the channel is set on the new SocketIO
                 clientIO.socketChannel = clientChannel;
+                clientIO.socketType = org.perlonjava.runtime.perlmodule.Socket.SOCK_STREAM;
                 return clientIO;
             }
             // Fallback to blocking accept
@@ -558,6 +632,9 @@ public class SocketIO implements IOHandle {
         if (socketChannel != null) {
             return socketChannel;
         }
+        if (sslSelectChannel != null) {
+            return sslSelectChannel;
+        }
         if (datagramChannel != null) {
             return datagramChannel;
         }
@@ -567,6 +644,37 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
+            // SocketChannel-backed handles, including socketpair() sockets,
+            // may not have Java stream wrappers. Readline still needs to work
+            // on them because IO::Socket exposes getline() for sockets.
+            if (socketChannel != null) {
+                if (!ensureConnected()) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxBytes);
+                int bytesRead = socketChannel.read(buf);
+                if (bytesRead == -1) {
+                    isEOF = true;
+                    return new RuntimeScalar("");
+                }
+                if (bytesRead == 0) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return new RuntimeScalar("");
+                }
+
+                byte[] buffer = new byte[bytesRead];
+                buf.flip();
+                buf.get(buffer);
+
+                if (decoderHelper == null) {
+                    decoderHelper = new CharsetDecoderHelper();
+                }
+                String decoded = decoderHelper.decode(buffer, bytesRead, charset);
+                return new RuntimeScalar(decoded);
+            }
+
             if (inputStream != null) {
                 if (decoderHelper == null) {
                     decoderHelper = new CharsetDecoderHelper();
@@ -616,6 +724,10 @@ public class SocketIO implements IOHandle {
             // Ensure non-blocking connect has completed before writing
             if (!ensureConnected()) {
                 getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                return scalarFalse;
+            }
+            if (hasClosedStreamPeer()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EPIPE());
                 return scalarFalse;
             }
 
@@ -706,6 +818,22 @@ public class SocketIO implements IOHandle {
                 return scalarUndef;
             }
 
+            if (datagramChannel != null) {
+                if (datagramErrorPending) {
+                    return consumeDatagramConnectionRefused();
+                }
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(length);
+                lastReceivedFrom = datagramChannel.receive(buf);
+                if (lastReceivedFrom == null) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+                buf.flip();
+                byte[] result = new byte[buf.remaining()];
+                buf.get(result);
+                return new RuntimeScalar(result);
+            }
+
             // Use channel-based I/O for non-blocking sockets to avoid
             // IllegalBlockingModeException from stream-based I/O.
             // Also use channel I/O when inputStream is not available
@@ -729,7 +857,14 @@ public class SocketIO implements IOHandle {
             }
 
             if (inputStream != null) {
-                byte[] buffer = new byte[length];
+                int readLength = length;
+                if (socket instanceof javax.net.ssl.SSLSocket) {
+                    int pending = inputStream.available();
+                    if (pending > 0 && pending < readLength) {
+                        readLength = pending;
+                    }
+                }
+                byte[] buffer = new byte[readLength];
                 int bytesRead = inputStream.read(buffer);
                 if (bytesRead == -1) {
                     isEOF = true;
@@ -740,6 +875,8 @@ public class SocketIO implements IOHandle {
                 return new RuntimeScalar(result);
             }
             throw new IllegalStateException("No input stream available");
+        } catch (PortUnreachableException e) {
+            return consumeDatagramConnectionRefused();
         } catch (IOException e) {
             return handleIOException(e, "sysread operation failed");
         }
@@ -760,10 +897,28 @@ public class SocketIO implements IOHandle {
                 getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
                 return scalarUndef;
             }
+            if (hasClosedStreamPeer()) {
+                getGlobalVariable("main::!").set(ErrnoVariable.EPIPE());
+                return scalarUndef;
+            }
 
             byte[] bytes = new byte[data.length()];
             for (int i = 0; i < data.length(); i++) {
                 bytes[i] = (byte) (data.charAt(i) & 0xFF);
+            }
+
+            if (datagramChannel != null) {
+                if (hasClosedDatagramPeer()) {
+                    datagramErrorPending = true;
+                    return new RuntimeScalar(bytes.length);
+                }
+                java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(bytes);
+                int written = datagramChannel.write(buf);
+                if (written == 0) {
+                    getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
+                    return scalarUndef;
+                }
+                return new RuntimeScalar(written);
             }
 
             // Use channel-based I/O for non-blocking sockets to avoid
@@ -786,6 +941,9 @@ public class SocketIO implements IOHandle {
                 return new RuntimeScalar(bytes.length);
             }
             throw new IllegalStateException("No output stream available");
+        } catch (PortUnreachableException e) {
+            datagramErrorPending = true;
+            return new RuntimeScalar(data.length());
         } catch (IOException e) {
             return handleIOException(e, "syswrite operation failed");
         }
@@ -809,13 +967,19 @@ public class SocketIO implements IOHandle {
     @Override
     public RuntimeScalar close() {
         try {
+            closed = true;
             if (socket != null) {
                 socket.close();
                 socket = null;
             }
+            sslSelectChannel = null;
             if (serverSocket != null) {
                 serverSocket.close();
                 serverSocket = null;
+            }
+            if (datagramChannel != null) {
+                datagramChannel.close();
+                datagramChannel = null;
             }
             return scalarTrue;
         } catch (IOException e) {
@@ -857,6 +1021,12 @@ public class SocketIO implements IOHandle {
      */
     public RuntimeScalar getpeername() {
         try {
+            if (datagramChannel != null && datagramChannel.getRemoteAddress() instanceof InetSocketAddress remoteAddress) {
+                return packSockaddrIn(remoteAddress);
+            }
+            if (socketChannel != null && socketChannel.getRemoteAddress() instanceof InetSocketAddress remoteAddress) {
+                return packSockaddrIn(remoteAddress);
+            }
             if (socket != null && socket.getRemoteSocketAddress() instanceof InetSocketAddress remoteAddress) {
                 return packSockaddrIn(remoteAddress);
             }
@@ -922,6 +1092,24 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Send a datagram on a connected UDP socket.
+     *
+     * @param data the data to send
+     * @return number of bytes sent
+     */
+    public int sendDatagram(byte[] data) throws IOException {
+        if (datagramChannel == null) {
+            throw new IllegalStateException("Not a datagram socket");
+        }
+        if (hasClosedDatagramPeer()) {
+            datagramErrorPending = true;
+            return data.length;
+        }
+        java.nio.ByteBuffer buf = java.nio.ByteBuffer.wrap(data);
+        return datagramChannel.write(buf);
+    }
+
+    /**
      * Receive a datagram. Stores the sender address accessible via getLastReceivedFrom().
      *
      * @param maxLength maximum number of bytes to receive
@@ -931,9 +1119,19 @@ public class SocketIO implements IOHandle {
         if (datagramChannel == null) {
             throw new IllegalStateException("Not a datagram socket");
         }
+        if (datagramErrorPending) {
+            consumeDatagramConnectionRefused();
+            return null;
+        }
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(maxLength);
-        lastReceivedFrom = datagramChannel.receive(buf);
+        try {
+            lastReceivedFrom = datagramChannel.receive(buf);
+        } catch (PortUnreachableException e) {
+            consumeDatagramConnectionRefused();
+            return null;
+        }
         if (lastReceivedFrom == null) {
+            getGlobalVariable("main::!").set(ErrnoVariable.EAGAIN());
             return null;
         }
         buf.flip();
@@ -1013,6 +1211,15 @@ public class SocketIO implements IOHandle {
      * @return the option value, or 0 if not set
      */
     public int getSocketOption(int level, int optname) {
+        if (level == org.perlonjava.runtime.perlmodule.Socket.SOL_SOCKET) {
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_TYPE) {
+                return socketType;
+            }
+            if (optname == org.perlonjava.runtime.perlmodule.Socket.SO_ACCEPTCONN) {
+                return serverSocket != null && serverSocket.isBound() && !serverSocket.isClosed() ? 1 : 0;
+            }
+        }
+
         try {
             // Try to use Java's native socket option support first
             SocketOption<?> javaOption = mapToJavaSocketOption(level, optname);

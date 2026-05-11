@@ -11,6 +11,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
 import static org.perlonjava.frontend.parser.PrototypeArgs.consumeArgsWithPrototype;
 import static org.perlonjava.frontend.parser.TokenUtils.consume;
@@ -111,11 +114,7 @@ public class CoreOperatorResolver {
             case "do" -> OperatorParser.parseDoOperator(parser);
             case "require" -> OperatorParser.parseRequire(parser);
             case "sub" -> SubroutineParser.parseSubroutineDefinition(parser, false, null);
-            case "method" -> {
-                Node node = SubroutineParser.parseSubroutineDefinition(parser, false, null);
-                node.setAnnotation("isMethod", true);
-                yield node;
-            }
+            case "method" -> parseAnonymousMethodExpression(parser, startIndex);
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
             case "dump", "dbmclose", "dbmopen" ->
@@ -177,6 +176,98 @@ public class CoreOperatorResolver {
             return new OperatorNode(operator, arguments, currentIndex);
         } finally {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+        }
+    }
+
+    private static Node parseAnonymousMethodExpression(Parser parser, int currentIndex) {
+        String prototype = null;
+        List<String> attributes = new ArrayList<>();
+        String attrDisplayName = parser.ctx.symbolTable.getCurrentPackage() + "::__ANON__";
+        String prevAttrProto = null;
+        while (peek(parser).text.equals(":")) {
+            String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                    prototype, attrDisplayName, prevAttrProto);
+            if (attrProto != null) {
+                prevAttrProto = prototype;
+                prototype = attrProto;
+            }
+        }
+
+        int methodScopeIndex = parser.ctx.symbolTable.enterScope();
+        parser.ctx.symbolTable.addVariable("$self", "my", null);
+
+        ListNode signatureAST = null;
+        if (peek(parser).text.equals("(")) {
+            signatureAST = SignatureParser.parseSignature(parser, null, true);
+        }
+
+        try {
+            while (peek(parser).text.equals(":")) {
+                String attrProto = SubroutineParser.consumeAttributes(parser, attributes,
+                        prototype, attrDisplayName, prevAttrProto);
+                if (attrProto != null) {
+                    prevAttrProto = prototype;
+                    prototype = attrProto;
+                }
+            }
+
+            if (!attributes.isEmpty()) {
+                org.perlonjava.runtime.operators.ModuleOperators.require(new RuntimeScalar("attributes.pm"));
+            }
+
+            if (!peek(parser).text.equals("{")) {
+                throw new RuntimeException("Expected '{' after method declaration");
+            }
+
+            consume(parser, LexerTokenType.OPERATOR, "{");
+            boolean wasInMethod = parser.isInMethod;
+            BlockNode block;
+            try {
+                parser.isInMethod = true;
+                block = ParseBlock.parseBlock(parser);
+            } finally {
+                parser.isInMethod = wasInMethod;
+            }
+            consume(parser, LexerTokenType.OPERATOR, "}");
+            injectAnonymousMethodSelf(block, signatureAST, currentIndex);
+
+            SubroutineNode method = new SubroutineNode(
+                    null,
+                    prototype,
+                    attributes.isEmpty() ? null : attributes,
+                    block,
+                    false,
+                    currentIndex
+            );
+            method.setAnnotation("isMethod", true);
+            method.setAnnotation("methodSelfInjected", true);
+            if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+                method.setAnnotation("signatureAST", signatureAST);
+            }
+            return method;
+        } finally {
+            parser.ctx.symbolTable.exitScope(methodScopeIndex);
+        }
+    }
+
+    private static void injectAnonymousMethodSelf(BlockNode block, ListNode signatureAST, int tokenIndex) {
+        ListNode mySelfDecl = new ListNode(tokenIndex);
+        OperatorNode mySelf = new OperatorNode("my",
+                new OperatorNode("$", new IdentifierNode("self", tokenIndex), tokenIndex),
+                tokenIndex);
+        mySelfDecl.elements.add(mySelf);
+
+        OperatorNode shiftOp = new OperatorNode("shift",
+                new OperatorNode("@", new IdentifierNode("_", tokenIndex), tokenIndex),
+                tokenIndex);
+        BinaryOperatorNode selfAssign = new BinaryOperatorNode("=", mySelfDecl, shiftOp, tokenIndex);
+        block.elements.addFirst(selfAssign);
+
+        if (signatureAST != null && !signatureAST.elements.isEmpty()) {
+            int insertPos = 1;
+            for (Node sigElement : signatureAST.elements) {
+                block.elements.add(insertPos++, sigElement);
+            }
         }
     }
 

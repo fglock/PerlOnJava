@@ -185,6 +185,9 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_const_EPIPE", "const_EPIPE", null);
             module.registerMethod("_const_EDOM", "const_EDOM", null);
             module.registerMethod("_const_ERANGE", "const_ERANGE", null);
+            module.registerMethod("_const_EWOULDBLOCK", "const_EWOULDBLOCK", null);
+            module.registerMethod("_const_ECONNRESET", "const_ECONNRESET", null);
+            module.registerMethod("_const_EINPROGRESS", "const_EINPROGRESS", null);
 
             // uname
             module.registerMethod("_uname", "uname", null);
@@ -1475,6 +1478,15 @@ public class POSIX extends PerlModuleBase {
     public static RuntimeList const_EPIPE(RuntimeArray a, int c) { return new RuntimeScalar(32).getList(); }
     public static RuntimeList const_EDOM(RuntimeArray a, int c) { return new RuntimeScalar(33).getList(); }
     public static RuntimeList const_ERANGE(RuntimeArray a, int c) { return new RuntimeScalar(34).getList(); }
+    public static RuntimeList const_EWOULDBLOCK(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_MAC ? 35 : 11).getList();
+    }
+    public static RuntimeList const_ECONNRESET(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 10054 : IS_MAC ? 54 : 104).getList();
+    }
+    public static RuntimeList const_EINPROGRESS(RuntimeArray a, int c) {
+        return new RuntimeScalar(IS_WINDOWS ? 10036 : IS_MAC ? 36 : 115).getList();
+    }
 
     /**
      * POSIX::uname() - returns (sysname, nodename, release, version, machine)

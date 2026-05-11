@@ -1170,7 +1170,7 @@ public class SubroutineParser {
                 }
             }
 
-            // "Subroutine X redefined": ckWARN('redefine') — $^W or lexical 'redefine' in ${^WARNING_BITS}.
+            // "Subroutine X redefined": ckWARN('redefine') - $^W or lexical 'redefine' in ${^WARNING_BITS}.
             // "Constant subroutine X redefined": still emitted when $^W is 0 (e.g. eval under local $^W=0);
             // only suppressed by lexical no warnings 'redefine' / no warnings. See perl5_t/t/comp/redef.t.
             if (isConstantSub) {
@@ -1447,6 +1447,8 @@ public class SubroutineParser {
                     Field field = placeholder.codeObject.getClass().getDeclaredField("__SUB__");
                     field.set(placeholder.codeObject, codeRef);
 
+                    installClosureCaptureMetadata(placeholder, paramList);
+
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
                     // This is critical: hash assignments copy RuntimeScalar but share the same
@@ -1478,6 +1480,7 @@ public class SubroutineParser {
                     // InterpretedCode implements PerlSubroutine, so we can use it directly
                     placeholder.subroutine = interpretedCode;
                     placeholder.codeObject = interpretedCode;
+                    installClosureCaptureMetadata(placeholder, paramList);
                 }
             } catch (VerifyError ve) {
                 // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
@@ -1510,6 +1513,7 @@ public class SubroutineParser {
                 interpretedCode.__SUB__ = codeRef;
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;
+                installClosureCaptureMetadata(placeholder, paramList);
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());
@@ -1535,6 +1539,25 @@ public class SubroutineParser {
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
         return result;
+    }
+
+    private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
+        if (code == null || capturedValues == null || capturedValues.isEmpty()
+                || code.capturedScalars != null) {
+            return;
+        }
+
+        ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
+        for (Object value : capturedValues) {
+            if (value instanceof RuntimeScalar scalar) {
+                capturedScalars.add(scalar);
+                scalar.captureCount++;
+            }
+        }
+        if (!capturedScalars.isEmpty()) {
+            code.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+            code.refCount = 0;
+        }
     }
 
     /**
