@@ -538,8 +538,9 @@ public class Operator {
                 for (int i = 0; i < length && offset < runtimeArray.size(); i++) {
                     RuntimeBase removed = runtimeArray.elements.remove(offset);
                     if (removed != null) {
-                        if (runtimeArray.elementsOwned && removed instanceof RuntimeScalar rs) {
+                        if (removed instanceof RuntimeScalar rs && runtimeArray.ownsElement(rs)) {
                             MortalList.deferDecrementIfTracked(rs);
+                            runtimeArray.forgetOwnedAliasElement(rs);
                         }
                         removedElements.elements.add(removed);
                     } else {
@@ -547,17 +548,20 @@ public class Operator {
                     }
                 }
 
-                // Add new elements.
-                // Note: we do NOT set runtimeArray.elementsOwned = true here, even though
-                // the inserted elements may have refCountOwned = true (from push's
-                // incrementRefCountForContainerStore). Setting elementsOwned = true would
-                // be incorrect for @_ arrays because remaining alias elements would then
-                // be subject to spurious DEC by subsequent shift/pop. The per-element
-                // refCountOwned flag handles cleanup when the array is cleared/destroyed.
+                // Add new elements. For @_ arrays, keep caller aliases
+                // non-owning while recording only the inserted elements as
+                // owned by this array.
                 if (!list.elements.isEmpty()) {
+                    boolean wasAliased = runtimeArray.elementsAliased;
                     RuntimeArray arr = new RuntimeArray();
                     RuntimeArray.push(arr, list);
                     runtimeArray.elements.addAll(offset, arr.elements);
+                    if (wasAliased) {
+                        for (RuntimeScalar elem : arr.elements) {
+                            runtimeArray.markOwnedAliasElement(elem);
+                        }
+                        runtimeArray.elementsAliased = true;
+                    }
                 }
 
                 yield removedElements;

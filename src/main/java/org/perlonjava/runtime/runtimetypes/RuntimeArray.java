@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 
 import org.perlonjava.runtime.operators.WarnDie;
@@ -40,6 +43,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Direct lvalue stores into ordinary arrays can flip elementsOwned on, but
     // alias arrays must stay non-owning so shift/pop do not consume caller refs.
     public boolean elementsAliased;
+    // For mixed @_ arrays: elementsAliased remains true for caller aliases,
+    // while mutating ops such as unshift can insert new counted elements that
+    // this array must release during tail-call/scope cleanup.
+    public Set<RuntimeScalar> ownedAliasElements;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
 
@@ -54,6 +61,32 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray(int initialCapacity) {
         type = PLAIN_ARRAY;
         elements = new ArrayList<>(initialCapacity);
+    }
+
+    public void markOwnedAliasElement(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        if (ownedAliasElements == null) {
+            ownedAliasElements = Collections.newSetFromMap(new IdentityHashMap<>());
+        }
+        ownedAliasElements.add(scalar);
+        elementsOwned = true;
+    }
+
+    public boolean ownsElement(RuntimeScalar scalar) {
+        if (!elementsOwned || scalar == null) return false;
+        if (!elementsAliased) return true;
+        return ownedAliasElements != null && ownedAliasElements.contains(scalar);
+    }
+
+    public void forgetOwnedAliasElement(RuntimeScalar scalar) {
+        if (ownedAliasElements == null || scalar == null) return;
+        ownedAliasElements.remove(scalar);
+        if (ownedAliasElements.isEmpty()) {
+            ownedAliasElements = null;
+            if (elementsAliased) {
+                elementsOwned = false;
+            }
+        }
     }
 
     /**
@@ -121,11 +154,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // @_ uses aliasing (setArrayOfAlias) without refCount increments,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
-                    if (runtimeArray.elementsOwned && result.refCountOwned
+                    if (runtimeArray.ownsElement(result) && result.refCountOwned
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        runtimeArray.forgetOwnedAliasElement(result);
                         if (base.refCountTrace) {
                             base.releaseOwner(result, "RuntimeArray.pop");
                         }
@@ -163,11 +197,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
-                    if (runtimeArray.elementsOwned && result.refCountOwned
+                    if (runtimeArray.ownsElement(result) && result.refCountOwned
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        runtimeArray.forgetOwnedAliasElement(result);
                         if (base.refCountTrace) {
                             base.releaseOwner(result, "RuntimeArray.shift");
                         }
@@ -212,16 +247,26 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 int sizeBefore = runtimeArray.elements.size();
+                boolean wasAliased = runtimeArray.elementsAliased;
                 value.addToArray(runtimeArray);
                 // Increment refCount for tracked references stored by push.
                 // addToArray creates copies via copy constructor (no refCount increment),
                 // so we must account for the container store here, matching the behavior
                 // of array assignment (setFromList) which also calls this.
                 for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
-                    RuntimeScalar.incrementRefCountForContainerStore(runtimeArray.elements.get(i));
+                    RuntimeScalar elem = runtimeArray.elements.get(i);
+                    RuntimeScalar.incrementRefCountForContainerStore(elem);
+                    if (wasAliased) {
+                        runtimeArray.markOwnedAliasElement(elem);
+                    }
                 }
-                runtimeArray.elementsOwned = true;
-                runtimeArray.elementsAliased = false;
+                if (wasAliased) {
+                    runtimeArray.elementsAliased = true;
+                } else {
+                    runtimeArray.elementsOwned = true;
+                    runtimeArray.elementsAliased = false;
+                    runtimeArray.ownedAliasElements = null;
+                }
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -251,11 +296,20 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
+                boolean wasAliased = runtimeArray.elementsAliased;
                 RuntimeArray arr = new RuntimeArray();
                 RuntimeArray.push(arr, value);
                 runtimeArray.elements.addAll(0, arr.elements);
-                runtimeArray.elementsOwned = true;
-                runtimeArray.elementsAliased = false;
+                if (wasAliased) {
+                    for (RuntimeScalar elem : arr.elements) {
+                        runtimeArray.markOwnedAliasElement(elem);
+                    }
+                    runtimeArray.elementsAliased = true;
+                } else {
+                    runtimeArray.elementsOwned = true;
+                    runtimeArray.elementsAliased = false;
+                    runtimeArray.ownedAliasElements = null;
+                }
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -729,6 +783,8 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
+        this.ownedAliasElements = null;
+        this.elementsAliased = false;
         this.elements.add(value);
         MortalList.flush();
         return this;
@@ -784,6 +840,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 }
                 this.elementsOwned = true;
                 this.elementsAliased = false;
+                this.ownedAliasElements = null;
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -871,6 +928,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         this.elementsOwned = false;
         this.elementsAliased = true;
+        this.ownedAliasElements = null;
         return this;
     }
 
@@ -1239,6 +1297,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar element = this.get(i);  // This will call FETCH
                 arr.elements.add(element);
             }
+            arr.elementsAliased = true;
             return arr;
         }
 
@@ -1252,10 +1311,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 arr.elements.add(new RuntimeArrayProxyEntry(this, i));
             } else {
                 arr.elements.add(element);
+                if (this.elementsAliased && this.ownsElement(element)) {
+                    arr.markOwnedAliasElement(element);
+                }
             }
         }
-        arr.elementsOwned = false;
         arr.elementsAliased = true;
+        arr.elementsOwned = arr.ownedAliasElements != null && !arr.ownedAliasElements.isEmpty();
         return arr;
     }
 

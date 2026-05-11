@@ -346,10 +346,18 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0) return;
-        // Alias arrays such as @_ do not own their elements. They can contain
-        // RuntimeScalar instances whose refCountOwned flag belongs to another
-        // container, so walking them here would consume that other owner's count.
-        if (arr.elementsAliased && !arr.elementsOwned) return;
+        // Alias arrays such as @_ do not own their original elements. They can
+        // still receive owned inserts via unshift/push before a goto &sub; in
+        // that mixed case, release only those inserted elements.
+        if (arr.elementsAliased) {
+            if (arr.ownedAliasElements == null || arr.ownedAliasElements.isEmpty()) return;
+            RuntimeScalar[] owned = arr.ownedAliasElements.toArray(new RuntimeScalar[0]);
+            for (RuntimeScalar elem : owned) {
+                deferDecrementRecursive(elem);
+                arr.forgetOwnedAliasElement(elem);
+            }
+            return;
+        }
         // Quick scan: check if any element either:
         //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
         //   2. Is a direct blessed reference (blessId != 0), OR
@@ -610,6 +618,7 @@ public class MortalList {
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
+        boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
@@ -627,7 +636,7 @@ public class MortalList {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
             } else if (base.blessId == 0
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && ReachabilityWalker.hasStrongCycle(base)) {
                 // Unblessed self-retaining cycles are intentionally leaked by
                 // Perl's refcounting. AnyEvent timers use this shape: the weak
@@ -635,7 +644,7 @@ public class MortalList {
                 // scalar holding that same array.
                 base.refCount = 1;
             } else if (base.blessId != 0
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // A weakened probe copy can make the selective count reach
@@ -646,7 +655,7 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && base.storedInPackageGlobal
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && isReachableCached(base)) {
                 // Module-global metadata such as Moose/Class::MOP metaclasses
                 // can transiently hit zero in the selective refcount model.

@@ -776,6 +776,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Get the Scalar alias into an Array
     public RuntimeArray setArrayOfAlias(RuntimeArray arr) {
         arr.elements.add(this);
+        arr.elementsAliased = true;
         return arr;
     }
 
