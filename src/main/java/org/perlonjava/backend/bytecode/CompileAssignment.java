@@ -18,6 +18,7 @@ public class CompileAssignment {
         // General fallback for any BinaryOperatorNode lvalue (matches JVM backend behavior)
         // Handles: local $hash{key} = v, local $array[i] = v, local $obj->method->{key} = v, etc.
         if (localOperand instanceof BinaryOperatorNode binOp) {
+            bc.prepareLocalHashFetchPatchRecording();
             bc.compileNode(binOp, -1, rhsContext);
             // Patch HASH_GET → HASH_GET_FOR_LOCAL so local $hash{key} survives hash reassignment
             bc.patchLastHashGetForLocal();
