@@ -457,6 +457,7 @@ public class IdentifierParser {
                         // Nothing valid follows ', so return what we have
                         return variableName.toString();
                     }
+                    isFirstToken = false;
                     // Continue the loop to process the next token
                     continue;
                 }
@@ -488,6 +489,7 @@ public class IdentifierParser {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();
                     }
+                    isFirstToken = false;
                     // Continue the loop to process the next token
                     continue;
                 }
@@ -554,6 +556,7 @@ public class IdentifierParser {
                 parser.tokenIndex++;
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                isFirstToken = false;
                 continue;
             } else if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE) {
                 return variableName.toString();
