@@ -994,6 +994,25 @@ imports:
       #                         iteration mismatch
       - utf8hash.t
 
+  # Unicode::Collate — UCA collation (Perl core dist). Java implements Collate.xs;
+  # Collate.pm is patched to skip the XS ucatbl trie and always load DUCET from files.
+  - source: perl5/cpan/Unicode-Collate/Collate.pm
+    target: src/main/perl/lib/Unicode/Collate.pm
+    patch: Unicode-Collate-Collate.pm.patch
+
+  - source: perl5/cpan/Unicode-Collate/Collate
+    target: src/main/perl/lib/Unicode/Collate
+    type: directory
+
+  # Upstream Unicode-Collate tests (see dev/modules/unicode_collate.md).
+  # Exclude heavy locale-matrix tests until the full stack is stable; core
+  # algorithm tests (default.t, test.t, hangul.t, …) stay enabled.
+  - source: perl5/cpan/Unicode-Collate/t
+    target: src/test/resources/module/Unicode-Collate/t
+    type: directory
+    exclude:
+      - loc_*.t
+
   # Add more imports below as needed
   # Example with minimal fields:
   # - source: perl5/lib/SomeModule.pm

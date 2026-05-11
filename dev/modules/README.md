@@ -16,6 +16,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [dbi_test_parity.md](dbi_test_parity.md) | DBI test-suite parity (~13.5× more passes than master; Phases 1–4 done, incl. a tied-hash method-dispatch fix in the PerlOnJava runtime) |
 | [math_bigint_bignum.md](math_bigint_bignum.md) | Math::BigInt / BigFloat / BigRat / bignum support (in progress) |
 | [storable_binary_format.md](storable_binary_format.md) | Storable native Perl binary format — read + write paths landed; jperl ↔ system-perl files interoperate in both directions |
+| [unicode_collate.md](unicode_collate.md) | Unicode::Collate — plan: file-backed DUCET + Java XS surface (default); optional ICU path tradeoffs |
 
 ## Module Status Overview
 

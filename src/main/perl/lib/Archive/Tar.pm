@@ -291,17 +291,17 @@ sub _get_handle {
 
             ### different reader/writer modules, different error vars... sigh
             if( MODE_READ->($mode) ) {
-                $fh = Compress::Bzip2::bzopen( $file, 'rb' ) or do {
+                $fh = IO::Uncompress::Bunzip2->new( $file, MultiStream => 1 ) or do {
                     $self->_error( qq[Could not read '$file': ] .
-                        $Compress::Bzip2::bzerrno
+                        $IO::Uncompress::Bunzip2::Bunzip2Error
                     );
                     return;
                 };
 
             } else {
-                $fh = Compress::Bzip2::bzopen( $file, 'wb' ) or do {
+                $fh = IO::Compress::Bzip2->new( $file ) or do {
                     $self->_error( qq[Could not write to '$file': ] .
-                        $Compress::Bzip2::bzerrno
+                        $IO::Compress::Bzip2::Bzip2Error
                     );
                     return;
                 };

@@ -420,7 +420,10 @@ public class CompareOperators {
             }
         }
 
-        return getScalarInt(Integer.compare(runtimeScalar.toString().compareTo(arg2.toString()), 0));
+        return getScalarInt(
+                Integer.signum(
+                        PerlUtfString.comparePerlLogical(
+                                runtimeScalar.toString(), arg2.toString())));
     }
 
     /**
@@ -557,7 +560,8 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
-        return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) < 0);
+        return getScalarBoolean(
+                PerlUtfString.comparePerlLogical(runtimeScalar.toString(), arg2.toString()) < 0);
     }
 
     /**
@@ -586,7 +590,8 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
-        return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) <= 0);
+        return getScalarBoolean(
+                PerlUtfString.comparePerlLogical(runtimeScalar.toString(), arg2.toString()) <= 0);
     }
 
     /**
@@ -615,7 +620,8 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
-        return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) > 0);
+        return getScalarBoolean(
+                PerlUtfString.comparePerlLogical(runtimeScalar.toString(), arg2.toString()) > 0);
     }
 
     /**
@@ -644,7 +650,8 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
-        return getScalarBoolean(runtimeScalar.toString().compareTo(arg2.toString()) >= 0);
+        return getScalarBoolean(
+                PerlUtfString.comparePerlLogical(runtimeScalar.toString(), arg2.toString()) >= 0);
     }
 
     /**

@@ -36,11 +36,23 @@ while (my $line = <$fh>) {
     my $source = $1;
     $source =~ s/^\s+|\s+$//g;
     $total++;
-    
-    # Get target
-    my $target_line = <$fh>;
-    my ($target) = $target_line =~ /target:\s+(.+)/;
-    $target =~ s/^\s+|\s+$//g if $target;
+
+    # Find target: anywhere before the next import block (do not assume it is
+    # the line immediately after source: — that breaks if fields are reordered).
+    my $target;
+    my $pos = tell($fh);
+    while (defined(my $l = <$fh>)) {
+        if ($l =~ /^\s*-\s+source:\s/) {
+            seek $fh, $pos, 0 or die "seek: $!\n";
+            last;
+        }
+        if ($l =~ /^\s+target:\s+(.+)/) {
+            ($target) = $1;
+            $target =~ s/^\s+|\s+$//g if $target;
+            last;
+        }
+        $pos = tell($fh);
+    }
     
     # Check source exists
     unless (-e $source) {

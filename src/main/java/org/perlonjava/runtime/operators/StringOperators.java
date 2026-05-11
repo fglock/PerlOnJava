@@ -31,7 +31,7 @@ public class StringOperators {
         }
         // Convert the RuntimeScalar to a string and return its length in codepoints
         String str = runtimeScalar.toString();
-        return getScalarInt(str.codePointCount(0, str.length()));
+        return getScalarInt(PerlUtfString.codePointCountPerl(str));
     }
 
     /**
@@ -602,41 +602,25 @@ public class StringOperators {
         // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
 
-        // For values 0-0x10FFFF that Java accepts, use Java's built-in support
-        if (Character.isValidCodePoint(codePoint) && codePoint <= 0x10FFFF) {
+        // BMP and supplementary scalars (not UTF-16 surrogate halves): normal UTF-16 string.
+        if (Character.isValidCodePoint(codePoint)
+                && codePoint <= 0x10FFFF
+                && (codePoint < 0xD800 || codePoint > 0xDFFF)) {
             RuntimeScalar res = new RuntimeScalar(new String(Character.toChars(codePoint)));
-            // Only mark as BYTE_STRING for values 0-255
             if (codePoint <= 0xFF) {
                 res.type = BYTE_STRING;
             }
             return res;
         }
 
-        // For surrogates (0xD800-0xDFFF) and values beyond Unicode (> 0x10FFFF),
-        // Perl still creates a character with that code point. We store it as a
-        // special marker that will be properly encoded when converted to UTF-8.
-        // For now, we create a string with the code point value, which will be
-        // handled by the UTF-8 encoding logic in pack/unpack.
-
-        // Create a character using the code point directly
-        // Note: This may create invalid Unicode, but that's what Perl does
-        if (codePoint <= 0x10FFFF) {
-            // Surrogates: Java won't let us create these with Character.toChars,
-            // but we can store the value for later UTF-8 encoding
-            RuntimeScalar res = new RuntimeScalar(new String(new int[]{codePoint}, 0, 1));
-            return res;
-        }
-
-        // For values beyond 0x10FFFF, Java's String can't represent them.
-        // We need to store the code point value separately so UnpackState can encode it.
-        // As a workaround, we'll store a special marker string with the code point embedded.
-        // Format: "\uFFFD" + 4-byte big-endian int representation
-        // This is a hack, but it allows us to preserve the value for unpack.
+        // Surrogate scalars (U+D800..U+DFFF) and beyond-Unicode UVs: internal FFFD<hex> marker
+        // so Perl distinguishes chr(D800).chr(DC00) from U+10000 (same UTF-16 in Java).
         RuntimeScalar res = new RuntimeScalar();
         res.type = RuntimeScalarType.STRING;
-        // Store as a special format that UnpackState will recognize
-        // Use a marker followed by the code point value
-        res.value = "\uFFFD" + String.format("<%08X>", codePoint);
+        res.value =
+                codePoint <= 0x10FFFF
+                        ? PerlUtfString.encodeSurrogateScalar(codePoint)
+                        : PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(codePoint));
         return res;
     }
 

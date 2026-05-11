@@ -75,7 +75,8 @@ use constant ZLIB           => do { !$ENV{'PERL5_AT_NO_ZLIB'} and
 
                             ### allow BZIP to be turned off using ENV: DEBUG only
 use constant BZIP           => do { !$ENV{'PERL5_AT_NO_BZIP'} and
-                                        eval { require Compress::Bzip2; };
+                                        eval { require IO::Uncompress::Bunzip2;
+                                               require IO::Compress::Bzip2; };
                                     $ENV{'PERL5_AT_NO_BZIP'} || $@ ? 0 : 1
                                 };
 

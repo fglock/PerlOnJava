@@ -267,6 +267,17 @@ test {
     }
 }
 
+// Propagate `JPERL_TEST_FILTER` into forked test JVMs as a plain string.
+// Passing a Provider to `Test.systemProperty` / `environment` has been observed
+// to stringify the Provider (breaking substring filters); resolve via the same
+// Provider we already record as an input so configuration-cache invalidation
+// stays correct when the env var changes between invocations.
+def jperlTestFilterProp = providers.environmentVariable('JPERL_TEST_FILTER').orElse('')
+tasks.withType(Test).configureEach { t ->
+    t.inputs.property('jperlTestFilter', jperlTestFilterProp)
+    t.environment('JPERL_TEST_FILTER', jperlTestFilterProp.get())
+}
+
 // Fast unit tests only (tests in unit/ directory)
 tasks.register('testUnit', Test) {
     description = 'Runs fast unit tests only (from unit/ directory)'
