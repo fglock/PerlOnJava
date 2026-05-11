@@ -8,7 +8,6 @@ package org.perlonjava.runtime.runtimetypes;
     Implementing modes for read/write (+<, +>) operations.
  */
 
-import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.operators.IOOperator;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -1083,59 +1082,16 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         if (runtimeScalar.isString()) {
-            String rawName = runtimeScalar.toString();
-            // Bare handle names (e.g. addfile(F) → "F") compile as strings (EmitLiteral.emitIdentifier).
-            // Prefer peek + existing IO slots so we do not vivify the wrong package's empty glob
-            // (main::F) while the real handle is MD5Test::F — see GAAS/MD5 t/md5.t.
-            String packageName = InterpreterState.currentPackage.get().toString();
-            if (rawName.equals("STDOUT") || rawName.equals("STDERR") || rawName.equals("STDIN")) {
+            String name = runtimeScalar.toString();
+            String packageName = "main";  // XXX TODO: get the current package name
+            if (name.equals("STDOUT") || name.equals("STDERR") || name.equals("STDIN")) {
                 packageName = "main";
             }
 
-            if (!rawName.contains("::") && rawName.matches("[A-Za-z_]\\w*")) {
-                LinkedHashSet<String> pkgs = new LinkedHashSet<>();
-                for (int i = 0; i < 16; i++) {
-                    CallerStack.CallerInfo ci = CallerStack.peek(i);
-                    if (ci == null) {
-                        break;
-                    }
-                    String callerPkg = ci.packageName();
-                    if (callerPkg != null && !callerPkg.isEmpty()) {
-                        pkgs.add(callerPkg);
-                    }
-                }
-                pkgs.add(packageName);
-                String gcp = RuntimeCode.getCurrentPackage();
-                if (gcp.endsWith("::")) {
-                    gcp = gcp.substring(0, gcp.length() - 2);
-                }
-                if (!gcp.isEmpty()) {
-                    pkgs.add(gcp);
-                }
-                pkgs.add("main");
-
-                RuntimeGlob found = null;
-                for (String pkg : pkgs) {
-                    String q = NameNormalizer.normalizeVariableName(rawName, pkg);
-                    RuntimeGlob g = GlobalVariable.peekGlobalIO(q);
-                    if (g != null && g.getIO() != null && g.getIO().getRuntimeIO() != null) {
-                        found = g;
-                        break;
-                    }
-                }
-                if (found == null) {
-                    found = GlobalVariable.pickGlobWithOpenIoForSimpleHandleName(rawName);
-                }
-                if (found != null) {
-                    runtimeScalar = found;
-                } else {
-                    String name = NameNormalizer.normalizeVariableName(rawName, packageName);
-                    runtimeScalar = GlobalVariable.getGlobalIO(name);
-                }
-            } else {
-                String name = NameNormalizer.normalizeVariableName(rawName, packageName);
-                runtimeScalar = GlobalVariable.getGlobalIO(name);
-            }
+            // Normalize the name to include the package qualifier
+            // This converts "HANDLE" to "Package::HANDLE" format
+            name = NameNormalizer.normalizeVariableName(name, packageName);
+            runtimeScalar = GlobalVariable.getGlobalIO(name);
         }
 
         if (runtimeScalar.value instanceof RuntimeGlob runtimeGlob) {

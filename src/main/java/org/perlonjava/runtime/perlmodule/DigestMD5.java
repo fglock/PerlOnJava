@@ -103,6 +103,18 @@ public class DigestMD5 extends PerlModuleBase {
             // RuntimeIO.getRuntimeIO resolves globs, \*FH, strings like "Pkg::FH", etc.
             // Unlike Digest::SHA, Digest::MD5 does not accept a plain filesystem path.
             RuntimeIO fh = RuntimeIO.getRuntimeIO(fileArg);
+            // Barewords compile to plain strings; getRuntimeIO may vivify main::FH with no IO
+            // while the real handle is Pkg::FH (GAAS/MD5 t/md5.t). Resolve only here — not in
+            // RuntimeIO.getRuntimeIO — so CallerStack / eval diagnostics stay unchanged.
+            if (fh == null && fileArg.isString()) {
+                String raw = fileArg.toString();
+                if (!raw.contains("::") && raw.matches("[A-Za-z_]\\w*")) {
+                    RuntimeGlob picked = GlobalVariable.pickGlobWithOpenIoForSimpleHandleName(raw);
+                    if (picked != null) {
+                        fh = RuntimeIO.getRuntimeIO(picked);
+                    }
+                }
+            }
             if (fh == null) {
                 throw new PerlCompilerException("Not a GLOB reference");
             }
