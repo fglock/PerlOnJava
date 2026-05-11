@@ -86,15 +86,13 @@ public class BytecodeCompiler implements Visitor {
     int targetOutputReg = -1;
 
     /**
-     * When true, the next HASH_GET / HASH_DEREF_FETCH* emitted as the outermost hash element
-     * fetch for a {@code local $hash{key}} / {@code local $href->{k}} lvalue is recorded for
-     * {@link #patchLastHashGetForLocal()}. We suppress recording while compiling inner key
-     * expressions so nested hash reads are not patched. (A backward scan for opcode value 50
-     * collides with register 50, string pool index 50, etc., and corrupts the bytecode stream.)
+     * When {@code localHashLvalueCompileDepth > 0}, hash element / arrow-hash fetches emit
+     * {@code *_FOR_LOCAL} opcodes so {@code local $hash{key}} / {@code local $href->{k}} get
+     * {@link RuntimeHashProxyEntry} proxies. {@code suppressLocalHashFetchForLocal} is bumped while
+     * compiling inner key expressions so nested hash reads stay ordinary fetches.
      */
-    private boolean recordHashFetchForLocalPatch = false;
-    private int pendingLocalHashOpcodePc = -1;
-    private int pendingLocalHashOriginalOp = -1;
+    private int localHashLvalueCompileDepth = 0;
+    private int suppressLocalHashFetchForLocal = 0;
 
     // Track current calling context for subroutine calls
     int currentCallContext = RuntimeContextType.LIST; // Default to LIST
@@ -1829,32 +1827,29 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(keyReg);
                 emit(keyIdx);
 
-                // Emit HASH_GET opcode
+                // Emit HASH_GET / HASH_GET_FOR_LOCAL (see localHashLvalueCompileDepth)
                 int rd = allocateOutputRegister();
-                int hashGetOpcodePc = bytecode.size();
-                emit(Opcodes.HASH_GET);
+                emit(opcodeForHashElementGet());
                 emitReg(rd);
                 emitReg(hashReg);
                 emitReg(keyReg);
-                noteHashFetchOpcodeIfRecording(Opcodes.HASH_GET, hashGetOpcodePc);
 
                 lastResultReg = rd;
             } else {
                 // Expression key - compile it in SCALAR context to ensure we get RuntimeScalar
-                boolean savedRecord = recordHashFetchForLocalPatch;
-                recordHashFetchForLocalPatch = false;
-                compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
-                recordHashFetchForLocalPatch = savedRecord;
+                suppressLocalHashFetchForLocal++;
+                try {
+                    compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
+                } finally {
+                    suppressLocalHashFetchForLocal--;
+                }
                 int keyReg = lastResultReg;
 
-                // Emit HASH_GET opcode
                 int rd = allocateOutputRegister();
-                int hashGetOpcodePc = bytecode.size();
-                emit(Opcodes.HASH_GET);
+                emit(opcodeForHashElementGet());
                 emitReg(rd);
                 emitReg(hashReg);
                 emitReg(keyReg);
-                noteHashFetchOpcodeIfRecording(Opcodes.HASH_GET, hashGetOpcodePc);
 
                 lastResultReg = rd;
             }
@@ -2268,23 +2263,19 @@ public class BytecodeCompiler implements Visitor {
             int keyIdx = addToStringPool(constantKey);
             int rd = allocateOutputRegister();
             if (isStrictRefsEnabled()) {
-                // SUPEROPERATOR: Constant key + strict refs - use HASH_DEREF_FETCH
-                int opPc = bytecode.size();
-                emit(Opcodes.HASH_DEREF_FETCH);
+                // SUPEROPERATOR: Constant key + strict refs
+                emit(opcodeForHashArrowFetchStrict());
                 emitReg(rd);
                 emitReg(baseReg);
                 emit(keyIdx);
-                noteHashFetchOpcodeIfRecording(Opcodes.HASH_DEREF_FETCH, opPc);
             } else {
-                // SUPEROPERATOR: Constant key + non-strict - use HASH_DEREF_FETCH_NONSTRICT
+                // SUPEROPERATOR: Constant key + non-strict
                 int pkgIdx = addToStringPool(getCurrentPackage());
-                int opPc = bytecode.size();
-                emit(Opcodes.HASH_DEREF_FETCH_NONSTRICT);
+                emit(opcodeForHashArrowFetchNonStrict());
                 emitReg(rd);
                 emitReg(baseReg);
                 emit(keyIdx);
                 emit(pkgIdx);
-                noteHashFetchOpcodeIfRecording(Opcodes.HASH_DEREF_FETCH_NONSTRICT, opPc);
             }
             return rd;
         }
@@ -2300,10 +2291,12 @@ public class BytecodeCompiler implements Visitor {
             emitReg(keyReg);
             emit(keyIdx);
         } else {
-            boolean savedRecord = recordHashFetchForLocalPatch;
-            recordHashFetchForLocalPatch = false;
-            compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
-            recordHashFetchForLocalPatch = savedRecord;
+            suppressLocalHashFetchForLocal++;
+            try {
+                compileNode(keyExpr, -1, RuntimeContextType.SCALAR);
+            } finally {
+                suppressLocalHashFetchForLocal--;
+            }
             keyReg = lastResultReg;
         }
 
@@ -2321,12 +2314,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int rd = allocateOutputRegister();
-        int hashGetOpcodePc = bytecode.size();
-        emit(Opcodes.HASH_GET);
+        emit(opcodeForHashElementGet());
         emitReg(rd);
         emitReg(hashReg);
         emitReg(keyReg);
-        noteHashFetchOpcodeIfRecording(Opcodes.HASH_GET, hashGetOpcodePc);
         return rd;
     }
 
@@ -4143,12 +4134,12 @@ public class BytecodeCompiler implements Visitor {
             // General fallback for any lvalue expression (matches JVM backend behavior)
             // Handles: local $hash{key}, local $array[index], local $obj->method->{key}, etc.
             if (node.operand instanceof BinaryOperatorNode binOp) {
-                prepareLocalHashFetchPatchRecording();
-                compileNode(binOp, -1, RuntimeContextType.SCALAR);
-                // Patch HASH_GET → HASH_GET_FOR_LOCAL so that local $hash{key}
-                // always gets a RuntimeHashProxyEntry (not a bare scalar).
-                // This ensures the save/restore mechanism can survive hash reassignment.
-                patchLastHashGetForLocal();
+                beginLocalHashLvalueCompile();
+                try {
+                    compileNode(binOp, -1, RuntimeContextType.SCALAR);
+                } finally {
+                    endLocalHashLvalueCompile();
+                }
                 int elemReg = lastResultReg;
                 emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 emitReg(elemReg);
@@ -4921,51 +4912,33 @@ public class BytecodeCompiler implements Visitor {
         bytecode.add(value);
     }
 
-    /**
-     * Begin recording the next hash element fetch opcode for {@link #patchLastHashGetForLocal()}.
-     * Call immediately before compiling the {@code local ...} lvalue expression.
-     */
-    public void prepareLocalHashFetchPatchRecording() {
-        pendingLocalHashOpcodePc = -1;
-        pendingLocalHashOriginalOp = -1;
-        recordHashFetchForLocalPatch = true;
+    /** Call around compiling the operand of {@code local} when it may be a hash element lvalue. */
+    public void beginLocalHashLvalueCompile() {
+        localHashLvalueCompileDepth++;
     }
 
-    private void noteHashFetchOpcodeIfRecording(int opcode, int opcodePc) {
-        if (!recordHashFetchForLocalPatch) {
-            return;
+    public void endLocalHashLvalueCompile() {
+        if (localHashLvalueCompileDepth > 0) {
+            localHashLvalueCompileDepth--;
         }
-        pendingLocalHashOpcodePc = opcodePc;
-        pendingLocalHashOriginalOp = opcode;
-        recordHashFetchForLocalPatch = false;
     }
 
-    /**
-     * Patch the hash fetch recorded during {@link #prepareLocalHashFetchPatchRecording()} to
-     * the *_FOR_LOCAL variant. Called after compiling hash element access in {@code local}
-     * context so that the result is always a RuntimeHashProxyEntry.
-     * <p>
-     * Safe when no hash fetch was emitted (e.g. {@code local $array[i]}).
-     */
-    void patchLastHashGetForLocal() {
-        if (pendingLocalHashOpcodePc >= 0 && pendingLocalHashOpcodePc < bytecode.size()) {
-            int cur = bytecode.get(pendingLocalHashOpcodePc);
-            if (cur == pendingLocalHashOriginalOp) {
-                int patched =
-                        switch (pendingLocalHashOriginalOp) {
-                            case Opcodes.HASH_GET -> Opcodes.HASH_GET_FOR_LOCAL;
-                            case Opcodes.HASH_DEREF_FETCH -> Opcodes.HASH_DEREF_FETCH_FOR_LOCAL;
-                            case Opcodes.HASH_DEREF_FETCH_NONSTRICT -> Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL;
-                            default -> cur;
-                        };
-                if (patched != cur) {
-                    bytecode.set(pendingLocalHashOpcodePc, patched);
-                }
-            }
-        }
-        pendingLocalHashOpcodePc = -1;
-        pendingLocalHashOriginalOp = -1;
-        recordHashFetchForLocalPatch = false;
+    private boolean shouldEmitHashFetchForLocal() {
+        return localHashLvalueCompileDepth > 0 && suppressLocalHashFetchForLocal == 0;
+    }
+
+    private int opcodeForHashElementGet() {
+        return shouldEmitHashFetchForLocal() ? Opcodes.HASH_GET_FOR_LOCAL : Opcodes.HASH_GET;
+    }
+
+    private int opcodeForHashArrowFetchStrict() {
+        return shouldEmitHashFetchForLocal() ? Opcodes.HASH_DEREF_FETCH_FOR_LOCAL : Opcodes.HASH_DEREF_FETCH;
+    }
+
+    private int opcodeForHashArrowFetchNonStrict() {
+        return shouldEmitHashFetchForLocal()
+                ? Opcodes.HASH_DEREF_FETCH_NONSTRICT_FOR_LOCAL
+                : Opcodes.HASH_DEREF_FETCH_NONSTRICT;
     }
 
     void emitInt(int value) {
