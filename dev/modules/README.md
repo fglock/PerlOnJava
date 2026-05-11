@@ -13,6 +13,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [makemaker_perlonjava.md](makemaker_perlonjava.md) | ExtUtils::MakeMaker implementation |
 | [cpan_client.md](cpan_client.md) | jcpan - CPAN client for PerlOnJava |
 | [dbix_class.md](dbix_class.md) | DBIx::Class support (in progress) |
+| [padwalker.md](padwalker.md) | PadWalker support plan for Reply lexical persistence |
 | [dbi_test_parity.md](dbi_test_parity.md) | DBI test-suite parity (~13.5× more passes than master; Phases 1–4 done, incl. a tied-hash method-dispatch fix in the PerlOnJava runtime) |
 | [math_bigint_bignum.md](math_bigint_bignum.md) | Math::BigInt / BigFloat / BigRat / bignum support (in progress) |
 | [storable_binary_format.md](storable_binary_format.md) | Storable native Perl binary format — read + write paths landed; jperl ↔ system-perl files interoperate in both directions |
@@ -44,6 +45,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | Module | Blocker | See |
 |--------|---------|-----|
 | Moose | B module subroutine names | [moose_support.md](moose_support.md) |
+| Reply | PadWalker lexical-pad introspection | [padwalker.md](padwalker.md) |
 | Any XS-only module | No compiler | [xs_fallback.md](xs_fallback.md) |
 
 ## Key Concepts
@@ -125,6 +127,7 @@ PERL_PARAMS_UTIL_PP=1 ./jcpan -t Class::Load
 - [moo_support.md](moo_support.md) - Moo support (working)
 - [JCPAN_DATETIME_FIXES.md](JCPAN_DATETIME_FIXES.md) - DateTime via jcpan
 - [dbix_class.md](dbix_class.md) - DBIx::Class support
+- [padwalker.md](padwalker.md) - PadWalker support plan for Reply lexical persistence
 - [log4perl-compatibility.md](log4perl-compatibility.md) - Log::Log4perl
 - [term_readkey.md](term_readkey.md) - Term::ReadKey
 - [xml_parser.md](xml_parser.md) - XML::Parser (Java XS via JDK SAX)
