@@ -1282,6 +1282,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Don't call callDestroy — the container is still alive.
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (oldBase.blessId != 0
+                        && WeakRefRegistry.hasWeakRefsTo(oldBase)
+                        && ReachabilityWalker.isReachableFromLiveScalarRegistry(oldBase)) {
+                    // Mirror MortalList.flush(): overwriting one counted scalar
+                    // can transiently zero the selective count while another live
+                    // lexical still reaches the object. Preserve weak refs until
+                    // the actual owner leaves scope.
+                    oldBase.refCount = 1;
+                } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
                         && ReachabilityWalker.isReachableFromRoots(oldBase)) {

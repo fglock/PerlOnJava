@@ -645,6 +645,16 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
+                    && ReachabilityWalker.isReachableFromLiveScalarRegistry(base)) {
+                // A closure/callback cleanup can transiently consume the counted
+                // owners of a blessed object while an outer lexical still holds it.
+                // DBIC's leak tracer exposes this by weakening schema backrefs and
+                // wrapping Try::Tiny blocks with goto. If a live scalar still reaches
+                // the object, keep the weak refs valid and wait for the real owner
+                // scope to exit.
+                base.refCount = 1;
+            } else if (base.blessId != 0
+                    && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && ReachabilityWalker.isReachableFromRoots(base)) {
                 // A weakened probe copy can make the selective count reach

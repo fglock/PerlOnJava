@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 {
     package Pr709AnonPkg;
@@ -39,3 +39,16 @@ my $missing_curly_error = do {
     $@;
 };
 like $missing_curly_error, qr/^Missing right curly/, "package block reports missing right curly";
+
+my $eval_runtime_error = do {
+    local $@;
+    eval {
+        $@ = "stale exception";
+        my $undef;
+        $undef->resultset;
+        1;
+    };
+    $@;
+};
+like $eval_runtime_error, qr/^Can't call method "resultset" on an undefined value/,
+    "eval replaces stale \$@ for runtime method-call exceptions";
