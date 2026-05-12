@@ -192,7 +192,12 @@ public class FileHandle {
                 String name = IdentifierParser.parseSubroutineIdentifier(parser);
                 if (name != null) {
                     fileHandle = parseBarewordHandle(parser, name);
-                    if (fileHandle == null && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                    // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
+                    // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
+                    // (perl5_t/t/comp/package.t test 13: print __PACKAGE__ eq 'Pkg' ? ...).
+                    if (fileHandle == null
+                            && name.matches("^[A-Z_][A-Z0-9_]*$")
+                            && !isDoubleUnderscoreMagicBareword(name)) {
                         GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
                         fileHandle = parseBarewordHandle(parser, name);
                     }
@@ -301,5 +306,10 @@ public class FileHandle {
         // This converts "HANDLE" to "Package::HANDLE" format
         name = NameNormalizer.normalizeVariableName(name, packageName);
         return name;
+    }
+
+    /** {@code __FOO__} tokens (e.g. {@code __PACKAGE__}) are not print bareword filehandles. */
+    private static boolean isDoubleUnderscoreMagicBareword(String name) {
+        return name.length() >= 4 && name.startsWith("__") && name.endsWith("__");
     }
 }

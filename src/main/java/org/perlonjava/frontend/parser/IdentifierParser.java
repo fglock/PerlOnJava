@@ -126,6 +126,18 @@ public class IdentifierParser {
         return nextToken.type == LexerTokenType.IDENTIFIER || nextToken.type == LexerTokenType.NUMBER;
     }
 
+    /** True if any code point in {@code s} is outside U+007F (Perl BEGIN-stash quirk for legacy {@code '} with UTF-8 names). */
+    private static boolean containsNonAsciiCodePoint(CharSequence s) {
+        for (int i = 0, n = s.length(); i < n; ) {
+            int cp = Character.codePointAt(s, i);
+            if (cp > 0x7F) {
+                return true;
+            }
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
+
     /**
      * Parses the inner part of a complex identifier, handling cases where the identifier
      * may be enclosed in braces.
@@ -404,11 +416,16 @@ public class IdentifierParser {
 
                 // Handle single quote as package separator (legacy Perl syntax)
                 if (token.text.equals("'") && isSingleQuotePackageSeparator(parser, variableName)) {
+                    // Perl only adds a BEGIN stash entry for this legacy syntax when the
+                    // package segment uses non-ASCII identifiers (perl5_t/t/uni/package.t).
+                    // Pure-ASCII segments like $main'a or $ABC'dyick must not (comp/package.t).
+                    if (containsNonAsciiCodePoint(variableName)) {
+                        GlobalVariable.ensureStashBeginStubForLegacyPackageSeparator(
+                                parser.ctx.symbolTable.getCurrentPackage());
+                    }
                     // Convert ' to :: for internal representation
                     variableName.append("::");
                     parser.tokenIndex++;
-                    GlobalVariable.ensureStashBeginStubForLegacyPackageSeparator(
-                            parser.ctx.symbolTable.getCurrentPackage());
 
                     // Update token references. Do NOT skip whitespace here:
                     // in real perl, qualified names cannot contain whitespace

@@ -625,8 +625,10 @@ public class GlobalVariable {
 
     /**
      * Perl records a {@code BEGIN} typeglob entry in the compiling package's stash when
-     * the legacy single-quote package separator is used (e.g. {@code $Pkg'var}).
-     * That entry must appear in {@code keys %CurrentPkg::} (see perl5_t/t/uni/package.t).
+     * the legacy single-quote package separator is used with a <em>non-ASCII</em> package
+     * segment (e.g. {@code $압Ƈ'var} under {@code use utf8}; see perl5_t/t/uni/package.t).
+     * Pure-ASCII legacy names (e.g. {@code $main'a}, {@code $ABC'dyick}) do not get this
+     * entry (perl5_t/t/comp/package.t).
      */
     public static void ensureStashBeginStubForLegacyPackageSeparator(String currentPackage) {
         if (currentPackage == null || currentPackage.isEmpty()) {
