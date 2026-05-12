@@ -1306,12 +1306,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             matcher.appendTail(resultBuffer);
         }
 
-        // Repair potential UTF-8 corruption from Latin-1 decoding
-        // When input string contains multi-byte UTF-8 sequences decoded as Latin-1,
-        // Java's Matcher.appendTail() may corrupt them. Try to repair by detecting
-        // sequences of high-byte characters that form valid UTF-8 when reinterpreted.
         String finalResult = resultBuffer.toString();
-        finalResult = repairLatin1EncodedUtf8(finalResult);
+
+        // Repair potential UTF-8 corruption from Matcher.appendTail()
+        // ONLY if the result looks corrupted (has orphaned lead bytes near punctuation),
+        // not if it looks like legitimate code
+        finalResult = repairLatin1EncodedUtf8IfCorrupted(finalResult);
 
         // Release captures from the replacement closure to unblock DESTROY.
         // The s///eg replacement is compiled as an anonymous sub that captures
@@ -1378,42 +1378,38 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Repair UTF-8 sequences that were corrupted by Latin-1 decoding.
+     * Repair orphaned UTF-8 lead bytes ONLY if they're clearly corruption.
      *
-     * When a file containing UTF-8 is incorrectly decoded as Latin-1, multi-byte
-     * UTF-8 sequences become sequences of separate high-byte characters. For example,
-     * « (U+00AB in UTF-8: 0xC2 0xAB) becomes two characters: U+00C2 and U+00AB.
-     *
-     * Java's Matcher.appendReplacement() may leave partial UTF-8 lead bytes orphaned
-     * (e.g., U+00C2 without its continuation byte), which display as replacement
-     * characters (Â). This method detects and removes these orphaned lead bytes.
-     *
-     * @param str The potentially corrupted string
-     * @return The repaired string
+     * Conservative repair that only removes orphaned lead bytes (0xC0-0xDF without
+     * continuation) if they appear in contexts that suggest corruption, not legitimate code.
+     * For example, orphaned bytes followed by ASCII letters/digits are likely corruption.
      */
-    private static String repairLatin1EncodedUtf8(String str) {
+    private static String repairLatin1EncodedUtf8IfCorrupted(String str) {
         if (str == null || str.isEmpty()) {
             return str;
         }
 
-        // Scan for orphaned UTF-8 lead bytes (0xC0-0xDF without valid continuation)
-        // These are the corruption markers we want to remove
-        boolean hasOrphanedLeadBytes = false;
-
+        // Scan for orphaned lead bytes followed by ASCII
+        // This pattern is unlikely in legitimate code but common in corrupted UTF-8
+        boolean hasLikelyCorruption = false;
         for (int i = 0; i < str.length() - 1; i++) {
             char c = str.charAt(i);
             if (c >= 0xC0 && c <= 0xDF) {
                 char next = str.charAt(i + 1);
+                // Not a continuation byte (0x80-0xBF)
                 if (!(next >= 0x80 && next <= 0xBF)) {
-                    // Found an orphaned lead byte
-                    hasOrphanedLeadBytes = true;
-                    break;
+                    // Is followed by ASCII letter/digit (likely corruption marker)
+                    if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z') ||
+                        (next >= '0' && next <= '9')) {
+                        hasLikelyCorruption = true;
+                        break;
+                    }
                 }
             }
         }
 
-        if (!hasOrphanedLeadBytes) {
-            return str; // No corruption detected
+        if (!hasLikelyCorruption) {
+            return str; // No clear corruption marker found
         }
 
         // Remove orphaned lead bytes
@@ -1422,21 +1418,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             char c = str.charAt(i);
 
             if (c >= 0xC0 && c <= 0xDF) {
-                // Check if followed by continuation byte
                 if (i + 1 < str.length()) {
                     char next = str.charAt(i + 1);
                     if (next >= 0x80 && next <= 0xBF) {
-                        // Valid UTF-8 sequence, keep both chars
+                        // Valid UTF-8 sequence, keep both
                         repaired.append(c).append(next);
-                        i++; // Skip the continuation byte
+                        i++;
                         continue;
                     }
                 }
-                // Orphaned lead byte with no valid continuation - skip it
+                // Orphaned lead byte - skip it
                 continue;
             }
 
-            // Regular character, keep it
             repaired.append(c);
         }
 

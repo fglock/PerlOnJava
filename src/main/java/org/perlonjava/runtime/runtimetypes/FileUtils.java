@@ -143,15 +143,20 @@ public class FileUtils {
             }
         }
 
+        // Check if file is valid UTF-8. Prefer UTF-8 over Latin-1 for CPAN modules
+        // and other modern code that's likely to use UTF-8.
+        if (isValidUtf8(bytes)) {
+            return StandardCharsets.UTF_8;
+        }
+
         // Check if file contains non-ASCII bytes that aren't valid UTF-8.
         // Perl 5 without 'use utf8' treats source as Latin-1 (ISO-8859-1).
-        // We use UTF-8 for valid UTF-8 files (most modern files), but fall back
-        // to ISO-8859-1 for files with invalid UTF-8 sequences (legacy Latin-1 files).
-        if (hasNonAscii(bytes) && !isValidUtf8(bytes)) {
+        // Only use Latin-1 if the file has non-ASCII bytes AND is not valid UTF-8.
+        if (hasNonAscii(bytes)) {
             return StandardCharsets.ISO_8859_1;
         }
 
-        // Default to UTF-8
+        // Default to UTF-8 for pure ASCII files
         return StandardCharsets.UTF_8;
     }
 
