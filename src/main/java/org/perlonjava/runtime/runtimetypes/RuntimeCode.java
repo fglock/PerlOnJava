@@ -1143,12 +1143,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Check if the eval string contains non-ASCII characters
             // If so, treat it as Unicode source to preserve Unicode characters during parsing
             // EXCEPT for evalbytes, which must treat everything as bytes
+            // NOTE: Even BYTE_STRINGs can contain UTF-8 encoded sequences, so we check all types
             String evalString = code.toString();
             boolean hasUnicode = false;
-            if (!ctx.isEvalbytes && code.type != RuntimeScalarType.BYTE_STRING) {
+            if (!ctx.isEvalbytes) {
                 for (int i = 0; i < evalString.length(); i++) {
                     if (evalString.charAt(i) > 127) {
                         hasUnicode = true;
+                        if (EVAL_TRACE) {
+                            System.err.println("[RuntimeCode.evalStringHelper] Detected non-ASCII char at position " + i +
+                                ": U+" + Integer.toHexString(evalString.charAt(i)).toUpperCase() +
+                                " in string type=" + code.type);
+                        }
                         break;
                     }
                 }
@@ -1164,6 +1170,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean isByteStringSource = !ctx.isEvalbytes && code.type == RuntimeScalarType.BYTE_STRING;
             if (hasUnicode) {
                 evalCompilerOptions.isUnicodeSource = true;
+                if (EVAL_TRACE) {
+                    System.err.println("[RuntimeCode.evalStringHelper] Setting isUnicodeSource=true");
+                }
             }
             if (ctx.isEvalbytes) {
                 evalCompilerOptions.isEvalbytes = true;

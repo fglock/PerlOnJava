@@ -124,6 +124,21 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
+
+            // Detect if eval string contains UTF-8 characters and set isUnicodeSource
+            // This allows identifiers with UTF-8 characters (e.g., guillemets « » from CodeGenerator)
+            // to be properly recognized instead of being rejected as "Unrecognized character"
+            if (perlCode != null && !perlCode.isEmpty()) {
+                for (int i = 0; i < perlCode.length(); i++) {
+                    if (perlCode.charAt(i) > 127) {
+                        opts.isUnicodeSource = true;
+                        evalTrace("Detected UTF-8 in eval at char " + i +
+                            ", first non-ASCII char: U+" + Integer.toHexString(perlCode.charAt(i)).toUpperCase());
+                        break;
+                    }
+                }
+            }
+
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.
@@ -395,6 +410,21 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
+
+            // Detect if eval string contains UTF-8 characters and set isUnicodeSource
+            // This allows identifiers with UTF-8 characters (e.g., guillemets « » from CodeGenerator)
+            // to be properly recognized instead of being rejected as "Unrecognized character"
+            if (perlCode != null && !perlCode.isEmpty()) {
+                for (int i = 0; i < perlCode.length(); i++) {
+                    if (perlCode.charAt(i) > 127) {
+                        opts.isUnicodeSource = true;
+                        evalTrace("Detected UTF-8 in eval at char " + i +
+                            ", first non-ASCII char: U+" + Integer.toHexString(perlCode.charAt(i)).toUpperCase());
+                        break;
+                    }
+                }
+            }
+
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.
