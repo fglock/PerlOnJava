@@ -2645,6 +2645,15 @@ public class BytecodeCompiler implements Visitor {
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
 
+                        // Match JVM EmitVariable: MODIFY_*_ATTRIBUTES must run for : ATTR(...)
+                        // declarations even when storage comes from RETRIEVE_BEGIN_* (closure
+                        // pre-registration). Skipping this left Class::Std broken under interpreter
+                        // eval STRING (attribute handlers and inside-out setup never ran).
+                        if ((op.equals("my") || op.equals("state"))
+                                && node.annotations != null && node.annotations.containsKey("attributes")) {
+                            emitVarAttrsIfNeeded(node, reg, sigil);
+                        }
+
                         // If this is a declared reference, create a reference to it
                         if (isDeclaredReference && currentCallContext != RuntimeContextType.VOID) {
                             int refReg = allocateRegister();

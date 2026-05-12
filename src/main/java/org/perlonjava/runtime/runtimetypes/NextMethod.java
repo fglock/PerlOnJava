@@ -10,6 +10,21 @@ public class NextMethod {
     private static final boolean DEBUG_NEXT_METHOD = Boolean.getBoolean("debug.next.method");
 
     /**
+     * Package for SUPER / next::method resolution: named-glob installs ({@code *Pkg::m = sub {...}})
+     * record {@link RuntimeCode#stashInstallPackage}; anonymous bodies may still have the
+     * enclosing compile-time {@link RuntimeCode#packageName} (e.g. Class::Std wrappers).
+     */
+    private static String methodResolutionPackage(RuntimeCode code) {
+        if (code == null) {
+            return null;
+        }
+        if (code.stashInstallPackage != null && !code.stashInstallPackage.isEmpty()) {
+            return code.stashInstallPackage;
+        }
+        return code.packageName;
+    }
+
+    /**
      * next::method with proper context from currentSub
      */
     public static RuntimeList nextMethodWithContext(RuntimeArray args, RuntimeScalar currentSub, int ctx) {
@@ -28,8 +43,11 @@ public class NextMethod {
         }
 
         RuntimeCode code = (RuntimeCode) currentSub.value;
-        String callerPackage = code.packageName;
-        String methodName = code.subName;
+        String callerPackage = methodResolutionPackage(code);
+        String methodName =
+                code.stashInstallSub != null && !code.stashInstallSub.isEmpty()
+                        ? code.stashInstallSub
+                        : code.subName;
 
         if (code.installedViaAnonGlobAssign && !code.explicitlyRenamed) {
             throw new PerlCompilerException(
@@ -69,8 +87,11 @@ public class NextMethod {
         }
 
         RuntimeCode code = (RuntimeCode) currentSub.value;
-        String callerPackage = code.packageName;
-        String methodName = code.subName;
+        String callerPackage = methodResolutionPackage(code);
+        String methodName =
+                code.stashInstallSub != null && !code.stashInstallSub.isEmpty()
+                        ? code.stashInstallSub
+                        : code.subName;
 
         if (code.installedViaAnonGlobAssign && !code.explicitlyRenamed) {
             return scalarUndef.getList();
@@ -318,13 +339,12 @@ public class NextMethod {
 
     static RuntimeScalar superMethod(RuntimeScalar currentSub, String methodName, String fallbackPackage) {
         RuntimeScalar method;
-        String packageName;
-        if (currentSub.value != null) {
-            packageName = ((RuntimeCode) currentSub.value).packageName;
-        } else {
-            // At package level (outside any subroutine), currentSub.value is null.
-            // Fall back to using the invocant's class name as the calling package.
-            packageName = fallbackPackage;
+        String packageName = fallbackPackage;
+        if (currentSub != null && currentSub.value instanceof RuntimeCode code) {
+            String mrp = methodResolutionPackage(code);
+            if (mrp != null && !mrp.isEmpty()) {
+                packageName = mrp;
+            }
         }
         method = InheritanceResolver.findMethodInHierarchy(
                 methodName.substring(7),    // method name without SUPER:: prefix

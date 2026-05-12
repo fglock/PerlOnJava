@@ -411,6 +411,9 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(valueReg);
 
                                 bytecodeCompiler.registerVariable(varName, reg);
+
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
+
                                 bytecodeCompiler.lastResultReg = reg;
                                 return;
                             }
@@ -499,6 +502,8 @@ public class CompileAssignment {
 
                                 bytecodeCompiler.registerVariable(varName, arrayReg);
 
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, arrayReg, "@");
+
                                 if (rhsContext == RuntimeContextType.SCALAR) {
                                     int countReg = bytecodeCompiler.allocateRegister();
                                     bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
@@ -562,6 +567,9 @@ public class CompileAssignment {
                                 bytecodeCompiler.emitReg(listReg);
 
                                 bytecodeCompiler.registerVariable(varName, hashReg);
+
+                                bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, hashReg, "%");
+
                                 bytecodeCompiler.lastResultReg = hashReg;
                                 return;
                             }
@@ -677,6 +685,10 @@ public class CompileAssignment {
                                             }
                                         }
                                         bytecodeCompiler.registerVariable(varName, varReg);
+                                        // Outer `my ($a,$b) : ATTR` puts attributes on the `my` node, not on
+                                        // each list slot; dispatching MODIFY_*_ once per RETRIEVE_BEGIN_* slot
+                                        // would duplicate calls. Variable attributes + RETRIEVE_BEGIN_* are
+                                        // fully handled for `my $x`, `my @x`, `my %x`, and `my $x=` forms above.
                                     } else {
                                         varReg = bytecodeCompiler.addVariable(varName, "my");
                                         switch (sigil) {
