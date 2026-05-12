@@ -231,7 +231,8 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base
                 && base.blessId != 0
                 && WeakRefRegistry.hasWeakRefsTo(base)
-                && ReachabilityWalker.isReachableFromLiveScalarRegistry(base)) {
+                && ReachabilityWalker.isReachableFromLiveScalarRegistry(
+                        base, liveScalarRegistrySnapshotForCaptureRelease())) {
             scalar.refCountOwned = false;
             if (base.refCountTrace) {
                 base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
@@ -375,7 +376,7 @@ public class MortalList {
         // source_registrations hash is assigned into the live schema while the
         // original hash later exits; walking it here would destroy ResultSources
         // still reachable through the schema.
-        if (ReachabilityWalker.isReachableFromExternalRoot(hash)) return;
+        if (hadLocalBinding && isReachableFromExternalRootCached(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }
@@ -663,6 +664,9 @@ public class MortalList {
     // (Schema/ResultSource back-refs) — every flush would re-walk the
     // full global graph for each one. Computed lazily on first need.
     private static Set<RuntimeBase> flushReachableCache = null;
+    private static ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot = null;
+    private static ReachabilityWalker.LiveRootSnapshot liveRootSnapshot = null;
+    private static java.util.List<RuntimeScalar> liveScalarRegistrySnapshotCache = null;
 
     private static boolean isReachableCached(RuntimeBase base) {
         if (flushReachableCache == null) {
@@ -670,6 +674,44 @@ public class MortalList {
             flushReachableCache = w.walk();
         }
         return flushReachableCache.contains(base);
+    }
+
+    private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+        if (externalRootSnapshot == null) {
+            externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
+        }
+        if (externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
+            return true;
+        }
+        if (liveRootSnapshot == null) {
+            liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+        }
+        return liveRootSnapshot.isReachable(base);
+    }
+
+    static void invalidateExternalRootSnapshot() {
+        externalRootSnapshot = null;
+        invalidateLiveRootSnapshot();
+    }
+
+    static void invalidateLiveRootSnapshot() {
+        liveRootSnapshot = null;
+    }
+
+    private static void invalidateReachabilityCaches() {
+        flushReachableCache = null;
+        invalidateExternalRootSnapshot();
+        liveScalarRegistrySnapshotCache = null;
+    }
+
+    private static java.util.List<RuntimeScalar> liveScalarRegistrySnapshotForCaptureRelease() {
+        if (!flushing) {
+            return ScalarRefRegistry.forceGcAndSnapshot();
+        }
+        if (liveScalarRegistrySnapshotCache == null) {
+            liveScalarRegistrySnapshotCache = ScalarRefRegistry.forceGcAndSnapshot();
+        }
+        return liveScalarRegistrySnapshotCache;
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
@@ -730,13 +772,13 @@ public class MortalList {
 
     public static void flush() {
         if (!active) return;
-        if (pending.isEmpty() || flushing) {
-            if (!flushing) {
-                processReadyDeferredCaptures();
-                maybeAutoSweepAfterFlush();
-            }
+        if (flushing) return;
+        if (pending.isEmpty()) {
+            processReadyDeferredCaptures();
+            maybeAutoSweepAfterFlush();
             return;
         }
+        invalidateReachabilityCaches();
         flushing = true;
         try {
             // Process list — DESTROY may add new entries, so use index-based loop
@@ -747,7 +789,7 @@ public class MortalList {
             marks.clear(); // All entries drained; marks are meaningless now
         } finally {
             flushing = false;
-            flushReachableCache = null;
+            invalidateReachabilityCaches();
         }
         processReadyDeferredCaptures();
         maybeAutoSweepAfterFlush();
@@ -810,6 +852,8 @@ public class MortalList {
     public static void drainPendingSince(int startIdx) {
         if (!active) return;
         if (startIdx < 0) startIdx = 0;
+        if (startIdx >= pending.size()) return;
+        invalidateReachabilityCaches();
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -818,7 +862,7 @@ public class MortalList {
                 i++;
             }
         } finally {
-            flushReachableCache = null;
+            invalidateReachabilityCaches();
         }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
@@ -868,13 +912,12 @@ public class MortalList {
      */
     public static void flushAboveMark() {
         if (!active) return;
+        if (flushing) return;
         boolean topLevel = marks.isEmpty();
-        if (pending.isEmpty() || flushing) {
-            if (!flushing) {
-                processReadyDeferredCaptures();
-                if (topLevel) {
-                    maybeAutoSweep();
-                }
+        if (pending.isEmpty()) {
+            processReadyDeferredCaptures();
+            if (topLevel) {
+                maybeAutoSweep();
             }
             return;
         }
@@ -886,6 +929,7 @@ public class MortalList {
             }
             return;
         }
+        invalidateReachabilityCaches();
         flushing = true;
         try {
             for (int i = mark; i < pending.size(); i++) {
@@ -897,7 +941,7 @@ public class MortalList {
             }
         } finally {
             flushing = false;
-            flushReachableCache = null;
+            invalidateReachabilityCaches();
         }
         processReadyDeferredCaptures();
         if (topLevel) {
@@ -921,6 +965,7 @@ public class MortalList {
             processReadyDeferredCaptures();
             return;
         }
+        invalidateReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
         for (int i = mark; i < pending.size(); i++) {
             processDeferredBase(pending.get(i), false);
@@ -929,7 +974,7 @@ public class MortalList {
         while (pending.size() > mark) {
             pending.removeLast();
         }
-        flushReachableCache = null;
+        invalidateReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures();

@@ -350,7 +350,12 @@ public class DestroyDispatch {
             // added during apply (shift @_, $self scope exit) without
             // clobbering outer-scope pending entries.
             int pendingBefore = MortalList.pendingSize();
-            RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+            MortalList.invalidateExternalRootSnapshot();
+            try {
+                RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+            } finally {
+                MortalList.invalidateExternalRootSnapshot();
+            }
 
             // Phase 3: Drain pending entries added during apply, regardless
             // of whether an outer flush is currently running.

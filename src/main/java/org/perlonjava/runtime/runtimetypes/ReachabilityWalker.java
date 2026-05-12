@@ -486,13 +486,18 @@ public class ReachabilityWalker {
      * is used only at the immediate weaken() zero-count decision.</p>
      */
     public static boolean isReachableFromLiveScalarRegistry(RuntimeBase target) {
+        return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
+    }
+
+    static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
+                                                     java.util.List<RuntimeScalar> roots) {
         if (target == null) return false;
         final int MAX_VISITS = 50_000;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+        for (RuntimeScalar sc : roots) {
             if (sc == null) continue;
             if (sc.captureCount > 0) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
@@ -752,63 +757,200 @@ public class ReachabilityWalker {
      * of live roots by the time its leak tests initialize.
      */
     public static boolean isReachableFromExternalRoot(RuntimeBase target) {
-        if (target == null) return false;
-        final int MAX_VISITS = 50_000;
+        return new ExternalRootSnapshot().isReachable(target);
+    }
 
-        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+    /**
+     * Cached equivalent of {@link #isReachableFromExternalRoot(RuntimeBase)}.
+     * <p>
+     * The package/rescued root graph is snapshotted separately from live
+     * lexical roots so callers can invalidate the live-lexical snapshot when
+     * scope registrations change without forcing a package-root rebuild.
+     */
+    public static final class ExternalRootSnapshot {
+        private static final int MAX_VISITS = 50_000;
 
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
-            seedTarget(e.getValue(), target, seen, todo);
-            if (seen.contains(target)) return true;
-        }
-        for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
-        }
-        for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
-            if (e.getValue() == target) return true;
-            if (seen.add(e.getValue())) todo.addLast(e.getValue());
-        }
-        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
-            if (rescued == target) return true;
-            if (seen.add(rescued)) todo.addLast(rescued);
+        private final Set<RuntimeBase> nonLexicalReachable =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+
+        public ExternalRootSnapshot() {
+            buildNonLexicalRoots();
         }
 
-        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
-            if (liveVar == target) continue;
-            if (liveVar instanceof RuntimeScalar sc) {
-                seedTarget(sc, target, seen, todo);
-                if (seen.contains(target)) return true;
-            } else if (liveVar instanceof RuntimeBase rb) {
-                if (seen.add(rb)) todo.addLast(rb);
+        public boolean isReachable(RuntimeBase target) {
+            if (target == null) return false;
+            if (nonLexicalReachable.contains(target)) return true;
+            return new LiveRootSnapshot().isReachable(target);
+        }
+
+        public boolean isReachableFromNonLexicalRoot(RuntimeBase target) {
+            return target != null && nonLexicalReachable.contains(target);
+        }
+
+        private void buildNonLexicalRoots() {
+            java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+                seedNonLexicalScalar(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
+                seedNonLexicalScalar(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+                addNonLexical(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
+                addNonLexical(e.getValue(), todo);
+            }
+            for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+                addNonLexical(rescued, todo);
+            }
+
+            int visits = 0;
+            while (!todo.isEmpty() && visits < MAX_VISITS) {
+                RuntimeBase cur = todo.removeFirst();
+                visits++;
+                walkSnapshotNode(cur, todo);
             }
         }
 
-        int visits = 0;
-        while (!todo.isEmpty() && visits < MAX_VISITS) {
-            RuntimeBase cur = todo.removeFirst();
-            visits++;
-            if (cur == target) return true;
-            if (cur instanceof RuntimeStash) continue;
+        private void walkSnapshotNode(RuntimeBase cur,
+                                      java.util.ArrayDeque<RuntimeBase> nonLexicalTodo) {
+            if (cur instanceof RuntimeStash) return;
             if (cur instanceof RuntimeHash h) {
-                if (h.elements instanceof HashSpecialVariable) continue;
+                if (h.elements instanceof HashSpecialVariable) return;
                 for (RuntimeScalar v : h.elements.values()) {
-                    if (followScalar(v, target, seen, todo)) return true;
+                    seedNonLexicalScalar(v, nonLexicalTodo);
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
-                    if (followScalar(v, target, seen, todo)) return true;
+                    seedNonLexicalScalar(v, nonLexicalTodo);
                 }
             } else if (cur instanceof RuntimeScalar sc) {
-                if (followScalar(sc, target, seen, todo)) return true;
+                seedNonLexicalScalar(sc, nonLexicalTodo);
             }
         }
-        return false;
+
+        private void seedNonLexicalScalar(RuntimeScalar s,
+                                          java.util.ArrayDeque<RuntimeBase> todo) {
+            if (s == null) return;
+            if (WeakRefRegistry.isweak(s)) return;
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && s.value instanceof RuntimeBase b) {
+                addNonLexical(b, todo);
+            }
+        }
+
+        private void addNonLexical(RuntimeBase b,
+                                   java.util.ArrayDeque<RuntimeBase> todo) {
+            if (b == null) return;
+            if (nonLexicalReachable.add(b)) {
+                todo.addLast(b);
+            }
+        }
+
+    }
+
+    /**
+     * Snapshot of reachability from currently-live lexical roots only.
+     * Direct lexical origins are tracked so a named lexical container does not
+     * count as an external root for itself.
+     */
+    public static final class LiveRootSnapshot {
+        private static final int MAX_VISITS = 50_000;
+        private static final Object MIXED_DIRECT_LEXICAL_ORIGIN = new Object();
+
+        private final Set<RuntimeBase> directLexicalRoots =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        private final IdentityHashMap<RuntimeBase, Object> directLexicalOrigins =
+                new IdentityHashMap<>();
+
+        public LiveRootSnapshot() {
+            build();
+        }
+
+        public boolean isReachable(RuntimeBase target) {
+            if (target == null) return false;
+            Object origin = directLexicalOrigins.get(target);
+            if (origin == null) return false;
+            if (!directLexicalRoots.contains(target)) return true;
+            return origin != target;
+        }
+
+        private void build() {
+            java.util.ArrayDeque<DirectRootStep> todo = new java.util.ArrayDeque<>();
+
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                if (!(liveVar instanceof RuntimeBase root)) continue;
+                directLexicalRoots.add(root);
+                if (root instanceof RuntimeScalar sc) {
+                    seedDirectScalar(sc, root, todo);
+                } else {
+                    addDirect(root, root, todo);
+                }
+            }
+
+            int visits = 0;
+            while (!todo.isEmpty() && visits < MAX_VISITS) {
+                DirectRootStep step = todo.removeFirst();
+                visits++;
+                walkLiveNode(step.base, todo, step.origin);
+            }
+        }
+
+        private void walkLiveNode(RuntimeBase cur,
+                                  java.util.ArrayDeque<DirectRootStep> todo,
+                                  Object origin) {
+            if (cur instanceof RuntimeStash) return;
+            if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) return;
+                for (RuntimeScalar v : h.elements.values()) {
+                    seedDirectScalar(v, origin, todo);
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    seedDirectScalar(v, origin, todo);
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                seedDirectScalar(sc, origin, todo);
+            }
+        }
+
+        private void seedDirectScalar(RuntimeScalar s, Object origin,
+                                      java.util.ArrayDeque<DirectRootStep> todo) {
+            if (s == null) return;
+            if (WeakRefRegistry.isweak(s)) return;
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && s.value instanceof RuntimeBase b) {
+                addDirect(b, origin, todo);
+            }
+        }
+
+        private void addDirect(RuntimeBase b, Object origin,
+                               java.util.ArrayDeque<DirectRootStep> todo) {
+            if (b == null || origin == null) return;
+            Object existing = directLexicalOrigins.get(b);
+            if (existing == null) {
+                directLexicalOrigins.put(b, origin);
+                todo.addLast(new DirectRootStep(b, origin));
+                return;
+            }
+            if (existing == MIXED_DIRECT_LEXICAL_ORIGIN || existing == origin) {
+                return;
+            }
+            directLexicalOrigins.put(b, MIXED_DIRECT_LEXICAL_ORIGIN);
+            todo.addLast(new DirectRootStep(b, MIXED_DIRECT_LEXICAL_ORIGIN));
+        }
+
+        private static final class DirectRootStep {
+            private final RuntimeBase base;
+            private final Object origin;
+
+            private DirectRootStep(RuntimeBase base, Object origin) {
+                this.base = base;
+                this.origin = origin;
+            }
+        }
     }
 
     private static void seedTarget(RuntimeScalar s, RuntimeBase target,
