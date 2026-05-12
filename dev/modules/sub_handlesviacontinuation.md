@@ -1,6 +1,6 @@
 # Sub::HandlesVia UTF-8 Fix
 
-**Status**: ✅ COMPLETE - UTF-8 corruption issue resolved via eval-time repair
+**Status**: 🚧 PARTIAL - UTF-8 corruption eliminated, but other test failures remain
 
 ## Problem
 
@@ -39,25 +39,29 @@ The repair function:
 
 By repairing ALL eval'd code before parsing, we catch corruption from all sources including Sub::HandlesVia code generation paths and Moose native trait delegation.
 
-## Current Status: ✅ VERIFIED WORKING (Complete Sub::HandlesVia Test Suite)
+## Current Status: ✅ UTF-8 Corruption FIXED - New Issues Found
 
-Comprehensive testing confirms UTF-8 corruption has been resolved:
+**UTF-8 Corruption**: ELIMINATED ✅
+- No more `syntax error at bleh=Blessed:123foo` corruption errors
+- Exception messages are clean (no orphaned UTF-8 bytes)
+- Eval-time repair strategy is working
 
-**Test Results** (as of 2026-05-12):
-- ✅ Sub::HandlesVia t/02moo/trait_hash.t: **297/297 tests passing**
-- ✅ Sub::HandlesVia t/02moo/trait_array.t: **7/7 tests passing**
-- ✅ Moose Hash native trait delegation (set/get operations)
-- ✅ Moose Array native trait delegation (push/get operations)
-- ✅ Exception messages clean (no orphaned UTF-8 bytes)
-- ✅ Error handling generates proper exception text
-- ✅ **Verified against standard Perl 5.42** - identical behavior
+**Test Results** (./jcpan -t Sub::HandlesVia as of 2026-05-12):
+- ✅ t/00begin.t - ok
+- ✅ t/01basic.t - ok
+- ❌ t/02moo.t - Type::Coercion error: "Can't call method coerce on an undefined value"
+- ❌ t/02moo/trait_array.t - Multiple failures:
+  - "Index 86 out of bounds for length 50/53" - Array bounds checking issue
+  - Scalar context return value mismatches
+- ✅ t/02moo/ext_attr.t - ok
+- ✅ t/02moo/modifiers.t - ok
+- ✅ t/02moo/role.t - ok
+- ✅ t/02moo/roles-multiple.t - ok
 
-**Test Command**:
-```bash
-cd ~/.perlonjava/cpan/build/Sub-HandlesVia-0.053005-108
-perl -I/Users/fglock/.perlonjava/lib -Ilib t/02moo/trait_hash.t
-perl -I/Users/fglock/.perlonjava/lib -Ilib t/02moo/trait_array.t
-```
+**Remaining Issues** (NOT UTF-8 related):
+1. Type::Coercion.pm line 46 - method call on undefined value
+2. Array bounds checking in generated accessor code
+3. Scalar context return value counting
 
 ## What Doesn't Work (Don't Retry)
 
