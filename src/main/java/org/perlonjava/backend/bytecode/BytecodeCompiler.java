@@ -1445,6 +1445,42 @@ public class BytecodeCompiler implements Visitor {
         lastResultReg = rd;
     }
 
+    /**
+     * Invokes a fully qualified nullary sub at runtime (LOAD_GLOBAL_CODE + CALL_SUB).
+     * Used under {@code strict subs} for {@code Package::Name::sub} barewords that are only
+     * defined after runtime {@code use} / {@code use_ok} (e.g. {@code use constant}).
+     */
+    private void emitQualifiedNullarySubInvocation(String varName) {
+        String subName = NameNormalizer.normalizeVariableName(varName, getCurrentPackage());
+        int codeRd = allocateOutputRegister();
+        int nameIdx = addToStringPool(subName);
+        emit(Opcodes.LOAD_GLOBAL_CODE);
+        emitReg(codeRd);
+        emit(nameIdx);
+
+        int argsRd = allocateOutputRegister();
+        emit(Opcodes.CREATE_LIST);
+        emitReg(argsRd);
+        emit(0);
+
+        int outRd = allocateOutputRegister();
+        emit(Opcodes.CALL_SUB);
+        emitReg(outRd);
+        emitReg(codeRd);
+        emitReg(argsRd);
+        emit(currentCallContext);
+
+        if (currentCallContext == RuntimeContextType.SCALAR) {
+            int rd = allocateOutputRegister();
+            emit(Opcodes.LIST_TO_SCALAR);
+            emitReg(rd);
+            emitReg(outRd);
+            lastResultReg = rd;
+        } else {
+            lastResultReg = outRd;
+        }
+    }
+
     @Override
     public void visit(IdentifierNode node) {
         // Variable reference
@@ -1495,8 +1531,11 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                     // This is a bareword (no sigil)
-                    if (emitterContext != null && emitterContext.symbolTable != null &&
-                            emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                    if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                        if (QualifiedBarewordSubCall.isDeferredStrictSubsBareword(varName)) {
+                            emitQualifiedNullarySubInvocation(varName);
+                            return;
+                        }
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
                     }
                     // Not strict - treat bareword as string literal

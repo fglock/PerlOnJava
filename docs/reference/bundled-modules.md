@@ -203,6 +203,7 @@ These are loaded automatically or via `use`:
 |--------|---------------|-------|
 | `Data::Dumper` | Java + Perl | |
 | `JSON` / `JSON::PP` | Perl | `JSON` delegates to the bundled pure-Perl `JSON::PP` |
+| `Cpanel::JSON::XS` (+ `::Type`, `::Boolean`) | Perl | Same encoder/decoder as `JSON::PP`; XS-only type-aware `encode_json` / `decode_json` arguments are not supported |
 | `YAML::PP` | Java + Perl | |
 | `TOML` | Java | |
 | `Text::CSV` | Java | |

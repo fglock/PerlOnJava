@@ -750,6 +750,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 ### Non-core modules
 - ✅  **HTTP::CookieJar** module.
 - ✅  **JSON** module.
+- ✅  **Cpanel::JSON::XS** module (JSON::PP-backed shim; same bundled encoder/decoder stack as `JSON`).
 - ✅  **Text::CSV** module.
 - ✅  **TOML** module.
 - ✅  **XML::Parser** module backed by JDK SAX (replaces native libexpat XS).
