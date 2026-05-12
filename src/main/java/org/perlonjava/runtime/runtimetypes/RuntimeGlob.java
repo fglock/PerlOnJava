@@ -119,6 +119,59 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     /**
+     * True when {@code code}'s package/sub pair matches the FQN of the glob slot
+     * (e.g. anonymous sub compiled in {@code Pkg} with a wrong lexical subName of
+     * {@code name} for {@code *Pkg::name = $cr}).
+     */
+    private static boolean coderefFqMatchesGlob(RuntimeCode code, String globName) {
+        if (code.packageName == null
+                || code.subName == null
+                || code.subName.isEmpty()
+                || "__ANON__".equals(code.subName)) {
+            return false;
+        }
+        return (code.packageName + "::" + code.subName).equals(globName);
+    }
+
+    /**
+     * Records stash-slot metadata for a coderef bound to a fully qualified glob
+     * ({@code *Pkg::name = $cr} or {@code *{'Pkg::name'} = $cr}). Used by
+     * {@link #set(RuntimeScalar)} and {@link RuntimeStashEntry#set}.
+     */
+    public static void attachCoderefToNamedGlob(RuntimeCode newCode, String globName) {
+        if (newCode == null || globName == null) {
+            return;
+        }
+        boolean anonLike =
+                newCode.subName == null
+                        || newCode.subName.isEmpty()
+                        || "__ANON__".equals(newCode.subName);
+        // Anonymous-ish installs: no real "sub name {}" declaration (isDeclared), or
+        // CvNAME empty/__ANON__. A coderef whose FQN matches the target glob but was
+        // not declared as that sub still behaves like an anonymous CV for next::method
+        // (mro/next_edgecases.t without Sub::Name).
+        boolean anonGlobInstall =
+                !newCode.explicitlyRenamed
+                        && (anonLike
+                                || (coderefFqMatchesGlob(newCode, globName) && !newCode.isDeclared));
+        if (anonGlobInstall) {
+            int gci = globName.lastIndexOf("::");
+            if (gci > 0) {
+                newCode.stashInstallPackage = globName.substring(0, gci);
+                newCode.stashInstallSub = globName.substring(gci + 2);
+            } else {
+                newCode.stashInstallPackage = "main";
+                newCode.stashInstallSub = globName;
+            }
+            newCode.installedViaAnonGlobAssign = true;
+        } else {
+            newCode.stashInstallPackage = null;
+            newCode.stashInstallSub = null;
+            newCode.installedViaAnonGlobAssign = false;
+        }
+    }
+
+    /**
      * Overload without code parameter for backward compatibility.
      */
     public static RuntimeGlob createDetachedWithSlots(
@@ -234,35 +287,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
                 codeContainer.set(value);
 
-                // When a coderef is installed into a named stash glob (*Pkg::name = $cr),
-                // Perl gives the CV the glob's fully qualified name for introspection
-                // (caller, Sub::Util::subname, namespace::autoclean). Builder-generated
-                // parsers are anonymous subs assigned this way; without renaming,
-                // subname still reports the compiling package (e.g. Builder::__ANON__),
-                // and namespace::autoclean incorrectly strips them as "imports".
                 if (value.value instanceof RuntimeCode newCode) {
-                    // When a coderef is installed into a named stash glob (*Pkg::name = $cr),
-                    // Perl gives the CV the glob's fully qualified name for introspection
-                    // (caller, Sub::Util::subname, namespace::autoclean). Builder-generated
-                    // parsers are anonymous subs assigned this way; without renaming,
-                    // subname still reports the compiling package (e.g. Builder::__ANON__),
-                    // and namespace::autoclean incorrectly strips them as "imports".
-                    if (!newCode.explicitlyRenamed && this.globName != null) {
-                        boolean looksAnonymous =
-                                newCode.subName == null
-                                        || newCode.subName.isEmpty()
-                                        || "__ANON__".equals(newCode.subName);
-                        if (looksAnonymous) {
-                            int gci = this.globName.lastIndexOf("::");
-                            if (gci > 0) {
-                                newCode.packageName = this.globName.substring(0, gci);
-                                newCode.subName = this.globName.substring(gci + 2);
-                            } else {
-                                newCode.packageName = "main";
-                                newCode.subName = this.globName;
-                            }
-                        }
-                    }
+                    // Record stash slot FQN for Sub::Util::subname / B::CV without
+                    // mutating packageName/subName (caller + next::method must keep
+                    // treating a bare *Pkg::name = sub{} install as anonymous).
+                    RuntimeGlob.attachCoderefToNamedGlob(newCode, this.globName);
                     newCode.stashRefCount++;
                 }
 

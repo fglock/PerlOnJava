@@ -8,6 +8,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.nio.charset.StandardCharsets;
@@ -406,6 +407,8 @@ public class IdentifierParser {
                     // Convert ' to :: for internal representation
                     variableName.append("::");
                     parser.tokenIndex++;
+                    GlobalVariable.ensureStashBeginStubForLegacyPackageSeparator(
+                            parser.ctx.symbolTable.getCurrentPackage());
 
                     // Update token references. Do NOT skip whitespace here:
                     // in real perl, qualified names cannot contain whitespace

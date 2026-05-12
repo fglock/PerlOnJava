@@ -412,6 +412,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // behaviour, where the CV's CvGV points to a free-floating GV with the name.
     public boolean explicitlyRenamed = false;
 
+    /**
+     * When a coderef is installed with {@code *Package::name = $cr}, records the
+     * stash slot FQN for introspection ({@code Sub::Util::subname}, {@code B::CV})
+     * without mutating {@link #packageName}/{@link #subName}, which must stay
+     * anonymous for {@code caller()} and {@code next::method} unless the CV was
+     * renamed via {@code Sub::Name}/{@code Sub::Util::set_subname}.
+     */
+    public String stashInstallPackage;
+    public String stashInstallSub;
+    /**
+     * True when this CV was last installed with {@code *Pkg::name = $anonymous_cr}
+     * (stash slot recorded, but not {@code Sub::Name}/{@code set_subname}).
+     * Such subs must not use the fast {@code next::method} path.
+     */
+    public boolean installedViaAnonGlobAssign;
+
     // Depth of active recursive calls to this subroutine, used by the
     // "Deep recursion on subroutine" warning. Incremented on entry and
     // decremented in a finally-block on exit.
@@ -634,6 +650,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
         clone.packageName = this.packageName;
         clone.subName = this.subName;
+        clone.stashInstallPackage = this.stashInstallPackage;
+        clone.stashInstallSub = this.stashInstallSub;
+        clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;

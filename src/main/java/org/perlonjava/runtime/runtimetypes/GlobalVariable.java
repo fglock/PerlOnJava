@@ -624,6 +624,22 @@ public class GlobalVariable {
     }
 
     /**
+     * Perl records a {@code BEGIN} typeglob entry in the compiling package's stash when
+     * the legacy single-quote package separator is used (e.g. {@code $Pkg'var}).
+     * That entry must appear in {@code keys %CurrentPkg::} (see perl5_t/t/uni/package.t).
+     */
+    public static void ensureStashBeginStubForLegacyPackageSeparator(String currentPackage) {
+        if (currentPackage == null || currentPackage.isEmpty()) {
+            return;
+        }
+        String key = currentPackage + "::BEGIN";
+        if (globalCodeRefs.containsKey(key)) {
+            return;
+        }
+        getGlobalCodeRef(key);
+    }
+
+    /**
      * Retrieves a global code reference by its key, initializing it if necessary.
      * The returned RuntimeScalar is also pinned, meaning it will survive stash deletion.
      * This matches Perl's behavior where compiled bytecode holds direct references to CVs.
