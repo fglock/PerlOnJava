@@ -274,6 +274,7 @@ Check the module's documentation for fallback behavior.
 
 ## See Also
 
+- **`make test-cpan-distroprefs`** — Full smoke: `jcpan -t` for every bundled distropref (slow; logs under `build/reports/`). See [patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
 - [Patch and CPAN prefs layout](../../dev/design/patch-and-cpan-prefs-layout.md) — Where distroprefs and CPAN tarball patches are maintained
 - [Bundled Modules Reference](../reference/bundled-modules.md) - Complete list of included modules
 - [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility

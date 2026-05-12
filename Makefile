@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter test-bundled-modules test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
+.PHONY: all clean test test-unit test-interpreter test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links
 
 all: build
 
@@ -86,6 +86,20 @@ ifeq ($(OS),Windows_NT)
 	gradlew.bat testModule --rerun-tasks
 else
 	./gradlew testModule --rerun-tasks
+endif
+
+# Bundled CPAN distroprefs: run jcpan -t for each distribution that ships a
+# pref under PerlOnJava/CpanDistroprefs/ (DBI, Moo, Moose, IO::Async, ...).
+# Slow (network + upstream test suites); logs under build/reports/.
+# XML::LibXML is skipped unless INCLUDE_XML_LIBXML_IN_DISTROPREF_SMOKE=1 (see design doc).
+# See dev/design/patch-and-cpan-prefs-layout.md and dev/tools/test-cpan-distroprefs.sh.
+test-cpan-distroprefs: check-java-gradle
+ifeq ($(OS),Windows_NT)
+	gradlew.bat shadowJar -q
+	bash dev/tools/test-cpan-distroprefs.sh
+else
+	./gradlew shadowJar -q
+	bash dev/tools/test-cpan-distroprefs.sh
 endif
 
 # Image::ExifTool test suite (Image-ExifTool-13.44/t/ directory)

@@ -69,7 +69,7 @@ On load, PerlOnJava:
 
 ## Stale `src/main/perl/lib/CPAN/Prefs/`
 
-That directory is **not** used by bootstrap. Canonical prefs live under `PerlOnJava/CpanDistroprefs/`. [`CPAN/Prefs/README.md`](../src/main/perl/lib/CPAN/Prefs/README.md) points contributors to the real location.
+That directory is **not** used by bootstrap. Canonical prefs live under `PerlOnJava/CpanDistroprefs/`. [`CPAN/Prefs/README.md`](../../src/main/perl/lib/CPAN/Prefs/README.md) points contributors to the real location.
 
 ## Related documentation
 
@@ -78,8 +78,26 @@ That directory is **not** used by bootstrap. Canonical prefs live under `PerlOnJ
 - [Testing reference](../../docs/reference/testing.md) — `sync.pl` in test workflows  
 - [Port CPAN module skill](../../.agents/skills/port-cpan-module/SKILL.md) — agent checklist  
 
+## Automated smoke (`make test-cpan-distroprefs`)
+
+From the repo root, after a normal build:
+
+```bash
+make test-cpan-distroprefs
+```
+
+This runs `timeout … ./jcpan -t <Module>` for each distribution that has a bundled
+distropref (see [`dev/tools/test-cpan-distroprefs.sh`](../../dev/tools/test-cpan-distroprefs.sh)).
+Full logs are written under `build/reports/cpan-distroprefs-*.log`. The harness is
+intentionally slow (network fetches + upstream test trees). Skip individual modules
+while iterating with `SKIP_MOO=1 make test-cpan-distroprefs`, etc.
+
+**XML::LibXML** is **off by default**: the bundled Java backend does not pass the full
+upstream `t/` tree yet. Set `INCLUDE_XML_LIBXML_IN_DISTROPREF_SMOKE=1` to include it
+when working on LibXML parity.
+
 ## Progress
 
 | Date | Change |
 |------|--------|
-| 2026-05-12 | Externalized distroprefs to `PerlOnJava/CpanDistroprefs/`, CPAN tarball patches fully under `CpanPatches/`, removed redundant `.dd` bootstrap, documented two-pipeline model. |
+| 2026-05-12 | Added `make test-cpan-distroprefs` + `dev/tools/test-cpan-distroprefs.sh` for bundled pref smoke. |
