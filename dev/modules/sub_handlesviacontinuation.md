@@ -1,6 +1,7 @@
-# Sub::HandlesVia UTF-8 Fix
+# Sub::HandlesVia UTF-8 Fix & Remaining Issues
 
-**Status**: 🚧 PARTIAL - UTF-8 corruption eliminated, but other test failures remain
+**UTF-8 Corruption**: ✅ FIXED
+**Test Suite Status**: 🚧 IN PROGRESS - UTF-8 fixed but other issues remain
 
 ## Problem
 
@@ -63,19 +64,43 @@ By repairing ALL eval'd code before parsing, we catch corruption from all source
 2. Array bounds checking in generated accessor code
 3. Scalar context return value counting
 
-## What Doesn't Work (Don't Retry)
+## Next Steps
 
-1. **Regex-only repair approach** - Sub::HandlesVia doesn't use regex operations for code generation
-2. **File encoding pragmas** - Attempted `use utf8` but Perl 5 standard treats unmarked files as Latin-1
-3. **Cleanup UTF-8 during file load** - Would need to intercept module loading at multiple levels
+1. **Type::Coercion issue** - Investigate why weakened references become undef during coercion
+2. **Array bounds checking** - Debug generated accessor code for off-by-one errors  
+3. **Scalar context returns** - Verify return value calculation logic in generated methods
 
-## Investigation Complete ✅
+These issues are outside the scope of the UTF-8 corruption fix and should be tracked separately.
 
-The documented failure paths have been resolved:
+## Phase 1 Complete: UTF-8 Corruption Fixed ✅
+
+The orphaned UTF-8 lead byte issue has been resolved:
 - All eval paths are now covered (EvalStringHandler and RuntimeCode.evalStringHelper)
 - Exception messages no longer contain orphaned UTF-8 bytes  
-- Trait delegation (Hash, Array) works identically to standard Perl
-- Both PerlOnJava and standard Perl 5.42 produce identical output
+- Corruption errors like `syntax error at bleh=Blessed:123foo` no longer occur
+- The eval-time repair catches corruption from Sub::HandlesVia code generation
+
+## Phase 2: Investigate Remaining Test Failures
+
+New issues discovered during full test suite execution (not UTF-8 related):
+
+### Issue 1: Type::Coercion Error
+**Error**: "Can't call method 'coerce' on an undefined value"
+**Location**: /Users/fglock/.perlonjava/lib/Type/Coercion.pm line 46
+**Test**: t/02moo.t
+
+### Issue 2: Array Bounds Checking
+**Error**: "Index 86 out of bounds for length 50/53"
+**Location**: Sub::HandlesVia::CodeGenerator::__SANDBOX__ in generated accessor code
+**Tests Affected**: t/02moo/trait_array.t (lines 342, 291)
+**Details**: Appears when testing array accessor methods with incorrect argument counts
+
+### Issue 3: Scalar Context Return Values
+**Tests**: t/02moo/trait_array.t 
+**Problem**: Scalar context methods returning wrong counts
+- Line 263: elements accessor in scalar context - got 2, expected 6
+- Line 478: sort accessor in scalar context - got 9, expected 5
+- Line 485: sort accessor with sort sub in scalar context - got 22, expected 5
 
 ## Technical Details
 
