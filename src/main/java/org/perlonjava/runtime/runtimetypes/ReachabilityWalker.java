@@ -181,24 +181,38 @@ public class ReachabilityWalker {
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                if (walkCaptures && code.capturedScalars != null) {
-                    for (RuntimeScalar cap : code.capturedScalars) {
-                        visitScalar(cap, todo);
-                    }
-                }
-                if (walkCaptures
-                        && cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    for (RuntimeBase cap : interpreted.capturedVars) {
-                        if (cap instanceof RuntimeScalar scalar) {
-                            visitScalar(scalar, todo);
-                        } else if (cap != null) {
-                            addReachable(cap, todo);
-                        }
-                    }
+                // Phase 2 normally keeps closure captures opaque to avoid
+                // over-rescuing DBIC objects through internal callbacks.
+                // Exception: Sub::Defer/Sub::Quote deferred wrappers keep a
+                // weak backref to the CODE object itself. If such a CODE ref
+                // is reachable through package metadata (not a direct stash
+                // entry), its captured info array is a real strong Perl edge
+                // and must survive the weak sweep.
+                if (walkCaptures || WeakRefRegistry.hasWeakRefsTo(code)) {
+                    visitCodeCaptures(code, todo);
                 }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
+            }
+        }
+    }
+
+    private void visitCodeCaptures(RuntimeCode code,
+                                   java.util.ArrayDeque<RuntimeBase> todo) {
+        if (code.capturedScalars != null) {
+            for (RuntimeScalar cap : code.capturedScalars) {
+                visitScalar(cap, todo);
+            }
+        }
+        visitReflectiveCodeScalars(code, cap -> visitScalar(cap, todo));
+        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (RuntimeBase cap : interpreted.capturedVars) {
+                if (cap instanceof RuntimeScalar scalar) {
+                    visitScalar(scalar, todo);
+                } else if (cap != null) {
+                    addReachable(cap, todo);
+                }
             }
         }
     }
@@ -300,11 +314,15 @@ public class ReachabilityWalker {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
                     }
                 }
+                String name = code.packageName == null ? "?" : code.packageName;
+                String sub = code.subName == null ? "(anon)" : code.subName;
+                final int[] reflectiveIdx = {0};
+                visitReflectiveCodeScalars(code, cap ->
+                        visitScalarPath(cap, curPath + "<closure " + name + "::" + sub
+                                + " field-cap#" + (reflectiveIdx[0]++) + ">", howReached, todo));
                 if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                         && interpreted.capturedVars != null) {
                     int i = 0;
-                    String name = code.packageName == null ? "?" : code.packageName;
-                    String sub = code.subName == null ? "(anon)" : code.subName;
                     for (RuntimeBase cap : interpreted.capturedVars) {
                         String path = curPath + "<interpreted closure " + name + "::" + sub
                                 + " cap#" + (i++) + ">";
@@ -609,13 +627,26 @@ public class ReachabilityWalker {
                 if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && sc.value instanceof RuntimeBase rb
                         && seen.add(rb)) todo.addLast(rb);
-            } else if (cur instanceof RuntimeCode code && code.capturedScalars != null) {
-                for (RuntimeScalar cap : code.capturedScalars) {
-                    if (cap == null) continue;
-                    if (WeakRefRegistry.isweak(cap)) continue;
-                    if (cap == target) return true;
-                    if (seen.add(cap)) todo.addLast(cap);
+            } else if (cur instanceof RuntimeCode code) {
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar cap : code.capturedScalars) {
+                        if (cap == null) continue;
+                        if (WeakRefRegistry.isweak(cap)) continue;
+                        if (cap == target) return true;
+                        if (seen.add(cap)) todo.addLast(cap);
+                    }
                 }
+                final boolean[] foundReflectiveCapture = {false};
+                visitReflectiveCodeScalars(code, cap -> {
+                    if (foundReflectiveCapture[0]) return;
+                    if (cap == null || WeakRefRegistry.isweak(cap)) return;
+                    if (cap == target) {
+                        foundReflectiveCapture[0] = true;
+                    } else if (seen.add(cap)) {
+                        todo.addLast(cap);
+                    }
+                });
+                if (foundReflectiveCapture[0]) return true;
             }
         }
         return false;
@@ -856,6 +887,7 @@ public class ReachabilityWalker {
                     seedNonLexicalScalar(cap, todo);
                 }
             }
+            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
             if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                     && interpreted.capturedVars != null) {
                 for (RuntimeBase cap : interpreted.capturedVars) {
@@ -1016,6 +1048,13 @@ public class ReachabilityWalker {
                 if (followScalar(cap, target, seen, todo)) return true;
             }
         }
+        final boolean[] foundReflectiveCapture = {false};
+        visitReflectiveCodeScalars(code, cap -> {
+            if (!foundReflectiveCapture[0] && followScalar(cap, target, seen, todo)) {
+                foundReflectiveCapture[0] = true;
+            }
+        });
+        if (foundReflectiveCapture[0]) return true;
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
@@ -1028,6 +1067,26 @@ public class ReachabilityWalker {
             }
         }
         return false;
+    }
+
+    private static void visitReflectiveCodeScalars(RuntimeCode code,
+                                                   java.util.function.Consumer<RuntimeScalar> visitor) {
+        Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (closureObject == null) return;
+        try {
+            for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
+                if (field.getType() == RuntimeScalar.class && !"__SUB__".equals(field.getName())) {
+                    RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
+                    if (cap != null) {
+                        visitor.accept(cap);
+                    }
+                }
+            }
+        } catch (IllegalAccessException ignored) {
+            // Generated closure fields are public. If another implementation
+            // denies reflective access, callers still have capturedScalars and
+            // interpreter capturedVars metadata as fallbacks.
+        }
     }
 
     /**
