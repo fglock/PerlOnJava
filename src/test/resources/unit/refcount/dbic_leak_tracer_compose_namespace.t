@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Test::More tests => 5;
 use Scalar::Util qw(weaken);
-use next;
 
 # DBIx::Class t/52leaks.t installs a global bless hook that immediately stores
 # every blessed object in a weak leak-tracing registry. That exposed a lifetime
@@ -147,7 +146,7 @@ $bless_override = sub {
     our @ISA = ('UnitDBIC52::CoreSchema');
 
     sub clone {
-        my $self = shift->next::method(@_);
+        my $self = UnitDBIC52::CoreSchema::clone(shift, @_);
         main::populate_weakregistry($self);
         return $self;
     }
