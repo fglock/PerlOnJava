@@ -207,8 +207,9 @@ public class IdentifierParser {
                             String hex = "\\x{" + Integer.toHexString(cp) + "}";
                             throw new PerlCompilerException("Unrecognized character " + hex + ";");
                         }
-                        // In utf8 mode, allow UTF-8 letters/digits but reject control/special chars
-                        if (!Character.isLetterOrDigit(cp) && cp != '_') {
+                        // In utf8 mode, allow UTF-8 identifier characters (use UCharacter for proper Unicode support)
+                        // UCharacter.hasBinaryProperty with XID_CONTINUE is the proper test for identifier parts
+                        if (!(cp == '_' || UCharacter.hasBinaryProperty(cp, UProperty.XID_CONTINUE))) {
                             String hex = "\\x{" + Integer.toHexString(cp) + "}";
                             throw new PerlCompilerException("Unrecognized character " + hex + ";");
                         }
