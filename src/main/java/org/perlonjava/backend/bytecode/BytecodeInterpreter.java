@@ -233,6 +233,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
+                                MyVarCleanupStack.unregister(slot);
                                 registers[reg] = null;
                             }
 
@@ -311,6 +312,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
+                                MyVarCleanupStack.unregister(slot);
                                 registers[reg] = null;
                             }
 
@@ -343,6 +345,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
+                                MyVarCleanupStack.unregister(slot);
                                 registers[reg] = null;
                             }
 
@@ -546,6 +549,12 @@ public class BytecodeInterpreter {
                                 RuntimeScalar newScalar = new RuntimeScalar();
                                 registers[rs].addToScalar(newScalar);
                                 registers[rd] = newScalar;
+                                MyVarCleanupStack.register(newScalar);
+                            }
+
+                            case Opcodes.REGISTER_MY_VAR -> {
+                                int reg = bytecode[pc++];
+                                MyVarCleanupStack.register(registers[reg]);
                             }
 
                             // =================================================================
@@ -2574,6 +2583,7 @@ public class BytecodeInterpreter {
                         MortalList.scopeExitCleanupArray(ra);
                         needsFlush = true;
                     }
+                    MyVarCleanupStack.unregister(reg);
                     registers[i] = null;
                 }
                 if (needsFlush) {

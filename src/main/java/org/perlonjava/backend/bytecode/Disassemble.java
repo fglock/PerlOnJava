@@ -175,6 +175,10 @@ public class Disassemble {
                         src = interpretedCode.bytecode[pc++];
                         sb.append("MY_SCALAR r").append(rd).append(" = r").append(src).append("\n");
                         break;
+                    case Opcodes.REGISTER_MY_VAR:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("REGISTER_MY_VAR r").append(rd).append("\n");
+                        break;
                     case Opcodes.LOAD_GLOBAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         int nameIdx = interpretedCode.bytecode[pc++];

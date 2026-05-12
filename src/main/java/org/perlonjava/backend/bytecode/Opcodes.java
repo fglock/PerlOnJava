@@ -2346,6 +2346,12 @@ public class Opcodes {
      */
     public static final short UCFIRST_UNICODE = 489;
 
+    /**
+     * Register a newly-created lexical my-variable with MyVarCleanupStack.
+     * Format: REGISTER_MY_VAR reg
+     */
+    public static final short REGISTER_MY_VAR = 490;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }
