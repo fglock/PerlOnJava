@@ -1306,6 +1306,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             matcher.appendTail(resultBuffer);
         }
 
+        // Repair potential UTF-8 corruption from Latin-1 decoding
+        // When input string contains multi-byte UTF-8 sequences decoded as Latin-1,
+        // Java's Matcher.appendTail() may corrupt them. Try to repair by detecting
+        // sequences of high-byte characters that form valid UTF-8 when reinterpreted.
+        String finalResult = resultBuffer.toString();
+        finalResult = repairLatin1EncodedUtf8(finalResult);
+
         // Release captures from the replacement closure to unblock DESTROY.
         // The s///eg replacement is compiled as an anonymous sub that captures
         // lexical variables from the enclosing scope (incrementing their captureCount).
@@ -1318,7 +1325,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (found > 0) {
-            String finalResult = resultBuffer.toString();
             boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
             // Store as last successful pattern for empty pattern reuse
@@ -1369,6 +1375,56 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.matched = false;
             }
         }
+    }
+
+    /**
+     * Repair UTF-8 sequences that were corrupted by Latin-1 decoding.
+     *
+     * When a file containing UTF-8 is incorrectly decoded as Latin-1, multi-byte
+     * UTF-8 sequences become sequences of separate high-byte characters. For example,
+     * « (U+00AB in UTF-8: 0xC2 0xAB) becomes two characters: U+00C2 and U+00AB.
+     *
+     * Java's Matcher.appendReplacement() may leave partial UTF-8 lead bytes orphaned
+     * (e.g., U+00C2 without its continuation byte), which then display as replacement
+     * characters. This method detects and attempts to remove these orphaned lead bytes.
+     *
+     * @param str The potentially corrupted string
+     * @return The repaired string
+     */
+    private static String repairLatin1EncodedUtf8(String str) {
+        if (str == null || str.isEmpty()) {
+            return str;
+        }
+
+        // Check if string contains orphaned UTF-8 lead bytes (0xC0-0xDF without continuation)
+        // These typically appear as replacement characters when displayed
+        StringBuilder repaired = new StringBuilder();
+
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+
+            // UTF-8 lead byte (0xC0-0xDF indicates a 2-byte sequence)
+            // UTF-8 continuation byte (0x80-0xBF)
+            if (c >= 0xC0 && c <= 0xDF) {
+                // Check if followed by continuation byte
+                if (i + 1 < str.length()) {
+                    char next = str.charAt(i + 1);
+                    if (next >= 0x80 && next <= 0xBF) {
+                        // Valid UTF-8 sequence, keep both chars
+                        repaired.append(c).append(next);
+                        i++; // Skip the continuation byte
+                        continue;
+                    }
+                }
+                // Orphaned lead byte with no valid continuation - skip it
+                continue;
+            }
+
+            // Regular character, keep it
+            repaired.append(c);
+        }
+
+        return repaired.toString();
     }
 
     /**
