@@ -1469,15 +1469,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         repaired.append(str.charAt(i + j + 1));
                     }
                     i += requiredContinuations;
-                } else {
-                    // Orphaned or incomplete sequence, skip the lead byte
-                    // Continue to next character (don't skip continuation bytes)
                 }
+                // else: orphaned lead byte, skip it (don't append anything)
             } else if (!(c >= 0x80 && c <= 0xBF)) {
                 // Regular character (not lead byte, not continuation byte)
                 repaired.append(c);
             }
-            // Skip any orphaned continuation bytes
+            // else: orphaned continuation byte, skip it (don't append anything)
         }
 
         return repaired.toString();
