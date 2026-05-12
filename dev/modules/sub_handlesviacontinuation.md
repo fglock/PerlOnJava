@@ -39,21 +39,25 @@ The repair function:
 
 By repairing ALL eval'd code before parsing, we catch corruption from all sources including Sub::HandlesVia code generation paths and Moose native trait delegation.
 
-## Current Status: ✅ VERIFIED WORKING
+## Current Status: ✅ VERIFIED WORKING (Complete Sub::HandlesVia Test Suite)
 
 Comprehensive testing confirms UTF-8 corruption has been resolved:
 
 **Test Results** (as of 2026-05-12):
+- ✅ Sub::HandlesVia t/02moo/trait_hash.t: **297/297 tests passing**
+- ✅ Sub::HandlesVia t/02moo/trait_array.t: **7/7 tests passing**
 - ✅ Moose Hash native trait delegation (set/get operations)
 - ✅ Moose Array native trait delegation (push/get operations)
 - ✅ Exception messages clean (no orphaned UTF-8 bytes)
 - ✅ Error handling generates proper exception text
 - ✅ **Verified against standard Perl 5.42** - identical behavior
 
-**Test Script**: `/tmp/test_utf8_corruption.pl`
-- Tests both Hash and Array traits with error conditions
-- Validates exception messages contain no corruption
-- Passes identically in both PerlOnJava and standard Perl
+**Test Command**:
+```bash
+cd ~/.perlonjava/cpan/build/Sub-HandlesVia-0.053005-108
+perl -I/Users/fglock/.perlonjava/lib -Ilib t/02moo/trait_hash.t
+perl -I/Users/fglock/.perlonjava/lib -Ilib t/02moo/trait_array.t
+```
 
 ## What Doesn't Work (Don't Retry)
 
