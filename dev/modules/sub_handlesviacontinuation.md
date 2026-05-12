@@ -1,52 +1,73 @@
 # Sub::HandlesVia UTF-8 Fix
 
-**Status**: In progress - fixing UTF-8 corruption in generated accessor code
+**Status**: In Progress - Testing reveals deeper corruption issue requiring investigation
 
 ## Problem
 
-When Sub::HandlesVia generates accessor delegation code via regex substitutions (in CodeGenerator.pm), Java's `Matcher.appendTail()` can leave orphaned UTF-8 lead bytes (0xC0-0xDF) in the result string. These orphaned bytes then corrupt the generated Perl code, causing syntax errors like:
+When Sub::HandlesVia generates accessor delegation code, orphaned UTF-8 lead bytes (0xC0-0xDF, 0xE0-0xEF, 0xF0-0xF7) appear in generated Perl code, causing syntax errors:
 
 ```
 Global symbol "@shv_tmp\x{c2}" requires explicit package name
-Unrecognized character \x{c2}; at line N
+Unrecognized character \x{c2}; at /Users/fglock/.perlonjava/lib/Eval/TypeTiny.pm line 8
+syntax error at set_option=Hash:set line 5, near "\"Wrong number "
 ```
 
-## Root Cause
+## Root Cause Analysis
 
-1. UTF-8 sequences can be incorrectly decoded as Latin-1 when files are read
-2. When regex substitutions happen via `Matcher.appendTail()`, these misencoded bytes can become orphaned (lead byte without continuation byte)
-3. The orphaned byte ends up in generated Perl code, breaking parsing
+The corruption stems from UTF-8/Latin-1 encoding mismatch:
 
-## Solution (branch: `fix/sub-handlesvia-utf8`)
+1. UTF-8 files may be decoded as Latin-1, leaving multi-byte sequences as orphaned high bytes
+2. When regex substitutions occur, these misencoded bytes can persist or become orphaned (lead byte without continuation)
+3. The orphaned bytes end up in generated Perl code evaluated at runtime, breaking parsing
 
-Two complementary fixes in `RuntimeRegex.java` and `FileUtils.java`:
+## Solution (branch: `fix/sub-handlesvia-utf8`, PR #717)
 
-### 1. Repair UTF-8 Corruption (RuntimeRegex.java:1387-1436)
+Three complementary fixes:
 
-**Function**: `repairLatin1EncodedUtf8IfCorrupted(String str)`
+### 1. Extended UTF-8 Lead Byte Repair (RuntimeRegex.java:1380-1439)
+**Commit 7e487f2f5** - Handles all UTF-8 lead byte types:
+- 0xC0-0xDF = 2-byte sequences (need 1 continuation)
+- 0xE0-0xEF = 3-byte sequences (need 2 continuations)  
+- 0xF0-0xF7 = 4-byte sequences (need 3 continuations)
 
-**Logic**:
-- Scan for orphaned UTF-8 lead bytes (0xC0-0xDF) followed by ASCII (0x00-0x7F)
-- This pattern is corruption (legitimate code wouldn't have this)
-- If found, remove all orphaned lead bytes while preserving valid UTF-8 sequences
-
-**Key insight**: The detection is conservative - only trigger repair when we see an orphaned lead byte followed by ANY ASCII character (not just alphanumerics). This catches patterns like `@shv_tmp\xc2"` where the corruption appears in variable names.
+**Implementation**: Scans for orphaned lead bytes and removes them while preserving valid multi-byte sequences.
 
 ### 2. Prefer UTF-8 Over Latin-1 (FileUtils.java:146-160)
+**Commit db417e2e8** - Reorder encoding detection:
 
-**Change**: Reorder encoding detection to check UTF-8 validity first
+```
+BOM check → Valid UTF-8 check → Latin-1 fallback → UTF-8 default
+```
 
-**Before**: Check for BOM → check for non-ASCII → assume Latin-1
-**After**: Check for BOM → check for valid UTF-8 → assume Latin-1 → assume UTF-8
+This ensures modern UTF-8 files are decoded correctly even without BOM.
 
-This ensures modern UTF-8 files are decoded correctly even without a BOM, preventing the initial misencoding that leads to corruption later.
+### 3. UTF-8 Detection Improvements (commit 919138037)
+Refined logic to better identify orphaned byte patterns.
 
-## Test Status
+## Test Results (in progress)
 
-Running `./jcpan -t Sub::HandlesVia` to verify all test suites pass with these fixes.
+Running `./jcpan -t Sub::HandlesVia` (all test suites):
+- **t/00begin.t**: ✓ ok
+- **t/01basic.t**: ✓ ok  
+- **t/02moo/*.t**: Mixed (trait_* tests failing with corruption)
+- **t/04moose/*.t**: Blocked by corruption in generated code
+- **t/05moose_nativetypes/*.t**: Blocked by corruption
+
+**Issue found**: Despite repair logic improvements, orphaned `\x{c2}` bytes still appear in generated accessor code. This suggests either:
+1. Repair isn't being triggered (detection logic may not catch all corruption patterns)
+2. Corruption happens in a different code path not covered by the regex substitution repair
+3. The source corruption is occurring earlier in file reading/parsing
+
+## Next Steps
+
+1. **Investigate corruption source**: Determine if issue is in regex substitution path or elsewhere in code generation
+2. **Trace code paths**: Check all places where generated code is constructed (not just s/// substitutions)
+3. **Verify encoding detection**: Confirm FileUtils UTF-8 preference is working correctly
+4. **Consider deeper fix**: May need to normalize all strings early in code generation pipeline
 
 ## Related Commits
 
+- `7e487f2f5`: Handle all UTF-8 lead byte types (2/3/4-byte) - Current
 - `db417e2e8`: Conservative repair + prefer UTF-8 encoding
 - `919138037`: Improve orphaned byte detection logic  
-- `23ff02e57`: Original repair (too aggressive, broke code)
+- `23ff02e57`: Original repair (too aggressive)
