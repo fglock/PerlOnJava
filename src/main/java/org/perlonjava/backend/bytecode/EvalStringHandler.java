@@ -10,6 +10,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
@@ -109,6 +110,13 @@ public class EvalStringHandler {
                     " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1));
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
+
+            // Step 1b: Repair orphaned UTF-8 lead bytes in eval'd code
+            // This handles cases where Sub::HandlesVia and other Perl modules generate code
+            // with Latin-1 misencoded multi-byte UTF-8 sequences
+            if (perlCode != null && !perlCode.isEmpty()) {
+                perlCode = RuntimeRegex.repairLatin1EncodedUtf8IfCorrupted(perlCode);
+            }
 
             // Step 2: Parse the string to AST
             Lexer lexer = new Lexer(perlCode);

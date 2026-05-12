@@ -1384,7 +1384,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * required continuation bytes 0x80-0xBF) from the string if any are detected.
      * Orphaned lead bytes are corruption artifacts from Latin-1 misencoding.
      */
-    private static String repairLatin1EncodedUtf8IfCorrupted(String str) {
+    public static String repairLatin1EncodedUtf8IfCorrupted(String str) {
         if (str == null || str.isEmpty()) {
             return str;
         }
