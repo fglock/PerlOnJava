@@ -169,19 +169,30 @@ public class IdentifierParser {
         // In `no utf8` mode (or `evalbytes`), Perl still allows many non-ASCII bytes as length-1 variables,
         // but it must reject whitespace-like bytes and format/control bytes. Additionally, for length-2+
         // identifiers, non-ASCII bytes are not allowed.
-        boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+        // Note: isUnicodeSource is set when eval'd code contains UTF-8 characters, even without `use utf8`
+        boolean utf8Enabled = (parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
+                || parser.ctx.compilerOptions.isUnicodeSource)
                 && !parser.ctx.compilerOptions.isEvalbytes;
 
-        if (!utf8Enabled && token.type == LexerTokenType.IDENTIFIER) {
+        if (token.type == LexerTokenType.IDENTIFIER) {
             // The Lexer may have greedily consumed non-ASCII identifier parts into a single IDENTIFIER token.
-            // Under `no utf8` / `evalbytes`, those are not allowed for length-2+ variables.
+            // Under `no utf8` / `evalbytes`, non-ASCII letters/digits are not allowed for length-2+ variables.
+            // Under normal operation (utf8 enabled), non-ASCII letters/digits ARE allowed but control chars are not.
             String id = token.text;
             if (id.length() > 1) {
                 for (int i = 0; i < id.length(); ) {
                     int cp = id.codePointAt(i);
                     if (cp > 127) {
-                        String hex = "\\x{" + Integer.toHexString(cp) + "}";
-                        throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                        // In no-utf8 mode, reject all non-ASCII characters
+                        if (!utf8Enabled) {
+                            String hex = "\\x{" + Integer.toHexString(cp) + "}";
+                            throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                        }
+                        // In utf8 mode, allow UTF-8 letters/digits but reject control/special chars
+                        if (!Character.isLetterOrDigit(cp) && cp != '_') {
+                            String hex = "\\x{" + Integer.toHexString(cp) + "}";
+                            throw new PerlCompilerException("Unrecognized character " + hex + ";");
+                        }
                     }
                     i += Character.charCount(cp);
                 }

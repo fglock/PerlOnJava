@@ -144,8 +144,19 @@ public class CompileExistsDelete {
                 bc.emitReg(hashReg);
                 bc.emit(nameIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode block) {
+            // Handle expression-based delete: delete @{$expr}{@keys}
+            // Compile the block to get a hash reference
+            bc.compileNode(block, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+
+            // Dereference to get the actual hash
+            hashReg = bc.allocateRegister();
+            bc.emit(Opcodes.DEREF_HASH);
+            bc.emitReg(hashReg);
+            bc.emitReg(refReg);
         } else {
-            bc.throwCompilerException("Hash slice delete requires identifier");
+            bc.throwCompilerException("Hash slice delete requires identifier or expression");
             return;
         }
         if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
@@ -196,8 +207,19 @@ public class CompileExistsDelete {
                 bc.emitReg(hashReg);
                 bc.emit(nameIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode block) {
+            // Handle expression-based delete: delete @{$expr}{@keys}
+            // Compile the block to get a hash reference
+            bc.compileNode(block, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+
+            // Dereference to get the actual hash
+            hashReg = bc.allocateRegister();
+            bc.emit(Opcodes.DEREF_HASH);
+            bc.emitReg(hashReg);
+            bc.emitReg(refReg);
         } else {
-            bc.throwCompilerException("Hash kv-slice delete requires identifier");
+            bc.throwCompilerException("Hash kv-slice delete requires identifier or expression");
             return;
         }
         if (!(hashAccess.right instanceof HashLiteralNode keysNode)) {
@@ -289,8 +311,19 @@ public class CompileExistsDelete {
                 bc.emitReg(arrayReg);
                 bc.emit(nameIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode block) {
+            // Handle expression-based delete: delete @{$expr}[@indices]
+            // Compile the block to get an array reference
+            bc.compileNode(block, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+
+            // Dereference to get the actual array
+            arrayReg = bc.allocateRegister();
+            bc.emit(Opcodes.DEREF_ARRAY);
+            bc.emitReg(arrayReg);
+            bc.emitReg(refReg);
         } else {
-            bc.throwCompilerException("Array slice delete requires identifier");
+            bc.throwCompilerException("Array slice delete requires identifier or expression");
             return;
         }
         if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
@@ -332,8 +365,19 @@ public class CompileExistsDelete {
                 bc.emitReg(arrayReg);
                 bc.emit(nameIdx);
             }
+        } else if (leftOp.operand instanceof BlockNode block) {
+            // Handle expression-based delete: delete @{$expr}[@indices]
+            // Compile the block to get an array reference
+            bc.compileNode(block, -1, RuntimeContextType.SCALAR);
+            int refReg = bc.lastResultReg;
+
+            // Dereference to get the actual array
+            arrayReg = bc.allocateRegister();
+            bc.emit(Opcodes.DEREF_ARRAY);
+            bc.emitReg(arrayReg);
+            bc.emitReg(refReg);
         } else {
-            bc.throwCompilerException("Array kv-slice delete requires identifier");
+            bc.throwCompilerException("Array kv-slice delete requires identifier or expression");
             return;
         }
         if (!(arrayAccess.right instanceof ArrayLiteralNode indicesNode)) {
