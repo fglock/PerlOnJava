@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n *)",
+      "Bash(grep -r *)",
+      "Bash(ls -la *)",
+      "Bash(grep -rn *)",
+      "Bash(find . *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(grep -A *)",
+      "Bash(ls -lh *)",
+      "Bash(git diff *)",
+      "Bash(find /Users/fglock/projects/PerlOnJava4 *)",
+      "Bash(find /Users/fglock/projects/PerlOnJava4/src/main/java *)",
+      "Bash(git branch *)",
+      "Bash(find ~/.claude/projects/ *)",
+      "Bash(wc -l *)",
+      "Bash(grep -B5 *)",
+      "Bash(grep -A5 *)",
+      "Bash(git show *)",
+      "Bash(ps aux *)",
+      "Bash(find /Users/fglock/projects/PerlOnJava4/src/main/perl/lib *)",
+      "Bash(grep -B *)",
+      "Bash(find ~/.perlonjava *)",
+      "Bash(find ~/.cpan *)",
+      "Bash(find /Users/fglock/projects/PerlOnJava4/src *)",
+      "Bash(find /Users/fglock/projects/PerlOnJava4/examples *)",
+      "Bash(ls -la ~/.cpan *)",
+      "Bash(ls -la ~/.perlonjava *)",
+      "Bash(cat ~/.cpan *)",
+      "Bash(cat ~/.perlonjava *)",
+      "Bash(./jcpan -t *)",
+      "Bash(timeout *)"
+    ]
+  }
+}
