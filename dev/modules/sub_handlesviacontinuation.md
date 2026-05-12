@@ -1,6 +1,6 @@
 # Sub::HandlesVia UTF-8 Fix
 
-**Status**: In Progress - Testing reveals deeper corruption issue requiring investigation
+**Status**: Testing new approach - Eval-time UTF-8 repair
 
 ## Problem
 
@@ -17,52 +17,38 @@ syntax error at set_option=Hash:set line 5, near "\"Wrong number "
 The corruption stems from UTF-8/Latin-1 encoding mismatch:
 
 1. UTF-8 files may be decoded as Latin-1, leaving multi-byte sequences as orphaned high bytes
-2. When regex substitutions occur, these misencoded bytes can persist or become orphaned (lead byte without continuation)
-3. The orphaned bytes end up in generated Perl code evaluated at runtime, breaking parsing
+2. When Perl code (like Sub::HandlesVia::CodeGenerator) does string concatenation to generate methods, if the source strings contain multi-byte UTF-8 sequences being interpreted as Latin-1, the corruption persists
+3. The orphaned bytes end up in generated Perl code that is eval'd at runtime, breaking parsing
 
-## Solution (branch: `fix/sub-handlesvia-utf8`, PR #717)
+## Solution (branch: `fix/sub-handlesvia-utf8`)
 
-Three complementary fixes:
+### Previous Attempts:
+1. **Extended UTF-8 Lead Byte Repair** - Only in regex substitutions (limited scope)
+2. **UTF-8 File Encoding Preference** - Reverted (non-standard Perl behavior)
 
-### 1. Extended UTF-8 Lead Byte Repair (RuntimeRegex.java:1380-1439)
-**Commit 7e487f2f5** - Handles all UTF-8 lead byte types:
-- 0xC0-0xDF = 2-byte sequences (need 1 continuation)
-- 0xE0-0xEF = 3-byte sequences (need 2 continuations)  
-- 0xF0-0xF7 = 4-byte sequences (need 3 continuations)
+### New Approach - Eval-time Repair (commit d7f725e27):
 
-**Implementation**: Scans for orphaned lead bytes and removes them while preserving valid multi-byte sequences.
+Apply UTF-8 corruption repair in **EvalStringHandler** before the Lexer processes eval'd code. This catches corruption from ALL code generation paths, not just regex substitutions.
 
-### 2. Standard Perl 5 File Encoding (Reverted)
+**Changes**:
+- Made `RuntimeRegex.repairLatin1EncodedUtf8IfCorrupted()` public and static
+- Added repair call in EvalStringHandler before parsing (Step 1b)
+- Repair runs on ALL eval STRING code, catching Sub::HandlesVia generated methods early
 
-Previously added UTF-8 preference in FileUtils, but this deviates from standard Perl 5 behavior where files without `use utf8` are treated as Latin-1. **Reverted in commit 12222348b** to maintain compatibility. File encoding detection now follows Perl 5 standard: non-ASCII bytes that aren't valid UTF-8 are treated as Latin-1.
-
-### 3. UTF-8 Detection Improvements (commit 919138037)
-Refined logic to better identify orphaned byte patterns.
+**Why this works**:
+- Sub::HandlesVia generates code via Perl string concatenation → eval
+- Corruption happens during concatenation (not captured by regex repair)
+- Now repair happens before the corrupted code reaches the Lexer
+- Orphaned lead bytes are removed, allowing valid parsing
 
 ## Test Results (in progress)
 
-Running `./jcpan -t Sub::HandlesVia` (all test suites):
-- **t/00begin.t**: ✓ ok
-- **t/01basic.t**: ✓ ok  
-- **t/02moo/*.t**: Mixed (trait_* tests failing with corruption)
-- **t/04moose/*.t**: Blocked by corruption in generated code
-- **t/05moose_nativetypes/*.t**: Blocked by corruption
-
-**Issue found**: Despite repair logic improvements, orphaned `\x{c2}` bytes still appear in generated accessor code. This suggests either:
-1. Repair isn't being triggered (detection logic may not catch all corruption patterns)
-2. Corruption happens in a different code path not covered by the regex substitution repair
-3. The source corruption is occurring earlier in file reading/parsing
-
-## Next Steps
-
-1. **Investigate corruption source**: Determine if issue is in regex substitution path or elsewhere in code generation
-2. **Trace code paths**: Check all places where generated code is constructed (not just s/// substitutions)
-3. **Verify encoding detection**: Confirm FileUtils UTF-8 preference is working correctly
-4. **Consider deeper fix**: May need to normalize all strings early in code generation pipeline
+Running `./jcpan -t Sub::HandlesVia` with new eval-time repair...
 
 ## Related Commits
 
-- `7e487f2f5`: Handle all UTF-8 lead byte types (2/3/4-byte) - Current
-- `db417e2e8`: Conservative repair + prefer UTF-8 encoding
-- `919138037`: Improve orphaned byte detection logic  
-- `23ff02e57`: Original repair (too aggressive)
+- `d7f725e27`: Apply UTF-8 repair in eval STRING handler - Current  
+- `d50c2387b`: Document revert of UTF-8 file encoding preference
+- `12222348b`: Revert non-standard UTF-8 preference
+- `7e487f2f5`: Extended UTF-8 lead byte repair (regex-only)
+

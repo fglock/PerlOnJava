@@ -1130,6 +1130,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // EXCEPT for evalbytes, which must treat everything as bytes
             // NOTE: Even BYTE_STRINGs can contain UTF-8 encoded sequences, so we check all types
             String evalString = code.toString();
+
+            // Repair orphaned UTF-8 lead bytes in eval'd code (same as EvalStringHandler)
+            if (!ctx.isEvalbytes && evalString != null && !evalString.isEmpty()) {
+                evalString = org.perlonjava.runtime.regex.RuntimeRegex.repairLatin1EncodedUtf8IfCorrupted(evalString);
+            }
+
             boolean hasUnicode = false;
             if (!ctx.isEvalbytes) {
                 for (int i = 0; i < evalString.length(); i++) {
