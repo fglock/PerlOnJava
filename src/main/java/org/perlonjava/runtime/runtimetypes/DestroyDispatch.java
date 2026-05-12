@@ -563,6 +563,27 @@ public class DestroyDispatch {
     }
 
     /**
+     * Clear weak refs for one specific object that was rescued by DESTROY.
+     * Used when user code explicitly undefines that object but the DESTROY body
+     * self-saves it. Other rescued objects may still be live and must remain
+     * available until their normal deferred cleanup point.
+     */
+    public static boolean clearRescuedWeakRefsTo(RuntimeBase rescued) {
+        if (rescued == null) return false;
+        boolean removed;
+        synchronized (rescuedObjects) {
+            removed = rescuedObjects.remove(rescued);
+        }
+        if (!removed) return false;
+
+        WeakRefRegistry.clearWeakRefsTo(rescued);
+        if (rescued instanceof RuntimeHash hash) {
+            deepClearWeakRefs(hash);
+        }
+        return true;
+    }
+
+    /**
      * Recursively walk a hash's values and clear weak refs for any blessed
      * objects found, including nested hashes and arrays. This is used after
      * DESTROY rescue to clear weak refs for objects contained inside the

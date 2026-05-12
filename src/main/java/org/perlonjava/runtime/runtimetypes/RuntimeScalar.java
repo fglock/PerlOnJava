@@ -1192,10 +1192,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
         RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
+        boolean shouldClearRescuedAfterUndefAssignment = false;
 
         // If this scalar was a weak ref, remove from weak tracking before overwriting.
         // Weak refs don't count toward refCount, so skip refCount decrement later.
         boolean thisWasWeak = (oldBase != null && WeakRefRegistry.removeWeakRef(this, oldBase));
+        boolean undefAssignmentOfDestroyableRef = oldBase != null
+                && !thisWasWeak
+                && value.type == UNDEF
+                && oldBase.blessId != 0
+                && WeakRefRegistry.weakRefsExist
+                && blessedClassHasDestroy(oldBase);
 
         // Increment new value's refCount (>= 0 means tracked; -1 means untracked).
         // Only increment for objects already being tracked (refCount >= 0).
@@ -1325,6 +1332,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             }
         }
+        if (undefAssignmentOfDestroyableRef) {
+            if (!DestroyDispatch.isInsideDestroy()) {
+                shouldClearRescuedAfterUndefAssignment = true;
+            }
+        }
 
         if (oldOwnedScalarReferenceContents) {
             releaseScalarReferenceContents(oldScalarReferenceContents);
@@ -1356,7 +1368,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.popTemporaryRoot(this);
         }
 
+        // `undef($x)` can compile through this assignment path instead of
+        // RuntimeScalar.undefine(). If this exact object was rescued during its
+        // DESTROY, clear weak refs reachable from it now so DBIC-style callbacks
+        // observe that the user's schema lexical is gone. Do not drain all
+        // rescued objects here; DBIC can have other live schemas pending.
+        if (shouldClearRescuedAfterUndefAssignment && !ModuleInitGuard.inModuleInit()) {
+            if (System.getenv("JPERL_PHASE_D_DBG") != null) {
+                System.err.println("DBG Phase D set-undef rescued cleanup for " +
+                        (oldBase != null ? org.perlonjava.runtime.runtimetypes.NameNormalizer.getBlessStr(oldBase.blessId) : "?") +
+                        " refCount=" + (oldBase != null ? oldBase.refCount : -1));
+            }
+            DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
+        }
+
         return this;
+    }
+
+    private static boolean blessedClassHasDestroy(RuntimeBase base) {
+        String cn = NameNormalizer.getBlessStr(base.blessId);
+        return cn != null && DestroyDispatch.classHasDestroy(base.blessId, cn);
     }
 
     public RuntimeScalar set(int value) {
