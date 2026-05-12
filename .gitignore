@@ -63,6 +63,8 @@ logs/
 *.patch
 # But allow patch files in import-perl5/patches/
 !dev/import-perl5/patches/*.patch
+# And CPAN tarball patches shipped in the JAR (PerlOnJava/CpanPatches/)
+!src/main/perl/lib/PerlOnJava/CpanPatches/**/*.patch
 
 skip_control_flow.t
 dev/design/CONTROL_FLOW_FIX_RESULTS.md

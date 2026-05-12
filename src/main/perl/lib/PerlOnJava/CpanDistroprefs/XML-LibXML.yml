@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for XML::LibXML.
+  XML::LibXML's Makefile.PL requires Alien::Libxml2 (pkg-config or share dir).
+  Neither is available under the JVM.  Even if Alien::Libxml2 were satisfied,
+  LibXML.xs cannot be compiled or loaded (JVM cannot dlopen native .so/.dylib).
+
+  PerlOnJava bundles a Java-backed XML::LibXML implementation in the JAR
+  (src/main/perl/lib/XML/LibXML.pm + XMLLibXML.java).  The backend uses
+  JDK standard APIs: javax.xml.parsers.DocumentBuilder, org.w3c.dom.*,
+  javax.xml.xpath.*, javax.xml.transform.*.
+
+  No commandline overrides are needed: Distribution.pm detects the Makefile.PL
+  failure and automatically generates a cross-platform fallback Makefile.  The
+  fallback Makefile runs 'make test' with jperl and 'make install' skipping
+  files that are bundled in the JAR.
+match:
+  distribution: "^SHLOMIF/XML-LibXML-"

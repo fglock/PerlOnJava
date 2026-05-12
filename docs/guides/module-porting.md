@@ -53,6 +53,13 @@ To add a new core module import:
 3. If the module needs PerlOnJava-specific changes, mark it as `protected: true`
    and optionally provide a patch file in `dev/import-perl5/patches/`
 
+**Import patches vs CPAN patches:** `dev/import-perl5/patches/` only affects the
+`sync.pl` copy from `perl5/` into this repo (`patch -p0`). Patches applied when
+end users install **CPAN distributions** with `jcpan` live under
+`src/main/perl/lib/PerlOnJava/CpanPatches/` and ship as YAML distroprefs in
+`PerlOnJava/CpanDistroprefs/`. See the canonical map in
+[dev/design/patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
+
 > **TODO:** `sync.pl` should be updated to copy core module tests into
 > `src/test/resources/module/` instead of `perl5_t/`, so they are picked up by
 > `ModuleTestExecutionTest` and run as part of `make test-bundled-modules`.

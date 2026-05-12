@@ -2,6 +2,10 @@
 
 This directory contains tools for importing and synchronizing Perl modules and tests from the perl5/ repository into PerlOnJava.
 
+**Scope:** Perl 5 **source tree** imports only (`perl5/` → repo paths). Patches
+for CPAN tarball installs under `jcpan` are maintained separately; see
+[dev/design/patch-and-cpan-prefs-layout.md](../design/patch-and-cpan-prefs-layout.md).
+
 ## Overview
 
 The import system helps maintain modules that are (nearly) identical to their perl5/ counterparts, allowing easy updates when perl5 changes.

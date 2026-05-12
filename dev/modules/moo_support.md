@@ -844,7 +844,7 @@ make the test phase always succeed.
 **Files changed**:
 - `src/main/perl/lib/CPAN/Config.pm` — Added `_bootstrap_prefs()` with inline Moo.yml
 - `src/main/perl/lib/CPAN/HandleConfig.pm` — Added PerlOnJava cpan_home bootstrap
-- `src/main/perl/lib/CPAN/Prefs/Moo.yml` — Bundled distroprefs (backup)
+- `src/main/perl/lib/PerlOnJava/CpanDistroprefs/Moo.yml` — Bundled CPAN distropref (canonical)
 
 **Verified**: `jcpan -f -i Moo` runs all 841 tests, reports 6 failures, but installs
 successfully with exit code 0.

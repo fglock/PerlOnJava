@@ -1,0 +1,14 @@
+--- lib/Net/Server/Proto.pm.orig
++++ lib/Net/Server/Proto.pm
+@@ -92,6 +92,11 @@ BEGIN {
+         inet_aton
+         getaddrinfo
+         getnameinfo
++        get_addr_info
++        safe_name_info
++        parse_info
++        object
++        ipv6_package
+     ];
+
+     # Load just in time once explicitly invoked.

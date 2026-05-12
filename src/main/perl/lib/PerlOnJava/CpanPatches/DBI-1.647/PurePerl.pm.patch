@@ -1,0 +1,17 @@
+--- lib/DBI/PurePerl.pm	2025-01-17 10:49:51
++++ /Users/fglock/projects/PerlOnJava4/src/main/perl/lib/DBI/PurePerl.pm	2026-04-24 09:09:45
+@@ -789,7 +789,13 @@
+     my($key)=shift;
+     return $DBI::err     if $$key eq '*err';
+     return $DBI::errstr  if $$key eq '&errstr';
+-    Carp::confess("FETCH $key not supported when using DBI::PurePerl");
++    # PerlOnJava patch: upstream confesses here. That kills any caller
++    # that scans the DBI:: symbol table and touches a tied var (e.g.
++    # DBIx-Class's DBICTest::Util::LeakTracer::symtable_referenced_addresses,
++    # which FETCHes every glob it finds when scanning ::DBI). Return undef
++    # instead so the scan can proceed; this mirrors the XS DBI's lenient
++    # fallback for unknown DBI::var keys.
++    return undef;
+ }
+ 
+ package

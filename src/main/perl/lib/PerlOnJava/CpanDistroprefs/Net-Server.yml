@@ -1,0 +1,18 @@
+---
+comment: |
+  PerlOnJava distroprefs for Net::Server.
+
+  Net::Server 2.018's Net::Server::Proto import-time validation only allows
+  symbols listed in @EXPORT_OK. Several helper subs used by Net::Server.pm
+  (`get_addr_info`, `safe_name_info`, `parse_info`, `object`, `ipv6_package`)
+  are defined later in the file but missing from that list, so PerlOnJava dies
+  during `use Net::Server::Proto qw[...]` with:
+
+    "<symbol> is not a valid Socket macro nor defined by Net::Server::Proto..."
+
+  Apply a tiny source patch that adds these symbols to @EXPORT_OK so import
+  works and Starman tests can proceed (with expected fork-related skips).
+match:
+  distribution: "^BBB/Net-Server-2\\.018"
+patches:
+  - "Net-Server-2.018/Proto.pm.patch"

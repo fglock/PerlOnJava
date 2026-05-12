@@ -1,0 +1,41 @@
+---
+comment: |
+  PerlOnJava distroprefs for DBI.
+
+  We bundle a patched DBI.pm + DBI::PurePerl + DBI::Const in the JAR
+  (src/main/perl/lib/DBI*). The bundled copy carries several fixes
+  that DBIx::Class (and other CPAN consumers) depend on:
+
+    1. DBI.pm:
+       a. force $ENV{DBI_PUREPERL}=2 unconditionally (no XSLoader on JVM)
+       b. prepare_cached wraps prepare failures with the XS-DBI-style
+          "prepare_cached failed: <orig>" context DBIC tests match on
+       c. execute_for_fetch wraps execute() in eval{} + local
+          RaiseError/PrintError=0 so per-row errors populate
+          \$tuple_status (DBIC _dbh_execute_for_fetch relies on it)
+
+    2. DBI/PurePerl.pm:
+       DBI::var::FETCH returns undef for unknown keys instead of
+       Carp::confess, so symbol-table walkers like DBIC's LeakTracer
+       don't die mid-scan.
+
+  Running `jcpan -i DBI` (directly or as a transitive dep) would
+  install upstream 1.647 into ~/.perlonjava/lib/DBI/ which is
+  PRE-JAR in @INC — silently shadowing our bundled patched copy
+  and breaking DBIC. Prevent that: make all build/test/install
+  steps a no-op. The JAR-bundled copy is authoritative.
+
+  When PerlOnJava wants to adopt a newer DBI, bump the bundled
+  files in src/main/perl/lib/DBI*, regenerate the reference patch
+  set in src/main/perl/lib/PerlOnJava/CpanPatches/DBI-X.YZ/, and
+  update the distribution-match regex below.
+match:
+  distribution: "/DBI-1\\.647(?:\\b|\\.)"
+pl:
+  commandline: "PERLONJAVA_SKIP"
+make:
+  commandline: "PERLONJAVA_SKIP"
+test:
+  commandline: "PERLONJAVA_SKIP"
+install:
+  commandline: "PERLONJAVA_SKIP"

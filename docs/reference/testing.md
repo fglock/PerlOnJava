@@ -414,6 +414,9 @@ This script reads `dev/import-perl5/config.yaml` and copies configured files fro
 
 The script also applies patches from `dev/import-perl5/patches/` for PerlOnJava compatibility.
 
+For how this differs from CPAN install-time patches under `jcpan`, see
+[dev/design/patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
+
 ### Running Imported Tests
 
 To run the imported Perl5 tests:

@@ -4,6 +4,17 @@
 
 PerlOnJava includes many common CPAN modules and supports installing additional modules from CPAN. It provides `jcpan`, a CPAN client that works with PerlOnJava, and a custom `ExtUtils::MakeMaker` that handles module installation without requiring native compilation tools.
 
+### Bundled distroprefs and CPAN patches
+
+Some distributions need environment overrides, skipped phases, or small
+unified diffs before `make test`. PerlOnJava ships **distroprefs** as YAML under
+`src/main/perl/lib/PerlOnJava/CpanDistroprefs/` and **patch files** under
+`src/main/perl/lib/PerlOnJava/CpanPatches/`. When CPAN loads, `CPAN::Config`
+copies them into `~/.perlonjava/cpan/prefs/` and `~/.perlonjava/cpan/patches/`
+respectively (see `_bootstrap_prefs` / `_bootstrap_patches` in
+`src/main/perl/lib/CPAN/Config.pm`). Contributor-facing documentation:
+[dev/design/patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
+
 ## Quick Start: Installing Modules with jcpan
 
 The recommended way to install CPAN modules is using `jcpan`:
@@ -263,6 +274,7 @@ Check the module's documentation for fallback behavior.
 
 ## See Also
 
+- [Patch and CPAN prefs layout](../../dev/design/patch-and-cpan-prefs-layout.md) — Where distroprefs and CPAN tarball patches are maintained
 - [Bundled Modules Reference](../reference/bundled-modules.md) - Complete list of included modules
 - [XS Compatibility Reference](../reference/xs-compatibility.md) - Detailed XS module compatibility
 - [Module Porting Guide](module-porting.md) - How to port modules to PerlOnJava
