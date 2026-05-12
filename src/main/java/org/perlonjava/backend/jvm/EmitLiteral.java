@@ -585,10 +585,6 @@ public class EmitLiteral {
         }
 
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_STRICT_SUBS)) {
-            if (QualifiedBarewordSubCall.isDeferredStrictSubsBareword(node.name)) {
-                emitQualifiedBarewordSubCallJVM(visitor, ctx, node);
-                return;
-            }
             throw new PerlCompilerException(
                     node.tokenIndex,
                     "Bareword \"" + node.name + "\" not allowed while \"strict subs\" in use",
@@ -664,33 +660,6 @@ public class EmitLiteral {
             // Fall back for unknown types
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.ARRAY_CLASS,
                     "add", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
-        }
-    }
-
-    /**
-     * JVM path for {@code Package::Sub} barewords under strict subs when the sub is only
-     * installed at runtime (see {@link QualifiedBarewordSubCall}).
-     */
-    private static void emitQualifiedBarewordSubCallJVM(EmitterVisitor visitor, EmitterContext ctx, IdentifierNode node) {
-        MethodVisitor mv = ctx.mv;
-        String normalized = NameNormalizer.normalizeVariableName(node.name, ctx.symbolTable.getCurrentPackage());
-        mv.visitLdcInsn(normalized);
-        if (ctx.contextType == RuntimeContextType.RUNTIME) {
-            mv.visitVarInsn(Opcodes.ILOAD, 2);
-        } else {
-            mv.visitLdcInsn(ctx.contextType);
-        }
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                "org/perlonjava/runtime/runtimetypes/QualifiedBarewordSubCall",
-                "invoke",
-                "(Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
-                false);
-        if (ctx.contextType == RuntimeContextType.VOID) {
-            mv.visitInsn(Opcodes.POP);
-        } else if (ctx.contextType == RuntimeContextType.LIST) {
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeList");
-        } else {
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
         }
     }
 }

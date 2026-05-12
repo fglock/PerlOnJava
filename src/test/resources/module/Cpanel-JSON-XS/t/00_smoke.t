@@ -17,6 +17,7 @@ eval { Cpanel::JSON::XS::encode_json( [], [] ) };
 like( $@, qr/type-aware encode_json/, 'encode_json rejects type second arg' );
 
 use_ok('Cpanel::JSON::XS::Type');
-is( Cpanel::JSON::XS::Type::JSON_TYPE_INT, 0x0002, 'JSON_TYPE_INT constant' );
+# Runtime coderef — avoids a compile-time FQ bareword under strict subs (matches stock Perl 5).
+is( scalar( Cpanel::JSON::XS::Type->can('JSON_TYPE_INT')->() ), 0x0002, 'JSON_TYPE_INT constant' );
 
 use_ok('Cpanel::JSON::XS::Boolean');
