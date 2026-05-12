@@ -31,7 +31,11 @@
       "Bash(cat ~/.cpan *)",
       "Bash(cat ~/.perlonjava *)",
       "Bash(./jcpan -t *)",
-      "Bash(timeout *)"
+      "Bash(timeout *)",
+      "Bash(until grep *)",
+      "Bash(ls -la /tmp *)",
+      "Bash(cat /tmp *)",
+      "Read(~/.perlonjava/*)"
     ]
   }
 }
