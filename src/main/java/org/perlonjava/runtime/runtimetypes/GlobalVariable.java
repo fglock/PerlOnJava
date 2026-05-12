@@ -5,6 +5,7 @@ import org.perlonjava.backend.jvm.CustomClassLoader;
 import org.perlonjava.frontend.parser.ParserTables;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -1148,6 +1149,48 @@ public class GlobalVariable {
      */
     public static RuntimeGlob getExistingGlobalIO(String key) {
         return globalIORefs.get(key);
+    }
+
+    /**
+     * Finds a global IO glob whose stash key ends with {@code "::"+bareName} and whose IO
+     * slot holds an active {@link RuntimeIO}. Used when a bareword handle was compiled to a
+     * plain string and package-qualified lookup missed the real glob (see GAAS/MD5
+     * {@code addfile(F)}). Prefers non-{@code main::} keys, then lexicographic key order.
+     */
+    public static RuntimeGlob pickGlobWithOpenIoForSimpleHandleName(String bareName) {
+        if (bareName == null || bareName.contains("::") || !bareName.matches("[A-Za-z_]\\w*")) {
+            return null;
+        }
+        String suffix = "::" + bareName;
+        ArrayList<String> keys = new ArrayList<>();
+        synchronized (globalIORefs) {
+            for (Map.Entry<String, RuntimeGlob> e : globalIORefs.entrySet()) {
+                String k = e.getKey();
+                if (!k.endsWith(suffix)) {
+                    continue;
+                }
+                RuntimeGlob g = e.getValue();
+                if (g == null) {
+                    continue;
+                }
+                RuntimeScalar ios = g.getIO();
+                if (ios != null && ios.getRuntimeIO() != null) {
+                    keys.add(k);
+                }
+            }
+        }
+        if (keys.isEmpty()) {
+            return null;
+        }
+        keys.sort((a, b) -> {
+            boolean am = a.startsWith("main::");
+            boolean bm = b.startsWith("main::");
+            if (am != bm) {
+                return am ? 1 : -1;
+            }
+            return a.compareTo(b);
+        });
+        return globalIORefs.get(keys.get(0));
     }
 
     /**
