@@ -191,12 +191,18 @@ This helps identify operator precedence issues and incorrect parsing.
 
 ### 6. Profile with JFR (for performance issues)
 ```bash
+# Resolve JDK tools explicitly; `jfr` is not always on PATH on macOS.
+export JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home 2>/dev/null)}"
+export JFR_BIN="${JFR_BIN:-$JAVA_HOME/bin/jfr}"
+# Local fallback known to exist on this workstation:
+# /Users/fglock/Library/Java/JavaVirtualMachines/temurin-24.0.2/Contents/Home/bin/jfr
+
 # Record profile
 $JAVA_HOME/bin/java -XX:StartFlightRecording=duration=10s,filename=profile.jfr \
   -jar target/perlonjava-3.0.0.jar script.pl
 
 # Analyze hotspots
-$JAVA_HOME/bin/jfr print --events jdk.ExecutionSample profile.jfr 2>&1 | \
+$JFR_BIN print --events jdk.ExecutionSample profile.jfr 2>&1 | \
   grep -E "^\s+[a-z].*line:" | sed 's/line:.*//' | sort | uniq -c | sort -rn | head -20
 ```
 
