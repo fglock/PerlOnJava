@@ -32,14 +32,9 @@ Three complementary fixes:
 
 **Implementation**: Scans for orphaned lead bytes and removes them while preserving valid multi-byte sequences.
 
-### 2. Prefer UTF-8 Over Latin-1 (FileUtils.java:146-160)
-**Commit db417e2e8** - Reorder encoding detection:
+### 2. Standard Perl 5 File Encoding (Reverted)
 
-```
-BOM check → Valid UTF-8 check → Latin-1 fallback → UTF-8 default
-```
-
-This ensures modern UTF-8 files are decoded correctly even without BOM.
+Previously added UTF-8 preference in FileUtils, but this deviates from standard Perl 5 behavior where files without `use utf8` are treated as Latin-1. **Reverted in commit 12222348b** to maintain compatibility. File encoding detection now follows Perl 5 standard: non-ASCII bytes that aren't valid UTF-8 are treated as Latin-1.
 
 ### 3. UTF-8 Detection Improvements (commit 919138037)
 Refined logic to better identify orphaned byte patterns.
