@@ -31,8 +31,16 @@ public class NextMethod {
         String callerPackage = code.packageName;
         String methodName = code.subName;
 
-        if (callerPackage == null || methodName == null) {
-            // Fallback to original implementation if context is not available
+        if (code.installedViaAnonGlobAssign && !code.explicitlyRenamed) {
+            throw new PerlCompilerException(
+                    "next::method/next::can/maybe::next::method cannot find enclosing method");
+        }
+
+        boolean realSubName =
+                methodName != null
+                        && !methodName.isEmpty()
+                        && !"__ANON__".equals(methodName);
+        if (!code.explicitlyRenamed && (callerPackage == null || !realSubName)) {
             return nextMethod(args, ctx);
         }
 
@@ -64,8 +72,15 @@ public class NextMethod {
         String callerPackage = code.packageName;
         String methodName = code.subName;
 
-        if (callerPackage == null || methodName == null) {
-            // Fallback to original implementation
+        if (code.installedViaAnonGlobAssign && !code.explicitlyRenamed) {
+            return scalarUndef.getList();
+        }
+
+        boolean realSubName =
+                methodName != null
+                        && !methodName.isEmpty()
+                        && !"__ANON__".equals(methodName);
+        if (!code.explicitlyRenamed && (callerPackage == null || !realSubName)) {
             return nextCan(args, ctx);
         }
 

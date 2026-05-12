@@ -21,6 +21,8 @@ gradle/*
 gradlew
 gradlew.bat
 .idea/
+.cursor/
+.cursorj/
 *.iml
 *.iws
 *.ipr
