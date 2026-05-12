@@ -330,9 +330,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `*foo = \@bar` creates an alias - both names refer to the same array
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeArray arr) {
+                    GlobalVariable.markPackageGlobalRoot(arr);
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalArrays.put(aliasedName, arr);
                     }
+                    GlobalVariable.invalidatePackageRootSnapshot();
                     // Mark as explicitly declared for strict vars (e.g., Exporter imports)
                     GlobalVariable.declareGlobalArray(this.globName);
                 }
@@ -341,9 +343,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `*foo = \%bar` creates an alias - both names refer to the same hash
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeHash hash) {
+                    GlobalVariable.markPackageGlobalRoot(hash);
                     for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
                         GlobalVariable.globalHashes.put(aliasedName, hash);
                     }
+                    GlobalVariable.invalidatePackageRootSnapshot();
                     // Mark as explicitly declared for strict vars (e.g., Exporter imports)
                     GlobalVariable.declareGlobalHash(this.globName);
                 }
@@ -465,7 +469,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             // lookups resolve through stashAliases. Perl 5 semantics make the two package hashes
             // share the same underlying SV.
             RuntimeHash srcStash = GlobalVariable.getGlobalHash(value.globName);
+            GlobalVariable.markPackageGlobalRoot(srcStash);
             GlobalVariable.globalHashes.put(this.globName, srcStash);
+            GlobalVariable.invalidatePackageRootSnapshot();
             // Migrate any pre-existing IO entries from Dst:: to Src::. Unlike code
             // and variable slots (where real Perl keeps the CV/SV pinned to its
             // compile-time package), IO handles are usually transient and the
@@ -567,7 +573,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // modules rely on the absence of these slots.
         if (GlobalVariable.existsGlobalArray(globName)) {
             RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
+            GlobalVariable.markPackageGlobalRoot(sourceArray);
             GlobalVariable.globalArrays.put(this.globName, sourceArray);
+            GlobalVariable.invalidatePackageRootSnapshot();
         }
 
         // Alias the HASH slot: both names point to the same RuntimeHash object.
@@ -579,7 +587,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || globName.endsWith("::");
         if (sourceHasHash) {
             RuntimeHash sourceHash = GlobalVariable.getGlobalHash(globName);
+            GlobalVariable.markPackageGlobalRoot(sourceHash);
             GlobalVariable.globalHashes.put(this.globName, sourceHash);
+            GlobalVariable.invalidatePackageRootSnapshot();
         }
 
         // Alias the SCALAR slot: both names point to the same RuntimeScalar
@@ -592,7 +602,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // hits the original read-only `$&` instead of the freshly-aliased
         // scalar (refstack.t GH#15752).
         RuntimeScalar sourceScalar = GlobalVariable.getGlobalVariable(globName);
+        GlobalVariable.markPackageGlobalRoot(sourceScalar);
         GlobalVariable.globalVariables.put(this.globName, sourceScalar);
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Alias the FORMAT slot: both names point to the same RuntimeFormat object
         RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
@@ -1060,6 +1072,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.invalidatePackageRootSnapshot();
             // Drop the stash hash view so it's empty.
             new RuntimeStash(prefix).elements.clear();
             InheritanceResolver.invalidateCache();
@@ -1085,12 +1098,14 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // holding blessed values.
         RuntimeArray oldArray = GlobalVariable.globalArrays.get(this.globName);
         if (oldArray != null) oldArray.undefine();
-        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+        GlobalVariable.globalArrays.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeArray()));
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Undefine HASH - same reasoning as ARRAY above.
         RuntimeHash oldHash = GlobalVariable.globalHashes.get(this.globName);
         if (oldHash != null) oldHash.undefine();
-        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+        GlobalVariable.globalHashes.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeHash()));
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         return this;
     }
@@ -1141,15 +1156,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // unconditionally install a fresh RuntimeScalar for the local scope.
         // Otherwise `local *X; $X = 5` would mutate the canonical $X and the
         // change would survive the scope exit.
-        GlobalVariable.globalVariables.put(this.globName, new RuntimeScalar());
+        GlobalVariable.globalVariables.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeScalar()));
+        GlobalVariable.invalidatePackageRootSnapshot();
         if (savedArray != null) {
-            GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
+            GlobalVariable.globalArrays.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeArray()));
+            GlobalVariable.invalidatePackageRootSnapshot();
         }
         if (savedHash != null) {
-            GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
+            GlobalVariable.globalHashes.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeHash()));
+            GlobalVariable.invalidatePackageRootSnapshot();
         }
         RuntimeScalar newCode = new RuntimeScalar();
+        GlobalVariable.markPackageGlobalRoot(newCode);
         GlobalVariable.globalCodeRefs.put(this.globName, newCode);
+        GlobalVariable.invalidatePackageRootSnapshot();
         // Decrement stashRefCount on the saved CODE ref being removed from the stash
         if (savedCode != null && savedCode.value instanceof RuntimeCode savedCodeObj) {
             if (savedCodeObj.stashRefCount > 0) {
@@ -1214,20 +1234,24 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // scope; remove the placeholder we may have lazily created during the
         // scope so that `defined *glob{SLOT}` reports false again.
         if (snap.scalar != null) {
+            GlobalVariable.markPackageGlobalRoot(snap.scalar);
             GlobalVariable.globalVariables.put(snap.globName, snap.scalar);
         } else {
             GlobalVariable.globalVariables.remove(snap.globName);
         }
         if (snap.hash != null) {
+            GlobalVariable.markPackageGlobalRoot(snap.hash);
             GlobalVariable.globalHashes.put(snap.globName, snap.hash);
         } else {
             GlobalVariable.globalHashes.remove(snap.globName);
         }
         if (snap.array != null) {
+            GlobalVariable.markPackageGlobalRoot(snap.array);
             GlobalVariable.globalArrays.put(snap.globName, snap.array);
         } else {
             GlobalVariable.globalArrays.remove(snap.globName);
         }
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Before replacing the code ref, decrement the refCount of the CODE
         // that was installed during the local scope. The local scope's code
@@ -1250,7 +1274,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 DestroyDispatch.callDestroy(localBase);
             }
         }
+        GlobalVariable.markPackageGlobalRoot(snap.code);
         GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
+        GlobalVariable.invalidatePackageRootSnapshot();
         // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
             restoredCode.stashRefCount++;

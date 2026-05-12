@@ -62,6 +62,12 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
         vivify(); // Ensure the scalar is initialized.
+        if (this instanceof RuntimeHashProxyEntry hpe
+                && hpe.getParent() != null
+                && hpe.getParent().isGlobalPackageHash) {
+            lvalue.isPackageGlobalRoot = true;
+            MortalList.invalidateExternalRootSnapshot();
+        }
         this.lvalue.set(value);
         this.type = lvalue.type;
         this.value = lvalue.value;
@@ -146,6 +152,12 @@ public abstract class RuntimeBaseProxy extends RuntimeScalar {
      */
     public RuntimeScalar undefine() {
         vivify();
+        if (this instanceof RuntimeHashProxyEntry hpe
+                && hpe.getParent() != null
+                && hpe.getParent().isGlobalPackageHash) {
+            lvalue.isPackageGlobalRoot = true;
+            MortalList.invalidateExternalRootSnapshot();
+        }
         RuntimeScalar ret = lvalue.undefine();
         this.type = lvalue.type;
         this.value = lvalue.value;

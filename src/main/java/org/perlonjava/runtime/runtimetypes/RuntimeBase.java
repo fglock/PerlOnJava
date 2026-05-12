@@ -55,6 +55,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean storedInPackageGlobal = false;
 
+    /**
+     * Marks a scalar/container whose contents are reachable from package
+     * globals. Mutating such an object can change cached root-reachability
+     * answers, so mutation paths invalidate MortalList's external-root
+     * snapshot when this flag is set.
+     */
+    public boolean isPackageGlobalRoot = false;
+
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: production-grade ownership tracking.
     // Active for blessed objects that have at least one weak reference

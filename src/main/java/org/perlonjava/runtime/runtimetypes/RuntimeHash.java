@@ -57,7 +57,76 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      */
     public RuntimeHash() {
         type = PLAIN_HASH;
-        elements = new StableHashMap<>();
+        elements = newElementMap();
+    }
+
+    private RuntimeHashElementMap newElementMap() {
+        return new RuntimeHashElementMap(this);
+    }
+
+    private RuntimeHashElementMap newElementMap(Map<String, RuntimeScalar> values) {
+        RuntimeHashElementMap map = new RuntimeHashElementMap(this);
+        map.putAll(values);
+        return map;
+    }
+
+    private static final class RuntimeHashElementMap extends StableHashMap<String, RuntimeScalar> {
+        private final RuntimeHash owner;
+
+        private RuntimeHashElementMap(RuntimeHash owner) {
+            this.owner = owner;
+        }
+
+        @Override
+        public RuntimeScalar put(String key, RuntimeScalar value) {
+            owner.notePackageRootMutation();
+            owner.markPackageRootedValue(value);
+            return super.put(key, value);
+        }
+
+        @Override
+        public void putAll(Map<? extends String, ? extends RuntimeScalar> m) {
+            owner.notePackageRootMutation();
+            for (RuntimeScalar value : m.values()) {
+                owner.markPackageRootedValue(value);
+            }
+            super.putAll(m);
+        }
+
+        @Override
+        public RuntimeScalar remove(Object key) {
+            RuntimeScalar previous = super.remove(key);
+            if (previous != null) {
+                owner.notePackageRootMutation();
+            }
+            return previous;
+        }
+
+        @Override
+        public void clear() {
+            if (!isEmpty()) {
+                owner.notePackageRootMutation();
+            }
+            super.clear();
+        }
+    }
+
+    private boolean isPackageRootedHash() {
+        return isPackageGlobalRoot || isGlobalPackageHash;
+    }
+
+    void notePackageRootMutation() {
+        if (isPackageRootedHash()) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
+    }
+
+    void markPackageRootedValue(RuntimeScalar value) {
+        if (!isPackageRootedHash() || value == null) return;
+        value.isPackageGlobalRoot = true;
+        if (value.value instanceof RuntimeBase rb) {
+            rb.storedInPackageGlobal = true;
+        }
     }
 
     /**
@@ -252,6 +321,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                             RuntimeScalarCache.scalarEmptyString);
                 }
 
+                notePackageRootMutation();
                 // Clear existing elements but keep the same Map instance to preserve capacity
                 MortalList.deferDestroyForContainerClear(this.elements.values());
                 this.elements.clear();
@@ -271,6 +341,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     }
                     // Create a new RuntimeScalar to properly handle aliasing and avoid read-only issues
                     RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
+                    markPackageRootedValue(val);
                     this.elements.put(key, val);
                     RuntimeScalar.incrementRefCountForContainerStore(val);
                 }
@@ -325,6 +396,8 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @param value The value for the hash entry.
      */
     public void put(String key, RuntimeScalar value) {
+        notePackageRootMutation();
+        markPackageRootedValue(value);
         switch (type) {
             case PLAIN_HASH -> {
                 elements.put(key, value);
@@ -1119,6 +1192,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return The current RuntimeHash instance after undefining its elements.
      */
     public RuntimeHash undefine() {
+        notePackageRootMutation();
         // Fast path: if no value could possibly fire a DESTROY, use the
         // old one-shot path (one flush total instead of N flushes). The
         // slow progressive path below is only required when at least one
@@ -1132,7 +1206,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         if (!hasDestroyableValues()) {
             MortalList.deferDestroyForContainerClear(this.elements.values());
             if (this.type == PLAIN_HASH) {
-                this.elements = new StableHashMap<>();
+                this.elements = newElementMap();
             } else {
                 this.elements.clear();
             }
@@ -1155,6 +1229,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             String key = entry.getKey();
             RuntimeScalar value = entry.getValue();
             it.remove();
+            notePackageRootMutation();
             if (this.byteKeys != null) this.byteKeys.remove(key);
             // Defer DESTROY for this one value, then flush so it runs now.
             MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(value));
@@ -1162,7 +1237,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
         // For PLAIN_HASH, reset to a fresh StableHashMap with default capacity
         if (this.type == PLAIN_HASH) {
-            this.elements = new StableHashMap<>();
+            this.elements = newElementMap();
         }
         this.byteKeys = null;
         hashIterator = null;
@@ -1231,12 +1306,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public void dynamicSaveState() {
         // Create a new RuntimeHash to save the current state
         RuntimeHash currentState = new RuntimeHash();
-        currentState.elements = new StableHashMap<>(this.elements);
+        currentState.elements = currentState.newElementMap(this.elements);
         currentState.blessId = this.blessId;
         currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
         currentState.type = this.type;
         dynamicStateStack.push(currentState);
         // Clear the hash
+        notePackageRootMutation();
         this.elements.clear();
         this.byteKeys = null;
         this.blessId = 0;
@@ -1273,7 +1349,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 this.refCount = savedRefCount;
                 this.blessId = savedBlessId;
             }
+            notePackageRootMutation();
             this.elements = previousState.elements;
+            if (isPackageRootedHash()) {
+                for (RuntimeScalar value : this.elements.values()) {
+                    markPackageRootedValue(value);
+                }
+            }
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
             this.type = previousState.type;

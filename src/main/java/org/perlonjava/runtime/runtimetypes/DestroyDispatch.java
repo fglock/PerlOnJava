@@ -350,11 +350,11 @@ public class DestroyDispatch {
             // added during apply (shift @_, $self scope exit) without
             // clobbering outer-scope pending entries.
             int pendingBefore = MortalList.pendingSize();
-            MortalList.invalidateExternalRootSnapshot();
+            MortalList.invalidateAllRootSnapshots();
             try {
                 RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
             } finally {
-                MortalList.invalidateExternalRootSnapshot();
+                MortalList.invalidateAllRootSnapshots();
             }
 
             // Phase 3: Drain pending entries added during apply, regardless
@@ -431,6 +431,7 @@ public class DestroyDispatch {
                 // Track rescued objects so clearRescuedWeakRefs can clean up
                 // at END time.
                 rescuedObjects.add(referent);
+                MortalList.invalidateExternalRootSnapshot();
                 return;
             }
 
@@ -517,6 +518,7 @@ public class DestroyDispatch {
             snapshot = new java.util.ArrayList<>(rescuedObjects);
             rescuedObjects.clear();
         }
+        MortalList.invalidateExternalRootSnapshot();
         boolean anyProcessed = false;
         for (RuntimeBase obj : snapshot) {
             if (obj.destroyFired && (obj.refCount == 1 || obj.refCount == Integer.MIN_VALUE)) {
@@ -530,6 +532,7 @@ public class DestroyDispatch {
                 // Object still has external references or unexpected state.
                 // Keep tracking it for later processing.
                 rescuedObjects.add(obj);
+                MortalList.invalidateExternalRootSnapshot();
             }
         }
         if (anyProcessed) {
@@ -559,6 +562,7 @@ public class DestroyDispatch {
             snapshot = new java.util.ArrayList<>(rescuedObjects);
             rescuedObjects.clear();
         }
+        MortalList.invalidateExternalRootSnapshot();
         for (RuntimeBase rescued : snapshot) {
             WeakRefRegistry.clearWeakRefsTo(rescued);
             if (rescued instanceof RuntimeHash hash) {
@@ -580,6 +584,7 @@ public class DestroyDispatch {
             removed = rescuedObjects.remove(rescued);
         }
         if (!removed) return false;
+        MortalList.invalidateExternalRootSnapshot();
 
         WeakRefRegistry.clearWeakRefsTo(rescued);
         if (rescued instanceof RuntimeHash hash) {

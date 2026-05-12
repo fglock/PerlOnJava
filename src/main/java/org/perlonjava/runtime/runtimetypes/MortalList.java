@@ -231,8 +231,7 @@ public class MortalList {
                 && scalar.value instanceof RuntimeBase base
                 && base.blessId != 0
                 && WeakRefRegistry.hasWeakRefsTo(base)
-                && ReachabilityWalker.isReachableFromLiveScalarRegistry(
-                        base, liveScalarRegistrySnapshotForCaptureRelease())) {
+                && isReachableFromLiveRootForCaptureRelease(base)) {
             scalar.refCountOwned = false;
             if (base.refCountTrace) {
                 base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
@@ -666,7 +665,6 @@ public class MortalList {
     private static Set<RuntimeBase> flushReachableCache = null;
     private static ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot = null;
     private static ReachabilityWalker.LiveRootSnapshot liveRootSnapshot = null;
-    private static java.util.List<RuntimeScalar> liveScalarRegistrySnapshotCache = null;
 
     private static boolean isReachableCached(RuntimeBase base) {
         if (flushReachableCache == null) {
@@ -691,6 +689,10 @@ public class MortalList {
 
     static void invalidateExternalRootSnapshot() {
         externalRootSnapshot = null;
+    }
+
+    static void invalidateAllRootSnapshots() {
+        invalidateExternalRootSnapshot();
         invalidateLiveRootSnapshot();
     }
 
@@ -698,20 +700,22 @@ public class MortalList {
         liveRootSnapshot = null;
     }
 
-    private static void invalidateReachabilityCaches() {
+    private static void invalidateDrainReachabilityCaches() {
         flushReachableCache = null;
-        invalidateExternalRootSnapshot();
-        liveScalarRegistrySnapshotCache = null;
+        invalidateLiveRootSnapshot();
     }
 
-    private static java.util.List<RuntimeScalar> liveScalarRegistrySnapshotForCaptureRelease() {
-        if (!flushing) {
-            return ScalarRefRegistry.forceGcAndSnapshot();
+    private static boolean isReachableFromLiveRootForCaptureRelease(RuntimeBase base) {
+        if (liveRootSnapshot == null) {
+            liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
         }
-        if (liveScalarRegistrySnapshotCache == null) {
-            liveScalarRegistrySnapshotCache = ScalarRefRegistry.forceGcAndSnapshot();
+        if (liveRootSnapshot.isReachable(base)) {
+            return true;
         }
-        return liveScalarRegistrySnapshotCache;
+        // Compatibility fallback for uncommon non-flush callers. The hot
+        // releaseCaptures path runs while MortalList is flushing and must not
+        // force a JVM GC for every captured scalar.
+        return !flushing && ReachabilityWalker.isReachableFromLiveScalarRegistry(base);
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
@@ -743,7 +747,7 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                    && isReachableFromExternalRootCached(base)) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
@@ -778,7 +782,7 @@ public class MortalList {
             maybeAutoSweepAfterFlush();
             return;
         }
-        invalidateReachabilityCaches();
+        invalidateDrainReachabilityCaches();
         flushing = true;
         try {
             // Process list — DESTROY may add new entries, so use index-based loop
@@ -789,7 +793,7 @@ public class MortalList {
             marks.clear(); // All entries drained; marks are meaningless now
         } finally {
             flushing = false;
-            invalidateReachabilityCaches();
+            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures();
         maybeAutoSweepAfterFlush();
@@ -853,7 +857,7 @@ public class MortalList {
         if (!active) return;
         if (startIdx < 0) startIdx = 0;
         if (startIdx >= pending.size()) return;
-        invalidateReachabilityCaches();
+        invalidateDrainReachabilityCaches();
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -862,7 +866,7 @@ public class MortalList {
                 i++;
             }
         } finally {
-            invalidateReachabilityCaches();
+            invalidateDrainReachabilityCaches();
         }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
@@ -929,7 +933,7 @@ public class MortalList {
             }
             return;
         }
-        invalidateReachabilityCaches();
+        invalidateDrainReachabilityCaches();
         flushing = true;
         try {
             for (int i = mark; i < pending.size(); i++) {
@@ -941,7 +945,7 @@ public class MortalList {
             }
         } finally {
             flushing = false;
-            invalidateReachabilityCaches();
+            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures();
         if (topLevel) {
@@ -965,7 +969,7 @@ public class MortalList {
             processReadyDeferredCaptures();
             return;
         }
-        invalidateReachabilityCaches();
+        invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
         for (int i = mark; i < pending.size(); i++) {
             processDeferredBase(pending.get(i), false);
@@ -974,7 +978,7 @@ public class MortalList {
         while (pending.size() > mark) {
             pending.removeLast();
         }
-        invalidateReachabilityCaches();
+        invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures();

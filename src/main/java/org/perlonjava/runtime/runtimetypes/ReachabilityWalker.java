@@ -791,7 +791,7 @@ public class ReachabilityWalker {
             java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
             for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
-                seedNonLexicalScalar(e.getValue(), todo);
+                seedGlobalCodeScalar(e.getValue(), todo);
             }
             for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
                 seedNonLexicalScalar(e.getValue(), todo);
@@ -838,6 +838,33 @@ public class ReachabilityWalker {
             if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && s.value instanceof RuntimeBase b) {
                 addNonLexical(b, todo);
+            }
+        }
+
+        private void seedGlobalCodeScalar(RuntimeScalar s,
+                                          java.util.ArrayDeque<RuntimeBase> todo) {
+            seedNonLexicalScalar(s, todo);
+            if (s != null && s.value instanceof RuntimeCode code) {
+                seedGlobalCodeCaptures(code, todo);
+            }
+        }
+
+        private void seedGlobalCodeCaptures(RuntimeCode code,
+                                            java.util.ArrayDeque<RuntimeBase> todo) {
+            if (code.capturedScalars != null) {
+                for (RuntimeScalar cap : code.capturedScalars) {
+                    seedNonLexicalScalar(cap, todo);
+                }
+            }
+            if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                    && interpreted.capturedVars != null) {
+                for (RuntimeBase cap : interpreted.capturedVars) {
+                    if (cap instanceof RuntimeScalar scalar) {
+                        seedNonLexicalScalar(scalar, todo);
+                    } else {
+                        addNonLexical(cap, todo);
+                    }
+                }
             }
         }
 

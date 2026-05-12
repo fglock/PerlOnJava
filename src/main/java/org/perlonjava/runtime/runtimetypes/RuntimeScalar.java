@@ -1105,6 +1105,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * Separated to keep setLarge() small enough for JIT inlining of set().
      */
     private RuntimeScalar setLargeRefCounted(RuntimeScalar value) {
+        if (isPackageGlobalRoot) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
         // Fast path for untracked references (refCount == -1).
         // Most reference assignments involve untracked objects (named variables,
         // anonymous arrays/hashes that were never blessed). Skip all refCount
@@ -2406,6 +2409,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar undefine() {
+        if (isPackageGlobalRoot) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
         // Special handling for CODE type - don't set the ref to undef,
         // just clear the code from the global symbol table.
         //
