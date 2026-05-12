@@ -234,10 +234,35 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
                 codeContainer.set(value);
 
-                // Increment stashRefCount on the new CODE ref installed in the stash.
-                // This tracks that the stash holds a reference to this CODE object,
-                // which is invisible to the selective refCount mechanism.
+                // When a coderef is installed into a named stash glob (*Pkg::name = $cr),
+                // Perl gives the CV the glob's fully qualified name for introspection
+                // (caller, Sub::Util::subname, namespace::autoclean). Builder-generated
+                // parsers are anonymous subs assigned this way; without renaming,
+                // subname still reports the compiling package (e.g. Builder::__ANON__),
+                // and namespace::autoclean incorrectly strips them as "imports".
                 if (value.value instanceof RuntimeCode newCode) {
+                    // When a coderef is installed into a named stash glob (*Pkg::name = $cr),
+                    // Perl gives the CV the glob's fully qualified name for introspection
+                    // (caller, Sub::Util::subname, namespace::autoclean). Builder-generated
+                    // parsers are anonymous subs assigned this way; without renaming,
+                    // subname still reports the compiling package (e.g. Builder::__ANON__),
+                    // and namespace::autoclean incorrectly strips them as "imports".
+                    if (!newCode.explicitlyRenamed && this.globName != null) {
+                        boolean looksAnonymous =
+                                newCode.subName == null
+                                        || newCode.subName.isEmpty()
+                                        || "__ANON__".equals(newCode.subName);
+                        if (looksAnonymous) {
+                            int gci = this.globName.lastIndexOf("::");
+                            if (gci > 0) {
+                                newCode.packageName = this.globName.substring(0, gci);
+                                newCode.subName = this.globName.substring(gci + 2);
+                            } else {
+                                newCode.packageName = "main";
+                                newCode.subName = this.globName;
+                            }
+                        }
+                    }
                     newCode.stashRefCount++;
                 }
 
