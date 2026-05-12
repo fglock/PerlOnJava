@@ -1385,8 +1385,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * « (U+00AB in UTF-8: 0xC2 0xAB) becomes two characters: U+00C2 and U+00AB.
      *
      * Java's Matcher.appendReplacement() may leave partial UTF-8 lead bytes orphaned
-     * (e.g., U+00C2 without its continuation byte), which then display as replacement
-     * characters. This method detects and attempts to remove these orphaned lead bytes.
+     * (e.g., U+00C2 without its continuation byte), which display as replacement
+     * characters (Â). This method detects and removes these orphaned lead bytes.
      *
      * @param str The potentially corrupted string
      * @return The repaired string
@@ -1396,15 +1396,31 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return str;
         }
 
-        // Check if string contains orphaned UTF-8 lead bytes (0xC0-0xDF without continuation)
-        // These typically appear as replacement characters when displayed
-        StringBuilder repaired = new StringBuilder();
+        // Scan for orphaned UTF-8 lead bytes (0xC0-0xDF without valid continuation)
+        // These are the corruption markers we want to remove
+        boolean hasOrphanedLeadBytes = false;
 
+        for (int i = 0; i < str.length() - 1; i++) {
+            char c = str.charAt(i);
+            if (c >= 0xC0 && c <= 0xDF) {
+                char next = str.charAt(i + 1);
+                if (!(next >= 0x80 && next <= 0xBF)) {
+                    // Found an orphaned lead byte
+                    hasOrphanedLeadBytes = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasOrphanedLeadBytes) {
+            return str; // No corruption detected
+        }
+
+        // Remove orphaned lead bytes
+        StringBuilder repaired = new StringBuilder();
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
 
-            // UTF-8 lead byte (0xC0-0xDF indicates a 2-byte sequence)
-            // UTF-8 continuation byte (0x80-0xBF)
             if (c >= 0xC0 && c <= 0xDF) {
                 // Check if followed by continuation byte
                 if (i + 1 < str.length()) {
