@@ -1378,60 +1378,106 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Repair orphaned UTF-8 lead bytes ONLY if they're clearly corruption.
+     * Repair orphaned UTF-8 lead bytes that are clearly corruption.
      *
-     * Conservative repair that only removes orphaned lead bytes (0xC0-0xDF without
-     * continuation) if they appear in contexts that suggest corruption, not legitimate code.
-     * For example, orphaned bytes followed by ASCII letters/digits are likely corruption.
+     * Removes orphaned lead bytes (0xC0-0xDF, 0xE0-0xEF, 0xF0-0xF7 without their
+     * required continuation bytes 0x80-0xBF) from the string if any are detected.
+     * Orphaned lead bytes are corruption artifacts from Latin-1 misencoding.
      */
     private static String repairLatin1EncodedUtf8IfCorrupted(String str) {
         if (str == null || str.isEmpty()) {
             return str;
         }
 
-        // Scan for orphaned lead bytes followed by ASCII
-        // This pattern is unlikely in legitimate code but common in corrupted UTF-8
-        boolean hasLikelyCorruption = false;
-        for (int i = 0; i < str.length() - 1; i++) {
+        // Scan for any orphaned lead bytes
+        // 0xC0-0xDF = start of 2-byte sequence (needs 1 continuation)
+        // 0xE0-0xEF = start of 3-byte sequence (needs 2 continuations)
+        // 0xF0-0xF7 = start of 4-byte sequence (needs 3 continuations)
+        boolean hasOrphanedBytes = false;
+        for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
+            int requiredContinuations = 0;
+
             if (c >= 0xC0 && c <= 0xDF) {
-                char next = str.charAt(i + 1);
-                // Not a continuation byte (0x80-0xBF)
-                if (!(next >= 0x80 && next <= 0xBF)) {
-                    // Is followed by ASCII letter/digit (likely corruption marker)
-                    if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z') ||
-                        (next >= '0' && next <= '9')) {
-                        hasLikelyCorruption = true;
+                requiredContinuations = 1;
+            } else if (c >= 0xE0 && c <= 0xEF) {
+                requiredContinuations = 2;
+            } else if (c >= 0xF0 && c <= 0xF7) {
+                requiredContinuations = 3;
+            }
+
+            if (requiredContinuations > 0) {
+                // Check if we have enough continuation bytes
+                for (int j = 0; j < requiredContinuations; j++) {
+                    if (i + j + 1 >= str.length()) {
+                        // Not enough bytes left
+                        hasOrphanedBytes = true;
+                        break;
+                    }
+                    char next = str.charAt(i + j + 1);
+                    if (!(next >= 0x80 && next <= 0xBF)) {
+                        // Not a continuation byte
+                        hasOrphanedBytes = true;
                         break;
                     }
                 }
+                if (hasOrphanedBytes) {
+                    break;
+                }
+                // Skip the continuation bytes
+                i += requiredContinuations;
             }
         }
 
-        if (!hasLikelyCorruption) {
-            return str; // No clear corruption marker found
+        if (!hasOrphanedBytes) {
+            return str;
         }
 
-        // Remove orphaned lead bytes
+        // Remove all orphaned lead bytes and their incomplete sequences
         StringBuilder repaired = new StringBuilder();
         for (int i = 0; i < str.length(); i++) {
             char c = str.charAt(i);
+            int requiredContinuations = 0;
 
             if (c >= 0xC0 && c <= 0xDF) {
-                if (i + 1 < str.length()) {
-                    char next = str.charAt(i + 1);
-                    if (next >= 0x80 && next <= 0xBF) {
-                        // Valid UTF-8 sequence, keep both
-                        repaired.append(c).append(next);
-                        i++;
-                        continue;
-                    }
-                }
-                // Orphaned lead byte - skip it
-                continue;
+                requiredContinuations = 1;
+            } else if (c >= 0xE0 && c <= 0xEF) {
+                requiredContinuations = 2;
+            } else if (c >= 0xF0 && c <= 0xF7) {
+                requiredContinuations = 3;
             }
 
-            repaired.append(c);
+            if (requiredContinuations > 0) {
+                // Check if we have a complete UTF-8 sequence
+                boolean isCompleteSequence = true;
+                for (int j = 0; j < requiredContinuations; j++) {
+                    if (i + j + 1 >= str.length()) {
+                        isCompleteSequence = false;
+                        break;
+                    }
+                    char next = str.charAt(i + j + 1);
+                    if (!(next >= 0x80 && next <= 0xBF)) {
+                        isCompleteSequence = false;
+                        break;
+                    }
+                }
+
+                if (isCompleteSequence) {
+                    // Valid sequence, keep all bytes
+                    repaired.append(c);
+                    for (int j = 0; j < requiredContinuations; j++) {
+                        repaired.append(str.charAt(i + j + 1));
+                    }
+                    i += requiredContinuations;
+                } else {
+                    // Orphaned or incomplete sequence, skip the lead byte
+                    // Continue to next character (don't skip continuation bytes)
+                }
+            } else if (!(c >= 0x80 && c <= 0xBF)) {
+                // Regular character (not lead byte, not continuation byte)
+                repaired.append(c);
+            }
+            // Skip any orphaned continuation bytes
         }
 
         return repaired.toString();
