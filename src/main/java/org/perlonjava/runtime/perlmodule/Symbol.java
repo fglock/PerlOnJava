@@ -3,8 +3,6 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.runtimetypes.RuntimeContextType.SCALAR;
-
 /**
  * The Symbol class provides functionalities for symbol manipulation in a Perl-like environment.
  * It extends PerlModuleBase to leverage module initialization and method registration.
@@ -134,7 +132,7 @@ public class Symbol extends PerlModuleBase {
         if (args.size() > 1) {
             packageName = args.get(1);
         } else {
-            RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), SCALAR);
+            RuntimeList callerList = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR);
             packageName = callerList.scalar();
         }
         RuntimeScalar result;
@@ -161,16 +159,26 @@ public class Symbol extends PerlModuleBase {
         if (args.size() < 1 || args.size() > 2) {
             throw new IllegalStateException("Bad number of arguments for qualify_to_ref()");
         }
-        RuntimeScalar object = qualify(args, ctx).scalar();
+        RuntimeScalar object;
+        if (args.size() == 1) {
+            RuntimeArray qa = new RuntimeArray();
+            qa.push(args.get(0));
+            // Prefer perl-compatible caller(); InterpreterState can diverge from caller inside
+            // closures invoked from another package (qualify_to_ref must match embedded qualify).
+            qa.push(RuntimeCode.caller(new RuntimeList(), RuntimeContextType.SCALAR).scalar());
+            object = qualify(qa, ctx).scalar();
+        } else {
+            object = qualify(args, ctx).scalar();
+        }
         RuntimeScalar result;
         if (!object.isString()) {
             // Already a glob reference or similar — return as-is
             result = object;
         } else {
-            // Create a named RuntimeGlob and return a GLOBREFERENCE to it.
-            // This mirrors Perl's \*{name}: the caller gets a reference whose
-            // hash slot (and other slots) delegate to the global symbol table.
-            result = new RuntimeGlob(object.toString()).createReference();
+            // Use the canonical stash glob (vivifying if needed), not a detached RuntimeGlob.
+            // new RuntimeGlob(name).createReference() pointed at an orphan glob — slots like
+            // ARRAY never saw @Pkg::name (Symbol::qualify_to_ref, FindBin::libs path).
+            result = GlobalVariable.getGlobalIO(object.toString()).createReference();
         }
         // System.out.println("qualify_to_ref returns " + result.type);
         RuntimeList list = new RuntimeList();

@@ -415,6 +415,12 @@ public class PrototypeArgs {
             parser.throwError("syntax error");
         }
 
+        // Builtin Perl parsing (no parentheses): `symlink qw(a b)`, `atan2 qw(1 2)`, etc.
+        // One parenthesis-free list literal fills successive leading `$` / `_` prototype slots.
+        if (tryConsumeParenFreeWordListForLeadingScalars(parser, args, prototype, hasParentheses)) {
+            return;
+        }
+
         // If prototype starts with ';' and we're at a terminator or single comma, all arguments are optional
         if (prototype.startsWith(";") && (isArgumentTerminator(parser) || isComma(TokenUtils.peek(parser)))) {
             return;
@@ -468,6 +474,62 @@ public class PrototypeArgs {
                 default -> parser.throwError("syntax error, unexpected prototype character '" + prototypeChar + "'");
             }
         }
+    }
+
+    /**
+     * Perl builtins accept {@code symlink qw(a b)} without commas: a single qw list fills successive
+     * leading scalar prototype slots (see {@code perl -MO=Deparse -e 'symlink qw(/x /y)'}).
+     */
+    private static boolean tryConsumeParenFreeWordListForLeadingScalars(
+            Parser parser, ListNode args, String prototype, boolean hasParentheses) {
+        if (hasParentheses || prototype == null || prototype.isEmpty()) {
+            return false;
+        }
+        int slots = countLeadingScalarPrototypeSlots(prototype);
+        if (slots < 2) {
+            return false;
+        }
+        int saved = parser.tokenIndex;
+        Node expr = parser.parseExpression(parser.getPrecedence(","));
+        if (expr instanceof ListNode ln
+                && ln.elements.size() == slots
+                && isPlainStringWordList(ln)) {
+            for (Node word : ln.elements) {
+                Node scalarArg = ParserNodeUtils.toScalarContext(word);
+                copyArgumentStartIndex(word, scalarArg);
+                scalarArg.setAnnotation("context", "SCALAR");
+                args.elements.add(scalarArg);
+            }
+            return true;
+        }
+        parser.tokenIndex = saved;
+        return false;
+    }
+
+    private static int countLeadingScalarPrototypeSlots(String prototype) {
+        int count = 0;
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                continue;
+            }
+            if (c == '$' || c == '_') {
+                count++;
+            } else {
+                break;
+            }
+        }
+        return count;
+    }
+
+    /** True if every element is a {@link StringNode} (parenthesis-free qw word list). */
+    private static boolean isPlainStringWordList(ListNode ln) {
+        for (Node n : ln.elements) {
+            if (!(n instanceof StringNode)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

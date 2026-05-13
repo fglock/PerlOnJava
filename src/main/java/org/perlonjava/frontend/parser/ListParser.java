@@ -60,6 +60,10 @@ public class ListParser {
             // No argument
             // 'isa' when enabled as a feature is an infix operator, not a bareword argument
             expr = new ListNode(parser.tokenIndex);
+        } else if (token.text.equals("?")) {
+            // `defined ? expr : expr` (zero-arg defined uses $_), `rand ? expr : expr`, etc.
+            // Do not parse the ternary `?` as the unary operator's optional operand.
+            expr = new ListNode(parser.tokenIndex);
         } else {
             // Argument without parentheses
             expr = ListNode.makeList(parser.parseExpression(parser.getPrecedence("isa") + 1));
@@ -328,7 +332,9 @@ public class ListParser {
         List<OperatorNode> savedHeredocNodes = ParseHeredoc.saveHeredocState(parser);
 
         LexerToken token = TokenUtils.consume(parser);
-        LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
+        LexerToken token1 = parser.tokenIndex < parser.tokens.size()
+                ? parser.tokens.get(parser.tokenIndex)
+                : new LexerToken(LexerTokenType.EOF, "");
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
         // Check if this is a list terminator, but we need to restore position for the check
@@ -385,7 +391,12 @@ public class ListParser {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
-                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
+                if (CompilerOptions.DEBUG_ENABLED) {
+                    String dbgTok = parser.tokenIndex < parser.tokens.size()
+                            ? String.valueOf(parser.tokens.get(parser.tokenIndex))
+                            : "EOF";
+                    parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + dbgTok + "`");
+                }
                 // if (LVALUE_INFIX_OP.contains(token.text)) {
                 //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 // }

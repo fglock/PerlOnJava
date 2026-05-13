@@ -212,7 +212,8 @@ public class SubroutineParser {
         // idiom is recognised (parses as `Error::Simple->catch(with {...})`).
         if (peek(parser).type == LexerTokenType.IDENTIFIER
                 && isValidIndirectMethod(subName, parser)
-                && !prototypeHasGlob) {
+                && !prototypeHasGlob
+                && !(subExists && prototypeStartsWithScalarSlot(prototype))) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
@@ -579,6 +580,71 @@ public class SubroutineParser {
                 && (subName.equals("try") || subName.equals("catch") || subName.equals("finally"))
                 && !parser.ctx.symbolTable.isFeatureCategoryEnabled("try")) {
             return true;
+        }
+        return false;
+    }
+
+    /**
+     * True when the subroutine prototype starts with a scalar (or {@code _}) slot after optional
+     * semicolons / grouping parens. Such subs take their first argument in scalar context; a bareword
+     * after the name is not indirect-object syntax ({@code ok Bin, "..."} vs {@code Bin->ok(...)},
+     * {@code require_ok Foo::Bar} vs {@code Foo::Bar->require_ok}). Filehandle-first prototypes
+     * ({@code *}) still allow indirect notation ({@code print HANDLE LIST}).
+     */
+    private static boolean prototypeStartsWithScalarSlot(String prototype) {
+        if (prototype == null || prototype.isEmpty()) {
+            return false;
+        }
+        int i = 0;
+        int n = prototype.length();
+        while (i < n) {
+            char c = prototype.charAt(i);
+            if (c == ' ' || c == '\t') {
+                i++;
+                continue;
+            }
+            if (c == ';') {
+                i++;
+                continue;
+            }
+            if (c == '(' || c == ')') {
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                int depth = 1;
+                i++;
+                while (i < n && depth > 0) {
+                    char bc = prototype.charAt(i);
+                    if (bc == '[') {
+                        depth++;
+                    } else if (bc == ']') {
+                        depth--;
+                    }
+                    i++;
+                }
+                continue;
+            }
+            if (c == '\\') {
+                i++;
+                if (i < n) {
+                    i++;
+                }
+                continue;
+            }
+            if (c == '*') {
+                return false;
+            }
+            if (c == '@') {
+                return false;
+            }
+            if (c == '%') {
+                return false;
+            }
+            if (c == '&') {
+                return false;
+            }
+            return c == '$' || c == '_';
         }
         return false;
     }

@@ -1023,7 +1023,7 @@ USE
 package $pack;
 BEGIN { \${^WARNING_BITS} = \$args[-1] if defined \$args[-1] }
 #line $line $filename
-use $module \@{\$args[0]};
+use $module \@Test::More::_USE_OK_IMPORTS;
 1;
 USE
     }
@@ -1053,7 +1053,17 @@ sub _eval {
     my( $sigdie, $eval_result, $eval_error );
     {
         local( $@, $!, $SIG{__DIE__} );    # isolate eval
-        $eval_result = eval $code;              ## no critic (BuiltinFunctions::ProhibitStringyEval)
+        # PerlOnJava string-eval does not close over the lexical @args from use_ok's
+        # caller the way perl(1) does, so \@{$args[0]} inside the eval never sees imports.
+        # Copy into a package-visible array for the duration of the eval (local element copy,
+        # not typeglob aliasing — aliases did not populate Exporter import lists).
+        if (@args && ref($args[0]) eq 'ARRAY') {
+            no warnings 'once';
+            local @Test::More::_USE_OK_IMPORTS = @{ $args[0] };
+            $eval_result = eval $code;
+        } else {
+            $eval_result = eval $code;
+        }
         $eval_error  = $@;
         $sigdie      = $SIG{__DIE__} || undef;
     }

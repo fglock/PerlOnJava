@@ -99,8 +99,9 @@ public class Variable {
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
-        LexerToken nextToken = parser.tokenIndex < parser.tokens.size()
-                ? parser.tokens.get(parser.tokenIndex)
+        int nextTokIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        LexerToken nextToken = nextTokIdx < parser.tokens.size()
+                ? parser.tokens.get(nextTokIdx)
                 : new LexerToken(LexerTokenType.EOF, "");
 
         // Special case 1: $${...} - nested scalar dereference
@@ -829,6 +830,30 @@ public class Variable {
         if (TokenUtils.peek(parser).text.equals("}")) {
             TokenUtils.consume(parser); // Consume the '}'
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
+        }
+
+        // *{EXPR} must parse EXPR as full Perl code (calls, commas, ternaries).
+        // The identifier fast-path below wrongly treats the start of `qualify $_[0], ...`
+        // as a bareword glob name `qualify`, breaking Symbol::qualify_to_ref's
+        // `return \*{ qualify $_[0], ... };` (bogus globs like *::bin).
+        if ("*".equals(sigil)) {
+            boolean savedInsideBracedDereference = parser.insideBracedDereference;
+            boolean savedParsingTakeReference = parser.parsingTakeReference;
+            parser.parsingTakeReference = false;
+            try {
+                BlockNode block = ParseBlock.parseBlock(parser);
+                if (!TokenUtils.peek(parser).text.equals("}")) {
+                    throw new PerlCompilerException(
+                            parser.tokenIndex,
+                            "Missing closing brace in *{...} construct",
+                            parser.ctx.errorUtil);
+                }
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                return new OperatorNode(sigil, block, parser.tokenIndex);
+            } finally {
+                parser.insideBracedDereference = savedInsideBracedDereference;
+                parser.parsingTakeReference = savedParsingTakeReference;
+            }
         }
 
         // For string interpolation, preprocess \" sequences IN PLACE
