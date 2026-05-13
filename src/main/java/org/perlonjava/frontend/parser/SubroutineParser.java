@@ -201,24 +201,23 @@ public class SubroutineParser {
 
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
 
-        // If a package name follows, then it looks like a indirect method
-        // Unless the subName looks like an operator
-        // Unless the subName has a prototype with `*`
-        //
         // Note: feature-gated core keywords (`try`, `catch`, `finally`) should
         // participate in indirect-object parsing when their feature is *off* —
         // this is how Error.pm's classic
         //     try { ... } catch Error::Simple with { ... }
         // idiom is recognised (parses as `Error::Simple->catch(with {...})`).
-        // Perl indirect-object `new Class LIST` must stay available even when the *current*
-        // package defines `sub new ($...)` (Parse::RecDescent::Error::code uses
-        // `new Parse::RecDescent::Directive(...)`). Without this exception, `subExists &&
-        // prototypeStartsWithScalarSlot` skips the probe and we mis-parse as a direct call to
-        // the enclosing package's `new`, yielding bogus arity errors.
+
+        // If a package name follows, it may be indirect-object syntax (INVOCANT->METHOD(LIST)).
+        //
+        // Do not skip this probe just because the callee has a scalar-leading prototype; that
+        // heuristic mis-parsed `new Some::Long::Name LIST` inside a package that defines its own
+        // `sub new ($...)` as a direct arity-checked call to the wrong sub (Parse::RecDescent).
+        // Perl does not treat `new` specially here — the method bareword is arbitrary.
+        //
+        // Ambiguous parses rely on the rejection/backtracking logic inside this block.
         if (peek(parser).type == LexerTokenType.IDENTIFIER
                 && isValidIndirectMethod(subName, parser)
-                && !prototypeHasGlob
-                && !(subExists && prototypeStartsWithScalarSlot(prototype) && !subName.equals("new"))) {
+                && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
@@ -585,71 +584,6 @@ public class SubroutineParser {
                 && (subName.equals("try") || subName.equals("catch") || subName.equals("finally"))
                 && !parser.ctx.symbolTable.isFeatureCategoryEnabled("try")) {
             return true;
-        }
-        return false;
-    }
-
-    /**
-     * True when the subroutine prototype starts with a scalar (or {@code _}) slot after optional
-     * semicolons / grouping parens. Such subs take their first argument in scalar context; a bareword
-     * after the name is not indirect-object syntax ({@code ok Bin, "..."} vs {@code Bin->ok(...)},
-     * {@code require_ok Foo::Bar} vs {@code Foo::Bar->require_ok}). Filehandle-first prototypes
-     * ({@code *}) still allow indirect notation ({@code print HANDLE LIST}).
-     */
-    private static boolean prototypeStartsWithScalarSlot(String prototype) {
-        if (prototype == null || prototype.isEmpty()) {
-            return false;
-        }
-        int i = 0;
-        int n = prototype.length();
-        while (i < n) {
-            char c = prototype.charAt(i);
-            if (c == ' ' || c == '\t') {
-                i++;
-                continue;
-            }
-            if (c == ';') {
-                i++;
-                continue;
-            }
-            if (c == '(' || c == ')') {
-                i++;
-                continue;
-            }
-            if (c == '[') {
-                int depth = 1;
-                i++;
-                while (i < n && depth > 0) {
-                    char bc = prototype.charAt(i);
-                    if (bc == '[') {
-                        depth++;
-                    } else if (bc == ']') {
-                        depth--;
-                    }
-                    i++;
-                }
-                continue;
-            }
-            if (c == '\\') {
-                i++;
-                if (i < n) {
-                    i++;
-                }
-                continue;
-            }
-            if (c == '*') {
-                return false;
-            }
-            if (c == '@') {
-                return false;
-            }
-            if (c == '%') {
-                return false;
-            }
-            if (c == '&') {
-                return false;
-            }
-            return c == '$' || c == '_';
         }
         return false;
     }
