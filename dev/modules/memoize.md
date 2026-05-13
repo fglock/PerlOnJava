@@ -1,48 +1,27 @@
-# Memoize Support Plan for PerlOnJava
+# Memoize Compatibility Report for PerlOnJava
 
-## Overview
+> Investigated 2026-04-13 against Memoize 1.17 (CPAN, ARISTOTLE) with PerlOnJava
 
-**Module:** Memoize 1.17 (CPAN: ARISTOTLE)
-**Bundled in PerlOnJava:** No (available via `jcpan`, candidate for bundling)
-**Test command:** `./jcpan -t Memoize`
-**Type:** Pure Perl (no XS)
+## Summary
 
-Memoize caches function return values, speeding up expensive computations.
-It is a core Perl module since Perl 5.8. All its direct dependencies are
-already satisfied in PerlOnJava.
+| Metric | Value |
+|--------|-------|
+| **CPAN distribution** | Memoize-1.17 (ARISTOTLE) |
+| **Bundled in PerlOnJava** | No (installed via jcpan for testing) |
+| **Test files** | 16 (4 skipped) |
+| **Subtests run** | 206 |
+| **Subtests explicitly failed** | 0 |
+| **Test programs crashed** | 5 / 12 that ran |
+| **Test files passing** | 7 / 16 |
+| **Overall status** | FAIL (but close to passing for core functionality) |
 
-## Current Status
+## Architecture
 
-**Branch:** `docs/cpan-reports-scalar-util-memoize`
+Memoize is **100% pure Perl** -- no XS required. It caches function return values
+by wrapping functions via typeglob manipulation.
 
-### Results History
-
-| Date | Programs Failed | Subtests Failed | Total Subtests | Key Fix |
-|------|----------------|-----------------|----------------|---------|
-| 2026-04-13 | 5/16 (4 skipped) | 0/206 explicit | 206 | Baseline (via jcpan) |
-
-### Test Results Summary
-
-| Test File | Status | Subtests | Root Cause |
-|-----------|--------|----------|------------|
-| t/basic.t | PASS | ok | Core memoize/unmemoize/INSTALL/NORMALIZER |
-| t/cache.t | PASS | ok | SCALAR_CACHE/LIST_CACHE with MEMORY/FAULT/MERGE |
-| t/correctness.t | FAIL | 16/17 | **Bug 1: StackOverflowError** in deep recursion test |
-| t/expmod.t | PASS | ok | Memoize::Expire |
-| t/expmod_t.t | PASS | ok | Timed expiration |
-| t/flush.t | PASS | ok | flush_cache() |
-| t/normalize.t | PASS | ok | NORMALIZER option |
-| t/threadsafe.t | FAIL | 1/8 | Requires `threads` module (not available) |
-| t/tie.t | FAIL | 0/7 | **Bug 2: DB_File infinite recursion** |
-| t/tie_db.t | FAIL | 0/7 | **Bug 2: DB_File infinite recursion** |
-| t/tie_gdbm.t | SKIP | — | Could not load GDBM_File |
-| t/tie_ndbm.t | SKIP | — | Could not load Memoize::NDBM_File |
-| t/tie_odbm.t | SKIP | — | Could not load ODBM_File |
-| t/tie_sdbm.t | SKIP | — | Could not load SDBM_File |
-| t/tie_storable.t | FAIL | 5/6 | 1 subtest not reached |
-| t/unmemoize.t | PASS | ok | unmemoize() |
-
----
+Source is available in the Perl 5 checkout at `perl5/cpan/Memoize/` but is
+**not bundled** in PerlOnJava's JAR.
 
 ## Dependency Analysis
 
@@ -50,158 +29,144 @@ already satisfied in PerlOnJava.
 
 | Dependency | Available | Location |
 |-----------|-----------|----------|
-| Carp | Yes | `src/main/perl/lib/Carp.pm` |
-| Scalar::Util (>=1.11) | Yes (v1.63) | Java backend: `ScalarUtil.java` |
-| Exporter | Yes | `src/main/perl/lib/Exporter.pm` |
-| warnings | Yes | Java backend: `Warnings.java` |
+| `Carp` | Yes | `src/main/perl/lib/Carp.pm` |
+| `Scalar::Util` (>=1.11) | Yes (v1.63) | Java backend: `ScalarUtil.java` |
+| `Exporter` | Yes | `src/main/perl/lib/Exporter.pm` |
+| `warnings` | Yes | Java backend: `Warnings.java` |
 
 ### Sub-module Dependencies
 
-| Sub-module | Dependency | Available |
-|-----------|-----------|-----------|
-| Memoize::Expire | Time::HiRes | Yes (Java impl) |
-| Memoize::Storable | Storable (lock_store) | Yes (stub locking) |
-| Memoize::AnyDBM_File | AnyDBM_File | No |
-| Memoize::NDBM_File | NDBM_File | No |
-| Memoize::SDBM_File | SDBM_File | No |
+| Sub-module | Extra Dependency | Available |
+|-----------|------------------|-----------|
+| `Memoize::Expire` | `Time::HiRes` | Yes (Java impl) |
+| `Memoize::Storable` | `Storable` | Yes (with stub locking) |
+| `Memoize::AnyDBM_File` | `AnyDBM_File` | No |
+| `Memoize::NDBM_File` | `NDBM_File` | No |
+| `Memoize::SDBM_File` | `SDBM_File` | No |
 
-### Key Language Features Used
+### Perl Language Features Used
 
-| Feature | Used For | PerlOnJava Status |
-|---------|----------|------------------|
-| `*{$name} = $wrapper` | Install memoized function | Implemented |
-| `*{$name}{CODE}` | Extract CODE slot | Implemented |
-| `Scalar::Util::set_prototype` | Preserve prototype | Implemented |
-| `caller`, `wantarray` | Context detection | Implemented |
-| `no strict` + symbolic refs | Dynamic installation | Implemented |
-| `tied %$hash` | Check tied cache | Implemented |
+| Feature | PerlOnJava Status |
+|---------|------------------|
+| `*{$name} = $wrapper` (typeglob CODE assign) | Implemented |
+| `*{$name}{CODE}` (extract CODE slot) | Implemented |
+| `Scalar::Util::set_prototype` | Implemented |
+| `caller`, `wantarray` | Implemented |
+| `no strict` + symbolic refs | Implemented |
+| `prototype()` builtin | Implemented |
+| `tied %$hash` | Implemented |
+| `warnings::enabled('all')` | Implemented |
 
----
+## Test Results by File
 
-## Bug Details
+### Passing (7 files)
 
-### Bug 1: StackOverflowError in correctness.t
+| Test File | Subtests | What it tests |
+|-----------|----------|---------------|
+| t/basic.t | ok | Core memoize/unmemoize, INSTALL, NORMALIZER, prototype preservation |
+| t/cache.t | ok | SCALAR_CACHE, LIST_CACHE with MEMORY/FAULT/MERGE |
+| t/expmod.t | ok | Memoize::Expire module |
+| t/expmod_t.t | ok | Memoize::Expire with timed expiration |
+| t/flush.t | ok | flush_cache() |
+| t/normalize.t | ok | NORMALIZER option |
+| t/unmemoize.t | ok | unmemoize() |
 
-**Impact:** t/correctness.t (1/17 tests not reached)
+### Failing (5 files)
 
-**Root cause:** The test at lines 90-103 probes for Perl's "Deep recursion"
-warning threshold by recursing up to 100,000 times (`deep_probe()`). This
-overflows the JVM default stack size.
+| Test File | Ran/Planned | Root Cause |
+|-----------|-------------|------------|
+| t/correctness.t | 16/17 | **StackOverflowError** -- deep recursion test (~100k calls) exceeds JVM stack |
+| t/threadsafe.t | 1/8 | `threads` module not available (PerlOnJava limitation) |
+| t/tie.t | 0/7 | **StackOverflowError** in `DB_File.pm` line 238/240 (infinite recursion) |
+| t/tie_db.t | 0/7 | **StackOverflowError** in `DB_File.pm` (same as tie.t) |
+| t/tie_storable.t | 5/6 | 1 subtest not reached (likely `Storable` lock_store stub issue) |
 
-```perl
-sub deep_probe { deep_probe() if ++$limit < 100_000 and not $fail }
-sub deep_test { no warnings "recursion"; deep_test() if $limit-- > 0 }
-memoize "deep_test";
-```
+### Skipped (4 files)
 
-**Workaround:** Run with `JPERL_OPTS="-Xss256m"`. The `perl_test_runner.pl`
-already applies this for known deeply-recursive tests.
+| Test File | Reason |
+|-----------|--------|
+| t/tie_gdbm.t | Could not load `GDBM_File` |
+| t/tie_ndbm.t | Could not load `Memoize::NDBM_File` |
+| t/tie_odbm.t | Could not load `ODBM_File` |
+| t/tie_sdbm.t | Could not load `SDBM_File` |
 
-**Status:** Won't fix in Memoize -- needs JVM stack config
+## Failure Analysis
 
-### Bug 2: DB_File Infinite Recursion
+### 1. StackOverflowError in correctness.t (line 93)
 
-**Impact:** t/tie.t (7/7), t/tie_db.t (7/7)
+The test probes for the Perl "Deep recursion" warning threshold (~100 recursive calls
+in standard Perl) and then verifies that Memoize's wrapper doesn't add extra stack
+frames that would trigger the warning. The probe function recurses up to 100,000 times,
+which overflows the JVM default stack.
 
-**Root cause:** `DB_File.pm` lines 238-240 have infinite recursion:
-```
-DB_File at /Users/fglock/.perlonjava/lib/DB_File.pm line 238
-DB_File at /Users/fglock/.perlonjava/lib/DB_File.pm line 240
-```
-This is a bug in the DB_File shim, not in Memoize. These tests tie Memoize's
-cache to a DB_File database.
+**Workaround**: Run with `JPERL_OPTS="-Xss256m"` to increase JVM stack size.
+This is the same workaround used for `re/pat.t` and other recursive tests.
 
-**Status:** Deferred (fix in DB_File shim)
+### 2. threads not available (threadsafe.t)
 
-### Bug 3: threads Not Available
+PerlOnJava does not implement Perl-style `threads`. This is a known systemic limitation.
+The `CLONE` method in Memoize.pm is defined but harmless.
 
-**Impact:** t/threadsafe.t (7/8)
+### 3. DB_File infinite recursion (tie.t, tie_db.t)
 
-**Root cause:** PerlOnJava does not implement Perl-style `threads`. This is
-a known systemic limitation.
+`DB_File.pm` has an infinite recursion at lines 238-240. This is a bug in the
+`DB_File` shim, not in Memoize itself. These tests tie Memoize's cache to a DB_File
+database.
 
-**Status:** Won't fix (architectural limitation)
+### 4. tie_storable.t partial failure
 
-### Bug 4: tie_storable.t Partial Failure
+5 of 6 subtests pass. The final subtest likely involves `lock_store`/`lock_retrieve`
+which are stub implementations in PerlOnJava's Storable.
 
-**Impact:** t/tie_storable.t (1/6 not reached)
+## Core Functionality Assessment
 
-**Root cause:** Likely related to `Storable::lock_store`/`lock_retrieve`
-being stubs in PerlOnJava.
+The **core Memoize functionality works correctly**:
 
-**Status:** Low priority
+- `memoize()` -- caching function return values
+- `unmemoize()` -- restoring original functions
+- `flush_cache()` -- clearing caches
+- `NORMALIZER` -- custom key normalization
+- `INSTALL` -- installing under different names
+- `SCALAR_CACHE` / `LIST_CACHE` -- cache configuration
+- `MERGE` -- merging scalar/list caches
+- `Memoize::Expire` -- time-based expiration
+- Prototype preservation via `set_prototype`
+- Context propagation (`wantarray`)
 
----
+All failures are in **peripheral features** (threads, DB backends, deep recursion edge case).
 
-## Bundling Plan
+## Recommendations
 
-Memoize source is available in the Perl 5 checkout at `perl5/cpan/Memoize/`.
+### Bundling Memoize
 
-### Step 1: Add to import-perl5 config
+Memoize is an excellent candidate for bundling. All core dependencies are satisfied.
 
-Add to `dev/import-perl5/config.yaml`:
+To bundle, add to `dev/import-perl5/config.yaml`:
 ```yaml
-  # Memoize - Function return value caching (pure Perl, core since 5.8)
-  - source: perl5/cpan/Memoize/lib/Memoize.pm
+  # Memoize - Function return value caching (pure Perl)
+  - source: perl5/cpan/Memoize/Memoize.pm
     target: src/main/perl/lib/Memoize.pm
 
-  - source: perl5/cpan/Memoize/lib/Memoize
+  - source: perl5/cpan/Memoize/Memoize
     target: src/main/perl/lib/Memoize
     type: directory
 ```
 
-### Step 2: Sync
-```bash
-perl dev/import-perl5/sync.pl
-```
+### Improving Test Results
 
-### Step 3: Update docs
-Add to `docs/reference/bundled-modules.md`.
+1. **correctness.t**: Would pass with `JPERL_OPTS="-Xss256m"` (add to perl_test_runner config)
+2. **tie.t / tie_db.t**: Fix DB_File.pm infinite recursion at line 238-240
+3. **tie_storable.t**: Investigate the 6th subtest failure
+4. **threadsafe.t**: Will always skip/fail (no threads) -- acceptable
 
-### Step 4: Verify
-```bash
-make dev
-./jperl -e 'use Memoize; memoize("fib"); sub fib { return $_[0] if $_[0] < 2; fib($_[0]-1)+fib($_[0]-2) } print fib(30), "\n"'
-```
+### Expected Results After Fixes
 
----
+| Test | Current | After Fix |
+|------|---------|-----------|
+| t/correctness.t | FAIL (stack) | PASS (with -Xss256m) |
+| t/threadsafe.t | FAIL (threads) | SKIP (acceptable) |
+| t/tie.t | FAIL (DB_File) | PASS (after DB_File fix) |
+| t/tie_db.t | FAIL (DB_File) | PASS (after DB_File fix) |
+| t/tie_storable.t | FAIL (1/6) | Likely PASS |
 
-## Fix Order (Priority)
-
-1. **Bundle Memoize** -- add to import config, sync, verify
-2. Investigate correctness.t with `-Xss256m` -- likely just works
-3. Fix DB_File shim infinite recursion -- separate issue
-4. threads support -- systemic, won't fix
-
-## Expected Results After Bundling
-
-| Test | Current | Expected |
-|------|---------|----------|
-| t/basic.t | PASS | PASS |
-| t/cache.t | PASS | PASS |
-| t/correctness.t | FAIL | PASS (with -Xss256m) |
-| t/expmod.t | PASS | PASS |
-| t/expmod_t.t | PASS | PASS |
-| t/flush.t | PASS | PASS |
-| t/normalize.t | PASS | PASS |
-| t/threadsafe.t | FAIL | FAIL (no threads) |
-| t/tie.t | FAIL | FAIL (DB_File bug) |
-| t/tie_db.t | FAIL | FAIL (DB_File bug) |
-| t/tie_storable.t | FAIL | Investigate |
-| t/unmemoize.t | PASS | PASS |
-
-**Target: 8/12 passing** (4 skipped for missing DB backends)
-
-## Completed Fixes
-
-_(none yet)_
-
-## Progress Tracking
-
-- [ ] Bundle Memoize via import-perl5 config
-- [ ] Verify core functionality works from bundled JAR
-- [ ] Re-run test suite and update results
-
-## Related Documents
-
-- `dev/cpan-reports/Memoize.md` -- detailed test investigation
+With these fixes, Memoize would go from 7/16 to 11/16 passing (4 skipped, 1 threads-only).
