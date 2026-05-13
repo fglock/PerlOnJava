@@ -1,5 +1,8 @@
 package org.perlonjava.runtime.operators;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -306,53 +309,105 @@ public class VersionHelper {
         return normalizedVersion;
     }
 
+    /**
+     * Normalizes a version for {@code version} objects (tuple stored in the blessed hash).
+     * Use {@link #normalizeVersion(RuntimeScalar, boolean)} when the caller knows whether a
+     * leading {@code v} denotes a dotted-decimal tuple ({@code v5.8} → 5.8.0) vs decimal style
+     * ({@code 5.8} parsed as {@code v5.8} internally → 5.800.0).
+     */
     public static String normalizeVersion(RuntimeScalar wantVersion) {
+        return normalizeVersion(wantVersion, false);
+    }
+
+    /**
+     * @param dottedDecimalTuple when true, segments after stripping {@code v} are literal
+     *                           dotted-decimal components (Perl {@code v5.8}, {@code v5.40}).
+     */
+    public static String normalizeVersion(RuntimeScalar wantVersion, boolean dottedDecimalTuple) {
         String normalizedVersion = wantVersion.toString();
-        
+
         // Handle special case: "undef" is returned by MM_Unix.parse_version when no version found
         if (normalizedVersion.equals("undef") || normalizedVersion.isEmpty()) {
             return "0.0.0";
         }
-        
+
         if (normalizedVersion.startsWith("v")) {
             normalizedVersion = normalizedVersion.substring(1);
         }
         if (wantVersion.type == RuntimeScalarType.VSTRING) {
             normalizedVersion = toDottedString(normalizedVersion);
-        } else {
-            normalizedVersion = normalizedVersion.replaceAll("_", "");
-            String[] parts = normalizedVersion.split("\\.");
-            if (parts.length < 3) {
-                String major = parts[0];
-                String minor = parts.length > 1 ? parts[1] : "0";
-                // Right-pad minor with zeros to at least 3 chars.
-                // In Perl's version system, decimal digits are grouped in 3s:
-                // 0.01 -> "010" -> v0.10.0, not v0.1.0
-                // 0.5  -> "500" -> v0.500.0
-                while (minor.length() < 3) {
-                    minor = minor + "0";
-                }
-                String patch = minor.length() > 3 ? minor.substring(3) : "0";
-                if (minor.length() > 3) {
-                    minor = minor.substring(0, 3);
-                }
-                if (patch.length() > 3) {
-                    patch = patch.substring(0, 3);
-                }
-                // Handle non-numeric version parts gracefully
-                int majorNumber;
-                int minorNumber;
-                int patchNumber;
-                try {
-                    majorNumber = Integer.parseInt(major);
-                    minorNumber = Integer.parseInt(minor);
-                    patchNumber = Integer.parseInt(patch);
-                } catch (NumberFormatException e) {
-                    // If version parts aren't numeric, return 0.0.0
-                    return "0.0.0";
-                }
-                normalizedVersion = String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
+            return normalizeDottedDecimalVersionComponents(normalizedVersion);
+        }
+        if (dottedDecimalTuple) {
+            return normalizeDottedDecimalVersionComponents(normalizedVersion);
+        }
+        return normalizeDecimalStyleVersionComponents(normalizedVersion);
+    }
+
+    /**
+     * Dotted-decimal tuple: each dot-separated segment is an integer (Perl {@code v5.8.1}).
+     * Extend with trailing {@code .0} components until at least three segments (Perl {@code normal()}).
+     */
+    private static String normalizeDottedDecimalVersionComponents(String withoutLeadingV) {
+        withoutLeadingV = withoutLeadingV.replace("_", "");
+        if (withoutLeadingV.isEmpty()) {
+            return "0.0.0";
+        }
+        String[] rawParts = withoutLeadingV.split("\\.", -1);
+        List<Integer> nums = new ArrayList<>(rawParts.length);
+        for (String p : rawParts) {
+            if (p.isEmpty()) {
+                throw new PerlCompilerException("Invalid version format (empty segment)");
             }
+            nums.add(Integer.parseInt(p));
+        }
+        while (nums.size() < 3) {
+            nums.add(0);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < nums.size(); i++) {
+            if (i > 0) {
+                sb.append('.');
+            }
+            sb.append(nums.get(i));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Decimal-style version string ({@code 5.8}, {@code 10.02}): minor digits are grouped in threes.
+     */
+    private static String normalizeDecimalStyleVersionComponents(String normalizedVersion) {
+        normalizedVersion = normalizedVersion.replaceAll("_", "");
+        String[] parts = normalizedVersion.split("\\.");
+        if (parts.length < 3) {
+            String major = parts[0];
+            String minor = parts.length > 1 ? parts[1] : "0";
+            // Right-pad minor with zeros to at least 3 chars.
+            // In Perl's version system, decimal digits are grouped in 3s:
+            // 0.01 -> "010" -> v0.10.0, not v0.1.0
+            // 0.5  -> "500" -> v0.500.0
+            while (minor.length() < 3) {
+                minor = minor + "0";
+            }
+            String patch = minor.length() > 3 ? minor.substring(3) : "0";
+            if (minor.length() > 3) {
+                minor = minor.substring(0, 3);
+            }
+            if (patch.length() > 3) {
+                patch = patch.substring(0, 3);
+            }
+            int majorNumber;
+            int minorNumber;
+            int patchNumber;
+            try {
+                majorNumber = Integer.parseInt(major);
+                minorNumber = Integer.parseInt(minor);
+                patchNumber = Integer.parseInt(patch);
+            } catch (NumberFormatException e) {
+                return "0.0.0";
+            }
+            return String.format("%d.%d.%d", majorNumber, minorNumber, patchNumber);
         }
         return normalizedVersion;
     }

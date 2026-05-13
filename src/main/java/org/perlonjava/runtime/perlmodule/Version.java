@@ -192,7 +192,8 @@ public class Version extends PerlModuleBase {
             versionObj.put("qv", getScalarBoolean(isVString));
 
             // Parse components
-            String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
+            String normalized =
+                    VersionHelper.normalizeVersion(new RuntimeScalar(version), isVString);
             versionObj.put("version", new RuntimeScalar(normalized));
         } else {
             // Decimal format
