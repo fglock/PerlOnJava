@@ -96,7 +96,8 @@ public class Main {
             PerlLanguageProvider.executePerlCode(parsedArgs, true);
 
             if (parsedArgs.compileOnly) {
-                System.out.println(parsedArgs.fileName + " syntax OK");
+                // Match system perl: `perl -c` prints this line to stderr (Test::Script relies on it).
+                System.err.println(parsedArgs.fileName + " syntax OK");
             }
 
             // Match system perl behavior:
