@@ -480,15 +480,16 @@ Foundation will select a Vote Administrator.
 The list below names the members of the Steering Council and Core Team
 responsible for creating the release of perl with which this document shipped.
 
-Remember, though that if you're reading the copy of this document that was
-installed with perl, it's very likely out of date.  Because every new stable
-feature release triggers an election, you're better off looking at L<the most
-up to date copy of this
-document|https://github.com/Perl/perl5/blob/blead/pod/perlgov.pod>, in the
-I<blead> branch of Perl's git repository.  Because it's git, you can also see
-how the membership has changed over time.
+B<NOTE>: Remember that every new stable release triggers an election, so the
+document you are looking at is B<almost certainly out of date> unless you are
+looking at L<the most up to date copy in the C<blead> branch of perl's git
+repository|https://github.com/Perl/perl5/blob/blead/pod/perlgov.pod>.
+You can also see membership changes over time using the commit history there.
 
-=head1 Steering Council Members
+=head2 Steering Council Members
+
+These are the members of the Steering Council elected to be responsible for
+the release of perl from version 5.43.1 onward through version 5.44.0:
 
 =over
 
@@ -500,13 +501,16 @@ how the membership has changed over time.
 
 =back
 
-=head1 Core Team Members
+=head2 Core Team Members
 
-The current members of the Perl Core Team are:
+=head3 Active Members
 
-=head2 Active Members
+These are the active members of the Perl Core Team as of the last update
+on April 11, 2026:
 
 =over 4
+
+=item Andreas König <andk@cpan.org>
 
 =item Aristotle Pagaltzis <pagaltzis@gmx.de>
 
@@ -534,6 +538,8 @@ The current members of the Perl Core Team are:
 
 =item Leon Timmermans <fawaka@gmail.com>
 
+=item Lukas Mai <lukasmai.403+p5p@gmail.com>
+
 =item Matthew Horsfall <wolfsage@gmail.com>
 
 =item Max Maischein <cpan@corion.net>
@@ -542,7 +548,7 @@ The current members of the Perl Core Team are:
 
 =item Nicholas Clark <nick@ccl4.org>
 
-=item Nicolas R <atoomic@cpan.org>
+=item Nicolas R <nicolas@atoomic.org>
 
 =item Paul "LeoNerd" Evans <leonerd@leonerd.org.uk>
 
@@ -554,6 +560,8 @@ The current members of the Perl Core Team are:
 
 =item Stuart Mackintosh <stuart@perlfoundation.org>
 
+=item Thibault Duponchelle <thibault.duponchelle@gmail.com>
+
 =item Todd Rinaldo <toddr@cpanel.net>
 
 =item Tony Cook <tony@develop-help.com>
@@ -562,7 +570,10 @@ The current members of the Perl Core Team are:
 
 =back
 
-=head2 Inactive Members
+=head3 Inactive Members
+
+These are the inactive members of the Perl Core Team as of the last update
+on July 1, 2023:
 
 =over 4
 
