@@ -47,7 +47,23 @@ public class ParseHeredoc {
             }
         } else if (tokenText.length() == 1 && "'`\"".contains(tokenText)) {
             delimiter = tokenText;
-        } else if (token.type == LexerTokenType.IDENTIFIER) {
+            // Lexer tokenizes <<`LABEL` as: ` LABEL ` (opening/closing backticks are separate tokens).
+            // parseRawString("q") does not handle a NUMBER in the middle, so grab LABEL here and skip q().
+            if ("`".equals(delimiter)
+                    && token.type == LexerTokenType.OPERATOR
+                    && parser.tokenIndex + 2 < parser.tokens.size()) {
+                LexerToken mid = parser.tokens.get(parser.tokenIndex + 1);
+                LexerToken end = parser.tokens.get(parser.tokenIndex + 2);
+                if ((mid.type == LexerTokenType.IDENTIFIER || mid.type == LexerTokenType.NUMBER)
+                        && end.type == LexerTokenType.OPERATOR
+                        && "`".equals(end.text)) {
+                    TokenUtils.consume(parser);
+                    identifier = mid.text;
+                    TokenUtils.consume(parser);
+                    TokenUtils.consume(parser);
+                }
+            }
+        } else if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
             delimiter = "\"";
             identifier = tokenText;
             TokenUtils.consume(parser);
@@ -234,10 +250,10 @@ public class ParseHeredoc {
                     operand = new StringNode(string, newlineIndex);
                     break;
                 case "\"":
-                    operand = interpolateString(parser, string, newlineIndex);
+                    operand = interpolateString(parser, string, newlineIndex, true);
                     break;
                 case "`":
-                    Node interpolated = interpolateString(parser, string, newlineIndex);
+                    Node interpolated = interpolateString(parser, string, newlineIndex, false);
                     List<Node> elements = new ArrayList<>();
                     elements.add(interpolated);
                     ListNode list = new ListNode(elements, newlineIndex);
@@ -263,7 +279,7 @@ public class ParseHeredoc {
         parser.tokenIndex = newlineIndex;
     }
 
-    private static Node interpolateString(Parser parser, String string, int newlineIndex) {
+    private static Node interpolateString(Parser parser, String string, int newlineIndex, boolean preprocessBracedBackslashQuotes) {
         ArrayList<String> buffers = new ArrayList<>();
         buffers.add(string);
         StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
@@ -273,7 +289,8 @@ public class ParseHeredoc {
         List<OperatorNode> heredocContext = new ArrayList<>();
 
         // Parse the string with the new context, preserving the original parser context
-        Node result = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, heredocContext, parser);
+        Node result = StringDoubleQuoted.parseDoubleQuotedString(parser.ctx, rawStr, true, true, false, heredocContext, parser,
+                preprocessBracedBackslashQuotes);
 
         // After parsing, any heredocs declared in this context need to be added to the parent
         parser.getHeredocNodes().addAll(heredocContext);

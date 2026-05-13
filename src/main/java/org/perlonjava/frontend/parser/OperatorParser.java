@@ -639,7 +639,7 @@ public class OperatorParser {
         Node operand;
         // Handle operators with one optional argument
         String text = token.text;
-        operand = ListParser.parseZeroOrOneList(parser, 0);
+        operand = ListParser.parseZeroOrOneList(parser, 0, text);
         if (((ListNode) operand).elements.isEmpty()) {
             switch (text) {
                 case "sleep":
@@ -869,7 +869,7 @@ public class OperatorParser {
         // Handle 'defined' operator with special parsing context
         boolean parsingTakeReference = parser.parsingTakeReference;
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
-        operand = ListParser.parseZeroOrOneList(parser, 0);
+        operand = ListParser.parseZeroOrOneList(parser, 0, "defined");
         parser.parsingTakeReference = parsingTakeReference;
         if (operand.elements.isEmpty()) {
             // `defined` without arguments means `defined $_`
@@ -890,7 +890,7 @@ public class OperatorParser {
         // Similar to 'defined', we need to prevent &subr from being auto-called
         boolean parsingTakeReference = parser.parsingTakeReference;
         parser.parsingTakeReference = true;    // don't call `&subr` while parsing "Take reference"
-        operand = ListParser.parseZeroOrOneList(parser, 0);
+        operand = ListParser.parseZeroOrOneList(parser, 0, "undef");
         parser.parsingTakeReference = parsingTakeReference;
         if (operand.elements.isEmpty()) {
             // `undef` without arguments returns undef
@@ -1291,7 +1291,7 @@ public class OperatorParser {
     static OperatorNode parseReadpipe(Parser parser) {
         Node operand;
         // Handle 'readpipe' operator with one optional argument
-        operand = ListParser.parseZeroOrOneList(parser, 0);
+        operand = ListParser.parseZeroOrOneList(parser, 0, "readpipe");
         if (((ListNode) operand).elements.isEmpty()) {
             // Create `$_` variable if no argument is provided
             operand = ParserNodeUtils.scalarUnderscore(parser);
@@ -1300,9 +1300,10 @@ public class OperatorParser {
     }
 
     static OperatorNode parsePack(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
-        // Handle 'pack' operator with one or more arguments
-        operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
+        if (operand.elements.isEmpty()) {
+            parser.throwError("Not enough arguments for pack");
+        }
         return new OperatorNode(token.text, operand, currentIndex);
     }
 

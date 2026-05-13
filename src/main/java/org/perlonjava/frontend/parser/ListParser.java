@@ -36,6 +36,15 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static ListNode parseZeroOrOneList(Parser parser, int minItems) {
+        return parseZeroOrOneList(parser, minItems, null);
+    }
+
+    /**
+     * @param tooManyArgsForBuiltin if non-null and more than one parenthesized argument is parsed,
+     *                              emit {@code Too many arguments for <name>} (Perl builtin wording)
+     *                              instead of a generic syntax error.
+     */
+    static ListNode parseZeroOrOneList(Parser parser, int minItems, String tooManyArgsForBuiltin) {
         if (looksLikeEmptyList(parser)) {
             // Return an empty list if it looks like an empty list
             if (minItems > 0) {
@@ -52,7 +61,11 @@ public class ListParser {
             TokenUtils.consume(parser);
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
-                parser.throwError("syntax error");
+                if (tooManyArgsForBuiltin != null) {
+                    parser.throwError("Too many arguments for " + tooManyArgsForBuiltin);
+                } else {
+                    parser.throwError("syntax error");
+                }
             }
         } else if (token.type == LexerTokenType.EOF || isListTerminator(parser, token) || token.text.equals(",")
                 || (token.text.equals("isa") && token.type == LexerTokenType.IDENTIFIER

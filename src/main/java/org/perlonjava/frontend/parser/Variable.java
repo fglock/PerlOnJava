@@ -872,8 +872,8 @@ public class Variable {
             }
         }
 
-        // For string interpolation, preprocess \" sequences IN PLACE
-        if (isStringInterpolation) {
+        // For qq-like interpolation, preprocess \" sequences IN PLACE (not qx/command strings).
+        if (isStringInterpolation && parser.preprocessBracedBackslashQuotesInInterpolation) {
             int startIndex = parser.tokenIndex;
             int braceLevel = 1;
 

@@ -1,10 +1,13 @@
 package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+
+import java.util.List;
 
 import static org.perlonjava.frontend.parser.ListParser.consumeCommas;
 import static org.perlonjava.frontend.parser.ListParser.isComma;
@@ -245,21 +248,27 @@ public class PrototypeArgs {
 
             // Check for too many arguments without parentheses only if prototype expects 2+ args
             if (!hasParentheses && countPrototypeArgs(prototype) >= 2) {
-                // If we see a comma after parsing all required args, check if it's a trailing comma
-                if (isComma(TokenUtils.peek(parser))) {
-                    // Consume the comma and check what follows
-                    int saveIndex = parser.tokenIndex;
-                    consumeCommas(parser);
-                    LexerToken nextToken = TokenUtils.peek(parser);
-                    // If followed by a statement terminator, it's a trailing comma (allowed)
-                    // Otherwise, it's too many arguments
-                    if (!Parser.isExpressionTerminator(nextToken) && 
-                        nextToken.type != LexerTokenType.EOF &&
-                        !nextToken.text.equals(")")) {
+                // Do not use TokenUtils.peek here: it runs Whitespace.skipWhitespace(), which
+                // processes NEWLINE and may fill in a pending << heredoc before arguments are done.
+                List<LexerToken> tokens = parser.tokens;
+                int i = skipHorizontalWhitespaceTokens(tokens, parser.tokenIndex);
+                if (i < tokens.size() && isComma(tokens.get(i))) {
+                    int j = skipHorizontalWhitespaceTokens(tokens, i + 1);
+                    LexerToken nextToken = tokenAtOrEof(tokens, j);
+                    // Trailing comma before the newline that starts a pending << heredoc body is valid
+                    // (see op/exec.t package o block). A newline with no pending heredoc is an extra arg.
+                    boolean trailingCommaBeforeHeredoc =
+                            nextToken.type == LexerTokenType.NEWLINE && !parser.getHeredocNodes().isEmpty();
+                    if (!trailingCommaBeforeHeredoc
+                            && !Parser.isExpressionTerminator(nextToken)
+                            && nextToken.type != LexerTokenType.EOF
+                            && !nextToken.text.equals(")")) {
                         throwTooManyArgumentsError(parser);
                     }
-                    // Restore position - the comma will be handled by the caller
-                    parser.tokenIndex = saveIndex;
+                    if (trailingCommaBeforeHeredoc) {
+                        parser.tokenIndex = i;
+                        consumeCommas(parser);
+                    }
                 }
             }
         }
@@ -298,6 +307,26 @@ public class PrototypeArgs {
         int callSiteIndex = firstNonCodeArgIndexAfterAmpersandPrototype(prototype, args);
         args.setIndex(callSiteIndex > 0 ? callSiteIndex : parser.tokenIndex);
         return args;
+    }
+
+    /** Advance past SPACE/TAB-only whitespace tokens; never consume NEWLINE (heredoc triggers). */
+    private static int skipHorizontalWhitespaceTokens(List<LexerToken> tokens, int i) {
+        while (i < tokens.size()) {
+            LexerToken t = tokens.get(i);
+            if (t.type == LexerTokenType.WHITESPACE) {
+                i++;
+                continue;
+            }
+            break;
+        }
+        return i;
+    }
+
+    private static LexerToken tokenAtOrEof(List<LexerToken> tokens, int i) {
+        if (i >= tokens.size()) {
+            return new LexerToken(LexerTokenType.EOF, Lexer.EOF);
+        }
+        return tokens.get(i);
     }
 
     private static int firstNonCodeArgIndexAfterAmpersandPrototype(String prototype, ListNode args) {
@@ -485,11 +514,12 @@ public class PrototypeArgs {
         if (hasParentheses || prototype == null || prototype.isEmpty()) {
             return false;
         }
-        int slots = countLeadingScalarPrototypeSlots(prototype);
+        int slots = countLeadingConsecutiveDollarPrototypeSlots(prototype);
         if (slots < 2) {
             return false;
         }
         int saved = parser.tokenIndex;
+        List<OperatorNode> savedHeredocs = ParseHeredoc.saveHeredocState(parser);
         Node expr = parser.parseExpression(parser.getPrecedence(","));
         if (expr instanceof ListNode ln
                 && ln.elements.size() == slots
@@ -503,21 +533,29 @@ public class PrototypeArgs {
             return true;
         }
         parser.tokenIndex = saved;
+        parser.getHeredocNodes().clear();
+        parser.getHeredocNodes().addAll(savedHeredocs);
         return false;
     }
 
-    private static int countLeadingScalarPrototypeSlots(String prototype) {
+    /**
+     * Counts leading {@code $} slots only (skipping whitespace). Used for the parenthesis-free
+     * {@code qw(...)} merge optimization: prototypes like {@code $_} (template + implicit {@code $_})
+     * must not run that lookahead — it would invoke {@code parseExpression} at a terminator and yield a
+     * bogus syntax error instead of {@code Not enough arguments for unpack}.
+     */
+    private static int countLeadingConsecutiveDollarPrototypeSlots(String prototype) {
         int count = 0;
         for (int i = 0; i < prototype.length(); i++) {
             char c = prototype.charAt(i);
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
                 continue;
             }
-            if (c == '$' || c == '_') {
+            if (c == '$') {
                 count++;
-            } else {
-                break;
+                continue;
             }
+            break;
         }
         return count;
     }

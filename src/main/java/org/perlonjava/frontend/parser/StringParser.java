@@ -586,7 +586,7 @@ public class StringParser {
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
         operator = "qx";
         // Parse as interpolated string (like double quotes)
-        Node parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true, false);
+        Node parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, true, true, false, null, null, false);
         List<Node> elements = new ArrayList<>();
         elements.add(parsed);
         ListNode list = new ListNode(elements, rawStr.index);

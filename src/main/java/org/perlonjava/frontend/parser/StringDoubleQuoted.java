@@ -91,7 +91,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
-        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, null);
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, null, null, true);
     }
 
     /**
@@ -109,7 +109,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
-        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, sharedHeredocNodes, null);
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, sharedHeredocNodes, null, true);
     }
 
     /**
@@ -125,6 +125,14 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @return An AST node representing the parsed string
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement,
+                sharedHeredocNodes, originalParser, true);
+    }
+
+    /**
+     * @param preprocessBracedBackslashQuotes See {@link Parser#preprocessBracedBackslashQuotesInInterpolation}.
+     */
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser, boolean preprocessBracedBackslashQuotes) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -141,6 +149,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
         var parser = sharedHeredocNodes != null ?
                 new Parser(ctx, tokens, sharedHeredocNodes) :
                 new Parser(ctx, tokens);
+
+        parser.preprocessBracedBackslashQuotesInInterpolation = preprocessBracedBackslashQuotes;
 
         // Preserve context flags from original parser if provided
         if (originalParser != null) {
