@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for OpenAI::API live testing.
+
+  PERLONJAVA_OPENAI_LIVE_TESTING is set, so PerlOnJava does not inject
+  NO_NETWORK_TESTING. OpenAI::API's live API tests still require the caller to
+  provide OPENAI_API_KEY explicitly in the environment.
+match:
+  distribution: "^NFERRAZ/OpenAI-API-"
+patches:
+  - "OpenAI-API-0.37/EventLoop.patch"
+  - "OpenAI-API-0.37/NoNetworkTests.patch"

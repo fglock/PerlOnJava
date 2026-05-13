@@ -19,9 +19,12 @@
 
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
-**Authoritative reference:** `docs/guides/module-porting.md` — always defer to that document for
-naming conventions, directory layout, and checklists. This skill provides step-by-step
-guidance for the AI agent; the guide is the source of truth for contributors.
+**Authoritative references:**
+
+- `docs/guides/module-porting.md` — naming conventions, directory layout, and checklists for ports.
+- `dev/design/patch-and-cpan-prefs-layout.md` — where bundled **CPAN distroprefs** and **CPAN tarball patches** live (`PerlOnJava/CpanDistroprefs/`, `PerlOnJava/CpanPatches/`) versus **Perl 5 import** patches (`dev/import-perl5/patches/`).
+
+This skill provides step-by-step guidance for the AI agent; those documents are the source of truth for contributors.
 
 ## When to Use This Skill
 

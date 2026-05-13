@@ -8,7 +8,7 @@ comment: |
   Test::RequiresInternet flag so network tests skip and offline validation
   tests still run. For an explicit live run, set
   PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell;
-  CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.
+  CPAN::Config will then install OpenAI-API.live.yml as OpenAI-API.yml instead.
 match:
   distribution: "^NFERRAZ/OpenAI-API-"
 patches:

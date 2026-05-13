@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for CPAN::FindDependencies.
+
+  CPAN::FindDependencies::MakeMaker uses fork/exec to run Makefile.PL
+  under a timeout while capturing output. PerlOnJava has no fork(), so
+  the helper either emits a TAP skip before tests run or execs Makefile.PL
+  in place and loses the parent process. Patch the helper to use a timed
+  subprocess when running under jperl.
+match:
+  distribution: "^DCANTRELL/CPAN-FindDependencies-3\\.13"
+patches:
+  - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"

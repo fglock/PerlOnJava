@@ -19,349 +19,45 @@ my $is_windows = $^O eq 'MSWin32' || $^O eq 'cygwin';
 # Bootstrap bundled distroprefs to the user's prefs directory.
 # CPAN reads prefs from the filesystem, so we write bundled YAML files
 # to ~/.perlonjava/cpan/prefs/ on first run.
+# Canonical sources live under lib/PerlOnJava/CpanDistroprefs/ in the JAR
+# (see dev/design/patch-and-cpan-prefs-layout.md).
 # Note: ~/.perlonjava/cpan/CPAN/MyConfig.pm is created by HandleConfig.pm.
 sub _bootstrap_prefs {
     my $prefs_dir = File::Spec->catdir($cpan_home, 'prefs');
 
-    # Bundled distroprefs for modules with known JVM platform limitations.
-    # These are written to the prefs directory if they don't already exist,
-    # so users can customize or remove them.
-    my %bundled = (
-        'Moo.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for Moo.
-  6 of 841 subtests fail due to JVM GC model limitations:
-  - Tests 10,11 in accessor-weaken*.t: weak ref to lazy anonymous default
-    not cleared at scope exit (JVM GC is non-deterministic)
-  - Test 19 in accessor-weaken*.t: optree reaping on sub redefinition
-    (JVM never unloads compiled bytecode)
-  69/71 test programs pass, 835/841 subtests (99.3%).
-match:
-  distribution: "^HAARG/Moo-"
-test:
-  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
-YAML
-        'Params-Validate.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for Params::Validate.
-  Force pure-Perl build: PerlOnJava cannot compile XS C code, so we
-  pass --pp to Build.PL and set PARAMS_VALIDATE_IMPLEMENTATION=PP.
-  38/38 test programs pass, 2515/2515 subtests (100%).
-match:
-  distribution: "^DROLSKY/Params-Validate-"
-pl:
-  args:
-    - "--pp"
-  env:
-    PARAMS_VALIDATE_IMPLEMENTATION: PP
-YAML
-        'Moose.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for Moose.
-
-  Modern Moose ships 13 .xs files plus mop.c. PerlOnJava cannot compile
-  XS, so a normal install/test cycle fails at Makefile.PL with
-  "This distribution requires a working compiler".
-
-  PerlOnJava bundles a pure-Perl Moose-as-Moo shim at
-  src/main/perl/lib/Moose.pm (loaded from the jar via PERL5LIB), so we
-  don't need to build or install the upstream distribution at all. We
-  just need to run its tests against the shim. This distropref:
-
-    - Skips Makefile.PL (would die on the compiler check).
-    - Skips make (nothing to build).
-    - Runs the upstream t/ tree with jperl directly via prove --exec,
-      so the bundled shim from the jar wins over the unpacked
-      lib/Moose.pm.
-    - Skips install (the shim is already on @INC via the jar).
-
-  Required: jcpan / jcpan.bat exports JPERL_BIN pointing at the right
-  jperl launcher. See bin/jcpan.
-
-  Expected result on `jcpan -t Moose`: most upstream tests fail to load
-  because they require Class::MOP, Moose::Meta::Class, etc. that the
-  shim doesn't provide. The shim-supported subset (basic attributes,
-  roles, BUILD/BUILDARGS, immutable round-trips, method modifiers,
-  cookbook recipes) does pass. See dev/modules/moose_support.md for
-  the baseline numbers and the plan for improving them.
-match:
-  distribution: "^ETHER/Moose-"
-disabled: 0
-# Cross-platform commandlines: each phase invokes `jperl` (which is on
-# PATH thanks to jcpan/jcpan.bat prepending SCRIPT_DIR) with -M to load
-# a small Perl helper. We avoid POSIX-only shell constructs (||, ;,
-# `touch`, /dev/null, $VAR) because CPAN.pm's commandline runs through
-# Perl's system(), which on Windows hands off to cmd.exe.
-#
-# We also avoid CPAN's `depends:` block: it would force CPAN to resolve
-# Moose's full upstream prereq tree (Package::Stash::XS,
-# MooseX::NonMoose, ...), most of which is XS and unsatisfiable on
-# PerlOnJava. The pl-phase helper installs only the one thing the
-# Moose-as-Moo shim genuinely needs: Moo itself.
-pl:
-  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::bootstrap_pl_phase()"'
-make:
-  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
-test:
-  commandline: 'prove --exec jperl -r t/'
-install:
-  commandline: 'jperl -MPerlOnJava::Distroprefs::Moose -e "PerlOnJava::Distroprefs::Moose::noop()"'
-YAML
-        'DBI.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for DBI.
-
-  We bundle a patched DBI.pm + DBI::PurePerl + DBI::Const in the JAR
-  (src/main/perl/lib/DBI*). The bundled copy carries several fixes
-  that DBIx::Class (and other CPAN consumers) depend on:
-
-    1. DBI.pm:
-       a. force $ENV{DBI_PUREPERL}=2 unconditionally (no XSLoader on JVM)
-       b. prepare_cached wraps prepare failures with the XS-DBI-style
-          "prepare_cached failed: <orig>" context DBIC tests match on
-       c. execute_for_fetch wraps execute() in eval{} + local
-          RaiseError/PrintError=0 so per-row errors populate
-          \$tuple_status (DBIC _dbh_execute_for_fetch relies on it)
-
-    2. DBI/PurePerl.pm:
-       DBI::var::FETCH returns undef for unknown keys instead of
-       Carp::confess, so symbol-table walkers like DBIC's LeakTracer
-       don't die mid-scan.
-
-  Running `jcpan -i DBI` (directly or as a transitive dep) would
-  install upstream 1.647 into ~/.perlonjava/lib/DBI/ which is
-  PRE-JAR in @INC — silently shadowing our bundled patched copy
-  and breaking DBIC. Prevent that: make all build/test/install
-  steps a no-op. The JAR-bundled copy is authoritative.
-
-  When PerlOnJava wants to adopt a newer DBI, bump the bundled
-  files in src/main/perl/lib/DBI*, regenerate the reference patch
-  set in src/main/perl/lib/PerlOnJava/CpanPatches/DBI-X.YZ/, and
-  update the distribution-match regex below.
-match:
-  distribution: "/DBI-1\\.647(?:\\b|\\.)"
-pl:
-  commandline: "PERLONJAVA_SKIP"
-make:
-  commandline: "PERLONJAVA_SKIP"
-test:
-  commandline: "PERLONJAVA_SKIP"
-install:
-  commandline: "PERLONJAVA_SKIP"
-YAML
-        'SQL-Translator.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for SQL::Translator.
-
-  SQL::Translator installs cleanly but exposes two failure modes that
-  PerlOnJava can't pass today:
-
-    1. DBIx::Class t/99dbic_sqlt_parser.t subtests:
-       * 'Schema not leaked' — relies on Scalar::Util::weaken seeing
-         an immediate scope-exit DESTROY, which JVM GC doesn't replay
-         deterministically (same class as Moo's accessor-weaken#10/11).
-       * 'SQLT schema object produced after YAML roundtrip' — YAML
-         emitter/parser edge case we haven't chased yet.
-
-    2. DBIx::Class t/86sqlt.t — long-running, various edge cases.
-
-  On the pre-rebase DBIC baseline (commit 99509c6a0), SQL::Translator
-  was not installed, so both tests cleanly SKIPPED and the suite ran
-  green. Block installation here to restore that baseline behaviour
-  for `./jcpan -t DBIx::Class`.
-
-  This is a CONSERVATIVE choice: modules that truly need SQL::Translator
-  will see it as "optional dep missing" and either skip or fail fast,
-  rather than silently crashing deep inside a translator call. Remove
-  this pref once SQL::Translator tests actually pass on PerlOnJava.
-match:
-  distribution: "/SQL-Translator-"
-pl:
-  commandline: "PERLONJAVA_SKIP"
-make:
-  commandline: "PERLONJAVA_SKIP"
-test:
-  commandline: "PERLONJAVA_SKIP"
-install:
-  commandline: "PERLONJAVA_SKIP"
-YAML
-        'XML-LibXML.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for XML::LibXML.
-  XML::LibXML's Makefile.PL requires Alien::Libxml2 (pkg-config or share dir).
-  Neither is available under the JVM.  Even if Alien::Libxml2 were satisfied,
-  LibXML.xs cannot be compiled or loaded (JVM cannot dlopen native .so/.dylib).
-
-  PerlOnJava bundles a Java-backed XML::LibXML implementation in the JAR
-  (src/main/perl/lib/XML/LibXML.pm + XMLLibXML.java).  The backend uses
-  JDK standard APIs: javax.xml.parsers.DocumentBuilder, org.w3c.dom.*,
-  javax.xml.xpath.*, javax.xml.transform.*.
-
-  No commandline overrides are needed: Distribution.pm detects the Makefile.PL
-  failure and automatically generates a cross-platform fallback Makefile.  The
-  fallback Makefile runs 'make test' with jperl and 'make install' skipping
-  files that are bundled in the JAR.
-match:
-  distribution: "^SHLOMIF/XML-LibXML-"
-YAML
-        'Net-Server.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for Net::Server.
-
-  Net::Server 2.018's Net::Server::Proto import-time validation only allows
-  symbols listed in @EXPORT_OK. Several helper subs used by Net::Server.pm
-  (`get_addr_info`, `safe_name_info`, `parse_info`, `object`, `ipv6_package`)
-  are defined later in the file but missing from that list, so PerlOnJava dies
-  during `use Net::Server::Proto qw[...]` with:
-
-    "<symbol> is not a valid Socket macro nor defined by Net::Server::Proto..."
-
-  Apply a tiny source patch that adds these symbols to @EXPORT_OK so import
-  works and Starman tests can proceed (with expected fork-related skips).
-match:
-  distribution: "^BBB/Net-Server-2\\.018"
-patches:
-  - "Net-Server-2.018/Proto.pm.patch"
-YAML
-        'CPAN-FindDependencies.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for CPAN::FindDependencies.
-
-  CPAN::FindDependencies::MakeMaker uses fork/exec to run Makefile.PL
-  under a timeout while capturing output. PerlOnJava has no fork(), so
-  the helper either emits a TAP skip before tests run or execs Makefile.PL
-  in place and loses the parent process. Patch the helper to use a timed
-  subprocess when running under jperl.
-match:
-  distribution: "^DCANTRELL/CPAN-FindDependencies-3\\.13"
-patches:
-  - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"
-YAML
-        'IO-Async.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for IO::Async.
-
-  PerlOnJava does not implement POSIX fork(); CORE::fork returns undef with
-  EAGAIN. IO::Async normally assumes fork support on Unix-like systems unless
-  IO_ASYNC_NO_FORK is set. Tell IO::Async's own test suite the real platform
-  capability so fork/process/routine tests skip instead of failing after the
-  runtime correctly rejects fork().
-match:
-  distribution: "^PEVANS/IO-Async-"
-patches:
-  - "IO-Async-0.805/NoFork.patch"
-  - "IO-Async-0.805/PerlOnJava.patch"
-test:
-  env:
-    IO_ASYNC_NO_FORK: 1
-YAML
-        'OpenAI-API.yml' => <<'YAML',
----
-comment: |
-  PerlOnJava distroprefs for OpenAI::API.
-
-  OpenAI::API's test suite includes live network/API exception tests. Those
-  should not depend on reaching the external OpenAI service during CPAN
-  installation, especially without an OPENAI_API_KEY. Set the standard
-  Test::RequiresInternet flag so network tests skip and offline validation
-  tests still run. For an explicit live run, set
-  PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell;
-  CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.
-match:
-  distribution: "^NFERRAZ/OpenAI-API-"
-patches:
-  - "OpenAI-API-0.37/EventLoop.patch"
-  - "OpenAI-API-0.37/NoNetworkTests.patch"
-test:
-  env:
-    NO_NETWORK_TESTING: 1
-YAML
+    # dest filename under prefs_dir => source path relative to each @INC entry
+    my %pref_install = (
+        'Moo.yml'                    => 'PerlOnJava/CpanDistroprefs/Moo.yml',
+        'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
+        'Moose.yml'                  => 'PerlOnJava/CpanDistroprefs/Moose.yml',
+        'DBI.yml'                    => 'PerlOnJava/CpanDistroprefs/DBI.yml',
+        'SQL-Translator.yml'         => 'PerlOnJava/CpanDistroprefs/SQL-Translator.yml',
+        'XML-LibXML.yml'             => 'PerlOnJava/CpanDistroprefs/XML-LibXML.yml',
+        'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
+        'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
+        'IO-Async.yml'               => 'PerlOnJava/CpanDistroprefs/IO-Async.yml',
     );
-    my %bundled_dd = (
-        'CPAN-FindDependencies.dd' => <<'DD',
-$VAR1 = {
-  'comment' => 'PerlOnJava distroprefs for CPAN::FindDependencies. Patch MakeMaker helper to avoid fork() under jperl.',
-  'match' => {
-    'distribution' => '^DCANTRELL/CPAN-FindDependencies-3\\.13'
-  },
-  'patches' => [
-    'CPAN-FindDependencies-3.13/MakeMaker.pm.patch'
-  ]
-};
-DD
-        'IO-Async.dd' => <<'DD',
-$VAR1 = {
-  'comment' => 'PerlOnJava distroprefs for IO::Async. Set IO_ASYNC_NO_FORK during tests because PerlOnJava does not implement POSIX fork().',
-  'match' => {
-    'distribution' => '^PEVANS/IO-Async-'
-  },
-  'patches' => [
-    'IO-Async-0.805/NoFork.patch',
-    'IO-Async-0.805/PerlOnJava.patch'
-  ],
-  'test' => {
-    'env' => {
-      'IO_ASYNC_NO_FORK' => 1
-    }
-  }
-};
-DD
-        'OpenAI-API.dd' => <<'DD',
-$VAR1 = {
-  'comment' => 'PerlOnJava distroprefs for OpenAI::API. Set NO_NETWORK_TESTING during tests so live external API checks skip during CPAN installation. For an explicit live run, set PERLONJAVA_OPENAI_LIVE_TESTING=1 and provide OPENAI_API_KEY in the shell; CPAN::Config will then generate a live pref without NO_NETWORK_TESTING.',
-  'match' => {
-    'distribution' => '^NFERRAZ/OpenAI-API-'
-  },
-  'patches' => [
-    'OpenAI-API-0.37/EventLoop.patch',
-    'OpenAI-API-0.37/NoNetworkTests.patch'
-  ],
-  'test' => {
-    'env' => {
-      'NO_NETWORK_TESTING' => 1
-    }
-  }
-};
-DD
-    );
+    $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
+        ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
+        : 'PerlOnJava/CpanDistroprefs/OpenAI-API.offline.yml';
 
-    if ($ENV{PERLONJAVA_OPENAI_LIVE_TESTING}) {
-        $bundled{'OpenAI-API.yml'} = <<'YAML';
----
-comment: |
-  PerlOnJava distroprefs for OpenAI::API live testing.
+    my $slurp = sub {
+        my ($path) = @_;
+        open my $fh, '<', $path or return undef;
+        my $content = do { local $/; <$fh> };
+        close $fh;
+        return $content;
+    };
 
-  PERLONJAVA_OPENAI_LIVE_TESTING is set, so PerlOnJava does not inject
-  NO_NETWORK_TESTING. OpenAI::API's live API tests still require the caller to
-  provide OPENAI_API_KEY explicitly in the environment.
-match:
-  distribution: "^NFERRAZ/OpenAI-API-"
-patches:
-  - "OpenAI-API-0.37/EventLoop.patch"
-  - "OpenAI-API-0.37/NoNetworkTests.patch"
-YAML
-        $bundled_dd{'OpenAI-API.dd'} = <<'DD';
-$VAR1 = {
-  'comment' => 'PerlOnJava distroprefs for OpenAI::API live testing. PERLONJAVA_OPENAI_LIVE_TESTING is set, so NO_NETWORK_TESTING is not injected; live API tests still require an explicit OPENAI_API_KEY.',
-  'match' => {
-    'distribution' => '^NFERRAZ/OpenAI-API-'
-  },
-  'patches' => [
-    'OpenAI-API-0.37/EventLoop.patch',
-    'OpenAI-API-0.37/NoNetworkTests.patch'
-  ]
-};
-DD
-    }
+    my $find_source = sub {
+        my ($src_rel) = @_;
+        return undef unless defined $src_rel;
+        for my $inc (@INC) {
+            my $candidate = File::Spec->catfile($inc, $src_rel);
+            return $candidate if -f $candidate;
+        }
+        return undef;
+    };
 
     # Create prefs directory if needed
     unless (-d $prefs_dir) {
@@ -369,7 +65,13 @@ DD
         File::Path::make_path($prefs_dir);
     }
 
-    for my $file (keys %bundled) {
+    for my $file (sort keys %pref_install) {
+        my $src_rel = $pref_install{$file};
+        my $src_path = $find_source->($src_rel);
+        next unless defined $src_path;
+        my $bundled = $slurp->($src_path);
+        next unless defined $bundled;
+
         my $dest = File::Spec->catfile($prefs_dir, $file);
         if (-f $dest) {
             # Only overwrite if the existing file was written by PerlOnJava
@@ -380,24 +82,10 @@ DD
             close $rfh;
             next unless $existing =~ /PerlOnJava/;
             # Skip if content is already up to date (avoid needless writes).
-            next if $existing eq $bundled{$file};
+            next if $existing eq $bundled;
         }
         if (open my $fh, '>', $dest) {
-            print $fh $bundled{$file};
-            close $fh;
-        }
-    }
-    for my $file (keys %bundled_dd) {
-        my $dest = File::Spec->catfile($prefs_dir, $file);
-        if (-f $dest) {
-            open my $rfh, '<', $dest or next;
-            my $existing = do { local $/; <$rfh> };
-            close $rfh;
-            next unless $existing =~ /PerlOnJava/;
-            next if $existing eq $bundled_dd{$file};
-        }
-        if (open my $fh, '>', $dest) {
-            print $fh $bundled_dd{$file};
+            print $fh $bundled;
             close $fh;
         }
     }
@@ -414,57 +102,10 @@ _bootstrap_prefs();
 #
 # Patches are keyed by "<Distribution>-<version>/<filename>.patch"
 # relative to $CPAN::Config->{patches_dir}.
+# Source files live under lib/PerlOnJava/CpanPatches/ (see
+# dev/design/patch-and-cpan-prefs-layout.md).
 sub _bootstrap_patches {
     my $patches_dir = File::Spec->catdir($cpan_home, 'patches');
-    my $net_server_proto_patch = <<'PATCH';
---- lib/Net/Server/Proto.pm.orig
-+++ lib/Net/Server/Proto.pm
-@@ -92,6 +92,11 @@ BEGIN {
-         inet_aton
-         getaddrinfo
-         getnameinfo
-+        get_addr_info
-+        safe_name_info
-+        parse_info
-+        object
-+        ipv6_package
-     ];
-
-     # Load just in time once explicitly invoked.
-PATCH
-    my $cpan_finddeps_makemaker_patch = <<'PATCH';
---- lib/CPAN/FindDependencies/MakeMaker.pm.orig
-+++ lib/CPAN/FindDependencies/MakeMaker.pm
-@@ -61,6 +61,28 @@ sub getreqs_from_mm {
-             return "Makefile.PL didn't finish in a reasonable time\n";
-         }
-     } else {
-+        if ($Config{perlpath} =~ /(?:^|[\/\\])jperl(?:\.bat)?$/) {
-+            my @cmd = ($Config{perlpath}, 'Makefile.PL');
-+            unshift(@cmd, 'timeout', '10') unless $^O eq 'MSWin32';
-+            my $status;
-+            eval { capture { $status = system(@cmd); } };
-+            if ($@) {
-+                chdir($cwd);
-+                return $@;
-+            }
-+
-+            my $exit = defined($status) ? ($status >> 8) : -1;
-+            if ($exit == 124) {
-+                chdir($cwd);
-+                return "Makefile.PL didn't finish in a reasonable time\n";
-+            }
-+
-+            open($MKFH, 'Makefile') || warn "Can't read Makefile\n";
-+            my $makefile_str = <$MKFH>;
-+            close($MKFH);
-+            chdir($cwd);
-+            return _parse_makefile( $makefile_str );
-+        }
-        # execute, suppressing noise ...
-        eval { capture {
-            if(my $pid = fork()) { # parent
-PATCH
 
     # Map: target path relative to $patches_dir  =>  source path inside the JAR
     # (or on-disk dev tree during `make`). The source is located via @INC.
@@ -474,11 +115,9 @@ PATCH
         [ 'DBI-1.647/PurePerl.pm.patch',
           'PerlOnJava/CpanPatches/DBI-1.647/PurePerl.pm.patch' ],
         [ 'Net-Server-2.018/Proto.pm.patch',
-          undef,
-          $net_server_proto_patch ],
+          'PerlOnJava/CpanPatches/Net-Server-2.018/Proto.pm.patch' ],
         [ 'CPAN-FindDependencies-3.13/MakeMaker.pm.patch',
-          undef,
-          $cpan_finddeps_makemaker_patch ],
+          'PerlOnJava/CpanPatches/CPAN-FindDependencies-3.13/MakeMaker.pm.patch' ],
         [ 'IO-Async-0.805/NoFork.patch',
           'PerlOnJava/CpanPatches/IO-Async-0.805/NoFork.patch' ],
         [ 'IO-Async-0.805/PerlOnJava.patch',
@@ -510,15 +149,12 @@ PATCH
     # Fast path: if every target exists and bundled targets are current, skip everything.
     my $needs_write = 0;
     for my $pair (@bundled) {
-        my ($rel, $src_rel, $inline_content) = @$pair;
+        my ($rel, $src_rel) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
         unless (-f $dest) { $needs_write = 1; last }
 
-        my $expected_content = $inline_content;
-        if (!defined $expected_content) {
-            my $src = $find_source->($src_rel);
-            $expected_content = $slurp->($src) if defined $src;
-        }
+        my $src = $find_source->($src_rel);
+        my $expected_content = defined $src ? $slurp->($src) : undef;
         next unless defined $expected_content;
 
         my $existing = $slurp->($dest);
@@ -531,18 +167,15 @@ PATCH
 
     require File::Path;
     for my $pair (@bundled) {
-        my ($rel, $src_rel, $inline_content) = @$pair;
+        my ($rel, $src_rel) = @$pair;
         my $dest = File::Spec->catfile($patches_dir, $rel);
         my $dest_dir = File::Spec->catpath('', (File::Spec->splitpath($dest))[0,1]);
         File::Path::make_path($dest_dir) unless -d $dest_dir;
 
-        my $content = $inline_content;
-        if (!defined $content) {
-            # Locate the source file in @INC (finds either jar:PERL5LIB/… at
-            # runtime or src/main/perl/lib/… during make/test).
-            my $src = $find_source->($src_rel);
-            $content = $slurp->($src) if defined $src;
-        }
+        # Locate the source file in @INC (finds either jar:PERL5LIB/… at
+        # runtime or src/main/perl/lib/… during make/test).
+        my $src = $find_source->($src_rel);
+        my $content = defined $src ? $slurp->($src) : undef;
         next unless defined $content;
 
         my $existing = -f $dest ? $slurp->($dest) : undef;

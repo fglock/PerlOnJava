@@ -1,0 +1,68 @@
+--- DBI.pm	2025-01-17 14:24:27
++++ /Users/fglock/projects/PerlOnJava4/src/main/perl/lib/DBI.pm	2026-04-24 08:41:51
+@@ -274,6 +274,12 @@
+ # If you get an error here like "Can't find loadable object ..."
+ # then you haven't installed the DBI correctly. Read the README
+ # then install it again.
++#
++# PerlOnJava customisation: there is no XS loader, so we force
++# DBI::PurePerl mode. Set DBI_PUREPERL to 2 (unless already set by
++# the user) before the conditional below so PurePerl is always
++# loaded and XSLoader is never attempted.
++$ENV{DBI_PUREPERL} = 2 unless defined $ENV{DBI_PUREPERL} && length $ENV{DBI_PUREPERL};
+ if ( $ENV{DBI_PUREPERL} ) {
+     eval { XSLoader::load('DBI', $XS_VERSION) } if       $ENV{DBI_PUREPERL} == 1;
+     require DBI::PurePerl  if $@ or $ENV{DBI_PUREPERL} >= 2;
+@@ -1725,7 +1731,20 @@
+ 	    return $sth  if $if_active <= 2;
+ 	}
+ 
+-	$sth = $dbh->prepare($statement, $attr);
++	$sth = eval { $dbh->prepare($statement, $attr) };
++	# PerlOnJava patch: wrap prepare failures with "prepare_cached failed"
++	# context. Real upstream XS DBI's dispatcher adds this context; PurePerl
++	# does not. DBIC's test suite (and the wider ecosystem) expect this
++	# exact text, e.g. DBIx-Class t/storage/base.t test 3 matches
++	# qr/prepare_cached failed/.
++	if ( $@ or ! $sth ) {
++	    my $err = $@ || ( $dbh->errstr // '<no error string>' );
++	    # Avoid double-wrapping if an outer call already tagged it.
++	    if ( $err !~ /prepare_cached failed/ ) {
++		Carp::croak("prepare_cached failed: $err");
++	    }
++	    die $err;
++	}
+ 	$cache->{$key} = $sth if $sth;
+ 
+ 	return $sth;
+@@ -2007,13 +2026,28 @@
+         my $rc_total = 0;
+ 	my $err_count;
+ 	while ( my $tuple = &$fetch_tuple_sub() ) {
+-	    if ( my $rc = $sth->execute(@$tuple) ) {
++	    # PerlOnJava patch: locally disable RaiseError/PrintError so
++	    # execute() returns false on error rather than dying, so that
++	    # $tuple_status can be populated with [err, errstr, state] for
++	    # each failed row. Matches upstream XS DBI's Executive.c behavior.
++	    # Required by DBIx::Class::Storage::DBI::_dbh_execute_for_fetch
++	    # (scans $tuple_status for ref entries to locate failed rows).
++	    local $sth->{RaiseError}  = 0;
++	    local $sth->{PrintError}  = 0;
++	    local $sth->{HandleError} = undef;
++	    my $rc;
++	    my $ok = eval { $rc = $sth->execute(@$tuple); 1 };
++	    if ( $ok && $rc ) {
+ 		push @$tuple_status, $rc;
+ 		$rc_total = ($rc >= 0 && $rc_total >= 0) ? $rc_total + $rc : -1;
+ 	    }
+ 	    else {
+ 		$err_count++;
+-		push @$tuple_status, [ $sth->err, $sth->errstr, $sth->state ];
++		# Prefer the driver's err/errstr/state; fall back to $@ if
++		# execute died before populating them (e.g., bind-time error).
++		my $err    = $sth->err    // $DBI::stderr;
++		my $errstr = $sth->errstr // (ref $@ ? "$@" : $@);
++		push @$tuple_status, [ $err, $errstr, $sth->state ];
+                 # XXX drivers implementing execute_for_fetch could opt to "last;" here
+                 # if they know the error code means no further executes will work.
+ 	    }

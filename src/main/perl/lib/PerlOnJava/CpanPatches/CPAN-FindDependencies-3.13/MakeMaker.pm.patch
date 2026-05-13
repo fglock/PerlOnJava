@@ -1,0 +1,31 @@
+--- lib/CPAN/FindDependencies/MakeMaker.pm.orig
++++ lib/CPAN/FindDependencies/MakeMaker.pm
+@@ -61,6 +61,28 @@ sub getreqs_from_mm {
+             return "Makefile.PL didn't finish in a reasonable time\n";
+         }
+     } else {
++        if ($Config{perlpath} =~ /(?:^|[\/\\])jperl(?:\.bat)?$/) {
++            my @cmd = ($Config{perlpath}, 'Makefile.PL');
++            unshift(@cmd, 'timeout', '10') unless $^O eq 'MSWin32';
++            my $status;
++            eval { capture { $status = system(@cmd); } };
++            if ($@) {
++                chdir($cwd);
++                return $@;
++            }
++
++            my $exit = defined($status) ? ($status >> 8) : -1;
++            if ($exit == 124) {
++                chdir($cwd);
++                return "Makefile.PL didn't finish in a reasonable time\n";
++            }
++
++            open($MKFH, 'Makefile') || warn "Can't read Makefile\n";
++            my $makefile_str = <$MKFH>;
++            close($MKFH);
++            chdir($cwd);
++            return _parse_makefile( $makefile_str );
++        }
+         # execute, suppressing noise ...
+         eval { capture {
+             if(my $pid = fork()) { # parent

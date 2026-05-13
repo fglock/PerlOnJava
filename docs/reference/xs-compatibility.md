@@ -32,6 +32,7 @@ These CPAN modules automatically fall back to pure Perl when XS is unavailable:
 |--------|-----------------|-------------------|-------|
 | DateTime | DateTime::PP | `/loadable object/` | Bundled PP implementation |
 | JSON::XS | JSON::PP | `/loadable object/` | Separate CPAN module |
+| Cpanel::JSON::XS | JSON::PP | `/loadable object/` | Bundled shim inherits `JSON::PP` (same stack as `JSON`) |
 | List::Util | List::Util::PP | varies | Some functions only |
 | Params::Util | Params::Util::PP | varies | Separate distribution |
 | Class::XSAccessor | fallback in .pm | `/loadable object/` | Pure Perl accessors |
@@ -42,7 +43,6 @@ These modules have no PP fallback and need Java implementations to work:
 
 | Module | Status | Priority | Notes |
 |--------|--------|----------|-------|
-| Cpanel::JSON::XS | Not implemented | Low | Use JSON instead |
 | Mouse | Not implemented | Medium | Use Moo instead |
 | Moose (XS parts) | Partial | Medium | Core works, some optimizations missing |
 

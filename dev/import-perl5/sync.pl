@@ -1,4 +1,8 @@
 #!/usr/bin/env perl
+# Imports files from the perl5/ tree into this repository and optionally applies
+# patches from dev/import-perl5/patches/ (patch -p0). This is separate from
+# CPAN tarball patches under src/main/perl/lib/PerlOnJava/CpanPatches/; see
+# dev/design/patch-and-cpan-prefs-layout.md.
 use strict;
 use warnings;
 use File::Basename qw(dirname);

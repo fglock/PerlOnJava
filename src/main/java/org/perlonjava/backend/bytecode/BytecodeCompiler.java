@@ -1495,8 +1495,7 @@ public class BytecodeCompiler implements Visitor {
                         return;
                     }
                     // This is a bareword (no sigil)
-                    if (emitterContext != null && emitterContext.symbolTable != null &&
-                            emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
+                    if (getEffectiveSymbolTable().isStrictOptionEnabled(Strict.HINT_STRICT_SUBS)) {
                         throwCompilerException("Bareword \"" + varName + "\" not allowed while \"strict subs\" in use");
                     }
                     // Not strict - treat bareword as string literal

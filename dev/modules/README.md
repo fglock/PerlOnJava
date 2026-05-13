@@ -6,6 +6,8 @@ This directory contains design documents and guides related to porting CPAN modu
 
 | Document | Description |
 |----------|-------------|
+| [json_test_parity.md](json_test_parity.md) | JSON CPAN test parity (dispatcher + `Json.java` lessons) |
+| [cpanel_json_xs.md](cpanel_json_xs.md) | **Cpanel::JSON::XS** — plan for full upstream `t/` parity (Java XS port, phased) |
 | [moose_support.md](moose_support.md) | Path to Moose/Class::MOP support (blocked by B module) |
 | [moo_support.md](moo_support.md) | Moo support status (96% working) |
 | [xs_fallback.md](xs_fallback.md) | XS fallback mechanism for pure Perl modules |
