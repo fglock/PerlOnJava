@@ -439,6 +439,7 @@ imports:
   # From CPAN distribution
   - source: perl5/cpan/version/lib/version/regex.pm
     target: src/main/perl/lib/version/regex.pm
+    patch: version-regex.pm.patch
 
   # Tests for distribution
   - source: perl5/cpan/version/t
@@ -573,6 +574,15 @@ imports:
     target: src/main/perl/lib
     type: directory
 
+  # PerlOnJava: Test2 refcount helpers (Internals::jperl_refstate_str fast paths)
+  - source: perl5/cpan/Test-Simple/lib/Test2/Tools/Ref.pm
+    target: src/main/perl/lib/Test2/Tools/Ref.pm
+    patch: Test2-Tools-Ref.pm.patch
+
+  - source: perl5/cpan/Test-Simple/lib/Test2/Tools/Refcount.pm
+    target: src/main/perl/lib/Test2/Tools/Refcount.pm
+    patch: Test2-Tools-Refcount.pm.patch
+
   # Test::Harness - Test harness for running tests (needed by CPAN make test)
   # Protected because we filter out jar: paths from @INC for child processes
   - source: perl5/cpan/Test-Harness/lib/Test/Harness.pm
@@ -656,10 +666,16 @@ imports:
   # Phase 2: Archive::Tar - Tar archive handling
   - source: perl5/cpan/Archive-Tar/lib/Archive/Tar.pm
     target: src/main/perl/lib/Archive/Tar.pm
+    patch: Archive-Tar.pm.patch
 
   - source: perl5/cpan/Archive-Tar/lib/Archive/Tar
     target: src/main/perl/lib/Archive/Tar
     type: directory
+
+  # PerlOnJava: bundled Compress::Bzip2 API instead of IO::{Compress,Uncompress}::Bzip2
+  - source: perl5/cpan/Archive-Tar/lib/Archive/Tar/Constant.pm
+    target: src/main/perl/lib/Archive/Tar/Constant.pm
+    patch: Archive-Tar-Constant.pm.patch
 
   # Phase 2: Net::FTP and libnet modules
   - source: perl5/cpan/libnet/lib/Net
@@ -712,6 +728,11 @@ imports:
   - source: perl5/cpan/CPAN/lib/CPAN
     target: src/main/perl/lib/CPAN
     type: directory
+
+  # PerlOnJava tweaks (see git history / CPAN client integration)
+  - source: perl5/cpan/CPAN/lib/CPAN/HandleConfig.pm
+    target: src/main/perl/lib/CPAN/HandleConfig.pm
+    patch: CPAN-HandleConfig.pm.patch
 
   # CPAN::Meta - Metadata handling for CPAN distributions
   - source: perl5/cpan/CPAN-Meta/lib/CPAN/Meta.pm

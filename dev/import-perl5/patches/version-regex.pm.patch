@@ -1,0 +1,11 @@
+--- perl5/cpan/version/lib/version/regex.pm
++++ src/main/perl/lib/version/regex.pm
+@@ -2,7 +2,7 @@
+ 
+ use strict;
+ 
+-our $VERSION = '0.9934';
++our $VERSION = '0.9933';
+ 
+ #--------------------------------------------------------------------------#
+ # Version regexp components
