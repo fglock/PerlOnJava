@@ -210,10 +210,15 @@ public class SubroutineParser {
         // this is how Error.pm's classic
         //     try { ... } catch Error::Simple with { ... }
         // idiom is recognised (parses as `Error::Simple->catch(with {...})`).
+        // Perl indirect-object `new Class LIST` must stay available even when the *current*
+        // package defines `sub new ($...)` (Parse::RecDescent::Error::code uses
+        // `new Parse::RecDescent::Directive(...)`). Without this exception, `subExists &&
+        // prototypeStartsWithScalarSlot` skips the probe and we mis-parse as a direct call to
+        // the enclosing package's `new`, yielding bogus arity errors.
         if (peek(parser).type == LexerTokenType.IDENTIFIER
                 && isValidIndirectMethod(subName, parser)
                 && !prototypeHasGlob
-                && !(subExists && prototypeStartsWithScalarSlot(prototype))) {
+                && !(subExists && prototypeStartsWithScalarSlot(prototype) && !subName.equals("new"))) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
             // System.out.println("maybe indirect object: " + packageName + "->" + subName);
