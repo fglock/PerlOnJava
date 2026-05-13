@@ -161,26 +161,22 @@ sub run_tests_parallel {
 sub process_test_result {
     my ($test_info, $test_dir) = @_;
 
-    # Look for result file from child
-    my $temp_pattern = "/tmp/perl_test_*";
-    my @temp_files = glob($temp_pattern);
-
+    # Each child writes one JSON blob to a path keyed by its PID — no fragile
+    # glob+scan of /tmp across parallel forks (would mis-assign results under
+    # load when multiple temp files coexist or decode attempts leave stale refs).
+    my $child_pid = $test_info->{child_pid};
+    my $result_path = "/tmp/perl_test_runner_result_$child_pid";
     my $result_data;
-    for my $temp_file (@temp_files) {
-        if (-f $temp_file && open my $fh, '<', $temp_file) {
-            local $/;
-            my $json_data = <$fh>;
-            close $fh;
-
-            eval {
-                $result_data = JSON::PP->new->decode($json_data);
-            };
-
-            if ($result_data && $result_data->{test_file} eq $test_info->{test_file}) {
-                unlink $temp_file;
-                last;
-            }
-        }
+    if (defined $child_pid && -f $result_path && open my $fh, '<', $result_path) {
+        local $/;
+        my $json_data = <$fh>;
+        close $fh;
+        unlink $result_path;
+        eval {
+            $result_data = JSON::PP->new->decode($json_data);
+            1;
+        };
+        $result_data = undef unless $result_data;
     }
 
     # Fallback if we couldn't read the result
@@ -403,9 +399,10 @@ sub start_test_job {
         # Child process
         my $result = run_single_test($test_file);
 
-        # Write result to temporary file for parent to read
-        my $temp_file = "/tmp/perl_test_$$" . "_" . time() . "_" . rand(1000);
-        if (open my $fh, '>', $temp_file) {
+        # Exactly one canonical path per child PID so the parent's waitpid reap
+        # reads the matching JSON — never scan shared /tmp/perl_test_* blobs.
+        my $result_path = "/tmp/perl_test_runner_result_$$";
+        if (open my $fh, '>', $result_path) {
             print $fh JSON::PP->new->encode({
                 test_file => $test_file,
                 test_index => $test_index,
@@ -421,6 +418,7 @@ sub start_test_job {
             test_file => $test_file,
             test_index => $test_index,
             start_time => time(),
+            child_pid => $pid,
         };
     }
 }
