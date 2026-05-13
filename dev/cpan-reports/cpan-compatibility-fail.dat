@@ -7,7 +7,7 @@ AC::DC	FAIL			Unknown test outcome	2026-04-21
 AC::MrGamoo	FAIL			Unknown test outcome	2026-05-09		
 ACH	FAIL			Unknown test outcome	2026-05-09		
 ACH::Generator	FAIL			Unknown test outcome	2026-05-08		
-ACH::Parser	FAIL			Unknown test outcome	2026-04-27		
+ACH::Parser	FAIL			Unknown test outcome	2026-05-13		
 ACME::Error::Coy	FAIL			Unknown test outcome	2026-05-08		
 ACME::Error::HTML	FAIL			Missing: HTML/FromText.pm	2026-05-04		
 ACME::QuoteDB	FAIL	18	5	13/18 subtests failed	2026-05-06		
@@ -83,10 +83,10 @@ ARS::Simple	FAIL	1	0	1/1 subtests failed	2026-05-08
 ARSObject	FAIL			Unknown test outcome	2026-05-06		
 ASNMTAP::Asnmtap	FAIL	50	32	18/50 subtests failed	2026-05-06		
 ASP	FAIL			Unknown test outcome	2026-05-11		
-ASP4	FAIL	17	5	12/17 subtests failed	2026-05-08		
+ASP4	FAIL	17	7	10/17 subtests failed	2026-05-13		
 ASP4::GlobalASA	FAIL	17	5	12/17 subtests failed	2026-05-09		
 ASP4x::Captcha::Imager	FAIL	3	2	1/3 subtests failed	2026-05-08		
-ASP4x::Linker	FAIL	2	1	1/2 subtests failed	2026-04-27		
+ASP4x::Linker	FAIL	2	1	1/2 subtests failed	2026-05-13		
 ASP4x::Router	FAIL	1	0	1/1 subtests failed	2026-05-01		
 ASP::NextLink	FAIL			Unknown test outcome	2026-05-11		
 AUBBC	FAIL			Unknown test outcome	2026-04-28		
@@ -590,7 +590,7 @@ BSD::Resource	FAIL	2	1	1/2 subtests failed	2026-05-12
 BSD::Socket::Splice	FAIL	2	0	2/2 subtests failed	2026-05-11		
 BSD::arc4random	FAIL				2026-05-08		
 BSD::devstat	FAIL	2	0	16/2 subtests failed	2026-05-07		
-BSON	FAIL	1525	1437	88/1525 subtests failed	2026-05-12		
+BSON	FAIL	1525	1439	86/1525 subtests failed	2026-05-13		
 BTRIEVE::Native	FAIL	5	0	23/5 subtests failed	2026-05-11		
 BZ::Client	FAIL	32	31	1/32 subtests failed	2026-05-07		
 BZ::Client::Test	FAIL	53	52	1/53 subtests failed	2026-05-09		
@@ -615,7 +615,7 @@ BenchmarkAnything::Storage::Backend::SQL	FAIL			Unknown test outcome	2026-05-10
 BenchmarkAnything::Storage::Frontend::HTTP	FAIL	4	4		2026-05-08		
 BenchmarkAnything::Storage::Frontend::Lib	FAIL	1	1		2026-05-10		
 BenchmarkAnything::Storage::Frontend::Tools	FAIL	2	2		2026-05-11		
-BerkeleyDB	FAIL			No parseable output	2026-04-27		
+BerkeleyDB	FAIL	5	5		2026-05-13		
 BerkeleyDB::Lite	FAIL			Configure failed	2026-05-04		
 BerkeleyDB::Manager	FAIL				2026-05-11		
 BerkeleyDB::Text	FAIL			No parseable output	2026-04-29		
@@ -651,7 +651,7 @@ BioX::SeqUtils::RandomSequence	FAIL	2	0	8/2 subtests failed	2026-05-04
 BioX::Workflow	FAIL			Missing: Moose.pm	2026-04-26		
 BioX::Workflow::Command::file_log	FAIL			Missing: MooseX/Types/Path/Tiny.pm	2026-05-11		
 BioX::Workflow::Drake	FAIL				2026-05-09		
-BioX::Wrapper	FAIL				2026-05-12		
+BioX::Wrapper	FAIL				2026-05-13		
 Bioinfo	FAIL	17	17	Missing: Devel/Symdump.pm	2026-04-29		
 Bit::Vector	FAIL	1	0	14/1 subtests failed	2026-04-12		
 BitTorrent	FAIL			No parseable output	2026-04-29		
@@ -804,7 +804,7 @@ CGI::Capture	FAIL	14	13	1/14 subtests failed	2026-04-28
 CGI::Carp::Throw	FAIL	39	37	2/39 subtests failed	2026-05-06		
 CGI::Carp::WarningsToBrowser	FAIL	6	5	1/6 subtests failed	2026-05-06		
 CGI::ClientError	FAIL			Unknown test outcome	2026-04-29		
-CGI::Compile	FAIL	41	0	55/41 subtests failed	2026-05-12		
+CGI::Compile	FAIL	41	0	55/41 subtests failed	2026-05-13		
 CGI::Compress::Gzip	FAIL	44	22	22/44 subtests failed	2026-05-08		
 CGI::ContactForm	FAIL			Syntax error	2026-05-12		
 CGI::Cookie::Splitter	FAIL	328	326	2/328 subtests failed	2026-05-10		
@@ -1126,13 +1126,13 @@ Catalyst::Plugin::Session::State::URI	FAIL	1	0	102/1 subtests failed	2026-05-06
 Catalyst::Plugin::Session::Store::DBIC	FAIL	1	0	1/1 subtests failed	2026-05-09		
 Catalyst::Plugin::Session::Store::Delegate	FAIL	1	1		2026-05-09		
 Catalyst::Plugin::Session::Store::FastMmap	FAIL	1	0	1/1 subtests failed	2026-05-10		
-Catalyst::Plugin::StackTrace	FAIL	1	1		2026-05-12		
+Catalyst::Plugin::StackTrace	FAIL	1	1		2026-05-13		
 Catalyst::Plugin::Static::Simple	FAIL	2	0	60/2 subtests failed	2026-04-21		
 Catalyst::Plugin::Static::Simple::ByClass	FAIL	3	2	1/3 subtests failed	2026-05-06		
-Catalyst::Plugin::SubRequest	FAIL	1	0	21/1 subtests failed	2026-05-12		
+Catalyst::Plugin::SubRequest	FAIL	1	0	21/1 subtests failed	2026-05-13		
 Catalyst::Restarter	FAIL	2	1	1/2 subtests failed	2026-05-09		
 Catalyst::Runtime	FAIL			Unknown test outcome	2026-04-21		
-Catalyst::View::Component::SubInclude	FAIL	6	6		2026-05-12		
+Catalyst::View::Component::SubInclude	FAIL	6	6		2026-05-13		
 Catalyst::View::Excel::Template::Plus	FAIL	5	0	13/5 subtests failed	2026-05-01		
 Catalyst::View::JSON	FAIL	1	0	1/1 subtests failed	2026-05-08		
 Catalyst::View::TT	FAIL	13	0	46/13 subtests failed	2026-04-21		
@@ -1205,7 +1205,7 @@ Class::Builtin	FAIL	90	88	2/90 subtests failed	2026-04-29
 Class::C3::Adopt::NEXT	FAIL	26	17	9/26 subtests failed	2026-05-06		
 Class::C3::XS	FAIL	1	0	45/1 subtests failed	2026-04-29		
 Class::Core	FAIL	1	0	1/1 subtests failed	2026-05-07		
-Class::DBI	FAIL	551	530	21/551 subtests failed	2026-05-09		
+Class::DBI	FAIL	551	530	21/551 subtests failed	2026-05-13		
 Class::DBI::BaseDSN	FAIL	6	5	1/6 subtests failed	2026-05-09		
 Class::DBI::Loader::Relationship	FAIL			Unknown test outcome	2026-04-21		
 Class::DBI::Pg::More	FAIL				2026-04-22		
@@ -1234,9 +1234,8 @@ Class::MethodMaker	FAIL	2	0	1251/2 subtests failed	2026-05-12
 Class::Mix	FAIL	20	0	78/20 subtests failed	2026-05-09		
 Class::Multi	FAIL			Unknown test outcome	2026-05-12		
 Class::Observable	FAIL	58	26	32/58 subtests failed	2026-05-09		
-Class::Std	FAIL	254	223	31/254 subtests failed	2026-05-12		
 Class::Std::Fast	FAIL	4	0	90/4 subtests failed	2026-05-10		
-Class::Std::Fast::Storable	FAIL	4	0	90/4 subtests failed	2026-05-12		
+Class::Std::Fast::Storable	FAIL	280	235	45/280 subtests failed	2026-05-13		
 Class::Tangram	FAIL	1	0	136/1 subtests failed	2026-04-21		
 Class::Throwable	FAIL	77	74	3/77 subtests failed	2026-05-08		
 Class::Tiny	FAIL				2026-04-21		
@@ -1300,10 +1299,10 @@ Concierge	FAIL	8	2	6/8 subtests failed	2026-05-06
 Concierge::Auth	FAIL				2026-05-06		
 Concierge::Sessions	FAIL				2026-05-06		
 Concierge::Users	FAIL	115	112	3/115 subtests failed	2026-05-06		
-Config::AWS	FAIL	4	3	1/4 subtests failed	2026-05-12		
+Config::AWS	FAIL			Unknown test outcome	2026-05-13		
 Config::Backend::INI	FAIL	2	0	10/2 subtests failed	2026-04-12		
 Config::General	FAIL	17	0	62/17 subtests failed	2026-04-12		
-Config::GitLike	FAIL	207	206	1/207 subtests failed	2026-05-12		
+Config::GitLike	FAIL	207	206	1/207 subtests failed	2026-05-13		
 Config::IOD::Reader	FAIL	25	22	3/25 subtests failed	2026-05-07		
 Config::IniFiles	FAIL	45	0	175/45 subtests failed	2026-05-12		
 Config::JFDI	FAIL				2026-05-09		
@@ -1735,7 +1734,7 @@ DBIx::dbMan	FAIL	1	0	4/1 subtests failed	2026-05-07
 DBIx::glueHTML	FAIL			Unknown test outcome	2026-05-09		
 DBM::Any	FAIL			Missing: SDBM_File.pm	2026-05-09		
 DBM::DBass	FAIL			Unknown test outcome	2026-04-30		
-DBM::Deep	FAIL	1	0	1/1 subtests failed	2026-05-12		
+DBM::Deep	FAIL	1	0	1/1 subtests failed	2026-05-13		
 DBM::Deep::Engine::Sector	FAIL	1	0	2/1 subtests failed	2026-05-07		
 DBMedit	FAIL	4	1	3/4 subtests failed	2026-05-12		
 DBNull_File	FAIL	23	6	17/23 subtests failed	2026-05-10		
@@ -1933,7 +1932,7 @@ Data::Object::Vars	FAIL				2026-04-21
 Data::ObjectDriver	FAIL	79	0	682/79 subtests failed	2026-05-12		
 Data::Perl	FAIL	194	193	1/194 subtests failed	2026-04-12		
 Data::Phrasebook::Loader::Ini	FAIL	12	1	11/12 subtests failed	2026-05-09		
-Data::Properties::JSON	FAIL				2026-05-09		
+Data::Properties::JSON	FAIL				2026-05-13		
 Data::Recursive::Encode	FAIL	28	27	1/28 subtests failed	2026-05-10		
 Data::Result	FAIL	28	26	2/28 subtests failed	2026-05-08		
 Data::Rmap	FAIL	39	36	3/39 subtests failed	2026-05-12		
@@ -2049,7 +2048,7 @@ Devel::CheckCompiler	FAIL	7	4	3/7 subtests failed	2026-05-12
 Devel::CheckLib	FAIL	25	13	12/25 subtests failed	2026-04-12		
 Devel::Confess	FAIL	123	50	73/123 subtests failed	2026-04-21		
 Devel::Cover::Report::Clover	FAIL	12	12		2026-05-07		
-Devel::Declare	FAIL	2	0	53/2 subtests failed	2026-05-12		
+Devel::Declare	FAIL	2	0	53/2 subtests failed	2026-05-13		
 Devel::Declare::Interface	FAIL	8	5	3/8 subtests failed	2026-05-12		
 Devel::Declare::Lexer	FAIL			Missing: Devel/Declare.pm	2026-05-11		
 Devel::Declare::Parser	FAIL	8	5	3/8 subtests failed	2026-05-08		
@@ -2087,7 +2086,7 @@ Digest::Haval256	FAIL	13	0	25/13 subtests failed	2026-04-22
 Digest::JHash	FAIL	1	0	6/1 subtests failed	2026-04-12		
 Digest::MD5	FAIL			Unknown test outcome	2026-05-12		
 Digest::OAT	FAIL	1	0	5/1 subtests failed	2026-05-07		
-Digest::Perl::MD4	FAIL			Unknown test outcome	2026-05-12		
+Digest::Perl::MD4	FAIL			Unknown test outcome	2026-05-13		
 Digest::Perl::MD5	FAIL			Unknown test outcome	2026-04-22		
 Digest::SHA1	FAIL				2026-04-12		
 Digest::SHA2	FAIL	21	0	61/21 subtests failed	2026-04-22		
@@ -2201,8 +2200,8 @@ Email::Date::Format	FAIL	8	4	4/8 subtests failed	2026-04-12
 Email::LocalDelivery	FAIL	1	0	6/1 subtests failed	2026-05-10		
 Email::MIME::CreateHTML	FAIL	11	0	64/11 subtests failed	2026-05-10		
 Email::Send	FAIL	93	92	1/93 subtests failed	2026-05-11		
-Email::Store	FAIL	14	0	43/14 subtests failed	2026-05-06		
-Email::Store::HTML	FAIL	1	0	15/1 subtests failed	2026-05-06		
+Email::Store	FAIL	14	0	43/14 subtests failed	2026-05-13		
+Email::Store::HTML	FAIL	1	0	15/1 subtests failed	2026-05-13		
 Email::Stuff	FAIL	2	0	36/2 subtests failed	2026-04-29		
 Email::Stuffer	FAIL	1	1		2026-05-08		
 Email::Valid::Loose	FAIL	1	0	1/1 subtests failed	2026-04-21		
@@ -2292,7 +2291,7 @@ ExtUtils::Typemaps::Magic	FAIL	3	0	3/3 subtests failed	2026-05-10
 ExtUtils::Typemaps::ObjectMap	FAIL	7	0	26/7 subtests failed	2026-05-06		
 ExtUtils::Typemaps::STL	FAIL	2	1	1/2 subtests failed	2026-05-06		
 ExtUtils::XSOne	FAIL	54	50	4/54 subtests failed	2026-05-05		
-ExtUtils::XSpp	FAIL	1	0	3/1 subtests failed	2026-05-11		
+ExtUtils::XSpp	FAIL	1	0	3/1 subtests failed	2026-05-13		
 ExtUtils::XSpp::Plugin::Cloning	FAIL	1	0	1/1 subtests failed	2026-05-08		
 ExtUtils::configPL	FAIL			Unknown test outcome	2026-05-07		
 ExtUtils::nvcc	FAIL	4	0	4/4 subtests failed	2026-05-11		
@@ -2368,10 +2367,10 @@ File::DirCompare	FAIL	16	15	1/16 subtests failed	2026-05-09
 File::ExtAttr	FAIL	5	0	5/5 subtests failed	2026-05-09		
 File::FcntlLock	FAIL				2026-05-07		
 File::Find::Closures	FAIL	150	148	2/150 subtests failed	2026-05-11		
-File::FindLib	FAIL	13	4	9/13 subtests failed	2026-05-12		
+File::FindLib	FAIL	13	4	9/13 subtests failed	2026-05-13		
 File::Flat	FAIL	66	66	Missing: File/Remove.pm	2026-05-10		
 File::Flock	FAIL				2026-05-05		
-File::LibMagic	FAIL	1	1		2026-05-12		
+File::LibMagic	FAIL	1	1		2026-05-13		
 File::LoadLines	FAIL	282	280	2/282 subtests failed	2026-05-08		
 File::Map	FAIL			Build failed	2026-05-12		
 File::NFSLock	FAIL	44	0	170/44 subtests failed	2026-04-22		
@@ -2410,7 +2409,7 @@ Filter::PPI::Transform	FAIL	1	0	2/1 subtests failed	2026-05-07
 Filter::Template	FAIL	13	0	19/13 subtests failed	2026-04-22		
 Filter::signatures	FAIL	10	0	59/10 subtests failed	2026-04-12		
 Filter::tee	FAIL	7	0	34/7 subtests failed	2026-05-12		
-Finance::Currency::Convert::WebserviceX	FAIL	1	0	18/1 subtests failed	2026-05-12		
+Finance::Currency::Convert::WebserviceX	FAIL	1	0	18/1 subtests failed	2026-05-13		
 FindBin::Bin	FAIL			Configure failed	2026-05-01		
 FindBin::libs	FAIL			Unknown test outcome	2026-05-11		
 FindLib	FAIL			No parseable output	2026-05-01		
@@ -2470,7 +2469,7 @@ GCC::Node	FAIL	1	0	1/1 subtests failed	2026-05-06
 GCT::XSP::ActionTaglib	FAIL			Missing: Apache/AxKit/Language/XSP.pm	2026-05-06		
 GCloud::CLIWrapper	FAIL			Unknown test outcome	2026-05-09		
 GCrypt	FAIL				2026-05-09		
-GD	FAIL	3	0	30/3 subtests failed	2026-05-12		
+GD	FAIL	3	0	30/3 subtests failed	2026-05-13		
 GD::3DBarGrapher	FAIL			Missing: GD.pm	2026-05-12		
 GD::Arrow	FAIL	1	0	12/1 subtests failed	2026-05-05		
 GD::Barcode::Code93	FAIL	4	2	2/4 subtests failed	2026-05-10		
@@ -2549,7 +2548,7 @@ GearmanX::Client	FAIL			Configure failed	2026-05-01
 GearmanX::Starter	FAIL	1	0	1/1 subtests failed	2026-05-11		
 Gears	FAIL	2	1	1/2 subtests failed	2026-05-06		
 GedNav	FAIL			Missing: GDBM_File.pm	2026-05-10		
-Gedcom	FAIL	9543	9453	90/9543 subtests failed	2026-05-12		
+Gedcom	FAIL	9543	9453	90/9543 subtests failed	2026-05-13		
 GenOO	FAIL			Missing: MooseX/AbstractFactory.pm	2026-05-09		
 GenOO::Data::DB::DBIC::Species::Schema::Result::Draft	FAIL			Missing: MooseX/AbstractFactory.pm	2026-05-01		
 GenOO::Data::File::SAM::Record	FAIL			Missing: MooseX/AbstractFactory.pm	2026-05-06		
@@ -2578,7 +2577,7 @@ Ginger	FAIL			Unknown test outcome	2026-05-07
 Giovanni	FAIL	1	0	1/1 subtests failed	2026-05-06		
 Git	FAIL			Unknown test outcome	2026-05-09		
 Git::CPAN::Hook	FAIL	31	27	4/31 subtests failed	2026-05-06		
-Git::PurePerl	FAIL	1	1		2026-05-12		
+Git::PurePerl	FAIL	1	1		2026-05-13		
 Git::Raw	FAIL				2026-04-22		
 GitHub::Crud::Response	FAIL			Missing: Data/Table/Text.pm	2026-05-05		
 GitHub::Extract	FAIL	1	1	Missing: HTTP/Online.pm	2026-05-11		
@@ -2626,7 +2625,7 @@ Greet	FAIL	1	0	1/1 subtests failed	2026-05-05
 GridEntry	FAIL			Missing: Tk.pm	2026-05-06		
 GrowthForecast::Aggregator::Callback	FAIL	4	0	4/4 subtests failed	2026-05-06		
 Gtk	FAIL			Missing: Gtk.pm	2026-05-07		
-Gtk2	FAIL	3	0	32/3 subtests failed	2026-05-12		
+Gtk2	FAIL	3	0	32/3 subtests failed	2026-05-13		
 Gtk2::CV	FAIL			Configure failed	2026-05-01		
 Gtk2::Chmod	FAIL	6	4	2/6 subtests failed	2026-05-06		
 Gtk2::CodeGen	FAIL	3	0	32/3 subtests failed	2026-05-10		
@@ -2765,7 +2764,7 @@ HTML::FormFu::Model::DBIC	FAIL			Unknown test outcome	2026-05-09
 HTML::FormFu::MultiForm	FAIL			Unknown test outcome	2026-05-06		
 HTML::FormFu::Role::JQueryValidation	FAIL				2026-05-10		
 HTML::FormHandler::Generator::DBIC	FAIL			Unknown test outcome	2026-04-30		
-HTML::FormHandler::Model::DBIC	FAIL			Unknown test outcome	2026-05-12		
+HTML::FormHandler::Model::DBIC	FAIL	64	38	26/64 subtests failed	2026-05-13		
 HTML::FormHandlerX::Field::JavaScript	FAIL	3	0	3/3 subtests failed	2026-04-30		
 HTML::FormHandlerX::Field::noCAPTCHA	FAIL	1	1	Missing: Data/Clone.pm	2026-05-11		
 HTML::FormHandlerX::Form::Contact	FAIL	1	0	1/1 subtests failed	2026-05-06		
@@ -2781,7 +2780,7 @@ HTML::FormatNroff	FAIL	5	5	Missing: HTML/Parse.pm	2026-05-12
 HTML::FormatNroffSub	FAIL	14	13	1/14 subtests failed	2026-05-01		
 HTML::FormatText	FAIL	29	11	18/29 subtests failed	2026-04-12		
 HTML::FormatText::Elinks	FAIL	57	0	249/57 subtests failed	2026-05-06		
-HTML::FormatText::WithLinks	FAIL	3	0	93/3 subtests failed	2026-05-11		
+HTML::FormatText::WithLinks	FAIL	3	0	93/3 subtests failed	2026-05-13		
 HTML::FormatText::WithLinks::AndTables	FAIL	5	4	1/5 subtests failed	2026-05-06		
 HTML::Formhandler::Role::ToJSON	FAIL			Missing: Data/Clone.pm	2026-05-05		
 HTML::FromMail	FAIL	11	8	3/11 subtests failed	2026-05-10		
@@ -2896,7 +2895,7 @@ HTML::ToDocBook	FAIL	3	0	7/3 subtests failed	2026-04-29
 HTML::TokeParser::Simple	FAIL	170	169	1/170 subtests failed	2026-05-11		
 HTML::Transmorgify	FAIL	89	82	7/89 subtests failed	2026-05-06		
 HTML::Tree	FAIL	989	960	29/989 subtests failed	2026-05-12		
-HTML::TreeBuilder	FAIL	989	960	29/989 subtests failed	2026-05-12		
+HTML::TreeBuilder	FAIL	989	960	29/989 subtests failed	2026-05-13		
 HTML::TreeBuilder::LibXML	FAIL	33	0	55/33 subtests failed	2026-05-11		
 HTML::TreeBuilder::Select	FAIL	6	0	9/6 subtests failed	2026-05-09		
 HTML::TreeBuilder::XPath	FAIL	3	0	30/3 subtests failed	2026-05-06		
@@ -3049,7 +3048,7 @@ Hey::Cache	FAIL	1	0	1/1 subtests failed	2026-05-08
 Hg	FAIL	21	0	33/21 subtests failed	2026-05-07		
 HiPi	FAIL	293	291	2/293 subtests failed	2026-05-07		
 HiPi::BCM2835	FAIL	3	0	72/3 subtests failed	2026-05-05		
-Hijk	FAIL			Unknown test outcome	2026-05-12		
+Hijk	FAIL			Unknown test outcome	2026-05-13		
 HoneyClient::Util::Config	FAIL	4	2	2/4 subtests failed	2026-05-06		
 Hook::AfterRuntime	FAIL			Missing: B/Hooks/Parser.pm	2026-05-11		
 Hook::LexWrap	FAIL	58	58		2026-04-12		
@@ -3110,7 +3109,7 @@ IO::Compress::Adapter::Zstd	FAIL	15	0	2564/15 subtests failed	2026-05-06
 IO::Compress::Xz	FAIL	28	0	8649/28 subtests failed	2026-05-08		
 IO::Default	FAIL			Unknown test outcome	2026-04-28		
 IO::Detect	FAIL	228	225	3/228 subtests failed	2026-05-10		
-IO::Digest	FAIL	4	2	2/4 subtests failed	2026-05-12		
+IO::Digest	FAIL	4	2	2/4 subtests failed	2026-05-13		
 IO::EPP	FAIL	14	14		2026-05-12		
 IO::EventMux::Socket::MsgHdr	FAIL			Build failed	2026-05-10		
 IO::Events	FAIL				2026-05-09		
@@ -3270,7 +3269,7 @@ InterMine::TypeLibrary	FAIL	1	0	1/1 subtests failed	2026-05-07
 Interchange6	FAIL	31	30	1/31 subtests failed	2026-05-07		
 Interchange6::Currency	FAIL	1	0	1/1 subtests failed	2026-05-01		
 Interchange6::Schema	FAIL			Unknown test outcome	2026-05-06		
-Interpolation	FAIL	158	157	1/158 subtests failed	2026-05-12		
+Interpolation	FAIL	158	157	1/158 subtests failed	2026-05-13		
 Interval	FAIL	207	154	53/207 subtests failed	2026-05-05		
 IronTestsCommon	FAIL	96	96	Missing: File/Remove.pm	2026-05-06		
 IsUTF8	FAIL	2	0	10/2 subtests failed	2026-05-09		
@@ -3460,7 +3459,7 @@ Legba	FAIL	1	0	1/1 subtests failed	2026-05-08
 Lembas	FAIL	18	18		2026-04-30		
 LendingClub::API	FAIL	3	2	1/3 subtests failed	2026-05-05		
 Lexical::Accessor	FAIL	65	63	2/65 subtests failed	2026-04-22		
-Lexical::SealRequireHints	FAIL			Unknown test outcome	2026-05-12		
+Lexical::SealRequireHints	FAIL			Unknown test outcome	2026-05-13		
 Lexical::Types	FAIL	39	0	1178/39 subtests failed	2026-05-08		
 Leyland	FAIL	1	0	15/1 subtests failed	2026-05-12		
 LiBot	FAIL	11	0	11/11 subtests failed	2026-04-28		
@@ -3725,7 +3724,7 @@ Math::Geometry::Planar	FAIL				2026-04-22
 Math::Geometry::Planar::GPC	FAIL				2026-04-22		
 Math::Geometry::Planar::Offset	FAIL	11	8	3/11 subtests failed	2026-05-12		
 Math::Int128	FAIL	3	2	1/3 subtests failed	2026-05-10		
-Math::Int64	FAIL				2026-05-12		
+Math::Int64	FAIL				2026-05-13		
 Math::Matrix	FAIL	3506	3470	36/3506 subtests failed	2026-05-11		
 Math::MatrixReal	FAIL	338	317	21/338 subtests failed	2026-05-12		
 Math::Pari	FAIL	2	2		2026-05-07		
@@ -3739,7 +3738,7 @@ Math::Random::MT	FAIL	39	22	17/39 subtests failed	2026-05-04
 Math::Random::MT::Auto	FAIL	3135	0	4789/3135 subtests failed	2026-05-10		
 Math::Random::Secure	FAIL	2	0	18/2 subtests failed	2026-04-21		
 Math::Trig	FAIL	392	0	841/392 subtests failed	2026-04-21		
-Math::UInt64	FAIL	5	1	4/5 subtests failed	2026-05-12		
+Math::UInt64	FAIL	5	1	4/5 subtests failed	2026-05-13		
 Math::Vector::Real::Random	FAIL	1	0	1/1 subtests failed	2026-05-06		
 Math::Vector::Real::XS	FAIL	36	0	261/36 subtests failed	2026-05-06		
 Math::Vector::Real::kdTree	FAIL			Missing: Sort/Key/Top.pm	2026-05-06		
@@ -3902,7 +3901,7 @@ Mojolicious::Plugin::YamlConfig	FAIL				2026-05-05
 MonetDB::CLI	FAIL	32	0	34/32 subtests failed	2026-05-10		
 MonetDB::CLI::MapiPP	FAIL	32	0	34/32 subtests failed	2026-05-10		
 MonetDB::CLI::MapiXS	FAIL	2	0	52/2 subtests failed	2026-05-11		
-MongoDB	FAIL			Unknown test outcome	2026-05-12		
+MongoDB	FAIL			Unknown test outcome	2026-05-13		
 MongoDB::BSON	FAIL	16	16	Missing: BSON/Decimal128.pm	2026-05-11		
 MongoDB::Simple	FAIL			Missing: MongoDB.pm	2026-04-22		
 MongoHosting	FAIL			No parseable output	2026-05-12		
@@ -3962,7 +3961,7 @@ MooseX::AbstractFactory	FAIL	4	3	1/4 subtests failed	2026-05-09
 MooseX::Aliases::Meta::Trait::Attribute	FAIL			No parseable output	2026-04-30		
 MooseX::AlwaysCoerce	FAIL	3	3		2026-05-12		
 MooseX::App	FAIL	50	0	125/50 subtests failed	2026-05-10		
-MooseX::App::Cmd	FAIL	7	0	13/7 subtests failed	2026-05-11		
+MooseX::App::Cmd	FAIL			Unknown test outcome	2026-05-13		
 MooseX::App::Cmd::Command::BashComplete	FAIL	2	0	4/2 subtests failed	2026-05-10		
 MooseX::Attribute::Prototype	FAIL	34	7	27/34 subtests failed	2026-05-10		
 MooseX::Attribute::ValidateWithException	FAIL	4	0	4/4 subtests failed	2026-05-08		
@@ -3976,12 +3975,12 @@ MooseX::ClassAttribute	FAIL	1	1	Syntax error	2026-04-29
 MooseX::ClassCompositor	FAIL	1	1	Missing: MooseX/Types.pm	2026-04-29		
 MooseX::Clone	FAIL	1	0	5/1 subtests failed	2026-05-11		
 MooseX::ConfigCascade	FAIL				2026-04-30		
-MooseX::ConfigFromFile	FAIL	4	3	1/4 subtests failed	2026-05-12		
+MooseX::ConfigFromFile	FAIL	4	3	1/4 subtests failed	2026-05-13		
 MooseX::CoverableModifiers	FAIL	1	1	Missing: Devel/Declare.pm	2026-05-07		
 MooseX::CurriedDelegation	FAIL	22	21	1/22 subtests failed	2026-05-12		
 MooseX::CurriedHandles	FAIL	5	2	3/5 subtests failed	2026-05-09		
 MooseX::DOM	FAIL	4	2	2/4 subtests failed	2026-05-10		
-MooseX::Daemonize	FAIL			Unknown test outcome	2026-05-12		
+MooseX::Daemonize	FAIL			Unknown test outcome	2026-05-13		
 MooseX::Declare	FAIL	5	0	106/5 subtests failed	2026-05-12		
 MooseX::DeclareX::Keyword::interface	FAIL	1	0	5/1 subtests failed	2026-05-07		
 MooseX::Documenter	FAIL	21	0	103/21 subtests failed	2026-04-28		
@@ -3990,11 +3989,11 @@ MooseX::ErrorHandling	FAIL				2026-05-11
 MooseX::Event	FAIL				2026-05-10		
 MooseX::Extended	FAIL	41	1	40/41 subtests failed	2026-05-11		
 MooseX::Fastly::Role	FAIL			Missing: Net/Fastly.pm	2026-05-07		
-MooseX::Getopt	FAIL	344	330	14/344 subtests failed	2026-05-12		
-MooseX::Getopt::Dashes	FAIL	344	330	14/344 subtests failed	2026-05-12		
+MooseX::Getopt	FAIL	344	330	14/344 subtests failed	2026-05-13		
+MooseX::Getopt::Dashes	FAIL	344	330	14/344 subtests failed	2026-05-13		
 MooseX::Getopt::GLD	FAIL	13	4	9/13 subtests failed	2026-05-09		
 MooseX::Getopt::Kingpin	FAIL	1	1		2026-04-30		
-MooseX::Getopt::Usage	FAIL	2	1	1/2 subtests failed	2026-05-12		
+MooseX::Getopt::Usage	FAIL	2	1	1/2 subtests failed	2026-05-13		
 MooseX::Getopt::Usage::Role::Man	FAIL	2	1	1/2 subtests failed	2026-05-12		
 MooseX::GlobRef	FAIL			Missing: Test/Unit/Lite.pm	2026-04-30		
 MooseX::Graph::Easy::StateMachine	FAIL			Missing: Graph/Easy.pm	2026-05-06		
@@ -4025,7 +4024,7 @@ MooseX::Role::UpdateAttributes	FAIL	2	1	1/2 subtests failed	2026-05-09
 MooseX::Role::XMLRPC::Client	FAIL	3	1	2/3 subtests failed	2026-05-09		
 MooseX::Runnable	FAIL	6	0	26/6 subtests failed	2026-05-08		
 MooseX::Semantic	FAIL			Configure failed	2026-05-08		
-MooseX::SimpleConfig	FAIL	15	0	19/15 subtests failed	2026-05-12		
+MooseX::SimpleConfig	FAIL	15	0	19/15 subtests failed	2026-05-13		
 MooseX::Singleton::Meta::Class	FAIL	2	0	43/2 subtests failed	2026-05-09		
 MooseX::Storage::DBIC	FAIL	1	1	Missing: Test/DBIC.pm	2026-05-12		
 MooseX::Storage::IO::CHI	FAIL				2026-05-08		
@@ -4052,7 +4051,7 @@ MooseX::Types::Locale::BR	FAIL	1	0	1/1 subtests failed	2026-04-30
 MooseX::Types::Meta	FAIL	7	7	Missing: MooseX/Types/Structured.pm	2026-05-10		
 MooseX::Types::Moose::MutualCoercion	FAIL				2026-05-09		
 MooseX::Types::Parameterizable	FAIL			Unknown test outcome	2026-05-08		
-MooseX::Types::Path::Tiny	FAIL			Unknown test outcome	2026-05-12		
+MooseX::Types::Path::Tiny	FAIL	40	39	1/40 subtests failed	2026-05-13		
 MooseX::Types::Ro	FAIL	1	1		2026-05-11		
 MooseX::Types::Set::Object	FAIL	4	3	1/4 subtests failed	2026-05-11		
 MooseX::Types::Structured	FAIL	352	350	2/352 subtests failed	2026-05-12		
@@ -4148,7 +4147,7 @@ Neo4j::Driver	FAIL	13	13	Missing: Feature/Compat/Try.pm	2026-05-11
 Neo4j::Driver::ResultColumns	FAIL	176	157	19/176 subtests failed	2026-05-07		
 NestedMap	FAIL			Unknown test outcome	2026-05-09		
 Net::AMQP	FAIL	47	37	10/47 subtests failed	2026-05-10		
-Net::AMQP::RabbitMQ	FAIL			Unknown test outcome	2026-05-12		
+Net::AMQP::RabbitMQ	FAIL				2026-05-13		
 Net::Address::IP::Local	FAIL			Unknown test outcome	2026-05-08		
 Net::Address::IPv4::Local	FAIL			Unknown test outcome	2026-05-01		
 Net::Akismet	FAIL	8	6	2/8 subtests failed	2026-05-08		
@@ -4592,7 +4591,7 @@ POE::Component::RemoteTail	FAIL	7	4	3/7 subtests failed	2026-05-12
 POE::Component::Resolver	FAIL	8	4	4/8 subtests failed	2026-05-10		
 POE::Component::ResourcePool	FAIL	11	0	46/11 subtests failed	2026-05-09		
 POE::Component::SNMP	FAIL			Unknown test outcome	2026-05-08		
-POE::Component::SSLify	FAIL			Unknown test outcome	2026-05-12		
+POE::Component::SSLify	FAIL			Unknown test outcome	2026-05-13		
 POE::Component::SSLify::NonBlock	FAIL	3	2	1/3 subtests failed	2026-04-22		
 POE::Component::Sequence	FAIL	2	0	4/2 subtests failed	2026-05-12		
 POE::Component::Server::Chargen	FAIL			Unknown test outcome	2026-05-12		
@@ -4670,8 +4669,8 @@ PPI::Transform::PackageName	FAIL	172	31	141/172 subtests failed	2026-05-12
 PPI::XS	FAIL	5	1	4/5 subtests failed	2026-05-12		
 PPI::XS::Tokenizer	FAIL			Unknown test outcome	2026-05-06		
 PPI::Xref	FAIL	10	1	9/10 subtests failed	2026-05-05		
-PPIx::QuoteLike	FAIL	221	219	2/221 subtests failed	2026-05-12		
-PPIx::Regexp	FAIL	2906	2902	4/2906 subtests failed	2026-05-12		
+PPIx::QuoteLike	FAIL	221	219	2/221 subtests failed	2026-05-13		
+PPIx::Regexp	FAIL	2928	2924	4/2928 subtests failed	2026-05-13		
 PPIx::XPath	FAIL	1	0	9/1 subtests failed	2026-05-12		
 PPM	FAIL			No parseable output	2026-05-11		
 PPM::Make	FAIL	23	14	9/23 subtests failed	2026-05-05		
@@ -4746,7 +4745,7 @@ Perl6::Attributes	FAIL	8	1	7/8 subtests failed	2026-05-08
 Perl6::Binding	FAIL				2026-05-06		
 Perl6::Classes	FAIL			Unknown test outcome	2026-05-09		
 Perl6::Currying	FAIL				2026-05-09		
-Perl6::Export::Attrs	FAIL	3	0	3/3 subtests failed	2026-05-12		
+Perl6::Export::Attrs	FAIL	3	0	3/3 subtests failed	2026-05-13		
 Perl6::GatherTake	FAIL	8	0	36/8 subtests failed	2026-05-08		
 Perl6::MakeMaker	FAIL			Unknown test outcome	2026-05-08		
 Perl6::Perl	FAIL	8	7	1/8 subtests failed	2026-05-09		
@@ -4755,7 +4754,7 @@ Perl6::Pod	FAIL			Missing: Regexp/Grammars.pm	2026-05-10
 Perl6::Pugs::Config	FAIL			Unknown test outcome	2026-05-11		
 Perl6::Rule::Parser	FAIL				2026-05-10		
 Perl6::Say	FAIL	72	0	99/72 subtests failed	2026-05-04		
-Perl::Critic	FAIL			Unknown test outcome	2026-05-12		
+Perl::Critic	FAIL			Unknown test outcome	2026-05-13		
 Perl::MinimumVersion	FAIL	1	0	100/1 subtests failed	2026-05-11		
 Perl::MinimumVersion::Fast	FAIL	1	0	1/1 subtests failed	2026-05-11		
 Perl::PrereqScanner	FAIL	269	143	126/269 subtests failed	2026-04-22		
@@ -4904,7 +4903,7 @@ ProLite	FAIL			Configure failed	2026-05-06
 Proc::CPUUsage	FAIL	1	0	1/1 subtests failed	2026-04-22		
 Proc::Daemon	FAIL	1	0	38/1 subtests failed	2026-04-21		
 Proc::FastSpawn	FAIL				2026-04-12		
-Proc::Fork	FAIL	12	10	2/12 subtests failed	2026-05-12		
+Proc::Fork	FAIL	12	10	2/12 subtests failed	2026-05-13		
 Proc::PID::File	FAIL				2026-05-12		
 Proc::Pidfile	FAIL	9	0	16/9 subtests failed	2026-05-08		
 Proc::Wait3	FAIL				2026-04-21		
@@ -5167,7 +5166,7 @@ Razor2::Client::Core	FAIL				2026-05-01
 Rc	FAIL				2026-04-30		
 Readonly::Enum	FAIL	2	0	2/2 subtests failed	2026-04-22		
 Readonly::Tiny	FAIL	56	52	4/56 subtests failed	2026-05-08		
-Readonly::Values::Boolean	FAIL	1	0	1/1 subtests failed	2026-05-12		
+Readonly::Values::Boolean	FAIL	1	0	1/1 subtests failed	2026-05-13		
 Readonly::Values::Months	FAIL	1	0	3/1 subtests failed	2026-04-22		
 Readonly::XS	FAIL	4	0	9/4 subtests failed	2026-05-09		
 ReadonlyX	FAIL	135	125	10/135 subtests failed	2026-05-08		
@@ -5369,7 +5368,7 @@ SQL::Statement::Hash	FAIL			No parseable output	2026-05-07
 SQL::Statement::Util::ARRAY::Function	FAIL			No parseable output	2026-04-30		
 SQL::Steno	FAIL			No parseable output	2026-05-11		
 SQL::String	FAIL	49	17	32/49 subtests failed	2026-05-09		
-SQL::Translator	FAIL			Unknown test outcome	2026-05-12		
+SQL::Translator	FAIL			Unknown test outcome	2026-05-13		
 SQL::Translator::Producer::DBIx::Class::File::Simple	FAIL			Unknown test outcome	2026-04-30		
 SQL::Translator::Producer::PlantUML	FAIL	1	0	1/1 subtests failed	2026-05-09		
 SQL::Translator::Producer::Teng	FAIL			Unknown test outcome	2026-05-07		
@@ -5549,7 +5548,7 @@ Spreadsheet::ParseExcel	FAIL			Unknown test outcome	2026-04-22
 Spreadsheet::ParseODS	FAIL	1	0	148/1 subtests failed	2026-05-10		
 Spreadsheet::ParseXLSX	FAIL	6	0	6/6 subtests failed	2026-05-10		
 Spreadsheet::WriteExcel	FAIL	1178	1068	110/1178 subtests failed	2026-04-22		
-Spreadsheet::XLSX	FAIL	23	17	6/23 subtests failed	2026-05-12		
+Spreadsheet::XLSX	FAIL	23	17	6/23 subtests failed	2026-05-13		
 Sqids	FAIL	33	28	5/33 subtests failed	2026-05-09		
 StackTrace::HiPerf	FAIL				2026-05-06		
 Stancer	FAIL			Unknown test outcome	2026-05-11		
@@ -5635,7 +5634,7 @@ SyslogScan	FAIL				2026-05-06
 SyslogScan::Daemon	FAIL			No parseable output	2026-05-09		
 System2	FAIL				2026-05-07		
 SystemTray::Applet	FAIL			No parseable output	2026-04-12		
-SystemTray::Applet::Gnome	FAIL	3	1	2/3 subtests failed	2026-05-12		
+SystemTray::Applet::Gnome	FAIL	3	1	2/3 subtests failed	2026-05-13		
 SystemTray::Applet::Win32	FAIL	3	1	2/3 subtests failed	2026-05-01		
 TAP::Base	FAIL			Unknown test outcome	2026-05-11		
 TAP::DOM	FAIL	7	0	20/7 subtests failed	2026-05-12		
@@ -5756,7 +5755,7 @@ Test::Class::Most	FAIL				2026-05-10
 Test::Classy	FAIL	3	2	1/3 subtests failed	2026-04-29		
 Test::CleanNamespaces	FAIL	134	119	15/134 subtests failed	2026-04-12		
 Test::Command	FAIL	119	109	10/119 subtests failed	2026-05-08		
-Test::Compile	FAIL	79	66	13/79 subtests failed	2026-05-12		
+Test::Compile	FAIL	79	66	13/79 subtests failed	2026-05-13		
 Test::Compile::Internal	FAIL	79	66	13/79 subtests failed	2026-05-10		
 Test::Consul	FAIL	1	0	1/1 subtests failed	2026-04-22		
 Test::DBIC::ExpectedQueries	FAIL	3	3		2026-04-22		
@@ -5777,7 +5776,7 @@ Test::Files	FAIL			Missing: Test/Expander.pm	2026-05-06
 Test::Flatten	FAIL	20	16	4/20 subtests failed	2026-05-12		
 Test::Fork	FAIL	8	0	11/8 subtests failed	2026-05-10		
 Test::Future::IO	FAIL	1	1	Missing: Future/IO.pm	2026-05-12		
-Test::Group	FAIL	263	224	39/263 subtests failed	2026-05-12		
+Test::Group	FAIL	263	224	39/263 subtests failed	2026-05-13		
 Test::HTML::Content	FAIL	331	0	338/331 subtests failed	2026-05-12		
 Test::HTML::Lint	FAIL	357	183	174/357 subtests failed	2026-05-08		
 Test::HTTP::LocalServer	FAIL	1	0	24/1 subtests failed	2026-05-11		
@@ -5786,7 +5785,7 @@ Test::HTTP::Response	FAIL	23	22	1/23 subtests failed	2026-04-22
 Test::HTTP::Server	FAIL	3	0	15/3 subtests failed	2026-04-21		
 Test::Harness::Straps	FAIL			Unknown test outcome	2026-04-30		
 Test::Helper	FAIL			Unknown test outcome	2026-04-12		
-Test::Image::GD	FAIL	7	0	10/7 subtests failed	2026-05-12		
+Test::Image::GD	FAIL	7	0	10/7 subtests failed	2026-05-13		
 Test::Inline	FAIL	20	0	167/20 subtests failed	2026-05-10		
 Test::Instruction	FAIL	1	0	1/1 subtests failed	2026-05-09		
 Test::Interface	FAIL	1	0	1/1 subtests failed	2026-04-21		
@@ -5819,7 +5818,7 @@ Test::Moose	FAIL			Configure failed	2026-04-26
 Test::More	FAIL			Configure failed	2026-05-01		
 Test::More::YAMLScript	FAIL			Syntax error	2026-05-10		
 Test::Net::LDAP	FAIL	1	0	1/1 subtests failed	2026-05-11		
-Test::Net::RabbitMQ	FAIL	2	1	1/2 subtests failed	2026-04-25		
+Test::Net::RabbitMQ	FAIL			Unknown test outcome	2026-05-13		
 Test::OpenTracing::Integration	FAIL	7	1	6/7 subtests failed	2026-05-08		
 Test::Override::UserAgent	FAIL			Unknown test outcome	2026-04-30		
 Test::Perl::Critic	FAIL	3	0	7/3 subtests failed	2026-05-10		
@@ -5837,7 +5836,7 @@ Test::Returns	FAIL	1	0	1/1 subtests failed	2026-04-26
 Test::Roo	FAIL	9	1	8/9 subtests failed	2026-04-12		
 Test::Roo::DataDriven	FAIL	11	11		2026-04-22		
 Test::Routine	FAIL	3	1	2/3 subtests failed	2026-04-21		
-Test::Run	FAIL	74	0	91/74 subtests failed	2026-05-12		
+Test::Run	FAIL	74	0	91/74 subtests failed	2026-05-13		
 Test::Script	FAIL			Unknown test outcome	2026-04-21		
 Test::Script::Run	FAIL	7	0	37/7 subtests failed	2026-05-10		
 Test::SetupTeardown	FAIL	3	1	2/3 subtests failed	2026-04-29		
@@ -5854,16 +5853,16 @@ Test::Trap	FAIL	408	0	641/408 subtests failed	2026-05-12
 Test::Type	FAIL	2	1	1/2 subtests failed	2026-05-12		
 Test::TypeConstraints	FAIL	1	0	1/1 subtests failed	2026-05-08		
 Test::Unit::Lite	FAIL	39	37	2/39 subtests failed	2026-05-12		
-Test::Version	FAIL	62	57	5/62 subtests failed	2026-05-12		
+Test::Version	FAIL	62	57	5/62 subtests failed	2026-05-13		
 Test::WWW::Mechanize	FAIL	238	178	60/238 subtests failed	2026-04-21		
 Test::WWW::Mechanize::Catalyst	FAIL	2	0	55/2 subtests failed	2026-05-12		
 Test::Weaken	FAIL	94	15	79/94 subtests failed	2026-04-22		
-Test::XML	FAIL	92	90	2/92 subtests failed	2026-05-12		
+Test::XML	FAIL	92	90	2/92 subtests failed	2026-05-13		
 Test::XML::Ordered	FAIL	1	0	3/1 subtests failed	2026-05-07		
 Test::XPath	FAIL	44	0	89/44 subtests failed	2026-05-10		
 Test::YAML	FAIL	1	0	1/1 subtests failed	2026-04-12		
 Test::mysqld	FAIL	1	0	1/1 subtests failed	2026-05-08		
-Test::utf8	FAIL	40	37	3/40 subtests failed	2026-05-12		
+Test::utf8	FAIL	40	37	3/40 subtests failed	2026-05-13		
 TestDriver	FAIL	1	0	1/1 subtests failed	2026-05-07		
 TestHandler	FAIL				2026-05-08		
 TestLib	FAIL	3	2	1/3 subtests failed	2026-05-12		
@@ -5900,7 +5899,7 @@ Text::QRCode	FAIL	3	0	5/3 subtests failed	2026-05-11
 Text::Query::BuildSQL	FAIL			Configure failed	2026-05-09		
 Text::RecordParser::Tab	FAIL	214	212	2/214 subtests failed	2026-05-12		
 Text::Similarity	FAIL	36	0	94/36 subtests failed	2026-05-12		
-Text::Sprintf::Named	FAIL	27	23	4/27 subtests failed	2026-05-12		
+Text::Sprintf::Named	FAIL	27	23	4/27 subtests failed	2026-05-13		
 Text::Table::Tiny	FAIL	1	0	29/1 subtests failed	2026-05-12		
 Text::Template	FAIL	163	100	63/163 subtests failed	2026-04-12		
 Text::Tiki	FAIL			Unknown test outcome	2026-04-22		
@@ -6382,10 +6381,10 @@ WebFetch::Input::Atom	FAIL	1	0	1/1 subtests failed	2026-04-28
 WebFetch::Input::RSS	FAIL	2	0	2/2 subtests failed	2026-05-08		
 WebFetch::Output::TT	FAIL	1	0	1/1 subtests failed	2026-05-08		
 WebMoney::WMSigner	FAIL				2026-05-05		
-WebNano	FAIL	53	52	1/53 subtests failed	2026-05-12		
+WebNano	FAIL	53	52	1/53 subtests failed	2026-05-13		
 WebNano::Controller	FAIL	53	52	1/53 subtests failed	2026-05-07		
-WebNano::Controller::CRUD	FAIL			Missing: Moose.pm	2026-04-26		
-WebNano::Renderer::TT	FAIL				2026-05-07		
+WebNano::Controller::CRUD	FAIL			Missing: WebNano/Renderer/TT.pm	2026-05-13		
+WebNano::Renderer::TT	FAIL				2026-05-13		
 WebPrototypes::ResetPass	FAIL				2026-05-05		
 WebService::APIKeys::AutoChanger	FAIL	3	1	2/3 subtests failed	2026-05-05		
 WebService::AcousticBrainz	FAIL	7	5	2/7 subtests failed	2026-05-05		
@@ -6532,7 +6531,7 @@ Wiki::Toolkit	FAIL	122	0	571/122 subtests failed	2026-05-10
 WikiText::Kwiki	FAIL			Configure failed	2026-04-28		
 Win32	FAIL	3	0	86/3 subtests failed	2026-05-11		
 Win32::ADRecurse	FAIL	1	0	1/1 subtests failed	2026-05-08		
-Win32::API	FAIL	12	0	46/12 subtests failed	2026-05-12		
+Win32::API	FAIL	12	0	46/12 subtests failed	2026-05-13		
 Win32::API::Interface	FAIL	1	0	13/1 subtests failed	2026-04-30		
 Win32::API::OutputDebugString	FAIL				2026-05-06		
 Win32::AbsPath	FAIL			Unknown test outcome	2026-05-12		
@@ -6985,7 +6984,7 @@ smallnum	FAIL	72	51	21/72 subtests failed	2026-04-12
 strictures	FAIL	5	4	1/5 subtests failed	2026-04-12		
 subs	FAIL	2	0	2/2 subtests failed	2026-05-07		
 superclass	FAIL	49	48	1/49 subtests failed	2026-05-12		
-threads	FAIL			Unknown test outcome	2026-05-12		
+threads	FAIL			Unknown test outcome	2026-05-13		
 threads::shared	FAIL	80	80		2026-04-12		
 utf8::all	FAIL	4	0	40/4 subtests failed	2026-04-22		
 version	FAIL			Configure failed	2026-05-01		
