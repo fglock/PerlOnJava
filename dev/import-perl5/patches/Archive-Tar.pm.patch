@@ -1,0 +1,24 @@
+--- perl5/cpan/Archive-Tar/lib/Archive/Tar.pm
++++ src/main/perl/lib/Archive/Tar.pm
+@@ -291,17 +291,17 @@
+ 
+             ### different reader/writer modules, different error vars... sigh
+             if( MODE_READ->($mode) ) {
+-                $fh = IO::Uncompress::Bunzip2->new( $file, MultiStream => 1 ) or do {
++                $fh = Compress::Bzip2::bzopen( $file, 'rb' ) or do {
+                     $self->_error( qq[Could not read '$file': ] .
+-                        $IO::Uncompress::Bunzip2::Bunzip2Error
++                        $Compress::Bzip2::bzerrno
+                     );
+                     return;
+                 };
+ 
+             } else {
+-                $fh = IO::Compress::Bzip2->new( $file ) or do {
++                $fh = Compress::Bzip2::bzopen( $file, 'wb' ) or do {
+                     $self->_error( qq[Could not write to '$file': ] .
+-                        $IO::Compress::Bzip2::Bzip2Error
++                        $Compress::Bzip2::bzerrno
+                     );
+                     return;
+                 };

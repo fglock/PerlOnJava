@@ -291,7 +291,7 @@ If the module's `.pm` files come from the Perl 5 source tree (core modules),
 use `dev/import-perl5/sync.pl` instead of copying them manually:
 
 1. Add entries to `dev/import-perl5/config.yaml` (source/target pairs)
-2. Run `perl dev/import-perl5/sync.pl`
+2. Run `perl dev/import-perl5/sync.pl --only UNIQUE_SUBSTRING` (substring of `source:` or `target:`) so other bundled trees are not refreshed; use bare `perl dev/import-perl5/sync.pl` only when intentionally replaying the full manifest.
 3. If the module needs PerlOnJava-specific changes, mark it `protected: true`
    and optionally provide a patch in `dev/import-perl5/patches/`
 

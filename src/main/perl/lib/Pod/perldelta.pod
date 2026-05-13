@@ -5,15 +5,15 @@
 [ this is a template for a new perldelta file. Any text flagged as XXX needs
 to be processed before release. ]
 
-perldelta - what is new for perl v5.43.10
+perldelta - what is new for perl v5.43.11
 
 =head1 DESCRIPTION
 
-This document describes differences between the 5.43.9 release and the 5.43.10
+This document describes differences between the 5.43.10 release and the 5.43.11
 release.
 
-If you are upgrading from an earlier release such as 5.43.8, first read
-L<perl5439delta>, which describes differences between 5.43.8 and 5.43.9.
+If you are upgrading from an earlier release such as 5.43.9, first read
+L<perl54310delta>, which describes differences between 5.43.9 and 5.43.10.
 
 =head1 Notice
 
@@ -348,34 +348,6 @@ well.
 
 =item *
 
-When a UTF-8 constant string was used as the hash key in an insert
-operation, such as C<$hash{'über maus'} = 1;>, and the string could
-be converted into a single byte representation, the flag noting the
-original encoding (C<HVhek_WASUTF8>) was not always retained.
-
-When this occurred, the relevant scalars returned by C<keys %hash>
-would not be in the original, expected UTF-8 encoding.
-
-The original encoding is now captured and propagated.
-[GH #24266]
-
-=item *
-
-When a constant IV or NV was used as a hash key, such as in
-C<my %hash = ( 42 => 0 );>, and was preemptively stringified
-into a hash key, the fact that the numerical value came first
-was lost. This unintentionally modified deparse output for
-such keys.
-
-The numerical values are now carried across, and flags on the
-key variable reflect the original data type.
-
-Note: This now preserves the form of constant keys supplied
-to tied hashes in list assignments.
-[GH #24302]
-
-=item *
-
 XXX
 
 =back
@@ -395,12 +367,6 @@ manager will later use a regex to expand these into links.
 =item *
 
 XXX
-
-=item *
-
-Resolving a lexical sub for prototype checking during parsing in eval
-could result in finding the wrong sub, resulting in confusing
-errors. [GH #24056][GH #24131]
 
 =back
 
@@ -440,7 +406,7 @@ died, add a short obituary here.
 
 XXX Generate this with:
 
-  perl Porting/acknowledgements.pl v5.43.9..HEAD
+  perl Porting/acknowledgements.pl v5.43.10..HEAD
 
 =head1 Reporting Bugs
 

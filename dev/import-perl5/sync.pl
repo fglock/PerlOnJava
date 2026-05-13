@@ -3,6 +3,13 @@
 # patches from dev/import-perl5/patches/ (patch -p0). This is separate from
 # CPAN tarball patches under src/main/perl/lib/PerlOnJava/CpanPatches/; see
 # dev/design/patch-and-cpan-prefs-layout.md.
+#
+# By default this processes EVERY row in config.yaml (bulk refresh against perl5/).
+# To add or refresh a single module without touching unrelated trees:
+#   perl dev/import-perl5/sync.pl --only File-DosGlob
+#   perl dev/import-perl5/sync.pl --only src/main/perl/lib/File/DosGlob.pm
+#
+# Options: --help, --only SUBSTRING (matches source: or target: field)
 use strict;
 use warnings;
 use File::Basename qw(dirname);
@@ -133,6 +140,58 @@ sub copy_directory {
     return 1;
 }
 
+sub usage {
+    print <<'USAGE';
+PerlOnJava perl5 import sync — see dev/import-perl5/config.yaml
+
+  perl dev/import-perl5/sync.pl
+      Refresh every import in config.yaml (full manifest replay against perl5/).
+      Use when intentionally updating the bundled perl5 snapshot.
+
+  perl dev/import-perl5/sync.pl --only SUBSTRING
+      Refresh only imports whose source: or target: contains SUBSTRING (substring match).
+      Use when adding one module or re-syncing a small subset without overwriting
+      unrelated files under src/main/perl/lib/.
+
+  perl dev/import-perl5/sync.pl --help
+      Show this message.
+
+Protected targets (protected: true in YAML) are skipped on existing single-file
+imports. For directory imports, protected paths are excluded from rsync; that list
+is always computed from the full config even when --only is used.
+
+USAGE
+}
+
+# Parse CLI; dies on unknown args. Returns optional --only needle or undef.
+sub parse_argv {
+    my $only_needle;
+    my $i = 0;
+    while ($i < @ARGV) {
+        my $a = $ARGV[$i++];
+        if ($a eq '--help' || $a eq '-h') {
+            usage();
+            exit 0;
+        }
+        if ($a eq '--only') {
+            die "sync.pl: --only requires a substring argument\n" if $i >= @ARGV;
+            $only_needle = $ARGV[$i++];
+            die "sync.pl: --only substring must be non-empty\n" if !defined $only_needle || $only_needle eq '';
+        }
+        elsif ($a =~ /^--only=(.+)\z/) {
+            $only_needle = $1;
+            die "sync.pl: --only substring must be non-empty\n" if $only_needle eq '';
+        }
+        elsif ($a =~ /^-/) {
+            die "sync.pl: unknown option '$a' (try --help)\n";
+        }
+        else {
+            die "sync.pl: unexpected argument '$a' (try --help)\n";
+        }
+    }
+    return $only_needle;
+}
+
 # Main script
 sub main {
     # Determine project root (3 levels up from this script)
@@ -140,37 +199,58 @@ sub main {
     my $project_root = abs_path(File::Spec->catdir($script_dir, '..', '..'));
     my $patches_dir = File::Spec->catdir($script_dir, 'patches');
     my $config_file = File::Spec->catdir($script_dir, 'config.yaml');
-    
+
+    my $only_needle = parse_argv();
+
+    unless (-f $config_file) {
+        die "Configuration file not found: $config_file\n";
+    }
+
+    my $imports_all = parse_yaml($config_file);
+
+    unless (@$imports_all) {
+        print "No imports found in configuration.\n";
+        return;
+    }
+
+    my @protected_files;
+    for my $import (@$imports_all) {
+        if ($import->{protected} && $import->{target}) {
+            push @protected_files, $import->{target};
+        }
+    }
+
+    my $imports = $imports_all;
+    if (defined $only_needle) {
+        my @filtered = grep {
+            my $s = $_->{source} // '';
+            my $t = $_->{target} // '';
+            index($s, $only_needle) >= 0 || index($t, $only_needle) >= 0
+        } @$imports_all;
+        unless (@filtered) {
+            die "sync.pl: no imports matched --only '$only_needle' "
+                . "(try a substring of source: or target: in config.yaml)\n";
+        }
+        $imports = \@filtered;
+    }
+
     print "PerlOnJava Perl5 Import Tool\n";
     print "=" x 60 . "\n";
     print "Project root: $project_root\n";
     print "Config file: $config_file\n\n";
-    
-    # Check if config exists
-    unless (-f $config_file) {
-        die "Configuration file not found: $config_file\n";
+
+    if (@protected_files) {
+        print "Protected paths from config (" . scalar(@protected_files) . "):\n";
+        print "  $_\n" for @protected_files;
+        print "\n";
     }
-    
-    # Parse configuration
-    my $imports = parse_yaml($config_file);
-    
-    unless (@$imports) {
-        print "No imports found in configuration.\n";
-        return;
+
+    if (defined $only_needle) {
+        print "Filtered mode: " . scalar(@$imports) . " import(s) matching --only '$only_needle'\n";
+        print "(of " . scalar(@$imports_all) . " total in config.yaml)\n\n";
+    } else {
+        print "Full manifest: " . scalar(@$imports_all) . " import(s) to process.\n\n";
     }
-    
-    print "Found " . scalar(@$imports) . " import(s) to process.\n\n";
-    
-    # Build list of protected files for exclusion from directory imports
-    my @protected_files;
-    for my $import (@$imports) {
-        if ($import->{protected} && $import->{target}) {
-            # Store relative path for rsync exclude
-            push @protected_files, $import->{target};
-            print "Protected file: $import->{target}\n";
-        }
-    }
-    print "\n" if @protected_files;
     
     my $success_count = 0;
     my $error_count = 0;

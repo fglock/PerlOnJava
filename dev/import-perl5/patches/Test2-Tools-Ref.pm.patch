@@ -1,0 +1,74 @@
+--- perl5/cpan/Test-Simple/lib/Test2/Tools/Ref.pm
++++ src/main/perl/lib/Test2/Tools/Ref.pm
+@@ -36,6 +36,35 @@
+ }
+ 
+ sub ref_is($$;$@) {
++    if( defined &Internals::jperl_refstate_str ) {
++        my $name = $_[2];
++        my @diag = @_[3 .. $#_];
++
++        my $bool = 0;
++        my $got_is_ref = ref $_[0];
++        my $exp_is_ref = ref $_[1];
++
++        $bool = refaddr( $_[0] ) == refaddr( $_[1] )
++            if $got_is_ref && $exp_is_ref;
++
++        my $ctx = context();
++
++        if (!$got_is_ref) {
++            my $got = defined($_[0]) ? $_[0] : '<undef>';
++            $ctx->ok(0, $name, ["First argument '$got' is not a reference", @diag]);
++        }
++        elsif(!$exp_is_ref) {
++            my $exp = defined($_[1]) ? $_[1] : '<undef>';
++            $ctx->ok(0, $name, ["Second argument '$exp' is not a reference", @diag]);
++        }
++        else {
++            $ctx->ok($bool, $name, ["'$_[0]' is not the same reference as '$_[1]'", @diag]);
++        }
++
++        $ctx->release;
++        return $bool ? 1 : 0;
++    }
++
+     my ($got, $exp, $name, @diag) = @_;
+     my $ctx = context();
+ 
+@@ -60,6 +89,35 @@
+ }
+ 
+ sub ref_is_not($$;$) {
++    if( defined &Internals::jperl_refstate_str ) {
++        my $name = $_[2];
++        my @diag = @_[3 .. $#_];
++
++        my $bool = 0;
++        my $got_is_ref = ref $_[0];
++        my $exp_is_ref = ref $_[1];
++
++        $bool = refaddr( $_[0] ) != refaddr( $_[1] )
++            if $got_is_ref && $exp_is_ref;
++
++        my $ctx = context();
++
++        if (!$got_is_ref) {
++            my $got = defined($_[0]) ? $_[0] : '<undef>';
++            $ctx->ok(0, $name, ["First argument '$got' is not a reference", @diag]);
++        }
++        elsif(!$exp_is_ref) {
++            my $exp = defined($_[1]) ? $_[1] : '<undef>';
++            $ctx->ok(0, $name, ["Second argument '$exp' is not a reference", @diag]);
++        }
++        else {
++            $ctx->ok($bool, $name, ["'$_[0]' is the same reference as '$_[1]'", @diag]);
++        }
++
++        $ctx->release;
++        return $bool ? 1 : 0;
++    }
++
+     my ($got, $exp, $name, @diag) = @_;
+     my $ctx = context();
+ 

@@ -27,7 +27,15 @@ The import system helps maintain modules that are (nearly) identical to their pe
 perl dev/import-perl5/sync.pl
 ```
 
-This copies all files listed in config.yaml from perl5/ to their target locations and applies any patches.
+This copies **every** row in config.yaml from perl5/ to its target and applies patches — use when you intentionally bulk-refresh the bundled perl5 snapshot.
+
+### Synchronize Only Matching Imports
+
+```bash
+perl dev/import-perl5/sync.pl --only File-DosGlob
+```
+
+Substring match against each row’s `source:` and `target:` fields. Prefer this after adding a single module so unrelated trees under `src/main/perl/lib/` are not overwritten. Run `perl dev/import-perl5/sync.pl --help` for details.
 
 ### Add a New Module
 
@@ -38,8 +46,8 @@ perl dev/import-perl5/add_module.pl Text::Wrap
 # Actually add to config.yaml
 perl dev/import-perl5/add_module.pl --apply Text::Wrap
 
-# Then sync
-perl dev/import-perl5/sync.pl
+# Then sync only those rows (pick a unique substring from config.yaml)
+perl dev/import-perl5/sync.pl --only Text/Wrap
 ```
 
 ### Add Multiple Similar Modules
@@ -65,8 +73,12 @@ Main synchronization script that imports files from perl5/ based on config.yaml.
 
 **Usage:**
 ```bash
-perl dev/import-perl5/sync.pl
+perl dev/import-perl5/sync.pl                  # full manifest (every import)
+perl dev/import-perl5/sync.pl --only SUBSTRING # only rows matching source/target
+perl dev/import-perl5/sync.pl --help
 ```
+
+Protected targets (`protected: true` in YAML) are always excluded from bulk directory rsync using the **full** config list, even when `--only` is used.
 
 ### add_module.pl
 

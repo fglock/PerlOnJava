@@ -1,0 +1,23 @@
+--- perl5/ext/File-DosGlob/t/DosGlob.t
++++ src/test/resources/module/File-DosGlob/t/DosGlob.t
+@@ -10,8 +10,9 @@
+ use FindBin;
+ use File::Spec::Functions;
+ BEGIN {
+-    chdir catdir $FindBin::Bin, (updir)x3, 't';
+-    @INC = '../lib';
++    # Bundled layout: perl5/t-shaped tree under fixture/t (see fixture/t/op/*.t).
++    my $tdir = catdir $FindBin::Bin, '..', 'fixture', 't';
++    chdir $tdir or die "chdir $tdir: $!";
+ }
+ 
+ use Test::More tests => 21;
+@@ -142,7 +143,7 @@
+ # core-only module, this should be OK.
+ SKIP: {
+     require Config;
+-    skip "no XS::APItest"
++    skip "no XS::APItest", 1
+      unless eval { require XS::APItest; XS::APItest->import("sv_count"); 1 };
+     # Use a random number of ops, so that the glob op does not reuse the
+     # same address each time, giving us false passes.

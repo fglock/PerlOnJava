@@ -314,8 +314,8 @@ public class ScalarGlobOperator {
 
         List<String> results = ScalarGlobOperatorHelper.processPattern(this, pattern);
 
-        // Sort results and remove duplicates
-        results = new ArrayList<>(new TreeSet<>(results));
+        // Preserve match/discovery order (matches perl File::DosGlob read-dir semantics).
+        // Lexicographic sort broke DosGlob.t parity vs subroutine glob().
         this.iterator = results.iterator();
     }
 

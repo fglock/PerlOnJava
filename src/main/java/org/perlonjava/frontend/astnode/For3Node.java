@@ -76,9 +76,15 @@ public class For3Node extends AbstractNode {
         if (node instanceof OperatorNode) {
             // "<>", "each", "glob"
             operator = ((OperatorNode) node).operator;
-        } else if (node instanceof BinaryOperatorNode) {
-            // "readline"
-            operator = ((BinaryOperatorNode) node).operator;
+        } else if (node instanceof BinaryOperatorNode bin) {
+            // "readline", or "(" for subroutine calls rewritten as &(glob)(args)
+            operator = bin.operator;
+            if ("(".equals(operator) && bin.left instanceof OperatorNode amp
+                    && "&".equals(amp.operator)
+                    && amp.operand instanceof IdentifierNode id
+                    && "glob".equals(id.name)) {
+                return true;
+            }
         }
         return operator.equals("<>") ||
                 operator.equals("each") ||
