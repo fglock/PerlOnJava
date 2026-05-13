@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
@@ -17,9 +18,12 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalContext.encodeSpecialVar;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.isGlobalCodeRefDefined;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.setGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.flushAllHandles;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -44,6 +48,24 @@ public class SystemOperator {
      * @throws PerlCompilerException if an error occurs during command execution or stream handling.
      */
     public static RuntimeBase systemCommand(RuntimeScalar command, int ctx) {
+        // Perl dispatches qx//, `` and readpipe() through the package readpipe CV when defined
+        // (use subs + sub readpipe), not straight to the shell.
+        // Use InterpreterState (updated by JVM `package` / scoped blocks), not caller() —
+        // caller() from inside this runtime helper resolves the wrong package and skips the override.
+        String pkg = InterpreterState.currentPackage.get().toString();
+        if (pkg == null || pkg.isEmpty()) {
+            pkg = "main";
+        }
+        String fqReadpipe = pkg.endsWith("::") ? pkg + "readpipe" : pkg + "::readpipe";
+        if (isGlobalCodeRefDefined(fqReadpipe)) {
+            RuntimeScalar cv = getGlobalCodeRef(fqReadpipe);
+            if (cv.value instanceof RuntimeCode rc && rc.defined()) {
+                RuntimeArray argv = new RuntimeArray();
+                argv.add(command);
+                return rc.apply(argv, RuntimeCode.effectiveCallContext(ctx));
+            }
+        }
+
         String cmd = command.toString();
         CommandResult result;
 
@@ -552,7 +574,9 @@ public class SystemOperator {
         List<String> flattenedArgs = flattenToStringList(args.elements);
         
         if (flattenedArgs.isEmpty()) {
-            throw new PerlCompilerException("exec: no command specified");
+            // Perl returns false and sets errno (typically ENOENT) — does not die.
+            getGlobalVariable("main::!").set(2);
+            return scalarFalse;
         }
 
         // Check for pending fork-open emulation

@@ -99,8 +99,9 @@ public class Variable {
      */
     public static Node parseVariable(Parser parser, String sigil) {
         Node operand;
-        LexerToken nextToken = parser.tokenIndex < parser.tokens.size()
-                ? parser.tokens.get(parser.tokenIndex)
+        int nextTokIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        LexerToken nextToken = nextTokIdx < parser.tokens.size()
+                ? parser.tokens.get(nextTokIdx)
                 : new LexerToken(LexerTokenType.EOF, "");
 
         // Special case 1: $${...} - nested scalar dereference
@@ -831,8 +832,48 @@ public class Variable {
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
         }
 
-        // For string interpolation, preprocess \" sequences IN PLACE
-        if (isStringInterpolation) {
+        // *{EXPR}: either a glob NAME (`*{P2::ISA}`) or a full expression (`*{ qualify $_[0], ... }`).
+        // Never parse a lone qualified identifier with ParseBlock — strict subs rejects it as a
+        // useless statement (perl5_t/t/mro/basic.t). When `{` is not followed by a single
+        // identifier up to `}`, fall back to ParseBlock like Perl's expression-in-braces form.
+        if ("*".equals(sigil)) {
+            int savedIdx = parser.tokenIndex;
+            parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            String globInnerName = IdentifierParser.parseComplexIdentifierInner(parser, true, true);
+            if (globInnerName != null && !globInnerName.isEmpty()) {
+                if (!isMaybeOperator(globInnerName, parser)
+                        && !isBuiltinFunctionFollowedByArrow(globInnerName, parser)) {
+                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                    if (TokenUtils.peek(parser).text.equals("}")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        int idx = parser.tokenIndex;
+                        return new OperatorNode(sigil, new IdentifierNode(globInnerName, idx), idx);
+                    }
+                }
+            }
+            parser.tokenIndex = savedIdx;
+
+            boolean savedInsideBracedDereference = parser.insideBracedDereference;
+            boolean savedParsingTakeReference = parser.parsingTakeReference;
+            parser.parsingTakeReference = false;
+            try {
+                BlockNode block = ParseBlock.parseBlock(parser);
+                if (!TokenUtils.peek(parser).text.equals("}")) {
+                    throw new PerlCompilerException(
+                            parser.tokenIndex,
+                            "Missing closing brace in *{...} construct",
+                            parser.ctx.errorUtil);
+                }
+                TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                return new OperatorNode(sigil, block, parser.tokenIndex);
+            } finally {
+                parser.insideBracedDereference = savedInsideBracedDereference;
+                parser.parsingTakeReference = savedParsingTakeReference;
+            }
+        }
+
+        // For qq-like interpolation, preprocess \" sequences IN PLACE (not qx/command strings).
+        if (isStringInterpolation && parser.preprocessBracedBackslashQuotesInInterpolation) {
             int startIndex = parser.tokenIndex;
             int braceLevel = 1;
 

@@ -36,6 +36,15 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static ListNode parseZeroOrOneList(Parser parser, int minItems) {
+        return parseZeroOrOneList(parser, minItems, null);
+    }
+
+    /**
+     * @param tooManyArgsForBuiltin if non-null and more than one parenthesized argument is parsed,
+     *                              emit {@code Too many arguments for <name>} (Perl builtin wording)
+     *                              instead of a generic syntax error.
+     */
+    static ListNode parseZeroOrOneList(Parser parser, int minItems, String tooManyArgsForBuiltin) {
         if (looksLikeEmptyList(parser)) {
             // Return an empty list if it looks like an empty list
             if (minItems > 0) {
@@ -52,13 +61,21 @@ public class ListParser {
             TokenUtils.consume(parser);
             expr = new ListNode(parseList(parser, ")", 0), parser.tokenIndex);
             if (expr.elements.size() > 1) {
-                parser.throwError("syntax error");
+                if (tooManyArgsForBuiltin != null) {
+                    parser.throwError("Too many arguments for " + tooManyArgsForBuiltin);
+                } else {
+                    parser.throwError("syntax error");
+                }
             }
         } else if (token.type == LexerTokenType.EOF || isListTerminator(parser, token) || token.text.equals(",")
                 || (token.text.equals("isa") && token.type == LexerTokenType.IDENTIFIER
                     && parser.ctx.symbolTable.isFeatureCategoryEnabled("isa"))) {
             // No argument
             // 'isa' when enabled as a feature is an infix operator, not a bareword argument
+            expr = new ListNode(parser.tokenIndex);
+        } else if (token.text.equals("?")) {
+            // `defined ? expr : expr` (zero-arg defined uses $_), `rand ? expr : expr`, etc.
+            // Do not parse the ternary `?` as the unary operator's optional operand.
             expr = new ListNode(parser.tokenIndex);
         } else {
             // Argument without parentheses
@@ -328,7 +345,9 @@ public class ListParser {
         List<OperatorNode> savedHeredocNodes = ParseHeredoc.saveHeredocState(parser);
 
         LexerToken token = TokenUtils.consume(parser);
-        LexerToken token1 = parser.tokens.get(parser.tokenIndex); // Next token including spaces
+        LexerToken token1 = parser.tokenIndex < parser.tokens.size()
+                ? parser.tokens.get(parser.tokenIndex)
+                : new LexerToken(LexerTokenType.EOF, "");
         LexerToken nextToken = TokenUtils.peek(parser);  // After spaces
 
         // Check if this is a list terminator, but we need to restore position for the check
@@ -385,7 +404,12 @@ public class ListParser {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like regex");
             } else {
                 // Subroutine call with zero arguments, followed by infix operator: `pos = 3`
-                if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + parser.tokens.get(parser.tokenIndex) + "`");
+                if (CompilerOptions.DEBUG_ENABLED) {
+                    String dbgTok = parser.tokenIndex < parser.tokens.size()
+                            ? String.valueOf(parser.tokens.get(parser.tokenIndex))
+                            : "EOF";
+                    parser.ctx.logDebug("parseZeroOrMoreList return zero at `" + dbgTok + "`");
+                }
                 // if (LVALUE_INFIX_OP.contains(token.text)) {
                 //    throw new PerlCompilerException(tokenIndex, "Can't modify non-lvalue subroutine call", ctx.errorUtil);
                 // }

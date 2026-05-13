@@ -15,6 +15,25 @@ import java.nio.file.Path;
 public class FileUtils {
 
     /**
+     * Decodes Perl module / script bytes (from disk or from a JAR resource) using the same rules as
+     * {@link #readFileWithEncodingDetection(Path, CompilerOptions)}: BOM detection, charset selection,
+     * {@link CompilerOptions#rawCodeBytes} for {@code __DATA__}, and newline normalization for the lexer.
+     *
+     * <p>Jar loading previously used {@code InputStreamReader} + {@code readLine()}, which could diverge
+     * from file reads (charset, raw bytes); keep one path so identical sources compile identically.
+     */
+    public static String decodePerlSourceBytes(byte[] bytes, CompilerOptions parsedArgs) {
+        String content = detectEncodingAndDecode(bytes, parsedArgs);
+        // Normalize line endings: \r\n → \n, bare \r → \n
+        // This must happen for source files so the Lexer sees clean \n line endings.
+        // For eval STRING input, \r characters are preserved (they don't go through this path).
+        if (content.indexOf('\r') >= 0) {
+            content = content.replace("\r\n", "\n").replace("\r", "\n");
+        }
+        return content;
+    }
+
+    /**
      * Reads a file with automatic encoding detection based on BOM (Byte Order Mark).
      * Supports UTF-8, UTF-16BE, UTF-16LE, and defaults to UTF-8 if no BOM is found.
      *
@@ -24,14 +43,7 @@ public class FileUtils {
      */
     public static String readFileWithEncodingDetection(Path filePath, CompilerOptions parsedArgs) throws IOException {
         byte[] bytes = Files.readAllBytes(filePath);
-        String content = detectEncodingAndDecode(bytes, parsedArgs);
-        // Normalize line endings: \r\n → \n, bare \r → \n
-        // This must happen for source files so the Lexer sees clean \n line endings.
-        // For eval STRING input, \r characters are preserved (they don't go through this path).
-        if (content.indexOf('\r') >= 0) {
-            content = content.replace("\r\n", "\n").replace("\r", "\n");
-        }
-        return content;
+        return decodePerlSourceBytes(bytes, parsedArgs);
     }
 
     /**

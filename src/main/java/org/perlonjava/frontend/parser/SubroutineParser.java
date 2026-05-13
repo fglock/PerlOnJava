@@ -201,15 +201,20 @@ public class SubroutineParser {
 
         boolean prototypeHasGlob = prototype != null && prototype.contains("*");
 
-        // If a package name follows, then it looks like a indirect method
-        // Unless the subName looks like an operator
-        // Unless the subName has a prototype with `*`
-        //
         // Note: feature-gated core keywords (`try`, `catch`, `finally`) should
         // participate in indirect-object parsing when their feature is *off* —
         // this is how Error.pm's classic
         //     try { ... } catch Error::Simple with { ... }
         // idiom is recognised (parses as `Error::Simple->catch(with {...})`).
+
+        // If a package name follows, it may be indirect-object syntax (INVOCANT->METHOD(LIST)).
+        //
+        // Do not skip this probe just because the callee has a scalar-leading prototype; that
+        // heuristic mis-parsed `new Some::Long::Name LIST` inside a package that defines its own
+        // `sub new ($...)` as a direct arity-checked call to the wrong sub (Parse::RecDescent).
+        // Perl does not treat `new` specially here — the method bareword is arbitrary.
+        //
+        // Ambiguous parses rely on the rejection/backtracking logic inside this block.
         if (peek(parser).type == LexerTokenType.IDENTIFIER
                 && isValidIndirectMethod(subName, parser)
                 && !prototypeHasGlob) {

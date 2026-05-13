@@ -1767,6 +1767,10 @@ public class EmitOperator {
                 } else if (node.operand instanceof OperatorNode op && op.operator.equals("$")) {
                     // Scalar variable - use SCALAR context
                     contextType = RuntimeContextType.SCALAR;
+                } else if (node.operand instanceof OperatorNode op && op.operator.equals("*")) {
+                    // *{EXPR} — EXPR is evaluated in scalar context (e.g. Symbol::qualify_to_ref's
+                    // \*{ qualify $_[0], ... }). LIST context breaks the comma/ternary inside braces.
+                    contextType = RuntimeContextType.SCALAR;
                 }
 
                 node.operand.accept(emitterVisitor.with(contextType));

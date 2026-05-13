@@ -7,10 +7,8 @@ import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -152,6 +150,9 @@ public class ModuleOperators {
         Path fullName = null;
         String code = null;
         String actualFileName = null;
+
+        /** Raw bytes from {@code jar:PERL5LIB} before decoding — decoded once {@link CompilerOptions} exists. */
+        byte[] jarPrefetchedBytes = null;
 
         // Variables for handling array references with state
         RuntimeCode codeRef = null;
@@ -570,16 +571,11 @@ public class ModuleOperators {
                             actualFileName = GlobalContext.JAR_PERLLIB + "/" + fileName;
                             fullName = Paths.get(resourcePath);  // Just for compatibility
 
-                            try (InputStream is = resource.openStream();
-                                 BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-                                StringBuilder content = new StringBuilder();
-                                String line = null;
-                                while ((line = reader.readLine()) != null) {
-                                    content.append(line).append("\n");
-                                }
-                                code = content.toString();
+                            try (InputStream is = resource.openStream()) {
+                                jarPrefetchedBytes = is.readAllBytes();
                                 break;
                             } catch (IOException e1) {
+                                jarPrefetchedBytes = null;
                                 // Continue to next directory
                             }
                         }
@@ -635,6 +631,9 @@ public class ModuleOperators {
         parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
         parsedArgs.disassembleEnabled = RuntimeCode.DISASSEMBLE;
         parsedArgs.useInterpreter = RuntimeCode.USE_INTERPRETER;
+        if (jarPrefetchedBytes != null) {
+            code = FileUtils.decodePerlSourceBytes(jarPrefetchedBytes, parsedArgs);
+        }
         if (code == null) {
             try {
                 // Use the absolute fullName for file I/O (parsedArgs.fileName may be relative)

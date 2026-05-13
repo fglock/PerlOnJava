@@ -65,6 +65,14 @@ public class Parser {
     // re-tokenized string content and __LINE__ should use this as the base line,
     // counting newlines from the inner token list to offset from it.
     public int baseLineNumber = 0;
+    /**
+     * When {@code true} (qq and normal strings), {@link Variable#parseBracedVariable} may rewrite
+     * {@code \"} before {@code "} inside {@code ${...}} so patterns like {@code "${\"name\"}"}
+     * interpolate {@code $name}. When {@code false} (qx / command heredocs), keep the backslash so
+     * {@code ${\"hello"}} parses as a reference to the string {@code hello} and dereferences it,
+     * matching Perl 5.
+     */
+    public boolean preprocessBracedBackslashQuotesInInterpolation = true;
 
     /**
      * Constructs a Parser with the given context and tokens.
