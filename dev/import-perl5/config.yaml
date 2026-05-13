@@ -194,6 +194,16 @@ imports:
   - source: perl5/lib/File/Compare.pm
     target: src/main/perl/lib/File/Compare.pm
 
+  # File::DosGlob - DOS-style glob (XS provides _callsite in core; patched for PerlOnJava)
+  - source: perl5/ext/File-DosGlob/lib/File/DosGlob.pm
+    target: src/main/perl/lib/File/DosGlob.pm
+    patch: DosGlob.pm.patch
+
+  # File::DosGlob upstream tests (adapted fixture layout under module/File-DosGlob/fixture/)
+  - source: perl5/ext/File-DosGlob/t/DosGlob.t
+    target: src/test/resources/module/File-DosGlob/t/DosGlob.t
+    patch: File-DosGlob-DosGlob.t.patch
+
   # File::stat - by-name interface to stat() (required by IO::Dir)
   - source: perl5/lib/File/stat.pm
     target: src/main/perl/lib/File/stat.pm

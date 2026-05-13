@@ -1,0 +1,19 @@
+--- perl5/ext/File-DosGlob/lib/File/DosGlob.pm
++++ src/main/perl/lib/File/DosGlob.pm
+@@ -10,8 +10,14 @@
+ use strict;
+ use warnings;
+ 
+-require XSLoader;
+-XSLoader::load();
++sub _callsite {
++    my $key = '';
++    for my $i (0 .. 32) {
++	my @c = caller($i) or last;
++	$key .= join("\0", @c[0 .. 3]) . "\x{1e}";
++    }
++    return $key;
++}
+ 
+ sub doglob {
+     my $cond = shift;

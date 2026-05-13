@@ -100,6 +100,12 @@ public class ModuleTestExecutionTest {
 
         List<String> sortedScripts = Files.walk(modulesRoot)
                 .filter(path -> path.toString().endsWith(".t"))
+                // Test fixtures shipped as sibling trees (e.g. DosGlob op/*.t globs)
+                // must not be executed as TAP harness scripts themselves.
+                .filter(path -> {
+                    String s = path.toString().replace('\\', '/');
+                    return !s.contains("/fixture/");
+                })
                 .map(resourcesRoot::relativize)
                 .map(Path::toString)
                 // Normalize to forward slashes so the skip list works on Windows too.
