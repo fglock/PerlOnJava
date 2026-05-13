@@ -189,6 +189,27 @@ public class IPCOpen3 extends PerlModuleBase {
                             errRef.type == RuntimeScalarType.REFERENCE &&
                             rdrRef.value == errRef.value);
 
+            RuntimeScalar innerWtr = derefOpen3Slot(wtrRef);
+            RuntimeScalar innerRdr = derefOpen3Slot(rdrRef);
+            RuntimeScalar innerErr = derefOpen3Slot(errRef);
+
+            // Stock Perl's open3 inherits parent's std* when CHLD_* is a read-only
+            // false value (e.g. literal 0 / undef / "0") or FD integer 1/2 — see
+            // Test::Compile::Internal::_run_command (open3(0, $stdout, $stderr, ...)).
+            boolean inheritIn = shouldInheritStdin(innerWtr);
+            boolean inheritOut = shouldInheritStdout(innerRdr);
+            boolean inheritErr = !mergeStderr && errIsUsable && shouldInheritStderr(innerErr);
+
+            if (inheritIn) {
+                processBuilder.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            }
+            if (inheritOut) {
+                processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+            }
+            if (inheritErr) {
+                processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
+
             if (mergeStderr) {
                 processBuilder.redirectErrorStream(true);
             }
@@ -219,7 +240,7 @@ public class IPCOpen3 extends PerlModuleBase {
             if (isInputRedirection(wtrRef)) {
                 // Input redirection - just close the process stdin
                 process.getOutputStream().close();
-            } else {
+            } else if (!inheritIn) {
                 setupWriteHandle(wtrRef, process.getOutputStream());
             }
 
@@ -229,7 +250,7 @@ public class IPCOpen3 extends PerlModuleBase {
             if (rdrIsRedirection) {
                 // Output redirection - pipe stdout to the named handle
                 handleOutputRedirection(rdrRef, process.getInputStream());
-            } else {
+            } else if (!inheritOut) {
                 setupReadHandle(rdrRef, process.getInputStream(), process);
             }
 
@@ -237,7 +258,7 @@ public class IPCOpen3 extends PerlModuleBase {
             if (!mergeStderr && errIsUsable) {
                 if (isOutputRedirection(errRef)) {
                     handleOutputRedirection(errRef, process.getErrorStream());
-                } else {
+                } else if (!inheritErr) {
                     setupReadHandle(errRef, process.getErrorStream(), process);
                 }
             }
@@ -252,6 +273,93 @@ public class IPCOpen3 extends PerlModuleBase {
             getGlobalVariable("main::!").set(e.getMessage());
             throw new RuntimeException("open3: " + e.getMessage());
         }
+    }
+
+    /**
+     * Referent of {@code \$_[n]} as passed from {@code IPC::Open3::open3} (one ref level).
+     */
+    private static RuntimeScalar derefOpen3Slot(RuntimeScalar handleRef) {
+        if (handleRef != null
+                && handleRef.type == RuntimeScalarType.REFERENCE
+                && handleRef.value instanceof RuntimeScalar ref) {
+            return ref;
+        }
+        return handleRef;
+    }
+
+    private static boolean isPerlReadonlyOpen3Target(RuntimeScalar slot) {
+        if (slot == null) {
+            return false;
+        }
+        if (slot instanceof RuntimeScalarReadOnly) {
+            return true;
+        }
+        return slot.type == RuntimeScalarType.READONLY_SCALAR;
+    }
+
+    /**
+     * True when {@code v} is the integer {@code n} or its string form ({@code "0"}, {@code "1"}, ...).
+     */
+    private static boolean matchesNumericOrString(RuntimeScalar v, int n) {
+        if (v == null) {
+            return false;
+        }
+        return switch (v.type) {
+            case RuntimeScalarType.INTEGER -> v.getInt() == n;
+            case RuntimeScalarType.DOUBLE -> Math.abs(v.getDouble() - n) < 1e-10;
+            case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING ->
+                    Integer.toString(n).equals(v.toString());
+            default -> {
+                try {
+                    yield v.getInt() == n;
+                } catch (Exception e) {
+                    yield false;
+                }
+            }
+        };
+    }
+
+    /**
+     * Read-only slot that means "inherit parent's STDIN" (Perl {@code open3(undef/0/0.0/"0", ...)}).
+     * Read-only empty string is excluded — stock Perl dies modifying it.
+     */
+    private static boolean shouldInheritStdin(RuntimeScalar slot) {
+        if (!isPerlReadonlyOpen3Target(slot)) {
+            return false;
+        }
+        if (!slot.getDefinedBoolean()) {
+            return true;
+        }
+        if (slot.type == RuntimeScalarType.STRING || slot.type == RuntimeScalarType.BYTE_STRING) {
+            String s = slot.toString();
+            if (s.isEmpty()) {
+                return false;
+            }
+            return "0".equals(s);
+        }
+        return matchesNumericOrString(slot, 0);
+    }
+
+    /** Read-only false value for STDOUT: {@code undef}, {@code 1}, {@code "1"}. */
+    private static boolean shouldInheritStdout(RuntimeScalar slot) {
+        if (!isPerlReadonlyOpen3Target(slot)) {
+            return false;
+        }
+        if (!slot.getDefinedBoolean()) {
+            return true;
+        }
+        return matchesNumericOrString(slot, 1);
+    }
+
+    /** Read-only STDERR FD {@code 2} / {@code "2"} — not {@code undef} (that merges streams). */
+    private static boolean shouldInheritStderr(RuntimeScalar slot) {
+        if (!isPerlReadonlyOpen3Target(slot)) {
+            return false;
+        }
+        if (!slot.getDefinedBoolean()) {
+            return false;
+        }
+        return matchesNumericOrString(slot, 2);
     }
 
     /**

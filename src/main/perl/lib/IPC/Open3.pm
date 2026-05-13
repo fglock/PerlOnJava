@@ -6,6 +6,7 @@ use warnings;
 use Exporter 'import';
 use Carp;
 use Symbol qw(gensym qualify);
+use Scalar::Util qw(readonly);
 
 our $VERSION = '1.24';
 our @EXPORT = qw(open3);
@@ -58,13 +59,15 @@ sub open3 {
     # Call the XS implementation
     my $pid = _open3($wtr_ref, $rdr_ref, $err_ref, @cmd);
 
-    # Update the caller's variables (but not if they were redirection directives)
-    $_[0] = $$wtr_ref unless $wtr_is_redirect;
-    $_[1] = $$rdr_ref unless $rdr_is_redirect;
-    $_[2] = $$err_ref if defined $err && !$err_is_redirect;
+    # Update the caller's variables (but not if they were redirection directives).
+    # Skip read-only slots (e.g. open3(0, $stdout, $stderr, ...) inherits stdin; the
+    # literal 0 cannot be assigned to). See Test::Compile::Internal::_run_command.
+    $_[0] = $$wtr_ref unless $wtr_is_redirect || readonly($_[0]);
+    $_[1] = $$rdr_ref unless $rdr_is_redirect || readonly($_[1]);
+    $_[2] = $$err_ref if defined $err && !$err_is_redirect && !readonly($_[2]);
 
-    # Turn on autoflush for the write handle
-    if (defined $_[0] && !$wtr_is_redirect) {
+    # Turn on autoflush for the write handle (skip inherited stdin / read-only slots)
+    if (defined $_[0] && !$wtr_is_redirect && !readonly($_[0])) {
         my $old = select($_[0]);
         $| = 1;
         select($old);
