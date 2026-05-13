@@ -10,7 +10,12 @@
 # To add a new import:
 # 1. Add an entry below
 # 2. If a patch is needed, create it with: diff -u original modified > patches/filename.patch
-# 3. Run: perl dev/import-perl5/sync.pl
+# 3. Run:
+#      perl dev/import-perl5/sync.pl --only YOUR_SUBSTRING
+#    Use a substring unique to that row's source: or target: (e.g. File-DosGlob).
+#    This avoids replaying the entire manifest (which refreshes every bundled tree).
+#    To intentionally bulk-refresh everything against perl5/, run:
+#      perl dev/import-perl5/sync.pl
 #
 # PROTECTED FILES:
 # Files with 'protected: true' will be skipped during sync if they already exist.
