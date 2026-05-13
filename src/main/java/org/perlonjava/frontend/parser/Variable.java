@@ -832,11 +832,27 @@ public class Variable {
             return new OperatorNode(sigil, new StringNode("", parser.tokenIndex), parser.tokenIndex);
         }
 
-        // *{EXPR} must parse EXPR as full Perl code (calls, commas, ternaries).
-        // The identifier fast-path below wrongly treats the start of `qualify $_[0], ...`
-        // as a bareword glob name `qualify`, breaking Symbol::qualify_to_ref's
-        // `return \*{ qualify $_[0], ... };` (bogus globs like *::bin).
+        // *{EXPR}: either a glob NAME (`*{P2::ISA}`) or a full expression (`*{ qualify $_[0], ... }`).
+        // Never parse a lone qualified identifier with ParseBlock — strict subs rejects it as a
+        // useless statement (perl5_t/t/mro/basic.t). When `{` is not followed by a single
+        // identifier up to `}`, fall back to ParseBlock like Perl's expression-in-braces form.
         if ("*".equals(sigil)) {
+            int savedIdx = parser.tokenIndex;
+            parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+            String globInnerName = IdentifierParser.parseComplexIdentifierInner(parser, true, true);
+            if (globInnerName != null && !globInnerName.isEmpty()) {
+                if (!isMaybeOperator(globInnerName, parser)
+                        && !isBuiltinFunctionFollowedByArrow(globInnerName, parser)) {
+                    parser.tokenIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+                    if (TokenUtils.peek(parser).text.equals("}")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        int idx = parser.tokenIndex;
+                        return new OperatorNode(sigil, new IdentifierNode(globInnerName, idx), idx);
+                    }
+                }
+            }
+            parser.tokenIndex = savedIdx;
+
             boolean savedInsideBracedDereference = parser.insideBracedDereference;
             boolean savedParsingTakeReference = parser.parsingTakeReference;
             parser.parsingTakeReference = false;
