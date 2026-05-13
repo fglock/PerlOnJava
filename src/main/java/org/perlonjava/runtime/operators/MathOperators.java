@@ -812,6 +812,18 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the integer division result.
      */
     public static RuntimeScalar integerDivide(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Like divide(): overloaded packages (Math::BigInt, Math::BigRat, …) still receive
+        // operator dispatch under "use integer"; native IV division must not bypass overload.
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result =
+                    OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/", "/");
+            if (result != null) {
+                return result;
+            }
+        }
+
         long dividend = arg1.getLong();
         long divisor = arg2.getLong();
 
@@ -832,6 +844,16 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the integer division result.
      */
     public static RuntimeScalar integerDivideWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result =
+                    OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(/", "/");
+            if (result != null) {
+                return result;
+            }
+        }
+
         // Convert to number with warning for uninitialized values
         arg1 = arg1.getNumberWarn("integer division (/)");
         arg2 = arg2.getNumberWarn("integer division (/)");
@@ -873,6 +895,16 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the integer modulus.
      */
     public static RuntimeScalar integerModulus(RuntimeScalar arg1, RuntimeScalar arg2) {
+        int blessId = blessedId(arg1);
+        int blessId2 = blessedId(arg2);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result =
+                    OverloadContext.tryTwoArgumentOverload(arg1, arg2, blessId, blessId2, "(%", "%");
+            if (result != null) {
+                return result;
+            }
+        }
+
         long dividend = arg1.getLong();
         long divisor = arg2.getLong();
 
