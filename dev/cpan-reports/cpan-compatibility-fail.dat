@@ -313,7 +313,7 @@ AnyEvent::WebArchive	FAIL	1	0	4/1 subtests failed	2026-05-06
 AnyEvent::WebDriver	FAIL			Syntax error	2026-05-08		
 AnyEvent::WebService::ImKayac	FAIL	1	0	1/1 subtests failed	2026-05-06		
 AnyEvent::WebService::Notifo	FAIL	1	0	1/1 subtests failed	2026-05-11		
-AnyEvent::WebSocket::Client	FAIL	6	5	1/6 subtests failed	2026-05-12		
+AnyEvent::WebSocket::Client	FAIL	6	5	1/6 subtests failed	2026-05-13		
 AnyEvent::Worker	FAIL	5	0	23/5 subtests failed	2026-05-11		
 AnyEvent::XMPP	FAIL	40	0	49/40 subtests failed	2026-05-09		
 AnyEvent::XSPromises	FAIL				2026-04-29		
@@ -513,7 +513,7 @@ Authen::Passphrase::BlowfishCrypt	FAIL	425	0	1265/425 subtests failed	2026-05-07
 Authen::Simple	FAIL	54	52	2/54 subtests failed	2026-05-12		
 Authen::Simple::Passwd	FAIL	2	0	9/2 subtests failed	2026-05-07		
 AuthenNZRealMeEncTestHelper	FAIL	82	81	1/82 subtests failed	2026-05-10		
-Authentication	FAIL			Unknown test outcome	2026-04-27		
+Authentication	FAIL			Unknown test outcome	2026-05-13		
 AutoReloader	FAIL	6	0	32/6 subtests failed	2026-05-11		
 AutoSQL::AdaptorFactory	FAIL			Missing: AutoCode/ModuleFactory.pm	2026-05-04		
 AutoSession	FAIL			Unknown test outcome	2026-05-11		
@@ -644,7 +644,7 @@ Bio::Tools::Run::RemoteBlast	FAIL	2	0	2/2 subtests failed	2026-05-05
 Bio::Variation::SNP	FAIL	197	168	29/197 subtests failed	2026-05-05		
 BioGraph::FileAccess	FAIL			No parseable output	2026-05-04		
 BioPerl	FAIL			Unknown test outcome	2026-04-29		
-BioSAILs::Integrations::Github	FAIL	1	1		2026-05-12		
+BioSAILs::Integrations::Github	FAIL	1	1		2026-05-13		
 BioX::CLPM	FAIL	13	0	14/13 subtests failed	2026-04-29		
 BioX::SeqUtils::Promoter	FAIL	17	0	23/17 subtests failed	2026-05-07		
 BioX::SeqUtils::RandomSequence	FAIL	2	0	8/2 subtests failed	2026-05-04		
@@ -694,10 +694,10 @@ C::TCC	FAIL	12	0	41/12 subtests failed	2026-05-12
 C::sparse	FAIL				2026-05-08		
 C::sparse::sym::EXPR_ALIGNOF	FAIL				2026-05-06		
 CACertOrg::CA	FAIL	6	3	3/6 subtests failed	2026-05-11		
-CAD::Drawing	FAIL	108	15	93/108 subtests failed	2026-05-12		
+CAD::Drawing	FAIL	108	15	93/108 subtests failed	2026-05-13		
 CAD::Drawing::IO::DWGI	FAIL	1	0	1/1 subtests failed	2026-05-11		
 CAD::Drawing::IO::OpenDWG	FAIL	1	0	1/1 subtests failed	2026-05-11		
-CAD::Drawing::IO::PostScript	FAIL			No parseable output	2026-04-27		
+CAD::Drawing::IO::PostScript	FAIL	1	0	1/1 subtests failed	2026-05-13		
 CAD::Drawing::IO::Tk	FAIL	1	0	1/1 subtests failed	2026-05-12		
 CAD::OpenSCAD::GearMaker	FAIL			Missing: Object/Pad.pm	2026-05-12		
 CAIXS	FAIL	1	0	3/1 subtests failed	2026-05-06		
@@ -963,12 +963,12 @@ CPAN::Dependency	FAIL	6	0	79/6 subtests failed	2026-05-09
 CPAN::Digger	FAIL	3	1	2/3 subtests failed	2026-05-10		
 CPAN::Distribution::ReleaseHistory	FAIL	7	5	2/7 subtests failed	2026-05-11		
 CPAN::FindDependencies	FAIL	8	7	1/8 subtests failed	2026-05-09		
-CPAN::Index::API	FAIL	1	1	Missing: Test/XML.pm	2026-05-12		
+CPAN::Index::API	FAIL	1	1	Missing: Test/XML.pm	2026-05-13		
 CPAN::Index::API::Object::Package	FAIL	9	3	6/9 subtests failed	2026-05-07		
 CPAN::Index::Author	FAIL			Unknown test outcome	2026-05-06		
 CPAN::IndexPod	FAIL	4	0	12/4 subtests failed	2026-05-12		
 CPAN::Indexer::Mirror	FAIL	2	0	15/2 subtests failed	2026-05-08		
-CPAN::Inject	FAIL	3	0	25/3 subtests failed	2026-05-12		
+CPAN::Inject	FAIL	3	0	25/3 subtests failed	2026-05-13		
 CPAN::Local	FAIL			No parseable output	2026-04-25		
 CPAN::Meta::YAML	FAIL			Unknown test outcome	2026-05-08		
 CPAN::Mini::Inject	FAIL				2026-05-10		
@@ -2381,7 +2381,7 @@ File::PathConvert	FAIL	266	264	2/266 subtests failed	2026-04-12
 File::PathInfo	FAIL	57	57	Missing: Time/Format.pm	2026-05-12		
 File::PathInfo::Ext	FAIL	1	1		2026-05-12		
 File::Raw	FAIL	1	0	1/1 subtests failed	2026-05-11		
-File::Remove	FAIL	218	211	7/218 subtests failed	2026-05-12		
+File::Remove	FAIL	218	211	7/218 subtests failed	2026-05-13		
 File::RotateLogs	FAIL	1	0	1/1 subtests failed	2026-05-12		
 File::Rules	FAIL	3	0	14/3 subtests failed	2026-04-22		
 File::Save::Home	FAIL	16	0	44/16 subtests failed	2026-04-30		
@@ -2577,7 +2577,7 @@ Ginger	FAIL			Unknown test outcome	2026-05-07
 Giovanni	FAIL	1	0	1/1 subtests failed	2026-05-06		
 Git	FAIL			Unknown test outcome	2026-05-09		
 Git::CPAN::Hook	FAIL	31	27	4/31 subtests failed	2026-05-06		
-Git::PurePerl	FAIL	1	1		2026-05-13		
+Git::PurePerl	FAIL			Unknown test outcome	2026-05-13		
 Git::Raw	FAIL				2026-04-22		
 GitHub::Crud::Response	FAIL			Missing: Data/Table/Text.pm	2026-05-05		
 GitHub::Extract	FAIL	1	1	Missing: HTTP/Online.pm	2026-05-11		
@@ -3269,7 +3269,7 @@ InterMine::TypeLibrary	FAIL	1	0	1/1 subtests failed	2026-05-07
 Interchange6	FAIL	31	30	1/31 subtests failed	2026-05-07		
 Interchange6::Currency	FAIL	1	0	1/1 subtests failed	2026-05-01		
 Interchange6::Schema	FAIL			Unknown test outcome	2026-05-06		
-Interpolation	FAIL	158	157	1/158 subtests failed	2026-05-13		
+Interpolation	FAIL			Unknown test outcome	2026-05-13		
 Interval	FAIL	207	154	53/207 subtests failed	2026-05-05		
 IronTestsCommon	FAIL	96	96	Missing: File/Remove.pm	2026-05-06		
 IsUTF8	FAIL	2	0	10/2 subtests failed	2026-05-09		
@@ -3376,14 +3376,14 @@ KCP	FAIL	2	1	1/2 subtests failed	2026-05-12
 KSx::Highlight::Summarizer	FAIL			Missing: KinoSearch/Searcher.pm	2026-05-09		
 KSx::Searcher::Abstract	FAIL	3	0	10/3 subtests failed	2026-05-09		
 Karel	FAIL	1	0	1/1 subtests failed	2026-04-30		
-Kavorka	FAIL	1	0	1/1 subtests failed	2026-05-12		
+Kavorka	FAIL	1	0	1/1 subtests failed	2026-05-13		
 KeePass::constants	FAIL			Unknown test outcome	2026-05-06		
 Kephra	FAIL	23	11	12/23 subtests failed	2026-05-09		
 KeyValuePair	FAIL			Missing: Tree/DAG_Node.pm	2026-05-05		
 Keybinder	FAIL	1	0	1/1 subtests failed	2026-05-09		
 KeyedMutex	FAIL	7	0	26/7 subtests failed	2026-05-08		
 Keyword::Declare	FAIL			Missing: Keyword/Simple.pm	2026-05-06		
-Keyword::Simple	FAIL	1	0	1/1 subtests failed	2026-05-12		
+Keyword::Simple	FAIL	1	0	1/1 subtests failed	2026-05-13		
 KeywordsSpider	FAIL			Missing: HTML/TreeBuilder.pm	2026-05-12		
 Khonsu	FAIL	1	0	1/1 subtests failed	2026-04-30		
 KiokuDB	FAIL			Unknown test outcome	2026-05-11		
@@ -3722,11 +3722,11 @@ Math::Cephes	FAIL	11	0	474/11 subtests failed	2026-05-05
 Math::Complex	FAIL	392	0	841/392 subtests failed	2026-04-12		
 Math::Geometry::Planar	FAIL				2026-04-22		
 Math::Geometry::Planar::GPC	FAIL				2026-04-22		
-Math::Geometry::Planar::Offset	FAIL	11	8	3/11 subtests failed	2026-05-12		
+Math::Geometry::Planar::Offset	FAIL	11	8	3/11 subtests failed	2026-05-13		
 Math::Int128	FAIL	3	2	1/3 subtests failed	2026-05-10		
 Math::Int64	FAIL				2026-05-13		
 Math::Matrix	FAIL	3506	3470	36/3506 subtests failed	2026-05-11		
-Math::MatrixReal	FAIL	338	317	21/338 subtests failed	2026-05-12		
+Math::MatrixReal	FAIL	338	317	21/338 subtests failed	2026-05-13		
 Math::Pari	FAIL	2	2		2026-05-07		
 Math::Prime::Util	FAIL	2	0	2/2 subtests failed	2026-04-22		
 Math::Prime::Util::GMP	FAIL	1	0	1/1 subtests failed	2026-04-22		
@@ -3874,7 +3874,7 @@ MojoX::Renderer::HTP	FAIL	6	4	2/6 subtests failed	2026-05-08
 MojoX::Renderer::Xslate	FAIL	2	0	2/2 subtests failed	2026-05-09		
 MojoX::Route	FAIL	2	1	1/2 subtests failed	2026-05-08		
 MojoX::Routes::AsGraph	FAIL	1	0	2/1 subtests failed	2026-05-08		
-MojoX::Session	FAIL	131	111	20/131 subtests failed	2026-05-12		
+MojoX::Session	FAIL	12	0	128/12 subtests failed	2026-05-13		
 MojoX::Session::Simple	FAIL	1	1	Missing: Test/Pretty.pm	2026-05-12		
 MojoX::Session::Store	FAIL	131	111	20/131 subtests failed	2026-05-09		
 MojoX::Session::Store::File	FAIL	4	0	9/4 subtests failed	2026-05-07		
@@ -3989,7 +3989,7 @@ MooseX::ErrorHandling	FAIL				2026-05-11
 MooseX::Event	FAIL				2026-05-10		
 MooseX::Extended	FAIL	41	1	40/41 subtests failed	2026-05-11		
 MooseX::Fastly::Role	FAIL			Missing: Net/Fastly.pm	2026-05-07		
-MooseX::Getopt	FAIL	344	330	14/344 subtests failed	2026-05-13		
+MooseX::Getopt	FAIL			Unknown test outcome	2026-05-13		
 MooseX::Getopt::Dashes	FAIL	344	330	14/344 subtests failed	2026-05-13		
 MooseX::Getopt::GLD	FAIL	13	4	9/13 subtests failed	2026-05-09		
 MooseX::Getopt::Kingpin	FAIL	1	1		2026-04-30		
@@ -5572,7 +5572,7 @@ StorageDisplay::Elem	FAIL	11	10	1/11 subtests failed	2026-05-05
 Storm	FAIL			Missing: MooseX/Types.pm	2026-05-12		
 StormX::Query::DeleteWhere	FAIL			Missing: Storm/Object.pm	2026-05-10		
 StrTree	FAIL			No parseable output	2026-05-07		
-Stream::FileInputStream	FAIL				2026-05-12		
+Stream::FileInputStream	FAIL				2026-05-13		
 String::CRC32	FAIL				2026-04-12		
 String::CamelCase	FAIL	31	27	4/31 subtests failed	2026-04-12		
 String::Checker	FAIL			Unknown test outcome	2026-05-11		
