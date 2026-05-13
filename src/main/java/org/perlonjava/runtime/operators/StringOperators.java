@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.operators;
 
 import com.ibm.icu.lang.UCharacter;
+import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.CaseMap;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -117,31 +118,51 @@ public class StringOperators {
     }
 
     /**
-     * Escapes all non-alphanumeric characters in the string representation of the given {@link RuntimeScalar}.
-     *
-     * @param runtimeScalar the {@link RuntimeScalar} to be quoted
-     * @return a {@link RuntimeScalar} with non-alphanumeric characters escaped
+     * Perl's {@code quotemeta} / {@code \Q...\E}: ASCII non-word characters are backslashed;
+     * {@code _} is never escaped. UTF-8 strings follow Perl 5.16+ (Unicode TR31-style): only
+     * Pattern_Syntax, Pattern_White_Space, White_Space, Default_Ignorable_Code_Point, and controls
+     * are escaped among non-ASCII code points. Non-UTF-8 ({@link RuntimeScalarType#BYTE_STRING})
+     * values quote every character in the upper Latin-1 range (128–255), like Perl without the
+     * utf8 flag.
      */
     public static RuntimeScalar quotemeta(RuntimeScalar runtimeScalar) {
         StringBuilder quoted = new StringBuilder();
         String str = runtimeScalar.toString();
-        // Iterate over Unicode code points, not Java chars, so surrogate pairs
-        // (characters outside the BMP, e.g. \x{1D54B}) are handled correctly.
         int len = str.length();
         for (int i = 0; i < len; ) {
             int cp = str.codePointAt(i);
-            // If the code point is alphanumeric or underscore, append it as is.
-            // Perl's quotemeta does NOT escape underscore (it's part of \w)
-            if (Character.isLetterOrDigit(cp) || cp == '_') {
-                quoted.appendCodePoint(cp);
-            } else {
-                // Otherwise, escape it with a backslash
+            if (perlQuotemetaMustQuote(cp, runtimeScalar)) {
                 quoted.append('\\');
-                quoted.appendCodePoint(cp);
             }
+            quoted.appendCodePoint(cp);
             i += Character.charCount(cp);
         }
         return makeStringResult(quoted.toString(), runtimeScalar);
+    }
+
+    /** Perl word character in ASCII only: {@code [A-Za-z0-9_]} */
+    private static boolean isPerlAsciiWord(int cp) {
+        return (cp >= 'A' && cp <= 'Z')
+                || (cp >= 'a' && cp <= 'z')
+                || (cp >= '0' && cp <= '9')
+                || cp == '_';
+    }
+
+    /**
+     * Whether {@code quotemeta} must prefix this code point with backslash (Perl 5.38 rules).
+     */
+    private static boolean perlQuotemetaMustQuote(int cp, RuntimeScalar runtimeScalar) {
+        if (cp <= 0x7F) {
+            return !isPerlAsciiWord(cp);
+        }
+        if (runtimeScalar.type == BYTE_STRING && cp <= 0xFF) {
+            return true;
+        }
+        return UCharacter.hasBinaryProperty(cp, UProperty.PATTERN_SYNTAX)
+                || UCharacter.hasBinaryProperty(cp, UProperty.PATTERN_WHITE_SPACE)
+                || UCharacter.hasBinaryProperty(cp, UProperty.WHITE_SPACE)
+                || UCharacter.hasBinaryProperty(cp, UProperty.DEFAULT_IGNORABLE_CODE_POINT)
+                || UCharacter.getType(cp) == UCharacter.CONTROL;
     }
 
     /**
