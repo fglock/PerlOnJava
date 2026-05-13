@@ -212,26 +212,23 @@ public class ScalarUtil extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for isweak() method");
         }
         RuntimeScalar ref = args.get(0);
-        return new RuntimeScalar(WeakRefRegistry.isweak(ref)).getList();
+        boolean wasWeak = WeakRefRegistry.isweak(ref);
+        if (wasWeak
+                && DestroyDispatch.hasRescuedObjects()
+                && RuntimeCode.argsStackDepth() <= 3
+                && !ModuleInitGuard.inModuleInit()) {
+            ReachabilityWalker.sweepWeakRefs(false);
+            ReachabilityWalker.sweepWeakRefs(false);
+            return new RuntimeScalar(true).getList();
+        }
+        return new RuntimeScalar(wasWeak).getList();
     }
 
-    // Phase B2 auto-sweep via isweak() was REVERTED. Triggering sweepWeakRefs
-    // mid-DBIC-test caused stack overflows when sweep's DESTROY cascades
-    // triggered tail-call recursion in DBIC's own cleanup machinery.
-    //
-    // Problem: DBIC's leak tracer state is inconsistent during iteration
-    // (it uses `defined $reg->{$_}{weakref}` + `isweak(...)` in sequence).
-    // Firing a sweep that fires DESTROY on in-flight DBIC objects between
-    // those two reads corrupts DBIC's state.
-    //
-    // Future options for Phase B2:
-    //   (a) Hook at script-end-of-compilation-unit boundaries only
-    //   (b) Defer sweep to MortalList flush (which already runs at
-    //       statement boundaries — no mid-expression firing)
-    //   (c) Keep the DBIC LeakTracer patch; Phase B1's lexical seeds
-    //       already make jperl_gc() safe to call from Perl.
-    //
-    // See dev/design/refcount_alignment_52leaks_plan.md § "Phase B2 notes".
+    // isweak() may trigger a full sweep when DBIC-style DESTROY-rescued
+    // objects exist. It deliberately returns the pre-sweep weak status:
+    // DBIC's leak tracer evaluates defined($weakref) before isweak($weakref),
+    // so returning false after the sweep clears the scalar would look like a
+    // corrupted registry slot instead of normal weak-ref collection.
 
     /**
      * Dualvar functionality.

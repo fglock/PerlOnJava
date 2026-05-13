@@ -1238,9 +1238,7 @@ public abstract class StringSegmentParser {
                 if (Long.compareUnsigned(hexUv, 0x10FFFFL) > 0) {
                     appendToCurrentSegment(PerlUtfString.encodeBeyondUnicode(hexUv));
                 } else if (hexUv >= 0xD800L && hexUv <= 0xDFFFL) {
-                    // One UTF-16 code unit (same as Perl chr / string literal); marker would
-                    // break uni/variables.t length-1 identifier diagnostics.
-                    appendToCurrentSegment(String.valueOf((char) hexUv));
+                    appendToCurrentSegment(PerlUtfString.encodeSurrogate(hexUv));
                 } else if (hexUv <= 0xFFFFL) {
                     appendToCurrentSegment(String.valueOf((char) hexUv));
                 } else {

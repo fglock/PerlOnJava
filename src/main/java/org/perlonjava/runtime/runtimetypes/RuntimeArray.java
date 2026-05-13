@@ -1,8 +1,11 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.Stack;
 
 import org.perlonjava.runtime.operators.WarnDie;
@@ -40,6 +43,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Direct lvalue stores into ordinary arrays can flip elementsOwned on, but
     // alias arrays must stay non-owning so shift/pop do not consume caller refs.
     public boolean elementsAliased;
+    // For mixed @_ arrays: elementsAliased remains true for caller aliases,
+    // while mutating ops such as unshift can insert new counted elements that
+    // this array must release during tail-call/scope cleanup.
+    public Set<RuntimeScalar> ownedAliasElements;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
 
@@ -47,13 +54,145 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Constructor
     public RuntimeArray() {
         type = PLAIN_ARRAY;
-        elements = new ArrayList<>();
+        elements = newElementList();
     }
 
     // Constructor with initial capacity
     public RuntimeArray(int initialCapacity) {
         type = PLAIN_ARRAY;
-        elements = new ArrayList<>(initialCapacity);
+        elements = newElementList(initialCapacity);
+    }
+
+    private RuntimeArrayElementList newElementList() {
+        return new RuntimeArrayElementList(this);
+    }
+
+    private RuntimeArrayElementList newElementList(int initialCapacity) {
+        return new RuntimeArrayElementList(this, initialCapacity);
+    }
+
+    private RuntimeArrayElementList newElementList(List<RuntimeScalar> values) {
+        RuntimeArrayElementList list = new RuntimeArrayElementList(this, values.size());
+        list.addAll(values);
+        return list;
+    }
+
+    private static final class RuntimeArrayElementList extends ArrayList<RuntimeScalar> {
+        private final RuntimeArray owner;
+
+        private RuntimeArrayElementList(RuntimeArray owner) {
+            super();
+            this.owner = owner;
+        }
+
+        private RuntimeArrayElementList(RuntimeArray owner, int initialCapacity) {
+            super(initialCapacity);
+            this.owner = owner;
+        }
+
+        @Override
+        public boolean add(RuntimeScalar value) {
+            owner.notePackageRootMutation();
+            owner.markPackageRootedValue(value);
+            return super.add(value);
+        }
+
+        @Override
+        public void add(int index, RuntimeScalar element) {
+            owner.notePackageRootMutation();
+            owner.markPackageRootedValue(element);
+            super.add(index, element);
+        }
+
+        @Override
+        public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
+            owner.notePackageRootMutation();
+            for (RuntimeScalar value : c) {
+                owner.markPackageRootedValue(value);
+            }
+            return super.addAll(c);
+        }
+
+        @Override
+        public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
+            owner.notePackageRootMutation();
+            for (RuntimeScalar value : c) {
+                owner.markPackageRootedValue(value);
+            }
+            return super.addAll(index, c);
+        }
+
+        @Override
+        public RuntimeScalar set(int index, RuntimeScalar element) {
+            owner.notePackageRootMutation();
+            owner.markPackageRootedValue(element);
+            return super.set(index, element);
+        }
+
+        @Override
+        public RuntimeScalar remove(int index) {
+            RuntimeScalar previous = super.remove(index);
+            owner.notePackageRootMutation();
+            return previous;
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            boolean removed = super.remove(o);
+            if (removed) owner.notePackageRootMutation();
+            return removed;
+        }
+
+        @Override
+        public void clear() {
+            if (!isEmpty()) owner.notePackageRootMutation();
+            super.clear();
+        }
+    }
+
+    void notePackageRootMutation() {
+        if (isPackageGlobalRoot) {
+            MortalList.invalidateExternalRootSnapshot();
+        }
+    }
+
+    void markPackageRootedValue(RuntimeScalar value) {
+        if (isPackageGlobalRoot && value != null) {
+            value.isPackageGlobalRoot = true;
+        }
+    }
+
+    private void markPackageRootedValues(int fromIndex) {
+        if (!isPackageGlobalRoot) return;
+        for (int i = Math.max(0, fromIndex); i < elements.size(); i++) {
+            markPackageRootedValue(elements.get(i));
+        }
+    }
+
+    public void markOwnedAliasElement(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        if (ownedAliasElements == null) {
+            ownedAliasElements = Collections.newSetFromMap(new IdentityHashMap<>());
+        }
+        ownedAliasElements.add(scalar);
+        elementsOwned = true;
+    }
+
+    public boolean ownsElement(RuntimeScalar scalar) {
+        if (!elementsOwned || scalar == null) return false;
+        if (!elementsAliased) return true;
+        return ownedAliasElements != null && ownedAliasElements.contains(scalar);
+    }
+
+    public void forgetOwnedAliasElement(RuntimeScalar scalar) {
+        if (ownedAliasElements == null || scalar == null) return;
+        ownedAliasElements.remove(scalar);
+        if (ownedAliasElements.isEmpty()) {
+            ownedAliasElements = null;
+            if (elementsAliased) {
+                elementsOwned = false;
+            }
+        }
     }
 
     /**
@@ -65,11 +204,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param list The list of RuntimeScalar elements to initialize the array with.
      */
     public RuntimeArray(List<RuntimeScalar> list) {
-        this.elements = new ArrayList<>(list);
+        this.elements = newElementList(list);
     }
 
     public RuntimeArray(RuntimeBase... values) {
-        this.elements = new ArrayList<>();
+        this.elements = newElementList();
         for (RuntimeBase value : values) {
             for (RuntimeScalar runtimeScalar : value) {
                 this.elements.add(runtimeScalar);
@@ -83,7 +222,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param a The RuntimeList to initialize the array with.
      */
     public RuntimeArray(RuntimeList a) {
-        this.elements = new ArrayList<>();
+        this.elements = newElementList();
         for (RuntimeScalar runtimeScalar : a) {
             this.elements.add(new RuntimeScalar(runtimeScalar));
         }
@@ -95,7 +234,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @param value The initial scalar value for the array.
      */
     public RuntimeArray(RuntimeScalar value) {
-        this.elements = new ArrayList<>();
+        this.elements = newElementList();
         this.elements.add(value);
     }
 
@@ -111,6 +250,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (runtimeArray.isEmpty()) {
                     yield new RuntimeScalar(); // Return undefined if empty
                 }
+                runtimeArray.notePackageRootMutation();
                 RuntimeScalar result = runtimeArray.elements.removeLast();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
@@ -121,11 +261,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                     // @_ uses aliasing (setArrayOfAlias) without refCount increments,
                     // so its elements must NOT be mortal-ized on shift/pop — doing so
                     // would corrupt the caller's refCount tracking.
-                    if (runtimeArray.elementsOwned && result.refCountOwned
+                    if (runtimeArray.ownsElement(result) && result.refCountOwned
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        runtimeArray.forgetOwnedAliasElement(result);
                         if (base.refCountTrace) {
                             base.releaseOwner(result, "RuntimeArray.pop");
                         }
@@ -158,16 +299,18 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 if (runtimeArray.isEmpty()) {
                     yield new RuntimeScalar(); // Return undefined if empty
                 }
+                runtimeArray.notePackageRootMutation();
                 RuntimeScalar result = runtimeArray.elements.removeFirst();
                 // Sparse arrays can have null elements - return undef in that case
                 if (result != null) {
                     // If this element owned a refCount, defer the decrement.
                     // See pop() for rationale and elementsOwned guard.
-                    if (runtimeArray.elementsOwned && result.refCountOwned
+                    if (runtimeArray.ownsElement(result) && result.refCountOwned
                             && (result.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && result.value instanceof RuntimeBase base
                             && base.refCount > 0) {
                         result.refCountOwned = false;
+                        runtimeArray.forgetOwnedAliasElement(result);
                         if (base.refCountTrace) {
                             base.releaseOwner(result, "RuntimeArray.shift");
                         }
@@ -212,16 +355,28 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
                 int sizeBefore = runtimeArray.elements.size();
+                boolean wasAliased = runtimeArray.elementsAliased;
+                runtimeArray.notePackageRootMutation();
                 value.addToArray(runtimeArray);
+                runtimeArray.markPackageRootedValues(sizeBefore);
                 // Increment refCount for tracked references stored by push.
                 // addToArray creates copies via copy constructor (no refCount increment),
                 // so we must account for the container store here, matching the behavior
                 // of array assignment (setFromList) which also calls this.
                 for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
-                    RuntimeScalar.incrementRefCountForContainerStore(runtimeArray.elements.get(i));
+                    RuntimeScalar elem = runtimeArray.elements.get(i);
+                    RuntimeScalar.incrementRefCountForContainerStore(elem);
+                    if (wasAliased) {
+                        runtimeArray.markOwnedAliasElement(elem);
+                    }
                 }
-                runtimeArray.elementsOwned = true;
-                runtimeArray.elementsAliased = false;
+                if (wasAliased) {
+                    runtimeArray.elementsAliased = true;
+                } else {
+                    runtimeArray.elementsOwned = true;
+                    runtimeArray.elementsAliased = false;
+                    runtimeArray.ownedAliasElements = null;
+                }
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -251,11 +406,22 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         return switch (runtimeArray.type) {
             case PLAIN_ARRAY -> {
+                boolean wasAliased = runtimeArray.elementsAliased;
                 RuntimeArray arr = new RuntimeArray();
                 RuntimeArray.push(arr, value);
+                runtimeArray.notePackageRootMutation();
                 runtimeArray.elements.addAll(0, arr.elements);
-                runtimeArray.elementsOwned = true;
-                runtimeArray.elementsAliased = false;
+                runtimeArray.markPackageRootedValues(0);
+                if (wasAliased) {
+                    for (RuntimeScalar elem : arr.elements) {
+                        runtimeArray.markOwnedAliasElement(elem);
+                    }
+                    runtimeArray.elementsAliased = true;
+                } else {
+                    runtimeArray.elementsOwned = true;
+                    runtimeArray.elementsAliased = false;
+                    runtimeArray.ownedAliasElements = null;
+                }
                 yield getScalarInt(runtimeArray.elements.size());
             }
             case AUTOVIVIFY_ARRAY -> {
@@ -727,9 +893,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == READONLY_ARRAY) {
             throw new PerlCompilerException("Modification of a read-only value attempted");
         }
+        notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
+        this.ownedAliasElements = null;
+        this.elementsAliased = false;
         this.elements.add(value);
+        markPackageRootedValue(value);
         MortalList.flush();
         return this;
     }
@@ -744,6 +914,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public RuntimeArray setFromList(RuntimeList list) {
         return switch (type) {
             case PLAIN_ARRAY -> {
+                notePackageRootMutation();
                 // Check if the list contains references to this array's elements
                 // If so, we need to save the values before clearing
                 boolean needsCopy = false;
@@ -780,10 +951,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // addToArray creates copies via the copy constructor (which doesn't
                 // increment refCount), so we do it here for the final container store.
                 for (RuntimeScalar elem : this.elements) {
+                    markPackageRootedValue(elem);
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
                 this.elementsOwned = true;
                 this.elementsAliased = false;
+                this.ownedAliasElements = null;
 
                 // Create a new array with scalarContextSize set for assignment return value
                 // This is needed for eval context where assignment should return element count
@@ -860,6 +1033,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             // refcount-inflation risk is lower there.
             return setFromList(list);
         }
+        notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
         list.addToArray(this);
@@ -868,9 +1042,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         // refCountOwned before decrementing.
         for (RuntimeScalar elem : this.elements) {
             if (elem != null) elem.refCountOwned = false;
+            markPackageRootedValue(elem);
         }
         this.elementsOwned = false;
         this.elementsAliased = true;
+        this.ownedAliasElements = null;
         return this;
     }
 
@@ -1239,6 +1415,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeScalar element = this.get(i);  // This will call FETCH
                 arr.elements.add(element);
             }
+            arr.elementsAliased = true;
             return arr;
         }
 
@@ -1252,10 +1429,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 arr.elements.add(new RuntimeArrayProxyEntry(this, i));
             } else {
                 arr.elements.add(element);
+                if (this.elementsAliased && this.ownsElement(element)) {
+                    arr.markOwnedAliasElement(element);
+                }
             }
         }
-        arr.elementsOwned = false;
         arr.elementsAliased = true;
+        arr.elementsOwned = arr.ownedAliasElements != null && !arr.ownedAliasElements.isEmpty();
         return arr;
     }
 
@@ -1318,6 +1498,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
      * @return The updated RuntimeArray after undefining.
      */
     public RuntimeArray undefine() {
+        notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
         this.elements.clear();
         MortalList.flush();
@@ -1392,13 +1573,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             currentState.elements = this.elements; // Keep the TieArray reference
             currentState.type = TIED_ARRAY;
         } else {
-            currentState.elements = new ArrayList<>(this.elements);
+            currentState.elements = currentState.newElementList(this.elements);
         }
         // Copy the current blessId to the new state
         currentState.blessId = this.blessId;
         // Push the current state onto the stack
         dynamicStateStack.push(currentState);
         // Clear the array elements (for tied arrays, this calls CLEAR)
+        notePackageRootMutation();
         if (this.type == TIED_ARRAY) {
             TieArray.tiedClear(this);
         } else {
@@ -1450,7 +1632,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.blessId = savedBlessId;
             }
             // Restore the elements from the saved state
-            this.elements = previousState.elements;
+            notePackageRootMutation();
+            if (previousState.type == TIED_ARRAY) {
+                this.elements = previousState.elements;
+            } else {
+                this.elements = newElementList(previousState.elements);
+            }
+            markPackageRootedValues(0);
             // Restore the type from the saved state (important for tied arrays)
             this.type = previousState.type;
             // Restore the blessId from the saved state

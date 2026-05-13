@@ -32,11 +32,21 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        vivify();
+        parent.markPackageRootedValue(lvalue);
         RuntimeScalar result = super.set(value);
         if (!parent.elementsAliased) {
             parent.elementsOwned = true;
         }
         return result;
+    }
+
+    @Override
+    public RuntimeScalar undefine() {
+        vivify();
+        parent.markPackageRootedValue(lvalue);
+        parent.notePackageRootMutation();
+        return super.undefine();
     }
 
     /**
@@ -52,6 +62,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             List<RuntimeScalar> elements = parent.elements;
             if (key >= 0 && key < elements.size() && elements.get(key) != null) {
                 lvalue = elements.get(key);
+                parent.markPackageRootedValue(lvalue);
             } else {
                 vivify();
             }
@@ -83,12 +94,14 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             List<RuntimeScalar> elements = parent.elements;
 
             // Expand the array if needed
+            parent.notePackageRootMutation();
             while (key >= elements.size()) {
                 elements.add(null); // Add null placeholders
             }
 
             // Set the element at the index
             elements.set(key, lvalue);
+            parent.markPackageRootedValue(lvalue);
         }
     }
 
@@ -129,6 +142,7 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
             // Pop the most recent saved state from the stack
             RuntimeScalar previousState = dynamicStateStack.pop();
             if (previousState == null) {
+                parent.notePackageRootMutation();
                 // Element didn't exist before.
                 // Decrement refCount of the current value being displaced.
                 if (this.lvalue != null
@@ -149,6 +163,9 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
                 this.blessId = previousState.blessId;
             }
             int previousSize = dynamicStateStackInt.pop();
+            if (parent.elements.size() > previousSize) {
+                parent.notePackageRootMutation();
+            }
             while (parent.elements.size() > previousSize) {
                 parent.elements.removeLast();
             }

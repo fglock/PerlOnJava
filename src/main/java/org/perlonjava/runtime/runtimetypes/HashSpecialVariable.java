@@ -230,7 +230,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
                 }
             }
         } else if (this.mode == Id.STASH) {
-            String prefix = namespace + key;
+            String prefix = stashGlobNameFor(String.valueOf(key));
             // System.out.println("Get Key " + prefix);
             if (containsNamespace(GlobalVariable.globalVariables, prefix) ||
                     containsNamespace(GlobalVariable.globalArrays, prefix) ||
@@ -269,7 +269,55 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
             return false;
         }
+        if (this.mode == Id.STASH) {
+            if (!(key instanceof String name)) return false;
+            return stashContainsEntry(name);
+        }
         return super.containsKey(key);
+    }
+
+    @Override
+    public Set<String> keySet() {
+        if (this.mode != Id.STASH) {
+            return super.keySet();
+        }
+
+        Set<String> allKeys = new HashSet<>();
+        allKeys.addAll(GlobalVariable.globalVariables.keySet());
+        allKeys.addAll(GlobalVariable.globalArrays.keySet());
+        allKeys.addAll(GlobalVariable.globalHashes.keySet());
+        allKeys.addAll(GlobalVariable.globalCodeRefs.keySet());
+        allKeys.addAll(GlobalVariable.globalIORefs.keySet());
+        allKeys.addAll(GlobalVariable.globalFormatRefs.keySet());
+
+        Set<String> keys = new HashSet<>();
+        boolean isMainStash = "main::".equals(namespace);
+        for (String key : allKeys) {
+            String entryKey = null;
+            if (key.startsWith(namespace)) {
+                String remainingKey = key.substring(namespace.length());
+                int nextSeparatorIndex = remainingKey.indexOf("::");
+                if (nextSeparatorIndex == -1) {
+                    entryKey = remainingKey;
+                } else {
+                    entryKey = remainingKey.substring(0, nextSeparatorIndex + 2);
+                }
+            } else if (isMainStash) {
+                int separatorIndex = key.indexOf("::");
+                if (separatorIndex > 0) {
+                    entryKey = key.substring(0, separatorIndex + 2);
+                }
+            }
+
+            if (entryKey == null || entryKey.isEmpty()) {
+                continue;
+            }
+            if (entryKey.equals("a") || entryKey.equals("b")) {
+                continue;
+            }
+            keys.add(entryKey);
+        }
+        return keys;
     }
 
     /**
@@ -315,6 +363,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
 
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
+            GlobalVariable.invalidatePackageRootSnapshot();
 
             return oldValue;
         }
@@ -347,6 +396,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             RuntimeHash hash = GlobalVariable.globalHashes.remove(fullKey);
             RuntimeGlob io = GlobalVariable.globalIORefs.remove(fullKey);
             RuntimeScalar format = GlobalVariable.globalFormatRefs.remove(fullKey);
+            GlobalVariable.invalidatePackageRootSnapshot();
 
             // Any stash mutation can affect method lookup; clear method resolution caches.
             InheritanceResolver.invalidateCache();
@@ -370,6 +420,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
             GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+            GlobalVariable.invalidatePackageRootSnapshot();
 
             InheritanceResolver.invalidateCache();
             GlobalVariable.clearPackageCache();
@@ -394,6 +445,42 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             }
         }
         return false;
+    }
+
+    private boolean stashContainsEntry(String name) {
+        String prefix = namespace + name;
+        if (containsAnySlotWithPrefix(prefix)) {
+            return true;
+        }
+        // Top-level packages are represented in %main:: as "Foo::", but
+        // their symbols are stored under "Foo::bar" rather than
+        // "main::Foo::bar". Enumeration already exposes those packages; direct
+        // exists/get lookups need the same fallback for code like Carp::_fetch_sub.
+        return "main::".equals(namespace)
+                && name.endsWith("::")
+                && containsAnySlotWithPrefix(name);
+    }
+
+    private String stashGlobNameFor(String name) {
+        String prefix = namespace + name;
+        if (containsAnySlotWithPrefix(prefix)) {
+            return prefix;
+        }
+        if ("main::".equals(namespace)
+                && name.endsWith("::")
+                && containsAnySlotWithPrefix(name)) {
+            return name;
+        }
+        return prefix;
+    }
+
+    private boolean containsAnySlotWithPrefix(String prefix) {
+        return containsNamespace(GlobalVariable.globalVariables, prefix) ||
+                containsNamespace(GlobalVariable.globalArrays, prefix) ||
+                containsNamespace(GlobalVariable.globalHashes, prefix) ||
+                containsNamespace(GlobalVariable.globalCodeRefs, prefix) ||
+                containsNamespace(GlobalVariable.globalIORefs, prefix) ||
+                containsNamespace(GlobalVariable.globalFormatRefs, prefix);
     }
 
     // Enum to represent the mode of operation for HashSpecialVariable

@@ -138,6 +138,25 @@ public class IdentifierParser {
         return false;
     }
 
+    private static boolean isSpecialVariable(String name) {
+        // Special variables that can't be package-qualified
+        // These are single-character special variables in Perl
+        return name.equals("_") ||   // default variable
+               name.equals("/") ||   // input record separator
+               name.equals("\\") ||  // output record separator
+               name.equals("|") ||   // output field separator
+               name.equals(",") ||   // output field separator
+               name.equals(";") ||   // statement terminator
+               name.equals("'") ||   // last pattern match result
+               name.equals("`") ||   // last read line
+               name.equals("!") ||   // errno
+               name.equals("?") ||   // child error status
+               name.equals("$") ||   // process id
+               name.equals(".") ||   // input line number
+               name.equals("%") ||   // hash slice
+               name.equals("&");     // last regex match result
+    }
+
     /**
      * Parses the inner part of a complex identifier, handling cases where the identifier
      * may be enclosed in braces.
@@ -438,6 +457,7 @@ public class IdentifierParser {
                         // Nothing valid follows ', so return what we have
                         return variableName.toString();
                     }
+                    isFirstToken = false;
                     // Continue the loop to process the next token
                     continue;
                 }
@@ -469,6 +489,7 @@ public class IdentifierParser {
                         // Nothing valid follows ::, so return what we have
                         return variableName.toString();
                     }
+                    isFirstToken = false;
                     // Continue the loop to process the next token
                     continue;
                 }
@@ -510,6 +531,14 @@ public class IdentifierParser {
                 boolean hasDoubleColon = nextToken.text.equals("::");
                 boolean hasSingleQuote = false;
 
+                // Special variables can't be package-qualified (e.g., $_, $/, $\, etc.)
+                // If we have a single-letter identifier that's a special variable, don't allow :: qualification
+                if (isFirstToken && hasDoubleColon && token.text.length() == 1 && isSpecialVariable(token.text)) {
+                    // Special variable - can't have package qualification
+                    parser.tokenIndex++;
+                    return variableName.toString();
+                }
+
                 if (nextToken.text.equals("'")) {
                     // Look ahead to see what follows the '
                     LexerToken afterQuote = parser.tokens.get(parser.tokenIndex + 2);
@@ -527,6 +556,7 @@ public class IdentifierParser {
                 parser.tokenIndex++;
                 token = parser.tokens.get(parser.tokenIndex);
                 nextToken = parser.tokens.get(parser.tokenIndex + 1);
+                isFirstToken = false;
                 continue;
             } else if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.EOF || token.type == LexerTokenType.NEWLINE) {
                 return variableName.toString();

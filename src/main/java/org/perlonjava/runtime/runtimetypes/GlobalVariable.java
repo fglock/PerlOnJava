@@ -23,16 +23,16 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  */
 public class GlobalVariable {
     // Global variables and subroutines
-    public static final Map<String, RuntimeScalar> globalVariables = new HashMap<>();
-    public static final Map<String, RuntimeArray> globalArrays = new HashMap<>();
-    public static final Map<String, RuntimeHash> globalHashes = new HashMap<>();
+    public static final Map<String, RuntimeScalar> globalVariables = new PackageRootMap<>();
+    public static final Map<String, RuntimeArray> globalArrays = new PackageRootMap<>();
+    public static final Map<String, RuntimeHash> globalHashes = new PackageRootMap<>();
     // Cache for package existence checks
     public static final Map<String, Boolean> packageExistsCache = new HashMap<>();
     // isSubs: Tracks subroutines declared via 'use subs' pragma (e.g., use subs 'hex')
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
-    public static final Map<String, RuntimeScalar> globalCodeRefs = new HashMap<>();
+    public static final Map<String, RuntimeScalar> globalCodeRefs = new PackageRootMap<>();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
@@ -73,6 +73,65 @@ public class GlobalVariable {
     private static final Set<String> declaredGlobalVariables = new HashSet<>();
     private static final Set<String> declaredGlobalArrays = new HashSet<>();
     private static final Set<String> declaredGlobalHashes = new HashSet<>();
+
+    private static final class PackageRootMap<T extends RuntimeBase> extends HashMap<String, T> {
+        @Override
+        public T put(String key, T value) {
+            markPackageGlobalRoot(value);
+            T previous = super.put(key, value);
+            invalidatePackageRootSnapshot();
+            return previous;
+        }
+
+        @Override
+        public T putIfAbsent(String key, T value) {
+            markPackageGlobalRoot(value);
+            T previous = super.putIfAbsent(key, value);
+            if (previous == null) {
+                invalidatePackageRootSnapshot();
+            } else {
+                markPackageGlobalRoot(previous);
+            }
+            return previous;
+        }
+
+        @Override
+        public T remove(Object key) {
+            T previous = super.remove(key);
+            if (previous != null) {
+                invalidatePackageRootSnapshot();
+            }
+            return previous;
+        }
+
+        @Override
+        public void clear() {
+            if (!isEmpty()) {
+                invalidatePackageRootSnapshot();
+            }
+            super.clear();
+        }
+    }
+
+    static <T extends RuntimeBase> T markPackageGlobalRoot(T root) {
+        if (root == null) return null;
+        root.isPackageGlobalRoot = true;
+        if (root instanceof RuntimeHash hash) {
+            hash.isGlobalPackageHash = true;
+            for (RuntimeScalar value : hash.elements.values()) {
+                hash.markPackageRootedValue(value);
+            }
+        } else if (root instanceof RuntimeArray array) {
+            for (RuntimeScalar value : array.elements) {
+                array.markPackageRootedValue(value);
+            }
+        }
+        return root;
+    }
+
+    static void invalidatePackageRootSnapshot() {
+        MortalList.invalidateExternalRootSnapshot();
+    }
 
     /**
      * Marks a global variable as explicitly declared (e.g., via use vars, Exporter import).
@@ -171,6 +230,7 @@ public class GlobalVariable {
         // Destroy the old classloader and create a new one
         // This allows the old generated classes to be garbage collected
         globalClassLoader = new CustomClassLoader(GlobalVariable.class.getClassLoader());
+        MortalList.invalidateAllRootSnapshots();
     }
 
     public static void setStashAlias(String dstNamespace, String srcNamespace) {
@@ -178,11 +238,14 @@ public class GlobalVariable {
         String src = srcNamespace.endsWith("::") ? srcNamespace : srcNamespace + "::";
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
+        invalidatePackageRootSnapshot();
     }
 
     public static void clearStashAlias(String namespace) {
         String key = namespace.endsWith("::") ? namespace : namespace + "::";
-        stashAliases.remove(key);
+        if (stashAliases.remove(key) != null) {
+            invalidatePackageRootSnapshot();
+        }
         resolvedStashAliasCache.clear();
     }
 
@@ -301,10 +364,12 @@ public class GlobalVariable {
         // Don't create self-loops
         if (!fromGlob.equals(canonical)) {
             globAliases.put(fromGlob, canonical);
+            invalidatePackageRootSnapshot();
         }
         // Also ensure toGlob points to the canonical name (unless it would create a self-loop)
         if (!toGlob.equals(canonical) && !toGlob.equals(fromGlob)) {
             globAliases.put(toGlob, canonical);
+            invalidatePackageRootSnapshot();
         }
     }
 
@@ -386,19 +451,27 @@ public class GlobalVariable {
                 // Normal "non-magic" global variable
                 var = new RuntimeScalar();
             }
+            markPackageGlobalRoot(var);
             globalVariables.put(key, var);
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(var);
         }
         return var;
     }
 
     public static RuntimeScalar aliasGlobalVariable(String key, String to) {
         RuntimeScalar var = globalVariables.get(to);
+        markPackageGlobalRoot(var);
         globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
         return var;
     }
 
     public static void aliasGlobalVariable(String key, RuntimeScalar var) {
+        markPackageGlobalRoot(var);
         globalVariables.put(key, var);
+        invalidatePackageRootSnapshot();
     }
 
     /**
@@ -447,7 +520,9 @@ public class GlobalVariable {
      * @return The removed RuntimeScalar, or null if it did not exist.
      */
     public static RuntimeScalar removeGlobalVariable(String key) {
-        return globalVariables.remove(key);
+        RuntimeScalar removed = globalVariables.remove(key);
+        if (removed != null) invalidatePackageRootSnapshot();
+        return removed;
     }
 
     /**
@@ -487,6 +562,7 @@ public class GlobalVariable {
                 if (var == null) {
                     var = new RuntimeArray();
                 }
+                markPackageGlobalRoot(var);
                 for (String alias : aliasGroup) {
                     globalArrays.putIfAbsent(alias, var);
                 }
@@ -495,8 +571,12 @@ public class GlobalVariable {
                 }
             } else {
                 var = new RuntimeArray();
+                markPackageGlobalRoot(var);
                 globalArrays.put(key, var);
             }
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(var);
         }
         return var;
     }
@@ -524,7 +604,9 @@ public class GlobalVariable {
      * @return The removed RuntimeArray, or null if it did not exist.
      */
     public static RuntimeArray removeGlobalArray(String key) {
-        return globalArrays.remove(key);
+        RuntimeArray removed = globalArrays.remove(key);
+        if (removed != null) invalidatePackageRootSnapshot();
+        return removed;
     }
 
     /**
@@ -575,7 +657,7 @@ public class GlobalVariable {
                 if (var == null) {
                     var = new RuntimeHash();
                 }
-                var.isGlobalPackageHash = true;
+                markPackageGlobalRoot(var);
                 for (String alias : aliasGroup) {
                     globalHashes.putIfAbsent(alias, var);
                 }
@@ -591,9 +673,12 @@ public class GlobalVariable {
                 // D-W6.18: mark as package-global so values stored here
                 // get the storedInPackageGlobal flag (replaces class-name
                 // heuristic in walker gate).
-                var.isGlobalPackageHash = true;
+                markPackageGlobalRoot(var);
                 globalHashes.put(key, var);
             }
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(var);
         }
         return var;
     }
@@ -620,7 +705,9 @@ public class GlobalVariable {
      * @return The removed RuntimeHash, or null if it did not exist.
      */
     public static RuntimeHash removeGlobalHash(String key) {
-        return globalHashes.remove(key);
+        RuntimeHash removed = globalHashes.remove(key);
+        if (removed != null) invalidatePackageRootSnapshot();
+        return removed;
     }
 
     /**
@@ -685,7 +772,11 @@ public class GlobalVariable {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = createEmptyCodeRef(key);
+            markPackageGlobalRoot(var);
             globalCodeRefs.put(key, var);
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(var);
         }
 
         // Pin the RuntimeScalar so it survives stash deletion
@@ -742,7 +833,11 @@ public class GlobalVariable {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var == null) {
             var = createEmptyCodeRef(key);
+            markPackageGlobalRoot(var);
             globalCodeRefs.put(key, var);
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(var);
         }
         if (!deletedCodeRefPins.contains(key)) {
             pinnedCodeRefs.put(key, var);
@@ -776,14 +871,20 @@ public class GlobalVariable {
                 // sites keep the CV even if a following `no Module` deletes
                 // the visible stash entry before runtime.
                 ref = pinned;
+                markPackageGlobalRoot(ref);
                 globalCodeRefs.put(resolvedKey, ref);
+                invalidatePackageRootSnapshot();
             } else {
                 ref = getGlobalCodeRefForFreshLookup(resolvedKey);
             }
         }
         // Ensure it's in globalCodeRefs so method resolution finds it
         if (!globalCodeRefs.containsKey(resolvedKey)) {
+            markPackageGlobalRoot(ref);
             globalCodeRefs.put(resolvedKey, ref);
+            invalidatePackageRootSnapshot();
+        } else {
+            markPackageGlobalRoot(ref);
         }
         deletedCodeRefPins.remove(resolvedKey);
         pinnedCodeRefs.put(resolvedKey, ref);
@@ -948,6 +1049,7 @@ public class GlobalVariable {
         if (deleted != null || pinnedCodeRefs.containsKey(key)) {
             deletedCodeRefPins.add(key);
             clearPackageCache();
+            invalidatePackageRootSnapshot();
         }
         // Decrement stashRefCount on the removed CODE ref
         if (deleted != null && deleted.value instanceof RuntimeCode removedCode) {

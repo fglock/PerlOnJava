@@ -464,6 +464,8 @@ public class CompileAssignment {
                                 // may tie the variable), then assign the value so STORE fires.
                                 bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
                                 bytecodeCompiler.emitReg(reg);
+                                bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                                bytecodeCompiler.emitReg(reg);
                                 bytecodeCompiler.emitVarAttrsIfNeeded(leftOp, reg, "$");
                                 bytecodeCompiler.emit(Opcodes.SET_SCALAR);
                                 bytecodeCompiler.emitReg(reg);
@@ -689,6 +691,8 @@ public class CompileAssignment {
                                         // each list slot; dispatching MODIFY_*_ once per RETRIEVE_BEGIN_* slot
                                         // would duplicate calls. Variable attributes + RETRIEVE_BEGIN_* are
                                         // fully handled for `my $x`, `my @x`, `my %x`, and `my $x=` forms above.
+                                        bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                                        bytecodeCompiler.emitReg(varReg);
                                     } else {
                                         varReg = bytecodeCompiler.addVariable(varName, "my");
                                         switch (sigil) {
@@ -705,6 +709,8 @@ public class CompileAssignment {
                                                 bytecodeCompiler.emitReg(varReg);
                                             }
                                         }
+                                        bytecodeCompiler.emit(Opcodes.REGISTER_MY_VAR);
+                                        bytecodeCompiler.emitReg(varReg);
                                     }
                                     varRegs.add(varReg);
                                 }

@@ -55,6 +55,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean storedInPackageGlobal = false;
 
+    /**
+     * Marks a scalar/container whose contents are reachable from package
+     * globals. Mutating such an object can change cached root-reachability
+     * answers, so mutation paths invalidate MortalList's external-root
+     * snapshot when this flag is set.
+     */
+    public boolean isPackageGlobalRoot = false;
+
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: production-grade ownership tracking.
     // Active for blessed objects that have at least one weak reference
@@ -235,6 +243,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public boolean localBindingExists = false;
 
     /**
+     * True once a scalar/container slot has taken a counted reference to this
+     * base. If later refcount drift leaves the count at zero during scope
+     * cleanup, this tells cleanup that an external owner may have existed and a
+     * bounded reachability check is worthwhile.
+     */
+    public boolean hadCountedReference = false;
+
+    /**
      * True once DESTROY has been called for this object. Perl 5 semantics:
      * if an object is resurrected by DESTROY (stored somewhere during DESTROY),
      * and its refCount later reaches 0 again, DESTROY is NOT called a second time.
@@ -315,8 +331,8 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public RuntimeArray getArrayOfAlias() {
         RuntimeArray arr = new RuntimeArray();
         this.setArrayOfAlias(arr);
-        arr.elementsOwned = false;
         arr.elementsAliased = true;
+        arr.elementsOwned = arr.ownedAliasElements != null && !arr.ownedAliasElements.isEmpty();
         return arr;
     }
 

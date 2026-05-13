@@ -2745,6 +2745,8 @@ public class BytecodeCompiler implements Visitor {
                         }
                         default -> throwCompilerException("Unsupported variable type: " + sigil);
                     }
+                    emit(Opcodes.REGISTER_MY_VAR);
+                    emitReg(reg);
 
                     // Runtime attribute dispatch for my variables with attributes
                     emitVarAttrsIfNeeded(node, reg, sigil);

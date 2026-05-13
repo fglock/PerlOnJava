@@ -41,7 +41,7 @@ public class RuntimeScalarType {
         if (runtimeScalar.type == READONLY_SCALAR) return blessedId((RuntimeScalar) runtimeScalar.value);
         if ((runtimeScalar.type & REFERENCE_BIT) != 0) {
             if (runtimeScalar.value == null) return 0;
-            return ((RuntimeBase) runtimeScalar.value).blessId;
+            return NameNormalizer.getEffectiveBlessId(((RuntimeBase) runtimeScalar.value).blessId);
         }
         return 0;
     }
@@ -51,4 +51,3 @@ public class RuntimeScalarType {
         return (runtimeScalar.type & REFERENCE_BIT) != 0;
     }
 }
-

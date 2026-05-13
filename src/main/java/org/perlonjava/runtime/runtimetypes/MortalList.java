@@ -44,6 +44,28 @@ public class MortalList {
     // from Perl's view, only held Java-alive by this static list.
     private static final java.util.IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new java.util.IdentityHashMap<>();
 
+    private static final ThreadLocal<ArrayDeque<RuntimeBase>> temporaryRoots =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    public static void pushTemporaryRoot(RuntimeBase root) {
+        if (root != null) {
+            temporaryRoots.get().push(root);
+        }
+    }
+
+    public static void popTemporaryRoot(RuntimeBase root) {
+        if (root != null) {
+            ArrayDeque<RuntimeBase> roots = temporaryRoots.get();
+            if (!roots.isEmpty()) {
+                roots.pop();
+            }
+        }
+    }
+
+    public static java.util.List<RuntimeBase> snapshotTemporaryRoots() {
+        return new java.util.ArrayList<>(temporaryRoots.get());
+    }
+
     /**
      * Phase I: O(1) check whether the given scalar is in
      * {@link #deferredCaptures}. Used by the reachability walker to
@@ -195,6 +217,33 @@ public class MortalList {
     }
 
     /**
+     * Release a scope-exited closure capture. This is normally the same as
+     * {@link #deferDecrementIfTracked}, but DBIC's leak tracer can wrap
+     * Try::Tiny blocks with {@code goto} and weak refs, making a captured
+     * temporary consume the counted owner of an outer lexical that is still
+     * live. In that case, transfer the counted owner to the still-live scalar
+     * by clearing this capture's ownership without decrementing the referent.
+     */
+    public static void releaseCapturedDecrement(RuntimeScalar scalar) {
+        if (!active || scalar == null) return;
+        if (!scalar.refCountOwned) return;
+        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base
+                && base.blessId != 0
+                && WeakRefRegistry.hasWeakRefsTo(base)
+                && isReachableFromLiveRootForCaptureRelease(base)) {
+            scalar.refCountOwned = false;
+            if (base.refCountTrace) {
+                base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
+                base.releaseOwner(scalar, "releaseCapturedDecrement transfer");
+            }
+            base.releaseActiveOwner(scalar);
+            return;
+        }
+        deferDecrementIfTracked(scalar);
+    }
+
+    /**
      * Like {@link #deferDecrementIfTracked}, but delegates to
      * {@link RuntimeScalar#scopeExitCleanup} if the scalar is captured
      * by a closure ({@code captureCount > 0}).
@@ -281,6 +330,7 @@ public class MortalList {
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
+        boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
@@ -321,6 +371,11 @@ public class MortalList {
             }
         }
         if (!needsWalk) return;
+        // Refcount drift can miss an escaped hash reference. DBIC's
+        // source_registrations hash is assigned into the live schema while the
+        // original hash later exits; walking it here would destroy ResultSources
+        // still reachable through the schema.
+        if (hadLocalBinding && isReachableFromExternalRootCached(hash)) return;
         for (RuntimeScalar val : hash.elements.values()) {
             deferDecrementRecursive(val);
         }
@@ -346,10 +401,18 @@ public class MortalList {
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
         if (arr.refCount > 0) return;
-        // Alias arrays such as @_ do not own their elements. They can contain
-        // RuntimeScalar instances whose refCountOwned flag belongs to another
-        // container, so walking them here would consume that other owner's count.
-        if (arr.elementsAliased && !arr.elementsOwned) return;
+        // Alias arrays such as @_ do not own their original elements. They can
+        // still receive owned inserts via unshift/push before a goto &sub; in
+        // that mixed case, release only those inserted elements.
+        if (arr.elementsAliased) {
+            if (arr.ownedAliasElements == null || arr.ownedAliasElements.isEmpty()) return;
+            RuntimeScalar[] owned = arr.ownedAliasElements.toArray(new RuntimeScalar[0]);
+            for (RuntimeScalar elem : owned) {
+                deferDecrementRecursive(elem);
+                arr.forgetOwnedAliasElement(elem);
+            }
+            return;
+        }
         // Quick scan: check if any element either:
         //   1. Owns a refCount (was assigned via setLarge with a tracked referent), OR
         //   2. Is a direct blessed reference (blessId != 0), OR
@@ -600,6 +663,8 @@ public class MortalList {
     // (Schema/ResultSource back-refs) — every flush would re-walk the
     // full global graph for each one. Computed lazily on first need.
     private static Set<RuntimeBase> flushReachableCache = null;
+    private static ReachabilityWalker.ExternalRootSnapshot externalRootSnapshot = null;
+    private static ReachabilityWalker.LiveRootSnapshot liveRootSnapshot = null;
 
     private static boolean isReachableCached(RuntimeBase base) {
         if (flushReachableCache == null) {
@@ -609,7 +674,52 @@ public class MortalList {
         return flushReachableCache.contains(base);
     }
 
+    private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+        if (externalRootSnapshot == null) {
+            externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
+        }
+        if (externalRootSnapshot.isReachableFromNonLexicalRoot(base)) {
+            return true;
+        }
+        if (liveRootSnapshot == null) {
+            liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+        }
+        return liveRootSnapshot.isReachable(base);
+    }
+
+    static void invalidateExternalRootSnapshot() {
+        externalRootSnapshot = null;
+    }
+
+    static void invalidateAllRootSnapshots() {
+        invalidateExternalRootSnapshot();
+        invalidateLiveRootSnapshot();
+    }
+
+    static void invalidateLiveRootSnapshot() {
+        liveRootSnapshot = null;
+    }
+
+    private static void invalidateDrainReachabilityCaches() {
+        flushReachableCache = null;
+        invalidateLiveRootSnapshot();
+    }
+
+    private static boolean isReachableFromLiveRootForCaptureRelease(RuntimeBase base) {
+        if (liveRootSnapshot == null) {
+            liveRootSnapshot = new ReachabilityWalker.LiveRootSnapshot();
+        }
+        if (liveRootSnapshot.isReachable(base)) {
+            return true;
+        }
+        // Compatibility fallback for uncommon non-flush callers. The hot
+        // releaseCaptures path runs while MortalList is flushing and must not
+        // force a JVM GC for every captured scalar.
+        return !flushing && ReachabilityWalker.isReachableFromLiveScalarRegistry(base);
+    }
+
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
+        boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
@@ -627,7 +737,7 @@ public class MortalList {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
             } else if (base.blessId == 0
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && ReachabilityWalker.hasStrongCycle(base)) {
                 // Unblessed self-retaining cycles are intentionally leaked by
                 // Perl's refcounting. AnyEvent timers use this shape: the weak
@@ -635,9 +745,9 @@ public class MortalList {
                 // scalar holding that same array.
                 base.refCount = 1;
             } else if (base.blessId != 0
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && ReachabilityWalker.isReachableFromRoots(base)) {
+                    && isReachableFromExternalRootCached(base)) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
@@ -646,7 +756,7 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && base.storedInPackageGlobal
-                    && WeakRefRegistry.hasWeakRefsTo(base)
+                    && hasWeakRefs
                     && isReachableCached(base)) {
                 // Module-global metadata such as Moose/Class::MOP metaclasses
                 // can transiently hit zero in the selective refcount model.
@@ -666,12 +776,13 @@ public class MortalList {
 
     public static void flush() {
         if (!active) return;
-        if (pending.isEmpty() || flushing) {
-            if (!flushing) {
-                processReadyDeferredCaptures();
-            }
+        if (flushing) return;
+        if (pending.isEmpty()) {
+            processReadyDeferredCaptures();
+            maybeAutoSweepAfterFlush();
             return;
         }
+        invalidateDrainReachabilityCaches();
         flushing = true;
         try {
             // Process list — DESTROY may add new entries, so use index-based loop
@@ -682,11 +793,10 @@ public class MortalList {
             marks.clear(); // All entries drained; marks are meaningless now
         } finally {
             flushing = false;
-            flushReachableCache = null;
+            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures();
-        // Phase B2a: guarded auto-sweep.
-        maybeAutoSweep();
+        maybeAutoSweepAfterFlush();
     }
 
     private static void maybeAutoSweep() {
@@ -700,6 +810,7 @@ public class MortalList {
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
+        if (RuntimeCode.argsStackDepth() > 1) return;
         if (!FORCE_SWEEP_EVERY_FLUSH) {
             long now = System.nanoTime();
             if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
@@ -707,11 +818,7 @@ public class MortalList {
         }
         inAutoSweep = true;
         try {
-            // Quiet mode: only clear weak refs for unreachable objects,
-            // don't fire DESTROY. DESTROY cascades can re-enter DBIC/
-            // Moo code that isn't prepared for mid-statement cleanup.
-            // Explicit Internals::jperl_gc() still fires DESTROY for
-            // callers that want full cleanup.
+            // Quiet mode handles ordinary statement-boundary checks.
             int cleared = ReachabilityWalker.sweepWeakRefs(true);
             if (AUTO_GC_DEBUG) {
                 System.err.println("DBG auto-sweep cleared=" + cleared);
@@ -719,6 +826,10 @@ public class MortalList {
         } finally {
             inAutoSweep = false;
         }
+    }
+
+    private static void maybeAutoSweepAfterFlush() {
+        maybeAutoSweep();
     }
 
     /**
@@ -745,6 +856,8 @@ public class MortalList {
     public static void drainPendingSince(int startIdx) {
         if (!active) return;
         if (startIdx < 0) startIdx = 0;
+        if (startIdx >= pending.size()) return;
+        invalidateDrainReachabilityCaches();
         // Loop because DESTROY may add further entries
         int i = startIdx;
         try {
@@ -753,7 +866,7 @@ public class MortalList {
                 i++;
             }
         } finally {
-            flushReachableCache = null;
+            invalidateDrainReachabilityCaches();
         }
         // Truncate the pending list back to startIdx to mark these entries
         // as processed. Outer flush won't re-process them.
@@ -803,17 +916,24 @@ public class MortalList {
      */
     public static void flushAboveMark() {
         if (!active) return;
-        if (pending.isEmpty() || flushing) {
-            if (!flushing) {
-                processReadyDeferredCaptures();
+        if (flushing) return;
+        boolean topLevel = marks.isEmpty();
+        if (pending.isEmpty()) {
+            processReadyDeferredCaptures();
+            if (topLevel) {
+                maybeAutoSweep();
             }
             return;
         }
         int mark = marks.isEmpty() ? 0 : marks.getLast();
         if (pending.size() <= mark) {
             processReadyDeferredCaptures();
+            if (topLevel) {
+                maybeAutoSweep();
+            }
             return;
         }
+        invalidateDrainReachabilityCaches();
         flushing = true;
         try {
             for (int i = mark; i < pending.size(); i++) {
@@ -825,9 +945,12 @@ public class MortalList {
             }
         } finally {
             flushing = false;
-            flushReachableCache = null;
+            invalidateDrainReachabilityCaches();
         }
         processReadyDeferredCaptures();
+        if (topLevel) {
+            maybeAutoSweep();
+        }
     }
 
     /**
@@ -846,6 +969,7 @@ public class MortalList {
             processReadyDeferredCaptures();
             return;
         }
+        invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
         for (int i = mark; i < pending.size(); i++) {
             processDeferredBase(pending.get(i), false);
@@ -854,7 +978,7 @@ public class MortalList {
         while (pending.size() > mark) {
             pending.removeLast();
         }
-        flushReachableCache = null;
+        invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures();

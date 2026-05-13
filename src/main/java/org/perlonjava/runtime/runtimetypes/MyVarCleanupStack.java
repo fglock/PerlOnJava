@@ -95,6 +95,7 @@ public class MyVarCleanupStack {
         // which seeds liveCounts with all already-registered my-vars.
         if (var != null && WeakRefRegistry.weakRefsExist) {
             liveCounts.merge(var, 1, Integer::sum);
+            MortalList.invalidateLiveRootSnapshot();
         }
     }
 
@@ -112,6 +113,7 @@ public class MyVarCleanupStack {
                 liveCounts.merge(var, 1, Integer::sum);
             }
         }
+        MortalList.invalidateLiveRootSnapshot();
     }
 
     /**
@@ -148,6 +150,7 @@ public class MyVarCleanupStack {
         if (c == null) return;
         if (c <= 1) liveCounts.remove(var);
         else liveCounts.put(var, c - 1);
+        MortalList.invalidateLiveRootSnapshot();
     }
 
     /**

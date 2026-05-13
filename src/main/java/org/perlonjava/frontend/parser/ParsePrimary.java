@@ -305,31 +305,27 @@ public class ParsePrimary {
             case "::":
                 // Leading :: can mean either:
                 // 1. Function call: ::foo() -> main::foo()
-                // 2. Bareword reference: ::foo without parens -> calls main::foo if it exists
-                // 3. Bareword string: ::foo when no such sub exists -> '::foo'
-                //
-                // In Perl, ::foo without parens calls main::foo if the sub exists at compile time.
-                // If no such sub exists, it becomes a bareword string '::foo'.
+                // 2. Function call: ::foo if main::foo exists at compile time
+                // 3. Bareword string: ::foo when no such sub exists
                 LexerToken nextToken2 = peek(parser);
                 if (nextToken2.type == LexerTokenType.IDENTIFIER) {
                     String identifierName = nextToken2.text;
                     // Look ahead to see if this is a function call with parens
                     int lookAhead = parser.tokenIndex + 1;
                     // Skip whitespace
-                    while (lookAhead < parser.tokens.size() && 
+                    while (lookAhead < parser.tokens.size() &&
                            parser.tokens.get(lookAhead).type == LexerTokenType.WHITESPACE) {
                         lookAhead++;
                     }
-                    String afterIdentifier = lookAhead < parser.tokens.size() ? 
+                    String afterIdentifier = lookAhead < parser.tokens.size() ?
                                             parser.tokens.get(lookAhead).text : "";
-                    
                     // Check if the sub exists at compile time. Do NOT use getGlobalCodeRef() here:
                     // it autovivifies an undefined CV placeholder, and RuntimeScalar.getDefinedBoolean()
                     // returns true for every CODE slot — so ::e was always treated as main::e (Mo.pm
                     // and other minified sources use $pkg.$_.::e → must stay bareword "::e").
                     String fullSubName = "main::" + identifierName;
                     boolean subExists = GlobalVariable.isGlobalCodeRefDefined(fullSubName);
-                    
+
                     if (afterIdentifier.equals("(") || subExists) {
                         // Function call: ::foo() or ::foo (when sub exists)
                         // Insert "main" before the :: to create main::identifier
@@ -338,7 +334,7 @@ public class ParsePrimary {
                         return parseIdentifier(parser, parser.tokenIndex,
                                 new LexerToken(LexerTokenType.IDENTIFIER, "main"), "main");
                     } else {
-                        // Bareword: ::foo -> '::foo' (no such sub exists)
+                        // Bareword: ::foo -> '::foo'
                         parser.tokenIndex++; // Consume the identifier
                         return new StringNode("::" + identifierName, parser.tokenIndex);
                     }

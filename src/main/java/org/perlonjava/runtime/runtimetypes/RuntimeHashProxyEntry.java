@@ -90,6 +90,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             }
             // Retrieve the element associated with the key
             lvalue = parent.elements.get(key);
+            parent.markPackageRootedValue(lvalue);
         }
     }
 
@@ -131,6 +132,7 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
             if (previousState == null) {
                 // Key didn't exist before — remove it from the parent hash.
                 // Re-fetch from parent in case hash was reassigned (setFromList clears elements).
+                parent.notePackageRootMutation();
                 RuntimeScalar current = parent.elements.remove(key);
                 if (current != null
                         && (current.type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -149,8 +151,9 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
                 RuntimeScalar target = parent.elements.get(key);
                 if (target == null) {
                     target = new RuntimeScalar();
-                    parent.elements.put(key, target);
+                    parent.put(key, target);
                 }
+                parent.markPackageRootedValue(target);
                 this.lvalue = target;
                 // Restore the saved value into the current hash entry
                 // lvalue.set() goes through setLarge() which handles refCount

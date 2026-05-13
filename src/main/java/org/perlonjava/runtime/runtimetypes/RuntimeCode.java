@@ -192,6 +192,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return stack.isEmpty() ? null : stack.peek();
     }
 
+    public static java.util.List<RuntimeArray> snapshotArgsStack() {
+        return new java.util.ArrayList<>(argsStack.get());
+    }
+
+    public static int argsStackDepth() {
+        return argsStack.get().size();
+    }
+
     /**
      * Get the caller's @_ array (one level up from current).
      * Used by Java-implemented functions (like List::Util::any) that need to pass
@@ -592,7 +600,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && s.value instanceof RuntimeBase rb
                                 && rb.blessId != 0) {
-                            MortalList.deferDecrementIfTracked(s);
+                            MortalList.releaseCapturedDecrement(s);
                         }
                     }
                 }
@@ -2542,11 +2550,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Runtime stack trace
             if (ctx == RuntimeContextType.SCALAR) {
                 String pkg = stackTrace.get(frame).getFirst();
-                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));
+                res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));
             } else {
                 ArrayList<String> frameInfo = stackTrace.get(frame);
                 String pkg = frameInfo.get(0);
-                res.add(new RuntimeScalar(pkg != null ? pkg : "main"));  // package
+                res.add(new RuntimeScalar(normalizeCallerPackage(pkg)));  // package
                 res.add(new RuntimeScalar(frameInfo.get(1)));  // filename
                 res.add(new RuntimeScalar(frameInfo.get(2)));  // line
 
@@ -2749,15 +2757,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             CallerStack.CallerInfo info = CallerStack.peek(callerStackFrame);
             if (info != null) {
                 if (ctx == RuntimeContextType.SCALAR) {
-                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
                 } else {
-                    res.add(new RuntimeScalar(info.packageName()));
+                    res.add(new RuntimeScalar(normalizeCallerPackage(info.packageName())));
                     res.add(new RuntimeScalar(info.filename()));
                     res.add(new RuntimeScalar(info.line()));
                 }
             }
         }
         return res;
+    }
+
+    private static String normalizeCallerPackage(String packageName) {
+        return packageName == null || packageName.isEmpty() ? "main" : packageName;
     }
 
     /**
@@ -2991,7 +3003,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // value to protect. Without this flush, DESTROY fires outside the
                         // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
                         // causing Test::Warn to miss warnings from DESTROY.
-                        MortalList.flush();
+                        MortalList.flushAboveMark();
                     }
                     return result;
                 }
@@ -3266,7 +3278,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
-                        MortalList.flush();
+                        MortalList.flushAboveMark();
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {
@@ -3403,16 +3415,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static void cleanupTailCallArgs(RuntimeArray tailArgs) {
         if (tailArgs == null) return;
-        boolean oldOwned = tailArgs.elementsOwned;
-        try {
-            // Tail-call args are a transfer array: the callee's @_ aliases them,
-            // but this array is responsible for releasing any owned temporaries
-            // inserted by the trampoline (for example `unshift @_, $weakself`).
-            tailArgs.elementsOwned = true;
-            MortalList.scopeExitCleanupArray(tailArgs);
-        } finally {
-            tailArgs.elementsOwned = oldOwned;
-        }
+        // Tail-call args may be a pure alias array for the caller's @_.
+        // Do not force ownership here: if the trampoline inserted owned
+        // temporaries (for example `unshift @_, $weakself`), the mutating array
+        // operation has already marked the array as owning elements.
+        MortalList.scopeExitCleanupArray(tailArgs);
     }
 
     // Method to apply (execute) a subroutine reference (legacy method for compatibility)
@@ -3518,7 +3525,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
-                        MortalList.flush();
+                        MortalList.flushAboveMark();
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {

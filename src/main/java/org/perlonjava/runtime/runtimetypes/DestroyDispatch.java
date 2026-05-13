@@ -67,6 +67,10 @@ public class DestroyDispatch {
         }
     }
 
+    public static boolean hasRescuedObjects() {
+        return !rescuedObjects.isEmpty();
+    }
+
     /**
      * Check whether the class identified by blessId defines DESTROY (or AUTOLOAD).
      * Result is cached in the destroyClasses BitSet.
@@ -346,7 +350,12 @@ public class DestroyDispatch {
             // added during apply (shift @_, $self scope exit) without
             // clobbering outer-scope pending entries.
             int pendingBefore = MortalList.pendingSize();
-            RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+            MortalList.invalidateAllRootSnapshots();
+            try {
+                RuntimeCode.apply(destroyMethod, args, RuntimeContextType.VOID);
+            } finally {
+                MortalList.invalidateAllRootSnapshots();
+            }
 
             // Phase 3: Drain pending entries added during apply, regardless
             // of whether an outer flush is currently running.
@@ -422,6 +431,7 @@ public class DestroyDispatch {
                 // Track rescued objects so clearRescuedWeakRefs can clean up
                 // at END time.
                 rescuedObjects.add(referent);
+                MortalList.invalidateExternalRootSnapshot();
                 return;
             }
 
@@ -508,6 +518,7 @@ public class DestroyDispatch {
             snapshot = new java.util.ArrayList<>(rescuedObjects);
             rescuedObjects.clear();
         }
+        MortalList.invalidateExternalRootSnapshot();
         boolean anyProcessed = false;
         for (RuntimeBase obj : snapshot) {
             if (obj.destroyFired && (obj.refCount == 1 || obj.refCount == Integer.MIN_VALUE)) {
@@ -521,6 +532,7 @@ public class DestroyDispatch {
                 // Object still has external references or unexpected state.
                 // Keep tracking it for later processing.
                 rescuedObjects.add(obj);
+                MortalList.invalidateExternalRootSnapshot();
             }
         }
         if (anyProcessed) {
@@ -550,12 +562,35 @@ public class DestroyDispatch {
             snapshot = new java.util.ArrayList<>(rescuedObjects);
             rescuedObjects.clear();
         }
+        MortalList.invalidateExternalRootSnapshot();
         for (RuntimeBase rescued : snapshot) {
             WeakRefRegistry.clearWeakRefsTo(rescued);
             if (rescued instanceof RuntimeHash hash) {
                 deepClearWeakRefs(hash);
             }
         }
+    }
+
+    /**
+     * Clear weak refs for one specific object that was rescued by DESTROY.
+     * Used when user code explicitly undefines that object but the DESTROY body
+     * self-saves it. Other rescued objects may still be live and must remain
+     * available until their normal deferred cleanup point.
+     */
+    public static boolean clearRescuedWeakRefsTo(RuntimeBase rescued) {
+        if (rescued == null) return false;
+        boolean removed;
+        synchronized (rescuedObjects) {
+            removed = rescuedObjects.remove(rescued);
+        }
+        if (!removed) return false;
+        MortalList.invalidateExternalRootSnapshot();
+
+        WeakRefRegistry.clearWeakRefsTo(rescued);
+        if (rescued instanceof RuntimeHash hash) {
+            deepClearWeakRefs(hash);
+        }
+        return true;
     }
 
     /**

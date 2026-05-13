@@ -88,9 +88,7 @@ public class WarnDie {
             // should not invoke it again while catching the exception.
             return scalarUndef;
         } else {
-            if (!(e instanceof PerlCompilerException) || !err.getBoolean()) {
-                err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(e)));
-            }
+            err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(e)));
         }
 
         RuntimeScalar sig = getGlobalHash("main::SIG").get("__DIE__");

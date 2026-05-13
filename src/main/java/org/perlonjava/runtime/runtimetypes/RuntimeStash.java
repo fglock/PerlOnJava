@@ -81,6 +81,7 @@ public class RuntimeStash extends RuntimeHash {
      */
     public void put(String key, RuntimeScalar value) {
         new RuntimeStashEntry(namespace + key, true).set(value);
+        GlobalVariable.invalidatePackageRootSnapshot();
     }
 
     /**
@@ -191,6 +192,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalHashes.remove(fullKey);
         GlobalVariable.globalIORefs.remove(fullKey);
         GlobalVariable.globalFormatRefs.remove(fullKey);
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Clear weak refs when a reference-holding scalar is deleted from the stash.
         // In Perl 5, removing a global variable drops the strong reference to its referent.
@@ -249,6 +251,7 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalHashes.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalIORefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         // Clear pinned code refs so deleted subs don't get resurrected
         // by getGlobalCodeRef() lookups (e.g., in SubroutineParser redefinition check)
@@ -419,16 +422,19 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.globalCodeRefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalIORefs.keySet().removeIf(k -> k.startsWith(prefix));
         GlobalVariable.globalFormatRefs.keySet().removeIf(k -> k.startsWith(prefix));
+        GlobalVariable.invalidatePackageRootSnapshot();
 
         this.elements.clear();
 
-        // Make existing blessed objects become anonymous (__ANON__).
-        // namespace is stored with trailing "::".
+        // Method resolution depends on the stash. This clears the class-name
+        // bless-id cache, so do it before installing the anonymous mapping below.
+        InheritanceResolver.invalidateCache();
+
+        // Make existing blessed objects and glob PACKAGE lookups become
+        // anonymous (__ANON__). namespace is stored with trailing "::".
         String className = prefix.endsWith("::") ? prefix.substring(0, prefix.length() - 2) : prefix;
         NameNormalizer.anonymizeBlessId(className);
 
-        // Method resolution depends on the stash.
-        InheritanceResolver.invalidateCache();
         GlobalVariable.clearPackageCache();
         return this;
     }

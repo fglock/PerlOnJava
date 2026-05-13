@@ -123,10 +123,7 @@ public class ReachabilityWalker {
                 // walker roots falsely pins their referents and breaks
                 // DBIC's leak tracer.
                 if (MortalList.isDeferredCapture(sc)) continue;
-                if (!MyVarCleanupStack.isLive(sc)) {
-                    if (sc.scopeExited) continue;
-                    if (!sc.refCountOwned) continue;
-                }
+                if (!MyVarCleanupStack.isLive(sc)) continue;
                 visitScalar(sc, todo);
             }
 
@@ -150,6 +147,12 @@ public class ReachabilityWalker {
                     addReachable(rb, todo);
                 }
             }
+            for (RuntimeArray args : RuntimeCode.snapshotArgsStack()) {
+                addReachable(args, todo);
+            }
+            for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
+                addReachable(tempRoot, todo);
+            }
         }
 
         bfs(todo, walkCodeCaptures);
@@ -169,6 +172,7 @@ public class ReachabilityWalker {
             // so iterating them here is redundant work.
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) continue;
                 for (RuntimeScalar v : h.elements.values()) {
                     visitScalar(v, todo);
                 }
@@ -177,24 +181,38 @@ public class ReachabilityWalker {
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
-                if (walkCaptures && code.capturedScalars != null) {
-                    for (RuntimeScalar cap : code.capturedScalars) {
-                        visitScalar(cap, todo);
-                    }
-                }
-                if (walkCaptures
-                        && cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
-                        && interpreted.capturedVars != null) {
-                    for (RuntimeBase cap : interpreted.capturedVars) {
-                        if (cap instanceof RuntimeScalar scalar) {
-                            visitScalar(scalar, todo);
-                        } else if (cap != null) {
-                            addReachable(cap, todo);
-                        }
-                    }
+                // Phase 2 normally keeps closure captures opaque to avoid
+                // over-rescuing DBIC objects through internal callbacks.
+                // Exception: Sub::Defer/Sub::Quote deferred wrappers keep a
+                // weak backref to the CODE object itself. If such a CODE ref
+                // is reachable through package metadata (not a direct stash
+                // entry), its captured info array is a real strong Perl edge
+                // and must survive the weak sweep.
+                if (walkCaptures || WeakRefRegistry.hasWeakRefsTo(code)) {
+                    visitCodeCaptures(code, todo);
                 }
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
+            }
+        }
+    }
+
+    private void visitCodeCaptures(RuntimeCode code,
+                                   java.util.ArrayDeque<RuntimeBase> todo) {
+        if (code.capturedScalars != null) {
+            for (RuntimeScalar cap : code.capturedScalars) {
+                visitScalar(cap, todo);
+            }
+        }
+        visitReflectiveCodeScalars(code, cap -> visitScalar(cap, todo));
+        if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (RuntimeBase cap : interpreted.capturedVars) {
+                if (cap instanceof RuntimeScalar scalar) {
+                    visitScalar(scalar, todo);
+                } else if (cap != null) {
+                    addReachable(cap, todo);
+                }
             }
         }
     }
@@ -296,11 +314,15 @@ public class ReachabilityWalker {
                         visitScalarPath(cap, curPath + "<closure " + name + "::" + sub + " cap#" + (i++) + ">", howReached, todo);
                     }
                 }
+                String name = code.packageName == null ? "?" : code.packageName;
+                String sub = code.subName == null ? "(anon)" : code.subName;
+                final int[] reflectiveIdx = {0};
+                visitReflectiveCodeScalars(code, cap ->
+                        visitScalarPath(cap, curPath + "<closure " + name + "::" + sub
+                                + " field-cap#" + (reflectiveIdx[0]++) + ">", howReached, todo));
                 if (cur instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                         && interpreted.capturedVars != null) {
                     int i = 0;
-                    String name = code.packageName == null ? "?" : code.packageName;
-                    String sub = code.subName == null ? "(anon)" : code.subName;
                     for (RuntimeBase cap : interpreted.capturedVars) {
                         String path = curPath + "<interpreted closure " + name + "::" + sub
                                 + " cap#" + (i++) + ">";
@@ -482,13 +504,18 @@ public class ReachabilityWalker {
      * is used only at the immediate weaken() zero-count decision.</p>
      */
     public static boolean isReachableFromLiveScalarRegistry(RuntimeBase target) {
+        return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
+    }
+
+    static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
+                                                     java.util.List<RuntimeScalar> roots) {
         if (target == null) return false;
         final int MAX_VISITS = 50_000;
 
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
 
-        for (RuntimeScalar sc : ScalarRefRegistry.forceGcAndSnapshot()) {
+        for (RuntimeScalar sc : roots) {
             if (sc == null) continue;
             if (sc.captureCount > 0) continue;
             if (WeakRefRegistry.isweak(sc)) continue;
@@ -600,13 +627,26 @@ public class ReachabilityWalker {
                 if ((sc.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && sc.value instanceof RuntimeBase rb
                         && seen.add(rb)) todo.addLast(rb);
-            } else if (cur instanceof RuntimeCode code && code.capturedScalars != null) {
-                for (RuntimeScalar cap : code.capturedScalars) {
-                    if (cap == null) continue;
-                    if (WeakRefRegistry.isweak(cap)) continue;
-                    if (cap == target) return true;
-                    if (seen.add(cap)) todo.addLast(cap);
+            } else if (cur instanceof RuntimeCode code) {
+                if (code.capturedScalars != null) {
+                    for (RuntimeScalar cap : code.capturedScalars) {
+                        if (cap == null) continue;
+                        if (WeakRefRegistry.isweak(cap)) continue;
+                        if (cap == target) return true;
+                        if (seen.add(cap)) todo.addLast(cap);
+                    }
                 }
+                final boolean[] foundReflectiveCapture = {false};
+                visitReflectiveCodeScalars(code, cap -> {
+                    if (foundReflectiveCapture[0]) return;
+                    if (cap == null || WeakRefRegistry.isweak(cap)) return;
+                    if (cap == target) {
+                        foundReflectiveCapture[0] = true;
+                    } else if (seen.add(cap)) {
+                        todo.addLast(cap);
+                    }
+                });
+                if (foundReflectiveCapture[0]) return true;
             }
         }
         return false;
@@ -741,6 +781,237 @@ public class ReachabilityWalker {
         }        return false;
     }
 
+    /**
+     * Return true when {@code target} is held by a live reference scalar other
+     * than its own named my-variable slot. This is deliberately narrower than a
+     * full root walk: scope cleanup calls it often, and DBIC can have thousands
+     * of live roots by the time its leak tests initialize.
+     */
+    public static boolean isReachableFromExternalRoot(RuntimeBase target) {
+        return new ExternalRootSnapshot().isReachable(target);
+    }
+
+    /**
+     * Cached equivalent of {@link #isReachableFromExternalRoot(RuntimeBase)}.
+     * <p>
+     * The package/rescued root graph is snapshotted separately from live
+     * lexical roots so callers can invalidate the live-lexical snapshot when
+     * scope registrations change without forcing a package-root rebuild.
+     */
+    public static final class ExternalRootSnapshot {
+        private static final int MAX_VISITS = 50_000;
+
+        private final Set<RuntimeBase> nonLexicalReachable =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+
+        public ExternalRootSnapshot() {
+            buildNonLexicalRoots();
+        }
+
+        public boolean isReachable(RuntimeBase target) {
+            if (target == null) return false;
+            if (nonLexicalReachable.contains(target)) return true;
+            return new LiveRootSnapshot().isReachable(target);
+        }
+
+        public boolean isReachableFromNonLexicalRoot(RuntimeBase target) {
+            return target != null && nonLexicalReachable.contains(target);
+        }
+
+        private void buildNonLexicalRoots() {
+            java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalCodeRefs.entrySet()) {
+                seedGlobalCodeScalar(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeScalar> e : GlobalVariable.globalVariables.entrySet()) {
+                seedNonLexicalScalar(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeArray> e : GlobalVariable.globalArrays.entrySet()) {
+                addNonLexical(e.getValue(), todo);
+            }
+            for (Map.Entry<String, RuntimeHash> e : GlobalVariable.globalHashes.entrySet()) {
+                addNonLexical(e.getValue(), todo);
+            }
+            for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+                addNonLexical(rescued, todo);
+            }
+
+            int visits = 0;
+            while (!todo.isEmpty() && visits < MAX_VISITS) {
+                RuntimeBase cur = todo.removeFirst();
+                visits++;
+                walkSnapshotNode(cur, todo);
+            }
+        }
+
+        private void walkSnapshotNode(RuntimeBase cur,
+                                      java.util.ArrayDeque<RuntimeBase> nonLexicalTodo) {
+            if (cur instanceof RuntimeStash) return;
+            if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) return;
+                for (RuntimeScalar v : h.elements.values()) {
+                    seedNonLexicalScalar(v, nonLexicalTodo);
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    seedNonLexicalScalar(v, nonLexicalTodo);
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                seedNonLexicalScalar(sc, nonLexicalTodo);
+            }
+        }
+
+        private void seedNonLexicalScalar(RuntimeScalar s,
+                                          java.util.ArrayDeque<RuntimeBase> todo) {
+            if (s == null) return;
+            if (WeakRefRegistry.isweak(s)) return;
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && s.value instanceof RuntimeBase b) {
+                addNonLexical(b, todo);
+            }
+        }
+
+        private void seedGlobalCodeScalar(RuntimeScalar s,
+                                          java.util.ArrayDeque<RuntimeBase> todo) {
+            seedNonLexicalScalar(s, todo);
+            if (s != null && s.value instanceof RuntimeCode code) {
+                seedGlobalCodeCaptures(code, todo);
+            }
+        }
+
+        private void seedGlobalCodeCaptures(RuntimeCode code,
+                                            java.util.ArrayDeque<RuntimeBase> todo) {
+            if (code.capturedScalars != null) {
+                for (RuntimeScalar cap : code.capturedScalars) {
+                    seedNonLexicalScalar(cap, todo);
+                }
+            }
+            visitReflectiveCodeScalars(code, cap -> seedNonLexicalScalar(cap, todo));
+            if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
+                    && interpreted.capturedVars != null) {
+                for (RuntimeBase cap : interpreted.capturedVars) {
+                    if (cap instanceof RuntimeScalar scalar) {
+                        seedNonLexicalScalar(scalar, todo);
+                    } else {
+                        addNonLexical(cap, todo);
+                    }
+                }
+            }
+        }
+
+        private void addNonLexical(RuntimeBase b,
+                                   java.util.ArrayDeque<RuntimeBase> todo) {
+            if (b == null) return;
+            if (nonLexicalReachable.add(b)) {
+                todo.addLast(b);
+            }
+        }
+
+    }
+
+    /**
+     * Snapshot of reachability from currently-live lexical roots only.
+     * Direct lexical origins are tracked so a named lexical container does not
+     * count as an external root for itself.
+     */
+    public static final class LiveRootSnapshot {
+        private static final int MAX_VISITS = 50_000;
+        private static final Object MIXED_DIRECT_LEXICAL_ORIGIN = new Object();
+
+        private final Set<RuntimeBase> directLexicalRoots =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        private final IdentityHashMap<RuntimeBase, Object> directLexicalOrigins =
+                new IdentityHashMap<>();
+
+        public LiveRootSnapshot() {
+            build();
+        }
+
+        public boolean isReachable(RuntimeBase target) {
+            if (target == null) return false;
+            Object origin = directLexicalOrigins.get(target);
+            if (origin == null) return false;
+            if (!directLexicalRoots.contains(target)) return true;
+            return origin != target;
+        }
+
+        private void build() {
+            java.util.ArrayDeque<DirectRootStep> todo = new java.util.ArrayDeque<>();
+
+            for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+                if (!(liveVar instanceof RuntimeBase root)) continue;
+                directLexicalRoots.add(root);
+                if (root instanceof RuntimeScalar sc) {
+                    seedDirectScalar(sc, root, todo);
+                } else {
+                    addDirect(root, root, todo);
+                }
+            }
+
+            int visits = 0;
+            while (!todo.isEmpty() && visits < MAX_VISITS) {
+                DirectRootStep step = todo.removeFirst();
+                visits++;
+                walkLiveNode(step.base, todo, step.origin);
+            }
+        }
+
+        private void walkLiveNode(RuntimeBase cur,
+                                  java.util.ArrayDeque<DirectRootStep> todo,
+                                  Object origin) {
+            if (cur instanceof RuntimeStash) return;
+            if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) return;
+                for (RuntimeScalar v : h.elements.values()) {
+                    seedDirectScalar(v, origin, todo);
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    seedDirectScalar(v, origin, todo);
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                seedDirectScalar(sc, origin, todo);
+            }
+        }
+
+        private void seedDirectScalar(RuntimeScalar s, Object origin,
+                                      java.util.ArrayDeque<DirectRootStep> todo) {
+            if (s == null) return;
+            if (WeakRefRegistry.isweak(s)) return;
+            if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && s.value instanceof RuntimeBase b) {
+                addDirect(b, origin, todo);
+            }
+        }
+
+        private void addDirect(RuntimeBase b, Object origin,
+                               java.util.ArrayDeque<DirectRootStep> todo) {
+            if (b == null || origin == null) return;
+            Object existing = directLexicalOrigins.get(b);
+            if (existing == null) {
+                directLexicalOrigins.put(b, origin);
+                todo.addLast(new DirectRootStep(b, origin));
+                return;
+            }
+            if (existing == MIXED_DIRECT_LEXICAL_ORIGIN || existing == origin) {
+                return;
+            }
+            directLexicalOrigins.put(b, MIXED_DIRECT_LEXICAL_ORIGIN);
+            todo.addLast(new DirectRootStep(b, MIXED_DIRECT_LEXICAL_ORIGIN));
+        }
+
+        private static final class DirectRootStep {
+            private final RuntimeBase base;
+            private final Object origin;
+
+            private DirectRootStep(RuntimeBase base, Object origin) {
+                this.base = base;
+                this.origin = origin;
+            }
+        }
+    }
+
     private static void seedTarget(RuntimeScalar s, RuntimeBase target,
                                    Set<RuntimeBase> seen,
                                    java.util.ArrayDeque<RuntimeBase> todo) {
@@ -777,6 +1048,13 @@ public class ReachabilityWalker {
                 if (followScalar(cap, target, seen, todo)) return true;
             }
         }
+        final boolean[] foundReflectiveCapture = {false};
+        visitReflectiveCodeScalars(code, cap -> {
+            if (!foundReflectiveCapture[0] && followScalar(cap, target, seen, todo)) {
+                foundReflectiveCapture[0] = true;
+            }
+        });
+        if (foundReflectiveCapture[0]) return true;
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
@@ -789,6 +1067,26 @@ public class ReachabilityWalker {
             }
         }
         return false;
+    }
+
+    private static void visitReflectiveCodeScalars(RuntimeCode code,
+                                                   java.util.function.Consumer<RuntimeScalar> visitor) {
+        Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (closureObject == null) return;
+        try {
+            for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
+                if (field.getType() == RuntimeScalar.class && !"__SUB__".equals(field.getName())) {
+                    RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
+                    if (cap != null) {
+                        visitor.accept(cap);
+                    }
+                }
+            }
+        } catch (IllegalAccessException ignored) {
+            // Generated closure fields are public. If another implementation
+            // denies reflective access, callers still have capturedScalars and
+            // interpreter capturedVars metadata as fallbacks.
+        }
     }
 
     /**
@@ -820,12 +1118,12 @@ public class ReachabilityWalker {
     public static int sweepWeakRefs(boolean quiet) {
         if (!WeakRefRegistry.weakRefsExist) return 0;
         ScalarRefRegistry.forceGcAndSnapshot();
-        // Phase H1: drain rescued objects in BOTH quiet and non-quiet modes.
-        // Rescued objects are blessed-with-DESTROY objects that self-saved
-        // during their DESTROY body. Clearing their weak refs from auto-
-        // sweep matches Perl's behavior: once the last user-visible strong
-        // ref goes, weak refs to the self-rescued object clear.
-        DestroyDispatch.clearRescuedWeakRefs();
+        if (!quiet) {
+            // Explicit sweeps drain rescued objects. Quiet auto-sweeps run
+            // during user workflows and must not clear DBIC Schema rescue
+            // links while later chained calls still rely on them.
+            DestroyDispatch.clearRescuedWeakRefs();
+        }
         ReachabilityWalker w = new ReachabilityWalker();
         Set<RuntimeBase> live = w.walk();
         ArrayList<RuntimeBase> toClear = new ArrayList<>();
