@@ -258,3 +258,77 @@ file before closing the phase.
 - Is the `return $r` bug a separate issue (return copy discipline) or a
   symptom of the same container-store miscount? Needs a separate minimal
   repro without containers.
+
+---
+
+## Future work — `t/04_element.t` and `%PPI::Singletons::_PARENT` (2026-05)
+
+Upstream PPI keeps a weak parent table: `weaken($_PARENT{refaddr $child} = $parent)`.
+`PPI::Element::DESTROY` deletes `$_PARENT{refaddr $_[0]}`.  
+`PPI/tests/t/04_element.t` asserts that after parsing a large document and
+destroying the root `PPI::Document`, `scalar keys %_PARENT` returns to the
+baseline count (tests **202** explicit `DESTROY`, **206** implicit scope exit).
+
+### Symptom on PerlOnJava (as of 2026-05)
+
+Those two subtests still fail: thousands of `_PARENT` keys remain after
+document teardown, i.e. many `PPI::Element` objects never run `DESTROY` (or
+equivalent cleanup). Other failures in `./jcpan -t PPI` (e.g. `t/07_token.t`,
+`t/08_regression.t`) may share refcount/DESTROY plumbing; treat them after
+`04_element` is green.
+
+### Fixes landed incrementally (see linked PR)
+
+1. **`InheritanceResolver`**: do **not** negative-cache a failed `DESTROY`
+   method lookup. During `require`/compile order, resolution can run before
+   a base class installs `DESTROY`; caching `null` would skip Perl destructors
+   for the rest of the process.
+2. **`DestroyDispatch.doCallDestroy`**: set `destroyFired` only **after** it
+   is known that a Perl `DESTROY` (or the no-DESTROY cleanup path) will run.
+   Setting it before the null-check could skip `PPI::Element::DESTROY` when
+   resolution transiently failed.
+3. **`RuntimeScalar.incrementRefCountForContainerStore`**: activate nested
+   referents at `refCount == -1` before incrementing (and refuse `MIN_VALUE` /
+   `WEAKLY_TRACKED`), so hash/array slot stores and `createReferenceWithTrackedElements`
+   paths can count anon containers consistently.
+
+These improve destructor reliability but **do not** yet pass tests 202/206 alone.
+
+### Next investigation steps (ordered)
+
+1. **Reproduce at scale**  
+   `./jperl -Ilib t/04_element.t` (or only the failing scope) with `PERL5LIB`
+   pointing at bundled `IO::File` etc. Use `timeout` on full `./jcpan -t PPI`
+   (see `AGENTS.md`).
+
+2. **Correlate stuck keys with JVM state**  
+   For one leaked element after `$doc->DESTROY`, check
+   `Internals::jperl_refstate`-style introspection (if available): `refCount`,
+   `refCountOwned`, whether the object is still reachable from a live
+   `RuntimeArray` slot (`{children}`) or from deferred mortal queues.
+
+3. **`PPI::Node::DESTROY` pattern**  
+   BFS: `unshift @queue, @{delete $_->{children}}` then `%$_ = ()`. Ensure
+   `RuntimeHash.delete` and bulk clear both drop nested refcount for **non-`refCountOwned`**
+   slot scalars where Perl still drops SV refcount (prior art: a narrowly scoped
+   `deferDecrementRecursive` or hash-delete helper broke unrelated tests when
+   too broad).
+
+4. **Hash / anon literal construction**  
+   JVM path uses `RuntimeHash.createHashRef` → `createReferenceWithTrackedElements`.
+   A mid-construction `MortalList.flush` could in theory destroy nested values
+   before container-store pins them; `suppressFlush` around **only** the hash-ref
+   construction sequence was attempted but caused regressions elsewhere — any
+   retry must be narrower than wrapping all `createHashRef` callers.
+
+5. **After `04_element` passes**  
+   Re-run full `./jcpan -t PPI`, refresh the failure table at the top of this
+   doc, then continue Phase 2/RC2 refcount parity work from "Next Steps" above
+   for lexer/`Structure::Condition` issues.
+
+### References
+
+- `lib/PPI/Node.pm` (`DESTROY`), `lib/PPI/Element.pm` (`DESTROY`),
+  `lib/PPI/Singletons.pm` (`%_PARENT`)
+- Runtime: `DestroyDispatch.java`, `MortalList.java`, `RuntimeHash.delete`,
+  `RuntimeScalar.incrementRefCountForContainerStore`

@@ -185,6 +185,35 @@ public class InheritanceResolver {
     }
 
     /**
+     * Drop method-resolution cache entries that depend on a given package sub's
+     * <em>leaf</em> name (stash key {@code My::Pkg::foo} &rarr; {@code foo}), including
+     * {@code \0noautoload} variants. Also clears {@link DestroyDispatch} bookkeeping
+     * when the leaf is {@code DESTROY}.
+     */
+    public static void invalidateMethodLookupCachesForStashSubKey(String stashFqn) {
+        if (stashFqn == null || stashFqn.isEmpty()) {
+            return;
+        }
+        int chop = stashFqn.lastIndexOf("::");
+        String leaf = chop < 0 ? stashFqn : stashFqn.substring(chop + 2);
+        if (leaf.isEmpty()) {
+            return;
+        }
+        String suffix = "::" + leaf;
+        String suffixNoAutoload = suffix + "\0noautoload";
+        methodCache.entrySet().removeIf(e -> {
+            String k = e.getKey();
+            return k.endsWith(suffixNoAutoload)
+                    || k.endsWith(suffix)
+                    || k.equals(leaf)
+                    || k.equals(leaf + "\0noautoload");
+        });
+        if ("DESTROY".equals(leaf)) {
+            DestroyDispatch.invalidateCache();
+        }
+    }
+
+    /**
      * Retrieves a cached OverloadContext for the given blessing ID.
      *
      * @param blessId The blessing ID of the class.
@@ -429,7 +458,9 @@ public class InheritanceResolver {
             }
         }
 
-        // Cache the fact that method was not found (using null)
+        // Cache "method not found" as null. Late-installed or redefined package subs
+        // invalidate matching entries via GlobalVariable.globalCodeRefs and in-place CV
+        // updates on stash-backed RuntimeScalars (see globalCodeRefFqn).
         methodCache.put(cacheKey, null);
         return null;
     }

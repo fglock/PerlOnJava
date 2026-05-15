@@ -79,6 +79,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean ioOwner;
 
     /**
+     * When this scalar is installed in {@link GlobalVariable#globalCodeRefs}, the map key
+     * (fully-qualified name such as {@code My::Pkg::foo}). Used to invalidate
+     * method-resolution cache lines for that sub's leaf name after in-place CV updates
+     * via {@link #set(RuntimeScalar)}.
+     */
+    public String globalCodeRefFqn;
+
+    /**
      * Number of closures that have captured this RuntimeScalar variable.
      * When {@code captureCount > 0}, {@link #scopeExitCleanup} skips the
      * blessed ref decrement because a closure still holds a reference to
@@ -942,19 +950,38 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * constructor, and their refCount was already incremented at creation time.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
-        if (scalar != null && !scalar.refCountOwned
-                && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.hadCountedReference = true;
-            base.recordOwner(scalar, "incrementRefCountForContainerStore");
-            base.recordActiveOwner(scalar);
-            scalar.refCountOwned = true;
-            // Phase B1 (refcount_alignment_52leaks_plan.md): track the
-            // container element so ReachabilityWalker can see it via
-            // ScalarRefRegistry.
-            ScalarRefRegistry.registerRef(scalar);
+        if (scalar == null || scalar.refCountOwned
+                || (scalar.type & REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)) {
+            return;
         }
+        // Destroyed / weaken sentinel states must not be reactivated here.
+        if (base.refCount == Integer.MIN_VALUE
+                || base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            return;
+        }
+        // Anonymous nested containers start at refCount=-1 (untracked).
+        // bless {}'s retroactive pass and normal container stores must still count
+        // the hash slot as a strong ref, otherwise delete $h{k} / hash clear never
+        // drops the child (PPI::Node->{children}; cpan PPI t/04_element.t).
+        // Restrict promotion to real containers: doing this for arbitrary -1
+        // referents (e.g. refs to readonly scalars) breaks Moo weak_ref accessors
+        // (cpan Moo t/accessor-weaken.t).
+        if (base.refCount < 0) {
+            if (!(base instanceof RuntimeHash) && !(base instanceof RuntimeArray)) {
+                return;
+            }
+            base.refCount = 0;
+        }
+        base.refCount++;
+        base.hadCountedReference = true;
+        base.recordOwner(scalar, "incrementRefCountForContainerStore");
+        base.recordActiveOwner(scalar);
+        scalar.refCountOwned = true;
+        // Phase B1 (refcount_alignment_52leaks_plan.md): track the
+        // container element so ReachabilityWalker can see it via
+        // ScalarRefRegistry.
+        ScalarRefRegistry.registerRef(scalar);
     }
 
     private static boolean scalarReferenceContentsNeedRetain(RuntimeScalar value) {
@@ -1232,6 +1259,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             ScalarRefRegistry.registerRef(this);
         }
 
+        int preAssignType = this.type;
+        Object preAssignValue = this.value;
+
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
@@ -1383,6 +1413,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));
             }
             DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
+        }
+
+        if (isPackageGlobalRoot && globalCodeRefFqn != null) {
+            boolean invalidate = preAssignType != this.type || preAssignValue != this.value;
+            if (!invalidate && this.type == CODE && this.value instanceof RuntimeCode nc
+                    && preAssignType == CODE && preAssignValue instanceof RuntimeCode oc) {
+                invalidate = oc.defined() != nc.defined();
+            }
+            if (invalidate) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(globalCodeRefFqn);
+            }
         }
 
         return this;
