@@ -79,6 +79,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean ioOwner;
 
     /**
+     * When this scalar is installed in {@link GlobalVariable#globalCodeRefs}, the map key
+     * (fully-qualified name such as {@code My::Pkg::foo}). Used to invalidate DESTROY
+     * method-resolution caches after in-place CV installation via {@link #set(RuntimeScalar)}.
+     */
+    public String globalCodeRefFqn;
+
+    /**
      * Number of closures that have captured this RuntimeScalar variable.
      * When {@code captureCount > 0}, {@link #scopeExitCleanup} skips the
      * blessed ref decrement because a closure still holds a reference to
@@ -1396,6 +1403,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         " refCount=" + (oldBase != null ? oldBase.refCount : -1));
             }
             DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
+        }
+
+        if (isPackageGlobalRoot && type == CODE && globalCodeRefFqn != null
+                && GlobalVariable.isDestroyCodeSlotKey(globalCodeRefFqn)) {
+            InheritanceResolver.invalidateDestroyMethodLookupCaches();
         }
 
         return this;

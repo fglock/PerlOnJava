@@ -185,6 +185,19 @@ public class InheritanceResolver {
     }
 
     /**
+     * Invalidates negative and positive DESTROY entries in the method-resolution cache and
+     * DESTROY dispatch bookkeeping. Call when a {@code *Pkg::DESTROY} slot is installed,
+     * redefined, or removed so a prior "no DESTROY" cache entry cannot outlive a late CV.
+     */
+    public static void invalidateDestroyMethodLookupCaches() {
+        methodCache.entrySet().removeIf(e -> {
+            String k = e.getKey();
+            return k.endsWith("::DESTROY") || k.contains("::DESTROY\0");
+        });
+        DestroyDispatch.invalidateCache();
+    }
+
+    /**
      * Retrieves a cached OverloadContext for the given blessing ID.
      *
      * @param blessId The blessing ID of the class.
@@ -429,15 +442,10 @@ public class InheritanceResolver {
             }
         }
 
-        // Normally cache "method not found" as null. Do NOT do this for DESTROY:
-        // during require/use, resolution can run while a package is still compiling
-        // (e.g. overload/bootstrap) before sub DESTROY is installed in a base class.
-        // A cached null then pins "no destructor" for that cache key until the next
-        // full invalidate — PPI's Element tree would skip Perl DESTROY and leak
-        // %PPI::Singletons::_PARENT keys (t/04_element.t).
-        if (!"DESTROY".equals(methodName)) {
-            methodCache.put(cacheKey, null);
-        }
+        // Cache "method not found" as null, including for DESTROY. Late-installed
+        // DESTROY subs invalidate these entries via GlobalVariable.globalCodeRefs hooks
+        // and RuntimeScalar assignments to the *::DESTROY CV slot.
+        methodCache.put(cacheKey, null);
         return null;
     }
 
