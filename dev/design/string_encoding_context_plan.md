@@ -286,6 +286,12 @@ die "FAIL" if is_utf8($err);
 
 ## Notes
 
+- **Investigation update (2026-05-15):** Running `./jcpan -t Sub::HandlesVia` showed an immediate crash in
+  Mite’s generated `*.mite.pm`: `HAS_BUILDARGS` was polluted with the string `HAS_FOREIGNBUILDARGS`,
+  falsely enabling the `BUILDARGS` branch. Root cause was **`UNIVERSAL::can()` returning an empty list**
+  instead of `(undef)`, which destroys hash literals at compile time. Fixed in `Universal.java`.
+  The concatenation constructor / `BYTE_STRING` work below remains correct hardening against the
+  original UTF‑8 splice issues described earlier in this doc.
 - This fix addresses the root cause rather than applying post-corruption repair
 - The eval-time repair in RuntimeRegex can remain as a safety net
 - This aligns PerlOnJava with Perl 5's encoding context semantics

@@ -13,6 +13,7 @@ import java.util.Iterator;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
 
 /**
  * A utility class that provides various string operations on {@link RuntimeScalar} objects.
@@ -438,33 +439,18 @@ public class StringOperators {
         boolean aIsUtf8 = runtimeScalar.type == RuntimeScalarType.STRING;
         boolean bIsUtf8 = b.type == RuntimeScalarType.STRING;
 
+        String result = aStr + bStr;
+
         if (aIsUtf8 || bIsUtf8) {
-            return new RuntimeScalar(aStr + bStr);
+            return new RuntimeScalar(result, STRING);
         }
 
-        // Neither operand is UTF-8 — produce BYTE_STRING result
-        // Check if all chars fit in a byte (Latin-1)
-        boolean safe = true;
-        for (int i = 0; safe && i < aStr.length(); i++) {
-            if (aStr.charAt(i) > 255) {
-                safe = false;
+        for (int i = 0; i < result.length(); i++) {
+            if (result.charAt(i) > 255) {
+                return new RuntimeScalar(result, STRING);
             }
         }
-        for (int i = 0; safe && i < bStr.length(); i++) {
-            if (bStr.charAt(i) > 255) {
-                safe = false;
-            }
-        }
-        if (safe) {
-            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] out = new byte[aBytes.length + bBytes.length];
-            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-            return new RuntimeScalar(out);
-        }
-
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(result, BYTE_STRING);
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
@@ -486,43 +472,30 @@ public class StringOperators {
         String aStr = aResolved.toString();
         String bStr = bResolved.toString();
 
-        if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(aStr + bStr);
+        String concat = aStr + bStr;
+
+        if (aResolved.type == STRING || bResolved.type == STRING) {
+            return new RuntimeScalar(concat, STRING);
         }
 
         if (aResolved.type == BYTE_STRING || bResolved.type == BYTE_STRING) {
             boolean aIsByte = aResolved.type == BYTE_STRING
                     || aResolved.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && aResolved.type != RuntimeScalarType.STRING);
+                    || (aStr.isEmpty() && aResolved.type != STRING);
             boolean bIsByte = bResolved.type == BYTE_STRING
                     || bResolved.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && bResolved.type != RuntimeScalarType.STRING);
+                    || (bStr.isEmpty() && bResolved.type != STRING);
             if (aIsByte && bIsByte) {
-                boolean safe = true;
-                for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
+                for (int i = 0; i < concat.length(); i++) {
+                    if (concat.charAt(i) > 255) {
+                        return new RuntimeScalar(concat, STRING);
                     }
                 }
-                for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                if (safe) {
-                    byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] out = new byte[aBytes.length + bBytes.length];
-                    System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                    System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                    return new RuntimeScalar(out);
-                }
+                return new RuntimeScalar(concat, BYTE_STRING);
             }
         }
 
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(concat);
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -836,43 +809,30 @@ public class StringOperators {
         String aStr = runtimeScalar.toStringNoOverload();
         String bStr = b.toStringNoOverload();
 
-        if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
-            return new RuntimeScalar(aStr + bStr);
+        String concat = aStr + bStr;
+
+        if (runtimeScalar.type == STRING || b.type == STRING) {
+            return new RuntimeScalar(concat, STRING);
         }
 
         if (runtimeScalar.type == BYTE_STRING || b.type == BYTE_STRING) {
             boolean aIsByte = runtimeScalar.type == BYTE_STRING
                     || runtimeScalar.type == RuntimeScalarType.UNDEF
-                    || (aStr.isEmpty() && runtimeScalar.type != RuntimeScalarType.STRING);
+                    || (aStr.isEmpty() && runtimeScalar.type != STRING);
             boolean bIsByte = b.type == BYTE_STRING
                     || b.type == RuntimeScalarType.UNDEF
-                    || (bStr.isEmpty() && b.type != RuntimeScalarType.STRING);
+                    || (bStr.isEmpty() && b.type != STRING);
             if (aIsByte && bIsByte) {
-                boolean safe = true;
-                for (int i = 0; safe && i < aStr.length(); i++) {
-                    if (aStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
+                for (int i = 0; i < concat.length(); i++) {
+                    if (concat.charAt(i) > 255) {
+                        return new RuntimeScalar(concat, STRING);
                     }
                 }
-                for (int i = 0; safe && i < bStr.length(); i++) {
-                    if (bStr.charAt(i) > 255) {
-                        safe = false;
-                        break;
-                    }
-                }
-                if (safe) {
-                    byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-                    byte[] out = new byte[aBytes.length + bBytes.length];
-                    System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-                    System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-                    return new RuntimeScalar(out);
-                }
+                return new RuntimeScalar(concat, BYTE_STRING);
             }
         }
 
-        return new RuntimeScalar(aStr + bStr);
+        return new RuntimeScalar(concat);
     }
 
     /**

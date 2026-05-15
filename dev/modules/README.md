@@ -21,6 +21,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [storable_binary_format.md](storable_binary_format.md) | Storable native Perl binary format — read + write paths landed; jperl ↔ system-perl files interoperate in both directions |
 | [unicode_collate.md](unicode_collate.md) | Unicode::Collate — plan: file-backed DUCET + Java XS surface (default); optional ICU path tradeoffs |
 | [ppi.md](ppi.md) | **PPI** — CPAN test status, RC1–RC4, refcount/`DESTROY` follow-ups (`t/04_element.t` `%_PARENT`) |
+| [sub_handlesvia_support.md](sub_handlesvia_support.md) | **Sub::HandlesVia** — Mite/can/hash fix landed; **`eval_closure` UTF‑8 (\x{c2})** trace plan |
 
 ## Module Status Overview
 
