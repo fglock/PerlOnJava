@@ -1,0 +1,29 @@
+--- lib/Image/BMP.pm.orig
++++ lib/Image/BMP.pm
+@@ -292,7 +292,7 @@
+ sub split_bits {
+ 	my ($val,$bits) = @_;
+ 	fatal("Can't handle >32b numbers") if $bits>32;
+-	fatal("Tried fitting [$val] into $bits bits") if $val>=(1<<$bits);
++	fatal("Tried fitting [$val] into $bits bits") if $val>=(2**$bits);
+ 	split('',substr(unpack("B32",pack("N",$val)),32-$bits));
+ }
+ 
+@@ -382,7 +382,7 @@
+ 	$bmp->{YpixelsPerM} = read_bmp($bmp,4);
+ 	$bmp->{ColorsUsed} = read_bmp($bmp,4);
+ 	$bmp->{ColorsImportant} = read_bmp($bmp,4);
+-	$bmp->{ColorsUsed} = 1<<$bmp->{BitCount} if $bmp->{ColorsUsed} == 0;
++	$bmp->{ColorsUsed} = 2**$bmp->{BitCount} if $bmp->{ColorsUsed} == 0;
+ 
+ 	$bmp->_debug(1,"Image: $bmp->{BitCount}/$bmp->{ColorsUsed} colors. Geometry: $bmp->{Width}x$bmp->{Height} $bmp->{ImageSize} [comp: $compStr ($bmp->{Compression})]\n");
+ 
+@@ -401,7 +401,7 @@
+ 	# BITMAPV4HEADER has 68 more bytes to read
+ 	read_bmp($bmp,68) if $bmp->{HeaderSize}==108;
+ 
+-	$bmp->{_colors} = $bmp->{ColorsUsed} || 1<<$bmp->{BitCount};
++	$bmp->{_colors} = $bmp->{ColorsUsed} || 2**$bmp->{BitCount};
+ 	$bmp->{_colors} = 0 if $bmp->{_colors}==(1<<24);	# No truecolor map
+ 
+ 	# Treat mask colors as color indexes (just to skip them) and reset

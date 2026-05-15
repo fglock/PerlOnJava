@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Image::BMP.
+
+  On 32-bit IV builds, 1<<32 is 0, but BMP info headers use ColorsUsed==0 to
+  mean 2**BitCount entries (e.g. 2**32 for 32bpp). Use exponentiation so
+  jcpan tests and runtime match the module author's intent on PerlOnJava
+  (ivsize=4; see perl5_t/t/op/bop.t).
+match:
+  distribution: "^.*/Image-BMP-1\\.26"
+patches:
+  - "Image-BMP-1.26/BMP.pm.patch"

@@ -1,6 +1,5 @@
 package org.perlonjava.runtime.operators;
 
-import java.math.BigInteger;
 
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -486,20 +485,10 @@ public class BitwiseOperators {
             return shiftRightInternal(value, shift, false);
         }
 
-        // Non-"use integer" Perl widens << results: 1<<32 == 4294967296, 1<<63 uses NV.
-        // Shifts >= 64 bits yield 0 (matches system Perl on 64-bit builds).
-        if (shift >= 64) {
-            return RuntimeScalarCache.scalarZero;
-        }
-
+        // 32-bit Perl: UV shifts wrap at 32 bits; (1<<32) and larger shifts are 0
+        // (perl5_t/t/op/bop.t; Config ivsize=4).
         if (shift >= 32) {
-            BigInteger wide = BigInteger.valueOf(value).shiftLeft((int) shift);
-            BigInteger maxLong = BigInteger.valueOf(Long.MAX_VALUE);
-            BigInteger minLong = BigInteger.valueOf(Long.MIN_VALUE);
-            if (wide.compareTo(maxLong) <= 0 && wide.compareTo(minLong) >= 0) {
-                return new RuntimeScalar(wide.longValue());
-            }
-            return new RuntimeScalar(wide.doubleValue());
+            return RuntimeScalarCache.scalarZero;
         }
 
         // Treat value as unsigned 32-bit (UV semantics)
