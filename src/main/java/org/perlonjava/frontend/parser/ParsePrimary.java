@@ -220,7 +220,7 @@ public class ParsePrimary {
 
         // Try to parse as a core operator/keyword
         if (operatorEnabled) {
-            Node operation = CoreOperatorResolver.parseCoreOperator(parser, token, startIndex);
+            Node operation = CoreOperatorResolver.parseCoreOperator(parser, token, startIndex, calledWithCore);
             if (operation != null) {
                 return operation;
             }

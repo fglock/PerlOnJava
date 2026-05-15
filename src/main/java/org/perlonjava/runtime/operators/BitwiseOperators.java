@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -484,8 +485,8 @@ public class BitwiseOperators {
             return shiftRightInternal(value, shift, false);
         }
 
-        // Perl uses 32-bit word size for shift operations
-        // Shifts >= 32 return 0
+        // 32-bit Perl: UV shifts wrap at 32 bits; (1<<32) and larger shifts are 0
+        // (perl5_t/t/op/bop.t; Config ivsize=4).
         if (shift >= 32) {
             return RuntimeScalarCache.scalarZero;
         }

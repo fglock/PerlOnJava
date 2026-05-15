@@ -36,6 +36,7 @@ sub _bootstrap_prefs {
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
         'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
         'IO-Async.yml'               => 'PerlOnJava/CpanDistroprefs/IO-Async.yml',
+        'Image-BMP.yml'              => 'PerlOnJava/CpanDistroprefs/Image-BMP.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -126,6 +127,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/EventLoop.patch' ],
         [ 'OpenAI-API-0.37/NoNetworkTests.patch',
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/NoNetworkTests.patch' ],
+        [ 'Image-BMP-1.26/BMP.pm.patch',
+          'PerlOnJava/CpanPatches/Image-BMP-1.26/BMP.pm.patch' ],
     );
 
     my $slurp = sub {
