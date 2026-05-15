@@ -250,13 +250,6 @@ public class DestroyDispatch {
      * Perform the actual DESTROY method call.
      */
     private static void doCallDestroy(RuntimeBase referent, String className) {
-        // Mark as destroyed before running DESTROY — one-shot guard.
-        // Prevents re-entrant DESTROY if cascading cleanup brings this
-        // object's refCount to 0 again within the same call stack.
-        // Also prevents infinite DESTROY loops for rescued objects
-        // (destroyFired stays true after rescue — see note in rescue path).
-        referent.destroyFired = true;
-
         // Use cached method if available
         RuntimeScalar destroyMethod = destroyMethodCache.get(referent.blessId);
         if (destroyMethod == null) {
@@ -282,6 +275,13 @@ public class DestroyDispatch {
             }
             return;
         }
+
+        // Mark as destroyed only once we will run Perl DESTROY. Setting destroyFired
+        // before the null check above incorrectly skips PPI::Element::DESTROY (and
+        // any other Perl destructor) when method resolution transiently returned null
+        // or fell through without a CODE ref — leaving PPI::_PARENT keys orphaned.
+        // Prevents re-entrant Perl DESTROY for the same object; see callDestroy.
+        referent.destroyFired = true;
 
         // If findMethodInHierarchy returned an AUTOLOAD sub (because no explicit DESTROY
         // exists), we need to set $AUTOLOAD before calling it. The method resolver sets

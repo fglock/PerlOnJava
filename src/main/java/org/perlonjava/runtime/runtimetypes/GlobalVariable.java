@@ -32,7 +32,7 @@ public class GlobalVariable {
     // Maps fully-qualified names (package::subname) to indicate they should be called
     // as user-defined subroutines instead of built-in operators
     public static final Map<String, Boolean> isSubs = new HashMap<>();
-    public static final Map<String, RuntimeScalar> globalCodeRefs = new PackageRootMap<>();
+    public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
 
@@ -107,6 +107,75 @@ public class GlobalVariable {
         @Override
         public void clear() {
             if (!isEmpty()) {
+                invalidatePackageRootSnapshot();
+            }
+            super.clear();
+        }
+    }
+
+    /**
+     * Tracks FQN on stash-backed code scalars and invalidates method-resolution cache
+     * lines that depend on the sub's leaf name when the map entry is meaningfully
+     * created or replaced (see {@link InheritanceResolver#invalidateMethodLookupCachesForStashSubKey}).
+     */
+    private static final class GlobalCodeRefMap extends HashMap<String, RuntimeScalar> {
+        private static void maybeInvalidateMethodCacheForCodeRefPut(String key, RuntimeScalar previous, RuntimeScalar value) {
+            if (key == null || value == null) {
+                return;
+            }
+            boolean reseat = previous != null && previous != value;
+            boolean firstDefinedInstall = previous == null && RuntimeCode.isCodeDefined(value);
+            if (reseat || firstDefinedInstall) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
+            }
+        }
+
+        @Override
+        public RuntimeScalar put(String key, RuntimeScalar value) {
+            markPackageGlobalRoot(value);
+            RuntimeScalar old = super.put(key, value);
+            invalidatePackageRootSnapshot();
+            if (old != null && old != value) {
+                old.globalCodeRefFqn = null;
+            }
+            if (value != null) {
+                value.globalCodeRefFqn = key;
+            }
+            maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
+            return old;
+        }
+
+        @Override
+        public RuntimeScalar putIfAbsent(String key, RuntimeScalar value) {
+            RuntimeScalar existing = get(key);
+            if (existing != null) {
+                markPackageGlobalRoot(existing);
+                return existing;
+            }
+            return put(key, value);
+        }
+
+        @Override
+        public RuntimeScalar remove(Object key) {
+            RuntimeScalar prev = super.remove(key);
+            if (prev != null) {
+                invalidatePackageRootSnapshot();
+                prev.globalCodeRefFqn = null;
+            }
+            if (key instanceof String s) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(s);
+            }
+            return prev;
+        }
+
+        @Override
+        public void clear() {
+            if (!isEmpty()) {
+                for (RuntimeScalar s : values()) {
+                    if (s != null) {
+                        s.globalCodeRefFqn = null;
+                    }
+                }
                 invalidatePackageRootSnapshot();
             }
             super.clear();

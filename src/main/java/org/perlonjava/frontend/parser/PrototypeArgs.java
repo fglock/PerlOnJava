@@ -253,10 +253,10 @@ public class PrototypeArgs {
                 List<LexerToken> tokens = parser.tokens;
                 int i = skipHorizontalWhitespaceTokens(tokens, parser.tokenIndex);
                 if (i < tokens.size() && isComma(tokens.get(i))) {
-                    int j = skipHorizontalWhitespaceTokens(tokens, i + 1);
+                    int j = skipHorizontalWhitespaceAndIgnorableNewlines(tokens, i + 1, parser);
                     LexerToken nextToken = tokenAtOrEof(tokens, j);
                     // Trailing comma before the newline that starts a pending << heredoc body is valid
-                    // (see op/exec.t package o block). A newline with no pending heredoc is an extra arg.
+                    // (see op/exec.t package o block).
                     boolean trailingCommaBeforeHeredoc =
                             nextToken.type == LexerTokenType.NEWLINE && !parser.getHeredocNodes().isEmpty();
                     if (!trailingCommaBeforeHeredoc
@@ -318,6 +318,26 @@ public class PrototypeArgs {
                 continue;
             }
             break;
+        }
+        return i;
+    }
+
+    /**
+     * After a comma in a parenthesis-free multi-arg prototype call, Perl allows a trailing comma
+     * before a statement terminator even when newlines appear before that terminator (e.g.
+     * {@code throws_ok BLOCK, qr//, 'msg',} then newline then {@code ;} in DBIx::Class tests).
+     * <p>
+     * We only skip NEWLINEs when no {@code <<} heredoc is pending — otherwise the newline may begin
+     * the heredoc body and must not be skipped for lookahead.
+     */
+    private static int skipHorizontalWhitespaceAndIgnorableNewlines(List<LexerToken> tokens, int i, Parser parser) {
+        i = skipHorizontalWhitespaceTokens(tokens, i);
+        while (i < tokens.size() && tokens.get(i).type == LexerTokenType.NEWLINE) {
+            if (!parser.getHeredocNodes().isEmpty()) {
+                break;
+            }
+            i++;
+            i = skipHorizontalWhitespaceTokens(tokens, i);
         }
         return i;
     }
