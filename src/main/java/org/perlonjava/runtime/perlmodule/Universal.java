@@ -155,7 +155,7 @@ public class Universal extends PerlModuleBase {
             if (method != null && !isAutoloadDispatch(method, actualMethod, perlClassName)) {
                 return method.getList();
             }
-            return new RuntimeList();
+            return scalarUndef.getList();
         }
 
         // Handle Package::SUPER::method syntax
@@ -168,7 +168,7 @@ public class Universal extends PerlModuleBase {
             if (method != null && !isAutoloadDispatch(method, actualMethod, packageName)) {
                 return method.getList();
             }
-            return new RuntimeList();
+            return scalarUndef.getList();
         }
 
         // Perl's can() must NOT consider AUTOLOAD - it should only find
@@ -219,7 +219,7 @@ public class Universal extends PerlModuleBase {
                 return method.getList();
             }
         }
-        return new RuntimeList();
+        return scalarUndef.getList();
     }
 
     /**

@@ -43,6 +43,18 @@ strings) never upgrade the result to UTF-8.
 - Previously, if neither was BYTE_STRING (e.g. INTEGER + BYTE_STRING), it fell
   through to the default STRING return
 
+### 2b. `UNIVERSAL::can()` failures must return `(undef)`
+
+**File:** `src/main/java/org/perlonjava/runtime/perlmodule/Universal.java`
+
+Perl returns **one** undefined value (`(undef)` in list context). PerlOnJava used an **empty**
+`RuntimeList`, which behaves like Perl’s truly empty list: in `%h = (...)`/`{ … }`
+constructors it eats the next pairing and corrupts literals. Downstream (**Mite** `__META__` in
+`*.mite.pm`; **Sub::HandlesVia::CodeGenerator**) saw `HAS_BUILDARGS` swallow the `'HAS_FOREIGNBUILDARGS'`
+key as its bogus string value and incorrectly took the `BUILDARGS` constructor branch.
+
+Failures now use `scalarUndef.getList()` (singleton undef).
+
 ### 3. `sprintf` — SprintfOperator.sprintfInternal()
 
 **File:** `src/main/java/org/perlonjava/runtime/operators/SprintfOperator.java`
