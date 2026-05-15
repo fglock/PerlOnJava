@@ -2,7 +2,14 @@
 
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More;
+
+BEGIN {
+    eval { require Moose; require namespace::autoclean; 1 }
+        or plan skip_all => 'Moose and namespace::autoclean required';
+}
+
+plan tests => 4;
 
 {
     package NamespaceAutocleanConstantTest;

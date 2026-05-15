@@ -4,6 +4,11 @@ use Test::More;
 use DBI;
 use Storable qw(nfreeze thaw);
 
+BEGIN {
+    eval { require DBD::SQLite; 1 }
+        or plan skip_all => 'DBD::SQLite required';
+}
+
 my $dbh = DBI->connect(
     'dbi:SQLite:dbname=:memory:',
     '',

@@ -4,7 +4,11 @@ use warnings;
 
 use Test::More;
 use Scalar::Util qw(weaken);
-use Internals;
+
+BEGIN {
+    eval { require Internals; 1 }
+        or plan skip_all => 'Internals not available (core refcount helpers)';
+}
 
 {
     package GTAC_Object;
