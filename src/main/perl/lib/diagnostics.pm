@@ -573,13 +573,22 @@ sub death_trap {
 
     # See if we are coming from anywhere within an eval. If so we don't
     # want to explain the exception because it's going to get caught.
-    my $in_eval = 0;
-    my $i = 0;
-    while (my $caller = (caller($i++))[3]) {
-      if ($caller eq '(eval)') {
-	$in_eval = 1;
-	last;
-      }
+    #
+    # PerlOnJava note: caller()[3] inside $SIG{__DIE__} may not include the
+    # synthetic "(eval)" frame yet (stack differs from perl's XS caller).
+    # Inline's tests hit this via `eval "require Missing::Mod"` under
+    # diagnostics; missing the eval frame makes splain+die recurse badly.
+    # When the exception already carries an "(eval N) line" location, treat
+    # it as eval-bound — matching perl's behavior for $@ caught by eval.
+    my $in_eval = ($exception =~ /\bat \(eval \d+\) line\b/);
+    unless ($in_eval) {
+	my $i = 0;
+	while (my $caller = (caller($i++))[3]) {
+	  if ($caller eq '(eval)') {
+	    $in_eval = 1;
+	    last;
+	  }
+	}
     }
 
     splainthis($exception) unless $in_eval;
