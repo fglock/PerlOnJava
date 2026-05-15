@@ -232,6 +232,16 @@ public class RuntimeStashEntry extends RuntimeGlob {
                 // TODO: Add "Undefined value assigned to typeglob" warning with proper guards
                 // to avoid false positives during module loading
                 return value;
+            case INTEGER:
+            case DOUBLE:
+            case BOOLEAN:
+            case VSTRING:
+            case DUALVAR:
+                // Stash-hash assignment with a numeric or other non-string scalar (e.g.
+                // `${"HTTP/Response::"}{VERSION} ||= -1` from Test::MockObject::fake_module)
+                // updates the GV's scalar slot, not subroutine prototype metadata — delegate
+                // to RuntimeGlob.
+                return super.set(value);
             case STRING:
             case BYTE_STRING:
                 // Assigning a string to a stash entry sets the prototype for that symbol
