@@ -617,6 +617,7 @@ DBIx::BulkUtil	PASS	1	1		2026-05-08		454bddc34
 DBIx::CSV	PASS	1	1		2026-05-10		1e95a0902
 DBIx::CSVDumper	PASS	2	2		2026-04-22		3f3336774
 DBIx::CheckConnectivity	PASS	33	33		2026-05-12		93dfa497b
+DBIx::Class	PASS	13858	13858		2026-05-15		9b36f7e57
 DBIx::Class::Bootstrap::Simple	PASS	2	2		2026-05-06		b338f8ff5
 DBIx::Class::CryptColumn	PASS	31	31		2026-05-10		a0cb33710
 DBIx::Class::CustomPrefetch	PASS	95	95		2026-05-15		3fe76ed3b
@@ -1305,6 +1306,7 @@ IS::Conf	PASS	1	1		2026-05-11		b5c01ce1c
 ISO::639::3	PASS	1	1		2026-05-08		454bddc34
 ITM	PASS	39	39		2026-05-06		b338f8ff5
 Icon::FamFamFam::Silk	PASS	3	3		2026-05-10		1e95a0902
+Image::ExifTool	PASS	600	600		2026-05-15		9b36f7e57
 Image::GIF::Encoder::PP	PASS	2	2		2026-04-12		cc5efa220
 Image::Magick::Info	PASS	1	1		2026-05-09		d7916b01c
 Image::OCR::Tesseract	PASS	5	5		2026-05-12		b5c01ce1c
