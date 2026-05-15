@@ -1167,9 +1167,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     || value.value == null
                     || ((RuntimeBase) value.value).refCount == -1;
             if (oldUntracked && newUntracked) {
-                this.type = value.type;
-                this.value = value.value;
-                return this;
+                // Hash/array element stores must count refs to RuntimeHash/RuntimeArray
+                // at refCount==-1 (see incrementRefCountForContainerStore). Otherwise a
+                // lone `$slot = $obj` assignment can bypass tracking while push() does not.
+                if ((value.type & REFERENCE_BIT) != 0
+                        && value.value instanceof RuntimeBase nb
+                        && nb.refCount < 0
+                        && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
+                    // fall through to full refCounted assignment
+                } else {
+                    this.type = value.type;
+                    this.value = value.value;
+                    return this;
+                }
             }
         }
 
@@ -1250,15 +1260,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && WeakRefRegistry.weakRefsExist
                 && blessedClassHasDestroy(oldBase);
 
-        // Increment new value's refCount (>= 0 means tracked; -1 means untracked).
-        // Only increment for objects already being tracked (refCount >= 0).
-        // Objects born via createReferenceWithTrackedElements or closures with
-        // captures start at 0 and are always tracked. Named variables (\$x, \@a)
-        // have refCount = -1 (untracked) since they have a JVM local slot that
-        // isn't counted. Transitioning -1→1 would undercount.
+        // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
+        // at refCount==-1 are promoted to 0 here (aligned with
+        // incrementRefCountForContainerStore) so hash/array slots and
+        // `%hash=()`/`deferDestroyForContainerClear` balance. Other referents at -1
+        // stay untracked (e.g. named \@x via local slot).
         boolean newOwned = false;
         if ((value.type & RuntimeScalarType.REFERENCE_BIT) != 0 && value.value != null) {
             RuntimeBase nb = (RuntimeBase) value.value;
+            if (nb.refCount < 0
+                    && (nb instanceof RuntimeHash || nb instanceof RuntimeArray)) {
+                nb.refCount = 0;
+            }
             if (nb.refCount >= 0) {
                 nb.traceRefCount(+1, "RuntimeScalar.setLargeRefCounted (increment on store)");
                 nb.recordOwner(this, "setLargeRefCounted store");

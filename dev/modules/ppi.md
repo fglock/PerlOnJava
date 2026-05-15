@@ -217,7 +217,7 @@ file before closing the phase.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 done; Phase 2 blocked on cross-cutting refcount work
+### Current Status: Phase 1 done; Phase 1b (hash-slot refcount) landed; Phase 2 / `04_element` leak still open
 
 ### Completed Phases
 - [x] **Phase 1** (2026-04-20): Fix `Package::->method()` bareword trailing-`::` stripping (RC1).
@@ -226,6 +226,18 @@ file before closing the phase.
   - Regression test: `src/test/resources/unit/method_call_trailing_colons.t` (5 tests).
   - Verified: `t/ppi_token_whitespace.t` now passes all 6 subtests.
   - `make` (full unit tests) passes.
+
+- [x] **Phase 1b** (2026-05-15): Additional refcount parity for **hash slot** assignment
+    (`RuntimeScalar.setLargeRefCounted`).
+  - **Problem**: `RuntimeScalar.setLargeRefCounted` had a fast path that treated any pair of
+    `refCount==-1` referents as “fully untracked” and skipped refcount bookkeeping. That
+    diverged from `incrementRefCountForContainerStore` (used by `push` and anon hash finalize),
+    so some container stores could miss `deferDestroyForContainerClear` on `%hash=()`.
+  - **Change**: Bypass that fast path for `RuntimeHash`/`RuntimeArray` at `refCount<0`,
+    promote `-1→0`, then increment like container-store.
+  - **PPI `t/04_element.t` tests 202/206**: still fail (~2134 `%_PARENT` keys remain after
+    `PPI::Document->DESTROY` on large `PPI/Node.pm` parse); dominant cause still selective
+    refcount / teardown, not this hash-slot path alone.
 
 ### Next Steps
 
@@ -293,6 +305,23 @@ equivalent cleanup). Other failures in `./jcpan -t PPI` (e.g. `t/07_token.t`,
    paths can count anon containers consistently.
 
 These improve destructor reliability but **do not** yet pass tests 202/206 alone.
+
+### Future: collision-safe `refaddr` (`perlObjectId`)
+
+- Today `Scalar::Util::refaddr` on PerlOnJava uses `System.identityHashCode` on the referent,
+  which is **not** a unique id (collisions are possible; key space is 32-bit).
+- PPI indexes `%PPI::Singletons::_PARENT` by `refaddr($child)`; in theory collisions could merge
+  unrelated children and confuse parent links (low probability at moderate tree sizes).
+- **Idea**: assign each `RuntimeBase` a monotonic `long` at construction (`AtomicLong`),
+  return it from `refaddr` for `HASHREFERENCE` / blessed objects / etc.
+- **Cost**: ~8 bytes per `RuntimeBase` instance (including every `RuntimeScalar`) plus an atomic
+  increment on every allocation; see earlier overhead discussion.
+- **Experiment** (2026-05): a prototype did **not** fix `04_element` 202/206; the dominant issue
+  is refcount/teardown, not key collision. Keep this as an **optional** hardening step after
+  `04_element` is understood.
+- **Tests**: `src/test/resources/unit/*.t` must remain runnable with **stock `perl`**
+  (`prove`, one-liner checks). Do not add jperl-only assertions about numeric `refaddr` layout
+  unless guarded (e.g. `plan skip_all` when `$^X` is not jperl).
 
 ### Next investigation steps (ordered)
 
