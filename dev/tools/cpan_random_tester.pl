@@ -21,7 +21,7 @@
 #   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Test specific modules
 #   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
-#   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min timeout per module
+#   perl dev/tools/cpan_random_tester.pl --timeout 120      # default 2 min (overrides below win)
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
 #
 # Output:
@@ -62,6 +62,12 @@ my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat
 my $log_dir      = '/tmp/cpan_random_logs';
 my $KILL_AFTER   = 10;  # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 
+# jcpan -t timeouts (seconds): distribution root module -> wall clock.  Overrides --timeout
+# for that target only (heavy test suites).
+my %MODULE_TIMEOUT_SECONDS = (
+    'DBIx::Class' => 3600,
+);
+
 # CPAN package index
 my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 
@@ -91,6 +97,12 @@ GetOptions(
 if ($help) {
     print_usage();
     exit 0;
+}
+
+sub effective_timeout_for {
+    my ($module) = @_;
+    my $secs = $MODULE_TIMEOUT_SECONDS{$module};
+    defined $secs ? $secs : $timeout;
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -216,8 +228,13 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
-printf "\nTesting %d randomly selected modules (timeout: %ds, commit: %s):\n",
+printf "\nTesting %d randomly selected modules (default timeout: %ds, commit: %s):\n",
     scalar @selected, $timeout, $git_commit;
+if (%MODULE_TIMEOUT_SECONDS) {
+    print "Per-module timeouts: ",
+        join(', ', map { "$_=${MODULE_TIMEOUT_SECONDS{$_}}s" } sort keys %MODULE_TIMEOUT_SECONDS),
+        "\n";
+}
 print "=" x 70, "\n\n";
 
 # ──────────────────────────────────────────────────────────────────────
@@ -231,12 +248,14 @@ my $upgraded     = 0;   # FAIL→PASS transitions
 for my $module (@selected) {
     $target_count++;
     my $mode = $install ? '' : '-t';
-    printf "[%d/%d] jcpan %s %s\n", $target_count, scalar @selected, $mode, $module;
+    my $module_timeout = effective_timeout_for($module);
+    printf "[%d/%d] jcpan %s %s (timeout %ds)\n",
+        $target_count, scalar @selected, $mode, $module, $module_timeout;
 
     my $start = time();
     my $cmd = $install ? "$jcpan $module" : "$jcpan -t $module";
 
-    my ($output, $timed_out) = run_with_timeout($cmd, $timeout);
+    my ($output, $timed_out) = run_with_timeout($cmd, $module_timeout);
 
     my $elapsed = sprintf('%.1f', time() - $start);
 
@@ -251,7 +270,7 @@ for my $module (@selected) {
             push @all_results, {
                 module => $module, status => 'FAIL',
                 tests => undef, pass_count => undef,
-                error => "TIMEOUT (>${timeout}s)",
+                error => "TIMEOUT (>${module_timeout}s)",
             };
         } elsif ($output =~ /\Q$module\E is up to date/) {
             # Already installed, jcpan skipped it — not a failure
@@ -879,7 +898,8 @@ Options:
                    Can be:
                      - Comma-separated: --modules Foo::Bar,Baz::Qux
                      - File path: --modules modules.txt (one per line, # for comments)
-  --timeout N      Timeout per target module in seconds (default: 300)
+  --timeout N      Default timeout per target module in seconds (default: 300).
+                   Known-slow distributions use a larger timeout wired in this script.
   --install        Use jcpan (install) instead of jcpan -t (test only).
                    Deps stay installed for future runs, but already-installed
                    modules are skipped (no re-test).
@@ -894,6 +914,7 @@ Behavior:
   - Targets are randomly chosen from modules that haven't passed yet
     (or from --modules if specified).
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
+  - A few heavy targets (e.g. DBIx::Class) have a higher per-module timeout in the script.
   - If a previously-failed module now passes (e.g., its deps got
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
