@@ -1248,6 +1248,18 @@ public class SubroutineParser {
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();
 
+        // B::CV->START line must be available before lazy compilation instantiates
+        // the JVM/interpreted body — e.g. Fennec::Lite calls B::svref_2object($cr)
+        // from _add_tests while registering coderefs.
+        if (parser.ctx.errorUtil != null && block != null) {
+            var loc = parser.ctx.errorUtil.getSourceLocationAccurate(block.tokenIndex);
+            placeholder.cvStartFile = loc.fileName();
+            placeholder.cvStartLine = loc.lineNumber();
+        } else if (parser.ctx.compilerOptions != null
+                && parser.ctx.compilerOptions.fileName != null) {
+            placeholder.cvStartFile = parser.ctx.compilerOptions.fileName;
+        }
+
         // Optimization - https://github.com/fglock/PerlOnJava/issues/8
         // Prepare capture variables
         Map<Integer, SymbolTable.SymbolEntry> outerVars = parser.ctx.symbolTable.getAllVisibleVariables();
@@ -1453,6 +1465,8 @@ public class SubroutineParser {
                     field.set(placeholder.codeObject, codeRef);
 
                     installClosureCaptureMetadata(placeholder, paramList);
+                    placeholder.cvStartFile = compiledCode.cvStartFile;
+                    placeholder.cvStartLine = compiledCode.cvStartLine;
 
                 } else if (runtimeCode instanceof InterpretedCode interpretedCode) {
                     // InterpretedCode path - update placeholder in-place (not replace codeRef.value)
@@ -1486,6 +1500,8 @@ public class SubroutineParser {
                     placeholder.subroutine = interpretedCode;
                     placeholder.codeObject = interpretedCode;
                     installClosureCaptureMetadata(placeholder, paramList);
+                    placeholder.cvStartFile = interpretedCode.cvStartFile;
+                    placeholder.cvStartLine = interpretedCode.cvStartLine;
                 }
             } catch (VerifyError ve) {
                 // VerifyError extends Error (not Exception), so it's not caught by catch(Exception).
@@ -1519,6 +1535,8 @@ public class SubroutineParser {
                 placeholder.subroutine = interpretedCode;
                 placeholder.codeObject = interpretedCode;
                 installClosureCaptureMetadata(placeholder, paramList);
+                placeholder.cvStartFile = interpretedCode.cvStartFile;
+                placeholder.cvStartLine = interpretedCode.cvStartLine;
             } catch (Exception e) {
                 // Handle any exceptions during subroutine creation
                 throw new PerlCompilerException("Subroutine error: " + e.getMessage());

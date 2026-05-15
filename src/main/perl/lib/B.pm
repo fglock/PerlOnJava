@@ -218,8 +218,23 @@ package B::CV {
     
     sub START {
         # Return a B::COP (control op) so optree walkers find file/line info.
-        # Real Perl returns the first op of the sub body; for PerlOnJava we
-        # return a COP with the best location info we have.
+        # Real Perl returns the first op of the sub body; for PerlOnJava use
+        # Internals::jperl_cv_start_location when available.
+        my $self = shift;
+        my $ref = $self->{ref};
+        if ($ref && ref($ref) eq 'CODE') {
+            local $@;
+            eval { require Internals; 1 } or return B::COP->new("-e", 0);
+            my @loc = Internals::jperl_cv_start_location($ref);
+            if (@loc >= 2) {
+                my ($file, $line) = @loc;
+                $file ||= "-e";
+                $line ||= 0;
+                if ($line > 0) {
+                    return B::COP->new($file, $line);
+                }
+            }
+        }
         return B::COP->new("-e", 0);
     }
     

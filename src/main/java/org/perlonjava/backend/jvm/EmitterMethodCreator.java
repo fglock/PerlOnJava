@@ -1733,7 +1733,7 @@ public class EmitterMethodCreator implements Opcodes {
             if (SHOW_FALLBACK) {
                 System.err.println("Note: JVM compilation succeeded.");
             }
-            return wrapAsCompiledCode(generatedClass, ctx);
+            return wrapAsCompiledCode(generatedClass, ctx, ast);
 
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
@@ -1788,9 +1788,10 @@ public class EmitterMethodCreator implements Opcodes {
      *
      * @param generatedClass The compiled JVM class
      * @param ctx            The compiler context
+     * @param ast            Body root node (for {@code B::CV->START} source line)
      * @return CompiledCode wrapping the compiled class
      */
-    private static CompiledCode wrapAsCompiledCode(Class<?> generatedClass, EmitterContext ctx) {
+    private static CompiledCode wrapAsCompiledCode(Class<?> generatedClass, EmitterContext ctx, Node ast) {
         try {
             // Get the constructor (may have parameters for captured variables)
             String[] env = (ctx.capturedEnv != null) ? ctx.capturedEnv : ctx.symbolTable.getVariableNames();
@@ -1828,15 +1829,19 @@ public class EmitterMethodCreator implements Opcodes {
                 RuntimeScalar selfRef = new RuntimeScalar();
                 selfRef.type = RuntimeScalarType.CODE;
                 // Note: ctx doesn't have prototype field, it's set separately by caller
-                selfRef.value = new CompiledCode(methodHandle, codeObject, null, generatedClass, ctx);
+                CompiledCode cc = new CompiledCode(methodHandle, codeObject, null, generatedClass, ctx);
+                applyCvStartFromAst(ctx, ast, cc);
+                selfRef.value = cc;
                 field.set(codeObject, selfRef);
 
-                return (CompiledCode) selfRef.value;
+                return cc;
             } else {
                 // Has captured variables - caller must instantiate later
                 // Return a CompiledCode with null codeObject/methodHandle
                 // The caller will fill these in via reflection (see SubroutineParser pattern)
-                return new CompiledCode(null, null, null, generatedClass, ctx);
+                CompiledCode cc = new CompiledCode(null, null, null, generatedClass, ctx);
+                applyCvStartFromAst(ctx, ast, cc);
+                return cc;
             }
 
         } catch (VerifyError ve) {
@@ -1848,6 +1853,26 @@ public class EmitterMethodCreator implements Opcodes {
             throw new PerlCompilerException(
                     "Failed to wrap compiled class: " + e.getMessage());
         }
+    }
+
+    private static void applyCvStartFromAst(EmitterContext ctx, Node ast, RuntimeCode target) {
+        if (target == null || ctx == null) {
+            return;
+        }
+        String cvFile = "-e";
+        if (ctx.compilerOptions != null && ctx.compilerOptions.fileName != null) {
+            cvFile = ctx.compilerOptions.fileName;
+        }
+        int cvLine = 0;
+        if (ctx.errorUtil != null && ast != null) {
+            ErrorMessageUtil.SourceLocation loc = ctx.errorUtil.getSourceLocationAccurate(ast.getIndex());
+            cvLine = loc.lineNumber();
+            if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+                cvFile = loc.fileName();
+            }
+        }
+        target.cvStartFile = cvFile;
+        target.cvStartLine = cvLine;
     }
 
     /**
