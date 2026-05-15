@@ -579,6 +579,16 @@ public class Internals extends PerlModuleBase {
      */
     public static RuntimeList abs_path(RuntimeArray args, int ctx) {
         String path = args.size() > 0 ? args.get(0).toString() : ".";
+        // jar:PERL5LIB & jar:PERL5LIB/… paths live in the embedded Perl library.
+        // File.exists/canonicalPath cannot see them, but FileTestOperator and @INC do.
+        // Inline::derive_minus_I maps abs_path over @INC entries; returning undef here
+        // produced bare "-I" flags and broke Inline's config subprocess.
+        if (path.startsWith("jar:")) {
+            if (Jar.isJarDirectory(path) || Jar.exists(path)) {
+                return new RuntimeScalar(path).getList();
+            }
+            return new RuntimeScalar().getList();
+        }
         try {
             java.io.File file = new java.io.File(path);
             if (!file.isAbsolute()) {

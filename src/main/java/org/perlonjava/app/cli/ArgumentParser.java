@@ -13,6 +13,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.perlonjava.core.Configuration.getPerlVersionBundle;
 
@@ -317,31 +319,152 @@ public class ArgumentParser {
      */
     private static void processShebangLine(String[] args, CompilerOptions parsedArgs, String fileContent, int index) {
         String[] lines = fileContent.split("\n", 2);
-        if (lines.length > 0 && lines[0].startsWith("#!")) {
-            // Extract the shebang line and process it
-            String shebangLine = lines[0].substring(2).trim();
-            int perlIndex = shebangLine.indexOf("perl");
-            if (perlIndex != -1) {
-                String relevantPart = shebangLine.substring(perlIndex + 4).trim();
-                // Strip emacs mode line marker (e.g. "-*- mode: cperl -*-") which real
-                // perl tolerates in #! lines but not on the command line.
-                int emacsStart = relevantPart.indexOf("-*-");
-                if (emacsStart != -1) {
-                    int emacsEnd = relevantPart.indexOf("-*-", emacsStart + 3);
-                    if (emacsEnd != -1) {
-                        relevantPart = relevantPart.substring(0, emacsStart)
-                                + relevantPart.substring(emacsEnd + 3);
-                    } else {
-                        relevantPart = relevantPart.substring(0, emacsStart);
-                    }
+        if (lines.length == 0 || !lines[0].startsWith("#!")) {
+            return;
+        }
+        String shebangLine = lines[0].substring(2).trim();
+        if (shebangLine.isEmpty()) {
+            return;
+        }
+
+        // perlrun: parsing of #! switches starts at a *word* "perl" or "indir".
+        // Substrings like "jperl" must NOT match (matches stock perl behavior).
+        Matcher perlWord = Pattern.compile("\\b(?:perl|indir)\\b", Pattern.CASE_INSENSITIVE).matcher(shebangLine);
+        if (perlWord.find()) {
+            String relevantPart = shebangLine.substring(perlWord.end()).trim();
+            // Strip emacs mode line marker (e.g. "-*- mode: cperl -*-") which real
+            // perl tolerates in #! lines but not on the command line.
+            int emacsStart = relevantPart.indexOf("-*-");
+            if (emacsStart != -1) {
+                int emacsEnd = relevantPart.indexOf("-*-", emacsStart + 3);
+                if (emacsEnd != -1) {
+                    relevantPart = relevantPart.substring(0, emacsStart)
+                            + relevantPart.substring(emacsEnd + 3);
+                } else {
+                    relevantPart = relevantPart.substring(0, emacsStart);
                 }
-                String[] shebangArgs = relevantPart.trim().split("\\s+");
-                // Filter out empty args from shebang processing
-                String[] nonEmptyArgs = Arrays.stream(shebangArgs)
-                        .filter(arg -> !arg.isEmpty())
-                        .toArray(String[]::new);
-                processArgs(nonEmptyArgs, parsedArgs);
             }
+            String[] shebangArgs = relevantPart.trim().split("\\s+");
+            String[] nonEmptyArgs = Arrays.stream(shebangArgs)
+                    .filter(arg -> !arg.isEmpty())
+                    .toArray(String[]::new);
+            processArgs(nonEmptyArgs, parsedArgs);
+            return;
+        }
+
+        // Alternate interpreter (perlrun): if there is no word "perl"/"indir", exec the named program.
+        // Example: Inline's TestML tests start with "#!inc/bin/testml-cpan".
+        String[] tokens = shebangLine.split("\\s+");
+        if (tokens.length == 0) {
+            return;
+        }
+        if (isPerlOnJavaExecutable(Paths.get(tokens[0]))) {
+            // Same binary as this runtime (e.g. "#!/path/to/jperl"): compile here; do not re-exec.
+            return;
+        }
+        List<String> cmd = buildShebangCommand(tokens);
+        delegateToShebangInterpreter(args, cmd, index);
+    }
+
+    /**
+     * Build argv for an alternate #! interpreter.
+     * When {@code PERLONJAVA_EXECUTABLE} points at our launcher, prefer {@code jperl /abs/script}
+     * over executing {@code script} directly so ENOEXEC/shell-fallback (bash parsing Perl)
+     * cannot occur — CPAN's Inline bundles "#!inc/bin/testml-cpan" wrappers whose kernel
+     * exec path is fragile under JVM-spawned children on some platforms.
+     */
+    private static List<String> buildShebangCommand(String[] shebangTokens) {
+        java.nio.file.Path interpScript =
+                Paths.get(shebangTokens[0]).toAbsolutePath().normalize();
+        String perlExe = System.getenv("PERLONJAVA_EXECUTABLE");
+        List<String> out = new ArrayList<>();
+        if (perlExe != null && !perlExe.isEmpty() && interpreterScriptUsesPerlOnJava(interpScript)) {
+            out.add(perlExe);
+            out.add(interpScript.toString());
+            for (int i = 1; i < shebangTokens.length; i++) {
+                out.add(shebangTokens[i]);
+            }
+            return out;
+        }
+        out.add(interpScript.toString());
+        for (int i = 1; i < shebangTokens.length; i++) {
+            out.add(shebangTokens[i]);
+        }
+        return out;
+    }
+
+    /** True when {@code script}'s own shebang names this PerlOnJava launcher (absolute path). */
+    private static boolean interpreterScriptUsesPerlOnJava(java.nio.file.Path script) {
+        try {
+            List<String> lines = java.nio.file.Files.readAllLines(script, java.nio.charset.StandardCharsets.UTF_8);
+            if (lines.isEmpty()) {
+                return false;
+            }
+            String line = lines.getFirst().trim();
+            if (!line.startsWith("#!")) {
+                return false;
+            }
+            String body = line.substring(2).trim();
+            if (body.isEmpty()) {
+                return false;
+            }
+            String[] parts = body.split("\\s+");
+            return isPerlOnJavaExecutable(Paths.get(parts[0]));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * True when {@code interpreterPath} resolves to the same file as {@code PERLONJAVA_EXECUTABLE}.
+     */
+    private static boolean isPerlOnJavaExecutable(java.nio.file.Path interpreterPath) {
+        String self = System.getenv("PERLONJAVA_EXECUTABLE");
+        if (self == null || self.isEmpty()) {
+            return false;
+        }
+        try {
+            java.nio.file.Path a = interpreterPath.toAbsolutePath().normalize().toRealPath();
+            java.nio.file.Path b = Paths.get(self).toAbsolutePath().normalize().toRealPath();
+            return a.equals(b);
+        } catch (IOException e) {
+            try {
+                java.io.File fa = interpreterPath.toAbsolutePath().normalize().toFile();
+                java.io.File fb = Paths.get(self).toAbsolutePath().normalize().toFile();
+                return fa.getCanonicalPath().equals(fb.getCanonicalPath());
+            } catch (IOException e2) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Spawn the alternate #! interpreter with this script and trailing argv, then exit the JVM
+     * with its status (matches perl's exec semantics closely enough for harness-driven tests).
+     */
+    private static void delegateToShebangInterpreter(String[] args, List<String> interpreterArgv0, int scriptArgIndex) {
+        // Preserve the argv spelling (usually relative, e.g. t/foo.t). Some wrappers
+        // (Inline's inc/bin/testml-cpan) regex-rewrite paths assuming a distribution-relative name;
+        // canonical absolute paths break their compiled-.tml lookup.
+        List<String> cmd = new ArrayList<>(interpreterArgv0);
+        cmd.add(args[scriptArgIndex]);
+        for (int i = scriptArgIndex + 1; i < args.length; i++) {
+            cmd.add(args[i]);
+        }
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.inheritIO();
+        try {
+            Process p = pb.start();
+            int exit = p.waitFor();
+            System.exit(exit);
+        } catch (IOException e) {
+            System.err.println("Error: unable to run shebang interpreter \""
+                    + interpreterArgv0.get(0) + "\": " + e.getMessage());
+            System.exit(255);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Error: interrupted while running shebang interpreter");
+            System.exit(255);
         }
     }
 
