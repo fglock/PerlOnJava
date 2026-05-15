@@ -1499,7 +1499,6 @@ DBIx::Broker	FAIL				2026-05-10
 DBIx::Browse	FAIL	4	0	18/4 subtests failed	2026-05-05		
 DBIx::CGITables	FAIL			Unknown test outcome	2026-05-05		
 DBIx::Chart	FAIL			Configure failed	2026-05-11		
-DBIx::Class	FAIL	13840	13840		2026-05-15		
 DBIx::Class::AsFdat	FAIL	3	3	Missing: Test/Perl/Critic.pm	2026-05-08		
 DBIx::Class::AuditAny	FAIL			Missing: SQL/Translator.pm	2026-05-09		
 DBIx::Class::AuditLog	FAIL				2026-05-10		

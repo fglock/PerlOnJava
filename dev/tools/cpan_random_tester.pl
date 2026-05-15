@@ -66,6 +66,7 @@ my $KILL_AFTER   = 10;  # seconds between SIGTERM and SIGKILL (used by run_with_
 # for that target only (heavy test suites).
 my %MODULE_TIMEOUT_SECONDS = (
     'DBIx::Class' => 3600,
+    'Image::ExifTool' => 3600,
 );
 
 # CPAN package index
