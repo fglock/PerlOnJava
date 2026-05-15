@@ -1132,15 +1132,11 @@ public class Encode extends PerlModuleBase {
         }
         RuntimeScalar arg = args.get(0);
         boolean wasUtf8 = (arg.type == STRING);
-        if (arg.type == BYTE_STRING) {
-            // Re-decode the byte string as UTF-8 to get proper characters
-            // e.g., bytes \xC3\xA9 -> character U+00E9 (é)
-            String s = arg.toString();
-            byte[] bytes = s.getBytes(StandardCharsets.ISO_8859_1);
-            arg.set(new String(bytes, StandardCharsets.UTF_8));
+        if (!wasUtf8) {
+            boolean fromBytes = (arg.type == BYTE_STRING);
+            arg.type = STRING;
+            arg.utf8UncheckedOctets = fromBytes;
         }
-        // Set the UTF-8 flag (change type to STRING)
-        arg.type = STRING;
         return new RuntimeScalar(wasUtf8).getList();
     }
 
@@ -1160,6 +1156,7 @@ public class Encode extends PerlModuleBase {
             arg.set(new String(bytes, StandardCharsets.ISO_8859_1));
         }
         arg.type = BYTE_STRING;
+        arg.utf8UncheckedOctets = false;
         return new RuntimeScalar(wasUtf8).getList();
     }
 

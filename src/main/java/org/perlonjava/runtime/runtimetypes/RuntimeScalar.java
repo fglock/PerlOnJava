@@ -79,6 +79,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public boolean ioOwner;
 
     /**
+     * When {@link #type} is {@link RuntimeScalarType#STRING}, true if this value was produced by
+     * {@code Encode::_utf8_on} on a {@link RuntimeScalarType#BYTE_STRING} without decoding octets.
+     * Character ordinals then match raw UTF-8 bytes (possibly ill-formed), as in Perl.
+     */
+    public boolean utf8UncheckedOctets;
+
+    /**
      * When this scalar is installed in {@link GlobalVariable#globalCodeRefs}, the map key
      * (fully-qualified name such as {@code My::Pkg::foo}). Used to invalidate
      * method-resolution cache lines for that sub's leaf name after in-place CV updates
@@ -197,6 +204,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         this.type = scalar.type;
         this.value = scalar.value;
+        this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
     }
 
     public RuntimeScalar(RuntimeCode value) {
@@ -1049,10 +1057,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (this != value) {
                 this.type = value.type;
                 this.value = value.value;
+                this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                 RuntimePosLvalue.invalidatePos(this);
             } else {
                 this.type = value.type;
                 this.value = value.value;
+                this.utf8UncheckedOctets = value.utf8UncheckedOctets;
             }
             return this;
         }
@@ -1139,6 +1149,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // so no refCount was incremented/decremented, and no mortal entries were added.
         this.type = value.type;
         this.value = value.value;
+        this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         return this;
     }
 
@@ -1178,6 +1189,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 } else {
                     this.type = value.type;
                     this.value = value.value;
+                    this.utf8UncheckedOctets = value.utf8UncheckedOctets;
                     return this;
                 }
             }
@@ -1294,6 +1306,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+        this.utf8UncheckedOctets = value.utf8UncheckedOctets;
 
         // DESTROY rescue detection for reference types.
         // Only trigger when the OLD value was a reference to the DESTROY target
@@ -1547,6 +1560,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             this.type = RuntimeScalarType.STRING;
         }
         this.value = value;
+        this.utf8UncheckedOctets = false;
         return this;
     }
 
