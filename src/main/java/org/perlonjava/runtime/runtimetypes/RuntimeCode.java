@@ -421,6 +421,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean explicitlyRenamed = false;
 
     /**
+     * Source location of the start of this CV's body (Perl {@code B::CV->START->line} /
+     * COP). Used by the stub {@code B} module; {@code 0} means unknown.
+     */
+    public String cvStartFile;
+    public int cvStartLine;
+
+    /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
      * stash slot FQN for introspection ({@code Sub::Util::subname}, {@code B::CV})
      * without mutating {@link #packageName}/{@link #subName}, which must stay
@@ -2018,6 +2025,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @throws Exception if an error occurs during method retrieval
      */
     public static RuntimeScalar makeCodeObject(Object codeObject, String prototype, String packageName) throws Exception {
+        return makeCodeObject(codeObject, prototype, packageName, null, 0);
+    }
+
+    /**
+     * Like {@link #makeCodeObject(Object, String, String)} plus COP source
+     * location for {@code B::CV->START} (e.g. Fennec::Lite line filtering).
+     */
+    public static RuntimeScalar makeCodeObject(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine) throws Exception {
         // Retrieve the class of the provided code object
         Class<?> clazz = codeObject.getClass();
 
@@ -2030,6 +2050,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Set CvSTASH (the package where this sub was compiled)
         if (packageName != null) {
             code.packageName = packageName;
+        }
+        if (cvStartFile != null && !cvStartFile.isEmpty()) {
+            code.cvStartFile = cvStartFile;
+        }
+        if (cvStartLine > 0) {
+            code.cvStartLine = cvStartLine;
         }
 
         // Look up pad constants registered at compile time for this class.

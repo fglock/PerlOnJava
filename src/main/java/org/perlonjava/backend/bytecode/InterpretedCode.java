@@ -192,6 +192,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (this.packageName == null && compilePackage != null) {
             this.packageName = compilePackage;
         }
+        this.cvStartFile = sourceName;
+        this.cvStartLine = sourceLine;
         // Scan bytecodes to find registers used by SCOPE_EXIT_CLEANUP opcodes.
         // These are the actual "my" variable registers that need cleanup during
         // exception propagation. Temporaries (hash element aliases, method return

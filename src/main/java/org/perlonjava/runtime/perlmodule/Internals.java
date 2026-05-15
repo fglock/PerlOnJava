@@ -59,6 +59,7 @@ public class Internals extends PerlModuleBase {
             // to approximate the real-Perl GVf_IMPORTED_CV bit so callers
             // such as Pod::Coverage can skip imported helpers.
             internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
+            internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -612,5 +613,36 @@ public class Internals extends PerlModuleBase {
             return new RuntimeScalar(1).getList();
         }
         return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Returns (filename, line) for the start of a coderef body — what Perl's
+     * {@code B::svref_2object($cv)->START->line} reports. Used by the bundled
+     * {@code B} stub (e.g. Fennec::Lite's {@code FENNEC_ITEM} filtering).
+     */
+    public static RuntimeList jperlCvStartLocation(RuntimeArray args, int ctx) {
+        String defFile = "-e";
+        if (args.size() == 0) {
+            return new RuntimeList(new RuntimeScalar(defFile), new RuntimeScalar(0));
+        }
+        RuntimeScalar s = args.get(0);
+        if (s == null) {
+            return new RuntimeList(new RuntimeScalar(defFile), new RuntimeScalar(0));
+        }
+        s = s.scalar();
+        if (s.type != RuntimeScalarType.CODE || !(s.value instanceof RuntimeCode code)) {
+            return new RuntimeList(new RuntimeScalar(defFile), new RuntimeScalar(0));
+        }
+        String file = code.cvStartFile;
+        int line = code.cvStartLine;
+        if ((line <= 0 || file == null || file.isEmpty())
+                && code instanceof org.perlonjava.backend.bytecode.InterpretedCode ic) {
+            file = ic.sourceName != null ? ic.sourceName : defFile;
+            line = ic.sourceLine;
+        }
+        if (file == null || file.isEmpty()) {
+            file = defFile;
+        }
+        return new RuntimeList(new RuntimeScalar(file), new RuntimeScalar(line));
     }
 }

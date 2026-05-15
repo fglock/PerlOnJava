@@ -241,6 +241,18 @@ public class EmitSubroutine {
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
             RuntimeCode.anonSubs.put(subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
 
+            String cvStartFile = "-e";
+            int cvStartLine = 0;
+            if (ctx.errorUtil != null && node.block != null) {
+                var loc = ctx.errorUtil.getSourceLocationAccurate(node.block.getIndex());
+                cvStartLine = loc.lineNumber();
+                if (loc.fileName() != null && !loc.fileName().isEmpty()) {
+                    cvStartFile = loc.fileName();
+                }
+            } else if (ctx.compilerOptions != null && ctx.compilerOptions.fileName != null) {
+                cvStartFile = ctx.compilerOptions.fileName;
+            }
+
             // Transfer pad constants (cached string literals referenced via \) from compile time
             // to a registry so makeCodeObject() can attach them to the RuntimeCode at runtime.
             if (subCtx.javaClassInfo.padConstants != null && !subCtx.javaClassInfo.padConstants.isEmpty()) {
@@ -289,11 +301,13 @@ public class EmitSubroutine {
                 mv.visitInsn(Opcodes.ACONST_NULL);
             }
             mv.visitLdcInsn(ctx.symbolTable.getCurrentPackage());
+            mv.visitLdcInsn(cvStartFile);
+            mv.visitLdcInsn(cvStartLine);
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "makeCodeObject",
-                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
