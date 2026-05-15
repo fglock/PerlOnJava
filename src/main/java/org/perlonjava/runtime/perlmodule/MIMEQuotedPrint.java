@@ -110,7 +110,8 @@ public class MIMEQuotedPrint extends PerlModuleBase {
 
             // Check if adding this token would make the line too long
             // We need to leave room for the '=' of a soft break, so max is 75
-            if (currentLength + token.length() > 75) {
+            // Empty EOL means Perl's "no soft breaks" mode (binary charset encoding only).
+            if (!eol.isEmpty() && currentLength + token.length() > 75) {
                 // Need to break the line
                 output.append(currentLine).append("=").append(eol);
                 currentLine = new StringBuilder(token);
