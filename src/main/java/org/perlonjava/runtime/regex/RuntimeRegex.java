@@ -990,7 +990,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (found) {
             fixPerl16894AlternateCaptureInLookahead(regex, inputStr);
-            regex.matched = true; // Counter for m?PAT?
+            if (regex.regexFlags.isMatchExactlyOnce()) {
+                regex.matched = true; // m?PAT? — remember we consumed the one allowed match
+            }
             lastMatchUsedPFlag = regex.hasPreservesMatch;
             lastSuccessfulPattern = regex;
             // Store last successful match information (persists across failed matches)

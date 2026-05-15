@@ -276,8 +276,8 @@ public class EmitLiteral {
                     mv.visitMethodInsn(
                             Opcodes.INVOKESTATIC,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                            "getScalarByteString",
-                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            "materializeByteStringLiteral",
+                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
                             false);
                     return;
                 } else {
@@ -311,8 +311,8 @@ public class EmitLiteral {
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                    "getScalarString",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "materializeStringLiteral",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
                     false);
         } else {
             // String is too long for cache or null, create new object

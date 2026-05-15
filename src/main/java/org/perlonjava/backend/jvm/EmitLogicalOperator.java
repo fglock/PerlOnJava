@@ -246,10 +246,12 @@ public class EmitLogicalOperator {
             // If true, jump to convert label
             mv.visitJumpInsn(compareOpcode, convertLabel);
 
-            // LHS is false: evaluate RHS in LIST context
+            // LHS is false: RHS is evaluated in the same context as this &&/||///
+            // (perlop: context propagates to the right operand). For //, EXPR2 is explicitly
+            // in the context // itself; LHS stays scalar for the test above.
             mv.visitInsn(Opcodes.POP); // Remove LHS
             node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            // Stack: [RuntimeList]
+            // Stack: [RuntimeList] — LIST context emission matches flattening for aggregates
             mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
             // LHS is true: convert scalar to list

@@ -1427,8 +1427,8 @@ public class BytecodeCompiler implements Visitor {
                     : RuntimeScalarCache.getOrCreateStringIndex(node.value);
             if (cacheIdx >= 0) {
                 RuntimeScalar cached = (opcode == Opcodes.LOAD_BYTE_STRING)
-                        ? RuntimeScalarCache.getScalarByteString(cacheIdx)
-                        : RuntimeScalarCache.getScalarString(cacheIdx);
+                        ? RuntimeScalarCache.materializeByteStringLiteral(cacheIdx)
+                        : RuntimeScalarCache.materializeStringLiteral(cacheIdx);
                 int constIdx = addToConstantPool(cached);
                 emit(Opcodes.LOAD_CONST);
                 emitReg(rd);

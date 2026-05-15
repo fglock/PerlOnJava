@@ -202,6 +202,29 @@ public class RuntimeScalarCache {
     }
 
     /**
+     * Materialize a fresh read-only string scalar from a short-string cache entry.
+     * <p>Perl allocates a distinct SV for each string literal <em>occurrence</em>. Reusing the
+     * singleton from {@link #getScalarString(int)} breaks operations keyed by scalar identity,
+     * notably {@code pos()} / {@code \\G} regex state (see Data::SExpression folding tests).
+     */
+    public static RuntimeScalarReadOnly materializeStringLiteral(int index) {
+        RuntimeScalarReadOnly template = scalarString[index];
+        RuntimeScalarReadOnly copy = new RuntimeScalarReadOnly(template.s);
+        copy.type = template.type;
+        return copy;
+    }
+
+    /**
+     * Same as {@link #materializeStringLiteral(int)} for octet-string literals.
+     */
+    public static RuntimeScalarReadOnly materializeByteStringLiteral(int index) {
+        RuntimeScalarReadOnly template = scalarByteString[index];
+        RuntimeScalarReadOnly copy = new RuntimeScalarReadOnly(template.s);
+        copy.type = RuntimeScalarType.BYTE_STRING;
+        return copy;
+    }
+
+    /**
      * Looks up an existing cache index for the specified byte string without creating a new entry.
      *
      * @param s the string to look up

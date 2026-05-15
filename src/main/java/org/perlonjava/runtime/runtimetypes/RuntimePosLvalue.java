@@ -70,8 +70,21 @@ public class RuntimePosLvalue {
         if (perlVariable == null) {
             return;
         }
-        // Remove the cache entry entirely so pos() returns undef
-        positionCache.remove(perlVariable);
+        // Reset the canonical pos lvalue in place. Removing the cache entry orphans the
+        // PosLvalueScalar that matchRegexDirect may already hold (local posScalar), breaking
+        // /g and \\G after (?{ }) or other mid-match assignments to the target scalar.
+        CacheEntry cachedEntry = positionCache.get(perlVariable);
+        if (cachedEntry != null) {
+            int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
+            cachedEntry.valueHash = code;
+            RuntimeScalar pos = cachedEntry.regexPosition;
+            pos.type = RuntimeScalarType.UNDEF;
+            pos.value = null;
+            cachedEntry.lastMatchWasZeroLength = false;
+            cachedEntry.lastMatchPosition = -1;
+            cachedEntry.lastMatchPattern = null;
+            cachedEntry.hasUnicodeChars = null;
+        }
     }
 
     private static void clearZeroLengthMatchTracking(RuntimeScalar perlVariable) {
