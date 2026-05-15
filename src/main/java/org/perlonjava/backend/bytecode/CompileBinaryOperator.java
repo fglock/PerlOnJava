@@ -473,8 +473,9 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
+            // LHS is scalar for the boolean test; RHS uses this operator's context (LIST/SCALAR/
+            // VOID/RUNTIME) — perlop: context propagates to the right operand (//: EXPR2 in //).
+            bytecodeCompiler.compileNode(node.right, rd, bytecodeCompiler.currentCallContext);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);
@@ -499,8 +500,8 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
+            // LHS scalar for truth test; RHS in this operator's context — see && branch above.
+            bytecodeCompiler.compileNode(node.right, rd, bytecodeCompiler.currentCallContext);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);
@@ -530,8 +531,8 @@ public class CompileBinaryOperator {
             bytecodeCompiler.emitReg(definedReg);
             bytecodeCompiler.emitInt(0);
 
-            int rightCtx = bytecodeCompiler.currentCallContext;
-            bytecodeCompiler.compileNode(node.right, rd, rightCtx);
+            // LHS scalar for definedness; RHS in this operator's context — see && branch above.
+            bytecodeCompiler.compileNode(node.right, rd, bytecodeCompiler.currentCallContext);
             int rs2 = bytecodeCompiler.lastResultReg;
             if (rs2 >= 0) {
                 bytecodeCompiler.emitAliasWithTarget(rd, rs2);

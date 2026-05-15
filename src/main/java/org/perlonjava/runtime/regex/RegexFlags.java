@@ -28,11 +28,15 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                          boolean isAscii) {
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
+        // m?PAT? is encoded by StringParser as an extra trailing '?' on the modifier string
+        // (see parseRegexMatch).  Do NOT use modifiers.contains("?"): '?' appears inside many
+        // ordinary patterns (e.g. (?:...) or ...?) and must not enable match-once mode for those.
+        boolean matchOnce = modifiers != null && modifiers.endsWith("?");
         return new RegexFlags(
                 modifiers.contains("g"),
                 modifiers.contains("c"),
                 modifiers.contains("r"),
-                modifiers.contains("?"),
+                matchOnce,
                 patternString != null && patternString.contains("\\G"),
                 modifiers.contains("xx"),
                 modifiers.contains("n"),

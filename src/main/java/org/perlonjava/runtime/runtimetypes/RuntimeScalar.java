@@ -1040,7 +1040,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
-        if (this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
+        // Perl clears pos() when assigning from another SV ($x = $y), but preserves it for
+        // self-assignment ($x = $x). Hash/array element slots reuse one RuntimeScalar per key;
+        // $h{k} = $str must reset pos on that slot (Data::SExpression set_input / lexer \G).
+        if (this != value) {
+            RuntimePosLvalue.invalidatePos(this);
+        }
+        if (value != null && this.type < TIED_SCALAR & value.type < TIED_SCALAR) {
             this.type = value.type;
             this.value = value.value;
             return this;
