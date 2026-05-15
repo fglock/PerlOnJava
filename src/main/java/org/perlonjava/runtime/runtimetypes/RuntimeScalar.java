@@ -177,26 +177,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value;
     }
 
-    /**
-     * String scalar with explicit {@link RuntimeScalarType#STRING} vs
-     * {@link RuntimeScalarType#BYTE_STRING} (Perl SvUTF8 parity).
-     *
-     * @param stringType Must be {@code STRING} or {@code BYTE_STRING}; any other non-null-ish use
-     *     maps to STRING.
-     */
-    public RuntimeScalar(String value, int stringType) {
-        if (value == null) {
-            this.type = UNDEF;
-            this.value = null;
-            return;
-        }
-        this.value = value;
-        this.type =
-                stringType == BYTE_STRING
-                        ? BYTE_STRING
-                        : RuntimeScalarType.STRING;
-    }
-
     public RuntimeScalar(boolean value) {
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;

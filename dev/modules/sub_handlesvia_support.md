@@ -15,11 +15,11 @@ These changes address blockers traced while running `./jcpan -t Sub::HandlesVia`
 | Area | Problem | Fix |
 |------|---------|-----|
 | **`UNIVERSAL::can`** | Missing methods returned an **empty** `RuntimeList`, which behaves like Perl’s **empty list** inside hash literals. That **consumes** the next `=>` pairing and corrupted Mite **`__META__`** (`HAS_BUILDARGS` falsely truthy → bogus **`BUILDARGS`** branch). | Failure paths now return **`scalarUndef.getList()`** — one list element (**undef**) like Perl `(undef)`. `Universal.java`. |
-| **String concat** | Concat results could lose **BYTE_STRING** context or route through brittle `byte[]` paths for common cases. | **`RuntimeScalar(String, int)`** constructor + **`STRING` vs `BYTE_STRING`** selection from operands / wide-character scan in **`StringOperators`** (`stringConcat`, `stringConcatWarnUninitialized`, `stringConcatNoOverload`). |
+| **String concat SvUTF8** *(deferred)* | A typed-concat experiment caused **`perl5_t`** regressions (`op/sub.t`, `porting/filenames.t`, `re/pat_advanced.t`); it was **reverted** from the PR trajectory serving Sub::HandlesVia. Redo against smaller, **`perl5_t`-backed** steps ([`dev/design/string_encoding_context_plan.md`](../design/string_encoding_context_plan.md)). |
 
 Design cross-links:
 
-- [`dev/design/utf8_flag_parity.md`](../design/utf8_flag_parity.md) — §2b (can), §2c (typed string ctor), §2 bullet updates.
+- [`dev/design/utf8_flag_parity.md`](../design/utf8_flag_parity.md) — §2b (`can`).
 - [`dev/design/string_encoding_context_plan.md`](../design/string_encoding_context_plan.md) — investigation note (2026-05-15).
 
 ---
@@ -66,14 +66,27 @@ timeout 3600 ./jcpan -t Sub::HandlesVia > /tmp/jcpan_Sub_HandlesVia.txt 2>&1
 
 Catalog skips (optional deps **MooX::TypeTiny**, **Mouse**, etc.) vs real failures.
 
-### 3. [P2] Regression tests in-repo (coordination needed)
+### 3. [P2] Concat / SvUTF8 parity redo (staging)
+
+Retry [`dev/design/string_encoding_context_plan.md`](../design/string_encoding_context_plan.md) **Phase 2** (`StringOperators.stringConcat*`) **only after** guarding with:
+
+```bash
+cd perl5_t/t
+timeout 300 ../../jperl op/sub.t
+timeout 180 ../../jperl porting/filenames.t
+timeout 600 ../../jperl re/pat_advanced.t   # noisy; grep ^not ok
+```
+
+Establish **baseline counts** vs **`origin/master`** on the **same harness** (`perl_test_runner.pl` shards if that is CI). A naive `RuntimeScalar(text, BYTE_STRING)` swap for the ISO-8859-1 `byte[]` path surfaced **opaque** regressions in **regex/porting/stack** slices — redo incrementally under its own tiny PR once bisected.
+
+### 4. [P3] Regression tests in-repo (coordination needed)
 
 PerlOnJava policy: **never delete or weaken existing tests**; adding **new** unit tests requires maintainer alignment. Candidate areas:
 
 - **`UNIVERSAL::can`** in **hash constructor** contexts: `%h = (... unknown package ...->can(...) ...)` pairing integrity.
 - **Concat parity**: **`no utf8` / `use utf8`** literals **`Encode::is_utf8`** expectations (see **`dev/design/string_encoding_context_plan.md`** verification section).
 
-### 4. [P3] Optional XS
+### 5. [P4] Optional XS
 
 Upstream ships **`Sub::HandlesVia::XS`** (skipped when absent). No action unless performance work demands it — pure Perl path is canonical for portability.
 
@@ -107,4 +120,5 @@ Issues in **Eval::TypeTiny** often surface as **compile errors inside generated 
 
 | Date | Milestone |
 |------|-----------|
-| 2026-05-15 | **`UNIVERSAL::can`** empty-list/hash corruption fixed; **`RuntimeScalar(String,int)`** + concat typing; **`__META__`** validated; `\x{c2}` eval blocker documented as next P0 |
+| 2026-05-15 | **`UNIVERSAL::can`** empty-list/hash corruption fixed; **`__META__`** validated; `\x{c2}` eval blocker documented as next P0 |
+| 2026-05-15 | Typed-concat / `RuntimeScalar(String,int)` experiment **reverted** after `perl5_t` regressions; **`can`** fix retained |

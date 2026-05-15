@@ -42,8 +42,6 @@ strings) never upgrade the result to UTF-8.
 - When both operands are non-STRING, produce BYTE_STRING (with Latin-1 safety check)
 - Previously, if neither was BYTE_STRING (e.g. INTEGER + BYTE_STRING), it fell
   through to the default STRING return
-- Results use `new RuntimeScalar(text, BYTE_STRING)` or `(text, STRING)` instead of bouncing
-  through temporary `byte[]` for typical paths
 
 ### 2b. `UNIVERSAL::can()` failures must return `(undef)`
 
@@ -56,13 +54,6 @@ constructors it eats the next pairing and corrupts literals. Downstream (**Mite*
 key as its bogus string value and incorrectly took the `BUILDARGS` constructor branch.
 
 Failures now use `scalarUndef.getList()` (singleton undef).
-
-### 2c. Typed string constructor
-
-**Files:** `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeScalar.java`
-
-- `RuntimeScalar(String value, int stringType)` with `stringType` ∈ {`STRING`, `BYTE_STRING`} for
-  SvUTF8 parity (used by concatenation).
 
 ### 3. `sprintf` — SprintfOperator.sprintfInternal()
 
