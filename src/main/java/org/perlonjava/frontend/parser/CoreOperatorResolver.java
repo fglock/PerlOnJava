@@ -36,6 +36,15 @@ public class CoreOperatorResolver {
      * @return A Node representing the parsed operator and its operands.
      */
     public static Node parseCoreOperator(Parser parser, LexerToken token, int startIndex) {
+        return parseCoreOperator(parser, token, startIndex, false);
+    }
+
+    /**
+     * @param coreQualified when true, the call was written as {@code CORE::name(...)} — always use
+     *                      CORE's prototype for arity, never the current package's subroutine of
+     *                      the same name (e.g. {@code CORE::close($fh)} with {@code sub close ()}).
+     */
+    public static Node parseCoreOperator(Parser parser, LexerToken token, int startIndex, boolean coreQualified) {
         int currentIndex = parser.tokenIndex;
         String operatorName = token.text;
 
@@ -128,12 +137,14 @@ public class CoreOperatorResolver {
                  "endhostent", "endnetent", "endprotoent", "endservent", "gethostent",
                  "getnetbyaddr", "getnetbyname", "getnetent",
                  "getprotoent", "getservent", "sethostent",
-                 "setnetent", "setprotoent", "setservent", "reverse" -> parseWithPrototype(parser, token, currentIndex);
-            default -> parseWithPrototype(parser, token, currentIndex);
+                 "setnetent", "setprotoent", "setservent", "reverse" ->
+                    parseWithPrototype(parser, token, currentIndex, coreQualified);
+            default -> parseWithPrototype(parser, token, currentIndex, coreQualified);
         };
     }
 
-    private static Node parseWithPrototype(Parser parser, LexerToken token, int currentIndex) {
+    private static Node parseWithPrototype(
+            Parser parser, LexerToken token, int currentIndex, boolean coreQualified) {
         String operator = token.text;
         String fq = parser.ctx.symbolTable.getCurrentPackage() + "::" + operator;
 
@@ -150,7 +161,11 @@ public class CoreOperatorResolver {
         //
         // When coreProto != null, a defined package CV with an explicit prototype overrides
         // arity checking (Net::hostent gethostbyaddr ($;$) vs CORE $$).
-        if (coreProto != null
+        //
+        // Explicit CORE::name(...) must never take the package CV's prototype — real Perl
+        // always dispatches to the builtin (Image::BMP's "sub close ()" vs CORE::close $fh).
+        if (!coreQualified
+                && coreProto != null
                 && GlobalVariable.existsGlobalCodeRef(fq)) {
             RuntimeScalar ref = GlobalVariable.getGlobalCodeRef(fq);
             if (ref.type == RuntimeScalarType.CODE && ref.value instanceof RuntimeCode code && code.defined()
