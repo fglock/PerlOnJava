@@ -964,7 +964,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // bless {}'s retroactive pass and normal container stores must still count
         // the hash slot as a strong ref, otherwise delete $h{k} / hash clear never
         // drops the child (PPI::Node->{children}; cpan PPI t/04_element.t).
+        // Restrict promotion to real containers: doing this for arbitrary -1
+        // referents (e.g. refs to readonly scalars) breaks Moo weak_ref accessors
+        // (cpan Moo t/accessor-weaken.t).
         if (base.refCount < 0) {
+            if (!(base instanceof RuntimeHash) && !(base instanceof RuntimeArray)) {
+                return;
+            }
             base.refCount = 0;
         }
         base.refCount++;
