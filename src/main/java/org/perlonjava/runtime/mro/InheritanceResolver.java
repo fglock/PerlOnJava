@@ -429,8 +429,15 @@ public class InheritanceResolver {
             }
         }
 
-        // Cache the fact that method was not found (using null)
-        methodCache.put(cacheKey, null);
+        // Normally cache "method not found" as null. Do NOT do this for DESTROY:
+        // during require/use, resolution can run while a package is still compiling
+        // (e.g. overload/bootstrap) before sub DESTROY is installed in a base class.
+        // A cached null then pins "no destructor" for that cache key until the next
+        // full invalidate — PPI's Element tree would skip Perl DESTROY and leak
+        // %PPI::Singletons::_PARENT keys (t/04_element.t).
+        if (!"DESTROY".equals(methodName)) {
+            methodCache.put(cacheKey, null);
+        }
         return null;
     }
 

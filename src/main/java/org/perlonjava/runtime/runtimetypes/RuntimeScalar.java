@@ -942,19 +942,32 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * constructor, and their refCount was already incremented at creation time.
      */
     public static void incrementRefCountForContainerStore(RuntimeScalar scalar) {
-        if (scalar != null && !scalar.refCountOwned
-                && (scalar.type & REFERENCE_BIT) != 0 && scalar.value instanceof RuntimeBase base
-                && base.refCount >= 0) {
-            base.refCount++;
-            base.hadCountedReference = true;
-            base.recordOwner(scalar, "incrementRefCountForContainerStore");
-            base.recordActiveOwner(scalar);
-            scalar.refCountOwned = true;
-            // Phase B1 (refcount_alignment_52leaks_plan.md): track the
-            // container element so ReachabilityWalker can see it via
-            // ScalarRefRegistry.
-            ScalarRefRegistry.registerRef(scalar);
+        if (scalar == null || scalar.refCountOwned
+                || (scalar.type & REFERENCE_BIT) == 0
+                || !(scalar.value instanceof RuntimeBase base)) {
+            return;
         }
+        // Destroyed / weaken sentinel states must not be reactivated here.
+        if (base.refCount == Integer.MIN_VALUE
+                || base.refCount == WeakRefRegistry.WEAKLY_TRACKED) {
+            return;
+        }
+        // Anonymous nested containers start at refCount=-1 (untracked).
+        // bless {}'s retroactive pass and normal container stores must still count
+        // the hash slot as a strong ref, otherwise delete $h{k} / hash clear never
+        // drops the child (PPI::Node->{children}; cpan PPI t/04_element.t).
+        if (base.refCount < 0) {
+            base.refCount = 0;
+        }
+        base.refCount++;
+        base.hadCountedReference = true;
+        base.recordOwner(scalar, "incrementRefCountForContainerStore");
+        base.recordActiveOwner(scalar);
+        scalar.refCountOwned = true;
+        // Phase B1 (refcount_alignment_52leaks_plan.md): track the
+        // container element so ReachabilityWalker can see it via
+        // ScalarRefRegistry.
+        ScalarRefRegistry.registerRef(scalar);
     }
 
     private static boolean scalarReferenceContentsNeedRetain(RuntimeScalar value) {

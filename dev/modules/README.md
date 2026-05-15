@@ -20,6 +20,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [math_bigint_bignum.md](math_bigint_bignum.md) | Math::BigInt / BigFloat / BigRat / bignum support (in progress) |
 | [storable_binary_format.md](storable_binary_format.md) | Storable native Perl binary format — read + write paths landed; jperl ↔ system-perl files interoperate in both directions |
 | [unicode_collate.md](unicode_collate.md) | Unicode::Collate — plan: file-backed DUCET + Java XS surface (default); optional ICU path tradeoffs |
+| [ppi.md](ppi.md) | **PPI** — CPAN test status, RC1–RC4, refcount/`DESTROY` follow-ups (`t/04_element.t` `%_PARENT`) |
 
 ## Module Status Overview
 
