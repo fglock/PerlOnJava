@@ -90,6 +90,23 @@ public class Universal extends PerlModuleBase {
     }
 
     /**
+     * Missing-method return for UNIVERSAL::can.
+     *
+     * <p>Perl exposes this as undef. Compile-time lookups pass {@link RuntimeContextType#SCALAR} and
+     * discriminate with patterns like {@code size() == 1 && getBoolean()}; treating not-found {@code can}
+     * as a singleton {@code undef} there makes {@code size() == 1} with {@code getBoolean()==false}, which is
+     * not what those call sites distinguish from “no candidate”. Returning an {@linkplain RuntimeList#isEmpty()}
+     * list preserves existing logic.
+     *
+     * <p>List-context calls flatten this value into enclosing lists — only there must Perl get one{@code undef}
+     * placeholder (never a vanishing splice), which generated CPAN constructors rely on (e.g. Mite
+     * {@code __META__} pairings).
+     */
+    private static RuntimeList canNotFound(int ctx) {
+        return ctx == RuntimeContextType.LIST ? scalarUndef.getList() : new RuntimeList();
+    }
+
+    /**
      * Checks if the object can perform a given method.
      * Note: This is a Perl method, it expects `this` to be the first argument.
      *
@@ -155,7 +172,7 @@ public class Universal extends PerlModuleBase {
             if (method != null && !isAutoloadDispatch(method, actualMethod, perlClassName)) {
                 return method.getList();
             }
-            return scalarUndef.getList();
+            return canNotFound(ctx);
         }
 
         // Handle Package::SUPER::method syntax
@@ -168,7 +185,7 @@ public class Universal extends PerlModuleBase {
             if (method != null && !isAutoloadDispatch(method, actualMethod, packageName)) {
                 return method.getList();
             }
-            return scalarUndef.getList();
+            return canNotFound(ctx);
         }
 
         // Perl's can() must NOT consider AUTOLOAD - it should only find
@@ -219,7 +236,7 @@ public class Universal extends PerlModuleBase {
                 return method.getList();
             }
         }
-        return scalarUndef.getList();
+        return canNotFound(ctx);
     }
 
     /**

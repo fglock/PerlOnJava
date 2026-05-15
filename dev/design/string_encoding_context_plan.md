@@ -289,10 +289,14 @@ die "FAIL" if is_utf8($err);
 - **Investigation update (2026-05-15):** Running `./jcpan -t Sub::HandlesVia` showed an immediate crash in
   Mite’s generated `*.mite.pm`: `HAS_BUILDARGS` was polluted with the string `HAS_FOREIGNBUILDARGS`,
   falsely enabling the `BUILDARGS` branch. Root cause was **`UNIVERSAL::can()` returning an empty list**
-  instead of `(undef)`, which destroys hash literals at compile time. Fixed in `Universal.java`.
-  A follow-up concat / typed-string-constructor refactor (see Phase 1–2 below) briefly landed and
-  was **reverted** after `perl5_t` regressions (`op/sub.t`, `porting/filenames.t`,
-  `re/pat_advanced.t`); redo with targeted tests before merging. The **`UNIVERSAL::can`** fix is kept.
+  in **list contexts** inside flat list/hash construction (the empty list vanishes instead of occupying
+  a real `undef` slot). Returning a singleton **`(undef)`** on **every** failure path fixes Mite but
+  breaks **scalar-context** compile probes (`VERSION` / `use` **import** / attribute installers) that
+  assume **not-found** `can()` is **`size()==0`** in their `Universal.can` result. **`Universal.canNotFound(ctx)`**
+  now returns **`(undef)` only for `LIST` context** failures and **`()` for scalar-like contexts** (still
+  **`scalar()` → undef**, matching Perl for plain assignments).
+  A typed-string concat refactor (Phase 1–2 in this doc) was **reverted** after separate `perl5_t`
+  regressions; redo with targeted tests before merging.
 - This fix addresses the root cause rather than applying post-corruption repair
 - The eval-time repair in RuntimeRegex can remain as a safety net
 - This aligns PerlOnJava with Perl 5's encoding context semantics

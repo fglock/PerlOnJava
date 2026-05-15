@@ -53,7 +53,7 @@ constructors it eats the next pairing and corrupts literals. Downstream (**Mite*
 `*.mite.pm`; **Sub::HandlesVia::CodeGenerator**) saw `HAS_BUILDARGS` swallow the `'HAS_FOREIGNBUILDARGS'`
 key as its bogus string value and incorrectly took the `BUILDARGS` constructor branch.
 
-Failures now use `scalarUndef.getList()` (singleton undef).
+Failures use **`canNotFound(ctx)`**: **list** context returns **`scalarUndef.getList()`** (one `undef`, so outer list splices see a real slot); **scalar / void / lvalue** contexts return an **empty** `RuntimeList` so compile-time call sites that compare **`size() == 0`** vs **`size() == 1 && getBoolean()`** keep working (a singleton `undef` would be `size()==1` with a falsy non-sub value and mis-routes VERSION / import / attribute probes).
 
 ### 3. `sprintf` — SprintfOperator.sprintfInternal()
 

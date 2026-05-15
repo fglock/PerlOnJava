@@ -14,7 +14,7 @@ These changes address blockers traced while running `./jcpan -t Sub::HandlesVia`
 
 | Area | Problem | Fix |
 |------|---------|-----|
-| **`UNIVERSAL::can`** | Missing methods returned an **empty** `RuntimeList`, which behaves like Perl’s **empty list** inside hash literals. That **consumes** the next `=>` pairing and corrupted Mite **`__META__`** (`HAS_BUILDARGS` falsely truthy → bogus **`BUILDARGS`** branch). | Failure paths now return **`scalarUndef.getList()`** — one list element (**undef**) like Perl `(undef)`. `Universal.java`. |
+| **`UNIVERSAL::can`** | Missing methods returned an **empty** `RuntimeList`, which behaves like Perl’s **empty list** inside hash literals. That **consumes** the next `=>` pairing and corrupted Mite **`__META__`** (`HAS_BUILDARGS` falsely truthy → bogus **`BUILDARGS`** branch). Pure singleton-`undef` on **all** failure paths confused **scalar-context** compiler probes (`VERSION`/`import`/attributes) that discriminate with **`size() == 1`**. | Failure paths route through **`Universal.canNotFound(ctx)`**: **LIST** ⇒ one `undef` element; **scalar/void/lvalue** ⇒ empty list (still **`scalar()` → undef**). `Universal.java`. |
 | **String concat SvUTF8** *(deferred)* | A typed-concat experiment caused **`perl5_t`** regressions (`op/sub.t`, `porting/filenames.t`, `re/pat_advanced.t`); it was **reverted** from the PR trajectory serving Sub::HandlesVia. Redo against smaller, **`perl5_t`-backed** steps ([`dev/design/string_encoding_context_plan.md`](../design/string_encoding_context_plan.md)). |
 
 Design cross-links:
@@ -121,4 +121,4 @@ Issues in **Eval::TypeTiny** often surface as **compile errors inside generated 
 | Date | Milestone |
 |------|-----------|
 | 2026-05-15 | **`UNIVERSAL::can`** empty-list/hash corruption fixed; **`__META__`** validated; `\x{c2}` eval blocker documented as next P0 |
-| 2026-05-15 | Typed-concat / `RuntimeScalar(String,int)` experiment **reverted** after `perl5_t` regressions; **`can`** fix retained |
+| 2026-05-15 | **`UNIVERSAL::can`** split: **LIST** failures → `(undef)`, **scalar**/compile-time failures → empty list (restores `perl5_t` regressions while fixing Mite splice) |
