@@ -80,8 +80,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     /**
      * When this scalar is installed in {@link GlobalVariable#globalCodeRefs}, the map key
-     * (fully-qualified name such as {@code My::Pkg::foo}). Used to invalidate DESTROY
-     * method-resolution caches after in-place CV installation via {@link #set(RuntimeScalar)}.
+     * (fully-qualified name such as {@code My::Pkg::foo}). Used to invalidate
+     * method-resolution cache lines for that sub's leaf name after in-place CV updates
+     * via {@link #set(RuntimeScalar)}.
      */
     public String globalCodeRefFqn;
 
@@ -1252,6 +1253,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             ScalarRefRegistry.registerRef(this);
         }
 
+        int preAssignType = this.type;
+        Object preAssignValue = this.value;
+
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
@@ -1405,9 +1409,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             DestroyDispatch.clearRescuedWeakRefsTo(oldBase);
         }
 
-        if (isPackageGlobalRoot && type == CODE && globalCodeRefFqn != null
-                && GlobalVariable.isDestroyCodeSlotKey(globalCodeRefFqn)) {
-            InheritanceResolver.invalidateDestroyMethodLookupCaches();
+        if (isPackageGlobalRoot && globalCodeRefFqn != null) {
+            boolean invalidate = preAssignType != this.type || preAssignValue != this.value;
+            if (!invalidate && this.type == CODE && this.value instanceof RuntimeCode nc
+                    && preAssignType == CODE && preAssignValue instanceof RuntimeCode oc) {
+                invalidate = oc.defined() != nc.defined();
+            }
+            if (invalidate) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(globalCodeRefFqn);
+            }
         }
 
         return this;

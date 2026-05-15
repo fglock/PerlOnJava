@@ -114,26 +114,35 @@ public class GlobalVariable {
     }
 
     /**
-     * Tracks FQN on code-slot scalars and invalidates DESTROY method-resolution caches
-     * when {@code *Pkg::DESTROY} map entries change (see {@link
-     * InheritanceResolver#invalidateDestroyMethodLookupCaches}).
+     * Tracks FQN on stash-backed code scalars and invalidates method-resolution cache
+     * lines that depend on the sub's leaf name when the map entry is meaningfully
+     * created or replaced (see {@link InheritanceResolver#invalidateMethodLookupCachesForStashSubKey}).
      */
     private static final class GlobalCodeRefMap extends HashMap<String, RuntimeScalar> {
+        private static void maybeInvalidateMethodCacheForCodeRefPut(String key, RuntimeScalar previous, RuntimeScalar value) {
+            if (key == null || value == null) {
+                return;
+            }
+            boolean reseat = previous != null && previous != value;
+            boolean firstDefinedInstall = previous == null && RuntimeCode.isCodeDefined(value);
+            if (reseat || firstDefinedInstall) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(key);
+            }
+        }
+
         @Override
         public RuntimeScalar put(String key, RuntimeScalar value) {
             markPackageGlobalRoot(value);
-            RuntimeScalar prev = super.put(key, value);
+            RuntimeScalar old = super.put(key, value);
             invalidatePackageRootSnapshot();
-            if (prev != null && prev != value) {
-                prev.globalCodeRefFqn = null;
+            if (old != null && old != value) {
+                old.globalCodeRefFqn = null;
             }
             if (value != null) {
                 value.globalCodeRefFqn = key;
             }
-            if (isDestroyCodeSlotKey(key)) {
-                InheritanceResolver.invalidateDestroyMethodLookupCaches();
-            }
-            return prev;
+            maybeInvalidateMethodCacheForCodeRefPut(key, old, value);
+            return old;
         }
 
         @Override
@@ -153,8 +162,8 @@ public class GlobalVariable {
                 invalidatePackageRootSnapshot();
                 prev.globalCodeRefFqn = null;
             }
-            if (key instanceof String s && isDestroyCodeSlotKey(s)) {
-                InheritanceResolver.invalidateDestroyMethodLookupCaches();
+            if (key instanceof String s) {
+                InheritanceResolver.invalidateMethodLookupCachesForStashSubKey(s);
             }
             return prev;
         }
@@ -171,11 +180,6 @@ public class GlobalVariable {
             }
             super.clear();
         }
-    }
-
-    /** True for global code-ref keys that install Perl's destructor CV. */
-    static boolean isDestroyCodeSlotKey(String key) {
-        return key != null && (key.endsWith("::DESTROY") || key.equals("DESTROY"));
     }
 
     static <T extends RuntimeBase> T markPackageGlobalRoot(T root) {
