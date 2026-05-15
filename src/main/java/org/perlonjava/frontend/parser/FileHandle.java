@@ -271,13 +271,32 @@ public class FileHandle {
 
         // Check if this is a known file handle in the global I/O table
         // This helps distinguish between file handles and other barewords
-        if (GlobalVariable.existsGlobalIO(name) || isStandardFilehandle(name)) {
+        if (GlobalVariable.existsGlobalIO(name) || isStandardFilehandle(name)
+                || isAllDigitGlobName(name)) {
             // Create a GLOB reference for the file handle, like `\*FH`
             return new OperatorNode("\\",
                     new OperatorNode("*",
                             new IdentifierNode(name, parser.tokenIndex), parser.tokenIndex), parser.tokenIndex);
         }
         return null;
+    }
+
+    /**
+     * Perl allows numeric typeglob names such as {@code open 0; print <0>}, where filehandle
+     * {@code 0} shares the {@code *0} stash entry with {@code $0} (program name).
+     */
+    private static boolean isAllDigitGlobName(String normalizedName) {
+        int idx = normalizedName.lastIndexOf("::");
+        String base = idx >= 0 ? normalizedName.substring(idx + 2) : normalizedName;
+        if (base.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < base.length(); i++) {
+            if (!Character.isDigit(base.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

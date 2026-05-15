@@ -139,6 +139,24 @@ public class OperatorParser {
                 return diamond;
             }
 
+            // <0>, <1>, … — numeric filehandles (e.g. Acme::Buffy "open 0" reads $0)
+            if (operand.type == NUMBER && tokenText.matches("[0-9]+")
+                    && parser.tokens.get(parser.tokenIndex + 1).text.equals(">")) {
+                parser.tokenIndex++; // consume NUMBER
+                TokenUtils.consume(parser); // consume '>'
+                String digitName = operand.text;
+                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, digitName));
+                Node globRef = FileHandle.parseBarewordHandle(parser, digitName);
+                if (globRef != null) {
+                    BinaryOperatorNode readlineNode = new BinaryOperatorNode("readline",
+                            globRef,
+                            new ListNode(parser.tokenIndex), currentTokenIndex);
+                    readlineNode.setAnnotation("handleName", digitName);
+                    return readlineNode;
+                }
+                parser.tokenIndex = currentTokenIndex;
+            }
+
             // Check if the token looks like a Bareword file handle
             if (operand.type == IDENTIFIER) {
                 Node fileHandle = FileHandle.parseFileHandle(parser);
