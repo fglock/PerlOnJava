@@ -25,7 +25,7 @@ like(
     'wide character warns on STDERR without encoding layer'
 );
 
-require open;
+require 'open.pm';
 'open'->import( ':std', 'utf8' );
 
 ok(

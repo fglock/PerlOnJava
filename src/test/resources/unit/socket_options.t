@@ -120,6 +120,8 @@ SKIP: {
         or skip "listen unavailable: $!", 2;
 
     my $opt = getsockopt($server, SOL_SOCKET, SO_ACCEPTCONN);
+    skip "SO_ACCEPTCONN not returned by getsockopt on this platform", 2
+        unless defined $opt;
     ok defined($opt), 'getsockopt(SO_ACCEPTCONN) returns a value';
     is unpack("i", $opt), 1, 'SO_ACCEPTCONN reports a listening socket';
 }

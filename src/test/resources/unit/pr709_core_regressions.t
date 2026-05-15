@@ -56,10 +56,19 @@ like $eval_runtime_error, qr/^Can't call method "resultset" on an undefined valu
 {
     package Pr709StorableCaller;
 
+    BEGIN {
+        $INC{'Pr709StorableCaller.pm'} = __FILE__;
+    }
+
     sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
         my @caller = caller(0);
         die "caller package was empty" unless defined $caller[0] && length $caller[0];
         return "serialized";
+    }
+
+    sub STORABLE_thaw {
+        my ($self, $cloning, $serialized) = @_;
     }
 }
 
