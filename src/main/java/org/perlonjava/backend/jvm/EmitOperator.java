@@ -1773,23 +1773,12 @@ public class EmitOperator {
                     contextType = RuntimeContextType.SCALAR;
                 }
 
-                node.operand.accept(emitterVisitor.with(contextType));
-
-                // Track cached string constants referenced via backslash for optree reaping.
-                // When a subroutine is replaced (e.g., *foo = sub {}), weak refs to these
-                // constants need to be cleared.
                 if (node.operand instanceof StringNode strNode) {
-                    int idx = RuntimeScalarCache.lookupByteStringIndex(strNode.value);
-                    if (idx >= 0) {
-                        emitterVisitor.ctx.javaClassInfo.addPadConstant(
-                                RuntimeScalarCache.getScalarByteString(idx));
-                    } else {
-                        idx = RuntimeScalarCache.lookupStringIndex(strNode.value);
-                        if (idx >= 0) {
-                            emitterVisitor.ctx.javaClassInfo.addPadConstant(
-                                    RuntimeScalarCache.getScalarString(idx));
-                        }
-                    }
+                    // Singleton cache scalars + padConstants; see EmitLiteral.emitStringForRefToLiteral.
+                    EmitLiteral.emitStringForRefToLiteral(
+                            emitterVisitor.with(contextType).ctx, strNode);
+                } else {
+                    node.operand.accept(emitterVisitor.with(contextType));
                 }
 
                 // Always create a proper reference - don't special case CODE references

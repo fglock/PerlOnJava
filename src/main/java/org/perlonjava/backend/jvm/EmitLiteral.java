@@ -329,6 +329,76 @@ public class EmitLiteral {
     }
 
     /**
+     * Emits a string operand for {@code \\} (ref-to-literal) using the string cache's
+     * <strong>singleton</strong> scalars ({@link RuntimeScalarCache#getScalarByteString(int)} /
+     * {@link RuntimeScalarCache#getScalarString(int)}) for cacheable literals, and records
+     * them on {@link JavaClassInfo#addPadConstant}.
+     *
+     * <p>Ordinary {@link #emitString} uses {@link RuntimeScalarCache#materializeByteStringLiteral(int)}
+     * / {@link RuntimeScalarCache#materializeStringLiteral(int)} so each literal <em>occurrence</em>
+     * has a distinct SV (needed for {@code pos()} / {@code \\G}). Ref-to-literal in Perl shares one
+     * const SV in the CV; weak refs (e.g. Moo {@code weak_ref}) and {@link RuntimeCode#clearPadConstantWeakRefs}
+     * must target that same object identity.</p>
+     */
+    public static void emitStringForRefToLiteral(EmitterContext ctx, StringNode node) {
+        if (ctx.contextType == RuntimeContextType.VOID) {
+            return;
+        }
+        MethodVisitor mv = ctx.mv;
+        if (!ctx.isBoxed) {
+            emitStringValue(mv, node.value);
+            return;
+        }
+        if (node.isVString) {
+            // No cache slot; same as plain literal (optree reaping may not match Perl for \\v).
+            emitString(ctx, node);
+            return;
+        }
+
+        if (node.forceByteString
+                || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource)) {
+            boolean hasWideChars = false;
+            for (int i = 0; i < node.value.length(); i++) {
+                if (node.value.charAt(i) > 255) {
+                    hasWideChars = true;
+                    break;
+                }
+            }
+            if (!hasWideChars) {
+                int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
+                if (stringIndex >= 0) {
+                    mv.visitLdcInsn(stringIndex);
+                    mv.visitMethodInsn(
+                            Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                            "getScalarByteString",
+                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                            false);
+                    ctx.javaClassInfo.addPadConstant(RuntimeScalarCache.getScalarByteString(stringIndex));
+                    return;
+                }
+                emitString(ctx, node);
+                return;
+            }
+            // fall through — wide chars use UTF-8 string path (same as emitString)
+        }
+
+        int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
+        if (stringIndex >= 0) {
+            mv.visitLdcInsn(stringIndex);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                    "getScalarString",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            ctx.javaClassInfo.addPadConstant(RuntimeScalarCache.getScalarString(stringIndex));
+        } else {
+            emitString(ctx, node);
+        }
+    }
+
+    /**
      * Emits a string value, handling large strings by breaking them into chunks.
      */
     private static void emitStringValue(MethodVisitor mv, String value) {
