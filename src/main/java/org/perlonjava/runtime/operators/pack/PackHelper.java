@@ -351,19 +351,23 @@ public class PackHelper {
         // U format behavior depends on mode:
         // - Character mode: write character code (PackBuffer will handle UTF-8 upgrade)
         // - Byte mode: write UTF-8 bytes directly (for binary compatibility)
-        if (Long.compareUnsigned(codePointLong, 0x10FFFFL) <= 0) {
-            int codePoint1 = (int) codePointLong;
-            if (byteMode) {
-                // Byte mode: write UTF-8 bytes
-                String unicodeChar = new String(Character.toChars(codePoint1));
-                byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
-                output.write(utf8Bytes);
-            } else {
-                // Character mode: write character code
-                output.writeCharacter(codePoint1);
-            }
-        } else {
+        //
+        // Perl accepts pack("U", $cp) up to 0x7FFF_FFFF (see t/lib/Util.pm in Unicode-UTF8).
+        // Character mode may represent code points above U+10FFFF for modules such as Unicode::UTF8
+        // that reject them at encode time.
+        if (Long.compareUnsigned(codePointLong, 0x80000000L) >= 0) {
             throw new PerlCompilerException("pack: invalid Unicode code point: " + codePointLong);
+        }
+        int codePoint1 = (int) codePointLong;
+        if (byteMode) {
+            if (Integer.compareUnsigned(codePoint1, 0x10FFFF) > 0) {
+                throw new PerlCompilerException("pack: invalid Unicode code point: " + codePointLong);
+            }
+            String unicodeChar = new String(Character.toChars(codePoint1));
+            byte[] utf8Bytes = unicodeChar.getBytes(StandardCharsets.UTF_8);
+            output.write(utf8Bytes);
+        } else {
+            output.writeCharacter(codePoint1);
         }
         return hasUnicodeInNormalMode;
     }

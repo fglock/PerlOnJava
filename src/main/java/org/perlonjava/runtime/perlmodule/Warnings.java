@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -115,11 +116,99 @@ public class Warnings extends PerlModuleBase {
     }
 
     /**
+     * Walks {@code caller()} until warning bits are found. Required when XS is implemented
+     * in Java: several stack frames may be native with no ${^WARNING_BITS}.
+     */
+    private static String getWarningBitsForJavaNativeXs() {
+        for (int level = 0; level < 25; level++) {
+            String bits = getWarningBitsAtLevel(level);
+            if (bits != null && !bits.isEmpty()) {
+                return bits;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Lexical ${^WARNING_BITS} at the Perl call site of a Java-implemented XS routine.
+     * Prefer the value saved by {@link RuntimeCode#apply} on {@link WarningBitsRegistry#callerBitsStack};
+     * fall back to walking {@code caller()} like {@link #warnIf}.
+     */
+    public static String getJavaNativeXsCallSiteWarningBits() {
+        String fromStack = WarningBitsRegistry.getCallerBitsAtFrame(0);
+        if (fromStack != null && !fromStack.isEmpty()) {
+            return fromStack;
+        }
+        return getWarningBitsForJavaNativeXs();
+    }
+
+    /**
+     * True if {@code category} is FATAL on any {@code caller()} level (used by Java XS where
+     * inner blocks use {@code use warnings FATAL => 'utf8'}).
+     */
+    public static boolean isCategoryFatalOnAnyCallerLevel(String category) {
+        if (category == null) {
+            return false;
+        }
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return false;
+        }
+        if (WarningFlags.isCustomCategory(category)) {
+            String bits = findExternalCallerBits();
+            return bits != null && WarningFlags.isFatalInBits(bits, category);
+        }
+        for (int level = 0; level < 25; level++) {
+            String bits = getWarningBitsAtLevel(level);
+            if (bits != null && WarningFlags.isFatalInBits(bits, category)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True if {@code category} is FATAL in the first Perl caller's lexical warning bits
+     * (used by Java-implemented XS, e.g. {@code Unicode::UTF8}).
+     */
+    public static boolean isCategoryFatalAtPerlXsCaller(String category) {
+        if (category == null) {
+            return false;
+        }
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return false;
+        }
+        String bits = WarningFlags.isCustomCategory(category)
+                ? findExternalCallerBits()
+                : getWarningBitsForJavaNativeXs();
+        return bits != null && WarningFlags.isFatalInBits(bits, category);
+    }
+
+    /**
+     * True if {@code category} is enabled in the first Perl caller's lexical warning bits
+     * (or only via {@code $^W} when bits do not mention the category).
+     */
+    public static boolean isCategoryEnabledAtPerlXsCaller(String category) {
+        if (category == null) {
+            return false;
+        }
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return false;
+        }
+        String bits = WarningFlags.isCustomCategory(category)
+                ? findExternalCallerBits()
+                : getWarningBitsForJavaNativeXs();
+        if (bits != null && WarningFlags.isEnabledInBits(bits, category)) {
+            return true;
+        }
+        return isWarnFlagSet();
+    }
+
+    /**
      * Walks up the call stack past frames in warnings-registered packages to find
      * the "external caller" whose warning bits should be checked. This implements
      * Perl 5's _error_loc() behavior: skip frames in any package that has used
      * warnings::register (i.e., any custom warning category package).
-     * 
+     *
      * @return The warning bits string from the first caller outside registered packages,
      *         or null if not found
      */

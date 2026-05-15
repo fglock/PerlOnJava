@@ -118,9 +118,9 @@ public class PackBuffer {
             // Character codes > 255 are already Unicode characters
             if (value > 0x10FFFF) {
                 sb.append(PerlUtfString.encodeBeyondUnicode(Integer.toUnsignedLong(value)));
-            } else if (value >= 0xD800 && value <= 0xDFFF) {
-                sb.append(PerlUtfString.encodeSurrogate(Integer.toUnsignedLong(value)));
             } else {
+                // Includes U+D800..U+DFFF from pack "U" / "W": one logical Perl character as a single
+                // UTF-16 code unit (not the FFFD+<hex> internal-marker form used elsewhere).
                 sb.appendCodePoint(value);
             }
         }
