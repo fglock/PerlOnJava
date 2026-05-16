@@ -933,8 +933,11 @@ sub fetch {
 sub fetchall_arrayref {
     my ($sth, $slice, $max_rows) = @_;
 
-    # Return undef if statement handle is inactive
-    return undef unless $sth->{Database}{Active};
+    # Match Perl DBI: gate on the sth's Active flag (pending/current result set),
+    # not Database->{Active} (dbh-level connection flag). JDBC-backed handles keep
+    # Database->{Active} accurate but clear sth->{Active} after DML executes; using
+    # Database here makes fetchall_arrayref spuriously return [] after SELECT execute().
+    return undef unless $sth->{Active};
 
     my @rows;
     my $row_count = 0;
@@ -1001,8 +1004,7 @@ sub fetchall_arrayref {
 sub fetchall_hashref {
     my ($sth, $key_field) = @_;
 
-    # Return undef if statement handle is inactive
-    return undef unless $sth->{Database}{Active};
+    return undef unless $sth->{Active};
 
     my %results;
 

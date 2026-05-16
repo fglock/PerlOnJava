@@ -134,7 +134,55 @@ public class RegexPreprocessor {
         StringBuilder sb = new StringBuilder();
         handleRegex(s, 0, sb, regexFlags, false);
         String result = sb.toString();
-        return result;
+        return preferOmniHolderLiteralAlternation(result);
+    }
+
+    /**
+     * Perl prefers the longest matching alternative when several branches succeed at the same
+     * offset; {@link Pattern} tries alternatives strictly left-to-right. DBIx::Simple's omniholder
+     * substitution uses {@code ($quoted|\(\?\?\))}: the nullable quoted repetition matches the empty
+     * string everywhere, so Java never reaches the literal {@code (??)} branch and SQL stays
+     * unchanged — JDBC then rejects {@code (??)} as invalid SQL.
+     * <p>
+     * Detect the usual Java-preprocessed shape {@code ( (?FLAGS:(?:'…'|"…")*)|\(\?\?\) )}
+     * (single outer capturing group) and swap alternatives so the omniholder literal is tried
+     * first.
+     */
+    static String preferOmniHolderLiteralAlternation(String javaPattern) {
+        final String omniBranch = "\\(\\?\\?\\)";
+        final String needle = "|" + omniBranch;
+        if (javaPattern.length() < omniBranch.length() + 4
+                || javaPattern.charAt(0) != '('
+                || javaPattern.charAt(javaPattern.length() - 1) != ')') {
+            return javaPattern;
+        }
+        int pipeIdx = javaPattern.lastIndexOf(needle);
+        if (pipeIdx <= 1) {
+            return javaPattern;
+        }
+        int omniStart = pipeIdx + 1;
+        if (!javaPattern.startsWith(omniBranch, omniStart)) {
+            return javaPattern;
+        }
+        int closingParenIdx = omniStart + omniBranch.length();
+        if (closingParenIdx != javaPattern.length() - 1 || javaPattern.charAt(closingParenIdx) != ')') {
+            return javaPattern;
+        }
+        String leftAlt = javaPattern.substring(1, pipeIdx);
+        // Narrow heuristic so arbitrary ( A | \(??\) ) patterns are untouched.
+        if (!looksLikeQuotedStarAlternate(leftAlt)) {
+            return javaPattern;
+        }
+        return "(" + omniBranch + "|" + leftAlt + ")";
+    }
+
+    /** Left branch produced from Perl {@code (?:'[^']*'|"[^"]*")*} plus inline (?FLAGS: … ). */
+    private static boolean looksLikeQuotedStarAlternate(String leftAlt) {
+        if (!leftAlt.startsWith("(?")) {
+            return false;
+        }
+        // Typical preprocessing embeds both quote flavours inside a non-capturing cluster.
+        return leftAlt.contains("(?:'[^") && leftAlt.contains("|\"[^");
     }
 
     /**

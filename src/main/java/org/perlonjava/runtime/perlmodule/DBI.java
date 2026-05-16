@@ -599,6 +599,25 @@ public class DBI extends PerlModuleBase {
         }, dbh, "fetchrow_arrayref");
     }
 
+    /** Like Perl: {@code $sth->{$key} || $sth->{NAME}} for column label arrays. */
+    private static RuntimeArray columnNamesAttribute(RuntimeHash sth, String key) {
+        if (sth == null) {
+            return null;
+        }
+        String[] tryKeys = "NAME".equals(key) ? new String[] {"NAME"} : new String[] {key, "NAME"};
+        for (String k : tryKeys) {
+            RuntimeScalar ref = sth.get(k);
+            if (ref == null || ref.type == RuntimeScalarType.UNDEF) {
+                continue;
+            }
+            RuntimeArray arr = ref.arrayDeref();
+            if (arr != null && !arr.isEmpty()) {
+                return arr;
+            }
+        }
+        return null;
+    }
+
     /**
      * Fetches the next row from a result set as a hash reference.
      *
@@ -632,16 +651,39 @@ public class DBI extends PerlModuleBase {
                 RuntimeHash row = new RuntimeHash();
                 ResultSetMetaData metaData = rs.getMetaData();
 
-                // Get the column name style to use
-                String nameStyle = sth.get("FetchHashKeyName").toString();
-                if (nameStyle.isEmpty()) {
+                // Match DBI.pm: fetchrow_hashref($sth, $name) reads $sth->{$name || FetchHashKeyName || 'NAME'}
+                String nameStyle = null;
+                if (args.size() > 1) {
+                    RuntimeScalar nameArg = args.get(1);
+                    if (nameArg != null && nameArg.type != RuntimeScalarType.UNDEF) {
+                        String explicit = nameArg.toString();
+                        if (explicit != null && !explicit.isEmpty()) {
+                            nameStyle = explicit;
+                        }
+                    }
+                }
+                if (nameStyle == null) {
+                    RuntimeScalar fk = sth.get("FetchHashKeyName");
+                    if (fk != null && fk.type != RuntimeScalarType.UNDEF) {
+                        String s = fk.toString();
+                        if (!s.isEmpty()) {
+                            nameStyle = s;
+                        }
+                    }
+                }
+                if (nameStyle == null) {
                     nameStyle = "NAME";
                 }
-                RuntimeArray columnNames = sth.get(nameStyle).arrayDeref();
+                int colCount = metaData.getColumnCount();
+                RuntimeArray columnNames = columnNamesAttribute(sth, nameStyle);
+                if (columnNames == null || columnNames.size() < colCount) {
+                    throw new IllegalStateException(
+                            "fetchrow_hashref: missing column NAME list for key \"" + nameStyle + "\"");
+                }
 
                 // For each column, add column name -> value pair to hash.
                 // See fetchrow_arrayref for rationale on UTF-8 encode to BYTE_STRING.
-                for (int i = 1; i <= metaData.getColumnCount(); i++) {
+                for (int i = 1; i <= colCount; i++) {
                     String columnName = columnNames.get(i - 1).toString();
                     Object value = rs.getObject(i);
                     RuntimeScalar val;
@@ -738,8 +780,12 @@ public class DBI extends PerlModuleBase {
     }
 
     /**
-     * Finishes a statement handle, closing the underlying JDBC PreparedStatement.
-     * This releases database locks (e.g., SQLite table locks) held by the statement.
+     * Finishes a statement handle: drops any open {@link ResultSet} but keeps the
+     * {@link PreparedStatement} usable for subsequent {@code execute()} calls.
+     * <p>
+     * Closing the JDBC {@code PreparedStatement} here breaks real DBI semantics and
+     * modules that recycle handles (DBIx::Simple statement cache, etc.). Perl's driver
+     * finish ends the active cursor, not the lifetime of the prepared statement.
      *
      * @param args RuntimeArray containing:
      *             [0] - Statement handle (sth)
@@ -749,22 +795,19 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList finish(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
 
-        // Close the JDBC PreparedStatement to release locks
-        RuntimeScalar stmtScalar = sth.get("statement");
-        if (stmtScalar != null && stmtScalar.value instanceof PreparedStatement stmt) {
+        RuntimeScalar prevResultRef = sth.get("execute_result");
+        if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
             try {
-                if (!stmt.isClosed()) {
-                    stmt.close();
+                RuntimeHash prevResult = prevResultRef.hashDeref();
+                RuntimeScalar rsScalar = prevResult.get("resultset");
+                if (rsScalar != null && rsScalar.value instanceof ResultSet rs) {
+                    if (!rs.isClosed()) {
+                        rs.close();
+                    }
                 }
-            } catch (Exception e) {
-                // Ignore close errors — statement may already be closed
+            } catch (Exception ignored) {
+                // Best effort — cursor may already be closed
             }
-        }
-        // Also close any open ResultSet
-        RuntimeScalar rsScalar = sth.get("execute_result");
-        if (rsScalar != null && RuntimeScalarType.isReference(rsScalar)) {
-            Object rsObj = rsScalar.hashDeref();
-            // execute_result may be stored differently; check raw value
         }
 
         sth.put("Active", new RuntimeScalar(false));

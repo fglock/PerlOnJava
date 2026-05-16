@@ -349,6 +349,69 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 : callContext;
     }
 
+    /**
+     * Perl collapses a multi-value list returned from a subroutine when the callee runs in
+     * scalar context: only the last element survives as the actual return SV. PerlOnJava
+     * historically returned the raw {@link RuntimeList} and relied on the caller (e.g.
+     * chained {@code ->}) to call {@link RuntimeList#scalar()}, which ran too late — mortal
+     * temporaries from intermediate values (DBI execute results, etc.) could be flushed and
+     * tear down shared JDBC state before the outer method ran.
+     */
+    public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext) {
+        if (result == null) {
+            return null;
+        }
+        if (result instanceof RuntimeControlFlowList) {
+            return result;
+        }
+        if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
+            return new RuntimeList(result.scalar());
+        }
+        return result;
+    }
+
+    /**
+     * Keep the blessed invocant's referent alive for the duration of a method dispatch.
+     * Nested {@code MortalList.flushAboveMark()} (e.g. from {@link RuntimeScalar#set})
+     * can otherwise dequeue deferred decrements and run DESTROY on chain temporaries such as
+     * {@code $db->query(...)->arrays} mid-callee — JDBC cursors appear truncated vs a lexical
+     * holding the intermediate result (DBIx::Simple).
+     */
+    private static RuntimeBase acquireMethodInvocantHold(RuntimeScalar runtimeScalar) {
+        RuntimeScalar v = runtimeScalar;
+        while (v != null && v.type == RuntimeScalarType.READONLY_SCALAR) {
+            v = (RuntimeScalar) v.value;
+        }
+        if (v == null || !RuntimeScalarType.isReference(v)) {
+            return null;
+        }
+        if (!(v.value instanceof RuntimeBase base)) {
+            return null;
+        }
+        if (base.blessId == 0) {
+            return null;
+        }
+        if (base.refCount == Integer.MIN_VALUE || base.currentlyDestroying) {
+            return null;
+        }
+        if (base.refCount < 0) {
+            return null;
+        }
+        base.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
+        base.refCount++;
+        return base;
+    }
+
+    private static void releaseMethodInvocantHold(RuntimeBase holdBase) {
+        if (holdBase == null) {
+            return;
+        }
+        holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
+        if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
+            holdBase.refCount--;
+        }
+    }
+
     public static boolean isLvalueCode(RuntimeCode code) {
         return code != null && code.attributes != null && code.attributes.contains("lvalue");
     }
@@ -2182,6 +2245,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
                     currentSub, args, callContext);
         }
+        RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
+        try {
         // Fast path: check inline cache for monomorphic call sites
         if (method.type == RuntimeScalarType.STRING || method.type == RuntimeScalarType.BYTE_STRING) {
             // Unwrap READONLY_SCALAR for blessId check (same as in call())
@@ -2230,13 +2295,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 MortalList.pushMark();
                                 try {
                                     // Prefer PerlSubroutine interface over MethodHandle
+                                    RuntimeList out;
                                     if (cachedCode.subroutine != null) {
-                                        return cachedCode.subroutine.apply(a, effectiveContext);
+                                        out = cachedCode.subroutine.apply(a, effectiveContext);
                                     } else if (cachedCode.isStatic) {
-                                        return (RuntimeList) cachedCode.methodHandle.invoke(a, effectiveContext);
+                                        out = (RuntimeList) cachedCode.methodHandle.invoke(a, effectiveContext);
                                     } else {
-                                        return (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, effectiveContext);
+                                        out = (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, effectiveContext);
                                     }
+                                    return coerceScalarCallResult(out, effectiveContext);
                                 } finally {
                                     MortalList.popMark();
                                 }
@@ -2294,34 +2361,30 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         
-        // Fall back to regular call
-        return call(runtimeScalar, method, currentSub, args, callContext);
+        // Fall back without nesting through call(...) — avoids double refcount hold
+        // (this outer frame already holds the invocant for the inlined-cache miss path).
+        RuntimeArray aFallback = new RuntimeArray();
+        aFallback.elements.add(runtimeScalar);
+        for (RuntimeBase arg : args) {
+            arg.setArrayOfAlias(aFallback);
+        }
+        return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
+        } finally {
+            releaseMethodInvocantHold(pjMethodInvHold);
+        }
     }
 
     /**
-     * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
-     *
-     * @param runtimeScalar The object to call the method on.
-     * @param method        The method to resolve.
-     * @param currentSub    The subroutine to resolve SUPER::method in.
-     * @param args          The arguments to pass to the method.
-     * @param callContext   The call context.
-     * @return The result of the method call.
+     * Dispatches {@code METHOD $self, ...} after {@code $self} is already element 0 of {@code args}.
+     * Caller must unwrap TIED_SCALAR and apply {@link #acquireMethodInvocantHold}/{@link
+     * #releaseMethodInvocantHold} unless another frame already retains the blessed invocant.
      */
-    public static RuntimeList call(RuntimeScalar runtimeScalar,
-                                   RuntimeScalar method,
-                                   RuntimeScalar currentSub,
-                                   RuntimeArray args,
-                                   int callContext) {
-        // Handle tied scalars: the invocant may be a TIED_SCALAR returned
-        // from a tied hash / array FETCH. Unwrap before dispatch so
-        // isReference / blessId checks see the real underlying value.
-        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
-            return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
-        }
-
-        // insert `this` into the parameter list
-        args.elements.addFirst(runtimeScalar);
+    private static RuntimeList dispatchPerlMethodAfterSelfInjected(
+            RuntimeScalar runtimeScalar,
+            RuntimeScalar method,
+            RuntimeScalar currentSub,
+            RuntimeArray args,
+            int callContext) {
 
         // System.out.println("call ->" + method + " " + currentPackage + " " + args + " " + callContext);
 
@@ -2510,6 +2573,38 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 errorMethodName = methodName.substring(7);
             }
             throw new PerlCompilerException("Can't locate object method \"" + errorMethodName + "\" via package \"" + perlClassName + "\" (perhaps you forgot to load \"" + perlClassName + "\"?)");
+        }
+    }
+
+    /**
+     * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.
+     *
+     * @param runtimeScalar The object to call the method on.
+     * @param method        The method to resolve.
+     * @param currentSub    The subroutine to resolve SUPER::method in.
+     * @param args          The arguments to pass to the method.
+     * @param callContext   The call context.
+     * @return The result of the method call.
+     */
+    public static RuntimeList call(RuntimeScalar runtimeScalar,
+                                   RuntimeScalar method,
+                                   RuntimeScalar currentSub,
+                                   RuntimeArray args,
+                                   int callContext) {
+        // Handle tied scalars: the invocant may be a TIED_SCALAR returned
+        // from a tied hash / array FETCH. Unwrap before dispatch so
+        // isReference / blessId checks see the real underlying value.
+        if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            return call(runtimeScalar.tiedFetch(), method, currentSub, args, callContext);
+        }
+
+        RuntimeBase invHold = acquireMethodInvocantHold(runtimeScalar);
+        // insert `this` into the parameter list
+        args.elements.addFirst(runtimeScalar);
+        try {
+            return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, args, callContext);
+        } finally {
+            releaseMethodInvocantHold(invHold);
         }
     }
 
@@ -3030,8 +3125,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
                         // causing Test::Warn to miss warnings from DESTROY.
                         MortalList.flushAboveMark();
+                        return result;
                     }
-                    return result;
+                    return coerceScalarCallResult(result, effectiveContext);
                 }
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
@@ -4011,7 +4107,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return result;
+                return coerceScalarCallResult(result, effectiveContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -4128,7 +4224,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return result;
+                return coerceScalarCallResult(result, effectiveContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
