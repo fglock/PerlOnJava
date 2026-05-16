@@ -81,9 +81,13 @@ Upstream **`Utils::_version_to_number`** strips non-numeric tails (e.g. **`1.5-a
 
 ---
 
-## Mitigated (2026-05-16): **`File::Copy`** uninitialized **`$!`** (**`warnings`**, line ~303)
+## Resolved (2026-05-16): **`File::Copy`** uninitialized **`$!` / `$^E`** (**`warnings`**, line **303**)
 
-Bundled **`File/Copy.pm`** used **`($! + 0, $^E + 0)`** when **`$!`** could be **undef**. Replaced with **defined‑guarded** coercion (still **Perl 5**‑compatible when errno is absent).
+Bundled **`File/Copy.pm`** `_move` error path assigned **`($! + 0, $^E + 0)`**. Under **`jperl`**, **`$!`** / **`$^E`** can be **`undef`** even after a failed **`eval`**, triggering **`warnings`**.
+
+**Fix:** **`($sts,$ossts) = ((defined $! ? $! + 0 : 0), (defined $^E ? $^E + 0 : 0));`** (`src/main/perl/lib/File/Copy.pm`). Rebuild **`shadowJar`** (**`make`**) before **`./jcpan`** so the **`jar:PERL5LIB`** copy picks up the change — a stale jar still showed the warning after an earlier partial guard.
+
+**Check:** **`timeout 900 ./jcpan -t CPANPLUS`** — no **`File/Copy`** **`uninitialized … addition`** in TAP.
 
 ---
 
@@ -119,7 +123,7 @@ timeout 120 ./jperl src/test/resources/unit/eval_after_stash_delete.t
 
 ## Roadmap: `./jcpan -t CPANPLUS` — **detailed next steps**
 
-**Latest harness (2026-05-16):** **`timeout 900 ./jcpan -t CPANPLUS`** → **PASS** (**20** files, **1576** subtests, CPANPLUS **0.9916**). One **`File::Copy`** uninitialized-value warning remains in TAP (see mitigation).
+**Latest harness (2026-05-16):** **`timeout 900 ./jcpan -t CPANPLUS`** → **PASS** (**20** files, **1576** subtests, CPANPLUS **0.9916**); clean TAP re **`File/Copy`** after **`File/Copy.pm`** line **303** guard + fresh **`shadowJar`**.
 
 ### 0. Routine verification (every CPANPLUS-related push)
 
@@ -149,9 +153,9 @@ See “Resolved … **`_version_to_number`**” above.
 - **Fix:** **`EmitSubroutine.handleApplyOperator`** no longer embeds parser **`parseTimeCodeRef`** via **`registerCompiledCodeRef`**; **`&(bareword)`** always goes through **`getGlobalCodeRef`** so **`local *glob`** (**`RuntimeGlob.dynamicSaveState`** / **`replacePinnedCodeRef`**) wins. Interpreter path still uses **`parseTimeCodeRef`** (**pr694** / stash-delete pinning).
 - **Check:** **`src/test/resources/unit/cpanplus_dist_mm_can_load_local.t`** (also rebuild **`shadowJar`** before spot-checking **`./jperl -e`** — stale jars looked like **`local`** was broken).
 
-### 5. **`File::Copy`** warnings — **Mitigated (still one TAP line)**
+### 5. ~~**`File::Copy`** **`$!`** / **`$^E`** warnings~~ — **Done**
 
-Occasional **`Use of uninitialized value in addition`** at **`File/Copy.pm`** ~303 still appears once in **`jcpan -t CPANPLUS`** output (2026-05-16); bundled **`defined`-guarded** coercion may need another pass for this code path.
+See **`File/Copy`** “Resolved … line **303**” above.
 
 ### 6. Documentation + incident hygiene
 
@@ -170,7 +174,7 @@ Occasional **`Use of uninitialized value in addition`** at **`File/Copy.pm`** ~3
 | **`BUILD_PL` / `MAKEFILE` filetest/`stat`** | **Done** | ALLCAP bareword handle heuristic vs **`->`** / defined package sub (**`FileHandle`** helper) |
 | **`t/00`** version / **`numify`** | **Done** | **`normalizeVersionForPerlModule`** + **`Version.java`**; bare **`use 5.x.y`** splice (**`StatementParser`**) |
 | **Strict + string `eval` + import/**`no`** (pr694)** | **Done** | **`SubroutineParser`** **`parseTimeCodeRef`** → **`BytecodeCompiler`**; **`pr694_core_regressions.t`**, **`eval_after_stash_delete.t`** |
-| **`File::Copy` warn + 0 `$!`** | **Mitigated** | Bundled **`File/Copy.pm`** |
+| **`File::Copy` warn + 0 `$!`/`$^E`** | **Done** | **`File/Copy.pm`** line **303**; **`make`** refreshes **`jar:PERL5LIB`** |
 | **`t/031` SQLite Source** | **Done** | Covered by **`jcpan -t CPANPLUS`** PASS (2026-05-16); upstream **`DBIx::Simple`/JDBC** |
 | **`t/20` Dist::MM / `can_load`** | **Done (JVM)** | **`EmitSubroutine`**: no **`registerCompiledCodeRef`** for **`&`** calls; **`cpanplus_dist_mm_can_load_local.t`** |
 
