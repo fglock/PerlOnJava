@@ -349,6 +349,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 : callContext;
     }
 
+    /**
+     * Perl collapses a multi-value list returned from a subroutine when the callee runs in
+     * scalar context: only the last element survives as the actual return SV. PerlOnJava
+     * historically returned the raw {@link RuntimeList} and relied on the caller (e.g.
+     * chained {@code ->}) to call {@link RuntimeList#scalar()}, which ran too late — mortal
+     * temporaries from intermediate values (DBI execute results, etc.) could be flushed and
+     * tear down shared JDBC state before the outer method ran.
+     */
+    public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext) {
+        if (result == null) {
+            return null;
+        }
+        if (result instanceof RuntimeControlFlowList) {
+            return result;
+        }
+        if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
+            return new RuntimeList(result.scalar());
+        }
+        return result;
+    }
+
     public static boolean isLvalueCode(RuntimeCode code) {
         return code != null && code.attributes != null && code.attributes.contains("lvalue");
     }
@@ -2230,13 +2251,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                 MortalList.pushMark();
                                 try {
                                     // Prefer PerlSubroutine interface over MethodHandle
+                                    RuntimeList out;
                                     if (cachedCode.subroutine != null) {
-                                        return cachedCode.subroutine.apply(a, effectiveContext);
+                                        out = cachedCode.subroutine.apply(a, effectiveContext);
                                     } else if (cachedCode.isStatic) {
-                                        return (RuntimeList) cachedCode.methodHandle.invoke(a, effectiveContext);
+                                        out = (RuntimeList) cachedCode.methodHandle.invoke(a, effectiveContext);
                                     } else {
-                                        return (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, effectiveContext);
+                                        out = (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, effectiveContext);
                                     }
+                                    return coerceScalarCallResult(out, effectiveContext);
                                 } finally {
                                     MortalList.popMark();
                                 }
@@ -3030,8 +3053,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
                         // causing Test::Warn to miss warnings from DESTROY.
                         MortalList.flushAboveMark();
+                        return result;
                     }
-                    return result;
+                    return coerceScalarCallResult(result, effectiveContext);
                 }
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
@@ -4011,7 +4035,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return result;
+                return coerceScalarCallResult(result, effectiveContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -4128,7 +4152,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return result;
+                return coerceScalarCallResult(result, effectiveContext);
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();

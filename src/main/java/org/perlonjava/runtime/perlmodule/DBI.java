@@ -738,8 +738,12 @@ public class DBI extends PerlModuleBase {
     }
 
     /**
-     * Finishes a statement handle, closing the underlying JDBC PreparedStatement.
-     * This releases database locks (e.g., SQLite table locks) held by the statement.
+     * Finishes a statement handle: drops any open {@link ResultSet} but keeps the
+     * {@link PreparedStatement} usable for subsequent {@code execute()} calls.
+     * <p>
+     * Closing the JDBC {@code PreparedStatement} here breaks real DBI semantics and
+     * modules that recycle handles (DBIx::Simple statement cache, etc.). Perl's driver
+     * finish ends the active cursor, not the lifetime of the prepared statement.
      *
      * @param args RuntimeArray containing:
      *             [0] - Statement handle (sth)
@@ -749,22 +753,19 @@ public class DBI extends PerlModuleBase {
     public static RuntimeList finish(RuntimeArray args, int ctx) {
         RuntimeHash sth = args.get(0).hashDeref();
 
-        // Close the JDBC PreparedStatement to release locks
-        RuntimeScalar stmtScalar = sth.get("statement");
-        if (stmtScalar != null && stmtScalar.value instanceof PreparedStatement stmt) {
+        RuntimeScalar prevResultRef = sth.get("execute_result");
+        if (prevResultRef != null && RuntimeScalarType.isReference(prevResultRef)) {
             try {
-                if (!stmt.isClosed()) {
-                    stmt.close();
+                RuntimeHash prevResult = prevResultRef.hashDeref();
+                RuntimeScalar rsScalar = prevResult.get("resultset");
+                if (rsScalar != null && rsScalar.value instanceof ResultSet rs) {
+                    if (!rs.isClosed()) {
+                        rs.close();
+                    }
                 }
-            } catch (Exception e) {
-                // Ignore close errors — statement may already be closed
+            } catch (Exception ignored) {
+                // Best effort — cursor may already be closed
             }
-        }
-        // Also close any open ResultSet
-        RuntimeScalar rsScalar = sth.get("execute_result");
-        if (rsScalar != null && RuntimeScalarType.isReference(rsScalar)) {
-            Object rsObj = rsScalar.hashDeref();
-            // execute_result may be stored differently; check raw value
         }
 
         sth.put("Active", new RuntimeScalar(false));

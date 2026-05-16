@@ -293,7 +293,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
         try {
-            return BytecodeInterpreter.execute(this, args, effectiveContext);
+            return RuntimeCode.coerceScalarCallResult(
+                    BytecodeInterpreter.execute(this, args, effectiveContext), effectiveContext);
         } finally {
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
@@ -318,7 +319,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
         try {
-            return BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName);
+            return RuntimeCode.coerceScalarCallResult(
+                    BytecodeInterpreter.execute(this, args, effectiveContext, subroutineName),
+                    effectiveContext);
         } finally {
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
