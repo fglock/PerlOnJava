@@ -300,7 +300,7 @@ sub _move {
         };
         return 1 unless $@;
     }
-    ($sts,$ossts) = ((defined $! ? $! + 0 : 0), (defined $^E ? $^E + 0 : 0));
+    ($sts,$ossts) = ($! + 0, $^E + 0);
 
     ($tosz2,$tomt2) = ((stat($to))[7,9],0,0) if defined $tomt1;
     unlink($to) if !defined($tomt1) or $tomt1 != $tomt2 or $tosz1 != $tosz2;

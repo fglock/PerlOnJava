@@ -76,7 +76,18 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
-        GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
+        // $! — errno dualvar. $^E is created as an empty slot by the $^A–$^Z loop above; on POSIX
+        // $^E always matches $! (perlvar), so share the same ErrnoVariable. On Windows $^E can
+        // differ from $! (GetLastError vs errno); use a second ErrnoVariable so list assignment
+        // like ($!,$^E)=(...) in File::Copy restores both values.
+        ErrnoVariable errnoVar = new ErrnoVariable();
+        GlobalVariable.globalVariables.put("main::!", errnoVar);
+        String dollarCaretE = "main::" + Character.toString((char) ('E' - 'A' + 1));
+        if (SystemUtils.osIsWindows()) {
+            GlobalVariable.globalVariables.put(dollarCaretE, new ErrnoVariable());
+        } else {
+            GlobalVariable.globalVariables.put(dollarCaretE, errnoVar);
+        }
         // Initialize $, (output field separator) with special variable class
         if (!GlobalVariable.globalVariables.containsKey("main::,")) {
             var ofs = new OutputFieldSeparator();

@@ -81,13 +81,13 @@ Upstream **`Utils::_version_to_number`** strips non-numeric tails (e.g. **`1.5-a
 
 ---
 
-## Resolved (2026-05-16): **`File::Copy`** uninitialized **`$!` / `$^E`** (**`warnings`**, line **303**)
+## Resolved (2026-05-16): **`$^E`** + **`$!`** uninitialized warnings (**File::Copy** TAP noise)
 
-Bundled **`File/Copy.pm`** `_move` error path assigned **`($! + 0, $^E + 0)`**. Under **`jperl`**, **`$!`** / **`$^E`** can be **`undef`** even after a failed **`eval`**, triggering **`warnings`**.
+`$^E` is created by the **`$^A`–`$^Z`** startup loop as a plain global (**undef**). Perl defines **`$^E`** as the extended OS error; on **POSIX** it **always matches `$!`** (perlvar). Numeric context **`$^E + 0`** must not warn.
 
-**Fix:** **`($sts,$ossts) = ((defined $! ? $! + 0 : 0), (defined $^E ? $^E + 0 : 0));`** (`src/main/perl/lib/File/Copy.pm`). Rebuild **`shadowJar`** (**`make`**) before **`./jcpan`** so the **`jar:PERL5LIB`** copy picks up the change — a stale jar still showed the warning after an earlier partial guard.
+**Fix:** **`GlobalContext.initializeGlobals`**: install **`ErrnoVariable`** for **`main::!`**. Re-point **`$^E`** to the **same `ErrnoVariable`** on non‑Windows hosts; on **Windows** use a **second `ErrnoVariable`** so **`($!, $^E) = (...)`** in **`File::Copy`** can restore errno vs Win32 error independently. Bundled **`File/Copy.pm`** stays stock **`($! + 0, $^E + 0)`**.
 
-**Check:** **`timeout 900 ./jcpan -t CPANPLUS`** — no **`File/Copy`** **`uninitialized … addition`** in TAP.
+**Check:** **`./jperl src/test/resources/unit/errno_caret_e_defined.t`**; **`timeout 900 ./jcpan -t CPANPLUS`** — no **`File/Copy`** **`uninitialized`** line.
 
 ---
 
@@ -155,7 +155,7 @@ See “Resolved … **`_version_to_number`**” above.
 
 ### 5. ~~**`File::Copy`** **`$!`** / **`$^E`** warnings~~ — **Done**
 
-See **`File/Copy`** “Resolved … line **303**” above.
+See “Resolved … **`$^E`**” above.
 
 ### 6. Documentation + incident hygiene
 
@@ -174,7 +174,7 @@ See **`File/Copy`** “Resolved … line **303**” above.
 | **`BUILD_PL` / `MAKEFILE` filetest/`stat`** | **Done** | ALLCAP bareword handle heuristic vs **`->`** / defined package sub (**`FileHandle`** helper) |
 | **`t/00`** version / **`numify`** | **Done** | **`normalizeVersionForPerlModule`** + **`Version.java`**; bare **`use 5.x.y`** splice (**`StatementParser`**) |
 | **Strict + string `eval` + import/**`no`** (pr694)** | **Done** | **`SubroutineParser`** **`parseTimeCodeRef`** → **`BytecodeCompiler`**; **`pr694_core_regressions.t`**, **`eval_after_stash_delete.t`** |
-| **`File::Copy` warn + 0 `$!`/`$^E`** | **Done** | **`File/Copy.pm`** line **303**; **`make`** refreshes **`jar:PERL5LIB`** |
+| **`File::Copy` warn + 0 `$!`/`$^E`** | **Done** | **`GlobalContext`**: **`$^E` → `ErrnoVariable`** (alias **`$!`** on POSIX) |
 | **`t/031` SQLite Source** | **Done** | Covered by **`jcpan -t CPANPLUS`** PASS (2026-05-16); upstream **`DBIx::Simple`/JDBC** |
 | **`t/20` Dist::MM / `can_load`** | **Done (JVM)** | **`EmitSubroutine`**: no **`registerCompiledCodeRef`** for **`&`** calls; **`cpanplus_dist_mm_can_load_local.t`** |
 
