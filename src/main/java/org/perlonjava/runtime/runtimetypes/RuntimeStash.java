@@ -183,6 +183,8 @@ public class RuntimeStash extends RuntimeHash {
         RuntimeGlob savedIO = GlobalVariable.globalIORefs.get(fullKey);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(fullKey);
 
+        RuntimeGlob.anonymizeOrphanNamedCvDetached(fullKey, savedCode);
+
         // Delete all slots from GlobalVariable. The CODE slot helper removes
         // the visible stash entry while keeping already-pinned CVs alive for
         // previously compiled call sites.

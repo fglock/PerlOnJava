@@ -10,6 +10,7 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -547,18 +548,32 @@ public class EmitSubroutine {
         // twice" error in DBIx::Class torture.t (perf/reduce-apply-bytecode Phase 2).
 
         String subroutineName = "";
-        if (node.left instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
-            if (operatorNode.operand instanceof IdentifierNode identifierNode) {
+        OperatorNode ampNode =
+                node.left instanceof OperatorNode on && "&".equals(on.operator) ? on : null;
+        if (ampNode != null && ampNode.operand instanceof IdentifierNode identifierNode) {
                 subroutineName = NameNormalizer.normalizeVariableName(identifierNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleApplyElementOperator subroutine " + subroutineName);
-            }
         }
 
-        // Always load \&name via EmitVariable (-> getGlobalCodeRef). Do not embed
-        // Parser's parseTimeCodeRef via registerCompiledCodeRef: that snapshot bypasses
-        // local *Pkg::sub = sub { ... } overrides (CPANPLUS::Dist::MM format_available + t/20).
-        // BytecodeInterpreter still consults parseTimeCodeRef separately for parity.
-        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target: code ref (usually &bareword)
+        // Embed parse-time CODeref when safe: wrapper clone shares the RuntimeCode object,
+        // so later glob .set(...) does not mutate the pooled wrapper (Perl compile-bind;
+        // op/symbolcache.t). Skip embedding while local *Pkg::name shadows CODE
+        // (GlobalVariable.isGlobCodeSlotUnderLocalShadow) so invokes observe
+        // monkeypatches (CPANPLUS::Dist::MM format_available-style tests).
+        if (ampNode != null
+                && !subroutineName.isEmpty()
+                && !GlobalVariable.isGlobCodeSlotUnderLocalShadow(subroutineName)
+                && ampNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar parseSnap) {
+            int codeRefId = GlobalVariable.registerCompiledCodeRef(parseSnap.clone());
+            mv.visitLdcInsn(codeRefId);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                    "getCompiledCodeRef",
+                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        } else {
+            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target: code ref (usually &bareword)
+        }
 
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)

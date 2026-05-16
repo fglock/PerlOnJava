@@ -40,6 +40,16 @@ public class GlobalVariable {
     // and should survive stash deletion. This matches Perl's behavior where
     // compiled bytecode holds direct references to CVs that survive stash deletion.
     private static final Map<String, RuntimeScalar> pinnedCodeRefs = new HashMap<>();
+
+    /**
+     * Nesting depth of {@code local *Pkg::name} scopes that reinstall the CODE slot (see
+     * {@link org.perlonjava.runtime.runtimetypes.RuntimeGlob#dynamicSaveState}). While {@code >0},
+     * named invokes must resolve the callee through {@link #getGlobalCodeRef(String)} on each call
+     * so monkeypatched coderefs are visible (CPANPLUS::Dist::MM). Depth {@code 0}: bytecode may embed
+     * a parse-time CODeref snapshot so redefinitions preserve Perl compile-time CV binding (op/symbolcache.t).
+     */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Integer> globCodeLocalShadowDepth =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private static final Set<String> deletedCodeRefPins = new HashSet<>();
     private static final Map<Integer, RuntimeScalar> compiledCodeRefs = new HashMap<>();
     private static int nextCompiledCodeRefId = 1;
@@ -256,6 +266,7 @@ public class GlobalVariable {
         globalHashes.clear();
         globalCodeRefs.clear();
         pinnedCodeRefs.clear();
+        globCodeLocalShadowDepth.clear();
         deletedCodeRefPins.clear();
         compiledCodeRefs.clear();
         nextCompiledCodeRefId = 1;
@@ -999,6 +1010,33 @@ public class GlobalVariable {
         if (pinnedCodeRefs.containsKey(key)) {
             pinnedCodeRefs.put(key, codeRef);
         }
+    }
+
+    public static boolean isGlobCodeSlotUnderLocalShadow(String fqGlobName) {
+        if (fqGlobName == null || fqGlobName.isEmpty()) {
+            return false;
+        }
+        Integer d = globCodeLocalShadowDepth.get(fqGlobName);
+        return d != null && d > 0;
+    }
+
+    /** Invoked after {@link RuntimeGlob#dynamicSaveState} replaces the pinned CODE slot. */
+    public static void beginGlobCodeLocalShadow(String fqGlobName) {
+        if (fqGlobName == null || fqGlobName.isEmpty()) {
+            return;
+        }
+        globCodeLocalShadowDepth.merge(fqGlobName, 1, Integer::sum);
+    }
+
+    /** Invoked after {@link RuntimeGlob#dynamicRestoreState} restores the CODE slot. */
+    public static void endGlobCodeLocalShadow(String fqGlobName) {
+        if (fqGlobName == null || fqGlobName.isEmpty()) {
+            return;
+        }
+        globCodeLocalShadowDepth.computeIfPresent(fqGlobName, (k, v) -> {
+            int n = v - 1;
+            return n <= 0 ? null : n;
+        });
     }
 
     /**

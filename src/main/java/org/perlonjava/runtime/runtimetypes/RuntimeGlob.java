@@ -278,6 +278,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // This emulates Perl 5's behavior where replacing a sub frees its op-tree,
                 // causing compile-time constants to be freed and weak refs to be cleared.
                 if (codeContainer.value instanceof RuntimeCode oldCode) {
+                    anonymizeCvReplacedAtGlob(
+                            oldCode, value.value instanceof RuntimeCode incoming ? incoming : null, this.globName);
                     oldCode.clearPadConstantWeakRefs();
                     // Decrement stashRefCount on the old CODE ref being replaced
                     if (oldCode.stashRefCount > 0) {
@@ -1181,6 +1183,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // assignments during the local scope would mutate the saved snapshot instead
         // of the new empty code, making the restore a no-op.
         GlobalVariable.replacePinnedCodeRef(this.globName, newCode);
+        GlobalVariable.beginGlobCodeLocalShadow(this.globName);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
         // Create a NEW RuntimeGlob for the local scope and install it in globalIORefs.
@@ -1284,9 +1287,60 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.
         GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);
+        GlobalVariable.endGlobCodeLocalShadow(snap.globName);
         InheritanceResolver.invalidateCache();
 
         GlobalVariable.getGlobalFormatRef(snap.globName).dynamicRestoreState();
+    }
+
+    /**
+     * When {@code delete $stash{'sym'}} removes a compiled package sub whose CV is still referenced,
+     * B::GV->NAME expects {@code __ANON__}.
+     */
+    public static void anonymizeOrphanNamedCvDetached(String fullGlobKey, RuntimeScalar codeScalar) {
+        if (fullGlobKey == null || codeScalar == null || !(codeScalar.value instanceof RuntimeCode cv)) {
+            return;
+        }
+        anonymizeDeclaredCvDetachedFromGlobSlot(cv, fullGlobKey);
+    }
+
+    /** When {@code *Pkg::name = sub { ... }} replaces with an anonymous-ish CV, the displaced CV orphans. */
+    private static void anonymizeCvReplacedAtGlob(RuntimeCode displaced, RuntimeCode incoming, String globName) {
+        if (displaced == null || incoming == null) {
+            return;
+        }
+        boolean incomingAnonLike =
+                incoming.subName == null
+                        || incoming.subName.isEmpty()
+                        || "__ANON__".equals(incoming.subName);
+        if (!incomingAnonLike || incoming.explicitlyRenamed) {
+            return;
+        }
+        anonymizeDeclaredCvDetachedFromGlobSlot(displaced, globName);
+    }
+
+    /** Match declared {@code CvNAME} glob slot; clear stash-install metadata Perl keeps off orphans. */
+    private static void anonymizeDeclaredCvDetachedFromGlobSlot(RuntimeCode cv, String globName) {
+        if (globName == null || cv == null) {
+            return;
+        }
+        int li = globName.lastIndexOf("::");
+        if (li <= 0 || li + 2 >= globName.length()) {
+            return;
+        }
+        String pkgGlob = globName.substring(0, li);
+        String shortGlob = globName.substring(li + 2);
+        if (!cv.isDeclared
+                || cv.packageName == null
+                || cv.subName == null
+                || !pkgGlob.equals(cv.packageName)
+                || !shortGlob.equals(cv.subName)) {
+            return;
+        }
+        cv.subName = "__ANON__";
+        cv.stashInstallPackage = null;
+        cv.stashInstallSub = null;
+        cv.installedViaAnonGlobAssign = false;
     }
 
     private record GlobSlotSnapshot(

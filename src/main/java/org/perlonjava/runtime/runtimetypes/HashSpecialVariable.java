@@ -390,6 +390,9 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             // Remove only from the visible stash, not from pinned code refs:
             // compiled call sites keep their CV, while future lookups must see
             // the deletion and create an undefined slot.
+            RuntimeScalar savedCodePeek = GlobalVariable.globalCodeRefs.get(fullKey);
+            RuntimeGlob.anonymizeOrphanNamedCvDetached(fullKey, savedCodePeek);
+
             RuntimeScalar code = GlobalVariable.removeGlobalCodeRefForStashDelete(fullKey);
             RuntimeScalar scalar = GlobalVariable.globalVariables.remove(fullKey);
             RuntimeArray array = GlobalVariable.globalArrays.remove(fullKey);
