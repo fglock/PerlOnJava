@@ -976,7 +976,8 @@ public class OperatorParser {
         // Consume it here, before generic expression parsing can turn it into a subroutine call.
         if (nextToken.type == IDENTIFIER) {
             String name = nextToken.text;
-            if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
+            if (FileHandle.shouldTreatAllCapsIdentifierAsBareFileHandleSlot(
+                    parser, name, parser.tokenIndex)) {
                 TokenUtils.consume(parser);
                 // autovivify filehandle and convert to globref
                 GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));

@@ -672,7 +672,10 @@ public class StatementParser {
         // Parse Version string
         int currentIndex = parser.tokenIndex;
         RuntimeScalar versionScalar = scalarUndef;
-        Node versionNode = parseOptionalPackageVersion(parser);
+        Node versionNode =
+                packageName == null
+                        ? parseOptionalPerlBareUseVersion(parser)
+                        : parseOptionalPackageVersion(parser);
         if (versionNode != null) {
             if (TokenUtils.peek(parser).text.equals(",")) {
                 // no comma allowed after version
@@ -1304,6 +1307,42 @@ public class StatementParser {
             return block;
         }
         return null;
+    }
+
+    /**
+     * Optional version literal after bare {@code use} / {@code no} — {@code use 5.x.y} /
+     * {@code use v5.36}, not {@code use Module ...}.
+     * <p>
+     * Splices lexer-split dotted perl versions ({@code 5.38.0}), which must behave as tuples
+     * (v5.38.0) rather than floats (5.382).
+     */
+    private static Node parseOptionalPerlBareUseVersion(Parser parser) {
+        LexerToken token = TokenUtils.peek(parser);
+        if (token.type == LexerTokenType.IDENTIFIER && token.text.matches("^v\\d+(\\.\\d+)*")) {
+            return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
+        }
+        if (token.type != LexerTokenType.NUMBER) {
+            return null;
+        }
+        StringBuilder dotted = new StringBuilder(TokenUtils.consume(parser).text);
+        while (true) {
+            int beforeDotCursor = parser.tokenIndex;
+            if (!TokenUtils.peek(parser).text.equals(".")) {
+                break;
+            }
+            TokenUtils.consume(parser);
+            LexerToken afterDotPeek = TokenUtils.peek(parser);
+            if (afterDotPeek.type != LexerTokenType.NUMBER) {
+                parser.tokenIndex = beforeDotCursor;
+                break;
+            }
+            dotted.append('.').append(TokenUtils.consume(parser).text);
+        }
+        String verText = dotted.toString();
+        if (verText.chars().filter(c -> c == '.').count() >= 2) {
+            return new StringNode(verText, parser.tokenIndex);
+        }
+        return parseNumber(parser, new LexerToken(LexerTokenType.NUMBER, verText));
     }
 
     /**

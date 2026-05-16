@@ -4,6 +4,9 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.util.ArrayList;
+import java.util.StringJoiner;
+
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 public class VersionHelper {
@@ -355,6 +358,91 @@ public class VersionHelper {
             }
         }
         return normalizedVersion;
+    }
+
+    /**
+     * Normalize for {@code version}-module objects ({@link org.perlonjava.runtime.perlmodule.Version}).
+     * This is deliberately separate from {@link #normalizeVersion}, which implements the coarser rules
+     * needed for PerlOnJava {@code use VERSION} / feature-bundle parsing.
+     */
+    public static String normalizeVersionForPerlModule(RuntimeScalar wantVersion) {
+        String normalizedVersion = wantVersion.toString().trim();
+
+        if (normalizedVersion.equals("undef") || normalizedVersion.isEmpty()) {
+            return "0.0.0";
+        }
+
+        boolean explicitVString = normalizedVersion.startsWith("v");
+        if (wantVersion.type == RuntimeScalarType.VSTRING) {
+            normalizedVersion =
+                    normalizedVersion.startsWith("v")
+                            ? normalizedVersion.substring(1)
+                            : normalizedVersion;
+            if (normalizedVersion.matches("\\d+(\\.\\d+)*")) {
+                return perlTupleForVersionModule(normalizedVersion);
+            }
+            normalizedVersion = toDottedString(normalizedVersion);
+            return perlTupleForVersionModule(normalizedVersion);
+        }
+        if (explicitVString) {
+            normalizedVersion = normalizedVersion.substring(1).replace("_", "");
+            return perlTupleForVersionModule(normalizedVersion);
+        }
+
+        normalizedVersion = normalizedVersion.replaceAll("_", "");
+        if (normalizedVersion.matches("^\\d+$")) {
+            return normalizedVersion;
+        }
+        long dotCount = normalizedVersion.chars().filter(ch -> ch == '.').count();
+        if (dotCount >= 2 && normalizedVersion.matches("^\\d+(\\.\\d+)+$")) {
+            return perlTupleForVersionModule(normalizedVersion);
+        }
+        if (!normalizedVersion.matches("^\\d+\\.\\d+$")) {
+            return "0.0.0";
+        }
+        int dotIdx = normalizedVersion.indexOf('.');
+        try {
+            String major = normalizedVersion.substring(0, dotIdx);
+            Integer.parseInt(major);
+            String frac = normalizedVersion.substring(dotIdx + 1);
+            while (!frac.isEmpty() && frac.length() % 3 != 0) {
+                frac = frac + "0";
+            }
+            StringJoiner out = new StringJoiner(".").add(major);
+            for (int i = 0; i < frac.length(); i += 3) {
+                out.add(Integer.toString(Integer.parseInt(frac.substring(i, i + 3))));
+            }
+            return out.toString();
+        } catch (NumberFormatException e) {
+            return "0.0.0";
+        }
+    }
+
+    private static String perlTupleForVersionModule(String dottedNoLeadingV) {
+        String stripped = dottedNoLeadingV.replace("_", "");
+        String[] segs = stripped.split("\\.");
+        ArrayList<Integer> comps = new ArrayList<>(segs.length);
+        try {
+            for (String seg : segs) {
+                if (!seg.matches("\\d+")) {
+                    return "0.0.0";
+                }
+                comps.add(Integer.parseInt(seg));
+            }
+            if (comps.isEmpty()) {
+                return "0.0.0";
+            }
+            while (comps.size() < 3) {
+                comps.add(0);
+            }
+            StringJoiner joiner = new StringJoiner(".");
+            for (int v : comps) {
+                joiner.add(Integer.toString(v));
+            }
+            return joiner.toString();
+        } catch (NumberFormatException e) {
+            return "0.0.0";
+        }
     }
 
     public static String toDottedString(String input) {

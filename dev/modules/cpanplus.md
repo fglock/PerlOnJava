@@ -73,11 +73,11 @@ PerlOnJava’s **file-test** operator path and **`stat`/`lstat`** mistakenly con
 
 ## Resolved (2026-05-16): **`t/00`** **`_version_to_number`** (**`version` module** parity)
 
-Upstream **`Utils::_version_to_number`** ends with **`version->parse(...)->numify`**. Failures (**`v1.5`** vs **`1.5-a`**) came from **`VersionHelper.normalizeVersion`** mixing **explicit `v`-tuple** semantics with **decimal mantissa chunking**, plus **`Version.java`** forcing **`v`** on short two-part decimals (**`1.5` → wrong tuple**) and **`numify`** padding **`!qv`** values as if **`qv`**.
+Upstream **`Utils::_version_to_number`** strips non-numeric tails (e.g. **`1.5-a` → `version->parse("1.5")`**), then **`numify`**. Failures (**`v1.5`**, **`1.5`**) were **not** fixable by repurposing **`VersionHelper.normalizeVersion`**: that helper is also used for **`use VERSION` / feature-bundle parsing** and must stay coarse; changing it broke **`use v5.36`** signatures and **`IO::Handle`** ( **`use 5.38.0`** + built-in **`say`** ).
 
-**Fixes:** tuple branch for **`v…`** strings that are plain digit-dot tuples; rewrote decimal normalization to Perl’s **three-digit frac chunks**; removed bogus **`prepend v`** on **`1.x`** decimals in **`parseInternal`**; split **`numify`** padding **`qv`** vs **non‑`qv`**.
+**Fixes:** **`VersionHelper.normalizeVersionForPerlModule`** (tuple + single-dot decimal mantissa chunking + multi-dot **`5.x.y`** tuples) used only from **`Version.java`**; **`normalizeVersion`** unchanged for **`StatementParser`**. **`Version.java`**: removed bogus internal **`v`** prepend on short **`1.x`** decimals; **`numify`** uses **`max(parts − 1, 1)`** fractional **`%03d`** groups (Perl **`version.pm`**). **`StatementParser.parseOptionalPerlBareUseVersion`**: splice lexer-split **`use 5.38.0`** into a tuple string (not **`5.382`** float).
 
-**Check:** **`timeout 180 ./jperl ./00_CPANPLUS-Internals-Utils.t`** exit **0**; **`jperl -Mversion -E`** spot checks **`v1.5`** / **`1.5`** / **`1.2345`**.
+**Check:** **`./jperl src/test/resources/unit/version_pm_numify_parity.t`**; **`timeout 900 ./jcpan -t CPANPLUS`** ( **`t/00`** + full suite ).
 
 ---
 
@@ -119,7 +119,7 @@ timeout 120 ./jperl src/test/resources/unit/eval_after_stash_delete.t
 
 ## Roadmap: `./jcpan -t CPANPLUS` — **detailed next steps**
 
-_Re-run **`timeout 3600 ./jcpan -t CPANPLUS`** after substantive runtime/parser fixes and paste a fresh TAP / summary line into this doc (prior snapshot **`1267`** subtests / **`7/20`** dubious programs with CPANPLUS **0.9916** is stale)._
+**Latest harness (2026-05-16):** **`timeout 900 ./jcpan -t CPANPLUS`** → **PASS** (**20** files, **1576** subtests, CPANPLUS **0.9916**). One **`File::Copy`** uninitialized-value warning remains in TAP (see mitigation).
 
 ### 0. Routine verification (every CPANPLUS-related push)
 
@@ -139,14 +139,9 @@ See “Resolved … **`BUILD_PL` / `MAKEFILE`**” above.
 
 See “Resolved … **`_version_to_number`**” above.
 
-### 3. **`t/031`** SQLite source + **`DBIx::Simple`** (**Priority: high**)
+### 3. ~~**`t/031`** SQLite source + **`DBIx::Simple`**~~ — **Done (2026-05-16, `master`)**
 
-- **Symptom:** **`Can't call method "execute" on an undefined value`** in **`DBIx/Simple.pm`**, exercised via **`CPANPLUS::Internals::Source::SQLite`**.
-- **Next steps:**
-  1. Reproduce under **`timeout 180 ./jperl …/t/031_CPANPLUS-Internals-Source-SQLite.t`** with upstream **`PERL5LIB`** (or **`./jcpan`** unpacked tree).
-  2. Inspect whether **`dbh`** / **`$self->{dbh}`** is never set vs cleared early — trace **`DBI`**, **`connect`**, and any **`DESTROY`/scope** ordering under **`jperl`** (compare **`perl`** on same script).
-  3. Fix **PerlOnJava** runtime or (**only if unavoidable**) shim bundled **`DBIx::Simple`** — prefer fixing **`DBI`/`disconnect`** parity or refcount/GC quirks over changing CPANPLUS.
-  4. Re-run **`t/031`** then a short **`SQLite`/`Source`** slice of **`jcpan -t CPANPLUS`**.
+**`t/031_CPANPLUS-Internals-Source-SQLite.t`** and **`032_…via-sqlite`** pass under **`jcpan -t CPANPLUS`** after upstream **`DBIx::Simple`/JDBC chain** landed on **`master`**. Regression watch: **`dbh`** lifetime under heavy **`SQLite`** use.
 
 ### 4. ~~**`t/20`** **`CPANPLUS::Dist::MM`** / **`can_load`**~~ — **Done (2026-05-16, JVM)**
 
@@ -154,9 +149,9 @@ See “Resolved … **`_version_to_number`**” above.
 - **Fix:** **`EmitSubroutine.handleApplyOperator`** no longer embeds parser **`parseTimeCodeRef`** via **`registerCompiledCodeRef`**; **`&(bareword)`** always goes through **`getGlobalCodeRef`** so **`local *glob`** (**`RuntimeGlob.dynamicSaveState`** / **`replacePinnedCodeRef`**) wins. Interpreter path still uses **`parseTimeCodeRef`** (**pr694** / stash-delete pinning).
 - **Check:** **`src/test/resources/unit/cpanplus_dist_mm_can_load_local.t`** (also rebuild **`shadowJar`** before spot-checking **`./jperl -e`** — stale jars looked like **`local`** was broken).
 
-### 5. **`File::Copy`** warnings — **Mitigated**
+### 5. **`File::Copy`** warnings — **Mitigated (still one TAP line)**
 
-Occasional **`$!` + 0** noise from bundled **`File/Copy.pm`** — see mitigation above. Re-audit if **`jcpan`** output still warns on **`Copy`** paths.
+Occasional **`Use of uninitialized value in addition`** at **`File/Copy.pm`** ~303 still appears once in **`jcpan -t CPANPLUS`** output (2026-05-16); bundled **`defined`-guarded** coercion may need another pass for this code path.
 
 ### 6. Documentation + incident hygiene
 
@@ -173,10 +168,10 @@ Occasional **`$!` + 0** noise from bundled **`File/Copy.pm`** — see mitigation
 | **`make`** (unit shards) | **Done** | Run before pushing |
 | **`jcpan -t CPANPLUS`** bootstrap | **Unblocked** | **`conf.pl`** + **`Selfupdate`** / **`Report`** no longer abort on **`Config`** |
 | **`BUILD_PL` / `MAKEFILE` filetest/`stat`** | **Done** | ALLCAP bareword handle heuristic vs **`->`** / defined package sub (**`FileHandle`** helper) |
-| **`t/00`** version / **`numify`** | **Done** | **`VersionHelper`**, **`perlmodule/Version`** |
+| **`t/00`** version / **`numify`** | **Done** | **`normalizeVersionForPerlModule`** + **`Version.java`**; bare **`use 5.x.y`** splice (**`StatementParser`**) |
 | **Strict + string `eval` + import/**`no`** (pr694)** | **Done** | **`SubroutineParser`** **`parseTimeCodeRef`** → **`BytecodeCompiler`**; **`pr694_core_regressions.t`**, **`eval_after_stash_delete.t`** |
 | **`File::Copy` warn + 0 `$!`** | **Mitigated** | Bundled **`File/Copy.pm`** |
-| **`t/031` SQLite Source** | **Open** | **`DBIx::Simple`** `execute` on undefined (**`dbh`**) |
+| **`t/031` SQLite Source** | **Done** | Covered by **`jcpan -t CPANPLUS`** PASS (2026-05-16); upstream **`DBIx::Simple`/JDBC** |
 | **`t/20` Dist::MM / `can_load`** | **Done (JVM)** | **`EmitSubroutine`**: no **`registerCompiledCodeRef`** for **`&`** calls; **`cpanplus_dist_mm_can_load_local.t`** |
 
 ---

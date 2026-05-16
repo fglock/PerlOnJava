@@ -501,13 +501,10 @@ public class ParsePrimary {
 
         // File tests accept bareword filehandles; parse them before generic expression parsing
         // can turn them into subroutine calls. But '_' is special: it refers to the last stat buffer.
-        // Don't treat as filehandle if followed by :: (qualified package name like CPAN::find_perl)
         if (nextToken.type == LexerTokenType.IDENTIFIER) {
             String name = nextToken.text;
-            LexerToken afterName = parser.tokens.size() > parser.tokenIndex + 1 
-                ? parser.tokens.get(parser.tokenIndex + 1) : null;
-            boolean isQualifiedName = afterName != null && afterName.text.equals("::");
-            if (!isQualifiedName && !name.equals("_") && name.matches("^[A-Z_][A-Z0-9_]*$")) {
+            if (FileHandle.shouldTreatAllCapsIdentifierAsBareFileHandleSlot(
+                    parser, name, parser.tokenIndex)) {
                 TokenUtils.consume(parser);
                 // autovivify filehandle and convert to globref
                 GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));

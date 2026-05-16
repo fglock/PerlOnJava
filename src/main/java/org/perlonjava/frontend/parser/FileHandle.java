@@ -34,6 +34,29 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
 public class FileHandle {
 
     /**
+     * Legacy print/stat paths treat bare ALLCAPS words as IO slots (glob refs), but names like
+     * {@code BUILD_PL} are often constant subs and must participate in parsing {@code FN->(...) }.
+     */
+    public static boolean shouldTreatAllCapsIdentifierAsBareFileHandleSlot(
+            Parser parser, String name, int identifierTokenIndex) {
+        if ("_".equals(name) || !name.matches("^[A-Z_][A-Z0-9_]*$")) {
+            return false;
+        }
+        int nextIdx =
+                Whitespace.skipWhitespace(parser, identifierTokenIndex + 1, parser.tokens);
+        if (nextIdx < parser.tokens.size()) {
+            LexerToken t = parser.tokens.get(nextIdx);
+            if ("->".equals(t.text) || "::".equals(t.text)) {
+                return false;
+            }
+        }
+        String fullName =
+                NameNormalizer.normalizeVariableName(
+                        name, parser.ctx.symbolTable.getCurrentPackage());
+        return !GlobalVariable.isGlobalCodeRefDefined(fullName);
+    }
+
+    /**
      * Parses a file handle expression from the token stream.
      * <p>
      * This method attempts to parse various forms of Perl file handle syntax:

@@ -173,12 +173,6 @@ public class Version extends PerlModuleBase {
                 // Perl 5 treats these as v-strings with is_qv=true
                 isVString = true;
                 version = "v" + version;
-            } else if (dotCount == 1 && version.length() < 4) {
-                // If exactly one dot and short, prepend "v" for internal processing
-                // but keep the original for stringify() and qv flag
-                version = "v" + version;
-                // Note: originalVersionStr stays as the user's input (e.g., "1.0")
-                // Note: isVString remains false - this is a decimal version
             }
         }
 
@@ -192,7 +186,8 @@ public class Version extends PerlModuleBase {
             versionObj.put("qv", getScalarBoolean(isVString));
 
             // Parse components
-            String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
+            String normalized =
+                    VersionHelper.normalizeVersionForPerlModule(new RuntimeScalar(version));
             versionObj.put("version", new RuntimeScalar(normalized));
         } else {
             // Decimal format
@@ -203,7 +198,8 @@ public class Version extends PerlModuleBase {
             versionObj.put("qv", scalarFalse);
 
             // Normalize the version
-            String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(cleanVersion));
+            String normalized =
+                    VersionHelper.normalizeVersionForPerlModule(new RuntimeScalar(cleanVersion));
             versionObj.put("version", new RuntimeScalar(normalized));
         }
 
@@ -269,16 +265,14 @@ public class Version extends PerlModuleBase {
             return new RuntimeScalar(0.0).getList();
         }
 
-        // Build numified string with 3-digit zero-padded groups
-        // e.g., "5.42.0" -> "5.042000", "1.2.3" -> "1.002003"
-        StringBuilder numified = new StringBuilder();
-        numified.append(parts[0]);
+        // Perl version.pm numify — minimum one padded frac group after major (decimal "2" -> "2.000"),
+        // not always two fractional groups like qv tuples.
+        StringBuilder numified = new StringBuilder(parts[0]);
         numified.append(".");
-
-        // Ensure at least 2 sub-version groups (minor, patch) for proper padding
-        int numGroups = Math.max(parts.length - 1, 2);
-        for (int i = 0; i < numGroups; i++) {
-            int val = (i + 1 < parts.length) ? Integer.parseInt(parts[i + 1]) : 0;
+        int fracSlots = Math.max(parts.length - 1, 1);
+        for (int i = 0; i < fracSlots; i++) {
+            int idx = i + 1;
+            int val = idx < parts.length ? Integer.parseInt(parts[idx]) : 0;
             numified.append(String.format("%03d", val));
         }
 
