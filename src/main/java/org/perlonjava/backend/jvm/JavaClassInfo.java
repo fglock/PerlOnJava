@@ -59,6 +59,19 @@ public class JavaClassInfo {
     public int dynamicLevelSlot;
 
     /**
+     * {@link org.perlonjava.backend.jvm.EmitBlock#emitBlock} recursion depth during JVM emission.
+     * Used with {@link #emitJvmApplyBodyFromRequireOrDo} to recognize the outermost block of the
+     * generated {@code apply()} body without relying solely on AST annotations.
+     */
+    public int emitBlockJvmDepth;
+
+    /**
+     * True while emitting the {@code apply()} body in {@link EmitterMethodCreator#getBytecodeInternal}
+     * for a compilation unit loaded via {@code require}/{@code do}.
+     */
+    public boolean emitJvmApplyBodyFromRequireOrDo;
+
+    /**
      * Flag indicating if this subroutine uses 'local' variables.
      * Used to optimize return statements - if true, return values must be cloned
      * to prevent aliasing issues with local variable teardown.

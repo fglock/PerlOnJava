@@ -141,6 +141,8 @@ public class EmitEval {
         // The filename becomes "(eval N)" for better error messages
         CompilerOptions compilerOptions = emitterVisitor.ctx.compilerOptions.clone();
         compilerOptions.fileName = "(eval " + counter + ")";
+        compilerOptions.compilationUnitFromRequireOrDo = false;
+        compilerOptions.compilationUnitCallerContext = -1;
 
         // The evalTag is crucial - it links the runtime eval to this compile-time context
         // When evalStringHelper is called at runtime, it uses this tag to retrieve

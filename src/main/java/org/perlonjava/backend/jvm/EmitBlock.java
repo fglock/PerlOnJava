@@ -191,6 +191,9 @@ public class EmitBlock {
             return;
         }
 
+        emitterVisitor.ctx.javaClassInfo.emitBlockJvmDepth++;
+        try {
+
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock start context:" + emitterVisitor.ctx.contextType);
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
         EmitterVisitor voidVisitor =
@@ -351,14 +354,32 @@ public class EmitBlock {
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                         mv.visitVarInsn(Opcodes.ASTORE, resultReg);
                     } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
-                            && (node.getBooleanAnnotation("isFileLevelBlock") || node.getBooleanAnnotation("blockIsSubroutine"))
+                            && node.getBooleanAnnotation("blockIsSubroutine")
                             && element instanceof For3Node for3
                             && for3.isSimpleBlock
                             && for3.labelName == null) {
-                        // Bare block (no label) as last statement in file-level RUNTIME context
-                        // or inside a subroutine. This handles do "file", require, and sub { { 99 } }.
-                        // Visit with SCALAR context to get the block's return value.
+                        // Bare block (no label) as last statement inside a subroutine body under RUNTIME.
+                        // Handles sub { { 99 } } — visit with SCALAR to get the block's return value.
                         element.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                            && !node.getBooleanAnnotation("blockIsSubroutine")) {
+                        JavaClassInfo jci = emitterVisitor.ctx.javaClassInfo;
+                        boolean outerRequireDoApplyBody =
+                                jci.emitJvmApplyBodyFromRequireOrDo && jci.emitBlockJvmDepth == 1;
+                        if (outerRequireDoApplyBody) {
+                            // require/do compile the unit with RUNTIME ctx for wantarray propagation,
+                            // but Perl evaluates the compilation unit's final statement in the caller's
+                            // context (scalar for require). Without this, trailing `1;` is emitted as
+                            // RUNTIME and leaves no value — require sees undef ("did not return a true value").
+                            int callerCtx = RuntimeContextType.SCALAR;
+                            CompilerOptions co = emitterVisitor.ctx.compilerOptions;
+                            if (co != null && co.compilationUnitCallerContext >= 0) {
+                                callerCtx = co.compilationUnitCallerContext;
+                            }
+                            element.accept(emitterVisitor.with(callerCtx));
+                        } else {
+                            element.accept(emitterVisitor);
+                        }
                     } else {
                         element.accept(emitterVisitor);
                     }
@@ -459,10 +480,24 @@ public class EmitBlock {
         boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
         boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
         boolean doBlockFreshResult = isDoBlock && doBlockResultIsAlwaysFresh(node);
+        JavaClassInfo jciFlush = emitterVisitor.ctx.javaClassInfo;
+        boolean skipRequireDoRootMortalFlush =
+                jciFlush.emitJvmApplyBodyFromRequireOrDo
+                        && jciFlush.emitBlockJvmDepth == 1
+                        && !isSubBody
+                        && !isDoBlock;
+        // Outer apply() body for require/do: MortalList.flush() at the outer block exit runs while the
+        // compilation unit's return value may still live only as a mortal temporary (trailing `1`).
+        // Flushing turns require's result into undef ("did not return a true value"). Detection uses
+        // emitBlockJvmDepth (not only isFileLevelBlock) because annotation propagation can miss edge cases.
         EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                !isSubBody && (!isDoBlock || doBlockFreshResult));
+                !skipRequireDoRootMortalFlush && !isSubBody && (!isDoBlock || doBlockFreshResult));
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
+        } finally {
+            emitterVisitor.ctx.javaClassInfo.emitBlockJvmDepth--;
+        }
+
     }
 
 }

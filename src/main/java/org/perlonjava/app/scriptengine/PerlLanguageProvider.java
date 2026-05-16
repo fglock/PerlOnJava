@@ -11,6 +11,7 @@ import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.InterpreterFallbackException;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -128,6 +129,8 @@ public class PerlLanguageProvider {
         int contextType = callerContext >= 0 ? callerContext :
                 (isTopLevelScript ? RuntimeContextType.VOID : RuntimeContextType.SCALAR);
 
+        compilerOptions.compilationUnitCallerContext = contextType;
+
         // Create the compiler context
         EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(), // internal java class name
@@ -207,6 +210,11 @@ public class PerlLanguageProvider {
         // and before code emission. The package from the symbol table is used to resolve
         // bare constant identifiers (e.g., PI from `use constant PI => 3.14`).
         ast = ConstantFoldingVisitor.foldConstants(ast, ctx.symbolTable.getCurrentPackage());
+
+        if (compilerOptions.compilationUnitFromRequireOrDo && ast instanceof AbstractNode rootAst
+                && !rootAst.getBooleanAnnotation("blockIsSubroutine")) {
+            rootAst.setAnnotation("isFileLevelBlock", true);
+        }
 
         if (ctx.compilerOptions.parseOnly) {
             // Printing the ast
@@ -305,6 +313,8 @@ public class PerlLanguageProvider {
                 globalSymbolTable.warningFatalStack.push((java.util.BitSet) savedCurrentScope.warningFatalStack.peek().clone());
             }
         }
+
+        compilerOptions.compilationUnitCallerContext = contextType;
 
         EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),
@@ -601,10 +611,16 @@ public class PerlLanguageProvider {
                     if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Falling back to bytecode interpreter due to method size");
                     // Reset strict/feature/warning flags before fallback compilation.
                     // The JVM compiler already processed BEGIN blocks (use strict, etc.)
-                    // which set these flags on ctx.symbolTable. But the interpreter will
+                    // which set those flags on ctx.symbolTable. But the interpreter will
                     // re-process those pragmas during execution, so inheriting them causes
                     // false strict violations (e.g. bareword filehandles rejected).
-                    if (ctx.symbolTable != null) {
+                    //
+                    // Skip this reset for require/do compilation units: clearing strict hints
+                    // before recompiling large modules (e.g. CPANPLUS::Config) has been observed
+                    // to interact badly with unit initialization; those files rely on compile-time
+                    // hints accumulated during the failed JVM compile pass matching execution.
+                    if (ctx.symbolTable != null
+                            && !(ctx.compilerOptions != null && ctx.compilerOptions.compilationUnitFromRequireOrDo)) {
                         ctx.symbolTable.strictOptionsStack.pop();
                         ctx.symbolTable.strictOptionsStack.push(0);
                     }
@@ -671,6 +687,8 @@ public class PerlLanguageProvider {
         if (compilerOptions.codeHasEncoding) {
             globalSymbolTable.enableStrictOption(Strict.HINT_UTF8);
         }
+
+        compilerOptions.compilationUnitCallerContext = RuntimeContextType.SCALAR;
 
         EmitterContext ctx = new EmitterContext(
                 new JavaClassInfo(),

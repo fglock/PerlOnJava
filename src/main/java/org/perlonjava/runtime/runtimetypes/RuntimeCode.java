@@ -1247,6 +1247,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Always generate a unique filename for each eval to prevent source location collisions
             String actualFileName = getNextEvalFilename();
             evalCompilerOptions.fileName = actualFileName;
+            evalCompilerOptions.compilationUnitFromRequireOrDo = false;
+            evalCompilerOptions.compilationUnitCallerContext = -1;
 
             // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, feature flags, and package in cache key)
             // Skip caching when $^P is set, so each eval gets a unique filename
@@ -1730,6 +1732,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always generate a unique filename for each eval to prevent source location collisions
             evalCompilerOptions.fileName = getNextEvalFilename();
+            evalCompilerOptions.compilationUnitFromRequireOrDo = false;
+            evalCompilerOptions.compilationUnitCallerContext = -1;
 
             // Setup for BEGIN block support - create aliases for captured variables.
             // IMPORTANT: Do NOT mutate AST nodes (e.g. operatorAst.id) here.

@@ -14,6 +14,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [xsloader.md](xsloader.md) | XSLoader architecture |
 | [makemaker_perlonjava.md](makemaker_perlonjava.md) | ExtUtils::MakeMaker implementation |
 | [cpan_client.md](cpan_client.md) | jcpan - CPAN client for PerlOnJava |
+| [cpanplus.md](cpanplus.md) | **CPANPLUS** — `jcpan -t CPANPLUS`: `require` true-value chain, Interpreter/JVM parity, remaining test gaps (**`BUILD_PL`**, SQLite, formatting) |
 | [dbix_class.md](dbix_class.md) | DBIx::Class support (in progress) |
 | [padwalker.md](padwalker.md) | PadWalker support plan for Reply lexical persistence |
 | [dbi_test_parity.md](dbi_test_parity.md) | DBI test-suite parity (~13.5× more passes than master; Phases 1–4 done, incl. a tied-hash method-dispatch fix in the PerlOnJava runtime) |

@@ -1,5 +1,6 @@
 package org.perlonjava.backend.jvm.astrefactor;
 
+import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.analysis.BytecodeSizeEstimator;
 import org.perlonjava.frontend.analysis.ControlFlowDetectorVisitor;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -57,6 +58,18 @@ public class LargeBlockRefactorer {
 
         // Skip if block is already a subroutine or is a special block
         if (node.getBooleanAnnotation("blockIsSubroutine")) {
+            return false;
+        }
+
+        // Never refactor the outermost block of a require/do compilation unit: EmitBlock runs this
+        // before bumping emitBlockJvmDepth, so depth==0 identifies that outermost block even when
+        // isFileLevelBlock failed to annotate. Whole-block refactoring emits sub { ... }->(@_) and
+        // drops the unit's trailing statement as apply()'s return — require then sees undef.
+        CompilerOptions co = emitterVisitor.ctx.compilerOptions;
+        boolean outerRequireDoBlock =
+                co != null && co.compilationUnitFromRequireOrDo
+                        && emitterVisitor.ctx.javaClassInfo.emitBlockJvmDepth == 0;
+        if (outerRequireDoBlock || node.getBooleanAnnotation("isFileLevelBlock")) {
             return false;
         }
 

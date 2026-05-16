@@ -626,6 +626,7 @@ public class ModuleOperators {
         }
 
         CompilerOptions parsedArgs = new CompilerOptions();
+        parsedArgs.compilationUnitFromRequireOrDo = true;
         parsedArgs.fileName = actualFileName;
         parsedArgs.incHook = incHookRef;
         parsedArgs.applySourceFilters = shouldApplyFilters;  // Enable source filter preprocessing if needed
@@ -716,6 +717,20 @@ public class ModuleOperators {
             boolean moduleTrue = featureManager.isFeatureEnabled("module_true");
             if (moduleTrue) {
                 result = scalarTrue.getList();
+            } else if (isRequire
+                    && parsedArgs.compilationUnitFromRequireOrDo
+                    && result != null
+                    && result.isEmpty()) {
+                // Deep circular BEGIN/use/require chains (e.g. CPANPLUS::Configure loading
+                // CPANPLUS::Config while Backend re-enters Configure.pm) occasionally leave the
+                // compilation unit's apply() propagating an empty RuntimeList even though Perl
+                // semantics expect the trailing statement value (normally 1;) and $@ is untouched.
+                // Empty list scalarizes to undef -> false "did not return a true value" from require.
+                RuntimeScalar errVar = GlobalVariable.getGlobalVariable("main::@");
+                String errSnap = errVar != null ? errVar.toString() : "";
+                if (errSnap.isEmpty()) {
+                    result = scalarTrue.getList();
+                }
             }
 
             // Clear $@ on success. do FILE is like eval STRING, which clears $@

@@ -1422,6 +1422,12 @@ public class SubroutineParser {
         filteredSnapshot.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
         filteredSnapshot.strictOptionsStack.push(parser.ctx.symbolTable.strictOptionsStack.peek());
 
+        // Nested subroutine compilations must not inherit require/do compilation-unit flags;
+        // see EmitSubroutine (anon subs) — flags leak breaks EmitBlock final-statement codegen.
+        CompilerOptions subCompilerOptions = parser.ctx.compilerOptions.clone();
+        subCompilerOptions.compilationUnitFromRequireOrDo = false;
+        subCompilerOptions.compilationUnitCallerContext = -1;
+
         EmitterContext newCtx = new EmitterContext(
                 new JavaClassInfo(),
                 filteredSnapshot,
@@ -1430,7 +1436,7 @@ public class SubroutineParser {
                 RuntimeContextType.RUNTIME,
                 true,
                 parser.ctx.errorUtil,
-                parser.ctx.compilerOptions,
+                subCompilerOptions,
                 new RuntimeArray()
         );
 

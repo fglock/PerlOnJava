@@ -216,7 +216,14 @@ public class EmitSubroutine {
         if (isMapGrepBlock != null && isMapGrepBlock) {
             newJavaClassInfo.isMapGrepBlock = true;
         }
-        
+
+        // Nested subroutine compilations share ctx.compilerOptions by reference; require/do flags
+        // (compilationUnitFromRequireOrDo) must not leak into inner subs or EmitBlock mis-handles
+        // their final statement — observed as CPANPLUS::Config.pm returning an empty RuntimeList.
+        CompilerOptions subCompilerOptions = ctx.compilerOptions.clone();
+        subCompilerOptions.compilationUnitFromRequireOrDo = false;
+        subCompilerOptions.compilationUnitCallerContext = -1;
+
         EmitterContext subCtx =
                 new EmitterContext(
                         newJavaClassInfo, // Internal Java class name
@@ -226,7 +233,7 @@ public class EmitSubroutine {
                         RuntimeContextType.RUNTIME, // Call context
                         true, // Is boxed
                         ctx.errorUtil, // Error message utility
-                        ctx.compilerOptions,
+                        subCompilerOptions,
                         null);
         
         int skipVariables = EmitterMethodCreator.skipVariables; // Skip (this, @_, wantarray)

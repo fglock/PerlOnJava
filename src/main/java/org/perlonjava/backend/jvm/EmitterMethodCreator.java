@@ -734,7 +734,17 @@ public class EmitterMethodCreator implements Opcodes {
                 // Enable recording of my-variable indices for eval exception cleanup.
                 ctx.javaClassInfo.evalCleanupLocals = new java.util.ArrayList<>();
 
-                ast.accept(visitor);
+                boolean savedEmitJvmApplyBodyFromRequireDo = ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo;
+                int savedEmitBlockJvmDepth = ctx.javaClassInfo.emitBlockJvmDepth;
+                ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo =
+                        ctx.compilerOptions != null && ctx.compilerOptions.compilationUnitFromRequireOrDo;
+                ctx.javaClassInfo.emitBlockJvmDepth = 0;
+                try {
+                    ast.accept(visitor);
+                } finally {
+                    ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo = savedEmitJvmApplyBodyFromRequireDo;
+                    ctx.javaClassInfo.emitBlockJvmDepth = savedEmitBlockJvmDepth;
+                }
 
                 // Snapshot and disable recording of my-variable indices.
                 evalCleanupLocals = ctx.javaClassInfo.evalCleanupLocals;
@@ -763,7 +773,17 @@ public class EmitterMethodCreator implements Opcodes {
             } else {
                 // No try-catch block is used
 
-                ast.accept(visitor);
+                boolean savedEmitJvmApplyBodyFromRequireDo = ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo;
+                int savedEmitBlockJvmDepth = ctx.javaClassInfo.emitBlockJvmDepth;
+                ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo =
+                        ctx.compilerOptions != null && ctx.compilerOptions.compilationUnitFromRequireOrDo;
+                ctx.javaClassInfo.emitBlockJvmDepth = 0;
+                try {
+                    ast.accept(visitor);
+                } finally {
+                    ctx.javaClassInfo.emitJvmApplyBodyFromRequireOrDo = savedEmitJvmApplyBodyFromRequireDo;
+                    ctx.javaClassInfo.emitBlockJvmDepth = savedEmitBlockJvmDepth;
+                }
 
                 // Normal fallthrough return: spill and jump with empty operand stack.
                 mv.visitVarInsn(Opcodes.ASTORE, returnValueSlot);

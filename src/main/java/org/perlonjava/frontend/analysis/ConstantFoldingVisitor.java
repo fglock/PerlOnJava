@@ -439,7 +439,16 @@ public class ConstantFoldingVisitor implements Visitor {
         }
 
         if (changed) {
-            result = new BlockNode(foldedElements, node.tokenIndex);
+            BlockNode newBlock = new BlockNode(foldedElements, node.tokenIndex);
+            // Preserve block annotations (e.g. isFileLevelBlock set by Parser). Replacing the
+            // BlockNode during folding must not drop them — otherwise require loses the trailing
+            // statement's scalar return value for large modules like CPANPLUS::Config.
+            if (node.annotations != null) {
+                for (var e : node.annotations.entrySet()) {
+                    newBlock.setAnnotation(e.getKey(), e.getValue());
+                }
+            }
+            result = newBlock;
         } else {
             result = node;
         }

@@ -85,6 +85,20 @@ public class CompilerOptions implements Cloneable {
      * Perl 5 semantics.
      */
     public String initialPackage = null;
+    /**
+     * True only when this compilation unit is the body loaded by {@code require} / {@code do}
+     * ({@link org.perlonjava.runtime.operators.ModuleOperators#doFile}). Used so codegen can treat
+     * the AST root as a file-level compilation unit regardless of earlier transforms.
+     */
+    public boolean compilationUnitFromRequireOrDo = false;
+    /**
+     * Context from require/do/eval caller for this compilation unit (SCALAR/LIST/VOID).
+     * JVM codegen forces {@link org.perlonjava.runtime.runtimetypes.RuntimeContextType#RUNTIME}
+     * on {@link org.perlonjava.backend.jvm.EmitterContext}; {@link org.perlonjava.backend.jvm.EmitBlock}
+     * uses this for the final statement of file-level blocks so {@code require} sees the trailing
+     * {@code 1;} value. {@code -1} means unset (EmitBlock defaults to SCALAR).
+     */
+    public int compilationUnitCallerContext = -1;
     public boolean unicodeStdout = false; // -CO
     public boolean unicodeStderr = false; // -CE
     public boolean unicodeInput = false; // -CI (same as stdin)

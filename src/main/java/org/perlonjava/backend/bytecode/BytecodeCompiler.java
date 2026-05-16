@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 
+import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
@@ -102,6 +103,11 @@ public class BytecodeCompiler implements Visitor {
     Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
     // EmitterContext for strict checks and other compile-time options
     private EmitterContext emitterContext;
+    /**
+     * Nesting depth during {@link #visit(BlockNode)}; used with require/do units to skip
+     * mortal flushing at the outer block (see exitScope call in this visitor).
+     */
+    private int bytecodeEmitBlockNesting;
     // Register allocation
     private int nextRegister = 3;  // 0=this, 1=@_, 2=wantarray
     private int baseRegisterForStatement = 3;  // Reset point after each statement
@@ -1000,6 +1006,8 @@ public class BytecodeCompiler implements Visitor {
      */
     @Override
     public void visit(BlockNode node) {
+        bytecodeEmitBlockNesting++;
+        try {
         // Blocks create a new lexical scope
         // But if the block needs to return a value (not VOID context),
         // allocate a result register BEFORE entering the scope so it's valid after
@@ -1163,6 +1171,23 @@ public class BytecodeCompiler implements Visitor {
                 stmtContext = RuntimeContextType.VOID;
             } else {
                 stmtContext = currentCallContext;
+                // Mirror JVM EmitBlock: require/do compilation units use RUNTIME call context in apply(),
+                // but Perl evaluates the unit's *final* statement in the caller's effective context
+                // (scalar for normal require). After a failed JVM compile, ctx.contextType is often
+                // still RUNTIME — then trailing `1` emits as RUNTIME and becomes an empty list so
+                // require sees undef ("did not return a true value").
+                if (isLastStatement
+                        && emitterContext != null
+                        && emitterContext.compilerOptions != null
+                        && emitterContext.compilerOptions.compilationUnitFromRequireOrDo
+                        && bytecodeEmitBlockNesting == 1
+                        && !node.getBooleanAnnotation("blockIsSubroutine")
+                        && currentCallContext == RuntimeContextType.RUNTIME) {
+                    CompilerOptions co = emitterContext.compilerOptions;
+                    stmtContext = co.compilationUnitCallerContext >= 0
+                            ? co.compilationUnitCallerContext
+                            : RuntimeContextType.SCALAR;
+                }
             }
 
             compileNode(stmt, stmtTarget, stmtContext);
@@ -1227,8 +1252,24 @@ public class BytecodeCompiler implements Visitor {
         // promptly at scope exit. Subroutine body blocks and do-blocks must NOT
         // flush — the implicit return value may still be in a register and
         // flushing could destroy it before the caller captures it.
-        exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
-                && !node.getBooleanAnnotation("blockIsDoBlock"));
+        //
+        // require/do compilation units compiled via this interpreter path hit the same bug if we
+        // flush at the outermost BlockNode: outerResultReg often aliases the trailing `1` via a
+        // mortal scalar — flushing before RETURN turns require's result into undef.
+        boolean requireOrDoFileUnit =
+                emitterContext != null
+                        && emitterContext.compilerOptions != null
+                        && emitterContext.compilerOptions.compilationUnitFromRequireOrDo;
+        boolean skipRootRequireMortalFlush =
+                requireOrDoFileUnit
+                        && bytecodeEmitBlockNesting == 1
+                        && !node.getBooleanAnnotation("blockIsSubroutine")
+                        && !node.getBooleanAnnotation("blockIsDoBlock");
+        boolean flushMortals =
+                !node.getBooleanAnnotation("blockIsSubroutine")
+                        && !node.getBooleanAnnotation("blockIsDoBlock")
+                        && !skipRootRequireMortalFlush;
+        exitScope(flushMortals);
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -1237,6 +1278,9 @@ public class BytecodeCompiler implements Visitor {
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
+        } finally {
+            bytecodeEmitBlockNesting--;
+        }
     }
 
     // =========================================================================
