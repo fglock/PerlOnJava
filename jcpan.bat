@@ -33,11 +33,4 @@ rem POSIX sh. See src/main/perl/lib/CPAN/Config.pm (Moose.yml).
 set "JPERL_BIN=%SCRIPT_DIR%jperl.bat"
 set "JCPAN_BIN=%SCRIPT_DIR%jcpan.bat"
 set "PATH=%SCRIPT_DIR%;%PATH%"
-if exist "%SCRIPT_DIR%src\main\perl\lib" (
-    if defined PERL5LIB (
-        set "PERL5LIB=%SCRIPT_DIR%src\main\perl\lib;%PERL5LIB%"
-    ) else (
-        set "PERL5LIB=%SCRIPT_DIR%src\main\perl\lib"
-    )
-)
 "%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_ARGS%

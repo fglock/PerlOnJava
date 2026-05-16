@@ -1,7 +1,8 @@
 #!/usr/bin/env perl
 # Repro for DBIx::Simple chained query vs temporaries on PerlOnJava (see dev/modules/dbix_simple.md).
-# Run with bundled lib first:
-#   PERL5LIB="$PWD/src/main/perl/lib${PERL5LIB:+:$PERL5LIB}" timeout 120 ./jperl dev/tools/dbix_simple_chain_repro.pl
+# Run: timeout 120 ./jperl dev/tools/dbix_simple_chain_repro.pl
+# (Bundled JDBC fork lives in jar:PERL5LIB unless ~/.perlonjava/lib shadows it.)
+# Optional workspace edit cycle: ./jperl -I"$PWD/src/main/perl/lib" dev/tools/dbix_simple_chain_repro.pl
 
 use strict;
 use warnings;

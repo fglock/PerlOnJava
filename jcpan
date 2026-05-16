@@ -80,10 +80,4 @@ case "$JCPAN_BIN" in
 esac
 export PATH="$SCRIPT_DIR:$PATH"
 
-# Bundled compat layers (see src/main/perl/lib/DBIx/Simple.pm). Must precede ~/.perlonjava/lib,
-# which matches PERL5LIB's position in GlobalContext @INC construction.
-if [[ -d "$SCRIPT_DIR/src/main/perl/lib" ]]; then
-    export PERL5LIB="$SCRIPT_DIR/src/main/perl/lib${PERL5LIB:+:$PERL5LIB}"
-fi
-
 exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "${ARGS[@]}"
