@@ -177,10 +177,15 @@ public class SubroutineParser {
         boolean subExists = isNewMethod;
         String prototype = null;
         List<String> attributes = null;
-        RuntimeScalar parseTimeCodeRef = null;
+        // BytecodeCompiler embeds named &SUB in constant pool after parse(); eval-string units
+        // run use/no during parse(), so stash deletion can happen before bytecode emission.
+        // Attach only when THIS parse saw an actual callable (not a bare forward stub) so newer
+        // compilations after delete $stash{sub} keep fresh semantics (unit/eval_after_stash_delete).
+        // JVM apply() loads \&name via getGlobalCodeRef (honours local()); BytecodeInterpreter
+        // consumes parseTimeCodeRef for parity with perl's compile-time \& snapshots (pr694).
+        RuntimeScalar bytecodeParseTimeCodeSnap = null;
         if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-            parseTimeCodeRef = codeRef;
             if (codeRef.value instanceof RuntimeCode runtimeCode) {
                 prototype = runtimeCode.prototype;
                 attributes = runtimeCode.attributes;
@@ -192,6 +197,19 @@ public class SubroutineParser {
                         // Forward declarations like `sub foo;` create a RuntimeCode with a non-null
                         // attributes list (possibly empty). Placeholders created implicitly use null.
                         || attributes != null;
+                boolean isForwardNamedStub = !runtimeCode.isBuiltin && !runtimeCode.defined()
+                        && runtimeCode.subroutine == null
+                        && runtimeCode.methodHandle == null
+                        && runtimeCode.compilerSupplier == null
+                        && attributes != null;
+                boolean hasCallableImplementation = runtimeCode.defined()
+                        || runtimeCode.compilerSupplier != null
+                        || runtimeCode.subroutine != null
+                        || runtimeCode.methodHandle != null
+                        || runtimeCode.isBuiltin;
+                if (hasCallableImplementation && !isForwardNamedStub) {
+                    bytecodeParseTimeCodeSnap = codeRef;
+                }
             }
         }
         if (!subExists && !isNewMethod && !isMethod) {
@@ -417,7 +435,30 @@ public class SubroutineParser {
 
         // Check if the subroutine call has parentheses
         boolean hasParentheses = peek(parser).text.equals("(");
-        if (!subExists && !hasParentheses) {
+        // Unknown callee + `WORD ... =>` LISTOP/hash-pairs (dynamic imports / Moose-style DSL):
+        // must not route through parseIndirectMethodCall(); see strict + eval regression in unit/pr694.
+        boolean identifierThenFatArrow = false;
+        if (!subExists && !hasParentheses && parser.tokenIndex < parser.tokens.size()) {
+            LexerToken firstArgTok = parser.tokens.get(parser.tokenIndex);
+            int fatArrowIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex + 1, parser.tokens);
+            identifierThenFatArrow =
+                    firstArgTok.type == LexerTokenType.IDENTIFIER
+                            && fatArrowIdx < parser.tokens.size()
+                            && "=>".equals(parser.tokens.get(fatArrowIdx).text);
+        }
+        // When !subExists, skipping the indirect-object block landed in consumeArgsWithPrototype
+        // with prototype=null. That parses arguments differently than the list form used for e.g.
+        // `skip "msg", 2` — and breaks strict bareword DSL pairs like `has foo => (...)`
+        // (unit/pr694) compared to Perl's `@` LISTOP-ish argument handling.
+        if (!subExists && !hasParentheses && identifierThenFatArrow) {
+            ListNode arguments = consumeArgsWithPrototype(parser, "@");
+            OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
+            return new BinaryOperatorNode("(",
+                    codeRefNode,
+                    arguments,
+                    currentIndex);
+        }
+        if (!subExists && !hasParentheses && !identifierThenFatArrow) {
             // Perl allows calling not-yet-declared subs without parentheses when the
             // following token is not an identifier (e.g. `skip "msg", 2;`).
             // This is heavily used by the perl5 test harness (test.pl) inside SKIP/TODO blocks.
@@ -557,8 +598,8 @@ public class SubroutineParser {
 
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
-            if (parseTimeCodeRef != null) {
-                codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
+            if (bytecodeParseTimeCodeSnap != null) {
+                codeRefNode.setAnnotation("parseTimeCodeRef", bytecodeParseTimeCodeSnap);
             }
             return new BinaryOperatorNode("(",
                     codeRefNode,

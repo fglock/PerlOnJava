@@ -11,7 +11,6 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
-import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -555,19 +554,11 @@ public class EmitSubroutine {
             }
         }
 
-        if (node.left instanceof OperatorNode operatorNode
-                && operatorNode.operator.equals("&")
-                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
-            int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
-            mv.visitLdcInsn(codeRefId);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                    "getCompiledCodeRef",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
-        } else {
-            node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
-        }
+        // Always load \&name via EmitVariable (-> getGlobalCodeRef). Do not embed
+        // Parser's parseTimeCodeRef via registerCompiledCodeRef: that snapshot bypasses
+        // local *Pkg::sub = sub { ... } overrides (CPANPLUS::Dist::MM format_available + t/20).
+        // BytecodeInterpreter still consults parseTimeCodeRef separately for parity.
+        node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target: code ref (usually &bareword)
 
         // Dereference the scalar to get the CODE reference if needed
         // When we have &$x() the left side is OperatorNode("$") (the & is consumed by the parser)

@@ -59,57 +59,109 @@ timeout 3600 ./jcpan -t CPANPLUS   # captures full TAP; see jcpan/build logs
 
 ---
 
-## Current gap: remainder of `./jcpan -t CPANPLUS` (failed programs / snippets)
+## Resolved (2026-05-16): **`BUILD_PL` / `MAKEFILE`** “strict bareword” (**`-e`** / **`stat`** + **`->`**)
 
-_Last full harness observation (PerlOnJava + CPANPLUS 0.9916): **`1267`** subtests executed; **`7/20`** test **programs** still failed or exited non‑zero._
+Perl treats **`BUILD_PL`**, **`MAKEFILE`**, … as **exported constant subs**, not ALLCAPS filehandle slots.
 
-### Priority 1 — **`BUILD_PL` strict bareword**
+PerlOnJava’s **file-test** operator path and **`stat`/`lstat`** mistakenly consumed any **`^[A-Z_][A-Z0-9_]*$`** bareword as a glob handle **before** list/expression parsing, so **`CONSTANT->($path)`** and **`stat CONSTANT->(...)`** left a bare **`IdentifierNode`** behind and tripped **`strict subs`** at emit time.
 
-**Evidence:** **`Bareword "BUILD_PL" not allowed while "strict subs"`** in **`blib/lib/CPANPLUS/Module.pm`** (~line 674, near **`->(`**).
+**Fix:** **`FileHandle.shouldTreatAllCapsIdentifierAsBareFileHandleSlot`** — only use the legacy handle heuristic when **`NAME`** is **not** followed by **`->`** (skipping whitespace) **and **`GlobalVariable.isGlobalCodeRefDefined(CurrentPackage::NAME)`** is false. Wired from **`ParsePrimary.parseFileTestOperator`** and **`OperatorParser.parseStat`**.
 
-**Impact:** **`t/08_CPANPLUS-Backend.t`**, **`t/04_CPANPLUS-Module.t`**, **`t/07_CPANPLUS-Internals-Extract.t`**, **`t/20_CPANPLUS-Dist-MM.t`**, **`t/21_CPANPLUS-Dist-No-Build.t`** etc. Often **all planned subtests “pass”** but the process exits **255** (**dubious**) because **strict** blows up late or in a teardown path tied to **`Module.pm`**.
+**Check:** **`timeout 120 ./jperl -e '… -e BUILD_PL->($extract) …'`** and **`timeout 300 ./jperl ./04_CPANPLUS-Module.t`** (exit **0**).
 
-**Next steps:**
+---
 
-1. Open **`CPANPLUS/Module.pm`** at the offending line; classify `BUILD_PL` (bare hash key vs indirect object / `\&BUILD_PL`-style constructs, etc.).
-2. Build a **`jperl`** one-liner (**`-Mstrict`**) isolated repro (no CPANPLUS) that matches Perl 5 semantics.
-3. Fix **parser/typecheck** (**`bareword ⇒ string`**, **quoted keys**, **`{ … }`** deref contexts) until repro matches **`perl`**.
-4. Re-run the five dubious tests above; verify **exit 0**.
+## Resolved (2026-05-16): **`t/00`** **`_version_to_number`** (**`version` module** parity)
 
-### Priority 2 — **`t/00_CPANPLUS-Internals-Utils.t`** (scalar stringification / formatting)
+Upstream **`Utils::_version_to_number`** ends with **`version->parse(...)->numify`**. Failures (**`v1.5`** vs **`1.5-a`**) came from **`VersionHelper.normalizeVersion`** mixing **explicit `v`-tuple** semantics with **decimal mantissa chunking**, plus **`Version.java`** forcing **`v`** on short two-part decimals (**`1.5` → wrong tuple**) and **`numify`** padding **`!qv`** values as if **`qv`**.
 
-**Evidence:** **`Value as expected`** — got **`1.500000`** instead of **`1.005000`** / **`1.500`**.
+**Fixes:** tuple branch for **`v…`** strings that are plain digit-dot tuples; rewrote decimal normalization to Perl’s **three-digit frac chunks**; removed bogus **`prepend v`** on **`1.x`** decimals in **`parseInternal`**; split **`numify`** padding **`qv`** vs **non‑`qv`**.
 
-**Likely buckets:** `sprintf` / `%g` `%f`, `locale` / `LC_NUMERIC` parity, number → string semantics.
+**Check:** **`timeout 180 ./jperl ./00_CPANPLUS-Internals-Utils.t`** exit **0**; **`jperl -Mversion -E`** spot checks **`v1.5`** / **`1.5`** / **`1.2345`**.
 
-**Next steps:**
+---
 
-1. Read failing line (~133) in that test file for exact expected formatting rules.
-2. Compare **`perl`** vs **`jperl`** for the helper under test (**`Module::Functions` / CPANPLUS Internals helpers**).
-3. Align **PerlOnJava formatting** (**`PerlLanguageProvider`/runtime stringification**) or **`POSIX::locale`** stubs if referenced.
+## Mitigated (2026-05-16): **`File::Copy`** uninitialized **`$!`** (**`warnings`**, line ~303)
 
-### Priority 3 — **`t/031_CPANPLUS-Internals-Source-SQLite.t`** + DBIx
+Bundled **`File/Copy.pm`** used **`($! + 0, $^E + 0)`** when **`$!`** could be **undef**. Replaced with **defined‑guarded** coercion (still **Perl 5**‑compatible when errno is absent).
 
-**Evidence:** **`Can't call method "execute" on an undefined value`** at **`DBIx/Simple.pm`**, surfaced from **`CPANPLUS::Internals::Source::SQLite`**.
+---
 
-**Next steps:**
+## Resolved (2026-05): **Strict + string `eval` + import / `no` — pr694 (**`has … =>`** DSL)**
 
-1. Confirm **`DBD::SQLite` / shim** **`connect`** succeeds under **`PERL5LIB`** harness.
-2. Trace **`undef`** **`dbh`** — wrong **`DBIx::Simple->connect`** args vs **PerlOnJava** stubs.
-3. Fix **database layer / DBIx::Simple compat** until the test skips cleanly or connects.
+### Symptoms
 
-### Priority 4 — **`t/20_CPANPLUS-Dist-MM.t`** (log assertions)
+Failures such as **`Undefined subroutine &Some::Pkg::has`** inside **`eval q{ … use ExporterThing; has foo => (...); no ExporterThing; … }`** even though **`perl`** runs the **`has`** call with the imported CV after the stash entry was deleted (**CPANPLUS**-adjacent **`use`/`no`/DSL** ordering).
 
-**Evidence:** “Making format unavailable” / “Format failure logged”: TAP expects a message fragment mentioning `CPANPLUS::Dist::MM` unavailable; bundled EU::MM can change observable logs.
+Separate regression **`unit/eval_after_stash_delete.t`** must keep **Perl** semantics: compilations that start **after** **`delete $stash{sub}`** must **not** resurrect a pinned CV.
 
-**Next steps:**
+### Cause
 
-1. Decide whether to **simulate “format unavailable”** in tests by **unlinking stubs** vs **changing log text** (**prefer fixing runtime** only if **`perl`** emits the expected message with same stubs).
-2. Align PerlOnJava `CPANPLUS::Dist::*` error strings, verbosity, and fallback paths so the test’s regex matches what stock `perl` would emit under the same layout.
+For **eval string**, **`Parser.parse()`** runs **`use` / `no`** immediately (BEGIN-like), then **`BytecodeCompiler.compile(ast)`** runs. By emit time the visible **`globalCodeRefs`** entry for **`&Pkg::name`** is often already gone, so **`getGlobalCodeRefForFreshLookup`** constant-pooled an **undef placeholder** for named **`&sub(...)`** sites. **Perl** still calls the **compile-time-pinned** CV.
 
-### Priority 5 — noisy secondary issues
+A **GlobalVariable-only** “always prefer pinned when stash-deleted” fix broke **`eval_after_stash_delete`** (new compile after delete must see an empty slot).
 
-- **`File/Copy.pm`**: **uninitialized value in addition (~303)** — track down **`-U`/`undef`** math in **`copy`** / **`move`** edge case triggered by CPANPLUS tests.
+### Fix
+
+- **`SubroutineParser`**: when parsing a **direct** call **`&name(...)`** and **`GlobalVariable`** already shows a **real callable** (**not** a pure **`sub name;`** forward stub with only attributes), **`setAnnotation("parseTimeCodeRef", …)`** on the **`OperatorNode("&", …)`**.
+- **`BytecodeCompiler`** embeds **`parseTimeCodeRef`** into the bytecode constant pool (**interpreter** / eval-string parity with compile-time **`&`** pinning).
+- **JVM** **`EmitSubroutine.handleApplyOperator`**: **`&(bareword)`** must load the callee via **`EmitVariable` → `getGlobalCodeRef`** (runtime glob). Embedding **`parseTimeCodeRef`** with **`GlobalVariable.registerCompiledCodeRef`** was wrong for **`local *Pkg::…`** overrides (**CPANPLUS::Dist::MM** **`format_available`** / **t/20**) because the ID pins a **`RuntimeScalar`** that **`replacePinnedCodeRef`** does not update.
+
+### Regression tests
+
+```bash
+./gradlew shadowJar    # ./jperl uses target/perlonjava-*.jar — rebuild after Java changes
+timeout 120 ./jperl src/test/resources/unit/pr694_core_regressions.t
+timeout 120 ./jperl src/test/resources/unit/eval_after_stash_delete.t
+```
+
+---
+
+## Roadmap: `./jcpan -t CPANPLUS` — **detailed next steps**
+
+_Re-run **`timeout 3600 ./jcpan -t CPANPLUS`** after substantive runtime/parser fixes and paste a fresh TAP / summary line into this doc (prior snapshot **`1267`** subtests / **`7/20`** dubious programs with CPANPLUS **0.9916** is stale)._
+
+### 0. Routine verification (every CPANPLUS-related push)
+
+1. **`make`** (Gradle **`shadowJar`** + unit shards — required before PR updates per **`AGENTS.md`**).
+2. **Interpreter / eval regressions:**  
+   `timeout 120 ./jperl src/test/resources/unit/pr694_core_regressions.t`  
+   `timeout 120 ./jperl src/test/resources/unit/eval_after_stash_delete.t`
+3. **Smoke require** from a CPANPLUS tree (adjust paths):  
+   `PERL5LIB="…/CPANPLUS-*/blib/lib:…/CPANPLUS-*/blib/arch:$PERL5LIB" timeout 120 ./jperl -e 'require CPANPLUS::Config'`
+4. **Harness:** **`timeout 3600 ./jcpan -t CPANPLUS`** — capture full log under **`jcpan/`** / build output; note first failing **`t/`** program and TAP line.
+
+### 1. ~~**`BUILD_PL` / `MAKEFILE` barewords~~ — **Done**
+
+See “Resolved … **`BUILD_PL` / `MAKEFILE`**” above.
+
+### 2. ~~**`t/00`** `_version_to_number` / **`version`**~~ — **Done**
+
+See “Resolved … **`_version_to_number`**” above.
+
+### 3. **`t/031`** SQLite source + **`DBIx::Simple`** (**Priority: high**)
+
+- **Symptom:** **`Can't call method "execute" on an undefined value`** in **`DBIx/Simple.pm`**, exercised via **`CPANPLUS::Internals::Source::SQLite`**.
+- **Next steps:**
+  1. Reproduce under **`timeout 180 ./jperl …/t/031_CPANPLUS-Internals-Source-SQLite.t`** with upstream **`PERL5LIB`** (or **`./jcpan`** unpacked tree).
+  2. Inspect whether **`dbh`** / **`$self->{dbh}`** is never set vs cleared early — trace **`DBI`**, **`connect`**, and any **`DESTROY`/scope** ordering under **`jperl`** (compare **`perl`** on same script).
+  3. Fix **PerlOnJava** runtime or (**only if unavoidable**) shim bundled **`DBIx::Simple`** — prefer fixing **`DBI`/`disconnect`** parity or refcount/GC quirks over changing CPANPLUS.
+  4. Re-run **`t/031`** then a short **`SQLite`/`Source`** slice of **`jcpan -t CPANPLUS`**.
+
+### 4. ~~**`t/20`** **`CPANPLUS::Dist::MM`** / **`can_load`**~~ — **Done (2026-05-16, JVM)**
+
+- **Symptom:** **`local *CPANPLUS::Dist::MM::can_load = sub { … }`** should change **`can_load(...)`** inside **`format_available`**; **`jperl`** was still calling the pre-local CV.
+- **Fix:** **`EmitSubroutine.handleApplyOperator`** no longer embeds parser **`parseTimeCodeRef`** via **`registerCompiledCodeRef`**; **`&(bareword)`** always goes through **`getGlobalCodeRef`** so **`local *glob`** (**`RuntimeGlob.dynamicSaveState`** / **`replacePinnedCodeRef`**) wins. Interpreter path still uses **`parseTimeCodeRef`** (**pr694** / stash-delete pinning).
+- **Check:** **`src/test/resources/unit/cpanplus_dist_mm_can_load_local.t`** (also rebuild **`shadowJar`** before spot-checking **`./jperl -e`** — stale jars looked like **`local`** was broken).
+
+### 5. **`File::Copy`** warnings — **Mitigated**
+
+Occasional **`$!` + 0** noise from bundled **`File/Copy.pm`** — see mitigation above. Re-audit if **`jcpan`** output still warns on **`Copy`** paths.
+
+### 6. Documentation + incident hygiene
+
+- After each **`jcpan -t CPANPLUS`** run, update **this file** with: date, subtest totals, dubious-program count, and the **short list** of remaining failing **`t/`** scripts.
+- Keep **`dev/modules/cpan_client.md`** in sync only when **`jcpan`** behavior or **`PERL5LIB`** layout changes.
 
 ---
 
@@ -120,10 +172,12 @@ _Last full harness observation (PerlOnJava + CPANPLUS 0.9916): **`1267`** subtes
 | Empty list / **`require`** false negative | **Done** | Cloned **`CompilerOptions`**, evaluator fixes, bytecode last-stmt **`require`** parity, **`doFile`** empty-list heel when **`$@`** clean |
 | **`make`** (unit shards) | **Done** | Run before pushing |
 | **`jcpan -t CPANPLUS`** bootstrap | **Unblocked** | **`conf.pl`** + **`Selfupdate`** / **`Report`** no longer abort on **`Config`** |
-| **`BUILD_PL` strict/`Module.pm`** | **Open** | Blocks several **“dubious 255”** programs |
-| **Utils formatting** | **Open** | **`t/00`** mismatches |
-| **`t/031` SQLite Source** | **Open** | **DBIx:** `execute` on undefined (`dbh` lifecycle) |
-| **Dist/MM log expectations** | **Open** | **`t/20`** regex on log fragment |
+| **`BUILD_PL` / `MAKEFILE` filetest/`stat`** | **Done** | ALLCAP bareword handle heuristic vs **`->`** / defined package sub (**`FileHandle`** helper) |
+| **`t/00`** version / **`numify`** | **Done** | **`VersionHelper`**, **`perlmodule/Version`** |
+| **Strict + string `eval` + import/**`no`** (pr694)** | **Done** | **`SubroutineParser`** **`parseTimeCodeRef`** → **`BytecodeCompiler`**; **`pr694_core_regressions.t`**, **`eval_after_stash_delete.t`** |
+| **`File::Copy` warn + 0 `$!`** | **Mitigated** | Bundled **`File/Copy.pm`** |
+| **`t/031` SQLite Source** | **Open** | **`DBIx::Simple`** `execute` on undefined (**`dbh`**) |
+| **`t/20` Dist::MM / `can_load`** | **Done (JVM)** | **`EmitSubroutine`**: no **`registerCompiledCodeRef`** for **`&`** calls; **`cpanplus_dist_mm_can_load_local.t`** |
 
 ---
 

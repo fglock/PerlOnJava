@@ -1013,6 +1013,10 @@ public class GlobalVariable {
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             return runtimeCode.defined();
         }
+        RuntimeScalar pinned = pinnedCodeRefs.get(key);
+        if (pinned != null && pinned.type == RuntimeScalarType.CODE && pinned.value instanceof RuntimeCode pv) {
+            return pv.defined();
+        }
         return false;
     }
 
@@ -1025,7 +1029,11 @@ public class GlobalVariable {
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(String key) {
         RuntimeScalar var = globalCodeRefs.get(key);
-        return codeSlotExists(var) ? scalarTrue : scalarFalse;
+        if (codeSlotExists(var)) {
+            return scalarTrue;
+        }
+        RuntimeScalar pinned = pinnedCodeRefs.get(key);
+        return codeSlotExists(pinned) ? scalarTrue : scalarFalse;
     }
 
     public static RuntimeScalar existsGlobalCodeRefAsScalar(RuntimeScalar key) {
@@ -1075,6 +1083,13 @@ public class GlobalVariable {
         RuntimeScalar var = globalCodeRefs.get(key);
         if (var != null && var.type == RuntimeScalarType.CODE && var.value instanceof RuntimeCode runtimeCode) {
             return runtimeCode.defined() ? scalarTrue : scalarFalse;
+        }
+        // Stash deletes remove the visible map entry while keeping pinned CV holders for
+        // compiled call sites (see getGlobalCodeRef / perl5 stash delete semantics).
+        // defined(&NAME) still sees those bodies until the CODeref is reclaimed (pr694).
+        RuntimeScalar pinned = pinnedCodeRefs.get(key);
+        if (pinned != null && pinned.type == RuntimeScalarType.CODE && pinned.value instanceof RuntimeCode pv) {
+            return pv.defined() ? scalarTrue : scalarFalse;
         }
         return scalarFalse;
     }

@@ -1400,6 +1400,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 ScopedSymbolTable postParseSymbolTable = evalCtx.symbolTable;
                 evalCtx.symbolTable = capturedSymbolTable;
                 evalCtx.symbolTable.copyFlagsFrom(postParseSymbolTable);
+                // Package declarations live only on post-parse snapshot; emitting with the outer
+                // package (e.g. main) breaks defined &barename / &barename lookups inside
+                // package blocks (unit/pr694, Moose-style DSL in string eval).
+                evalCtx.symbolTable.copyPackageScopeFrom(postParseSymbolTable);
                 setCurrentScope(evalCtx.symbolTable);
 
                 // Use the captured environment array from compile-time to ensure

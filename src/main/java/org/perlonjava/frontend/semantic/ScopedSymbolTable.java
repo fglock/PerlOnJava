@@ -974,6 +974,21 @@ public class ScopedSymbolTable {
         this.strictOptionsStack.push(source.strictOptionsStack.peek());
     }
 
+    /**
+     * Copies the {@link #packageStack} from another table. Used after eval STRING parsing:
+     * the parse runs on a fresh symbol-table snapshot whose package directives must be
+     * reflected during JVM emission after we restore the captured outer lexical scope.
+     */
+    public void copyPackageScopeFrom(ScopedSymbolTable source) {
+        if (source == null) {
+            throw new IllegalArgumentException("Source ScopedSymbolTable cannot be null.");
+        }
+        packageStack.clear();
+        for (PackageInfo info : source.packageStack) {
+            packageStack.push(info);
+        }
+    }
+
     public record PackageInfo(String packageName, boolean isClass, String version) {
     }
 }
