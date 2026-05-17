@@ -1295,7 +1295,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     /**
      * When {@code delete $stash{'sym'}} removes a compiled package sub whose CV is still referenced,
-     * B::GV->NAME expects {@code __ANON__}.
+     * match Perl's orphan CV naming for introspection ({@code __ANON__}) and clear stash-install
+     * metadata. See {@link RuntimeCode#callerReportSubName} for the {@code main::} {@code caller()}
+     * exception.
      */
     public static void anonymizeOrphanNamedCvDetached(String fullGlobKey, RuntimeScalar codeScalar) {
         if (fullGlobKey == null || codeScalar == null || !(codeScalar.value instanceof RuntimeCode cv)) {
@@ -1336,6 +1338,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 || !pkgGlob.equals(cv.packageName)
                 || !shortGlob.equals(cv.subName)) {
             return;
+        }
+        // Perl forces CvNAME to __ANON__ for some orphaned CVs so Sub::Util::subname and
+        // B::CV agree with op/stash.t. Package main is special: caller() still reports the
+        // original "deleted subroutine name" (op/caller.t); preserve it in callerReportSubName.
+        if ("main".equals(cv.packageName)
+                && cv.subName != null
+                && !"__ANON__".equals(cv.subName)) {
+            cv.callerReportSubName = cv.subName;
+        } else {
+            cv.callerReportSubName = null;
         }
         cv.subName = "__ANON__";
         cv.stashInstallPackage = null;

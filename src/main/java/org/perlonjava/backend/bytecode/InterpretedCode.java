@@ -255,7 +255,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         frame = new InterpreterState.InterpreterFrame(this, packageName, subroutineName);
         // Cache it if this is the "normal" case (using code's own names)
         String defaultPkg = this.packageName != null ? this.packageName : "main";
-        String defaultSub = this.subName != null ? this.subName : "(eval)";
+        String effectiveSub =
+                this.callerReportSubName != null ? this.callerReportSubName : this.subName;
+        String defaultSub = effectiveSub != null ? effectiveSub : "(eval)";
         if (packageName.equals(defaultPkg) && java.util.Objects.equals(subroutineName, defaultSub)) {
             cachedFrame = frame;
         }
@@ -369,6 +371,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.prototype = this.prototype;
         copy.attributes = this.attributes;
         copy.subName = this.subName;
+        copy.callerReportSubName = this.callerReportSubName;
         copy.packageName = this.packageName;
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;

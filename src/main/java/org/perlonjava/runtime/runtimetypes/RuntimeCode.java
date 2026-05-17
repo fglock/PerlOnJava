@@ -455,6 +455,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // Method context information for next::method support
     public String packageName;
     public String subName;
+    /**
+     * When {@link #subName} is forced to {@code __ANON__} for B/introspection parity
+     * (stash orphan), real Perl still reports the original short name from {@code caller()}
+     * for subs in package {@code main} (see perl5_t/t/op/caller.t "deleted subroutine name").
+     */
+    public String callerReportSubName;
     // Source package for imported forward declarations (used for AUTOLOAD resolution)
     public String sourcePackage = null;
     // Historical marker for symbolic references created by \&{string}. A CODE
@@ -728,6 +734,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.attributes = this.attributes != null ? new java.util.ArrayList<>(this.attributes) : null;
         clone.packageName = this.packageName;
         clone.subName = this.subName;
+        clone.callerReportSubName = this.callerReportSubName;
         clone.stashInstallPackage = this.stashInstallPackage;
         clone.stashInstallSub = this.stashInstallSub;
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
@@ -2699,9 +2706,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // to honor set_subname() which modifies RuntimeCode.subName at runtime
                 if (frame == 1 && currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
                     RuntimeCode code = (RuntimeCode) currentSub.value;
-                    if (code.subName != null && !code.subName.isEmpty()) {
+                    String callerSub =
+                            code.callerReportSubName != null ? code.callerReportSubName : code.subName;
+                    if (callerSub != null && !callerSub.isEmpty()) {
                         String codePkg = code.packageName != null ? code.packageName : "main";
-                        subName = codePkg + "::" + code.subName;
+                        subName = codePkg + "::" + callerSub;
                     } else if (!code.explicitlyRenamed && code.packageName != null) {
                         // Anonymous sub: honor `local *PKG::__ANON__ = 'name'`
                         // by reading the package's *__ANON__ glob's nameOverride.
