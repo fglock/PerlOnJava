@@ -863,8 +863,12 @@ public class ArgumentParser {
             System.out.println("  Compiled at " + Configuration.buildTimestamp);
 
             System.out.println("  JVM properties:");
-            System.getProperties().forEach((key, value) ->
-                    System.out.println("    " + key + ": " + value));
+            System.getProperties().forEach((key, value) -> {
+                // Filter out unstable JVM properties that change between runs - this is needed by Test::Reporter
+                if (!key.equals("java.vm.compressedOopsMode")) {
+                    System.out.println("    " + key + ": " + value);
+                }
+            });
 
             // Print environment variables
             System.out.println("  %ENV:");
