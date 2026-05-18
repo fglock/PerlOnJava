@@ -11,7 +11,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -465,55 +464,59 @@ public class SystemOperator {
     }
 
     /**
-     * Writes a line to the current Perl-level STDOUT handle.
-     * This ensures output goes through any Perl-level redirections (e.g.,
-     * when STDOUT has been reopened to a file via open STDOUT, ">", $file).
-     */
-    private static void writeToPerlStdout(String line) {
-        try {
-            RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
-            if (perlStdout != null) {
-                perlStdout.write(line + "\n");
-            } else {
-                System.out.println(line);
-            }
-        } catch (Exception e) {
-            System.out.println(line);
-        }
-    }
-
-    /**
-     * Writes a line to the current Perl-level STDERR handle.
+     * Writes bytes to the current Perl-level STDERR handle.
      * This ensures output goes through any Perl-level redirections (e.g.,
      * when STDERR has been reopened to a file via open STDERR, ">", $file).
      */
-    private static void writeToPerlStderr(String line) {
+    private static void writeToPerlStderrBytes(byte[] buffer, int bytesRead) {
         try {
             RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+            String text = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.ISO_8859_1);
             if (perlStderr != null) {
-                perlStderr.write(line + "\n");
+                perlStderr.write(text);
             } else {
-                System.err.println(line);
+                System.err.write(buffer, 0, bytesRead);
             }
         } catch (Exception e) {
-            System.err.println(line);
+            System.err.write(buffer, 0, bytesRead);
         }
     }
 
     /**
-     * Creates a daemon thread that reads from the given input stream and writes
-     * each line to the current Perl-level handle for the given global name.
+     * Writes bytes to the current Perl-level STDOUT handle.
+     * This ensures output goes through any Perl-level redirections (e.g.,
+     * when STDOUT has been reopened to a file via open STDOUT, ">", $file).
+     */
+    private static void writeToPerlStdoutBytes(byte[] buffer, int bytesRead) {
+        try {
+            RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+            String text = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.ISO_8859_1);
+            if (perlStdout != null) {
+                perlStdout.write(text);
+            } else {
+                System.out.write(buffer, 0, bytesRead);
+            }
+        } catch (Exception e) {
+            System.out.write(buffer, 0, bytesRead);
+        }
+    }
+
+    /**
+     * Creates a thread that routes an InputStream to the current Perl-level handle.
+     * Bytes are written directly without line-by-line processing to preserve
+     * exact output including or excluding trailing newlines.
      * This is used for routing child process stderr/stdout through Perl handles.
      */
     private static Thread createStreamRouterThread(InputStream stream, boolean isStderr) {
         Thread t = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
+            try {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = stream.read(buffer)) != -1) {
                     if (isStderr) {
-                        writeToPerlStderr(line);
+                        writeToPerlStderrBytes(buffer, bytesRead);
                     } else {
-                        writeToPerlStdout(line);
+                        writeToPerlStdoutBytes(buffer, bytesRead);
                     }
                 }
             } catch (IOException e) {
