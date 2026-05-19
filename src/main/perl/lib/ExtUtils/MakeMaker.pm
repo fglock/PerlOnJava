@@ -490,6 +490,19 @@ sub _build_share_file_mapping {
                     $files{$src} = File::Spec->catfile($dest_base, $rel);
                 },
                 no_chdir => 1,
+                preprocess => sub {
+                    # Filter directories based on dotdirs setting
+                    return grep {
+                        my $name = basename($_);
+                        # Always skip . and ..
+                        return 0 if $name eq '.' || $name eq '..';
+                        # Skip version control dirs
+                        return 0 if $name =~ /^\.(svn|git|cvs)$/;
+                        # Skip dot directories unless INCLUDE_DOTDIRS is set
+                        return 0 if $name =~ /^\./ && !$def->{dotdirs};
+                        return 1;
+                    } @_;
+                },
             }, $src_dir);
         }
     }
@@ -561,10 +574,10 @@ sub _create_install_makefile {
     } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, './blib/lib', './blib/arch')" $test_glob};
+        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl test.pl};
+        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl test.pl};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
@@ -602,12 +615,12 @@ sub _create_install_makefile {
             ($blib_rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
         }
         if ($blib_rel) {
-            my $blib_dest = "blib/lib/$blib_rel";
+            my $blib_dest = "\$(INST_LIB)/$blib_rel";
             my $blib_dir = dirname($blib_dest);
             unless ($blib_dirs_seen{$blib_dir}++) {
                 push @blib_cmds, _shell_mkdir($blib_dir);
             }
-            push @blib_cmds, _shell_cp($src, $blib_dest, 'blib/lib/auto');
+            push @blib_cmds, _shell_cp($src, $blib_dest, '$(INST_LIB)/auto');
         }
     }
     
@@ -747,8 +760,8 @@ $depend_rules_str
 # Without this, AutoSplit::autosplit_file creates the dir and prints a warning — stock
 # EU::MakeMaker typically creates blib dirs earlier via blibdirs / pm_to_blib ordering.
 pm_to_blib::$pm_deps_str
-\t\@mkdir -p blib/arch
-\t\@mkdir -p blib/lib/auto
+\t\@mkdir -p \$(INST_ARCHLIB)
+\t\@mkdir -p \$(INST_LIB)/auto
 $blib_cmds_str
 
 # pure_all is an alias target some postambles (File::ShareDir::Install,
@@ -771,16 +784,18 @@ $script_cmds_str
 # Alien::Build's MY::postamble, File::ShareDir::Install) can add
 # additional rules for the same target. Mixing : and :: is a fatal
 # make error, and real ExtUtils::MakeMaker uses :: for these targets.
-config::
+config:: pm_to_blib
 
 test::
 \t$test_cmd
 
 # install: copy staged files from ./lib to INSTALLSITELIB, plus scripts.
+# Also copy share files staged by postambles (File::ShareDir::Install) from blib.
 # Depends on 'all' to ensure blib is built first (matches standard MakeMaker).
 install:: all install_scripts
 $install_cmds_str
-\t\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
+	\@if [ -d "\$(INST_LIB)/auto/share" ]; then cp -r "\$(INST_LIB)/auto/share/"* "\$(INSTALLSITELIB)/auto/share/" 2>/dev/null || true; fi
+	\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
 
 clean::
 \t\$(RM_RF) blib pm_to_blib
