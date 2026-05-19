@@ -3317,6 +3317,7 @@ public class BytecodeInterpreter {
             var entry = code.pcToTokenIndex.floorEntry(callPc);
             if (entry != null && code.errorUtil != null) {
                 int tokenIndex = entry.getValue();
+                // Always use getSourceLocationAccurate to honor #line directives
                 ErrorMessageUtil.SourceLocation loc = code.errorUtil.getSourceLocationAccurate(tokenIndex);
                 filename = loc.fileName();
                 lineNumber = loc.lineNumber();

@@ -304,3 +304,85 @@ ok($result3 < $file_end - 10, "caller() line is not near EOF (was: $result3, EOF
 - [x] Log::Log4perl tests improved (8→1 failures in t/024WarnDieCarp.t)
 - [x] Full test suite passing (no regressions)
 - [x] Code committed and merged (commit d4993893f)
+
+---
+
+## New Issue: #line Directive in Eval Context (2026-05-19)
+
+### Problem
+
+The `#line` directive is not being honored by `caller()` in eval context for modules like Sub::Quote.
+
+**Test failures in Sub::Quote:**
+- Test 55 expects "line 42" but gets actual file path with line 396
+- Test 56 expects "welp.pl line 42" but gets actual file path with line 401
+
+**Root Cause:**
+Sub::Quote generates code with `#line` directives like `#line 41 "welp.pl"` in the `_context` function. When this code is eval'd, the `#line` directive should affect how `caller()` reports the file and line. However, the infrastructure exists (`ErrorMessageUtil.getSourceLocationAccurate`, Whitespace processing) but the information is not being correctly propagated to `caller()` at runtime.
+
+### Investigation Findings
+
+**Existing Infrastructure:**
+1. `Whitespace.java` - Processes `#line` directives during parsing and calls `setFileName()`/`setLineNumber()` on errorUtil
+2. `ErrorMessageUtil.getSourceLocationAccurate()` - Walks through tokens to find `#line` directives and returns adjusted location
+3. `BytecodeInterpreter.getCallSiteInfo()` - Uses `getSourceLocationAccurate()` to get filename/line for caller()
+4. `ByteCodeSourceMapper.java` - Maps bytecode PC to source location with `#line` adjustment
+
+**Gap Identified:**
+The `#line` directive is processed during parsing, but the token index mapping (`pcToTokenIndex`) might not include the `#line` directive tokens, or the token index being passed to `getSourceLocationAccurate()` is wrong. The `#line` directive is at the beginning of the eval'd code, but the token index being passed is for the actual code being executed (the sub body), which might be after the `#line` directive.
+
+### Next Steps Plan
+
+#### Phase C: Fix #line Directive in Eval Context
+
+**Goal:** Ensure `#line` directives in eval'd code are honored by `caller()`.
+
+**Investigation Steps:**
+1. Verify that `#line` directive tokens are included in the token list passed to `ErrorMessageUtil`
+2. Check if `pcToTokenIndex` map includes indices for `#line` directive tokens
+3. Verify that `getSourceLocationAccurate()` is receiving the correct token index range
+
+**Implementation Steps:**
+1. Add debug logging to `BytecodeInterpreter.getCallSiteInfo()` to log:
+   - The token index being passed to `getSourceLocationAccurate()`
+   - The filename and line number returned
+   - The original filename for comparison
+2. Verify that `#line` directives are in the token list at the expected positions
+3. If `#line` directives are not in `pcToTokenIndex`, extend the map to include them
+4. If `getSourceLocationAccurate()` is not finding `#line` directives, fix the token walking logic
+
+**Files to modify:**
+- `BytecodeInterpreter.java` - Add debug logging, fix token index lookup
+- `ErrorMessageUtil.java` - Verify/fix `getSourceLocationAccurate()` logic
+- `BytecodeCompiler.java` - Ensure `#line` directive tokens are included in `pcToTokenIndex`
+
+**Testing:**
+```bash
+# Test Sub::Quote #line directive handling
+./jperl -I/Users/fglock/projects/PerlOnJava2/src/main/perl/lib \
+  /Users/fglock/projects/PerlOnJava2/src/test/resources/modules/Sub-Quote/t/sub-quote.t
+
+# Verify no regressions in croak-locations.t
+cd ~/.cpan/build/Moo-2.005005-2 && \
+  /Users/fglock/projects/PerlOnJava2/jperl t/croak-locations.t
+```
+
+**Success Criteria:**
+- Sub::Quote tests 55 and 56 pass without skip
+- `caller()` returns the `#line`-adjusted filename and line number
+- No regressions in existing caller stack fixes
+
+### Status: IN PROGRESS
+
+### Checklist
+- [x] Root cause identified
+- [x] Existing infrastructure documented
+- [x] Gap identified
+- [x] Next steps plan created
+- [ ] Add debug logging to investigate token index issue
+- [ ] Verify #line directive tokens in token list
+- [ ] Fix pcToTokenIndex mapping if needed
+- [ ] Fix getSourceLocationAccurate() logic if needed
+- [ ] Remove test skips once fix is working
+- [ ] Run full test suite for regressions
+- [ ] Commit and merge changes

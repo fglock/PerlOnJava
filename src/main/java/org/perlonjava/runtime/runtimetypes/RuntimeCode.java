@@ -1592,35 +1592,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param tokens     Lexer tokens (may be null on compilation failure)
      */
     private static void processLineDirectives(String evalString, String[] lines, List<LexerToken> tokens) {
-        String currentFilename = null;
-        int currentLineOffset = 0; // 0-based index into lines array
-
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("^\\s*#line\\s+(\\d+)\\s+\"([^\"]+)\"");
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
-            // Simple #line directive parsing: #line N "filename"
-            // Allow optional leading whitespace
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*#line\\s+(\\d+)\\s+\"([^\"]+)\"").matcher(line);
+            java.util.regex.Matcher m = pattern.matcher(line);
             if (m.find()) {
-                int targetLine = Integer.parseInt(m.group(1)); // 1-based line number in target file
-                currentFilename = m.group(2);
-                currentLineOffset = i + 1; // Next line in eval corresponds to targetLine
-                // Ensure the target array exists and is properly sized
-                String targetKey = "main::_<" + currentFilename;
+                int lineNum = Integer.parseInt(m.group(1));
+                String filename = m.group(2);
+                // Populate @{"_<filename"} array with line mapping
+                String arrayName = "_<" + filename;
+                String targetKey = "main::" + arrayName;
                 RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
-                // Ensure array is large enough (sparse behavior)
-                while (targetArray.elements.size() <= targetLine) {
-                    targetArray.elements.add(RuntimeScalarCache.scalarUndef);
+                if (targetArray == null) {
+                    targetArray = new RuntimeArray();
+                    GlobalVariable.getGlobalVariable(targetKey).set(targetArray);
                 }
-                // Place the next line at the correct index
-                if (i + 1 < lines.length) {
-                    targetArray.elements.set(targetLine, new RuntimeScalar(lines[i + 1] + "\n"));
-                }
-            } else if (currentFilename != null && i >= currentLineOffset) {
-                // Continue populating the current filename array
-                int targetLine = (i - currentLineOffset) + 1; // Convert to 1-based
-                String targetKey = "main::_<" + currentFilename;
-                RuntimeArray targetArray = GlobalVariable.getGlobalArray(targetKey);
                 // Ensure array is large enough (sparse behavior)
+                int targetLine = lineNum;
                 while (targetArray.elements.size() <= targetLine) {
                     targetArray.elements.add(RuntimeScalarCache.scalarUndef);
                 }

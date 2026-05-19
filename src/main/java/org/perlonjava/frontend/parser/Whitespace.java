@@ -75,7 +75,7 @@ public class Whitespace {
 
                 case OPERATOR:
                     if (token.text.equals("#")) {
-                        // # line directive must appear at the beginning of the line
+                        // #line directive must appear at the beginning of the line
                         boolean maybeLineDirective = tokenIndex == 0 || tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE;
 
                         // Skip optional whitespace after '#'
@@ -83,13 +83,18 @@ public class Whitespace {
                         while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
                             tokenIndex++;
                         }
-                        // Check if it's a "# line" directive
+                        // Check if it's a "#line" directive (with or without space after #)
                         if (maybeLineDirective && tokenIndex < tokens.size() && tokens.get(tokenIndex).text.equals("line")) {
                             tokenIndex = parseLineDirective(parser, tokenIndex, tokens);
-                        }
-                        // Skip comment until end of line
-                        while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
-                            tokenIndex++;
+                            // After processing #line directive, skip to end of line
+                            while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
+                                tokenIndex++;
+                            }
+                        } else {
+                            // Not a #line directive, treat as regular comment
+                            while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE) {
+                                tokenIndex++;
+                            }
                         }
                     } else {
                         return tokenIndex; // Stop processing and return current index

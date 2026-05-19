@@ -267,6 +267,10 @@ public class ErrorMessageUtil {
         return fileName;
     }
 
+    public String getOriginalFileName() {
+        return originalFileName;
+    }
+
     public void setFileName(String fileName) {
         this.fileName = fileName;
     }
