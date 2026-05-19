@@ -233,7 +233,7 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
-        clearWeakRefsTo(referent, true);  // Always include CODE refs for Sub::Quote compatibility
+        clearWeakRefsTo(referent, true);  
     }
 
     /**
