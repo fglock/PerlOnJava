@@ -3319,6 +3319,19 @@ public class BytecodeInterpreter {
                 int tokenIndex = entry.getValue();
                 // Always use getSourceLocationAccurate to honor #line directives
                 ErrorMessageUtil.SourceLocation loc = code.errorUtil.getSourceLocationAccurate(tokenIndex);
+                
+                // Debug logging for #line directive investigation
+                boolean debug = System.getenv("DEBUG_LINE_DIRECTIVE") != null;
+                if (debug) {
+                    System.err.println("DEBUG_LINE_DIRECTIVE: getCallSiteInfo callPc=" + callPc +
+                        " tokenIndex=" + tokenIndex +
+                        " filename=" + loc.fileName() +
+                        " lineNumber=" + loc.lineNumber() +
+                        " originalFilename=" + code.errorUtil.getOriginalFileName() +
+                        " sourceName=" + code.sourceName +
+                        " sourceLine=" + code.sourceLine);
+                }
+                
                 filename = loc.fileName();
                 lineNumber = loc.lineNumber();
             }

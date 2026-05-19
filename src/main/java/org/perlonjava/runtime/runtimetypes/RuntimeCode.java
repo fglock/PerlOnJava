@@ -2613,6 +2613,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param currentSub The __SUB__ reference from the calling subroutine (may be null)
      */
     public static RuntimeList callerWithSub(RuntimeList args, int ctx, RuntimeScalar currentSub) {
+        // Debug logging for #line directive investigation
+        boolean debug = System.getenv("DEBUG_LINE_DIRECTIVE") != null;
+        if (debug) {
+            System.err.println("DEBUG_LINE_DIRECTIVE: callerWithSub called frame=" + 
+                (args.isEmpty() ? "none" : args.getFirst().getInt()));
+        }
+
         RuntimeList res = new RuntimeList();
         int frame = 0;
         boolean hasExplicitExpr = !args.isEmpty();
