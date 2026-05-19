@@ -30,7 +30,7 @@ public class ScalarUtil extends PerlModuleBase {
         GlobalVariable.getGlobalVariable("Scalar::Util::VERSION").set(new RuntimeScalar("1.70"));
         scalarUtil.defineExport("EXPORT_OK", "blessed", "refaddr", "reftype", "weaken", "unweaken", "isweak",
                 "dualvar", "isdual", "isvstring", "looks_like_number", "openhandle", "readonly",
-                "set_prototype", "tainted");
+                "set_prototype", "tainted", "clear_unreachable_code_weak_refs");
         try {
             // Register methods with their respective signatures
             scalarUtil.registerMethod("blessed", "$");
@@ -47,6 +47,7 @@ public class ScalarUtil extends PerlModuleBase {
             scalarUtil.registerMethod("readonly", "$");
             scalarUtil.registerMethod("set_prototype", "$$");
             scalarUtil.registerMethod("tainted", "$");
+            scalarUtil.registerMethod("clear_unreachable_code_weak_refs", "");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Scalar::Util method: " + e.getMessage());
         }
@@ -181,6 +182,13 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar ref = args.get(0);
         WeakRefRegistry.weaken(ref);
+        
+        // For CODE refs, automatically clear unreachable weak refs after weakening
+        // This fixes Sub::Quote's CLONE method which relies on weak refs being cleared
+        if (ref.value instanceof RuntimeCode) {
+            WeakRefRegistry.clearUnreachableCodeWeakRefs();
+        }
+        
         return new RuntimeScalar().getList();
     }
 
@@ -201,6 +209,40 @@ public class ScalarUtil extends PerlModuleBase {
     }
 
     /**
+     * Clear weak references to a CODE object.
+     * This is needed for Sub::Quote's CLONE method which needs to clean up
+     * expired CODE refs even though they might still be in the stash.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList clear_weak_ref(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for clear_weak_ref() method");
+        }
+        RuntimeScalar ref = args.get(0);
+        if (ref.value instanceof RuntimeBase base) {
+            WeakRefRegistry.clearWeakRefsTo(base, true);
+        }
+        return new RuntimeScalar().getList();
+    }
+
+    /**
+     * Clear weak references to CODE objects that are no longer reachable.
+     * This is needed for Sub::Quote's CLONE method which needs to clean up
+     * expired CODE refs even though they might still be in the stash.
+     *
+     * @param args The arguments passed to the method.
+     * @param ctx  The context in which the method is called.
+     * @return A RuntimeList.
+     */
+    public static RuntimeList clear_unreachable_code_weak_refs(RuntimeArray args, int ctx) {
+        WeakRefRegistry.clearUnreachableCodeWeakRefs();
+        return new RuntimeScalar().getList();
+    }
+
+    /**
      * Check if a reference has been weakened via weaken().
      *
      * @param args The arguments passed to the method.
@@ -213,6 +255,14 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar ref = args.get(0);
         boolean wasWeak = WeakRefRegistry.isweak(ref);
+        
+        // For CODE refs, automatically clear unreachable weak refs before checking
+        // This fixes Sub::Quote's CLONE method which relies on weak refs being cleared
+        if (ref.value instanceof RuntimeCode) {
+            WeakRefRegistry.clearUnreachableCodeWeakRefs();
+            wasWeak = WeakRefRegistry.isweak(ref);
+        }
+        
         if (wasWeak
                 && DestroyDispatch.hasRescuedObjects()
                 && RuntimeCode.argsStackDepth() <= 3

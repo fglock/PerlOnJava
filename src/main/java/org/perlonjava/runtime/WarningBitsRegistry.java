@@ -36,9 +36,11 @@ public class WarningBitsRegistry {
     
     // ThreadLocal tracking the warning bits at the current call site.
     // Updated at runtime when 'use warnings' / 'no warnings' pragmas are encountered.
-    // This provides per-statement warning bits (like Perl 5's per-COP bits).
-    private static final ThreadLocal<String> callSiteBits = 
-        ThreadLocal.withInitial(() -> null);
+    // This provides per-statement warning bits granularity.
+    private static ThreadLocal<String> callSiteBits = ThreadLocal.withInitial(() -> null);
+
+    // Thread-local storage for main script warning bits (fallback for caller(0))
+    private static ThreadLocal<String> mainScriptBits = ThreadLocal.withInitial(() -> null);
     
     // ThreadLocal stack saving caller's call-site bits across subroutine calls.
     // Each apply() pushes the current callSiteBits before calling the subroutine,
@@ -173,6 +175,36 @@ public class WarningBitsRegistry {
     public static void pushCallerBits() {
         String bits = callSiteBits.get();
         callerBitsStack.get().push(bits != null ? bits : "");
+    }
+
+    /**
+     * Pushes specific warning bits onto the caller stack.
+     * Used by EmitCompilerFlag to make warning bits available for caller(0)
+     * in main script context where no subroutine call has occurred.
+     *
+     * @param bits The warning bits string to push
+     */
+    public static void pushCallerBits(String bits) {
+        callerBitsStack.get().push(bits != null ? bits : "");
+    }
+
+    /**
+     * Sets the main script warning bits for caller(0) fallback.
+     * Used when pragmas are encountered in the main script context.
+     *
+     * @param bits The warning bits string
+     */
+    public static void setMainScriptBits(String bits) {
+        mainScriptBits.set(bits);
+    }
+
+    /**
+     * Gets the main script warning bits for caller(0) fallback.
+     *
+     * @return The warning bits string, or null if not set
+     */
+    public static String getMainScriptBits() {
+        return mainScriptBits.get();
     }
     
     /**

@@ -43,6 +43,14 @@ public class EmitCompilerFlag {
                 "setCallSiteBits",
                 "(Ljava/lang/String;)V", false);
 
+        // Also push onto currentBitsStack to make them available for caller(0)
+        // This handles main script context where no subroutine call has occurred
+        mv.visitLdcInsn(newBits);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "pushCurrent",
+                "(Ljava/lang/String;)V", false);
+
         // Emit runtime code to update per-call-site $^H (hints).
         // This allows caller()[8] to return accurate hints for the current statement.
         int hints = node.getStrictOptions();

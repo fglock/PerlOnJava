@@ -233,16 +233,26 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
-        // Skip clearing weak refs to CODE objects. CODE refs live in both
-        // lexicals and the symbol table (stash), but stash assignments
-        // (*Foo::bar = $coderef) bypass setLarge(), making the stash reference
-        // invisible to refcounting. This causes false refCount==0 via mortal
-        // flush when a lexical goes out of scope — even though the CODE ref
-        // is still alive in the stash. Since DESTROY is not implemented,
-        // there is no behavioral difference from skipping the clear.
-        // This is critical for Sub::Quote/Sub::Defer which use weaken()
-        // for back-references to deferred subs.
-        if (referent instanceof RuntimeCode) return;
+        clearWeakRefsTo(referent, true);  // Always include CODE refs for Sub::Quote compatibility
+    }
+
+    /**
+     * Clear all weak references to a referent. Called when refCount reaches 0,
+     * before DESTROY. Sets all weak scalars pointing to this referent to undef.
+     *
+     * @param includeCode If true, also clear weak refs to CODE objects (RuntimeCode).
+     *                    This is needed for Sub::Quote's CLONE method which needs to
+     *                    clean up expired CODE refs even though they might still be
+     *                    in the stash.
+     */
+    public static void clearWeakRefsTo(RuntimeBase referent, boolean includeCode) {
+        // Skip clearing weak refs to CODE objects unless explicitly requested.
+        // CODE refs live in both lexicals and the symbol table (stash), but stash
+        // assignments (*Foo::bar = $coderef) bypass setLarge(), making the stash
+        // reference invisible to refcounting. This causes false refCount==0 via mortal
+        // flush when a lexical goes out of scope — even though the CODE ref is
+        // still alive in the stash.
+        if (!includeCode && referent instanceof RuntimeCode) return;
         Set<RuntimeScalar> weakRefs = referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
@@ -280,6 +290,28 @@ public class WeakRefRegistry {
      */
     public static java.util.List<RuntimeBase> snapshotWeakRefReferents() {
         return new java.util.ArrayList<>(referentToWeakRefs.keySet());
+    }
+
+    /**
+     * Clear weak refs to CODE objects that are no longer reachable from Perl variables.
+     * This is needed for Sub::Quote's CLONE method which needs to clean up
+     * expired CODE refs even though they might still be in the stash.
+     * <p>
+     * This method checks reachability and clears weak refs to CODE objects
+     * that are no longer reachable from any Perl variable (lexical, global, or stash).
+     */
+    public static void clearUnreachableCodeWeakRefs() {
+        java.util.List<RuntimeBase> referents = snapshotWeakRefReferents();
+        for (RuntimeBase referent : referents) {
+            if (!(referent instanceof RuntimeCode)) continue;
+            
+            // Check if the CODE ref is still reachable from any root
+            if (!ReachabilityWalker.isReachableFromRoots(referent) 
+                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)) {
+                // CODE ref is not reachable - clear weak refs to it
+                clearWeakRefsTo(referent, true);
+            }
+        }
     }
 
     public static void clearAllBlessedWeakRefs() {

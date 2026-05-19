@@ -2830,7 +2830,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // First try per-call-site bits from callerBitsStack (accurate per-statement)
                 // frame is 1-based here (after skip increment), callerBitsStack is 0-based
                 String warningBits = WarningBitsRegistry.getCallerBitsAtFrame(frame - 1);
-                if (warningBits == null) {
+                if (warningBits == null || warningBits.isEmpty()) {
                     // Fall back to per-class bits
                     if (frame < javaClassNames.size()) {
                         String className = javaClassNames.get(frame);
@@ -2839,7 +2839,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                     }
                 }
-                if (warningBits != null) {
+                // Fall back to currentBitsStack (pushed by EmitCompilerFlag at pragma execution)
+                // This handles main script context where callerBitsStack is empty
+                if ((warningBits == null || warningBits.isEmpty()) && frame == 1) {
+                    String currentBits = WarningBitsRegistry.getCurrent();
+                    if (currentBits != null && !currentBits.isEmpty()) {
+                        warningBits = currentBits;
+                    }
+                }
+                // Final fallback: access symbol table directly (same as ScalarSpecialVariable.WARNING_BITS)
+                if ((warningBits == null || warningBits.isEmpty()) && frame == 1) {
+                    try {
+                        org.perlonjava.frontend.semantic.ScopedSymbolTable symbolTable =
+                            org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope();
+                        if (symbolTable != null) {
+                            warningBits = symbolTable.getWarningBitsString();
+                        }
+                    } catch (Exception e) {
+                        // Ignore and continue with undef
+                    }
+                }
+                if (warningBits != null && !warningBits.isEmpty()) {
                     res.add(new RuntimeScalar(warningBits));
                 } else {
                     res.add(RuntimeScalarCache.scalarUndef);
