@@ -164,6 +164,16 @@ public class ByteCodeSourceMapper {
         var sourceLoc = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
         int lineNumber = sourceLoc.lineNumber();
         String sourceFileName = sourceLoc.fileName();
+        
+        // Debug logging for #line directive investigation
+        boolean debug = System.getenv("DEBUG_LINE_DIRECTIVE") != null;
+        if (debug) {
+            System.err.println("DEBUG_LINE_DIRECTIVE: saveSourceLocation tokenIndex=" + tokenIndex +
+                " lineNumber=" + lineNumber +
+                " sourceFileName=" + sourceFileName +
+                " originalFileName=" + ctx.compilerOptions.fileName);
+        }
+        
         int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
         
         // FIX: If current sourceFile equals original file (no #line active in emit context),

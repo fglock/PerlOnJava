@@ -320,16 +320,19 @@ The `#line` directive is not being honored by `caller()` in eval context for mod
 **Root Cause:**
 Sub::Quote generates code with `#line` directives like `#line 41 "welp.pl"` in the `_context` function. When this code is eval'd, the `#line` directive should affect how `caller()` reports the file and line. However, the infrastructure exists (`ErrorMessageUtil.getSourceLocationAccurate`, Whitespace processing) but the information is not being correctly propagated to `caller()` at runtime.
 
-### Investigation Findings
+### Investigation Findings (2026-05-19)
 
-**Existing Infrastructure:**
-1. `Whitespace.java` - Processes `#line` directives during parsing and calls `setFileName()`/`setLineNumber()` on errorUtil
-2. `ErrorMessageUtil.getSourceLocationAccurate()` - Walks through tokens to find `#line` directives and returns adjusted location
-3. `BytecodeInterpreter.getCallSiteInfo()` - Uses `getSourceLocationAccurate()` to get filename/line for caller()
-4. `ByteCodeSourceMapper.java` - Maps bytecode PC to source location with `#line` adjustment
+**Debug logging revealed:**
+1. JVM path is being used (callerWithSub is called, not BytecodeInterpreter.getCallSiteInfo)
+2. For eval'd code, sourceFileName equals originalFileName (both are `(eval N)`)
+3. No #line-adjusted filenames (like "welp.pl") appear in ByteCodeSourceMapper.saveSourceLocation() debug output
+4. This means the #line directive is not being applied during compilation of eval'd code
 
-**Gap Identified:**
-The `#line` directive is processed during parsing, but the token index mapping (`pcToTokenIndex`) might not include the `#line` directive tokens, or the token index being passed to `getSourceLocationAccurate()` is wrong. The `#line` directive is at the beginning of the eval'd code, but the token index being passed is for the actual code being executed (the sub body), which might be after the `#line` directive.
+**Root cause:**
+Sub::Quote generates code with `#line N "filename"` directives. When this code is eval'd and compiled to JVM bytecode, the #line directive information is not being preserved or applied correctly. The getSourceLocationAccurate() method is being called, but it's not finding or applying the #line directive for eval'd code.
+
+**Gap identified:**
+The #line directive processing works for regular source files but not for eval'd code. The eval compilation path may not be passing the #line directive information to ByteCodeSourceMapper, or the token list for eval'd code doesn't include the #line directive tokens.
 
 ### Next Steps Plan
 

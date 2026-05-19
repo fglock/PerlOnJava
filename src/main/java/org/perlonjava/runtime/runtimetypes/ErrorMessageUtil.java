@@ -380,6 +380,19 @@ public class ErrorMessageUtil {
     }
 
     public SourceLocation getSourceLocationAccurate(int index) {
+        // Debug logging for #line directive investigation
+        boolean debug = System.getenv("DEBUG_LINE_DIRECTIVE") != null;
+        if (debug && index < 10 && originalFileName.startsWith("(eval")) {
+            System.err.println("DEBUG_LINE_DIRECTIVE: getSourceLocationAccurate called index=" + index +
+                " originalFileName=" + originalFileName +
+                " tokens.size()=" + tokens.size());
+            // Print first 20 tokens to see what's in the token list
+            for (int k = 0; k < Math.min(20, tokens.size()); k++) {
+                LexerToken tok = tokens.get(k);
+                System.err.println("  Token " + k + ": type=" + tok.type + " text=" + tok.text);
+            }
+        }
+        
         String currentFileName = originalFileName;
         int lineNumber = 1;
 
@@ -430,12 +443,20 @@ public class ErrorMessageUtil {
                             if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
                                 String directiveFile = filenameBuilder.toString();
                                 if (!directiveFile.isEmpty()) {
+                                    if (debug) {
+                                        System.err.println("DEBUG_LINE_DIRECTIVE: getSourceLocationAccurate found #line directive: " +
+                                            "line=" + directiveLine + " file=" + directiveFile);
+                                    }
                                     currentFileName = directiveFile;
                                 }
                             }
                         } else if (j < tokens.size() && tokens.get(j).type == LexerTokenType.IDENTIFIER) {
                             // Unquoted filename: #line N filename
                             // Perl allows unquoted bareword filenames in #line directives
+                            if (debug) {
+                                System.err.println("DEBUG_LINE_DIRECTIVE: getSourceLocationAccurate found #line directive: " +
+                                    "line=" + directiveLine + " file=" + tokens.get(j).text);
+                            }
                             currentFileName = tokens.get(j).text;
                         }
 
