@@ -299,6 +299,11 @@ sub run_single_test {
     elsif ($test_file =~ m{^t/} && !-f 't/TestLib.pm') {
         $local_test_dir = 't';
     }
+    # For tests in perl5/t/ directory, change to perl5/t/
+    # so they can find ./test.pl via require
+    elsif ($test_file =~ m{^perl5/t/}) {
+        $local_test_dir = 'perl5/t';
+    }
     # For CPAN module tests with absolute paths (e.g., /path/to/Module-1.23/t/test.t)
     # chdir to the module root so require "./t/util.pl" works
     elsif ($test_file =~ m{^(/.*)/t/[^/]+\.t$}) {
