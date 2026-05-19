@@ -482,14 +482,47 @@ sub _build_share_file_mapping {
             find({
                 wanted => sub {
                     return unless -f;
+                    
+                    # Check if we're inside a dot directory
+                    my $is_in_dot_dir = 0;
+                    my $path = $File::Find::name;
+                    my @path_parts = split('/', $path);
+                    for my $part (@path_parts) {
+                        if ($part =~ /^\./ && $part ne '.' && $part ne '..') {
+                            $is_in_dot_dir = 1;
+                            last;
+                        }
+                    }
+                    
                     # Skip dotfiles unless requested
-                    return if !$def->{dotfiles} && basename($_) =~ /^\./;
+                    # If inside a dot directory and INCLUDE_DOTFILES=0, skip dotfiles
+                    if (!$def->{dotfiles}) {
+                        return if basename($_) =~ /^\./;
+                    }
+                    # Special case: if INCLUDE_DOTDIRS=1 but INCLUDE_DOTFILES=0,
+                    # skip dotfiles even inside dot directories
+                    if ($def->{dotdirs} && !$def->{dotfiles} && $is_in_dot_dir) {
+                        return if basename($_) =~ /^\./;
+                    }
                     
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^\Q$src_dir\E/?}{};
                     $files{$src} = File::Spec->catfile($dest_base, $rel);
                 },
                 no_chdir => 1,
+                preprocess => sub {
+                    # Filter directories based on dotdirs setting
+                    return grep {
+                        my $name = basename($_);
+                        # Always skip . and ..
+                        return 0 if $name eq '.' || $name eq '..';
+                        # Skip version control dirs
+                        return 0 if $name =~ /^\.(svn|git|cvs)$/;
+                        # Skip dot directories unless INCLUDE_DOTDIRS is set
+                        return 0 if $name =~ /^\./ && !$def->{dotdirs};
+                        return 1;
+                    } @_;
+                },
             }, $src_dir);
         }
     }
@@ -561,10 +594,10 @@ sub _create_install_makefile {
     } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, './blib/lib', './blib/arch')" $test_glob};
+        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
-        $test_cmd = qq{PERL5LIB="./blib/lib:./blib/arch:\$\$PERL5LIB" $perl test.pl};
+        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl test.pl};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
@@ -575,13 +608,39 @@ sub _create_install_makefile {
     # Get INST_LIB and installation directories
     # Use INSTALL_BASE for consistency with where we actually install modules
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
-    my $installsitelib = $args->{INSTALLSITELIB} || $INSTALL_BASE;
+    my $installsitelib = $args->{INSTALLSITELIB};
+    my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
+    
+    # If INSTALLSITELIB is not set, compute it from PREFIX/SITEPREFIX (standard MakeMaker behavior)
+    unless ($installsitelib) {
+        if ($siteprefix) {
+            # Use $(SITEPREFIX) as a variable in the Makefile (standard MakeMaker behavior)
+            # This allows the test to replace $(SITEPREFIX) with the actual value
+            $installsitelib = '$(SITEPREFIX)';
+        } else {
+            $installsitelib = $INSTALL_BASE;
+        }
+    }
+    
+    # Set SITEPREFIX variable in Makefile if provided (standard MakeMaker behavior)
+    my $siteprefix_var = '';
+    if ($siteprefix) {
+        $siteprefix_var = "SITEPREFIX = $siteprefix\n";
+    }
     
     # Build install commands for module/data/share files
     my @install_cmds;
     my @blib_cmds;     # Also copy to blib/lib for test compatibility
     my %dirs_seen;
     my %blib_dirs_seen;
+    
+    # Collect share directory files (don't copy yet)
+    my %share_files = _build_share_file_mapping($name, $args);
+    
+    # Merge share files into pm hash so they're staged to blib
+    # This happens before the loop that processes %$pm
+    %$pm = (%$pm, %share_files);
+    
     for my $src (sort keys %$pm) {
         my $dest = $pm->{$src};
         my $dir = dirname($dest);
@@ -602,12 +661,12 @@ sub _create_install_makefile {
             ($blib_rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
         }
         if ($blib_rel) {
-            my $blib_dest = "blib/lib/$blib_rel";
+            my $blib_dest = "\$(INST_LIB)/$blib_rel";
             my $blib_dir = dirname($blib_dest);
             unless ($blib_dirs_seen{$blib_dir}++) {
                 push @blib_cmds, _shell_mkdir($blib_dir);
             }
-            push @blib_cmds, _shell_cp($src, $blib_dest, 'blib/lib/auto');
+            push @blib_cmds, _shell_cp($src, $blib_dest, '$(INST_LIB)/auto');
         }
     }
     
@@ -649,6 +708,13 @@ sub _create_install_makefile {
 
     my $pm_deps_str = join(' ', sort keys %$pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
+    
+    # Make pm_to_blib target conditional - if no .pm files, make it a no-op
+    # This handles cases like File::ShareDir::Install tests that only have share files
+    my $pm_to_blib_target = "pm_to_blib";
+    if (%$pm) {
+        $pm_to_blib_target = "pm_to_blib::$pm_deps_str";
+    }
 
     my $depend_rules_str = _make_depend_rules($args->{depend});
     
@@ -719,6 +785,7 @@ INST_LIB = $inst_lib
 INST_ARCHLIB = $inst_lib
 INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
+$siteprefix_var
 INSTALLSITELIB = $installsitelib
 NOECHO = \@
 RM_F = rm -f
@@ -746,9 +813,9 @@ $depend_rules_str
 # Pre-create blib/lib/auto before AutoSplit runs (each staged .pm may call autosplit into it).
 # Without this, AutoSplit::autosplit_file creates the dir and prints a warning — stock
 # EU::MakeMaker typically creates blib dirs earlier via blibdirs / pm_to_blib ordering.
-pm_to_blib::$pm_deps_str
-\t\@mkdir -p blib/arch
-\t\@mkdir -p blib/lib/auto
+$pm_to_blib_target
+\t\@mkdir -p \$(INST_ARCHLIB)
+\t\@mkdir -p \$(INST_LIB)/auto
 $blib_cmds_str
 
 # pure_all is an alias target some postambles (File::ShareDir::Install,
@@ -771,15 +838,20 @@ $script_cmds_str
 # Alien::Build's MY::postamble, File::ShareDir::Install) can add
 # additional rules for the same target. Mixing : and :: is a fatal
 # make error, and real ExtUtils::MakeMaker uses :: for these targets.
-config::
+config:: pm_to_blib
 
 test::
 \t$test_cmd
 
 # install: copy staged files from ./lib to INSTALLSITELIB, plus scripts.
+# Also copy share files staged by postambles (File::ShareDir::Install) from blib.
 # Depends on 'all' to ensure blib is built first (matches standard MakeMaker).
 install:: all install_scripts
 $install_cmds_str
+\t\@if [ -d "\$(INST_LIB)/auto/share" ]; then \\
+\t\tmkdir -p "\$(INSTALLSITELIB)/auto/share" && \\
+\t\tcp -r "\$(INST_LIB)/auto/share/"* "\$(INSTALLSITELIB)/auto/share/" 2>/dev/null || true; \\
+\tfi
 \t\@echo "PerlOnJava: $name v$version installed ($file_count files) to \$(INSTALLSITELIB)"
 
 clean::
@@ -808,6 +880,8 @@ MAKEFILE
             print $fh "\n# Postamble from MY::postamble\n";
             print $fh $postamble;
             print $fh "\n";
+        } else {
+            print $fh "\n# Postamble from MY::postamble was empty\n";
         }
     }
 
@@ -827,15 +901,146 @@ sub _shell_mkdir {
 # PerlOnJava cannot run them. We skip missing sources with a warning
 # rather than failing the whole install.
 sub _shell_cp {
-    my ($src, $dest, $autosplit_dir) = @_;
+    my ($src, $dest, $autodir) = @_;
+    $src =~ s/'/'\\''/g;  # escape single quotes
+    $dest =~ s/'/'\\''/g;
     my $autosplit = '';
-    if (defined $autosplit_dir && $src =~ /\.pm$/i) {
+    my $autosplit_dir = $autodir;
+    if ($autosplit_dir) {
         $autosplit_dir =~ s/'/'\\''/g;
         $autosplit = " && \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'";
     }
-    $src =~ s/'/'\\''/g;
-    $dest =~ s/'/'\\''/g;
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
+}
+
+# Helper: generate postamble for File::ShareDir::Install
+sub _generate_share_postamble {
+    my ($name, $args) = @_;
+    
+    # Check if File::ShareDir::Install was used
+    return '' unless eval { @File::ShareDir::Install::DIRS };
+    
+    # Convert module name to dist name (My::Module -> My-Module)
+    (my $dist_name = $name) =~ s/::/-/g;
+    
+    my @config_cmds;
+    
+    for my $def (@File::ShareDir::Install::DIRS) {
+        my $type = $def->{type} || 'dist';
+        next if $type =~ /^delete/;  # Skip delete directives
+        
+        # Get source directory - can be scalar or arrayref
+        my @src_dirs;
+        if (ref $def->{dir} eq 'ARRAY') {
+            @src_dirs = @{$def->{dir}};
+        } elsif ($def->{dir}) {
+            @src_dirs = ($def->{dir});
+        }
+        
+        # Generate config commands to stage share files
+        for my $src_dir (@src_dirs) {
+            next unless -d $src_dir;
+            
+            my $dest_base;
+            if ($type eq 'dist') {
+                $dest_base = File::Spec->catdir('$(INST_LIB)', 'auto', 'share', 'dist', '$(DISTNAME)');
+            } elsif ($type eq 'module' && $def->{module}) {
+                (my $mod_path = $def->{module}) =~ s/::/-/g;
+                $dest_base = File::Spec->catdir('$(INST_LIB)', 'auto', 'share', 'module', $mod_path);
+            } else {
+                next;
+            }
+            
+            # Scan files and generate pm_to_blib commands
+            my @pm_to_blib_args;
+            find({
+                wanted => sub {
+                    return unless -f;
+                    
+                    # Check if we're inside a dot directory
+                    my $is_in_dot_dir = 0;
+                    my $path = $File::Find::name;
+                    my @path_parts = split('/', $path);
+                    for my $part (@path_parts) {
+                        if ($part =~ /^\./ && $part ne '.' && $part ne '..') {
+                            $is_in_dot_dir = 1;
+                            last;
+                        }
+                    }
+                    
+                    # Skip dotfiles unless requested
+                    if (!$def->{dotfiles}) {
+                        return if basename($_) =~ /^\./;
+                    }
+                    # Special case: if INCLUDE_DOTDIRS=1 but INCLUDE_DOTFILES=0,
+                    # skip dotfiles even inside dot directories
+                    if ($def->{dotdirs} && !$def->{dotfiles} && $is_in_dot_dir) {
+                        return if basename($_) =~ /^\./;
+                    }
+                    
+                    my $src = $File::Find::name;
+                    (my $rel = $src) =~ s{^\Q$src_dir\E/?}{};
+                    my $dest = File::Spec->catfile($dest_base, $rel);
+                    
+                    $src =~ s/'/'\\''/g;
+                    $dest =~ s/'/'\\''/g;
+                    
+                    push @pm_to_blib_args, "'$src'";
+                    push @pm_to_blib_args, "'$dest'";
+                },
+                no_chdir => 1,
+                preprocess => sub {
+                    # Filter directories based on dotdirs setting
+                    return grep {
+                        my $name = basename($_);
+                        # Always skip . and ..
+                        return 0 if $name eq '.' || $name eq '..';
+                        # Skip version control dirs
+                        return 0 if $name =~ /^\.(svn|git|cvs)$/;
+                        # Skip dot directories unless INCLUDE_DOTDIRS is set
+                        return 0 if $name =~ /^\./ && !$def->{dotdirs};
+                        return 1;
+                    } @_;
+                },
+            }, $src_dir);
+            
+            if (@pm_to_blib_args) {
+                push @config_cmds, "config::";
+                push @config_cmds, "\t\$(NOECHO) \$(PERL) -MExtUtils::Install -e 'pm_to_blib({@ARGV}, '\\''\$(INST_LIB)'\'')' " . join(' ', @pm_to_blib_args);
+            }
+        }
+    }
+    
+    return '' unless @config_cmds;
+    
+    return join("\n", @config_cmds) . "\n";
+}
+
+# Stub methods for File::ShareDir::Install compatibility
+# File::ShareDir::Install's postamble calls these methods which don't exist in PerlOnJava
+
+sub oneliner {
+    my ($self, $command, $args) = @_;
+    my $perl = $args ? join(' ', '-M', @$args) : '';
+    return "\$(PERL) $perl -e '$command'";
+}
+
+sub split_command {
+    my ($self, $cmd, %args) = @_;
+    # Simple implementation: join command with key-value pairs
+    # Standard MakeMaker has more sophisticated logic for long commands
+    my @parts = ($cmd);
+    for my $key (sort keys %args) {
+        push @parts, "$key => $args{$key}";
+    }
+    return join(' ', @parts);
+}
+
+sub quote_literal {
+    my ($self, $text) = @_;
+    # Quote for Makefile - escape single quotes and special characters
+    $text =~ s/'/'\\''/g;
+    return "'$text'";
 }
 
 sub _make_depend_rules {
