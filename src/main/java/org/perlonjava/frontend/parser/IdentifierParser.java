@@ -403,11 +403,18 @@ public class IdentifierParser {
                     }
                     return prefix;
                 }
+                if (isFirstToken && token.type == LexerTokenType.NUMBER) {
+                    // Numeric variables like $0, $1, and @0 are never package-qualified.
+                    // In strings, "$0::Foo" is $0 followed by literal "::Foo".
+                    variableName.append(token.text);
+                    parser.tokenIndex++;
+                    return variableName.toString();
+                }
                 if (token.text.equals("$") && (nextToken.text.equals("$")
                         || nextToken.text.equals("{")
                         || nextToken.type == LexerTokenType.IDENTIFIER
-                        || nextToken.type == LexerTokenType.NUMBER)
-                        || nextToken.text.equals("::")) {
+                        || nextToken.type == LexerTokenType.NUMBER
+                        || nextToken.text.equals("::"))) {
                     // `@$` can't be followed by `$`, `{`, `::`, name or number
                     // `@{${...}` should fall back to block parsing
                     return null;
@@ -426,13 +433,6 @@ public class IdentifierParser {
 
                     return variableName.toString();
                 }
-                if (isFirstToken && token.type == LexerTokenType.NUMBER) {
-                    // Finish because $1 can't be followed by `::`
-                    variableName.append(token.text);
-                    parser.tokenIndex++;
-                    return variableName.toString();
-                }
-
                 // Handle single quote as package separator (legacy Perl syntax)
                 if (token.text.equals("'") && isSingleQuotePackageSeparator(parser, variableName)) {
                     // Perl only adds a BEGIN stash entry for this legacy syntax when the
