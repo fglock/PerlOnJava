@@ -165,6 +165,22 @@ subtest 'Multiple dollar signs and complex expressions' => sub {
     is("$${\\\"literal\"}", "literal", "String literal in braces");
 };
 
+subtest 'Numeric variables followed by package separators' => sub {
+    is("$0::Statistics::Regression", $0 . "::Statistics::Regression",
+       '$0 followed by :: keeps :: as literal string text');
+
+    "abc" =~ /(b)/;
+    is("$1::tail", "b::tail",
+       '$1 followed by :: keeps :: as literal string text');
+
+    {
+        no strict 'vars';
+        local @0 = (4, 5, 6);
+        is("@0::X", "4 5 6::X",
+           '@0 followed by :: keeps :: as literal string text');
+    }
+};
+
 subtest 'Array length operations' => sub {
     my @arr = (1, 2, 3, 4, 5);
     
@@ -360,4 +376,3 @@ EOT
 }
 
 done_testing();
-
