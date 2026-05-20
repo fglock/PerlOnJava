@@ -330,6 +330,11 @@ imports:
     target: src/main/perl/lib/Module/Load/Conditional.pm
     patch: Module-Load-Conditional.pm.patch
 
+  # IPC::Cmd - command execution helper required by ExtUtils::CBuilder
+  - source: perl5/cpan/IPC-Cmd/lib/IPC/Cmd.pm
+    target: src/main/perl/lib/IPC/Cmd.pm
+    patch: IPC-Cmd.pm.patch
+
   # Tests for distribution
   - source: perl5/cpan/Params-Check/t
     target: perl5_t/Params-Check

@@ -37,6 +37,9 @@ sub _bootstrap_prefs {
         'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
         'IO-Async.yml'               => 'PerlOnJava/CpanDistroprefs/IO-Async.yml',
         'Image-BMP.yml'              => 'PerlOnJava/CpanDistroprefs/Image-BMP.yml',
+        'ExtUtils-CBuilder.yml'      => 'PerlOnJava/CpanDistroprefs/ExtUtils-CBuilder.yml',
+        'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
+        'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

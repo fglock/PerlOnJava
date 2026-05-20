@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for ExtUtils::ParseXS.
+  PerlOnJava installs the pure-Perl tooling files but cannot run the
+  XS compilation tests. The test suite currently spins in recursive
+  regex patterns that PerlOnJava does not implement. Downstream pure-Perl
+  build systems only need the modules to be present.
+match:
+  distribution: "^LEONT/ExtUtils-ParseXS-"
+test:
+  commandline: "PERLONJAVA_SKIP"
