@@ -506,9 +506,11 @@ public class Storable extends PerlModuleBase {
             case RuntimeScalarType.REFERENCE -> {
                 // Scalar reference: clone the referenced value
                 RuntimeScalar origValue = (RuntimeScalar) scalar.value;
-                RuntimeScalar newValue = deepClone(origValue, cloned);
+                RuntimeScalar newValue = new RuntimeScalar();
                 RuntimeScalar newRef = newValue.createReference();
                 cloned.put(scalar.value, newRef);
+                RuntimeScalar clonedValue = deepClone(origValue, cloned);
+                copyScalarPayload(newValue, clonedValue);
 
                 // Preserve blessing
                 if (blessId != 0) {
@@ -548,6 +550,12 @@ public class Storable extends PerlModuleBase {
                 yield copy;
             }
         };
+    }
+
+    private static void copyScalarPayload(RuntimeScalar target, RuntimeScalar source) {
+        target.type = source.type;
+        target.value = source.value;
+        target.utf8UncheckedOctets = source.utf8UncheckedOctets;
     }
 
 }
