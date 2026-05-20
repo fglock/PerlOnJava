@@ -313,6 +313,18 @@ imports:
   - source: perl5/cpan/Params-Check/lib/Params/Check.pm
     target: src/main/perl/lib/Params/Check.pm
 
+  # From CPAN distribution
+  - source: perl5/cpan/Module-Load/lib/Module/Load.pm
+    target: src/main/perl/lib/Module/Load.pm
+
+  # From CPAN distribution
+  - source: perl5/cpan/Module-Metadata/lib/Module/Metadata.pm
+    target: src/main/perl/lib/Module/Metadata.pm
+
+  # From CPAN distribution
+  - source: perl5/cpan/Module-Load-Conditional/lib/Module/Load/Conditional.pm
+    target: src/main/perl/lib/Module/Load/Conditional.pm
+
   # Tests for distribution
   - source: perl5/cpan/Params-Check/t
     target: perl5_t/Params-Check
@@ -1062,4 +1074,3 @@ imports:
   # - source: perl5/some_directory
   #   target: target_directory
   #   type: directory
-
