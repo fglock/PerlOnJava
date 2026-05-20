@@ -120,12 +120,6 @@ public class SubUtil extends PerlModuleBase {
             }
             return new RuntimeScalar(sub).getList();
         }
-        if (code.stashInstallPackage != null
-                && code.stashInstallSub != null
-                && !code.stashInstallSub.isEmpty()) {
-            return new RuntimeScalar(code.stashInstallPackage + "::" + code.stashInstallSub)
-                    .getList();
-        }
         if (sub == null || sub.isEmpty()) {
             // Anonymous sub: real Perl returns "Package::__ANON__" where Package
             // is the compile-time package (CvSTASH).

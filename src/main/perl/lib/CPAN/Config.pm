@@ -42,6 +42,18 @@ sub _bootstrap_prefs {
         'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
         'Class-Method-Modifiers.yml' => 'PerlOnJava/CpanDistroprefs/Class-Method-Modifiers.yml',
         'Sub-Quote.yml'              => 'PerlOnJava/CpanDistroprefs/Sub-Quote.yml',
+        'IPC-Run3.yml'               => 'PerlOnJava/CpanDistroprefs/IPC-Run3.yml',
+        'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
+        'Module-Pluggable.yml'       => 'PerlOnJava/CpanDistroprefs/Module-Pluggable.yml',
+        'Path-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Path-Tiny.yml',
+        'Test2-Plugin-NoWarnings.yml' => 'PerlOnJava/CpanDistroprefs/Test2-Plugin-NoWarnings.yml',
+        'Params-ValidationCompiler.yml' => 'PerlOnJava/CpanDistroprefs/Params-ValidationCompiler.yml',
+        'Test-Deep.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Deep.yml',
+        'Test-Warnings.yml'          => 'PerlOnJava/CpanDistroprefs/Test-Warnings.yml',
+        'File-Copy-Recursive.yml'    => 'PerlOnJava/CpanDistroprefs/File-Copy-Recursive.yml',
+        'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',
+        'DateTime-Locale.yml'        => 'PerlOnJava/CpanDistroprefs/DateTime-Locale.yml',
+        'Test-File.yml'              => 'PerlOnJava/CpanDistroprefs/Test-File.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

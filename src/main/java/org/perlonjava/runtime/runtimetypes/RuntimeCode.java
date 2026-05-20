@@ -565,10 +565,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
-     * stash slot FQN for introspection ({@code Sub::Util::subname}, {@code B::CV})
-     * without mutating {@link #packageName}/{@link #subName}, which must stay
-     * anonymous for {@code caller()} and {@code next::method} unless the CV was
-     * renamed via {@code Sub::Name}/{@code Sub::Util::set_subname}.
+     * stash slot FQN for method dispatch helpers without mutating
+     * {@link #packageName}/{@link #subName}, which must stay anonymous for
+     * {@code caller()} and {@code Sub::Util::subname()} unless the CV was renamed
+     * via {@code Sub::Name}/{@code Sub::Util::set_subname}.
      */
     public String stashInstallPackage;
     public String stashInstallSub;

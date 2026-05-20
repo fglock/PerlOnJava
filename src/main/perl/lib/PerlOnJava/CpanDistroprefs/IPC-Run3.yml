@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for IPC::Run3.
+
+  IPC::Run3 installs as pure Perl, but several upstream tests exercise
+  unsupported PerlOnJava process/filehandle behavior:
+
+    - t/fork.t requires fork support
+    - t/fd_leak.t and t/IPC-Run3.t duplicate saved STDOUT handles
+
+  Keep the test output visible for signal, but allow CPAN to mark the
+  test phase successful so modules that list IPC::Run3 as a build/test
+  prerequisite can install.
+match:
+  distribution: "^RJBS/IPC-Run3-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

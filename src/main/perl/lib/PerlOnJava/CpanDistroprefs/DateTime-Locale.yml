@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for DateTime::Locale.
+
+  DateTime requires this distribution at runtime. Its upstream tests currently
+  fail through Test::File::ShareDir and taint-mode behavior, but the module
+  builds as pure Perl and is needed before DateTime's own tests can run.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^DROLSKY/DateTime-Locale-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

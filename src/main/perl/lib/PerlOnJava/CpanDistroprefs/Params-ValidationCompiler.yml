@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Params::ValidationCompiler.
+
+  DateTime-Locale and DateTime-TimeZone require this module. Its upstream test
+  suite depends on Test2::Plugin::NoWarnings, whose tests currently fail on
+  unrelated PerlOnJava Test2 behavior.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^DROLSKY/Params-ValidationCompiler-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

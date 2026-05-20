@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::File.
+
+  Test::File is only needed as part of the DateTime-Locale test prerequisite
+  chain. Its own upstream suite has PerlOnJava-specific filesystem edge
+  failures, but the module installs as pure Perl.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^BRIANDFOY/Test-File-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.ScalarUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -303,9 +304,9 @@ public final class StorableWriter {
             // dispatch handles refs (it'll emit the right SX_REF wrapper
             // and its inner). We pass the ref AS-IS so the receiver can
             // reconstruct the same shape.
+            long newTag = c.peekNextWriteTag();
             dispatch(c, rsv);
-            long newTag = c.lookupSeenTag(subKey);
-            if (newTag < 0) {
+            if (c.peekNextWriteTag() <= newTag) {
                 throw new StorableFormatException(
                         "Could not serialize item #" + (i + 1) + " from hook in " + className);
             }
@@ -474,7 +475,7 @@ public final class StorableWriter {
                 // Storable.xs: doubles in netorder are emitted as strings
                 // for portability. Use the standard Perl-like decimal
                 // representation.
-                writeStringBody(c, Double.toString(dv).getBytes(StandardCharsets.UTF_8), false);
+                writeStringBody(c, ScalarUtils.formatLikePerl(dv).getBytes(StandardCharsets.UTF_8), false);
                 return;
             }
             c.writeByte(Opcodes.SX_DOUBLE);
