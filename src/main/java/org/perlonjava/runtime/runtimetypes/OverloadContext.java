@@ -155,6 +155,18 @@ public class OverloadContext {
                 && fallbackValue.getBoolean();
     }
 
+    private boolean deniesAutogeneration() {
+        return hasFallbackGlob
+                && fallbackValue != null
+                && fallbackValue.getDefinedBoolean()
+                && !fallbackValue.getBoolean();
+    }
+
+    private static void throwNoMethodFound(OverloadContext ctx, String methodName) {
+        throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
+                + "argument in overloaded package " + ctx.perlClassName);
+    }
+
     /**
      * Factory method to create overload context if applicable for a given RuntimeScalar.
      * Checks if the scalar is a blessed object and has overloading enabled.
@@ -324,11 +336,8 @@ public class OverloadContext {
         // Enforce fallback=0 (explicitly deny autogeneration / native op)
         OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
         if (activeCtx != null) {
-            if (activeCtx.hasFallbackGlob && activeCtx.fallbackValue != null
-                    && activeCtx.fallbackValue.getDefinedBoolean() && !activeCtx.fallbackValue.getBoolean()) {
-                String className = activeCtx.perlClassName;
-                throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
-                        + "argument in overloaded package " + className);
+            if (activeCtx.deniesAutogeneration()) {
+                throwNoMethodFound(activeCtx, methodName);
             }
         }
         return null;
@@ -359,7 +368,13 @@ public class OverloadContext {
             }
         }
 
+        OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
+
         // Try autogeneration: try alternative operator names (e.g., "+" for "+=")
+        // unless fallback => 0 explicitly denies it.
+        if (autogenNames != null && activeCtx != null && activeCtx.deniesAutogeneration()) {
+            throwNoMethodFound(activeCtx, methodName);
+        }
         if (autogenNames != null) {
             for (String autogenName : autogenNames) {
                 if (autogenName == null) continue;
@@ -394,14 +409,10 @@ public class OverloadContext {
         // Since callers (e.g., CompareOperators) handle autogeneration by calling us again
         // with the spaceship/cmp operator, we return null here to allow that attempt.
         // Only fallback=0 should block autogeneration and die immediately.
-        OverloadContext activeCtx = (ctx1 != null) ? ctx1 : ctx2;
         if (activeCtx != null) {
             // Check if fallback is explicitly false (fallback => 0): deny autogeneration, die
-            if (activeCtx.hasFallbackGlob && activeCtx.fallbackValue != null
-                    && activeCtx.fallbackValue.getDefinedBoolean() && !activeCtx.fallbackValue.getBoolean()) {
-                String className = activeCtx.perlClassName;
-                throw new PerlCompilerException("Operation \"" + methodName + "\": no method found, "
-                        + "argument in overloaded package " + className);
+            if (activeCtx.deniesAutogeneration()) {
+                throwNoMethodFound(activeCtx, methodName);
             }
             // fallback not specified, undef, or true: allow autogeneration / native fallback
             return null;
@@ -427,7 +438,7 @@ public class OverloadContext {
      */
     public RuntimeScalar tryOverloadFallback(RuntimeScalar runtimeScalar, String... fallbackMethods) {
         // Check if autogeneration is explicitly denied (fallback => 0)
-        if (hasFallbackGlob && fallbackValue != null && fallbackValue.getDefinedBoolean() && !fallbackValue.getBoolean()) {
+        if (deniesAutogeneration()) {
             return null;
         }
 

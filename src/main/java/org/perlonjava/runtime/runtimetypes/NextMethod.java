@@ -9,6 +9,8 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class NextMethod {
     private static final boolean DEBUG_NEXT_METHOD = Boolean.getBoolean("debug.next.method");
 
+    private record CallerMethod(String callerPackage, String methodName) {}
+
     /**
      * Package for SUPER / next::method resolution: named-glob installs ({@code *Pkg::m = sub {...}})
      * record {@link RuntimeCode#stashInstallPackage}; anonymous bodies may still have the
@@ -22,6 +24,43 @@ public class NextMethod {
             return code.stashInstallPackage;
         }
         return code.packageName;
+    }
+
+    private static CallerMethod resolveCallerMethodFromStack() {
+        for (int level = 0; level <= 5; level++) {
+            try {
+                RuntimeList levelArgs = new RuntimeScalar(level).getList();
+                RuntimeList callerInfo = RuntimeCode.caller(levelArgs, RuntimeContextType.LIST);
+
+                if (callerInfo.elements.size() >= 4) {
+                    String pkg = callerInfo.elements.get(0).toString();
+                    String filename = callerInfo.elements.get(1).toString();
+                    String subroutineName = callerInfo.elements.get(3).toString();
+
+                    if (!filename.contains(".java") && !pkg.isEmpty()
+                            && !subroutineName.isEmpty() && !subroutineName.equals("(eval)")
+                            && !subroutineName.endsWith("::__ANON__")) {
+                        String methodName;
+                        String callerPackage;
+                        int lastDoubleColon = subroutineName.lastIndexOf("::");
+                        if (lastDoubleColon >= 0) {
+                            methodName = subroutineName.substring(lastDoubleColon + 2);
+                            callerPackage = subroutineName.substring(0, lastDoubleColon);
+                        } else {
+                            methodName = subroutineName;
+                            callerPackage = pkg;
+                        }
+
+                        if (!methodName.isEmpty() && !methodName.equals("(eval)")) {
+                            return new CallerMethod(callerPackage, methodName);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Continue trying other levels.
+            }
+        }
+        return null;
     }
 
     /**
@@ -261,65 +300,28 @@ public class NextMethod {
             System.out.println("DEBUG: This should not be used in normal operation");
         }
 
-        // Original implementation as fallback
         if (args.size() == 0) {
             throw new PerlCompilerException("Can't call next::method on an empty argument list");
         }
 
-        // Try to get caller information from stack trace (original implementation)
-        // This is kept as a fallback but should rarely be used
-        String callerPackage = null;
-        String methodName = null;
-
-        // IMPROVED APPROACH: Use a more systematic way to find caller info
-        for (int level = 0; level <= 5; level++) {
-            try {
-                RuntimeList levelArgs = new RuntimeScalar(level).getList();
-                RuntimeList callerInfo = RuntimeCode.caller(levelArgs, RuntimeContextType.LIST);
-
-                if (callerInfo.elements.size() >= 4) {
-                    String pkg = callerInfo.elements.get(0).toString();
-                    String filename = callerInfo.elements.get(1).toString();
-                    String subroutineName = callerInfo.elements.get(3).toString();
-
-                    // Look for the actual Perl method call (not internal Java calls)
-                    if (!filename.contains(".java") && !pkg.isEmpty() &&
-                            !subroutineName.isEmpty() && !subroutineName.equals("(eval)") &&
-                            !subroutineName.endsWith("::__ANON__")) {
-
-                        // Extract method name from subroutine name
-                        if (subroutineName.contains("::")) {
-                            int lastDoubleColon = subroutineName.lastIndexOf("::");
-                            methodName = subroutineName.substring(lastDoubleColon + 2);
-                            callerPackage = subroutineName.substring(0, lastDoubleColon);
-                        } else {
-                            methodName = subroutineName;
-                            callerPackage = pkg;
-                        }
-
-                        // Make sure this is a reasonable method name
-                        if (!methodName.isEmpty() && !methodName.equals("(eval)")) {
-                            break;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                // Continue trying other levels
-            }
-        }
-
-        if (callerPackage == null || methodName == null) {
+        CallerMethod caller = resolveCallerMethodFromStack();
+        if (caller == null) {
             throw new PerlCompilerException("Can't resolve method name for next::method");
         }
 
-        return findAndCallNextMethod(args, callerPackage, methodName, ctx);
+        return findAndCallNextMethod(args, caller.callerPackage(), caller.methodName(), ctx);
     }
 
     public static RuntimeList nextCan(RuntimeArray args, int ctx) {
         try {
-            RuntimeScalar firstArg = args.get(0);
-            String searchClass = getSearchClass(firstArg);
-            RuntimeScalar nextMethod = findNextMethod(args, "unknown", "unknown", searchClass);
+            if (args.size() == 0) {
+                return scalarUndef.getList();
+            }
+            CallerMethod caller = resolveCallerMethodFromStack();
+            if (caller == null) {
+                return scalarUndef.getList();
+            }
+            RuntimeScalar nextMethod = findNextMethod(args, caller.callerPackage(), caller.methodName());
             return nextMethod != null ? nextMethod.getList() : scalarUndef.getList();
         } catch (Exception e) {
             if (DEBUG_NEXT_METHOD) {
