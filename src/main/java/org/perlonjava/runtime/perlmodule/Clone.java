@@ -132,9 +132,11 @@ public class Clone extends PerlModuleBase {
             }
             case RuntimeScalarType.REFERENCE -> {
                 RuntimeScalar origValue = (RuntimeScalar) scalar.value;
-                RuntimeScalar newValue = deepClone(origValue, cloned, nextDepth);
+                RuntimeScalar newValue = new RuntimeScalar();
                 RuntimeScalar newRef = newValue.createReference();
                 cloned.put(scalar.value, newRef);
+                RuntimeScalar clonedValue = deepClone(origValue, cloned, nextDepth);
+                copyScalarPayload(newValue, clonedValue);
 
                 if (blessId != 0) {
                     String className = NameNormalizer.getBlessStr(blessId);
@@ -170,5 +172,11 @@ public class Clone extends PerlModuleBase {
                 yield copy;
             }
         };
+    }
+
+    private static void copyScalarPayload(RuntimeScalar target, RuntimeScalar source) {
+        target.type = source.type;
+        target.value = source.value;
+        target.utf8UncheckedOctets = source.utf8UncheckedOctets;
     }
 }
