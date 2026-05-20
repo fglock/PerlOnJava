@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.*;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarBoolean;
 
 /**
  * Implementation of Perl's unlink operator for PerlOnJava
@@ -43,13 +42,7 @@ public class UnlinkOperator {
             }
         }
 
-        // In scalar context, return true if all files were deleted
-        // In list context, return the count of successfully deleted files
-        if (ctx == RuntimeContextType.SCALAR) {
-            return getScalarBoolean(successCount == fileList.size());
-        } else {
-            return new RuntimeScalar(successCount);
-        }
+        return new RuntimeScalar(successCount);
     }
 
     /**
@@ -59,6 +52,11 @@ public class UnlinkOperator {
         try {
             Path path = RuntimeIO.resolvePath(fileName, "unlink");
             if (path == null) {
+                return false;
+            }
+
+            if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+                getGlobalVariable("main::!").set("Is a directory");
                 return false;
             }
 

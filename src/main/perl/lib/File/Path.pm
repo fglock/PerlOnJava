@@ -92,10 +92,10 @@ sub _remove_tree_perl {
     for my $path (@paths) {
         next unless defined $path && length $path;
 
-        if (-d $path) {
+        if (-d $path && !-l $path) {
             # Simple recursive removal
             $count += _remove_dir_recursive($path, $verbose, $opts->{safe});
-        } elsif (-f $path) {
+        } elsif (-f $path || -l $path) {
             if (unlink($path)) {
                 $count++;
                 print "unlink $path\n" if $verbose;
@@ -120,9 +120,11 @@ sub _remove_dir_recursive {
             if (defined $mode) {
                 my $current_mode = $mode & 07777;
                 my $wanted = $current_mode | 0700;
-                if ($wanted != $current_mode && chmod($wanted, $dir)) {
+                if (chmod($wanted, $dir)) {
                     $restore_mode = $current_mode;
                 }
+            } else {
+                chmod(0700, $dir);
             }
         }
         opendir($dh, $dir) or croak "opendir $dir: $!";
@@ -133,7 +135,7 @@ sub _remove_dir_recursive {
 
     for my $entry (@entries) {
         my $path = "$dir/$entry";
-        if (-d $path) {
+        if (-d $path && !-l $path) {
             $count += _remove_dir_recursive($path, $verbose, $safe);
         } else {
             if (unlink($path)) {
@@ -143,9 +145,24 @@ sub _remove_dir_recursive {
         }
     }
 
-    chmod($restore_mode, $dir) if defined $restore_mode;
+    my $removed = rmdir($dir);
+    if (!$removed && !$safe) {
+        my $retry_restore_mode;
+        my $mode = (lstat($dir))[2];
+        if (defined $mode) {
+            my $current_mode = $mode & 07777;
+            my $wanted = $current_mode | 0700;
+            $retry_restore_mode = $current_mode if chmod($wanted, $dir);
+        } else {
+            chmod(0700, $dir);
+        }
+        $removed = rmdir($dir);
+        chmod($retry_restore_mode, $dir) if defined $retry_restore_mode && !$removed;
+    }
 
-    if (rmdir($dir)) {
+    chmod($restore_mode, $dir) if defined $restore_mode && !$removed;
+
+    if ($removed) {
         $count++;
         print "rmdir $dir\n" if $verbose;
     }

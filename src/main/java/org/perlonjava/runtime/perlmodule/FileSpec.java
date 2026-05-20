@@ -87,32 +87,38 @@ public class FileSpec extends PerlModuleBase {
             return new RuntimeScalar("").getList();
         }
         
-        // Implement Perl 5's File::Spec::Unix::canonpath logic:
-        // 1. Collapse multiple slashes into one
-        // 2. Collapse /./  and also /. at end of string
-        // 3. Remove leading ./  (unless path is exactly "./")
-        // 4. Remove trailing /  (unless path is exactly "/")
-        String sep = File.separator;
-        String quotedSep = Pattern.quote(sep);
-        String replSep = Matcher.quoteReplacement(sep);
-        
-        // Collapse multiple separators into one
-        String canonPath = path.replaceAll("[/\\\\]+", replSep);
-        
-        // Collapse /./ and /. at end: (?:/\.)+(?:/|$) -> /
-        // This handles both /./bar -> /bar and foo/. -> foo
-        canonPath = canonPath.replaceAll("(?:" + quotedSep + "\\.)+(?=" + quotedSep + "|$)", "");
-        
-        // Remove leading ./ unless the path is exactly "./" or "."
-        if (!canonPath.equals("." + sep) && !canonPath.equals(".")) {
-            while (canonPath.startsWith("." + sep)) {
-                canonPath = canonPath.substring(1 + sep.length());
+        String canonPath;
+        if (SystemUtils.osIsWindows()) {
+            String sep = File.separator;
+            String quotedSep = Pattern.quote(sep);
+            String replSep = Matcher.quoteReplacement(sep);
+
+            canonPath = path.replaceAll("[/\\\\]+", replSep);
+            canonPath = canonPath.replaceAll("(?:" + quotedSep + "\\.)+(?:"
+                    + quotedSep + "|$)", replSep);
+
+            if (!canonPath.equals("." + sep) && !canonPath.equals(".")) {
+                while (canonPath.startsWith("." + sep)) {
+                    canonPath = canonPath.substring(1 + sep.length());
+                }
             }
-        }
-        
-        // Remove trailing / unless the path is exactly "/"
-        if (!canonPath.equals(sep) && canonPath.endsWith(sep)) {
-            canonPath = canonPath.substring(0, canonPath.length() - sep.length());
+
+            if (!canonPath.equals(sep) && canonPath.endsWith(sep)) {
+                canonPath = canonPath.substring(0, canonPath.length() - sep.length());
+            }
+        } else {
+            // Match File::Spec::Unix::canonpath. Backslash is a literal path
+            // character on Unix, not a directory separator.
+            canonPath = path.replaceAll("/{2,}", "/");
+            canonPath = canonPath.replaceAll("(?:/\\.)+(?:/|$)", "/");
+            if (!canonPath.equals("./")) {
+                canonPath = canonPath.replaceFirst("^(?:\\./)+", "");
+            }
+            canonPath = canonPath.replaceFirst("^/(?:\\.\\./)+", "/");
+            canonPath = canonPath.replaceFirst("^/\\.\\.$", "/");
+            if (!canonPath.equals("/") && canonPath.endsWith("/")) {
+                canonPath = canonPath.substring(0, canonPath.length() - 1);
+            }
         }
         
         // If we reduced to empty string from a non-empty input, return "."

@@ -35,6 +35,7 @@ public class GlobalVariable {
     public static final Map<String, RuntimeScalar> globalCodeRefs = new GlobalCodeRefMap();
     static final Map<String, RuntimeGlob> globalIORefs = new HashMap<>();
     static final Map<String, RuntimeFormat> globalFormatRefs = new HashMap<>();
+    private static final Map<String, Integer> localizedCodeRefDepth = new HashMap<>();
 
     // Pinned code references: RuntimeScalars that were accessed at compile time
     // and should survive stash deletion. This matches Perl's behavior where
@@ -999,6 +1000,30 @@ public class GlobalVariable {
         if (pinnedCodeRefs.containsKey(key)) {
             pinnedCodeRefs.put(key, codeRef);
         }
+    }
+
+    static void enterLocalizedCodeRef(String key) {
+        localizedCodeRefDepth.merge(key, 1, Integer::sum);
+    }
+
+    static void exitLocalizedCodeRef(String key) {
+        Integer depth = localizedCodeRefDepth.get(key);
+        if (depth == null) {
+            return;
+        }
+        if (depth <= 1) {
+            localizedCodeRefDepth.remove(key);
+        } else {
+            localizedCodeRefDepth.put(key, depth - 1);
+        }
+    }
+
+    public static RuntimeScalar getLocalizedCodeRefForDirectCall(String key, RuntimeScalar fallback) {
+        if (key == null || key.isEmpty() || !localizedCodeRefDepth.containsKey(key)) {
+            return fallback;
+        }
+        RuntimeScalar localized = globalCodeRefs.get(key);
+        return localized != null ? localized : fallback;
     }
 
     /**

@@ -65,10 +65,11 @@ public class UtimeOperator {
                 return changeFilehandleTimes(fileArg, accessTime, modTime);
             }
 
-            String filename = RuntimeIO.sanitizePathname("utime", fileArg.toString());
-            if (filename == null || filename.isEmpty()) {
+            Path path = RuntimeIO.resolvePath(fileArg.toString(), "utime");
+            if (path == null || path.toString().isEmpty()) {
                 return false;
             }
+            String filename = path.toString();
 
             if (IS_WINDOWS) {
                 return changeFileTimesWindows(filename, accessTime, modTime);

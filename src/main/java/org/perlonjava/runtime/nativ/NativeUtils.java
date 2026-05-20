@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -24,18 +25,17 @@ public class NativeUtils {
             return new RuntimeScalar(0);
         }
 
-        String oldFile = RuntimeIO.resolvePath(args[0].toString()).toString();
-        String newFile = RuntimeIO.resolvePath(args[1].toString()).toString();
+        String oldFile = RuntimeIO.sanitizePathname("symlink", args[0].toString());
+        Path link = RuntimeIO.resolvePath(args[1].toString(), "symlink");
 
-        if (oldFile == null || newFile == null || oldFile.isEmpty() || newFile.isEmpty()) {
+        if (oldFile == null || link == null || oldFile.isEmpty()) {
             return new RuntimeScalar(0);
         }
 
         try {
             Path target = Paths.get(oldFile);
-            Path link = Paths.get(newFile);
 
-            if (Files.exists(link)) {
+            if (Files.exists(link, LinkOption.NOFOLLOW_LINKS)) {
                 GlobalVariable.getGlobalVariable("main::!").set("File exists");
                 return new RuntimeScalar(0);
             }

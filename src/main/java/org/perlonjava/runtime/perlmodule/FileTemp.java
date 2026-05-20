@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.SystemUtils;
@@ -119,7 +120,7 @@ public class FileTemp extends PerlModuleBase {
      * Register a temporary file for cleanup
      */
     public static RuntimeList _register_temp_file(RuntimeArray args, int ctx) {
-        if (args.size() != 1) {
+        if (args.size() != 2) {
             throw new IllegalStateException("Bad number of arguments for _register_temp_file");
         }
 
@@ -233,6 +234,7 @@ public class FileTemp extends PerlModuleBase {
                 String randomPart = generateRandomString(xCount);
                 String fileName = namePrefix + randomPart + suffix;
                 Path filePath = dir.resolve(fileName);
+                Path ioFilePath = resolveForIO(filePath);
 
                 try {
                     // Create file with restrictive permissions
@@ -246,18 +248,18 @@ public class FileTemp extends PerlModuleBase {
 
                     // Try to create with POSIX permissions, fall back if not supported
                     try {
-                        Files.newByteChannel(filePath, options, attr).close();
+                        Files.newByteChannel(ioFilePath, options, attr).close();
                     } catch (UnsupportedOperationException e) {
                         // Windows doesn't support POSIX permissions
-                        Files.newByteChannel(filePath, options).close();
+                        Files.newByteChannel(ioFilePath, options).close();
                     }
 
                     // Register for cleanup
                     long pid = ProcessHandle.current().pid();
-                    TEMP_FILES.computeIfAbsent(pid, k -> new HashSet<>()).add(filePath);
+                    TEMP_FILES.computeIfAbsent(pid, k -> new HashSet<>()).add(ioFilePath);
 
                     // Return file descriptor and path
-                    int fd = openFile ? openFileDescriptor(filePath) : -1;
+                    int fd = openFile ? openFileDescriptor(ioFilePath) : -1;
                     return new RuntimeList(
                             new RuntimeScalar(fd),
                             new RuntimeScalar(filePath.toString())
@@ -327,21 +329,22 @@ public class FileTemp extends PerlModuleBase {
                 String randomPart = generateRandomString(xCount);
                 String dirName = namePrefix + randomPart;
                 Path dirPath = parentDir.resolve(dirName);
+                Path ioDirPath = resolveForIO(dirPath);
 
                 try {
                     // Create directory with restrictive permissions
                     try {
                         Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------");
                         FileAttribute<Set<PosixFilePermission>> attr = PosixFilePermissions.asFileAttribute(perms);
-                        Files.createDirectory(dirPath, attr);
+                        Files.createDirectory(ioDirPath, attr);
                     } catch (UnsupportedOperationException e) {
                         // Windows doesn't support POSIX permissions
-                        Files.createDirectory(dirPath);
+                        Files.createDirectory(ioDirPath);
                     }
 
                     // Register for cleanup
                     long pid = ProcessHandle.current().pid();
-                    TEMP_DIRS.computeIfAbsent(pid, k -> new HashSet<>()).add(dirPath);
+                    TEMP_DIRS.computeIfAbsent(pid, k -> new HashSet<>()).add(ioDirPath);
 
                     return dirPath;
 
@@ -366,6 +369,13 @@ public class FileTemp extends PerlModuleBase {
             sb.append(TEMPLATE_CHARS.charAt(RANDOM.nextInt(TEMPLATE_CHARS.length())));
         }
         return sb.toString();
+    }
+
+    private static Path resolveForIO(Path path) {
+        if (path.isAbsolute()) {
+            return path.toAbsolutePath();
+        }
+        return RuntimeIO.resolvePath(path.toString(), "File::Temp");
     }
 
     private static String getTempDir() {
