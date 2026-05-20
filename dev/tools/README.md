@@ -31,6 +31,17 @@ This directory contains utility scripts and tools for PerlOnJava development.
 ### compare_test_results.pl
 **Purpose:** Compare test results between runs to identify regressions or improvements.
 
+### jcpan_bisect_module.pl
+**Purpose:** Find the PR merge commit where a slow `./jcpan -t MODULE` target stopped passing.
+
+**Usage:**
+```bash
+perl dev/tools/jcpan_bisect_module.pl --module DBIx::Class --good 9b36f7e57 --bad master --timeout 7200
+perl dev/tools/jcpan_bisect_module.pl --module Moo --good 3fe76ed3b --bad master --timeout 3600
+```
+
+By default it creates a separate worktree under `/tmp`, runs `git bisect --first-parent`, builds each candidate with `make`, wraps each `jcpan` run in a hard timeout, and stores per-commit logs plus cached verdicts under `/tmp`. Use a first-parent integration ref such as `master` or `origin/master` as `--bad`; use `--all-commits` only when branch-internal commits are expected to build and pass tests.
+
 ### tap_test_fixer.pl
 **Purpose:** Fix TAP (Test Anything Protocol) test output formatting.
 
