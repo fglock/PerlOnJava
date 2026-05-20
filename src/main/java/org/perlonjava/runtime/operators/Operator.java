@@ -906,12 +906,13 @@ public class Operator {
      * @return RuntimeScalar with link target or undef on error
      */
     public static RuntimeScalar readlink(int ctx, RuntimeBase... args) {
-        String path = args[0].getFirst().toString();
+        String path = args.length > 0
+                ? args[0].getFirst().toString()
+                : getGlobalVariable("main::_").toString();
         try {
             Path linkPath = RuntimeIO.resolvePath(path);
 
-            // Check if file exists first
-            if (!Files.exists(linkPath)) {
+            if (linkPath == null || !Files.exists(linkPath, LinkOption.NOFOLLOW_LINKS)) {
                 // Set $! to "No such file or directory"
                 getGlobalVariable("main::!").set("No such file or directory");
                 return RuntimeScalar.undef();

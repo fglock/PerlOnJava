@@ -60,6 +60,10 @@ sub new {
     return $self;
 }
 
+package File::Temp::Dir;
+
+our @ISA = ('File::Temp');
+
 package File::Temp;
 
 # Set up overloading at package level
@@ -84,14 +88,19 @@ sub new {
     # Default arguments
     $args{UNLINK} = 1 unless exists $args{UNLINK};
 
-    # Create temp file
-    my ($fh, $filename) = tempfile(
-        $args{TEMPLATE} || undef,
+    my @temp_args = (
         DIR    => $args{DIR},
         SUFFIX => $args{SUFFIX},
         UNLINK => $args{UNLINK},
         EXLOCK => $args{EXLOCK},
         PERMS  => $args{PERMS},
+    );
+    push @temp_args, TMPDIR => $args{TMPDIR} if exists $args{TMPDIR};
+
+    # Create temp file
+    my ($fh, $filename) = tempfile(
+        defined $args{TEMPLATE} ? $args{TEMPLATE} : undef,
+        @temp_args,
     );
 
     # Create object
@@ -107,25 +116,23 @@ sub new {
 # Create temporary directory object
 sub newdir {
     my $class = shift;
-    my $template;
-    my %args;
+    my $leading_template = (scalar(@_) % 2 == 1 ? shift(@_) : undef);
+    my %args = @_;
 
-    if (@_ == 1 && !ref $_[0]) {
-        $template = shift;
-    } else {
-        %args = @_;
-        $template = delete $args{TEMPLATE};
-    }
+    $args{TEMPLATE} = $leading_template
+        if defined $leading_template && !exists $args{TEMPLATE};
 
     # Default to cleanup
     $args{CLEANUP} = 1 unless exists $args{CLEANUP};
 
-    my $dir = tempdir($template || undef, %args);
+    my @temp_args;
+    push @temp_args, delete $args{TEMPLATE} if exists $args{TEMPLATE};
+    my $dir = tempdir(@temp_args, %args);
 
     my $self = bless {
         _dirname => $dir,
         _cleanup => $args{CLEANUP},
-    }, $class;
+    }, 'File::Temp::Dir';
 
     return $self;
 }

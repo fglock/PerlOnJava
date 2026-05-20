@@ -59,20 +59,60 @@ use constant {
     GLOB_ALTDIRFUNC => 1024,
 };
 
-# bsd_glob implementation - use Perl's built-in glob for now
 sub bsd_glob {
     my $pattern = shift;
     my $flags = shift || 0;
-    
-    # For now, just use Perl's built-in glob
-    # In the future, we could implement the flags properly
-    return CORE::glob($pattern);
+
+    return unless defined $pattern;
+
+    if ($pattern eq '~' || $pattern =~ m{^~/}) {
+        my @matches = CORE::glob($pattern);
+        @matches = map { _dequote($_) } @matches;
+        return wantarray ? @matches : $matches[0];
+    }
+
+    if (! _has_glob_magic($pattern)) {
+        my $literal = _dequote($pattern);
+        return wantarray ? ($literal) : $literal;
+    }
+
+    my @matches = CORE::glob($pattern);
+    @matches = map { _dequote($_) } @matches;
+
+    if (!@matches && ($flags & GLOB_NOCHECK)) {
+        @matches = (_dequote($pattern));
+    }
+
+    return wantarray ? @matches : $matches[0];
 }
 
 # Regular glob - just use built-in
 sub glob {
     my $pattern = shift;
     return CORE::glob($pattern);
+}
+
+sub _has_glob_magic {
+    my ($pattern) = @_;
+    my $escaped = 0;
+    for my $ch (split //, $pattern) {
+        if ($escaped) {
+            $escaped = 0;
+            next;
+        }
+        if ($ch eq '\\') {
+            $escaped = 1;
+            next;
+        }
+        return 1 if $ch eq '*' || $ch eq '?' || $ch eq '[' || $ch eq '{';
+    }
+    return 0;
+}
+
+sub _dequote {
+    my ($pattern) = @_;
+    $pattern =~ s/\\(.)/$1/gs;
+    return $pattern;
 }
 
 1;
@@ -117,4 +157,3 @@ Various GLOB_* constants are exported for compatibility.
 PerlOnJava Project
 
 =cut
-

@@ -367,7 +367,37 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
             return new RuntimeList(result.scalar());
         }
-        return result;
+        return copyReadonlyListReturns(result, effectiveContext);
+    }
+
+    private static RuntimeList copyReadonlyListReturns(RuntimeList result, int effectiveContext) {
+        if (effectiveContext != RuntimeContextType.LIST) {
+            return result;
+        }
+
+        RuntimeList copy = null;
+        for (int i = 0; i < result.elements.size(); i++) {
+            RuntimeBase value = result.elements.get(i);
+            RuntimeBase replacement = value;
+
+            if (value instanceof RuntimeScalarReadOnly ro && !(value instanceof ReadOnlyAlias)) {
+                RuntimeScalar scalar = new RuntimeScalar();
+                scalar.type = ro.type;
+                scalar.value = ro.value;
+                scalar.blessId = ro.blessId;
+                replacement = scalar;
+            }
+
+            if (replacement != value && copy == null) {
+                copy = new RuntimeList();
+                copy.elements.addAll(result.elements.subList(0, i));
+            }
+            if (copy != null) {
+                copy.elements.add(replacement);
+            }
+        }
+
+        return copy != null ? copy : result;
     }
 
     /**
@@ -784,6 +814,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && code.defined();
     }
 
+    private static RuntimeScalar resolveDirectCallTarget(RuntimeScalar runtimeScalar, String subroutineName) {
+        String lookupName = subroutineName;
+        if ((lookupName == null || lookupName.isEmpty()) && runtimeScalar != null) {
+            lookupName = runtimeScalar.globalCodeRefFqn;
+        }
+        return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
+    }
+
     /**
      * Preflight for generated direct subroutine calls. Perl reports an
      * undefined direct call at the line containing the function token, but
@@ -793,7 +831,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * call-site line.
      */
     public static void throwIfDirectCallUndefined(RuntimeScalar runtimeScalar, String subroutineName) {
-        RuntimeScalar curScalar = runtimeScalar;
+        RuntimeScalar curScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
 
         while (curScalar != null) {
             if (curScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -3316,6 +3354,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
+        runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
+
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
             return apply(runtimeScalar.tiedFetch(), subroutineName, args, callContext);
@@ -3563,6 +3603,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static RuntimeList applyImpl(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase list, int callContext) {
+        runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
 
         // Handle tied scalars - fetch the underlying value first
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {

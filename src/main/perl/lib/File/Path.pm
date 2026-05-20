@@ -92,10 +92,10 @@ sub _remove_tree_perl {
     for my $path (@paths) {
         next unless defined $path && length $path;
 
-        if (-d $path) {
+        if (-d $path && !-l $path) {
             # Simple recursive removal
             $count += _remove_dir_recursive($path, $verbose, $opts->{safe});
-        } elsif (-f $path) {
+        } elsif (-f $path || -l $path) {
             if (unlink($path)) {
                 $count++;
                 print "unlink $path\n" if $verbose;
@@ -133,7 +133,7 @@ sub _remove_dir_recursive {
 
     for my $entry (@entries) {
         my $path = "$dir/$entry";
-        if (-d $path) {
+        if (-d $path && !-l $path) {
             $count += _remove_dir_recursive($path, $verbose, $safe);
         } else {
             if (unlink($path)) {
