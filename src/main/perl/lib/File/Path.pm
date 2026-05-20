@@ -94,7 +94,7 @@ sub _remove_tree_perl {
 
         if (-d $path) {
             # Simple recursive removal
-            $count += _remove_dir_recursive($path, $verbose);
+            $count += _remove_dir_recursive($path, $verbose, $opts->{safe});
         } elsif (-f $path) {
             if (unlink($path)) {
                 $count++;
@@ -109,17 +109,32 @@ sub _remove_tree_perl {
 }
 
 sub _remove_dir_recursive {
-    my ($dir, $verbose) = @_;
+    my ($dir, $verbose, $safe) = @_;
     my $count = 0;
+    my $dh;
+    my $restore_mode;
 
-    opendir(my $dh, $dir) or croak "opendir $dir: $!";
+    unless (opendir($dh, $dir)) {
+        if (!$safe) {
+            my $mode = (lstat($dir))[2];
+            if (defined $mode) {
+                my $current_mode = $mode & 07777;
+                my $wanted = $current_mode | 0700;
+                if ($wanted != $current_mode && chmod($wanted, $dir)) {
+                    $restore_mode = $current_mode;
+                }
+            }
+        }
+        opendir($dh, $dir) or croak "opendir $dir: $!";
+    }
+
     my @entries = grep { $_ ne '.' && $_ ne '..' } readdir($dh);
     closedir($dh);
 
     for my $entry (@entries) {
         my $path = "$dir/$entry";
         if (-d $path) {
-            $count += _remove_dir_recursive($path, $verbose);
+            $count += _remove_dir_recursive($path, $verbose, $safe);
         } else {
             if (unlink($path)) {
                 $count++;
@@ -127,6 +142,8 @@ sub _remove_dir_recursive {
             }
         }
     }
+
+    chmod($restore_mode, $dir) if defined $restore_mode;
 
     if (rmdir($dir)) {
         $count++;
