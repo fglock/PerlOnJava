@@ -105,10 +105,11 @@ SKIP: {
     unlink "$dir/subprobe";
 
     mkdir "$dir/sub" or die "mkdir $dir/sub: $!";
+    my $expected_target = $^O eq 'MSWin32' ? '..\\target' : '../target';
     ok(symlink('../target', "$dir/sub/link"), 'relative symlink created');
-    is(readlink("$dir/sub/link"), '../target', 'readlink preserves relative target');
+    is(readlink("$dir/sub/link"), $expected_target, 'readlink preserves relative target');
     unlink $target or die "unlink $target: $!";
-    is(readlink("$dir/sub/link"), '../target', 'readlink works for broken symlink');
+    is(readlink("$dir/sub/link"), $expected_target, 'readlink works for broken symlink');
     ok(unlink("$dir/sub/link"), 'unlink removes broken symlink');
     ok(!unlink($dir), 'unlink does not remove directories');
 }

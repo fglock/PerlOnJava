@@ -120,9 +120,11 @@ sub _remove_dir_recursive {
             if (defined $mode) {
                 my $current_mode = $mode & 07777;
                 my $wanted = $current_mode | 0700;
-                if ($wanted != $current_mode && chmod($wanted, $dir)) {
+                if (chmod($wanted, $dir)) {
                     $restore_mode = $current_mode;
                 }
+            } else {
+                chmod(0700, $dir);
             }
         }
         opendir($dh, $dir) or croak "opendir $dir: $!";
@@ -145,13 +147,17 @@ sub _remove_dir_recursive {
 
     my $removed = rmdir($dir);
     if (!$removed && !$safe) {
+        my $retry_restore_mode;
         my $mode = (lstat($dir))[2];
         if (defined $mode) {
             my $current_mode = $mode & 07777;
             my $wanted = $current_mode | 0700;
-            chmod($wanted, $dir) if $wanted != $current_mode;
+            $retry_restore_mode = $current_mode if chmod($wanted, $dir);
+        } else {
+            chmod(0700, $dir);
         }
         $removed = rmdir($dir);
+        chmod($retry_restore_mode, $dir) if defined $retry_restore_mode && !$removed;
     }
 
     chmod($restore_mode, $dir) if defined $restore_mode && !$removed;
