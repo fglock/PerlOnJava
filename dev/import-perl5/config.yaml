@@ -55,6 +55,10 @@ imports:
     target: src/main/perl/lib/Memoize
     type: directory
 
+  # NEXT - legacy pseudo-class redispatch module used by perl5 mro tests
+  - source: perl5/cpan/NEXT/lib/NEXT.pm
+    target: src/main/perl/lib/NEXT.pm
+
   # Net::Ping - Network ping module (required by CPAN::Mirrors)
   - source: perl5/dist/Net-Ping/lib/Net/Ping.pm
     target: src/main/perl/lib/Net/Ping.pm
