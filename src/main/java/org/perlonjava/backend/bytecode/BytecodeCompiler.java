@@ -6192,11 +6192,15 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
+        int elementContext = currentCallContext == RuntimeContextType.LVALUE_LIST
+                ? RuntimeContextType.LVALUE_LIST
+                : RuntimeContextType.LIST;
+
         // Fast path: single element in LIST context
         // In list context, returns a RuntimeList with one element
         // List elements should be evaluated in LIST context
         if (node.elements.size() == 1) {
-            compileNode(node.elements.get(0), -1, RuntimeContextType.LIST);
+            compileNode(node.elements.get(0), -1, elementContext);
             int elemReg = lastResultReg;
 
             int listReg = allocateRegister();
@@ -6212,7 +6216,7 @@ public class BytecodeCompiler implements Visitor {
         // Evaluate each element into a register
         int[] elementRegs = new int[node.elements.size()];
         for (int i = 0; i < node.elements.size(); i++) {
-            compileNode(node.elements.get(i), -1, RuntimeContextType.LIST);
+            compileNode(node.elements.get(i), -1, elementContext);
             elementRegs[i] = lastResultReg;
         }
 

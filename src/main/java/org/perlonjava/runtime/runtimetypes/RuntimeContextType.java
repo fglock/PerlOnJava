@@ -48,4 +48,16 @@ public class RuntimeContextType {
      * attribute before allowing assignment through its return value.
      */
     public static final int LVALUE = 4;
+
+    /**
+     * Represents list lvalue context for subroutine and method calls used as
+     * list-assignment targets. The callee sees list context for wantarray(),
+     * while the runtime verifies the :lvalue attribute and preserves returned
+     * aliases instead of copying list values.
+     */
+    public static final int LVALUE_LIST = 5;
+
+    public static boolean isListLike(int context) {
+        return context == LIST || context == LVALUE_LIST;
+    }
 }
