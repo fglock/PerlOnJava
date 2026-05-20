@@ -143,9 +143,20 @@ sub _remove_dir_recursive {
         }
     }
 
-    chmod($restore_mode, $dir) if defined $restore_mode;
+    my $removed = rmdir($dir);
+    if (!$removed && !$safe) {
+        my $mode = (lstat($dir))[2];
+        if (defined $mode) {
+            my $current_mode = $mode & 07777;
+            my $wanted = $current_mode | 0700;
+            chmod($wanted, $dir) if $wanted != $current_mode;
+        }
+        $removed = rmdir($dir);
+    }
 
-    if (rmdir($dir)) {
+    chmod($restore_mode, $dir) if defined $restore_mode && !$removed;
+
+    if ($removed) {
         $count++;
         print "rmdir $dir\n" if $verbose;
     }

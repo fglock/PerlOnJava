@@ -215,22 +215,22 @@ sub check_install {
                 my $existed_in_inc = $INC{$file_inc};
 
                 if (UNIVERSAL::isa($dir, 'CODE')) {
-                    ($fh) = $dir->($dir, $file);
+                    ($fh) = $dir->($dir, $file_inc);
 
                 } elsif (UNIVERSAL::isa($dir, 'ARRAY')) {
-                    ($fh) = $dir->[0]->($dir, $file, @{$dir}{1..$#{$dir}})
+                    ($fh) = $dir->[0]->($dir, $file_inc, @{$dir}{1..$#{$dir}})
 
                 } elsif (UNIVERSAL::can($dir, 'INC')) {
-                    ($fh) = $dir->INC($file);
+                    ($fh) = $dir->INC($file_inc);
                 }
 
                 if (!UNIVERSAL::isa($fh, 'GLOB')) {
-                    warn loc(q[Cannot open file '%1': %2], $file, $!)
+                    warn loc(q[Cannot open file '%1': %2], $file_inc, $!)
                             if $args->{verbose};
                     next;
                 }
 
-                $filename = $INC{$file_inc} || $file;
+                $filename = $INC{$file_inc} || $file_inc;
 
                 delete $INC{$file_inc} if not $existed_in_inc;
 

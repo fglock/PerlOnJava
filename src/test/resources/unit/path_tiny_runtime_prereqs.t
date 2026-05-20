@@ -6,12 +6,16 @@ use File::Glob ();
 use File::Spec;
 use File::Temp qw(tempdir);
 
-is(File::Spec->canonpath('~idontthinkso\\*'), '~idontthinkso\\*',
-    'File::Spec::Unix canonpath treats backslash as literal');
-is(File::Spec->canonpath('/../../'), '/', 'canonpath clamps absolute updirs at root');
-is(File::Spec->canonpath('/../..'), '/', 'canonpath clamps absolute terminal updirs at root');
-is(File::Spec->canonpath('///../../..//./././a//b/.././c/././'), '/a/b/../c',
-    'canonpath matches File::Spec::Unix absolute cleanup');
+SKIP: {
+    skip 'Unix File::Spec canonpath cases', 4 if $^O eq 'MSWin32';
+
+    is(File::Spec->canonpath('~idontthinkso\\*'), '~idontthinkso\\*',
+        'File::Spec::Unix canonpath treats backslash as literal');
+    is(File::Spec->canonpath('/../../'), '/', 'canonpath clamps absolute updirs at root');
+    is(File::Spec->canonpath('/../..'), '/', 'canonpath clamps absolute terminal updirs at root');
+    is(File::Spec->canonpath('///../../..//./././a//b/.././c/././'), '/a/b/../c',
+        'canonpath matches File::Spec::Unix absolute cleanup');
+}
 
 is_deeply([File::Glob::bsd_glob('~blah blah')], ['~blah blah'],
     'File::Glob::bsd_glob keeps whitespace in one literal pattern');
@@ -20,7 +24,8 @@ is_deeply([File::Glob::bsd_glob('~idontthinkso\\*')], ['~idontthinkso*'],
 is_deeply([File::Glob::bsd_glob('~i\\{dont,think}so',
     File::Glob::GLOB_NOCHECK() | File::Glob::GLOB_BRACE() | File::Glob::GLOB_QUOTE())],
     ['~i{dont,think}so'], 'File::Glob::bsd_glob dequotes no-check literals');
-like((File::Glob::bsd_glob('~'))[0], qr{^/}, 'File::Glob::bsd_glob expands bare tilde');
+my ($glob_home) = File::Glob::bsd_glob('~');
+ok(defined($glob_home) && $glob_home ne '~', 'File::Glob::bsd_glob expands bare tilde');
 
 {
     package PathTinyLocalizedCodeSlot;
@@ -86,7 +91,7 @@ like((File::Glob::bsd_glob('~'))[0], qr{^/}, 'File::Glob::bsd_glob expands bare 
     mkdir 'nested' or die "mkdir nested: $!";
     open my $fh, '>', 'nested/file.txt' or die "open nested/file.txt: $!";
     close $fh;
-    ok(utime undef, undef, 'nested/file.txt', 'utime resolves relative to Perl cwd');
+    ok(utime(undef, undef, 'nested/file.txt'), 'utime resolves relative to Perl cwd');
     chdir $old or die "chdir $old: $!";
 }
 

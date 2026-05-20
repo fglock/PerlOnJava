@@ -328,6 +328,7 @@ imports:
   # From CPAN distribution
   - source: perl5/cpan/Module-Load-Conditional/lib/Module/Load/Conditional.pm
     target: src/main/perl/lib/Module/Load/Conditional.pm
+    patch: Module-Load-Conditional.pm.patch
 
   # Tests for distribution
   - source: perl5/cpan/Params-Check/t

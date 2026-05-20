@@ -1,0 +1,17 @@
+--- perl5/cpan/Module-Load-Conditional/lib/Module/Load/Conditional.pm
++++ src/main/perl/lib/Module/Load/Conditional.pm
+@@ -218 +218 @@
+-                    ($fh) = $dir->($dir, $file);
++                    ($fh) = $dir->($dir, $file_inc);
+@@ -221 +221 @@
+-                    ($fh) = $dir->[0]->($dir, $file, @{$dir}{1..$#{$dir}})
++                    ($fh) = $dir->[0]->($dir, $file_inc, @{$dir}{1..$#{$dir}})
+@@ -224 +224 @@
+-                    ($fh) = $dir->INC($file);
++                    ($fh) = $dir->INC($file_inc);
+@@ -228 +228 @@
+-                    warn loc(q[Cannot open file '%1': %2], $file, $!)
++                    warn loc(q[Cannot open file '%1': %2], $file_inc, $!)
+@@ -233 +233 @@
+-                $filename = $INC{$file_inc} || $file;
++                $filename = $INC{$file_inc} || $file_inc;
