@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for Module::Build.
+  Module::Build is needed as a build-tool prerequisite for pure-Perl
+  distributions such as Path::Class. Its upstream test suite exercises
+  toolchain compatibility paths and can stall under PerlOnJava, so CPAN
+  bootstrap skips this build-tool test phase.
+match:
+  distribution: "^LEONT/Module-Build-"
+test:
+  commandline: "PERLONJAVA_SKIP"

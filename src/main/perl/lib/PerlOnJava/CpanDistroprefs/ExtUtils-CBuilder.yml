@@ -1,0 +1,10 @@
+---
+comment: |
+  PerlOnJava distroprefs for ExtUtils::CBuilder.
+  PerlOnJava cannot compile native XS/C code; CBuilder is needed as a
+  build-tool dependency for pure-Perl distributions, but its compiler
+  probe tests are not a meaningful gate here.
+match:
+  distribution: "^AMBS/ExtUtils-CBuilder-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
