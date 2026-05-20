@@ -349,6 +349,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 : callContext;
     }
 
+    public static RuntimeList returnList(RuntimeBase retVal, int callContext) {
+        if (retVal == null) {
+            return new RuntimeList();
+        }
+        if (callContext == RuntimeContextType.LVALUE_LIST
+                && !(retVal instanceof RuntimeControlFlowList)) {
+            RuntimeList result = new RuntimeList();
+            result.add(retVal);
+            return result;
+        }
+        return retVal.getList();
+    }
+
     /**
      * Perl collapses a multi-value list returned from a subroutine when the callee runs in
      * scalar context: only the last element survives as the actual return SV. PerlOnJava
@@ -447,7 +460,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void requireLvalueCallable(RuntimeCode code, int callContext, String subroutineName) {
-        if (callContext != RuntimeContextType.LVALUE || isLvalueCode(code)) {
+        if ((callContext != RuntimeContextType.LVALUE && callContext != RuntimeContextType.LVALUE_LIST)
+                || isLvalueCode(code)) {
             return;
         }
 
@@ -1988,7 +2002,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Return undef/empty list to signal compilation failure
-                if (callContext == RuntimeContextType.LIST) {
+                if (RuntimeContextType.isListLike(callContext)) {
                     return new RuntimeList();
                 } else {
                     return new RuntimeList(new RuntimeScalar());
@@ -2045,7 +2059,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Return undef/empty list
-                if (callContext == RuntimeContextType.LIST) {
+                if (RuntimeContextType.isListLike(callContext)) {
                     return new RuntimeList();
                 } else {
                     return new RuntimeList(new RuntimeScalar());
@@ -2057,7 +2071,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarnDie.catchEval(e);
 
                 // Return undef/empty list
-                if (callContext == RuntimeContextType.LIST) {
+                if (RuntimeContextType.isListLike(callContext)) {
                     return new RuntimeList();
                 } else {
                     return new RuntimeList(new RuntimeScalar());
@@ -3288,7 +3302,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             }
 
-            if (callContext == RuntimeContextType.LIST) {
+            if (RuntimeContextType.isListLike(callContext)) {
                 return new RuntimeList();
             }
             return new RuntimeList(new RuntimeScalar());
@@ -3369,7 +3383,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is a temporary workaround for the architectural limitation that eval        // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
             // Return undef in appropriate context
-            if (callContext == RuntimeContextType.LIST) {
+            if (RuntimeContextType.isListLike(callContext)) {
                 return new RuntimeList();
             } else {
                 return new RuntimeList(new RuntimeScalar());
@@ -3620,7 +3634,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
             // Return undef in appropriate context
-            if (callContext == RuntimeContextType.LIST) {
+            if (RuntimeContextType.isListLike(callContext)) {
                 return new RuntimeList();
             } else {
                 return new RuntimeList(new RuntimeScalar());
@@ -3966,6 +3980,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * (original) values after the local scope exits.</p>
      */
     public static void materializeSpecialVarsInResult(RuntimeList result) {
+        materializeSpecialVarsInResult(result, RuntimeContextType.LIST);
+    }
+
+    public static void materializeSpecialVarsInResult(RuntimeList result, int callContext) {
+        boolean preserveAggregateLvalues = callContext == RuntimeContextType.LVALUE_LIST;
         List<RuntimeBase> elems = result.elements;
         for (int i = 0; i < elems.size(); i++) {
             RuntimeBase elem = elems.get(i);
@@ -3975,7 +3994,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 concrete.type = resolved.type;
                 concrete.value = resolved.value;
                 elems.set(i, concrete);
-            } else if (elem instanceof RuntimeArray arr) {
+            } else if (!preserveAggregateLvalues && elem instanceof RuntimeArray arr) {
                 // Copy array elements to ensure independence from local restoration.
                 // For tied arrays, use getList() which dispatches through FETCHSIZE/FETCH,
                 // since TieArray.elements (the ArrayList) is empty — data lives in the tied object.
@@ -3990,7 +4009,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     elems.set(i, copy);
                 }
-            } else if (elem instanceof RuntimeHash hash) {
+            } else if (!preserveAggregateLvalues && elem instanceof RuntimeHash hash) {
                 // Copy hash elements for the same reason as arrays.
                 // For tied hashes, use getList() which dispatches through FIRSTKEY/NEXTKEY/FETCH.
                 if (hash.type == RuntimeHash.TIED_HASH) {
@@ -4303,7 +4322,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * In scalar context, returns the entire output as a single scalar.
      */
     private static RuntimeList forkOpenOutputToList(String capturedOutput, int callContext) {
-        if (callContext == RuntimeContextType.LIST && capturedOutput != null && !capturedOutput.isEmpty()) {
+        if (RuntimeContextType.isListLike(callContext) && capturedOutput != null && !capturedOutput.isEmpty()) {
             // Split into lines preserving newlines (like Perl's <FH> in list context)
             RuntimeArray arr = new RuntimeArray();
             int start = 0;

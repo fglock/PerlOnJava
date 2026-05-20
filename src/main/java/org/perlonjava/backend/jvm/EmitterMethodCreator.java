@@ -780,7 +780,12 @@ public class EmitterMethodCreator implements Opcodes {
             // Transform the value in the stack to RuntimeList BEFORE local teardown.
             // Materialize it into a local slot immediately so all subsequent control-flow
             // checks operate from locals and join points don't depend on operand stack shape.
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getList", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
+            mv.visitVarInsn(Opcodes.ILOAD, 2);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "returnList",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 
             // (Return-path cleanup is emitted at each 'return' site in handleReturnOperator.)
@@ -1016,10 +1021,11 @@ public class EmitterMethodCreator implements Opcodes {
             // The return list may contain lazy ScalarSpecialVariable references; if we
             // restored first, they would resolve to the caller's (stale) values.
             mv.visitInsn(Opcodes.DUP);
+            mv.visitVarInsn(Opcodes.ILOAD, 2);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "materializeSpecialVarsInResult",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V", false);
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)V", false);
 
             if (useTryCatch) {
                 // For eval BLOCK, wrap the teardown in a try-catch to catch exceptions

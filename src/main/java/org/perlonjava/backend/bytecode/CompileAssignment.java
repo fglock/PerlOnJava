@@ -1850,9 +1850,9 @@ public class CompileAssignment {
                 bytecodeCompiler.emitReg(rhsListReg);
                 bytecodeCompiler.emitReg(rhsReg);
 
-                // Compile LHS ListNode in LIST context - this produces a RuntimeList of lvalues
+                // Compile LHS ListNode in list-lvalue context - this produces a RuntimeList of lvalues
                 // This follows the JVM backend approach (EmitVariable.java line 837)
-                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LIST);
+                bytecodeCompiler.compileNode(listNode, -1, RuntimeContextType.LVALUE_LIST);
                 int lhsListReg = bytecodeCompiler.lastResultReg;
 
                 // Call SET_FROM_LIST to assign RHS values to LHS lvalues

@@ -806,7 +806,7 @@ public class Operator {
     }
 
     public static RuntimeScalar wantarray(int ctx) {
-        return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(ctx == RuntimeContextType.LIST ? scalarTrue : scalarFalse);
+        return ctx == RuntimeContextType.VOID ? scalarUndef : new RuntimeScalar(RuntimeContextType.isListLike(ctx) ? scalarTrue : scalarFalse);
     }
 
     // Process-related operators

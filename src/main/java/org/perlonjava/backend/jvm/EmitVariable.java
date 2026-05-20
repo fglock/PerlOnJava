@@ -1009,9 +1009,9 @@ public class EmitVariable {
                 }
                 mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
 
-                // For declared references, we need special handling
-                // The my operator needs to be processed to create the variables first
-                node.left.accept(emitterVisitor.with(RuntimeContextType.LIST));   // emit the variable (target)
+                // For declared references, we need special handling.
+                // The my operator needs to be processed to create the variables first.
+                node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
 

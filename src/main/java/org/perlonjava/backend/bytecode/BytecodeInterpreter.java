@@ -357,8 +357,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = retVal.getList();
-                                RuntimeCode.materializeSpecialVarsInResult(retList);
+                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
 
                                 return retList;
                             }
@@ -372,8 +372,8 @@ public class BytecodeInterpreter {
                                 if (retVal == null) {
                                     retVal = new RuntimeList();
                                 }
-                                RuntimeList retList = retVal.getList();
-                                RuntimeCode.materializeSpecialVarsInResult(retList);
+                                RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
+                                RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
 
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
