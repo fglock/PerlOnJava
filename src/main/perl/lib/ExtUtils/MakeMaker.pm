@@ -608,6 +608,7 @@ sub _create_install_makefile {
     # Get INST_LIB and installation directories
     # Use INSTALL_BASE for consistency with where we actually install modules
     my $inst_lib = $args->{INST_LIB} || 'blib/lib';
+    my $inst_archlib = $args->{INST_ARCHLIB} || 'blib/arch';
     my $installsitelib = $args->{INSTALLSITELIB};
     my $siteprefix = $args->{SITEPREFIX} || $args->{PREFIX};
     
@@ -782,7 +783,7 @@ FULLPERLRUN = \$(FULLPERL)
 PERLRUNINST = \$(PERLRUN) -I\$(INST_ARCHLIB) -I\$(INST_LIB)
 INSTALLDIRS = site
 INST_LIB = $inst_lib
-INST_ARCHLIB = $inst_lib
+INST_ARCHLIB = $inst_archlib
 INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
 $siteprefix_var
