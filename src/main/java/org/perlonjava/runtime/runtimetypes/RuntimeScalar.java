@@ -1307,6 +1307,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = value.type;
         this.value = value.value;
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
+        if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
+            code.hadStashRef = true;
+        }
 
         // DESTROY rescue detection for reference types.
         // Only trigger when the OLD value was a reference to the DESTROY target
@@ -2506,18 +2509,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Captures are released when the CODE object's counted references
         // truly reach zero.
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code) {
+            boolean releasedCode = false;
             if (this.refCountOwned && code.refCount > 0) {
                 this.refCountOwned = false;
                 code.releaseActiveOwner(this);
                 if (--code.refCount == 0) {
                     code.refCount = Integer.MIN_VALUE;
                     DestroyDispatch.callDestroy(code);
+                    releasedCode = true;
                 }
             }
             // Clear the code value but keep the type as CODE
             this.value = new RuntimeCode((String) null, null);
             // Invalidate the method resolution cache
             InheritanceResolver.invalidateCache();
+            if (releasedCode && WeakRefRegistry.weakRefsExist && !ModuleInitGuard.inModuleInit()) {
+                ReachabilityWalker.sweepWeakRefs(true);
+            }
             return this;
         }
 

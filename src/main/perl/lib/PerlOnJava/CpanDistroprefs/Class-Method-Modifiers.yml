@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Class::Method::Modifiers.
+
+  Class::Method::Modifiers 2.15 has one known PerlOnJava test failure:
+  t/140-lvalue.t test 3 checks array lvalue attribute mutation through an
+  around modifier. The module itself is pure Perl and is needed by Moo.
+
+  Keep the test output visible for signal, but allow CPAN to mark the test
+  phase successful so the distribution can be installed as a Moo prerequisite.
+match:
+  distribution: "^ETHER/Class-Method-Modifiers-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

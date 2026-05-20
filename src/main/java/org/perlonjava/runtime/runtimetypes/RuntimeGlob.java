@@ -292,6 +292,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     // mutating packageName/subName (caller + next::method must keep
                     // treating a bare *Pkg::name = sub{} install as anonymous).
                     RuntimeGlob.attachCoderefToNamedGlob(newCode, this.globName);
+                    newCode.hadStashRef = true;
                     newCode.stashRefCount++;
                 }
 
@@ -1280,6 +1281,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.invalidatePackageRootSnapshot();
         // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
+            restoredCode.hadStashRef = true;
             restoredCode.stashRefCount++;
         }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the

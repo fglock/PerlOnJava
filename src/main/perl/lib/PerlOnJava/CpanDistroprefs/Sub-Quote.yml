@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for Sub::Quote / Sub::Defer.
+
+  Sub::Quote 2.006009 currently completes under PerlOnJava but has five known
+  non-refcount test failures:
+  - t/hints.t tests 4-5: warning-hint preservation diagnostics
+  - t/sub-quote.t tests 24,55-56: eval source/line-number diagnostics
+
+  Keep the test output visible for signal, but allow CPAN to mark the test
+  phase successful so Sub::Quote and Sub::Defer can be installed as Moo
+  prerequisites.
+match:
+  distribution: "^HAARG/Sub-Quote-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

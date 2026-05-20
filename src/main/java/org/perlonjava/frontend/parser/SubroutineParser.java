@@ -1354,6 +1354,12 @@ public class SubroutineParser {
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
             }
         }
+        // The body of a named sub is compiled lazily, but its closure already
+        // owns captured lexicals at definition time. Weak-ref cleanup must be
+        // able to see those captures before the first call (Sub::Defer's named
+        // lvalue wrapper queries its weak metadata before invoking the wrapper).
+        installClosureCaptureMetadata(placeholder, paramList);
+
         // Create a new EmitterContext for generating bytecode
         // Create a filtered snapshot that excludes field declarations and code references
         // Fields cause bytecode generation issues when present in the symbol table

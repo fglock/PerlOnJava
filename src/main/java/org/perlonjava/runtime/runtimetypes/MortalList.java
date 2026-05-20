@@ -736,6 +736,25 @@ public class MortalList {
                 if (clearWeakRefsForLocalBinding) {
                     WeakRefRegistry.clearWeakRefsTo(base);
                 }
+            } else if (base instanceof RuntimeCode code
+                    && hasWeakRefs
+                    && (RuntimeCode.isActiveCode(code)
+                    || (!code.hadStashRef && RuntimeCode.argsStackDepth() > 1))) {
+                // Sub::Defer stores a weak self-reference in the deferred
+                // CODE's captured info array. Selective refcounts can reach
+                // zero while the wrapper is still executing or nested
+                // generation is wiring Moo metadata. Clearing then makes
+                // nested dispatch call undefer_sub(undef).
+                base.refCount = 1;
+            } else if (base.blessId == 0
+                    && hasWeakRefs
+                    && (ReachabilityWalker.isReachableFromLiveCodeCaptures(base)
+                    || ReachabilityWalker.isReachableFromGlobalCodeCaptures(base))) {
+                // Sub::Defer/Sub::Quote keep metadata arrays/hashes alive
+                // through captures in a live CODE ref while storing only weak
+                // registry entries. Selective refcounts can transiently reach
+                // zero before the caller has finished using the returned CODE.
+                base.refCount = 1;
             } else if (base.blessId == 0
                     && hasWeakRefs
                     && ReachabilityWalker.hasStrongCycle(base)) {

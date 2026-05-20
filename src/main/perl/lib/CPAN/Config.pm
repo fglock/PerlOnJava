@@ -40,6 +40,8 @@ sub _bootstrap_prefs {
         'ExtUtils-CBuilder.yml'      => 'PerlOnJava/CpanDistroprefs/ExtUtils-CBuilder.yml',
         'ExtUtils-ParseXS.yml'       => 'PerlOnJava/CpanDistroprefs/ExtUtils-ParseXS.yml',
         'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
+        'Class-Method-Modifiers.yml' => 'PerlOnJava/CpanDistroprefs/Class-Method-Modifiers.yml',
+        'Sub-Quote.yml'              => 'PerlOnJava/CpanDistroprefs/Sub-Quote.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

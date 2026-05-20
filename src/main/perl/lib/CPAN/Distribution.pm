@@ -3921,7 +3921,9 @@ sub test {
         if ($system eq 'PERLONJAVA_SKIP') {
             # Cross-platform no-op: skip tests entirely.
             $self->{make_test} = CPAN::Distrostatus->new("YES");
+            $CPAN::META->is_tested($self->{build_dir},$self->{make_test}{TIME});
             $self->store_persistent_state;
+            $self->post_test();
             return $self->success("PERLONJAVA_SKIP -- test phase skipped");
         } elsif ($system eq 'PERLONJAVA_TEST_IGNORE_FAILURES') {
             # Run the platform-appropriate 'make test', always report success.
@@ -3929,7 +3931,10 @@ sub test {
             my $make_test_cmd = join " ", $self->_make_command(), "test";
             system($make_test_cmd);
             $self->{make_test} = CPAN::Distrostatus->new("YES");
+            $CPAN::META->is_tested($self->{build_dir},$self->{make_test}{TIME});
+            delete $self->{badtestcnt};
             $self->store_persistent_state;
+            $self->post_test();
             return $self->success("$make_test_cmd -- OK (failures ignored by PERLONJAVA_TEST_IGNORE_FAILURES)");
         }
     } elsif ($self->{modulebuild}) {

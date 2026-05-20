@@ -507,6 +507,34 @@ public class ReachabilityWalker {
         return isReachableFromLiveScalarRegistry(target, ScalarRefRegistry.forceGcAndSnapshot());
     }
 
+    public static boolean isReachableFromLiveCodeCaptures(RuntimeBase target) {
+        if (target == null) return false;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (!(liveVar instanceof RuntimeScalar sc)) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if (sc.value instanceof RuntimeCode code
+                    && followGlobalCodeCaptures(code, target, seen, todo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isReachableFromGlobalCodeCaptures(RuntimeBase target) {
+        if (target == null) return false;
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (RuntimeScalar sc : GlobalVariable.globalCodeRefs.values()) {
+            if (sc != null && sc.value instanceof RuntimeCode code
+                    && followGlobalCodeCaptures(code, target, seen, todo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static boolean isReachableFromLiveScalarRegistry(RuntimeBase target,
                                                      java.util.List<RuntimeScalar> roots) {
         if (target == null) return false;
