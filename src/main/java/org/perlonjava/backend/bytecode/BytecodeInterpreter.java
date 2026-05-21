@@ -2570,7 +2570,9 @@ public class BytecodeInterpreter {
                 // would incorrectly decrement refCounts, causing premature DESTROY.
                 BitSet myVars = code.myVarRegisters;
                 boolean needsFlush = false;
-                for (int i = myVars.nextSetBit(firstMyVarReg); i >= 0; i = myVars.nextSetBit(i + 1)) {
+                for (int i = myVars.nextSetBit(firstMyVarReg);
+                     i >= 0 && i < registers.length;
+                     i = myVars.nextSetBit(i + 1)) {
                     RuntimeBase reg = registers[i];
                     if (reg == null) continue;
                     if (reg instanceof RuntimeScalar rs) {

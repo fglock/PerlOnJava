@@ -1,7 +1,9 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 11;
+use Test::More tests => 12;
+use Eval::Closure qw(eval_closure);
+use Sub::Util qw(set_subname);
 
 # Test caller() returns correct line numbers, especially for deeper stack frames.
 # This tests the fix for the bug where caller($level) with level > 1 returned
@@ -111,5 +113,13 @@ eval {
 like($@,
      qr/Undefined subroutine &CallerLineNumber::Missing::for_line_test called at .* line $expected_line_11\./,
      "undefined multiline direct call reports function line");
+
+my $renamed_eval_closure = eval_closure(
+    source => q{sub { return (caller(0))[3] }},
+);
+set_subname( 'Other::Renamed', $renamed_eval_closure );
+is( $renamed_eval_closure->(),
+    'Other::Renamed',
+    'caller(0)[3] uses explicit set_subname package for eval closures' );
 
 # End of tests
