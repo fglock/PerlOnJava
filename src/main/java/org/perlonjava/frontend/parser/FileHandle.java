@@ -75,6 +75,10 @@ public class FileHandle {
      * @return A Node representing the parsed file handle, or null if no valid file handle was found
      */
     public static Node parseFileHandle(Parser parser) {
+        return parseFileHandle(parser, false);
+    }
+
+    public static Node parseFileHandle(Parser parser, boolean autovivifyUnknownBareword) {
         boolean hasBracket = false;
 
         // Check if the file handle is enclosed in curly braces
@@ -192,12 +196,7 @@ public class FileHandle {
                 String name = IdentifierParser.parseSubroutineIdentifier(parser);
                 if (name != null) {
                     fileHandle = parseBarewordHandle(parser, name);
-                    // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
-                    // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
-                    // (perl5_t/t/comp/package.t test 13: print __PACKAGE__ eq 'Pkg' ? ...).
-                    if (fileHandle == null
-                            && name.matches("^[A-Z_][A-Z0-9_]*$")
-                            && !isDoubleUnderscoreMagicBareword(name)) {
+                    if (fileHandle == null && shouldAutovivifyBarewordHandle(parser, name, autovivifyUnknownBareword)) {
                         GlobalVariable.vivifyGlobalIO(normalizeBarewordHandle(parser, name));
                         fileHandle = parseBarewordHandle(parser, name);
                     }
@@ -261,11 +260,12 @@ public class FileHandle {
     public static Node parseBarewordHandle(Parser parser, String name) {
         name = normalizeBarewordHandle(parser, name);
 
-        // Check if this name has a CODE ref defined (it's a subroutine, not a filehandle)
+        // Check if this name has a CODE slot (it's a subroutine, not a filehandle)
         // This handles the case where a subroutine was imported via typeglob assignment
         // (e.g., *main::myconfig = \&Config::myconfig), creating a glob entry but
-        // with only a CODE slot, not an IO slot.
-        if (GlobalVariable.isGlobalCodeRefDefined(name)) {
+        // with only a CODE slot, not an IO slot. Forward declarations also win:
+        // `sub foo; print foo "x"` is a subroutine call, not a bareword filehandle.
+        if (GlobalVariable.existsGlobalCodeRefAsScalar(name).getBoolean()) {
             return null;  // Not a filehandle, it's a subroutine
         }
 
@@ -330,5 +330,21 @@ public class FileHandle {
     /** {@code __FOO__} tokens (e.g. {@code __PACKAGE__}) are not print bareword filehandles. */
     private static boolean isDoubleUnderscoreMagicBareword(String name) {
         return name.length() >= 4 && name.startsWith("__") && name.endsWith("__");
+    }
+
+    private static boolean shouldAutovivifyBarewordHandle(Parser parser, String name, boolean autovivifyUnknownBareword) {
+        // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
+        // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
+        // (perl5_t/t/comp/package.t test 13: print __PACKAGE__ eq 'Pkg' ? ...).
+        if (isDoubleUnderscoreMagicBareword(name)) {
+            return false;
+        }
+
+        String normalizedName = normalizeBarewordHandle(parser, name);
+        if (GlobalVariable.existsGlobalCodeRefAsScalar(normalizedName).getBoolean()) {
+            return false;
+        }
+
+        return autovivifyUnknownBareword || name.matches("^[A-Z_][A-Z0-9_]*$");
     }
 }

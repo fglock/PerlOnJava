@@ -249,7 +249,7 @@ public class OperatorParser {
         parser.debugHeredocState("PRINT_START");
 
         try {
-            operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false);
+            operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false, true);
             parser.debugHeredocState("PRINT_PARSE_SUCCESS");
         } catch (PerlCompilerException e) {
             parser.debugHeredocState("PRINT_BEFORE_BACKTRACK");
