@@ -400,21 +400,14 @@ public class OverloadContext {
             if (result != null) return result;
         }
 
-        // All overload attempts failed. Check fallback semantics.
-        // Perl overload fallback rules:
-        //   fallback=0 (explicitly false): deny autogeneration, die immediately
-        //   fallback=undef/not specified:  allow autogeneration, die only if autogeneration also fails
-        //   fallback=1 (true):             allow autogeneration, use native op if all else fails
-        //
-        // Since callers (e.g., CompareOperators) handle autogeneration by calling us again
-        // with the spaceship/cmp operator, we return null here to allow that attempt.
-        // Only fallback=0 should block autogeneration and die immediately.
+        // All overload attempts failed. Only `fallback => 1` or a package with
+        // no actual operator overloads may fall through to the native operator.
+        // With fallback undef/missing, Perl reports "no method found" once the
+        // requested op and explicit autogeneration candidates have failed.
         if (activeCtx != null) {
-            // Check if fallback is explicitly false (fallback => 0): deny autogeneration, die
-            if (activeCtx.deniesAutogeneration()) {
+            if (!activeCtx.allowsFallbackAutogen()) {
                 throwNoMethodFound(activeCtx, methodName);
             }
-            // fallback not specified, undef, or true: allow autogeneration / native fallback
             return null;
         }
         return null;
