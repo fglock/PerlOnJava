@@ -13,11 +13,9 @@ EXIT: 0
 
 The run also verifies the dependency chain that previously blocked CPANPLUS: `Archive::Extract`, `Object::Accessor`, `File::Fetch`, `Log::Message`, `Module::Loaded`, `Package::Constants`, `Log::Message::Simple`, and `Term::UI`.
 
-The only observed remaining issue is a non-fatal warning during CPANPLUS' own suite:
-
-```text
-Use of uninitialized value in addition (+) at jar:PERL5LIB/File/Copy.pm line 303.
-```
+The previously observed non-fatal warning during CPANPLUS' own suite is now fixed:
+`$^E` aliases `$!` as a defined errno dualvar, so `File::Copy` can snapshot
+`($! + 0, $^E + 0)` without an uninitialized warning.
 
 ## Symptom
 
@@ -70,6 +68,11 @@ Version checks then exposed decimal vs dotted-version numification differences. 
 
 The final CPANPLUS blocker was in the generated Makefile for a dummy `Foo-Bar` distribution. When `Makefile.PL` was rerun after `blib/lib` already existed, PerlOnJava's MakeMaker treated staged `blib/lib/*.pm` files as source files. Its generated `pm_to_blib` target could delete `blib/lib/Foo/Bar.pm` and then try to copy that same path back to itself. MakeMaker now prefers real `lib/` sources over stale `blib/` entries and does not stage already-staged files back into `blib`.
 
+The last warning-only issue came from `File::Copy` saving both `$!` and `$^E`
+after a failed move fallback. Perl on Unix aliases `$^E` to `$!`; PerlOnJava
+had initialized `$^E` as a plain undef scalar, so numeric `$^E` warned under
+`use warnings`. `$^E` now uses the same `ErrnoVariable` instance as `$!`.
+
 ## Completed Work
 
 - Fixed loop-control parsing in [`OperatorParser.java`](../../src/main/java/org/perlonjava/frontend/parser/OperatorParser.java).
@@ -86,8 +89,10 @@ The final CPANPLUS blocker was in the generated Makefile for a dummy `Foo-Bar` d
 - Added regression coverage in [`version_numify.t`](../../src/test/resources/unit/version_numify.t).
 - Fixed PerlOnJava MakeMaker reruns after `blib/lib` exists so stale staged files are not copied onto themselves.
 - Added regression coverage in [`makemaker_stale_blib_source.t`](../../src/test/resources/unit/makemaker_stale_blib_source.t).
+- Fixed `$^E` to alias `$!` as a defined errno dualvar, matching Unix Perl and removing the `File::Copy.pm line 303` warning.
+- Added regression coverage in [`errno_special_vars.t`](../../src/test/resources/unit/errno_special_vars.t).
 - Verified `Object::Accessor` upstream suite passes: `Files=7, Tests=155, Result: PASS`.
-- Verified `./jcpan -t CPANPLUS` passes: `Files=20, Tests=1751, Result: PASS`.
+- Verified `./jcpan -t CPANPLUS` passes without the `File::Copy.pm line 303` warning: `Files=20, Tests=1751, Result: PASS`.
 - Verified `make` passes.
 
 ## Acceptance
@@ -101,14 +106,17 @@ make
 
 Before running the full `jcpan -t CPANPLUS` acceptance, make sure no local CPANPLUS distropref is masking the dependency path. A previous investigation generated `/Users/fglock/.perlonjava/cpan/prefs/CPANPLUS.yml`; move it aside or use an isolated CPAN home before judging dependency discovery.
 
+Archive::Extract's `.Z` test invokes `/usr/bin/uncompress -c`. In the Codex
+sandbox this can fail with `uncompress: /dev/stdout: Operation not permitted`,
+which prevents CPANPLUS from reaching its own tests. Run the full CPANPLUS
+acceptance outside the sandbox when verifying the `.Z` dependency path.
+
 ## Next Steps
 
-1. Reduce the non-fatal `File::Copy.pm line 303` warning from CPANPLUS' own suite. It appears to come from numeric conversion of `$!` or `$^E` after a failed move fallback, but it does not currently fail CPANPLUS.
-2. Re-run `timeout 1200 ./jcpan -t CPANPLUS` from a fresh or isolated CPAN home before merging if cache independence is required.
-3. Audit whether MakeMaker still needs to discover installable files from `blib/lib`; if it does, keep the new no-self-staging behavior as the regression guard.
-4. Keep CPANPLUS as a regression target when touching `Archive::Extract`, `Object::Accessor`, `ExtUtils::MakeMaker`, parser precedence, or `version`.
+1. Re-run `timeout 1200 ./jcpan -t CPANPLUS` from a fresh or isolated CPAN home before merging if cache independence is required.
+2. Audit whether MakeMaker still needs to discover installable files from `blib/lib`; if it does, keep the new no-self-staging behavior as the regression guard.
+3. Keep CPANPLUS as a regression target when touching `Archive::Extract`, `Object::Accessor`, `ExtUtils::MakeMaker`, parser precedence, `version`, or errno special variables.
 
 ## Open Questions
 
-- Does the `File::Copy` warning reveal a generic `$!` / `$^E` numeric conversion difference when the error variables are unset?
 - Are there CPAN distributions that intentionally rely on MakeMaker installing files that only exist under `blib/lib` after configure/build, and should that path be modeled more explicitly?
