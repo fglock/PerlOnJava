@@ -198,7 +198,7 @@ public class FileHandle {
                     if (fileHandle == null
                             && name.matches("^[A-Z_][A-Z0-9_]*$")
                             && !isDoubleUnderscoreMagicBareword(name)) {
-                        GlobalVariable.getGlobalIO(normalizeBarewordHandle(parser, name));
+                        GlobalVariable.vivifyGlobalIO(normalizeBarewordHandle(parser, name));
                         fileHandle = parseBarewordHandle(parser, name);
                     }
                 }

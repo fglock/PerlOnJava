@@ -45,6 +45,50 @@ subtest 'Scalar::Util::refaddr for named glob references' => sub {
         'different named glob refs report different refaddrs');
 };
 
+subtest 'Scalar::Util::reftype for glob IO slots' => sub {
+    require Scalar::Util;
+
+    open typeglob_reftype_io, '<', 'Makefile' or die "open Makefile: $!";
+    is(Scalar::Util::reftype(*typeglob_reftype_io{IO}), 'IO',
+        'IO slot reports reftype IO');
+    is(Scalar::Util::reftype(*typeglob_reftype_io), undef,
+        'bare typeglob is not a reference');
+};
+
+our $typeglob_compile_time_io;
+{
+    package TypeglobCompileTimeFH;
+    {
+        no warnings;
+        open foo, '<', 'Makefile' or die "open Makefile: $!";
+    }
+    BEGIN { $main::typeglob_compile_time_io = *foo{IO} }
+}
+
+subtest 'bareword open vivifies IO slot at compile time' => sub {
+    ok(defined $typeglob_compile_time_io, 'BEGIN sees IO slot for later bareword open');
+    is(*TypeglobCompileTimeFH::foo{IO}, $typeglob_compile_time_io,
+        'runtime open preserves compile-time IO slot identity');
+};
+
+subtest 'dynamic stash glob assignment restores IO slots' => sub {
+    require Package::Stash;
+
+    {
+        package TypeglobStashIO;
+        open foo, '<', 'Makefile' or die "open Makefile: $!";
+    }
+
+    my $stash = Package::Stash->new('TypeglobStashIO');
+    my $io = $stash->get_symbol('foo');
+    $stash->remove_glob('foo');
+    ok(!defined *TypeglobStashIO::foo{IO}, 'IO slot removed with glob');
+
+    $stash->add_symbol('foo', $io);
+    ok(defined *TypeglobStashIO::foo{IO}, 'IO slot restored through stash entry glob assignment');
+    is(*TypeglobStashIO::foo{IO}, $io, 'restored IO slot is the original handle');
+};
+
 subtest 'Using typeglobs as file handles' => sub {
     my $fh = *STDOUT;
     my $fh2 = \*STDOUT;

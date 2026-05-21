@@ -2338,7 +2338,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // PCS (Proxy Constant Subroutine) creation should only happen via direct
                 // stash hash assignment ($stash->{name} = \$scalar), handled by RuntimeStashEntry.set().
                 if (value instanceof RuntimeStashEntry stashEntry) {
-                    yield new RuntimeGlob(stashEntry.globName);
+                    yield GlobalVariable.getGlobalIO(stashEntry.globName);
                 }
                 yield (RuntimeGlob) value;
             }
@@ -2404,7 +2404,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // When glob-dereferencing a stash entry, return a plain RuntimeGlob.
                 // This prevents *{$stash->{name}} = \$scalar from creating PCS constant subs.
                 if (value instanceof RuntimeStashEntry stashEntry) {
-                    yield new RuntimeGlob(stashEntry.globName);
+                    yield GlobalVariable.getGlobalIO(stashEntry.globName);
                 }
                 yield (RuntimeGlob) value;
             }

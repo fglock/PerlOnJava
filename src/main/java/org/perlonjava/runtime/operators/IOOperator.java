@@ -634,7 +634,7 @@ public class IOOperator {
                 targetGlob = GlobalVariable.getGlobalIO(filehandleName);
             }
             if (targetGlob != null) {
-                targetGlob.setIO(oneFh);
+                targetGlob.openIO(oneFh);
                 // If args[0] is a writable scalar (not readonly), update it to point
                 // at the glob. We must NOT call set() on a readonly scalar (e.g. when
                 // args[0] is a numeric literal like in `open 0`).
@@ -851,7 +851,7 @@ public class IOOperator {
                         " ioHandleId=" + (fh != null && fh.ioHandle != null ? System.identityHashCode(fh.ioHandle) : 0));
                 System.err.flush();
             }
-            targetGlob.setIO(fh);
+            targetGlob.openIO(fh);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -1540,7 +1540,7 @@ public class IOOperator {
         }
 
         if (targetGlob != null) {
-            targetGlob.setIO(fh);
+            targetGlob.openIO(fh);
         } else {
             RuntimeScalar newGlob = new RuntimeScalar();
             newGlob.type = RuntimeScalarType.GLOBREFERENCE;

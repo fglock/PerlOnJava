@@ -145,7 +145,7 @@ public class OperatorParser {
                 parser.tokenIndex++; // consume NUMBER
                 TokenUtils.consume(parser); // consume '>'
                 String digitName = operand.text;
-                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, digitName));
+                GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, digitName));
                 Node globRef = FileHandle.parseBarewordHandle(parser, digitName);
                 if (globRef != null) {
                     BinaryOperatorNode readlineNode = new BinaryOperatorNode("readline",
@@ -710,7 +710,7 @@ public class OperatorParser {
             // select FILEHANDLE
             if (listNode1.elements.getFirst() instanceof IdentifierNode identifierNode) {
                 // Autovivify the filehandle IO slot so parseBarewordHandle succeeds
-                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, identifierNode.name));
+                GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, identifierNode.name));
                 Node handle = FileHandle.parseBarewordHandle(parser, identifierNode.name);
                 if (handle != null) {
                     // handle is Bareword
@@ -979,7 +979,7 @@ public class OperatorParser {
             if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
                 TokenUtils.consume(parser);
                 // autovivify filehandle and convert to globref
-                GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
                 Node fh = FileHandle.parseBarewordHandle(parser, name);
                 Node operand = fh != null ? fh : new IdentifierNode(name, parser.tokenIndex);
                 if (paren) {
