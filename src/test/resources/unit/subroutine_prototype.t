@@ -83,6 +83,7 @@ subtest "Plus (+) prototype behavior" => sub {
 
 subtest "Star (*) prototype behavior" => sub {
     sub star_proto (*) { ref( $_[0] ) || 'SCALAR' }
+    sub star_value (*) { ref( $_[0] ) || $_[0] }
 
     my @star_arr  = ( 1, 2, 3 );
     my %star_hash = ( a => 1 );
@@ -92,6 +93,7 @@ subtest "Star (*) prototype behavior" => sub {
     is( star_proto(@star_arr),     'SCALAR', "accepts array in scalar context" );
     is( star_proto(%star_hash),    'SCALAR', "accepts hash in scalar context" );
     is( star_proto($scalar),       'SCALAR', "accepts scalar" );
+    is( star_value(HANDLE),        'HANDLE', "accepts bareword as string" );
     is( star_proto(*HANDLE),       'GLOB',   "accepts typeglob" );
     is( star_proto( \@star_arr ),  'ARRAY',  "accepts array reference" );
     is( star_proto( \%star_hash ), 'HASH',   "accepts hash reference" );
@@ -159,4 +161,3 @@ subtest "Underscore (_) with optional parameters" => sub {
 };
 
 done_testing();
-
