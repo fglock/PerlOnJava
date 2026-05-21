@@ -855,6 +855,22 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         return this;
     }
 
+    public RuntimeGlob openIO(RuntimeIO io) {
+        if (this.IO != null
+                && this.IO.type != RuntimeScalarType.TIED_SCALAR
+                && this.IO.value instanceof RuntimeIO existingIO
+                && existingIO != io) {
+            RuntimeIO oldSelected = existingIO == RuntimeIO.selectedHandle ? existingIO : null;
+            existingIO.replaceStateFrom(io);
+            existingIO.globName = this.globName;
+            if (oldSelected != null) {
+                RuntimeIO.selectedHandle = existingIO;
+            }
+            return this;
+        }
+        return setIO(io);
+    }
+
     /**
      * Counts the number of elements in the typeglob.
      *

@@ -1290,6 +1290,21 @@ public class GlobalVariable {
     }
 
     /**
+     * Vivifies the IO slot for a bareword filehandle seen at compile time.
+     * Generic glob creation must not define {@code *name{IO}}, but Perl creates
+     * a PVIO object when it parses a bareword filehandle argument such as
+     * {@code open FH, ...}. BEGIN blocks can observe that placeholder before
+     * the runtime open call installs the real handle.
+     */
+    public static RuntimeGlob vivifyGlobalIO(String key) {
+        RuntimeGlob glob = getGlobalIO(key);
+        if (glob.IO == null || glob.IO.type == RuntimeScalarType.UNDEF || glob.IO.value == null) {
+            glob.setIO(new RuntimeIO());
+        }
+        return glob;
+    }
+
+    /**
      * Peek at a glob entry without vivifying it. Returns null if no glob has
      * been registered under this name. Used by anon-sub naming lookups
      * (see dev/modules/anon_sub_naming.md) to read *PKG::__ANON__'s

@@ -136,7 +136,7 @@ public class TokenUtils {
         LexerToken token = consume(parser);
         if (token.type != type) {
             throw new PerlCompilerException(
-                    parser.tokenIndex, "Expected token " + type + " but got " + token, parser.ctx.errorUtil);
+                    parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
         }
         return token;
     }
@@ -155,7 +155,7 @@ public class TokenUtils {
         if (token.type != type || !token.text.equals(text)) {
             throw new PerlCompilerException(
                     parser.tokenIndex,
-                    "Expected token " + type + " with text " + text + " but got " + token,
+                    "syntax error",
                     parser.ctx.errorUtil);
         }
     }
