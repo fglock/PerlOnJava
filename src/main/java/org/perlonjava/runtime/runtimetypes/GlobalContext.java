@@ -76,7 +76,10 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::\"").set(" ");    // initialize $" to " "
         GlobalVariable.getGlobalVariable("main::a");    // initialize $a to "undef"
         GlobalVariable.getGlobalVariable("main::b");    // initialize $b to "undef"
-        GlobalVariable.globalVariables.put("main::!", new ErrnoVariable());    // initialize $! with dualvar support
+        ErrnoVariable errnoVariable = new ErrnoVariable();
+        GlobalVariable.globalVariables.put("main::!", errnoVariable);    // initialize $! with dualvar support
+        // Model $^E as $! until platform-specific extended errors are needed.
+        GlobalVariable.globalVariables.put(encodeSpecialVar("E"), errnoVariable);
         // Initialize $, (output field separator) with special variable class
         if (!GlobalVariable.globalVariables.containsKey("main::,")) {
             var ofs = new OutputFieldSeparator();
