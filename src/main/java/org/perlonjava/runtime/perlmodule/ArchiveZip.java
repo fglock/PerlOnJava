@@ -34,6 +34,8 @@ public class ArchiveZip extends PerlModuleBase {
     private static final String MEMBERS_KEY = "_members";
     private static final String FILENAME_KEY = "_filename";
     private static final String COMMENT_KEY = "_zipfileComment";
+    private static final String MEMBER_NAME_KEY = "_name";
+    private static final String MEMBER_COMPAT_FILENAME_KEY = "fileName";
 
     /**
      * Resolve a path string against Perl's notion of the current working
@@ -329,7 +331,7 @@ public class ArchiveZip extends PerlModuleBase {
                     
                     // Create member object
                     RuntimeHash member = new RuntimeHash();
-                    member.put("_name", new RuntimeScalar(entry.getName()));
+                    putMemberName(member, entry.getName());
                     member.put("_externalFileName", new RuntimeScalar(""));
                     member.put("_isDirectory", entry.isDirectory() ? scalarTrue : scalarFalse);
                     member.put("_uncompressedSize", new RuntimeScalar(entry.getSize() >= 0 ? entry.getSize() : entryBaos.size()));
@@ -511,7 +513,8 @@ public class ArchiveZip extends PerlModuleBase {
         RuntimeList result = new RuntimeList();
         for (int i = 0; i < members.size(); i++) {
             RuntimeHash member = members.get(i).hashDeref();
-            result.add(member.get("_name"));
+            RuntimeScalar memberName = getMemberNameScalar(member);
+            result.add(memberName != null ? memberName : scalarUndef);
         }
         return result;
     }
@@ -545,7 +548,7 @@ public class ArchiveZip extends PerlModuleBase {
 
         for (int i = 0; i < members.size(); i++) {
             RuntimeHash member = members.get(i).hashDeref();
-            RuntimeScalar memberName = member.get("_name");
+            RuntimeScalar memberName = getMemberNameScalar(member);
             if (memberName != null && memberName.toString().equals(name)) {
                 return members.get(i).getList();
             }
@@ -577,7 +580,7 @@ public class ArchiveZip extends PerlModuleBase {
         try {
             for (int i = 0; i < members.size(); i++) {
                 RuntimeHash member = members.get(i).hashDeref();
-                RuntimeScalar memberName = member.get("_name");
+                RuntimeScalar memberName = getMemberNameScalar(member);
                 if (memberName != null && RuntimeRegex.matchRegex(
                         regex, memberName, RuntimeContextType.SCALAR).scalar().getBoolean()) {
                     result.add(members.get(i));
@@ -616,7 +619,7 @@ public class ArchiveZip extends PerlModuleBase {
             long lastModified = Files.getLastModifiedTime(path).toMillis();
 
             RuntimeHash member = new RuntimeHash();
-            member.put("_name", new RuntimeScalar(memberName));
+            putMemberName(member, memberName);
             member.put("_externalFileName", new RuntimeScalar(filename));
             member.put("_contents", new RuntimeScalar(new String(content, StandardCharsets.ISO_8859_1)));
             member.put("_isDirectory", scalarFalse);
@@ -655,7 +658,7 @@ public class ArchiveZip extends PerlModuleBase {
         byte[] contentBytes = content.getBytes(StandardCharsets.ISO_8859_1);
 
         RuntimeHash member = new RuntimeHash();
-        member.put("_name", new RuntimeScalar(memberName));
+        putMemberName(member, memberName);
         member.put("_externalFileName", new RuntimeScalar(""));
         member.put("_contents", new RuntimeScalar(content));
         member.put("_isDirectory", scalarFalse);
@@ -692,7 +695,7 @@ public class ArchiveZip extends PerlModuleBase {
         }
 
         RuntimeHash member = new RuntimeHash();
-        member.put("_name", new RuntimeScalar(dirName));
+        putMemberName(member, dirName);
         member.put("_externalFileName", new RuntimeScalar(""));
         member.put("_contents", new RuntimeScalar(""));
         member.put("_isDirectory", scalarTrue);
@@ -721,7 +724,17 @@ public class ArchiveZip extends PerlModuleBase {
         }
 
         RuntimeHash self = args.get(0).hashDeref();
-        String memberName = args.get(1).toString();
+        RuntimeScalar memberArg = args.get(1);
+        String memberName;
+        if (RuntimeScalarType.isReference(memberArg)) {
+            RuntimeScalar name = getMemberNameScalar(memberArg.hashDeref());
+            if (name == null || name.type == RuntimeScalarType.UNDEF) {
+                return new RuntimeScalar(AZ_ERROR).getList();
+            }
+            memberName = name.toString();
+        } else {
+            memberName = memberArg.toString();
+        }
         String destName = args.size() > 2 ? args.get(2).toString() : memberName;
 
         try {
@@ -729,7 +742,7 @@ public class ArchiveZip extends PerlModuleBase {
 
             for (int i = 0; i < members.size(); i++) {
                 RuntimeHash member = members.get(i).hashDeref();
-                RuntimeScalar name = member.get("_name");
+                RuntimeScalar name = getMemberNameScalar(member);
                 if (name != null && name.toString().equals(memberName)) {
                     RuntimeScalar isDir = member.get("_isDirectory");
                     if (isDir != null && isDir.getBoolean()) {
@@ -789,7 +802,7 @@ public class ArchiveZip extends PerlModuleBase {
                 member = found.scalar().hashDeref();
             }
 
-            RuntimeScalar name = member.get("_name");
+            RuntimeScalar name = getMemberNameScalar(member);
             if (name == null) {
                 return new RuntimeScalar(AZ_ERROR).getList();
             }
@@ -876,7 +889,7 @@ public class ArchiveZip extends PerlModuleBase {
 
             for (int i = 0; i < members.size(); i++) {
                 RuntimeHash member = members.get(i).hashDeref();
-                RuntimeScalar name = member.get("_name");
+                RuntimeScalar name = getMemberNameScalar(member);
                 if (name == null) continue;
 
                 String memberName = name.toString();
@@ -933,7 +946,7 @@ public class ArchiveZip extends PerlModuleBase {
         String targetName;
         if (RuntimeScalarType.isReference(memberArg)) {
             RuntimeHash member = memberArg.hashDeref();
-            RuntimeScalar name = member.get("_name");
+            RuntimeScalar name = getMemberNameScalar(member);
             targetName = name != null ? name.toString() : "";
         } else {
             targetName = memberArg.toString();
@@ -941,7 +954,7 @@ public class ArchiveZip extends PerlModuleBase {
 
         for (int i = 0; i < members.size(); i++) {
             RuntimeHash member = members.get(i).hashDeref();
-            RuntimeScalar name = member.get("_name");
+            RuntimeScalar name = getMemberNameScalar(member);
             if (name != null && name.toString().equals(targetName)) {
                 RuntimeScalar removed = members.get(i);
                 // Remove from array
@@ -969,7 +982,7 @@ public class ArchiveZip extends PerlModuleBase {
             return scalarUndef.getList();
         }
         RuntimeHash member = args.get(0).hashDeref();
-        RuntimeScalar name = member.get("_name");
+        RuntimeScalar name = getMemberNameScalar(member);
         return name != null ? name.getList() : scalarUndef.getList();
     }
 
@@ -1179,9 +1192,25 @@ public class ArchiveZip extends PerlModuleBase {
         return membersRef.arrayDeref();
     }
 
+    private static void putMemberName(RuntimeHash member, String name) {
+        RuntimeScalar nameScalar = new RuntimeScalar(name);
+        member.put(MEMBER_NAME_KEY, nameScalar);
+        // CPAN Archive::Zip exposes this hash key and callers such as
+        // Archive::Extract read it directly instead of calling fileName().
+        member.put(MEMBER_COMPAT_FILENAME_KEY, nameScalar);
+    }
+
+    private static RuntimeScalar getMemberNameScalar(RuntimeHash member) {
+        RuntimeScalar name = member.get(MEMBER_NAME_KEY);
+        if (name == null || name.type == RuntimeScalarType.UNDEF) {
+            name = member.get(MEMBER_COMPAT_FILENAME_KEY);
+        }
+        return name;
+    }
+
     private static RuntimeHash createMemberFromEntry(ZipFile zipFile, ZipEntry entry, Long rawDosTimestamp) throws IOException {
         RuntimeHash member = new RuntimeHash();
-        member.put("_name", new RuntimeScalar(entry.getName()));
+        putMemberName(member, entry.getName());
         member.put("_externalFileName", new RuntimeScalar(""));
         member.put("_isDirectory", entry.isDirectory() ? scalarTrue : scalarFalse);
         member.put("_uncompressedSize", new RuntimeScalar(entry.getSize()));
@@ -1234,7 +1263,7 @@ public class ArchiveZip extends PerlModuleBase {
     }
 
     private static void writeMemberToZip(ZipOutputStream zos, RuntimeHash member) throws IOException {
-        RuntimeScalar name = member.get("_name");
+        RuntimeScalar name = getMemberNameScalar(member);
         if (name == null) return;
 
         ZipEntry entry = new ZipEntry(name.toString());

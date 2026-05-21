@@ -2,7 +2,21 @@
 
 ## Current Status
 
-`CPANPLUS::Config` now loads under PerlOnJava after fixing loop-control parsing for bare labels that share a name with an imported constant. This unblocks the upstream `Makefile.PL` path that declares CPANPLUS' dynamic prerequisites, including `Log::Message`.
+`CPANPLUS::Config` now loads under PerlOnJava after fixing loop-control parsing for bare labels that share a name with an imported constant. This unblocks the upstream `Makefile.PL` path that declares CPANPLUS' dynamic prerequisites.
+
+The current `./jcpan -t CPANPLUS` run now gets through dependency discovery and the `Archive::Extract` dependency. It is blocked by `Object::Accessor`:
+
+```text
+t/03_Object-Accessor-local.t line 49
+got:      't/03_Object-Accessor-local.t'
+expected: '<process pid>'
+```
+
+Because `Object::Accessor` fails its dependency test, it is not installed, and CPANPLUS' own test files then fail at compile time with:
+
+```text
+Base class package "Object::Accessor" is empty.
+```
 
 ## Symptom
 
@@ -50,6 +64,10 @@ The fix keeps a standalone bare identifier immediately after `last`, `next`, or 
 - Fixed loop-control parsing in [`OperatorParser.java`](../../src/main/java/org/perlonjava/frontend/parser/OperatorParser.java).
 - Added regression coverage in [`loop_label_bareword_constant.t`](../../src/test/resources/unit/loop_label_bareword_constant.t).
 - Verified CPANPLUS' upstream `Makefile.PL` now completes and emits `PREREQ_PM` / `MYMETA.yml` entries for `Log::Message`.
+- Fixed the `Archive::Extract` dependency failure by making PerlOnJava's bundled `Archive::Zip` expose the CPAN-compatible member hash field `fileName` and accept member objects in `extractMember`.
+- Added regression coverage in [`archive_zip_members_matching_qr.t`](../../src/test/resources/unit/archive_zip_members_matching_qr.t) for direct member hash access and object extraction.
+- Verified `Archive::Extract` 0.88 upstream suite passes: `Files=1, Tests=1795, Result: PASS`.
+- Verified `./jcpan -t CPANPLUS` now gets past `Archive::Extract`; `File::Fetch`, `Log::Message`, `Module::Loaded`, `Package::Constants`, `Log::Message::Simple`, and `Term::UI` pass in the observed run.
 - Verified `make` passes.
 
 ## Acceptance
@@ -65,13 +83,14 @@ Before running the full `jcpan -t CPANPLUS` acceptance, make sure no local CPANP
 
 ## Next Steps
 
-1. Re-run `timeout 600 ./jcpan -t CPANPLUS` without the temporary local CPANPLUS distropref and confirm CPAN installs or schedules `Log::Message` from the upstream Makefile.PL metadata.
-2. Inspect the generated `Makefile`, `MYMETA.yml`, and CPAN log to verify `PREREQ_PM` includes the CPANPLUS runtime dependency set from `CPANPLUS::Selfupdate`.
-3. Continue from the next observed failures after dependency discovery is correct. The earlier workaround run reached `Archive::Extract` and `Module::Loaded`; treat those as separate module/runtime issues, not dependency-discovery fixes.
-4. Add any new minimal runtime/parser regression tests before patching CPAN distroprefs. Distroprefs should only be used for unavoidable CPAN packaging/test harness differences, not to hide missing interpreter semantics.
-5. When CPANPLUS tests are passing or have documented non-runtime blockers, update this document with the final test count and remaining skips/failures.
+1. Reduce `Object::Accessor`'s `t/03_Object-Accessor-local.t` failure. The failing construct is scoped attribute restore via `$Object->$Acc( $0 => \my $temp )`; PerlOnJava restores `$0` instead of the previous `$$` value when `$temp` leaves scope.
+2. Compare the reduced `Object::Accessor` case with system Perl and both PerlOnJava backends. Likely areas are `local`/scope cleanup, weak/DESTROY-like cleanup behavior around temporary references, or assignment to lexical references passed as arguments.
+3. Add a minimal unit regression for the runtime behavior before changing CPAN module prefs or overlays.
+4. Re-run `timeout 600 ./jcpan -t Object::Accessor` after the runtime fix, then re-run `timeout 1200 ./jcpan -t CPANPLUS`.
+5. Inspect the generated `Makefile`, `MYMETA.yml`, and CPAN log to verify `PREREQ_PM` includes the CPANPLUS runtime dependency set from `CPANPLUS::Selfupdate`.
+6. When CPANPLUS tests are passing or have documented non-runtime blockers, update this document with the final test count and remaining skips/failures.
 
 ## Open Questions
 
-- Does CPAN consume CPANPLUS' dynamic prereqs from `MYMETA.yml` reliably after the upstream Makefile.PL succeeds, or does PerlOnJava's MakeMaker shim need a targeted metadata handoff fix?
-- Are the later `Archive::Extract` / `Module::Loaded` failures pure module gaps, network/cache issues, or consequences of CPANPLUS test setup?
+- Is the `Object::Accessor` failure a generic PerlOnJava scope-cleanup bug or specific to the module's accessor implementation?
+- After `Object::Accessor` installs, do CPANPLUS' own tests expose runtime failures beyond dependency loading?
