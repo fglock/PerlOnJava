@@ -188,17 +188,23 @@ public class WeakRefRegistry {
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
         }
-        boolean shouldSweepLiveCodeRef = weakenedLiveCodeRef
+        boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
                 && codeRefHasCountedOwners(base)
                 && !ModuleInitGuard.inModuleInit();
         if (base instanceof RuntimeCode code
                 && code.refCount >= 0
                 && weakRefsExist
-                && (shouldSweepLiveCodeRef
+                && (shouldCheckLiveCodeRef
                 || (code.hadStashRef
                 && code.stashRefCount <= 0
                 && !isInstalledGlobalCodeRef(code)))) {
-            ReachabilityWalker.sweepWeakRefs(true);
+            // Keep this path targeted to the CODE referent. DBIC weakens
+            // callback CODE refs in hot cursor paths; running a full
+            // ReachabilityWalker sweep here forces repeated System.gc() calls.
+            // The CODE-specific stale-ref decision below is enough: live CODE
+            // refs are protected by clearWeakRefsTo()/shouldKeepCodeWeakRefs,
+            // while expired anonymous or former-stash CODE refs can still clear
+            // their weak registry entries immediately.
             if (hasWeakRefsTo(code)
                     && code.stashRefCount <= 0
                     && !isInstalledGlobalCodeRef(code)
