@@ -721,7 +721,7 @@ sub _create_install_makefile {
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op
     # This handles cases like File::ShareDir::Install tests that only have share files
-    my $pm_to_blib_target = "pm_to_blib";
+    my $pm_to_blib_target = "pm_to_blib::";
     if (%$pm) {
         $pm_to_blib_target = "pm_to_blib::$pm_deps_str";
     }

@@ -22,10 +22,11 @@ public class ParserTables {
     );
     // Map of CORE operators to prototype strings
     public static final Map<String, String> CORE_PROTOTYPES = new HashMap<>();
-    // The list below was obtained by running this in the perl git:
-    // ack  'CORE::GLOBAL::\w+' | perl -n -e ' /CORE::GLOBAL::(\w+)/ && print $1, "\n" ' | sort -u
+    // The list below is based on CORE::GLOBAL override points, plus builtins
+    // whose explicitly imported/use-subs declarations must shadow CORE.
     public static final Set<String> OVERRIDABLE_OP = Set.of(
             "bless",
+            "atan2",
             "caller", "chdir", "close", "connect",
             "die", "do", "dump",
             "exec", "exit",

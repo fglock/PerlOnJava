@@ -340,6 +340,20 @@ imports:
     target: perl5_t/Params-Check
     type: directory
 
+  # Math-Complex core distribution - bundled in system Perl.
+  # Provides Math::Complex and Math::Trig for CPAN installs without
+  # downloading a dual-life module that should already be in core.
+  - source: perl5/dist/Math-Complex/lib/Math/Complex.pm
+    target: src/main/perl/lib/Math/Complex.pm
+
+  - source: perl5/dist/Math-Complex/lib/Math/Trig.pm
+    target: src/main/perl/lib/Math/Trig.pm
+
+  # Math-Complex upstream test suite.
+  - source: perl5/dist/Math-Complex/t
+    target: src/test/resources/module/Math-Complex/t
+    type: directory
+
   # Math-BigInt upstream library (pure Perl) - replaces PerlOnJava's
   # previous thin Java-BigInteger shim. Provides the full Math::BigInt
   # family: Math::BigInt, Math::BigFloat, Math::BigRat, with Calc as the
