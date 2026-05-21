@@ -1,9 +1,14 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 13;
+use File::Path qw(rmtree);
 
 use Archive::Zip;
+
+my $tmp = "archive_zip_compat_$$";
+END { rmtree($tmp) if -d $tmp; }
+mkdir $tmp or die "mkdir $tmp: $!";
 
 my $zip = Archive::Zip->new();
 $zip->addString('{}', 'Fruit-Role-Fermentable-1.0/META.json');
@@ -26,3 +31,14 @@ is($modules[0]->fileName, 'Fruit-Role-Fermentable-1.0/lib/Fruit/Role/Fermentable
 
 my @plain = $zip->membersMatching('README');
 is($plain[0]->fileName, 'README', 'membersMatching still accepts string patterns');
+
+my $zip_path = "$tmp/read.zip";
+is($zip->writeToFileNamed($zip_path), 0, 'wrote zip fixture');
+
+my $read = Archive::Zip->new();
+is($read->read($zip_path), 0, 'read zip fixture');
+
+my ($read_meta) = $read->membersMatching(qr/META\.json\z/);
+is($read_meta->{fileName}, 'Fruit-Role-Fermentable-1.0/META.json', 'member hash exposes fileName compatibility field');
+is($read->extractMember($read_meta, "$tmp/meta.json"), 0, 'extractMember accepts member object');
+ok(-e "$tmp/meta.json", 'member object extraction wrote file');

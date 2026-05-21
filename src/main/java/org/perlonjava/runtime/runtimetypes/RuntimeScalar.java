@@ -2712,7 +2712,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // - captureCount=0 → capture handling branch not taken
         // - ioOwner=false → IO fd recycling branch not taken
         if (!scalar.refCountOwned && scalar.captureCount == 0 && !scalar.ioOwner
-                && !scalar.ownsScalarReferenceContents) {
+                && !scalar.ownsScalarReferenceContents
+                && scalar.type != RuntimeScalarType.TIED_SCALAR) {
             // Special case: CODE refs with unreleased captures that were never
             // stored via set() (e.g., anonymous subs passed directly as arguments).
             // These have refCount=0 (from makeCodeObject) and refCountOwned=false
@@ -2811,6 +2812,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // objects to the mortal list and prematurely clear weak refs.
         // Captures are properly released when the CODE ref is overwritten
         // (via setLarge) or undef'd (via undefine).
+
+        if (scalar.type == RuntimeScalarType.TIED_SCALAR
+                && scalar.value instanceof TiedVariableBase tiedVariable) {
+            tiedVariable.releaseTiedObject();
+            return;
+        }
 
         // Existing: IO fd recycling for anonymous filehandle globs
         if (scalar.ioOwner && scalar.type == GLOBREFERENCE

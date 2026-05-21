@@ -89,6 +89,25 @@ is($result, "<test values>", "direct call reusing @_");
 $result = $sub_ref->(101);
 is($result, "<101>", "indirect call with sub_ref->()");
 
+sub returns_coderef { sub { return "<@_>" } }
+$result = returns_coderef->(202);
+is($result, "<202>", "bareword subroutine before ->() returns a callable coderef under strict");
+
+sub returns_path_coderef { sub { return "/tmp" } }
+ok(-e returns_path_coderef->("ignored"), "file tests bind outside bareword coderef arrow calls");
+ok(defined((stat returns_path_coderef->("ignored"))[9]), "stat binds outside bareword coderef arrow calls");
+
+my $missing_coderef_error = do {
+    local $@;
+    eval 'use strict; missing_coderef_for_arrow->(); 1';
+    $@;
+};
+like(
+    $missing_coderef_error,
+    qr/Undefined subroutine .*missing_coderef_for_arrow/,
+    "missing bareword before ->() is a runtime subroutine error, not strict-subs"
+);
+
 @_ = ("another", "test");
 $result = &$sub_ref;
 is($result, "<another test>", "indirect call reusing @_");

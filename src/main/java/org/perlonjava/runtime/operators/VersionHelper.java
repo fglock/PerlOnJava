@@ -336,6 +336,9 @@ public class VersionHelper {
                 if (minor.length() > 3) {
                     minor = minor.substring(0, 3);
                 }
+                while (patch.length() < 3) {
+                    patch = patch + "0";
+                }
                 if (patch.length() > 3) {
                     patch = patch.substring(0, 3);
                 }
