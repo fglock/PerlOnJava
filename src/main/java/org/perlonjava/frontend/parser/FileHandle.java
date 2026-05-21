@@ -349,6 +349,15 @@ public class FileHandle {
                 && "(".equals(parser.tokens.get(parser.tokenIndex).text);
     }
 
+    private static boolean isFollowedByMethodDereference(Parser parser) {
+        int idx = parser.tokenIndex;
+        while (idx < parser.tokens.size()
+                && parser.tokens.get(idx).type == LexerTokenType.WHITESPACE) {
+            idx++;
+        }
+        return idx < parser.tokens.size() && "->".equals(parser.tokens.get(idx).text);
+    }
+
     private static boolean shouldAutovivifyBarewordHandle(Parser parser, String name, boolean autovivifyUnknownBareword) {
         // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
         // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
@@ -364,6 +373,10 @@ public class FileHandle {
         // Perl treats `print foo("x")` as printing the result of foo(), while
         // `print foo ("x")` can be a print to filehandle foo.
         if (isImmediatelyFollowedByOpenParen(parser)) {
+            return false;
+        }
+
+        if (isFollowedByMethodDereference(parser)) {
             return false;
         }
 

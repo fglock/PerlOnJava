@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 10;
 
 package PrintBarewordTarget;
 
@@ -71,6 +71,29 @@ is($known_called, 1, 'known bareword after print remains a subroutine call');
     my $error = $@;
     ok(!$ok && $error =~ /Undefined subroutine .*UnknownPrintFunction/,
         'bareword immediately followed by parens remains a subroutine call');
+}
+
+package PrintBarewordMethodTarget;
+
+sub foo {
+    return "method";
+}
+
+package main;
+
+{
+    my $buffer = '';
+    open my $capture, '>', \$buffer or die $!;
+    my $old = select $capture;
+    my $ok = eval {
+        print PrintBarewordMethodTarget->foo;
+        1;
+    };
+    my $error = $@;
+    select $old;
+    close $capture;
+    ok($ok, 'bareword method call after print is not a filehandle') or diag $error;
+    is($buffer, 'method', 'print parses bareword method calls as operands');
 }
 
 sub DeclaredOnly;
