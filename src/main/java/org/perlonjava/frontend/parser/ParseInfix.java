@@ -191,6 +191,15 @@ public class ParseInfix {
                     case "(":
                         TokenUtils.consume(parser);
                         right = new ListNode(ListParser.parseList(parser, ")", 0), parser.tokenIndex);
+                        if (left instanceof OperatorNode op && isArrowReassociatingUnaryOperator(op.operator)) {
+                            Node arrowLeft = coderefArrowLeft(op.operand);
+                            BinaryOperatorNode arrowCall = new BinaryOperatorNode(token.text,
+                                    arrowLeft,
+                                    right,
+                                    parser.tokenIndex);
+                            return new OperatorNode(op.operator, arrowCall, op.getIndex());
+                        }
+                        left = coderefArrowLeft(left);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "**":
                         // Postfix GLOB dereference: $ref->**
@@ -629,5 +638,24 @@ public class ParseInfix {
                 }
             }
         }
+    }
+
+    private static Node coderefArrowLeft(Node left) {
+        if (left instanceof IdentifierNode) {
+            OperatorNode subRef = new OperatorNode("&", left, left.getIndex());
+            return new BinaryOperatorNode("(",
+                    subRef,
+                    new ListNode(left.getIndex()),
+                    left.getIndex());
+        }
+        return left;
+    }
+
+    private static boolean isArrowReassociatingUnaryOperator(String operator) {
+        if (operator == null) return false;
+        if (operator.equals("stat") || operator.equals("lstat")) return true;
+        return operator.length() == 2
+                && operator.charAt(0) == '-'
+                && "rwxoRWXOezsfdlpSbctugkTBMAC".indexOf(operator.charAt(1)) >= 0;
     }
 }

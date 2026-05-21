@@ -341,6 +341,46 @@ subtest 'DESTROY called on untie' => sub {
     }
 };
 
+subtest 'DESTROY called when tied lexical scalar leaves scope' => sub {
+    @TrackedTiedScalar::method_calls = ();
+
+    {
+        tie my $scalar, 'TrackedTiedScalar';
+        $scalar = "scoped";
+        @TrackedTiedScalar::method_calls = ();
+    }
+
+    is_deeply(
+        \@TrackedTiedScalar::method_calls,
+        [['DESTROY']],
+        'tied object destroyed when lexical tied scalar leaves scope'
+    );
+};
+
+subtest 'tied lexical DESTROY deferred while tie object is referenced' => sub {
+    @TrackedTiedScalar::method_calls = ();
+
+    my $object;
+    {
+        $object = tie my $scalar, 'TrackedTiedScalar';
+        $scalar = "scoped";
+        @TrackedTiedScalar::method_calls = ();
+    }
+
+    is_deeply(
+        \@TrackedTiedScalar::method_calls,
+        [],
+        'external tie object reference defers DESTROY at lexical scope exit'
+    );
+
+    undef $object;
+    is_deeply(
+        \@TrackedTiedScalar::method_calls,
+        [['DESTROY']],
+        'DESTROY fires after the external tie object reference is dropped'
+    );
+};
+
 subtest 'UNTIE called before DESTROY' => sub {
     # Test that UNTIE is called before DESTROY
         @TrackedTiedScalar::method_calls = ();  # Clear method calls
@@ -362,4 +402,3 @@ subtest 'UNTIE called before DESTROY' => sub {
 };
 
 done_testing();
-

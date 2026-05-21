@@ -25,6 +25,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     protected final String tiedPackage;
 
+    private boolean tiedObjectReleased = false;
+
     /**
      * Creates a new TiedVariableBase instance.
      *
@@ -207,6 +209,8 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      * Called by untie() after UNTIE has been dispatched.
      */
     public void releaseTiedObject() {
+        if (tiedObjectReleased) return;
+        tiedObjectReleased = true;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
             if (base.refCount > 0 && --base.refCount == 0) {
@@ -216,4 +220,3 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         }
     }
 }
-

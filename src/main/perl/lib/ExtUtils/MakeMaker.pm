@@ -282,6 +282,7 @@ sub _install_pure_perl {
         # Some modules like Image::ExifTool use .pl files loaded via require,
         # .dat files for data (e.g., Geolocation.dat), and Mozilla::CA uses .pem
         my $installable_re = qr/\.(?:pm|pl|pod|dat|json|ya?ml|xml|txt|cfg|conf|ini|pem)$/i;
+        my %pm_rel_seen;
         if (-d 'lib') {
             find({
                 wanted => sub {
@@ -289,19 +290,24 @@ sub _install_pure_perl {
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^lib/}{};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                    $pm_rel_seen{$rel} = 1;
                 },
                 no_chdir => 1,
             }, 'lib');
         }
         
-        # Also check for blib/lib (after a build)
+        # Also check for blib/lib (after a build).  Prefer real sources
+        # under lib/ when both exist; rerunning Makefile.PL after a build
+        # must not turn blib/lib files into self-copying pm_to_blib sources.
         if (-d 'blib/lib') {
             find({
                 wanted => sub {
                     return unless -f && /$installable_re/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
+                    return if $pm_rel_seen{$rel};
                     $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                    $pm_rel_seen{$rel} = 1;
                 },
                 no_chdir => 1,
             }, 'blib/lib');
@@ -670,7 +676,7 @@ sub _create_install_makefile {
             # Flat layout: compute from dest path relative to INSTALL_BASE
             ($blib_rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
         }
-        if ($blib_rel) {
+        if ($blib_rel && $src !~ m{^blib/lib/}) {
             my $blib_dest = "\$(INST_LIB)/$blib_rel";
             my $blib_dir = dirname($blib_dest);
             unless ($blib_dirs_seen{$blib_dir}++) {
@@ -716,7 +722,7 @@ sub _create_install_makefile {
     my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
 
-    my $pm_deps_str = join(' ', sort keys %$pm);
+    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} } keys %$pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op

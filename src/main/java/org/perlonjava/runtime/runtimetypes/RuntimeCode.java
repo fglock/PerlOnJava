@@ -746,6 +746,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Sub::Defer/Moo's %DEFERRED and %QUOTED weak ref tables.
                     // The JVM GC handles truly-dead unblessed containers eventually.
                     if (s.scopeExited) {
+                        if (s.type == RuntimeScalarType.TIED_SCALAR
+                                && s.value instanceof TiedVariableBase tiedVariable) {
+                            tiedVariable.releaseTiedObject();
+                            continue;
+                        }
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && s.value instanceof RuntimeBase rb
                                 && rb.blessId != 0) {

@@ -173,12 +173,6 @@ public class Version extends PerlModuleBase {
                 // Perl 5 treats these as v-strings with is_qv=true
                 isVString = true;
                 version = "v" + version;
-            } else if (dotCount == 1 && version.length() < 4) {
-                // If exactly one dot and short, prepend "v" for internal processing
-                // but keep the original for stringify() and qv flag
-                version = "v" + version;
-                // Note: originalVersionStr stays as the user's input (e.g., "1.0")
-                // Note: isVString remains false - this is a decimal version
             }
         }
 
@@ -192,7 +186,7 @@ public class Version extends PerlModuleBase {
             versionObj.put("qv", getScalarBoolean(isVString));
 
             // Parse components
-            String normalized = VersionHelper.normalizeVersion(new RuntimeScalar(version));
+            String normalized = normalizeDottedVersion(version);
             versionObj.put("version", new RuntimeScalar(normalized));
         } else {
             // Decimal format
@@ -214,6 +208,18 @@ public class Version extends PerlModuleBase {
         ReferenceOperators.bless(blessed, new RuntimeScalar("version"));
 
         return blessed.getList();
+    }
+
+    private static String normalizeDottedVersion(String version) {
+        String normalized = version.startsWith("v") ? version.substring(1) : version;
+        normalized = normalized.replace("_", "");
+        String[] parts = normalized.split("\\.");
+        StringBuilder dotted = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) dotted.append(".");
+            dotted.append(Integer.parseInt(parts[i]));
+        }
+        return dotted.toString();
     }
 
     /**
@@ -263,6 +269,11 @@ public class Version extends PerlModuleBase {
         RuntimeHash versionObj = self.hashDeref();
 
         String version = versionObj.get("version").toString();
+        if (!versionObj.get("qv").getBoolean()) {
+            String original = versionObj.get("original").toString().replace("_", "");
+            return new RuntimeScalar(numifyDecimalVersion(original)).getList();
+        }
+
         String[] parts = version.split("\\.");
 
         if (parts.length == 0) {
@@ -283,6 +294,32 @@ public class Version extends PerlModuleBase {
         }
 
         return new RuntimeScalar(numified.toString()).getList();
+    }
+
+    private static String numifyDecimalVersion(String version) {
+        String clean = version.trim();
+        if (clean.startsWith("v")) {
+            clean = clean.substring(1);
+        }
+        int dot = clean.indexOf('.');
+        if (dot < 0) {
+            return clean + ".000";
+        }
+
+        String major = clean.substring(0, dot);
+        String decimal = clean.substring(dot + 1);
+        if (major.isEmpty()) {
+            major = "0";
+        }
+        if (decimal.isEmpty()) {
+            decimal = "0";
+        }
+        int width = ((decimal.length() + 2) / 3) * 3;
+        StringBuilder padded = new StringBuilder(decimal);
+        while (padded.length() < width) {
+            padded.append("0");
+        }
+        return major + "." + padded;
     }
 
     /**
