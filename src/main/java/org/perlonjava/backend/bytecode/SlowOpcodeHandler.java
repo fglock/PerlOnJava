@@ -309,9 +309,9 @@ public class SlowOpcodeHandler {
         } else {
             codeScalar = codeValue.scalar();
         }
-        String perlCode = codeScalar.toString();
         evalTrace("EVAL_STRING opcode enter rd=r" + rd + " strReg=r" + stringReg +
                 " ctx=" + evalCallContext + " evalSite=" + evalSiteIndex +
+                " codeType=" + codeScalar.type + " codeLen=" + codeScalar.toString().length() +
                 " src=" + (code != null ? code.sourceName : "null"));
 
         int callContext = evalCallContext;
@@ -323,7 +323,7 @@ public class SlowOpcodeHandler {
 
         if (callContext == RuntimeContextType.LIST) {
             RuntimeList result = EvalStringHandler.evalStringList(
-                    perlCode,
+                    codeScalar,
                     code,
                     registers,
                     code.sourceName,
@@ -338,7 +338,7 @@ public class SlowOpcodeHandler {
                     " scalar=" + result.scalar().toString());
         } else {
             RuntimeScalar result = EvalStringHandler.evalStringList(
-                    perlCode,
+                    codeScalar,
                     code,
                     registers,
                     code.sourceName,

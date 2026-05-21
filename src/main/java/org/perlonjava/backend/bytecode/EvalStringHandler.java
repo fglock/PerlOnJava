@@ -104,9 +104,37 @@ public class EvalStringHandler {
                                              Map<String, Integer> siteRegistry,
                                              int siteStrictOptions,
                                              int siteFeatureFlags) {
+        return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags) {
+        return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
+                sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions, siteFeatureFlags);
+    }
+
+    private static RuntimeList evalStringList(String perlCode,
+                                             int sourceType,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags) {
         try {
             evalTrace("EvalStringHandler enter ctx=" + callContext + " srcName=" + sourceName +
-                    " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1));
+                    " srcLine=" + sourceLine + " codeLen=" + (perlCode != null ? perlCode.length() : -1) +
+                    " sourceType=" + sourceType);
             // Step 1: Clear $@ at start of eval
             GlobalVariable.getGlobalVariable("main::@").set("");
 
@@ -124,6 +152,7 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
+            configureEvalSourceOptions(opts, perlCode, sourceType);
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.
@@ -367,6 +396,24 @@ public class EvalStringHandler {
         }
     }
 
+    private static void configureEvalSourceOptions(CompilerOptions opts,
+                                                   String perlCode,
+                                                   int sourceType) {
+        if (sourceType == RuntimeScalarType.BYTE_STRING) {
+            opts.isByteStringSource = true;
+            return;
+        }
+        if (perlCode == null) {
+            return;
+        }
+        for (int i = 0; i < perlCode.length(); i++) {
+            if (perlCode.charAt(i) > 127) {
+                opts.isUnicodeSource = true;
+                return;
+            }
+        }
+    }
+
     /**
      * Evaluate a Perl string with explicit variable capture.
      * <p>
@@ -395,6 +442,7 @@ public class EvalStringHandler {
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
+            configureEvalSourceOptions(opts, perlCode, RuntimeScalarType.STRING);
             ScopedSymbolTable symbolTable = new ScopedSymbolTable();
 
             // Add standard variables that are always available in eval context.
