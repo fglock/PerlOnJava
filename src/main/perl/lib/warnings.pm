@@ -101,6 +101,59 @@ our %Offsets = (
     'experimental::bitwise'		=> 160,
 );
 
+# Warning category masks - public compatibility data used by modules such as
+# Test::Warn. Offsets are bit positions, where the even bit enables a category
+# and the following odd bit marks it fatal.
+my %CategoryChildren = (
+    'all' => [qw(
+        closure deprecated exiting experimental glob imprecision io locale misc
+        missing numeric once overflow pack portable recursion redefine redundant
+        regexp scalar severe shadow signal substr syntax taint threads
+        uninitialized unpack untie utf8 void
+    )],
+    'deprecated' => [qw(
+        deprecated::goto_construct deprecated::unicode_property_name
+        deprecated::dot_in_inc deprecated::version_downgrade
+        deprecated::delimiter_will_be_paired
+        deprecated::missing_import_called_with_args
+        deprecated::subsequent_use_version
+    )],
+    'experimental' => [qw(
+        experimental::regex_sets experimental::re_strict
+        experimental::refaliasing experimental::declared_refs
+        experimental::private_use experimental::uniprop_wildcards
+        experimental::vlb experimental::try
+        experimental::args_array_with_signatures experimental::builtin
+        experimental::defer experimental::extra_paired_delimiters
+        experimental::class experimental::keyword_all experimental::keyword_any
+        experimental::bitwise
+    )],
+    'io'     => [qw(closed exec layer newline pipe unopened syscalls)],
+    'severe' => [qw(debugging inplace internal malloc)],
+    'syntax' => [qw(
+        ambiguous bareword digit parenthesis precedence printf prototype qw
+        reserved semicolon illegalproto
+    )],
+    'utf8'   => [qw(non_unicode nonchar surrogate)],
+);
+
+sub _mk_warning_mask {
+    my ($fatal_bit, @categories) = @_;
+    my $mask = "\0" x $BYTES;
+    my %seen;
+    while (@categories) {
+        my $category = shift @categories;
+        next if $seen{$category}++;
+        next unless exists $Offsets{$category};
+        vec($mask, $Offsets{$category} + $fatal_bit, 1) = 1;
+        push @categories, @{ $CategoryChildren{$category} || [] };
+    }
+    return $mask;
+}
+
+our %Bits     = map { $_ => _mk_warning_mask(0, $_) } keys %Offsets;
+our %DeadBits = map { $_ => _mk_warning_mask(1, $_) } keys %Offsets;
+
 # NoOp warnings - warnings that have been removed but kept for compatibility
 our %NoOp = ();
 
