@@ -102,16 +102,21 @@ sub test {
     
     return '' unless $tests;
     
-    # Set PERL5LIB to add blib/lib and blib/arch to @INC for test subprocesses
+    # Set PERL5LIB to add blib/lib and blib/arch to @INC for test subprocesses.
+    # CPAN.pm also writes .perlonjava-cpan-perl5lib during jcpan test runs so
+    # resumed/manual make test invocations keep tested-but-not-installed deps.
     # Test::Harness runs each test file as a subprocess, so we need PERL5LIB
     # Use "undef *Test::Harness::Switches" to disable the default -w switch,
     # matching standard ExtUtils::MakeMaker behavior (MM_Any::test_via_harness)
     return <<"MAKE_FRAG";
+PERLONJAVA_CPAN_PERL5LIB = \$(shell test -f .perlonjava-cpan-perl5lib && cat .perlonjava-cpan-perl5lib)
+PERLONJAVA_TEST_PERL5LIB = \$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
+
 test :: pure_all
-	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
+	PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_dynamic :: pure_all
-	PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
+	PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" \$(FULLPERL) "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(\$(TEST_VERBOSE), '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $tests
 
 test_static ::
 	\@echo "No static tests for PerlOnJava"

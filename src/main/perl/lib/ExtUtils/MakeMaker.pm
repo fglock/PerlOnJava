@@ -603,10 +603,10 @@ sub _create_install_makefile {
     } elsif ($test_glob) {
         # Use ExtUtils::Command::MM::test_harness with undef *Test::Harness::Switches
         # to disable the default -w switch, matching standard MakeMaker behavior
-        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
+        $test_cmd = qq{PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl "-MExtUtils::Command::MM" "-MTest::Harness" "-e" "undef *Test::Harness::Switches; test_harness(0, '\$(INST_LIB)', '\$(INST_ARCHLIB)')" $test_glob};
     } elsif (-f 'test.pl') {
         # Legacy convention: some older CPAN dists use test.pl instead of t/*.t
-        $test_cmd = qq{PERL5LIB="\$(INST_LIB):\$(INST_ARCHLIB):\$\$PERL5LIB" $perl test.pl};
+        $test_cmd = qq{PERL5LIB="\$(PERLONJAVA_TEST_PERL5LIB)" $perl test.pl};
     } else {
         $test_cmd = qq{$perl -e "print qq{PerlOnJava: No tests found (no t/ directory)\\n}"};
     }
@@ -795,6 +795,8 @@ INST_LIB = $inst_lib
 INST_ARCHLIB = $inst_archlib
 INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
+PERLONJAVA_CPAN_PERL5LIB = \$(shell test -f .perlonjava-cpan-perl5lib && cat .perlonjava-cpan-perl5lib)
+PERLONJAVA_TEST_PERL5LIB = \$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
 $siteprefix_var
 INSTALLSITELIB = $installsitelib
 NOECHO = \@
