@@ -214,9 +214,14 @@ public class ExceptionFormatter {
                         }
 
                         String subName = frame.subroutineName();
-                        // Don't add package prefix if subName already contains "::" or is a special name like "(eval)"
+                        // Don't add package prefix if subName already contains "::" or is a special name like "(eval)".
+                        // Explicitly renamed eval closures keep their original source package for location
+                        // reporting, but caller()[3] must use the rename target's package.
                         if (subName != null && !subName.isEmpty() && !subName.contains("::") && !subName.startsWith("(")) {
-                            subName = pkg + "::" + subName;
+                            String subPkg = frame.code().explicitlyRenamed
+                                    ? (frame.packageName() != null ? frame.packageName() : "main")
+                                    : pkg;
+                            subName = subPkg + "::" + subName;
                         }
 
                         var entry = new ArrayList<String>();
