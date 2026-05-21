@@ -522,6 +522,26 @@ public class ReachabilityWalker {
         return false;
     }
 
+    public static boolean hasLiveStrongScalarReferent(RuntimeBase target) {
+        if (target == null) return false;
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar instanceof RuntimeScalar sc
+                    && !WeakRefRegistry.isweak(sc)
+                    && !sc.scopeExited
+                    && sc.value == target) {
+                return true;
+            }
+        }
+        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+            if (sc == null) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if (sc.scopeExited) continue;
+            if (!MyVarCleanupStack.isLive(sc)) continue;
+            if (sc.value == target) return true;
+        }
+        return false;
+    }
+
     public static boolean isReachableFromGlobalCodeCaptures(RuntimeBase target) {
         if (target == null) return false;
         Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());

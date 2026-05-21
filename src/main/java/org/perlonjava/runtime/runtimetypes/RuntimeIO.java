@@ -423,6 +423,30 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Replace this handle's runtime state with another handle while preserving
+     * object identity. Perl keeps the PVIO object stable across {@code open FH}
+     * on an already-vivified bareword handle, so values captured by
+     * {@code *FH{IO}} before the open see the newly opened stream.
+     */
+    public void replaceStateFrom(RuntimeIO other) {
+        if (other == null || other == this) {
+            return;
+        }
+
+        Integer fd = ioToFileno.remove(other);
+        if (fd != null) {
+            ioToFileno.put(this, fd);
+            filenoToIO.put(fd, this);
+        }
+
+        this.currentLineNumber = other.currentLineNumber;
+        this.ioHandle = other.ioHandle;
+        this.directoryIO = other.directoryIO;
+        this.needFlush = other.needFlush;
+        this.autoFlush = other.autoFlush;
+    }
+
+    /**
      * Checks if this handle is in byte mode (no encoding layers).
      *
      * <p>In Perl, reads from handles without encoding layers (e.g., :raw, :bytes,

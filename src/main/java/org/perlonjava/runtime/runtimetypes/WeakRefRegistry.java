@@ -188,10 +188,13 @@ public class WeakRefRegistry {
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
         }
+        boolean shouldSweepLiveCodeRef = weakenedLiveCodeRef
+                && codeRefHasCountedOwners(base)
+                && !ModuleInitGuard.inModuleInit();
         if (base instanceof RuntimeCode code
                 && code.refCount >= 0
                 && weakRefsExist
-                && ((weakenedLiveCodeRef && !ModuleInitGuard.inModuleInit())
+                && (shouldSweepLiveCodeRef
                 || (code.hadStashRef
                 && code.stashRefCount <= 0
                 && !isInstalledGlobalCodeRef(code)))) {
@@ -203,6 +206,10 @@ public class WeakRefRegistry {
                 clearWeakRefsTo(code);
             }
         }
+    }
+
+    private static boolean codeRefHasCountedOwners(RuntimeBase base) {
+        return base.refCount > 0 || base.activeOwnerCount() > 0;
     }
 
     /**
@@ -295,6 +302,7 @@ public class WeakRefRegistry {
 
     private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
         if (code.stashRefCount > 0 || isInstalledGlobalCodeRef(code)) return true;
+        if (ReachabilityWalker.hasLiveStrongScalarReferent(code)) return true;
         return RuntimeCode.isActiveCode(code);
     }
 

@@ -632,7 +632,7 @@ public class PrototypeArgs {
                     }
                     // Not a known filehandle, but still allow bareword (will be treated as filename string)
                     // Autovivify the filehandle in case it's used later
-                    GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
+                    GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
                 }
             }
             Node scalarArg = ParserNodeUtils.toScalarContext(arg);
@@ -740,7 +740,7 @@ public class PrototypeArgs {
             // Builtin bareword filehandle - create a typeglob reference
 
             // autovivify the bareword handle
-            GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
+            GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
 
             Node typeglobRef = FileHandle.parseBarewordHandle(parser, idNode.name);
             args.elements.add(typeglobRef == null ? expr : typeglobRef);

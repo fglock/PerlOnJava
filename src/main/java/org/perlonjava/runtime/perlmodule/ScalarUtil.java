@@ -160,7 +160,14 @@ public class ScalarUtil extends PerlModuleBase {
             case ARRAYREFERENCE -> "ARRAY";
             case HASHREFERENCE -> "HASH";
             case CODE -> "CODE";
-            case GLOB, GLOBREFERENCE -> "GLOB";
+            case GLOB -> {
+                if (scalar.value instanceof RuntimeIO) yield "IO";
+                yield null;
+            }
+            case GLOBREFERENCE -> {
+                if (scalar.value instanceof RuntimeIO) yield "IO";
+                yield "GLOB";
+            }
             case FORMAT -> "FORMAT";
             case REGEX -> "REGEXP";
             default -> null;

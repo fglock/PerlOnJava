@@ -46,16 +46,12 @@ public class RuntimeStashEntry extends RuntimeGlob {
      */
     @Override
     public RuntimeGlob globDeref() {
-        RuntimeGlob pure = new RuntimeGlob(this.globName);
-        pure.IO = this.IO;
-        return pure;
+        return GlobalVariable.getGlobalIO(this.globName);
     }
 
     @Override
     public RuntimeGlob globDerefNonStrict(String packageName) {
-        RuntimeGlob pure = new RuntimeGlob(this.globName);
-        pure.IO = this.IO;
-        return pure;
+        return GlobalVariable.getGlobalIO(this.globName);
     }
 
 // Note on Stash Operations:
