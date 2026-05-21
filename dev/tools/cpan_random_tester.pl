@@ -142,7 +142,7 @@ my %module_to_dist;
 
 open my $gz, '-|', "gzcat '$packages_gz'" or die "Cannot read $packages_gz: $!\n";
 while (<$gz>) {
-    next if /^\s*$/ || /^[A-Z][a-z-]+:/ || /^\s/;  # skip header
+    next if /^\s*$/ || /^[A-Za-z-]+:\s/ || /^\s/;  # skip header
     chomp;
     my ($module, $version, $dist) = split /\s+/, $_, 3;
     next unless $module && $dist;
@@ -163,7 +163,7 @@ printf "Loaded %d unique distributions (%d total packages)\n",
     scalar @all_modules, scalar keys %module_to_dist;
 
 # Remove already-tested modules (only PASS — re-test FAILs in case deps are now available)
-# If --retest-age is set, only include modules tested N+ days ago instead
+# If --retest-age is set, re-test existing report entries tested N+ days ago.
 my @candidates;
 
 if ($modules_arg) {
@@ -171,9 +171,14 @@ if ($modules_arg) {
     @candidates = parse_module_list($modules_arg);
     printf "Testing %d user-specified modules\n", scalar @candidates;
 } elsif ($retest_age > 0) {
-    # Restrict to modules last tested N+ days ago (for concurrent instance work)
+    # Restrict to modules last tested N+ days ago (for concurrent instance work).
+    # Use the report records directly instead of @all_modules: the report also
+    # contains dependency modules, not just the distribution-root modules chosen
+    # from the CPAN index.
     my $cutoff_date = cutoff_date_for_days_ago($retest_age);
-    for my $mod (@all_modules) {
+    my %seen;
+    for my $mod (sort (keys %pass_modules, keys %fail_modules)) {
+        next if $seen{$mod}++;
         next if $skip_modules{$mod};
 
         my $record;
@@ -186,9 +191,9 @@ if ($modules_arg) {
         }
 
         my $test_date = $record->{date} // '';
-        push @candidates, $mod if $test_date lt $cutoff_date;
+        push @candidates, $mod if !$test_date || $test_date le $cutoff_date;
     }
-    printf "Candidates older than %d days: %d\n", $retest_age, scalar @candidates;
+    printf "Candidates at least %d days old: %d\n", $retest_age, scalar @candidates;
 } else {
     # Default: untested + failures (in case their deps got installed)
     for my $mod (@all_modules) {
@@ -245,6 +250,8 @@ my $target_count = 0;
 my $new_pass     = 0;
 my $new_fail     = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
+my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
+my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
 
 for my $module (@selected) {
     $target_count++;
@@ -332,8 +339,27 @@ for my $module (@selected) {
             printf "  - SKIP    %-38s (%s)\n", $mod, $r->{reason} // '';
 
         } else {
-            # Don't downgrade a PASS to FAIL (would need --retest-pass)
-            next if $pass_modules{$mod};
+            # Default runs can observe transient dependency failures while
+            # testing another target, so keep known PASS entries stable there.
+            # Explicit module/retest-age runs are intentional re-tests and
+            # should record regressions.
+            if ($pass_modules{$mod}) {
+                next unless $record_pass_regressions;
+
+                delete $pass_modules{$mod};
+                $fail_modules{$mod} = $r;
+                $regressed++;
+                printf "  ! REGRESS %-38s PASS -> FAIL", $mod;
+                printf " (%s/%s)", $r->{pass_count} // '?', $r->{tests}
+                    if $r->{tests};
+                if ($r->{error}) {
+                    my $err = $r->{error};
+                    $err = substr($err, 0, 45) . '...' if length($err) > 48;
+                    printf " [%s]", $err;
+                }
+                print "\n";
+                next;
+            }
             # Already a known FAIL — update silently
             if ($fail_modules{$mod}) {
                 $fail_modules{$mod} = $r;
@@ -365,8 +391,8 @@ for my $module (@selected) {
 # Summary
 # ──────────────────────────────────────────────────────────────────────
 print "=" x 70, "\n";
-printf "This run:   %d targets | +%d pass | +%d fail | %d upgraded (FAIL->PASS)\n",
-    $target_count, $new_pass, $new_fail, $upgraded;
+printf "This run:   %d targets | +%d pass | +%d fail | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
+    $target_count, $new_pass, $new_fail, $upgraded, $regressed;
 printf "Cumulative: %d pass | %d fail | %d skip | %d total\n",
     scalar keys %pass_modules, scalar keys %fail_modules,
     scalar keys %skip_modules,
