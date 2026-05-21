@@ -868,6 +868,7 @@ public class BytecodeCompiler implements Visitor {
         List<String> outerVarNames = new ArrayList<>();
         List<RuntimeBase> outerValues = new ArrayList<>();
         List<String> outerVarDecls = new ArrayList<>();
+        List<String> outerVarPackages = new ArrayList<>();
         capturedVarIndices = new HashMap<>();
 
         int reg = 3;
@@ -886,12 +887,18 @@ public class BytecodeCompiler implements Visitor {
             capturedVarIndices.put(name, reg);
             outerVarNames.add(name);
             outerVarDecls.add(entry.decl());
+            outerVarPackages.add(entry.perlPackage());
             outerValues.add(getVariableValueFromContext(name, ctx));
             reg++;
         }
 
         for (int i = 0; i < outerVarNames.size(); i++) {
-            symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, outerVarDecls.get(i));
+            String perlPackage = outerVarPackages.get(i);
+            if (perlPackage != null) {
+                symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, outerVarDecls.get(i), perlPackage);
+            } else {
+                symbolTable.addVariableWithIndex(outerVarNames.get(i), 3 + i, outerVarDecls.get(i));
+            }
         }
 
         // Reserve registers for captured variables so local my declarations don't collide
