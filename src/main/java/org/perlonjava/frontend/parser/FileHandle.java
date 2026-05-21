@@ -332,11 +332,42 @@ public class FileHandle {
         return name.length() >= 4 && name.startsWith("__") && name.endsWith("__");
     }
 
+    private static boolean isVStringBarewordPrefix(String name) {
+        if (name.length() < 2 || name.charAt(0) != 'v') {
+            return false;
+        }
+        for (int i = 1; i < name.length(); i++) {
+            if (!Character.isDigit(name.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isImmediatelyFollowedByOpenParen(Parser parser) {
+        return parser.tokenIndex < parser.tokens.size()
+                && "(".equals(parser.tokens.get(parser.tokenIndex).text);
+    }
+
     private static boolean shouldAutovivifyBarewordHandle(Parser parser, String name, boolean autovivifyUnknownBareword) {
         // Do not treat compile-time magic like __PACKAGE__ as print filehandles:
         // they match ^[A-Z_][A-Z0-9_]*$ but must fall through to the expression list
         // (perl5_t/t/comp/package.t test 13: print __PACKAGE__ eq 'Pkg' ? ...).
         if (isDoubleUnderscoreMagicBareword(name)) {
+            return false;
+        }
+
+        if (isVStringBarewordPrefix(name)) {
+            return false;
+        }
+
+        // Perl treats `print foo("x")` as printing the result of foo(), while
+        // `print foo ("x")` can be a print to filehandle foo.
+        if (isImmediatelyFollowedByOpenParen(parser)) {
+            return false;
+        }
+
+        if (ParserTables.CORE_PROTOTYPES.containsKey(name)) {
             return false;
         }
 
