@@ -727,7 +727,17 @@ public class PrototypeArgs {
             typeglobRef.setAnnotation("context", "SCALAR");
             args.elements.add(typeglobRef);
         } else if (expr instanceof IdentifierNode idNode) {
-            // Bareword - create a typeglob reference
+            if (!isBuiltinOperator(parser)) {
+                // User-defined `(*)` prototypes receive barewords as plain scalar
+                // strings. Builtins such as open/close keep the legacy bareword
+                // filehandle behavior handled below.
+                Node stringArg = new StringNode(idNode.name, idNode.getIndex());
+                stringArg.setAnnotation("context", "SCALAR");
+                args.elements.add(stringArg);
+                return 1;
+            }
+
+            // Builtin bareword filehandle - create a typeglob reference
 
             // autovivify the bareword handle
             GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, idNode.name));
