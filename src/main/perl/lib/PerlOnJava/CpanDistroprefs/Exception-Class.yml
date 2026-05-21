@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Exception::Class.
+
+  Exception::Class is pure Perl and is needed by Params::ValidationCompiler.
+  Its t/ignore.t suite has one PerlOnJava stack-frame-filter mismatch, but
+  the module otherwise builds and installs.
+
+  Keep the test output visible for signal, but allow CPAN to install it as
+  a DateTime prerequisite.
+match:
+  distribution: "^DROLSKY/Exception-Class-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

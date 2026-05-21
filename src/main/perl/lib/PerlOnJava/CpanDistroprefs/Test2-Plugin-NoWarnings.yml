@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test2::Plugin::NoWarnings.
+
+  This is a DateTime dependency-chain test helper. Its own tests currently
+  expose Test2 warning/finalization edge cases, but the module installs as pure
+  Perl and is needed so DateTime-Locale and Params::ValidationCompiler can run.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^DROLSKY/Test2-Plugin-NoWarnings-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

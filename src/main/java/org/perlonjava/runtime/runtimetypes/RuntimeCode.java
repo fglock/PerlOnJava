@@ -153,6 +153,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Thread-local stack of RuntimeCode objects currently executing on this
+     * Java thread. Weak CODE backrefs, especially Sub::Defer's self slot, must
+     * not be cleared while the referent CODE is still running.
+     */
+    private static final ThreadLocal<Deque<RuntimeCode>> activeCodeStack =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
      * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
      * time. Used to populate {@code @DB::args} for {@code caller(N)} from package DB.
      * <p>
@@ -198,6 +206,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     public static int argsStackDepth() {
         return argsStack.get().size();
+    }
+
+    private static void pushActiveCode(RuntimeCode code) {
+        activeCodeStack.get().push(code);
+    }
+
+    private static void popActiveCode(RuntimeCode code) {
+        Deque<RuntimeCode> stack = activeCodeStack.get();
+        if (!stack.isEmpty() && stack.peek() == code) {
+            stack.pop();
+            return;
+        }
+        stack.removeFirstOccurrence(code);
+    }
+
+    public static boolean isActiveCode(RuntimeCode code) {
+        if (code == null) return false;
+        for (RuntimeCode active : activeCodeStack.get()) {
+            if (active == code) return true;
+        }
+        return false;
     }
 
     /**
@@ -536,13 +565,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
-     * stash slot FQN for introspection ({@code Sub::Util::subname}, {@code B::CV})
-     * without mutating {@link #packageName}/{@link #subName}, which must stay
-     * anonymous for {@code caller()} and {@code next::method} unless the CV was
-     * renamed via {@code Sub::Name}/{@code Sub::Util::set_subname}.
+     * stash slot FQN for method dispatch helpers without mutating
+     * {@link #packageName}/{@link #subName}, which must stay anonymous for
+     * {@code caller()} and {@code Sub::Util::subname()} unless the CV was renamed
+     * via {@code Sub::Name}/{@code Sub::Util::set_subname}.
      */
     public String stashInstallPackage;
     public String stashInstallSub;
+    /**
+     * True once this CODE object has been installed in a package stash. After
+     * the visible stash slot is deleted, weak refs to the CODE should not be
+     * kept alive by stale internal owner records.
+     */
+    public boolean hadStashRef = false;
     /**
      * True when this CV was last installed with {@code *Pkg::name = $anonymous_cr}
      * (stash slot recorded, but not {@code Sub::Name}/{@code set_subname}).
@@ -4138,6 +4173,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            pushActiveCode(this);
 
             // hasArgs tracking for caller()[4]:
             // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
@@ -4173,6 +4209,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCurrent();
                 }
                 exitCall();
+                popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();
@@ -4256,6 +4293,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
             pushArgs(a);
+            pushActiveCode(this);
 
             // hasArgs tracking for caller()[4]:
             // This is the 3-arg instance method, called from the 4-arg static apply(scalar, name, args[], ctx).
@@ -4290,6 +4328,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCurrent();
                 }
                 exitCall();
+                popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.debugMode) {
                     DebugHooks.exitSubroutine();

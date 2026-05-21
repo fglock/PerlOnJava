@@ -500,6 +500,13 @@ public class UnicodeResolver {
 
     private static String translateUnicodeProperty(String property, boolean negated, Set<String> recursionSet) {
         try {
+            if (property.startsWith("utf8::")) {
+                String userPropertyName = property.substring("utf8::".length());
+                if (!userPropertyName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                    throw new IllegalArgumentException("Illegal user-defined property name \"" + property + "\"");
+                }
+            }
+
             // Check for user-defined properties (Is... or In...)
             // Perl treats ANY property starting with Is/In (case-insensitive prefix)
             // as potentially user-defined, regardless of the character after the prefix
@@ -707,7 +714,9 @@ public class UnicodeResolver {
         } catch (IllegalArgumentException e) {
             // If the error message already contains "in expansion of", it's a user-defined property error
             // that should be propagated as-is
-            if (e.getMessage() != null && e.getMessage().contains("in expansion of")) {
+            String message = e.getMessage();
+            if (message != null && (message.contains("in expansion of")
+                    || message.startsWith("Illegal user-defined property name"))) {
                 throw e;
             }
             throw new IllegalArgumentException("Invalid or unsupported Unicode property: " + property, e);

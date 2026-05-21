@@ -721,7 +721,7 @@ sub _create_install_makefile {
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op
     # This handles cases like File::ShareDir::Install tests that only have share files
-    my $pm_to_blib_target = "pm_to_blib";
+    my $pm_to_blib_target = "pm_to_blib::";
     if (%$pm) {
         $pm_to_blib_target = "pm_to_blib::$pm_deps_str";
     }
@@ -912,13 +912,14 @@ sub _shell_mkdir {
 # rather than failing the whole install.
 sub _shell_cp {
     my ($src, $dest, $autodir) = @_;
+    my $should_autosplit = defined($autodir) && $src =~ /\.pm\z/i && $dest =~ /\.pm\z/i;
     $src =~ s/'/'\\''/g;  # escape single quotes
     $dest =~ s/'/'\\''/g;
     my $autosplit = '';
     my $autosplit_dir = $autodir;
-    if ($autosplit_dir && $dest =~ /\.pm\z/i) {
+    if ($should_autosplit) {
         $autosplit_dir =~ s/'/'\\''/g;
-        $autosplit = " && \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'";
+        $autosplit = " && if grep -q '^__END__\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
     }
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
 }

@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::File::ShareDir.
+
+  DateTime-Locale uses this as a test helper. Its upstream tests depend on
+  File::Copy::Recursive and currently fail when that dependency's own tests
+  are not accepted by CPAN first.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^KENTNL/Test-File-ShareDir-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

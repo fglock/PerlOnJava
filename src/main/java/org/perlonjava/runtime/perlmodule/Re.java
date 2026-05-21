@@ -43,7 +43,9 @@ public class Re extends PerlModuleBase {
      * Constructor initializes the module.
      */
     public Re() {
-        super("re");
+        // Register Java-backed re::* functions without pre-populating %INC.
+        // Real Perl does not consider re.pm loaded until `use/require re`.
+        super("re", false);
     }
 
     /**

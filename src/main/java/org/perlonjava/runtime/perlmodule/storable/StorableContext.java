@@ -296,6 +296,14 @@ public final class StorableContext {
         return tag;
     }
 
+    /** Return the tag that will be assigned by the next write-side
+     *  {@link #recordWriteSeen(Object)} call. Storable hook encoding uses
+     *  this to remember the SX_REF placeholder tag for extra references
+     *  returned by STORABLE_freeze. */
+    public long peekNextWriteTag() {
+        return nextWriteTag;
+    }
+
     /** Look up a classname's index for {@code SX_IX_BLESS}, or {@code -1}
      *  if this class hasn't been emitted via {@code SX_BLESS} yet. */
     public int lookupWriteClass(String name) {

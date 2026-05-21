@@ -74,11 +74,22 @@ public class WeakRefRegistry {
         if (!(ref.value instanceof RuntimeBase base)) return;
         if (weakScalars.contains(ref)) return;  // already weak
 
-        // If referent was already destroyed, immediately undef the weak ref
+        // If referent was already destroyed, immediately undef the weak ref.
+        // CODE refs are an exception: Sub::Quote compiles named, no-install
+        // subs under a localized glob and returns the CODE ref after restoring
+        // that glob. The restore path can mark the temporary stash reference as
+        // destroyed even though a strong coderef escaped. Revive that stale
+        // marker so a later weaken() of the escaped CODE behaves like Perl.
         if (base.refCount == Integer.MIN_VALUE) {
-            ref.type = RuntimeScalarType.UNDEF;
-            ref.value = null;
-            return;
+            if (base instanceof RuntimeCode code
+                    && code.defined()
+                    && !code.currentlyDestroying) {
+                base.refCount = -1;
+            } else {
+                ref.type = RuntimeScalarType.UNDEF;
+                ref.value = null;
+                return;
+            }
         }
 
         weakScalars.add(ref);
@@ -104,6 +115,8 @@ public class WeakRefRegistry {
             MyVarCleanupStack.snapshotStackToLiveCounts();
         }
 
+        boolean weakenedLiveCodeRef = base instanceof RuntimeCode && MyVarCleanupStack.isLive(ref);
+
         if (base.refCount > 0 && ref.refCountOwned) {
             // Tracked object with a properly-counted reference:
             // decrement strong count (weak ref doesn't count).
@@ -128,7 +141,8 @@ public class WeakRefRegistry {
                     // Cleanup will happen at scope exit (scopeExitCleanupHash/Array).
                 } else if (hasWeakRefsTo(base)
                         && (ReachabilityWalker.isReachableFromRoots(base)
-                        || ReachabilityWalker.isReachableFromLiveScalarRegistry(base))) {
+                        || ReachabilityWalker.isReachableFromLiveScalarRegistry(base)
+                        || ReachabilityWalker.isReachableFromLiveCodeCaptures(base))) {
                     // A temporary probe can be weakened without owning the last
                     // strong Perl reference. Test::Refcount does this when it
                     // weakens a local copy before calling B::svref_2object().
@@ -173,6 +187,21 @@ public class WeakRefRegistry {
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
+        }
+        if (base instanceof RuntimeCode code
+                && code.refCount >= 0
+                && weakRefsExist
+                && ((weakenedLiveCodeRef && !ModuleInitGuard.inModuleInit())
+                || (code.hadStashRef
+                && code.stashRefCount <= 0
+                && !isInstalledGlobalCodeRef(code)))) {
+            ReachabilityWalker.sweepWeakRefs(true);
+            if (hasWeakRefsTo(code)
+                    && code.stashRefCount <= 0
+                    && !isInstalledGlobalCodeRef(code)
+                    && (code.hadStashRef || code.reachableOwnerCount() == 0)) {
+                clearWeakRefsTo(code);
+            }
         }
     }
 
@@ -233,16 +262,13 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
-        // Skip clearing weak refs to CODE objects. CODE refs live in both
-        // lexicals and the symbol table (stash), but stash assignments
-        // (*Foo::bar = $coderef) bypass setLarge(), making the stash reference
-        // invisible to refcounting. This causes false refCount==0 via mortal
-        // flush when a lexical goes out of scope — even though the CODE ref
-        // is still alive in the stash. Since DESTROY is not implemented,
-        // there is no behavioral difference from skipping the clear.
-        // This is critical for Sub::Quote/Sub::Defer which use weaken()
-        // for back-references to deferred subs.
-        if (referent instanceof RuntimeCode) return;
+        // CODE refs can live in both lexicals and the symbol table. Do not
+        // clear weak CODE refs while a stash slot still owns the sub, but do
+        // clear anonymous CODE refs when their selective refcount reaches zero.
+        // Sub::Quote/Sub::Defer store weak backrefs to anonymous deferred subs;
+        // leaving those weak scalars defined keeps the whole quoted/deferred
+        // metadata graph Java-reachable and leaks until global destruction.
+        if (referent instanceof RuntimeCode code && shouldKeepCodeWeakRefs(code)) return;
         Set<RuntimeScalar> weakRefs = referentToWeakRefs.remove(referent);
         if (weakRefs == null) return;
         if (System.getenv("PJ_WEAKCLEAR_TRACE") != null) {
@@ -256,6 +282,20 @@ public class WeakRefRegistry {
             weak.value = null;
             weakScalars.remove(weak);
         }
+    }
+
+    private static boolean isInstalledGlobalCodeRef(RuntimeCode code) {
+        for (RuntimeScalar scalar : GlobalVariable.globalCodeRefs.values()) {
+            if (scalar != null && scalar.value == code) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean shouldKeepCodeWeakRefs(RuntimeCode code) {
+        if (code.stashRefCount > 0 || isInstalledGlobalCodeRef(code)) return true;
+        return RuntimeCode.isActiveCode(code);
     }
 
     /**

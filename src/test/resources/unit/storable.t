@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use Storable qw(store retrieve nstore freeze thaw nfreeze dclone);
 
 # Test plan
-plan tests => 11;
+plan tests => 13;
 
 subtest 'Basic scalar serialization' => sub {
     plan tests => 6;
@@ -203,6 +203,16 @@ subtest 'Network byte order functions' => sub {
     is_deeply($thawed, $data, 'nfreeze/thaw round-trip works');
 };
 
+subtest 'Network byte order preserves Perl infinity spelling' => sub {
+    plan tests => 2;
+
+    my $pos = "Inf" + 0;
+    my $neg = "-Inf" + 0;
+
+    is(${ thaw(nfreeze(\$pos)) }, 'Inf', 'positive infinity thaws as Inf');
+    is(${ thaw(nfreeze(\$neg)) }, '-Inf', 'negative infinity thaws as -Inf');
+};
+
 subtest 'Deep cloning' => sub {
     plan tests => 4;
     
@@ -349,6 +359,36 @@ subtest 'STORABLE_freeze scalar hook keeps one ref level' => sub {
     is(ref($obj), '_StScalarHook', 'scalar hook object class survives');
     is($$obj, 'http://search.cpan.org', 'scalar hook referent survives');
     is("$obj", 'http://search.cpan.org', 'scalar hook overload sees one ref level');
+};
+
+subtest 'STORABLE_freeze extra scalar refs thaw as refs' => sub {
+    plan tests => 3;
+
+    package _StHookExtraScalarRef;
+
+    sub new {
+        my ($class, $formatter) = @_;
+        return bless { formatter => $formatter }, $class;
+    }
+
+    sub STORABLE_freeze {
+        my ($self, $cloning) = @_;
+        return 'cookie', \$self->{formatter};
+    }
+
+    sub STORABLE_thaw {
+        my ($self, $cloning, $cookie, $formatter) = @_;
+        $self->{cookie} = $cookie;
+        $self->{formatter_ref_type} = ref($formatter);
+        $self->{formatter} = $$formatter;
+    }
+
+    package main;
+
+    my $copy = eval { thaw(nfreeze(_StHookExtraScalarRef->new('Formatter'))) };
+    ok(!$@, "hook thaw with extra scalar ref lives (err: $@)");
+    is($copy->{formatter_ref_type}, 'SCALAR', 'extra hook arg is a scalar reference');
+    is($copy->{formatter}, 'Formatter', 'extra scalar reference points at original value');
 };
 
 done_testing();

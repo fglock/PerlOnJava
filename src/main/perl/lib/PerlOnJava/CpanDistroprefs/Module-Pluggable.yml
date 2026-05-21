@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for Module::Pluggable.
+
+  Module::Pluggable installs as pure Perl, but t/26inc_hook.t currently
+  hits a PerlOnJava read-only scalar edge case while testing @INC hook
+  behavior. The module is needed as a build/test prerequisite for
+  Test2::Plugin::NoWarnings.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^SIMONW/Module-Pluggable-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

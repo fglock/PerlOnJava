@@ -288,10 +288,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 codeContainer.set(value);
 
                 if (value.value instanceof RuntimeCode newCode) {
-                    // Record stash slot FQN for Sub::Util::subname / B::CV without
-                    // mutating packageName/subName (caller + next::method must keep
-                    // treating a bare *Pkg::name = sub{} install as anonymous).
+                    // Record stash slot FQN for method dispatch helpers without
+                    // mutating packageName/subName (caller/Sub::Util::subname and
+                    // next::method must keep treating a bare *Pkg::name = sub{}
+                    // install as anonymous).
                     RuntimeGlob.attachCoderefToNamedGlob(newCode, this.globName);
+                    newCode.hadStashRef = true;
                     newCode.stashRefCount++;
                 }
 
@@ -1280,6 +1282,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.invalidatePackageRootSnapshot();
         // Increment stashRefCount on the restored CODE ref being put back in the stash
         if (snap.code != null && snap.code.value instanceof RuntimeCode restoredCode) {
+            restoredCode.hadStashRef = true;
             restoredCode.stashRefCount++;
         }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the

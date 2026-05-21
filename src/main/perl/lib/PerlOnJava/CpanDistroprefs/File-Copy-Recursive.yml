@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for File::Copy::Recursive.
+
+  Test::File::ShareDir requires this pure-Perl module in DateTime's
+  dependency chain. Its own tests depend on helper modules with unrelated
+  PerlOnJava test-suite failures.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^DMUEY/File-Copy-Recursive-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

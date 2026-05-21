@@ -1,6 +1,9 @@
 package org.perlonjava.runtime.operators;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Perl-style logical characters on top of Java {@link String} (UTF-16).
@@ -15,8 +18,25 @@ import java.util.Locale;
 public final class PerlUtfString {
 
     public static final char MARKER_LEAD = '\uFFFD';
+    private static final int INDEX_CACHE_THRESHOLD = 4096;
+    private static final Map<String, PerlIndexMap> INDEX_CACHE = new WeakHashMap<>();
 
     public record PerlStep(int nextJavaIndex, long codePoint) {}
+    private record PerlIndexMap(int[] javaBoundaries) {
+        int logicalLength() {
+            return javaBoundaries.length - 1;
+        }
+
+        int javaIndexForLogicalOffset(int logicalOffset) {
+            if (logicalOffset <= 0) {
+                return 0;
+            }
+            if (logicalOffset >= logicalLength()) {
+                return javaBoundaries[javaBoundaries.length - 1];
+            }
+            return javaBoundaries[logicalOffset];
+        }
+    }
 
     private PerlUtfString() {}
 
@@ -92,6 +112,14 @@ public final class PerlUtfString {
     }
 
     public static int codePointCountPerl(String s) {
+        PerlIndexMap indexMap = cachedIndexMap(s);
+        if (indexMap != null) {
+            return indexMap.logicalLength();
+        }
+        return scanCodePointCountPerl(s);
+    }
+
+    private static int scanCodePointCountPerl(String s) {
         int count = 0;
         int i = 0;
         while (i < s.length()) {
@@ -107,11 +135,51 @@ public final class PerlUtfString {
     }
 
     public static int offsetByPerlCodePoints(String s, int startJava, int perlOffset) {
+        if (perlOffset <= 0) {
+            return startJava;
+        }
+        PerlIndexMap indexMap = cachedIndexMap(s);
+        if (indexMap != null) {
+            int startLogical = Arrays.binarySearch(indexMap.javaBoundaries, startJava);
+            if (startLogical >= 0) {
+                return indexMap.javaIndexForLogicalOffset(startLogical + perlOffset);
+            }
+        }
+        return scanOffsetByPerlCodePoints(s, startJava, perlOffset);
+    }
+
+    private static int scanOffsetByPerlCodePoints(String s, int startJava, int perlOffset) {
         int j = startJava;
         for (int k = 0; k < perlOffset && j < s.length(); k++) {
             j = readOnePerlLogical(s, j).nextJavaIndex();
         }
         return j;
+    }
+
+    private static PerlIndexMap cachedIndexMap(String s) {
+        if (s.length() < INDEX_CACHE_THRESHOLD) {
+            return null;
+        }
+        synchronized (INDEX_CACHE) {
+            PerlIndexMap indexMap = INDEX_CACHE.get(s);
+            if (indexMap == null) {
+                indexMap = buildIndexMap(s);
+                INDEX_CACHE.put(s, indexMap);
+            }
+            return indexMap;
+        }
+    }
+
+    private static PerlIndexMap buildIndexMap(String s) {
+        int[] boundaries = new int[s.length() + 1];
+        int count = 0;
+        int i = 0;
+        boundaries[count++] = 0;
+        while (i < s.length()) {
+            i = readOnePerlLogical(s, i).nextJavaIndex();
+            boundaries[count++] = i;
+        }
+        return new PerlIndexMap(Arrays.copyOf(boundaries, count));
     }
 
     /** First logical character as unsigned (Perl {@code ord} UV semantics for the first char). */
