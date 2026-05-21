@@ -1109,9 +1109,29 @@ public class OperatorParser {
     }
 
     static OperatorNode parseLast(Parser parser, LexerToken token, int currentIndex) {
-        Node operand;
-        // Handle loop control operators
-        operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
+        int savedIndex = parser.tokenIndex;
+        LexerToken next = TokenUtils.peek(parser);
+
+        // In Perl, `last FOO` / `next FOO` / `redo FOO` uses the bareword as
+        // the literal loop label FOO. A constant subroutine named FOO must not
+        // rewrite that bareword into a dynamic label expression.
+        if (next.type == IDENTIFIER && !ListParser.isListTerminator(parser, next)) {
+            int labelIndex = parser.tokenIndex;
+            TokenUtils.consume(parser);
+            LexerToken afterLabel = TokenUtils.peek(parser);
+            parser.tokenIndex = savedIndex;
+
+            if (afterLabel.type == EOF || ListParser.isListTerminator(parser, afterLabel)) {
+                TokenUtils.consume(parser);
+                ListNode labels = new ListNode(currentIndex);
+                labels.elements.add(new IdentifierNode(next.text, labelIndex));
+                return new OperatorNode(token.text, labels, currentIndex);
+            }
+        } else {
+            parser.tokenIndex = savedIndex;
+        }
+
+        Node operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode(token.text, operand, currentIndex);
     }
 
