@@ -1,9 +1,11 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.Arrays;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeArray.TIED_ARRAY;
 import static org.perlonjava.runtime.runtimetypes.RuntimeHash.TIED_HASH;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -64,13 +66,15 @@ public class TieOperators {
         // (not a string). This matches Perl's tie() behavior where `tie *$obj, $obj`
         // passes the blessed object as $_[0] to TIEHANDLE.
         RuntimeScalar invocant = blessId != 0 ? classArg : new RuntimeScalar(className);
-        RuntimeScalar self = RuntimeCode.call(
-                invocant,
-                new RuntimeScalar(method),
-                null,
-                args,
-                RuntimeContextType.SCALAR
-        ).getFirst();
+        RuntimeScalar self = blessId != 0
+                ? RuntimeCode.call(
+                        invocant,
+                        new RuntimeScalar(method),
+                        null,
+                        args,
+                        RuntimeContextType.SCALAR
+                ).getFirst()
+                : callTieConstructor(className, method, args);
 
         switch (variable.type) {
             case REFERENCE -> {
@@ -130,6 +134,25 @@ public class TieOperators {
             }
         }
         return self;
+    }
+
+    private static RuntimeScalar callTieConstructor(String className, String methodName, RuntimeArray args) {
+        args.elements.addFirst(new RuntimeScalar(className));
+
+        RuntimeScalar method = InheritanceResolver.findMethodInHierarchy(methodName, className, null, 0);
+        if (method == null) {
+            throw new PerlCompilerException("Can't locate object method \"" + methodName
+                    + "\" via package \"" + className + "\" (perhaps you forgot to load \""
+                    + className + "\"?)");
+        }
+
+        String autoloadVariableName = ((RuntimeCode) method.value).autoloadVariableName;
+        if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
+            getGlobalVariable(autoloadVariableName).set(
+                    NameNormalizer.normalizeVariableName(methodName, className));
+        }
+
+        return RuntimeCode.apply(method, args, RuntimeContextType.SCALAR).getFirst();
     }
 
     /**
