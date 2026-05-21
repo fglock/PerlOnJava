@@ -102,6 +102,10 @@ public class ListParser {
      * @throws PerlCompilerException If the syntax is incorrect or the minimum number of items is not met.
      */
     static ListNode parseZeroOrMoreList(Parser parser, int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex) {
+        return parseZeroOrMoreList(parser, minItems, wantBlockNode, obeyParentheses, wantFileHandle, wantRegex, false);
+    }
+
+    static ListNode parseZeroOrMoreList(Parser parser, int minItems, boolean wantBlockNode, boolean obeyParentheses, boolean wantFileHandle, boolean wantRegex, boolean autovivifyUnknownBarewordFileHandle) {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList start");
         ListNode expr = new ListNode(parser.tokenIndex);
 
@@ -168,7 +172,7 @@ public class ListParser {
                 TokenUtils.consume(parser);
                 hasParen = true;
             }
-            expr.handle = FileHandle.parseFileHandle(parser);
+            expr.handle = FileHandle.parseFileHandle(parser, autovivifyUnknownBarewordFileHandle);
             if (expr.handle == null || !isSpaceAfterPrintBlock(parser)) {
                 // Backtrack
                 parser.debugHeredocState("FILEHANDLE_BEFORE_BACKTRACK");
