@@ -90,6 +90,13 @@ public class RuntimeStashEntry extends RuntimeGlob {
         if (value.type == REFERENCE) {
             if (value.value instanceof RuntimeScalar) {
                 RuntimeScalar deref = value.scalarDeref();
+                RuntimeScalar existingScalar = GlobalVariable.globalVariables.get(this.globName);
+                if (existingScalar != null
+                        && existingScalar.getDefinedBoolean()
+                        && deref.type != READONLY_SCALAR
+                        && !(deref instanceof RuntimeScalarReadOnly)) {
+                    super.set(value);
+                }
                 if (deref.type == CODE) {
                     // `$stash->{foo} = \&bar` creates a constant subroutine returning the code reference
                     RuntimeCode code = new RuntimeCode("", null);
