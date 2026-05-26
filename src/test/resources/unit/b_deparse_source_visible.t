@@ -2,10 +2,10 @@ use strict;
 use warnings;
 use Test::More;
 use B::Deparse;
+use File::Temp qw(tempfile);
 
 my $deparse = B::Deparse->new;
-my $path = "/tmp/perlonjava_b_deparse_source_visible_$$.pl";
-open my $fh, '>', $path or die "open $path: $!";
+my ($fh, $path) = tempfile('perlonjava_b_deparse_source_visible_XXXX', SUFFIX => '.pl', TMPDIR => 1, UNLINK => 0);
 print {$fh} "our \$CODE = sub { 0 };\n1;\n";
 close $fh or die "close $path: $!";
 
