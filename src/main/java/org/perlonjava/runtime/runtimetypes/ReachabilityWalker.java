@@ -124,6 +124,7 @@ public class ReachabilityWalker {
                 // DBIC's leak tracer.
                 if (MortalList.isDeferredCapture(sc)) continue;
                 if (!MyVarCleanupStack.isLive(sc)) continue;
+                addReachable(sc, todo);
                 visitScalar(sc, todo);
             }
 
@@ -142,6 +143,7 @@ public class ReachabilityWalker {
             for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
                 if (liveVar instanceof RuntimeScalar sc) {
                     if (WeakRefRegistry.isweak(sc)) continue;
+                    addReachable(sc, todo);
                     visitScalar(sc, todo);
                 } else if (liveVar instanceof RuntimeBase rb) {
                     addReachable(rb, todo);
@@ -181,6 +183,7 @@ public class ReachabilityWalker {
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
+                visitCodePadConstants(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
                 // over-rescuing DBIC objects through internal callbacks.
                 // Exception: Sub::Defer/Sub::Quote deferred wrappers keep a
@@ -194,6 +197,14 @@ public class ReachabilityWalker {
             } else if (cur instanceof RuntimeScalar s) {
                 visitScalar(s, todo);
             }
+        }
+    }
+
+    private void visitCodePadConstants(RuntimeCode code,
+                                       java.util.ArrayDeque<RuntimeBase> todo) {
+        if (code.padConstants == null) return;
+        for (RuntimeBase constant : code.padConstants) {
+            addReachable(constant, todo);
         }
     }
 

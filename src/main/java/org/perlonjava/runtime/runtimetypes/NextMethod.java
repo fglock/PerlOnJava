@@ -26,6 +26,64 @@ public class NextMethod {
         return code.packageName;
     }
 
+    private static boolean isNextHelper(String callerPackage, String methodName) {
+        return ("next".equals(callerPackage)
+                        && ("method".equals(methodName) || "can".equals(methodName)))
+                || ("maybe::next".equals(callerPackage) && "method".equals(methodName));
+    }
+
+    private static CallerMethod callerMethodFromCode(RuntimeCode code) {
+        if (code == null) {
+            return null;
+        }
+
+        String callerPackage = methodResolutionPackage(code);
+        String methodName =
+                code.stashInstallSub != null && !code.stashInstallSub.isEmpty()
+                        ? code.stashInstallSub
+                        : code.subName;
+
+        if (methodName != null
+                && methodName.contains("::")
+                && (code.stashInstallSub == null || code.stashInstallSub.isEmpty())) {
+            int lastDoubleColon = methodName.lastIndexOf("::");
+            String packageFromName = methodName.substring(0, lastDoubleColon);
+            String nameFromName = methodName.substring(lastDoubleColon + 2);
+            if (!packageFromName.isEmpty() && !nameFromName.isEmpty()) {
+                callerPackage = packageFromName;
+                methodName = nameFromName;
+            }
+        }
+
+        boolean realSubName =
+                methodName != null
+                        && !methodName.isEmpty()
+                        && !"__ANON__".equals(methodName)
+                        && !methodName.startsWith("(");
+        if (callerPackage == null
+                || callerPackage.isEmpty()
+                || !realSubName
+                || isNextHelper(callerPackage, methodName)
+                || (code.installedViaAnonGlobAssign && !code.explicitlyRenamed)) {
+            return null;
+        }
+
+        return new CallerMethod(callerPackage, methodName);
+    }
+
+    private static CallerMethod resolveCallerMethodFromActiveCodeStack() {
+        for (int depth = 0; ; depth++) {
+            RuntimeCode code = RuntimeCode.getActiveCodeAt(depth);
+            if (code == null) {
+                return null;
+            }
+            CallerMethod caller = callerMethodFromCode(code);
+            if (caller != null) {
+                return caller;
+            }
+        }
+    }
+
     private static CallerMethod resolveCallerMethodFromStack() {
         for (int level = 0; level <= 5; level++) {
             try {
@@ -306,7 +364,10 @@ public class NextMethod {
             throw new PerlCompilerException("Can't call next::method on an empty argument list");
         }
 
-        CallerMethod caller = resolveCallerMethodFromStack();
+        CallerMethod caller = resolveCallerMethodFromActiveCodeStack();
+        if (caller == null) {
+            caller = resolveCallerMethodFromStack();
+        }
         if (caller == null) {
             throw new PerlCompilerException("Can't resolve method name for next::method");
         }
@@ -319,7 +380,10 @@ public class NextMethod {
             if (args.size() == 0) {
                 return scalarUndef.getList();
             }
-            CallerMethod caller = resolveCallerMethodFromStack();
+            CallerMethod caller = resolveCallerMethodFromActiveCodeStack();
+            if (caller == null) {
+                caller = resolveCallerMethodFromStack();
+            }
             if (caller == null) {
                 return scalarUndef.getList();
             }

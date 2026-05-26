@@ -654,6 +654,11 @@ public class MortalList {
     private static final boolean FORCE_SWEEP_EVERY_FLUSH =
             System.getenv("JPERL_FORCE_SWEEP_EVERY_FLUSH") != null;
     private static boolean inAutoSweep = false;
+    private static boolean immediateWeakSweepRequested = false;
+
+    public static void requestImmediateWeakSweep() {
+        immediateWeakSweepRequested = true;
+    }
 
     // D-W6.18 perf: cached reachable-set, valid for the duration of a
     // single flush() invocation. The walker BFS is O(globals); without
@@ -821,22 +826,27 @@ public class MortalList {
     private static void maybeAutoSweep() {
         if (AUTO_GC_DISABLED) return;
         if (inAutoSweep) return;
+        boolean immediateSweep = immediateWeakSweepRequested;
         // FORCE_SWEEP_EVERY_FLUSH bypasses the weakRefsExist gate AND the
         // 5-s throttle so reproducers can deterministically trigger the
         // walker at every statement boundary.
-        if (!FORCE_SWEEP_EVERY_FLUSH && !WeakRefRegistry.weakRefsExist) return;
+        if (!FORCE_SWEEP_EVERY_FLUSH && !WeakRefRegistry.weakRefsExist && !immediateSweep) return;
         // Phase B2a: skip while require/use/BEGIN/eval-STRING is running.
         // Those paths depend on weak-refed intermediate state staying
         // defined until the init completes.
         if (ModuleInitGuard.inModuleInit()) return;
         if (RuntimeCode.argsStackDepth() > 1) return;
-        if (!FORCE_SWEEP_EVERY_FLUSH) {
+        if (!FORCE_SWEEP_EVERY_FLUSH && !immediateSweep) {
             long now = System.nanoTime();
             if (now - lastAutoSweepNanos < AUTO_SWEEP_MIN_INTERVAL_NS) return;
             lastAutoSweepNanos = now;
         }
         inAutoSweep = true;
         try {
+            if (immediateSweep) {
+                immediateWeakSweepRequested = false;
+                lastAutoSweepNanos = System.nanoTime();
+            }
             // Quiet mode handles ordinary statement-boundary checks.
             int cleared = ReachabilityWalker.sweepWeakRefs(true);
             if (AUTO_GC_DEBUG) {
@@ -849,6 +859,12 @@ public class MortalList {
 
     private static void maybeAutoSweepAfterFlush() {
         maybeAutoSweep();
+    }
+
+    private static void maybeAutoSweepIfRequested() {
+        if (immediateWeakSweepRequested) {
+            maybeAutoSweep();
+        }
     }
 
     /**
@@ -986,6 +1002,7 @@ public class MortalList {
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
             processReadyDeferredCaptures();
+            maybeAutoSweepIfRequested();
             return;
         }
         invalidateDrainReachabilityCaches();
@@ -1001,5 +1018,6 @@ public class MortalList {
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures();
+        maybeAutoSweepIfRequested();
     }
 }
