@@ -351,6 +351,7 @@ These are loaded automatically or via `use`:
 | `Attribute::Handlers` | Perl | |
 | `Devel::Cycle` | Perl | |
 | `Devel::Peek` | Perl | |
+| `Class::XSAccessor` / `Class::XSAccessor::Array` | Perl | Pure-Perl replacement for the CPAN XS accessors; no entersub optimizer |
 | `Class::MOP` | Perl | Upstream 2.4000 source |
 | `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass (no threads). See note below. |
 | `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |
