@@ -11,8 +11,10 @@ package org.perlonjava.runtime.regex;
  * block can't be constant-folded. {@link RegexPreprocessor} detects them
  * and reports "not implemented":
  * <ul>
- *   <li>{@link #CODE_BLOCK} — a hard error; the surrounding regex can't
- *       usefully run without the code block.</li>
+ *   <li>{@link #CODE_BLOCK} — a hard error under default die mode,
+ *       or a no-op fallback only when {@link #CODE_BLOCK_NOOP_ENV} is set.
+ *       Plain {@code JPERL_UNIMPLEMENTED=warn} still reports the unsupported
+ *       feature without pretending the callback ran.</li>
  *   <li>{@link #RECURSIVE_PATTERN} — a hard error under default die mode,
  *       or a warning under {@code JPERL_UNIMPLEMENTED=warn} followed by
  *       the soft {@code (?:} fallback so the surrounding pattern still
@@ -34,6 +36,14 @@ package org.perlonjava.runtime.regex;
  * matches regardless of flags.
  */
 public final class RegexMarkers {
+    /**
+     * Environment variable that permits non-constant {@code (?{ CODE })}
+     * blocks to compile as empty no-op groups. This is deliberately opt-in:
+     * normal PerlOnJava code must fail loudly because callbacks are not
+     * executed.
+     */
+    public static final String CODE_BLOCK_NOOP_ENV = "JPERL_REGEX_CODE_BLOCK_NOOP";
+
     /**
      * Marker for a {@code (?{ CODE })} code block that could not be
      * constant-folded at parse time. Contains no fold-affected letters.

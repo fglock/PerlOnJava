@@ -245,6 +245,12 @@ public class Variable {
             // lazily-compiled named sub bodies that would otherwise be missed
             checkStrictVarsAtParseTime(parser, sigil, varName);
 
+            SymbolTable.SymbolEntry lexicalExport = getLexicalExportEntry(parser, sigil, varName);
+            if (lexicalExport != null) {
+                String qualifiedName = lexicalExport.perlPackage() + "::" + varName;
+                return new OperatorNode(sigil, new IdentifierNode(qualifiedName, parser.tokenIndex), parser.tokenIndex);
+            }
+
             // Normal variable: create a simple variable reference node
             return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
         } else if (peek(parser).text.equals("{")) {
@@ -256,6 +262,44 @@ public class Variable {
         // Parse the expression with the appropriate precedence
         operand = parser.parseExpression(parser.getPrecedence("$") + 1);
         return new OperatorNode(sigil, operand, parser.tokenIndex);
+    }
+
+    private static SymbolTable.SymbolEntry getLexicalExportEntry(Parser parser, String sigil, String varName) {
+        SymbolTable.SymbolEntry entry = parser.ctx.symbolTable.getSymbolEntry(sigil + varName);
+        if (isLexicalExportEntry(entry)) {
+            return entry;
+        }
+
+        int peekIdx = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        String nextText = peekIdx < parser.tokens.size() ? parser.tokens.get(peekIdx).text : "";
+
+        if (sigil.equals("$")) {
+            if (nextText.equals("{")) {
+                entry = parser.ctx.symbolTable.getSymbolEntry("%" + varName);
+                if (isLexicalExportEntry(entry)) {
+                    return entry;
+                }
+            } else if (nextText.equals("[")) {
+                entry = parser.ctx.symbolTable.getSymbolEntry("@" + varName);
+                if (isLexicalExportEntry(entry)) {
+                    return entry;
+                }
+            }
+        } else if (sigil.equals("@") && nextText.equals("{")) {
+            entry = parser.ctx.symbolTable.getSymbolEntry("%" + varName);
+            if (isLexicalExportEntry(entry)) {
+                return entry;
+            }
+        }
+
+        return null;
+    }
+
+    private static boolean isLexicalExportEntry(SymbolTable.SymbolEntry entry) {
+        return entry != null
+                && "our".equals(entry.decl())
+                && entry.perlPackage() != null
+                && entry.perlPackage().startsWith("PerlOnJava::_LEXICAL_EXPORT_");
     }
 
     /**

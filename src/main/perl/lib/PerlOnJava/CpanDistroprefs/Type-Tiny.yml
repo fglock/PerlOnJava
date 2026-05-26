@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Type::Tiny.
+
+  Type::Tiny's StrMatch callback tests build regexes containing non-constant
+  (?{...}) callbacks. PerlOnJava intentionally keeps those fatal for real code
+  because callback execution is not implemented, so patch only those tests out
+  of the CPAN test phase.
+match:
+  distribution: "^TOBYINK/Type-Tiny-"
+patches:
+  - "Type-Tiny-2.010001/SkipRegexCallbackTests.patch"

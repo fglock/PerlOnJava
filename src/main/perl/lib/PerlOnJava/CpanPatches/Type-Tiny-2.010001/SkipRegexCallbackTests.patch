@@ -1,0 +1,22 @@
+--- t/20-modules/Types-Standard/strmatch-allow-callbacks.t.orig
++++ t/20-modules/Types-Standard/strmatch-allow-callbacks.t
+@@ -24,6 +24,8 @@ use strict;
+ use warnings;
+ use lib qw( . ./t ../inc ./inc );
+ use Test::More;
++plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks';
++
+ use Test::Requires '5.020';
+ 
+ use Types::Standard 'StrMatch';
+--- t/20-modules/Types-Standard/strmatch-avoid-callbacks.t.orig
++++ t/20-modules/Types-Standard/strmatch-avoid-callbacks.t
+@@ -24,6 +24,8 @@ use strict;
+ use warnings;
+ use lib qw( . ./t ../inc ./inc );
+ use Test::More;
++plan skip_all => 'PerlOnJava does not implement non-constant (?{...}) regex callbacks';
++
+ 
+ BEGIN {
+ 	plan skip_all => "cperl's `shadow` warnings catgeory breaks this test; skipping"

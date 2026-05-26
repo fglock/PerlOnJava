@@ -10,7 +10,9 @@ our $VERSION = '1.00_perlonjava';
 # 
 # This stub provides minimal functionality:
 # 1. For Sub::Quote created subs, return the stored source code
-# 2. For other subs, return a placeholder
+# 2. For simple anonymous subs whose source file is still available, return
+#    the source-visible body
+# 3. For other subs, return a placeholder
 
 sub new {
     my $class = shift;
@@ -53,10 +55,57 @@ sub coderef2text {
             return "{\n$source\n}";
         }
     }
+
+    my $source = _source_visible_anon_sub($coderef);
+    return $source if defined $source;
     
     # Fallback: return a placeholder
     # In real Perl, B::Deparse would decompile the optree
     return '{ "DUMMY" }';
+}
+
+sub _source_visible_anon_sub {
+    my ($coderef) = @_;
+
+    require B;
+    my $cv = eval { B::svref_2object($coderef) } or return;
+    my $cop = eval { $cv->START } or return;
+    my $file = eval { $cop->file } or return;
+    my $line = eval { $cop->line } || 0;
+    return if $line <= 0 || $file eq '-e' || !-f $file;
+
+    open my $fh, '<', $file or return;
+    my @lines = <$fh>;
+    close $fh;
+
+    my $source = join '', @lines[($line - 1) .. ($line + 8 < @lines ? $line + 8 : $#lines)];
+    return unless $source =~ /\bsub\s*(?:\([^)]*\)\s*)?\{/;
+
+    my $start = $-[0];
+    my $brace = index($source, '{', $start);
+    return if $brace < 0;
+
+    my $depth = 0;
+    my $end = -1;
+    for (my $i = $brace; $i < length($source); $i++) {
+        my $ch = substr($source, $i, 1);
+        if ($ch eq '{') {
+            $depth++;
+        } elsif ($ch eq '}') {
+            $depth--;
+            if ($depth == 0) {
+                $end = $i;
+                last;
+            }
+        }
+    }
+    return if $end < 0;
+
+    my $body = substr($source, $brace + 1, $end - $brace - 1);
+    $body =~ s/^\s+//;
+    $body =~ s/\s+$//;
+    $body .= ';' if length($body) && $body !~ /[;}]\z/;
+    return "{ $body }";
 }
 
 # Additional methods that might be called
@@ -92,6 +141,11 @@ This stub provides minimal functionality:
 =item *
 
 For subroutines created via Sub::Quote, the stored source code is returned.
+
+=item *
+
+For simple anonymous subroutines whose source file is still available, the
+source-visible body is returned.
 
 =item *
 

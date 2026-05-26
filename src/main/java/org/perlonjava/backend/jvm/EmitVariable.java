@@ -899,12 +899,12 @@ public class EmitVariable {
                         }
                     }
 
-                    // Handle scalar ref aliasing: \$y = $ref
-                    // Makes $y an alias for the scalar referenced by $ref
-                    if (nodeLeft.operand instanceof OperatorNode varNode && varNode.operator.equals("$")) {
+                    // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
+                    if (nodeLeft.operand instanceof OperatorNode varNode
+                            && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
                         String varName;
                         if (varNode.operand instanceof IdentifierNode idNode) {
-                            varName = "$" + idNode.name;
+                            varName = varNode.operator + idNode.name;
                         } else {
                             throw new PerlCompilerException(node.tokenIndex, "Assignment to unsupported ref aliasing target", ctx.errorUtil);
                         }
@@ -917,18 +917,26 @@ public class EmitVariable {
                             }
                             // else RHS is already on top of stack
 
-                            // Dereference: get the RuntimeScalar that the reference points to
-                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                                    "scalarDeref",
-                                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                                    false);
+                            switch (varNode.operator) {
+                                case "$" -> mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                        "scalarDeref",
+                                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                        false);
+                                case "@" -> mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                        "arrayDeref",
+                                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                                        false);
+                                case "%" -> mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                        "hashDeref",
+                                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
+                                        false);
+                            }
 
-                            // Duplicate: one copy for the return value, one for ASTORE
                             mv.visitInsn(Opcodes.DUP);
 
-                            // Store the dereferenced scalar directly into the variable's local slot
-                            // This creates the alias: $y now points to the same RuntimeScalar object
                             mv.visitVarInsn(Opcodes.ASTORE, symEntry.index());
 
                             if (pooledRhs) {

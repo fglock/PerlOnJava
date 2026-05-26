@@ -70,6 +70,25 @@ my @KNOWN_FLAKES = (
         file   => 'porting/checkcase.t',
         reason => 'File-existence checks vary per checkout (counts files in tree).',
     },
+    {
+        file   => 'porting/manifest.t',
+        reason => 'Perl-core MANIFEST file-existence checks vary with the ignored '
+                . 'local perl5_t checkout/test corpus. Compare only against runs '
+                . 'made from the same perl5_t tree.',
+    },
+    {
+        file   => 'porting/filenames.t',
+        reason => 'Pass count equals total in both runs, but total varies with the '
+                . 'ignored local perl5_t MANIFEST corpus.',
+    },
+    {
+        file   => 'op/sub.t',
+        reason => 'Subtest 61 ("simple sub stored as CV in stash (non-main::)") '
+                . 'has appeared as "not ok ... # TODO disabled for now" in some '
+                . 'raw runner outputs and plain "not ok" in others. The runtime '
+                . 'behavior is the same failure; the aggregate pass count changes '
+                . 'because TODO not-ok lines count as passing TAP.',
+    },
 );
 
 my %FLAKE_BY_FILE = map { $_->{file} => $_ } @KNOWN_FLAKES;
@@ -361,4 +380,3 @@ if (!$show_flakes) {
 }
 
 print "\n";
-

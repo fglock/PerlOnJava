@@ -1129,10 +1129,15 @@ public class RegexPreprocessor {
             } else if (c3 == '{') {
                 // Check if this is our special unimplemented marker
                 if (s.startsWith(RegexMarkers.CODE_BLOCK, offset)) {
-                    regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
+                    if (!allowRegexCodeBlockNoop()) {
+                        regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
+                    }
+                    sb.append("(?:");
+                    offset = offset + RegexMarkers.CODE_BLOCK.length() - 1;
+                } else {
+                    // Handle (?{ ... }) code blocks - try constant folding
+                    offset = handleCodeBlock(s, offset, length, sb, regexFlags);
                 }
-                // Handle (?{ ... }) code blocks - try constant folding
-                offset = handleCodeBlock(s, offset, length, sb, regexFlags);
             } else if (c3 == '?' && c4 == '{') {
                 // Check if this is the unimplemented marker for (??{...}).
                 // Under JPERL_UNIMPLEMENTED=warn, warn and fall through to the
@@ -2397,8 +2402,9 @@ public class RegexPreprocessor {
             return codeEnd + 1; // Just skip past '}' if no ')' found
         }
 
-        // Non-constant code block: replace with no-op group so the regex compiles.
-        // This allows tests that use (?{...}) in non-critical parts to continue running.
+        if (!allowRegexCodeBlockNoop()) {
+            regexUnimplemented(s, offset + 2, "(?{...}) code blocks in regex not implemented");
+        }
         sb.append("(?:");
 
         // Return offset pointing to the ')' so handleGroup can consume it
@@ -2406,6 +2412,11 @@ public class RegexPreprocessor {
             return codeEnd + 1; // Point to ')' for handleGroup to consume
         }
         return codeEnd + 1; // Just skip past '}' if no ')' found
+    }
+
+    private static boolean allowRegexCodeBlockNoop() {
+        return "1".equals(GlobalVariable.getGlobalHash("main::ENV")
+                .get(RegexMarkers.CODE_BLOCK_NOOP_ENV).toString());
     }
 
     /**
