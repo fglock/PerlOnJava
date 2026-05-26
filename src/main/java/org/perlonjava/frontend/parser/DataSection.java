@@ -63,12 +63,11 @@ public class DataSection {
     /**
      * Creates or updates a DATA filehandle for a package.
      *
-     * @param parser  the parser instance
-     * @param content the content after __DATA__ or __END__
+     * @param parser     the parser instance
+     * @param handleName fully-qualified DATA handle name
+     * @param content    the content after __DATA__ or __END__
      */
-    public static void createDataHandle(Parser parser, String content) {
-        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
-
+    public static void createDataHandle(Parser parser, String handleName, String content) {
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Populating DATA handle for package: " + handleName + " with content: " + content);
 
         // Get the existing RuntimeIO (which should be the placeholder we created earlier)
@@ -88,6 +87,15 @@ public class DataSection {
             GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Created new DATA handle");
         }
+    }
+
+    private static String dataHandleName(Parser parser, String markerText) {
+        // Perl treats top-level __END__ as main::DATA even if the marker appears
+        // after a package declaration. __DATA__ remains package-relative.
+        if (markerText.equals("__END__") && parser.isTopLevelScript) {
+            return "main::DATA";
+        }
+        return parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
     }
 
     /**
@@ -172,7 +180,7 @@ public class DataSection {
     }
 
     static int parseDataSection(Parser parser, int tokenIndex, List<LexerToken> tokens, LexerToken token) {
-        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+        String handleName = dataHandleName(parser, token.text);
 
         // Check if this package has already processed its DATA section.
         // However, allow re-processing if the DATA handle was closed (e.g., module
@@ -220,7 +228,7 @@ public class DataSection {
                 }
 
                 if (rawContent != null) {
-                    createDataHandle(parser, rawContent);
+                    createDataHandle(parser, handleName, rawContent);
                 } else {
                     // Fallback: concatenate remaining tokens (for eval/string-based code
                     // where raw bytes are not available)
@@ -237,7 +245,7 @@ public class DataSection {
                         tokenIndex++;
                     }
 
-                    createDataHandle(parser, dataContent.toString());
+                    createDataHandle(parser, handleName, dataContent.toString());
                 }
 
                 // When `use utf8` is active, apply :utf8 layer to the DATA handle.
