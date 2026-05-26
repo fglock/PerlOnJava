@@ -141,8 +141,23 @@ sub DESTROY {
     return $self->SUPER::DESTROY() if $self->can('SUPER::DESTROY');
 }
 
+package CallerTrackingTiedHash;
+our @ISA = ('TiedHash');
+our $caller_sub;
+
+sub FETCH {
+    my ($self, $key) = @_;
+    my @caller = caller(1);
+    $caller_sub = $caller[3];
+    return $self->SUPER::FETCH($key);
+}
+
 # Main test package
 package main;
+
+sub tied_hash_return_accessor {
+    return $_[0]->{key};
+}
 
 subtest 'Basic tie operations' => sub {
     my %hash;
@@ -191,6 +206,17 @@ subtest 'FETCH and STORE operations' => sub {
 
     # Fetch undefined key
     is($hash{nonexistent}, undef, 'undefined key returns undef');
+};
+
+subtest 'FETCH during scalar return keeps callee caller frame' => sub {
+    my %hash;
+    tie %hash, 'CallerTrackingTiedHash';
+    $hash{key} = 'value';
+    $CallerTrackingTiedHash::caller_sub = undef;
+
+    is(tied_hash_return_accessor(\%hash), 'value', 'tied hash value returned from accessor');
+    is($CallerTrackingTiedHash::caller_sub, 'main::tied_hash_return_accessor',
+       'FETCH sees the accessor frame before scalar return unwinds');
 };
 
 subtest 'EXISTS and DELETE operations' => sub {

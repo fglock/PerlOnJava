@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 13;
 use Eval::Closure qw(eval_closure);
 use Sub::Util qw(set_subname);
 
@@ -121,5 +121,21 @@ set_subname( 'Other::Renamed', $renamed_eval_closure );
 is( $renamed_eval_closure->(),
     'Other::Renamed',
     'caller(0)[3] uses explicit set_subname package for eval closures' );
+
+{
+    package CallerLineNumber::GeneratedAccessor;
+    sub get {
+        return (caller(1))[3];
+    }
+
+    my $generated = sub { get() };
+    Sub::Util::set_subname('CallerLineNumber::GeneratedAccessor::generated', $generated);
+    no strict 'refs';
+    *{'CallerLineNumber::GeneratedAccessor::generated'} = $generated;
+}
+
+is( CallerLineNumber::GeneratedAccessor::generated(),
+    'CallerLineNumber::GeneratedAccessor::generated',
+    'caller(1)[3] uses explicit set_subname for generated accessors' );
 
 # End of tests
