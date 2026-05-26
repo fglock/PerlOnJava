@@ -120,11 +120,11 @@ public class FileTemp extends PerlModuleBase {
      * Register a temporary file for cleanup
      */
     public static RuntimeList _register_temp_file(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _register_temp_file");
         }
 
-        String path = args.get(1).toString();
+        String path = args.get(args.size() - 1).toString();
         long pid = ProcessHandle.current().pid();
         TEMP_FILES.computeIfAbsent(pid, k -> new HashSet<>()).add(Paths.get(path));
         return new RuntimeList();
@@ -134,11 +134,11 @@ public class FileTemp extends PerlModuleBase {
      * Register a temporary directory for cleanup
      */
     public static RuntimeList _register_temp_dir(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _register_temp_dir");
         }
 
-        String path = args.get(1).toString();
+        String path = args.get(args.size() - 1).toString();
         long pid = ProcessHandle.current().pid();
         TEMP_DIRS.computeIfAbsent(pid, k -> new HashSet<>()).add(Paths.get(path));
         return new RuntimeList();
@@ -148,11 +148,11 @@ public class FileTemp extends PerlModuleBase {
      * Unregister a temporary file
      */
     public static RuntimeList _unregister_temp_file(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _unregister_temp_file");
         }
 
-        String path = args.get(1).toString();
+        String path = args.get(args.size() - 1).toString();
         long pid = ProcessHandle.current().pid();
         Set<Path> files = TEMP_FILES.get(pid);
         if (files != null) {
@@ -165,11 +165,11 @@ public class FileTemp extends PerlModuleBase {
      * Unregister a temporary directory
      */
     public static RuntimeList _unregister_temp_dir(RuntimeArray args, int ctx) {
-        if (args.size() != 2) {
+        if (args.size() < 1) {
             throw new IllegalStateException("Bad number of arguments for _unregister_temp_dir");
         }
 
-        String path = args.get(1).toString();
+        String path = args.get(args.size() - 1).toString();
         long pid = ProcessHandle.current().pid();
         Set<Path> dirs = TEMP_DIRS.get(pid);
         if (dirs != null) {

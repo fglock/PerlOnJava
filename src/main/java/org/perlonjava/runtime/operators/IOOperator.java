@@ -2985,12 +2985,8 @@ public class IOOperator {
             DupIOHandle[] pair = DupIOHandle.createPair(dupTarget, origFd);
 
             if (layeredWrapper != null) {
-                LayeredIOHandle origLayered = new LayeredIOHandle(pair[0]);
-                origLayered.activeLayers.addAll(layeredWrapper.activeLayers);
-                LayeredIOHandle dupLayered = new LayeredIOHandle(pair[1]);
-                dupLayered.activeLayers.addAll(layeredWrapper.activeLayers);
-                original.ioHandle = origLayered;
-                duplicate.ioHandle = dupLayered;
+                original.ioHandle = cloneLayeredHandle(layeredWrapper, pair[0]);
+                duplicate.ioHandle = cloneLayeredHandle(layeredWrapper, pair[1]);
             } else {
                 original.ioHandle = pair[0];  // Replace original's handle with refcounted wrapper
                 duplicate.ioHandle = pair[1]; // New handle with unique fd
@@ -3025,6 +3021,20 @@ public class IOOperator {
         }
 
         return duplicate;
+    }
+
+    private static LayeredIOHandle cloneLayeredHandle(LayeredIOHandle source, IOHandle delegate) {
+        LayeredIOHandle clone = new LayeredIOHandle(delegate);
+        if (source.activeLayers.isEmpty()) {
+            return clone;
+        }
+
+        StringBuilder mode = new StringBuilder();
+        for (IOLayer layer : source.activeLayers) {
+            mode.append(':').append(layer.getLayerName());
+        }
+        clone.binmode(mode.toString());
+        return clone;
     }
 
     /**

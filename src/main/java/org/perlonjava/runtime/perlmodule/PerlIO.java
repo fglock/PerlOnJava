@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.io.IOLayer;
 import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.ScalarBackedIO;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -60,11 +61,22 @@ public class PerlIO extends PerlModuleBase {
         // For now, we ignore these options and just return layer names
 
         RuntimeArray layers = new RuntimeArray();
+        RuntimeArray.push(layers, new RuntimeScalar(isScalarBacked(fh) ? "scalar" : "unix"));
         if (fh.ioHandle instanceof LayeredIOHandle layeredIOHandle) {
             for (IOLayer layer : layeredIOHandle.activeLayers) {
                 RuntimeArray.push(layers, new RuntimeScalar(layer.getLayerName()));
             }
         }
         return layers.getList();
+    }
+
+    private static boolean isScalarBacked(RuntimeIO fh) {
+        if (fh.ioHandle instanceof ScalarBackedIO) {
+            return true;
+        }
+        if (fh.ioHandle instanceof LayeredIOHandle layeredIOHandle) {
+            return layeredIOHandle.getDelegate() instanceof ScalarBackedIO;
+        }
+        return false;
     }
 }
