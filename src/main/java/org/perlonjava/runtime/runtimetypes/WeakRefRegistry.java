@@ -187,6 +187,7 @@ public class WeakRefRegistry {
             // Moo's accessor inlining (51 test failures). See §15.
             ref.refCountOwned = false;
             base.refCount = WEAKLY_TRACKED;
+            MortalList.requestImmediateWeakSweep();
         }
         boolean shouldCheckLiveCodeRef = weakenedLiveCodeRef
                 && codeRefHasCountedOwners(base)

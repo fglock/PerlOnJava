@@ -2374,7 +2374,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         inlineCacheMethodHash[cacheIndex] == methodHash) {
                         RuntimeCode cachedCode = inlineCacheCode[cacheIndex];
                         if (cachedCode != null && (cachedCode.subroutine != null || cachedCode.methodHandle != null)) {
-                            // Cache hit - ultra fast path: directly invoke method
+                            // Cache hit: skip method lookup, but still enter through
+                            // RuntimeCode.apply() so caller(), next::method, warnings,
+                            // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
                                 RuntimeArray a = new RuntimeArray();
                                 a.elements.add(runtimeScalar);
@@ -2399,20 +2401,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                     }
                                 }
                                 
-                                requireLvalueCallable(cachedCode, callContext, null);
-                                int effectiveContext = effectiveCallContext(callContext);
                                 MortalList.pushMark();
                                 try {
-                                    // Prefer PerlSubroutine interface over MethodHandle
-                                    RuntimeList out;
-                                    if (cachedCode.subroutine != null) {
-                                        out = cachedCode.subroutine.apply(a, effectiveContext);
-                                    } else if (cachedCode.isStatic) {
-                                        out = (RuntimeList) cachedCode.methodHandle.invoke(a, effectiveContext);
-                                    } else {
-                                        out = (RuntimeList) cachedCode.methodHandle.invoke(cachedCode.codeObject, a, effectiveContext);
-                                    }
-                                    return coerceScalarCallResult(out, effectiveContext);
+                                    return cachedCode.apply(a, callContext);
                                 } finally {
                                     MortalList.popMark();
                                 }

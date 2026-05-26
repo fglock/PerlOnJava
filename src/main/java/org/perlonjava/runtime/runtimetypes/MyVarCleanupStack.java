@@ -140,6 +140,7 @@ public class MyVarCleanupStack {
             if (stack.get(i) == var) {
                 stack.remove(i);
                 decLiveCount(var);
+                noteVarLeftScope(var);
                 return;
             }
         }
@@ -151,6 +152,12 @@ public class MyVarCleanupStack {
         if (c <= 1) liveCounts.remove(var);
         else liveCounts.put(var, c - 1);
         MortalList.invalidateLiveRootSnapshot();
+    }
+
+    private static void noteVarLeftScope(Object var) {
+        if (var instanceof RuntimeBase base && WeakRefRegistry.hasWeakRefsTo(base)) {
+            MortalList.requestImmediateWeakSweep();
+        }
     }
 
     /**
@@ -169,6 +176,7 @@ public class MyVarCleanupStack {
             if (var != null) {
                 decLiveCount(var);
                 MortalList.evalExceptionScopeCleanup(var);
+                noteVarLeftScope(var);
             }
         }
     }
@@ -183,7 +191,10 @@ public class MyVarCleanupStack {
     public static void popMark(int mark) {
         while (stack.size() > mark) {
             Object var = stack.removeLast();
-            if (var != null) decLiveCount(var);
+            if (var != null) {
+                decLiveCount(var);
+                noteVarLeftScope(var);
+            }
         }
     }
 }

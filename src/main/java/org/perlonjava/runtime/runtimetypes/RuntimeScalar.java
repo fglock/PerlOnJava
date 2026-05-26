@@ -1430,8 +1430,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Overwriting ONE reference doesn't mean no other strong refs exist —
         // closures may capture copies (e.g., Sub::Quote's $_QUOTED capture).
         // This is the same rationale as in scopeExitCleanup.
-        // Weak refs for WEAKLY_TRACKED objects are cleared only via explicit
-        // undefine() of a strong reference.
+        // Weak refs for WEAKLY_TRACKED objects are cleared only when a strong
+        // reference is explicitly undef'd (or assigned undef), via a targeted
+        // sweep so other strong scalar refs can still keep the referent alive.
+        if (oldBase != null
+                && oldBase.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                && value.type == UNDEF) {
+            MortalList.requestImmediateWeakSweep();
+        }
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
