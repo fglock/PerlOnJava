@@ -113,13 +113,12 @@ public class Encode extends PerlModuleBase {
         } catch (Exception ignored) {
         }
 
-        // "locale" and "locale_fs" - map to JVM's default charset.
-        // Encode::Locale registers these via Encode::Alias, but the Java decode/encode
-        // methods bypass Perl-side alias resolution. The JVM default charset matches
-        // what Encode::Locale detects from the OS locale (e.g. UTF-8 on modern systems).
+        // Locale fallbacks before Encode::Locale has initialized its globals.
         Charset defaultCharset = Charset.defaultCharset();
         CHARSET_ALIASES.put("locale", defaultCharset);
         CHARSET_ALIASES.put("locale_fs", defaultCharset);
+        CHARSET_ALIASES.put("console_in", defaultCharset);
+        CHARSET_ALIASES.put("console_out", defaultCharset);
 
         // UTF-32 aliases
         try {
@@ -1224,6 +1223,8 @@ public class Encode extends PerlModuleBase {
      * Handles common aliases and Perl-style encoding names.
      */
     private static Charset getCharset(String encodingName) {
+        encodingName = resolveDynamicEncodingName(encodingName);
+
         // Check aliases first
         Charset charset = CHARSET_ALIASES.get(encodingName);
         if (charset != null) {
@@ -1236,5 +1237,33 @@ public class Encode extends PerlModuleBase {
         } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
             throw new RuntimeException("Unknown encoding: " + encodingName);
         }
+    }
+
+    /**
+     * Encode::Locale exposes dynamic aliases whose target can change at
+     * runtime via reinit(). Java-backed encode/decode bypass Perl's
+     * Encode::Alias dispatcher, so read those package globals directly.
+     */
+    private static String resolveDynamicEncodingName(String encodingName) {
+        if (encodingName == null) {
+            return null;
+        }
+
+        String globalName = switch (encodingName.toLowerCase(Locale.ROOT)) {
+            case "locale" -> "Encode::Locale::ENCODING_LOCALE";
+            case "locale_fs" -> "Encode::Locale::ENCODING_LOCALE_FS";
+            case "console_in" -> "Encode::Locale::ENCODING_CONSOLE_IN";
+            case "console_out" -> "Encode::Locale::ENCODING_CONSOLE_OUT";
+            default -> null;
+        };
+        if (globalName == null) {
+            return encodingName;
+        }
+
+        RuntimeScalar aliasTarget = GlobalVariable.globalVariables.get(globalName);
+        if (aliasTarget != null && aliasTarget.getDefinedBoolean()) {
+            return aliasTarget.toString();
+        }
+        return encodingName;
     }
 }
