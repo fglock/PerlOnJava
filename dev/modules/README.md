@@ -10,6 +10,7 @@ This directory contains design documents and guides related to porting CPAN modu
 | [cpanel_json_xs.md](cpanel_json_xs.md) | **Cpanel::JSON::XS** — plan for full upstream `t/` parity (Java XS port, phased) |
 | [moose_support.md](moose_support.md) | Path to Moose/Class::MOP support (blocked by B module) |
 | [moo_support.md](moo_support.md) | Moo support status (96% working) |
+| [sub_multimethod.md](sub_multimethod.md) | **Sub::MultiMethod** — currently blocked only by pending `builtin::export_lexically`; module suite passes after no-test dependency install |
 | [xs_fallback.md](xs_fallback.md) | XS fallback mechanism for pure Perl modules |
 | [xsloader.md](xsloader.md) | XSLoader architecture |
 | [makemaker_perlonjava.md](makemaker_perlonjava.md) | ExtUtils::MakeMaker implementation |
