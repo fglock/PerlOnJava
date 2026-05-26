@@ -249,6 +249,7 @@ print "=" x 70, "\n\n";
 my $target_count = 0;
 my $new_pass     = 0;
 my $new_fail     = 0;
+my $new_skip     = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
 my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
 my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
@@ -315,6 +316,7 @@ for my $module (@selected) {
 
         if ($r->{status} eq 'PASS') {
             $r->{git_commit} = $git_commit;
+            delete $skip_modules{$mod};
 
             # Was it previously a FAIL? That's an upgrade.
             if ($fail_modules{$mod}) {
@@ -334,11 +336,18 @@ for my $module (@selected) {
             $pass_modules{$mod} = $r;
 
         } elsif ($r->{status} eq 'SKIP') {
-            next if $skip_modules{$mod};
+            delete $pass_modules{$mod};
+            delete $fail_modules{$mod};
+            if ($skip_modules{$mod}) {
+                $skip_modules{$mod} = $r;
+                next;
+            }
             $skip_modules{$mod} = $r;
+            $new_skip++;
             printf "  - SKIP    %-38s (%s)\n", $mod, $r->{reason} // '';
 
         } else {
+            delete $skip_modules{$mod};
             # Default runs can observe transient dependency failures while
             # testing another target, so keep known PASS entries stable there.
             # Explicit module/retest-age runs are intentional re-tests and
@@ -391,8 +400,8 @@ for my $module (@selected) {
 # Summary
 # ──────────────────────────────────────────────────────────────────────
 print "=" x 70, "\n";
-printf "This run:   %d targets | +%d pass | +%d fail | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
-    $target_count, $new_pass, $new_fail, $upgraded, $regressed;
+printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
+    $target_count, $new_pass, $new_fail, $new_skip, $upgraded, $regressed;
 printf "Cumulative: %d pass | %d fail | %d skip | %d total\n",
     scalar keys %pass_modules, scalar keys %fail_modules,
     scalar keys %skip_modules,
@@ -508,6 +517,13 @@ sub parse_all_module_results {
             next;
         }
 
+        if (is_bundled_skip_output($text)) {
+            $r{status} = 'SKIP';
+            $r{reason} = 'bundled';
+            push @results, \%r;
+            next;
+        }
+
         if ($text =~ /Result: FAIL/ || $text =~ /(?:make|Build) test -- NOT OK/) {
             $r{status} = 'FAIL';
             if ($total_tests > 0) {
@@ -540,6 +556,7 @@ sub parse_all_module_results {
 
     # --- Pass 3: catch modules that never reached the test phase ---
     # (configure failures, build failures, etc.)
+    my %pending_bundled_skip;
     for my $line (split /\n/, $output) {
         if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
             $last_mod = $1;
@@ -568,9 +585,33 @@ sub parse_all_module_results {
             );
             push @results, \%r;
         }
+
+        # Bundled primary modules generate a no-op test target. Some CPAN
+        # output shapes may omit the standard make-test block, so keep this
+        # fallback too. Defer recording until after the scan so a later
+        # configure/build failure still wins.
+        $pending_bundled_skip{$last_mod} = 1
+            if $last_mod && !$seen{$last_mod} && is_bundled_skip_output($line);
+    }
+
+    for my $mod (sort keys %pending_bundled_skip) {
+        next if $seen{$mod}++;
+        my %r = (
+            module => $mod, status => 'SKIP',
+            tests => undef, pass_count => undef,
+            error => '', reason => 'bundled',
+        );
+        push @results, \%r;
     }
 
     return @results;
+}
+
+sub is_bundled_skip_output {
+    my ($text) = @_;
+    return 1 if $text =~ /PerlOnJava:\s+.+?\s+is bundled in the JAR;\s+skipping upstream test suite/i;
+    return 1 if $text =~ /NOTE:\s+\S+\.pm\s+is bundled;\s+upstream test suite will be skipped/i;
+    return 0;
 }
 
 
@@ -793,7 +834,7 @@ sub generate_report {
 | **Modules Tested** | $total |
 | **Pass** | $total_pass ($pass_pct%) |
 | **Fail** | $total_fail |
-| **Skipped (XS-only)** | $total_skip |
+| **Skipped** | $total_skip |
 
 HEADER
 
@@ -847,9 +888,8 @@ HEADER
 
     # ── Skip list ──
     if ($total_skip > 0) {
-        print $fh "## Skipped Modules (XS-only)\n\n";
-        print $fh "These modules require XS/C extensions and cannot work with PerlOnJava ";
-        print $fh "unless a Java backend is implemented.\n\n";
+        print $fh "## Skipped Modules\n\n";
+        print $fh "These modules were recognized as intentionally skipped by the tester.\n\n";
         print $fh "| Module | Reason | Date |\n";
         print $fh "|--------|--------|------|\n";
         for my $mod (sort keys %skip_modules) {
