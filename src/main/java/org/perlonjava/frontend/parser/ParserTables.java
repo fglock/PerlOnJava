@@ -34,6 +34,7 @@ public class ParserTables {
             "gethostbyname", "getpwuid", "glob",
             "hex",
             "kill",
+            "log",
             "oct", "open",
             "readline", "readpipe", "rename", "require",
             "send",
