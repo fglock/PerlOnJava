@@ -39,7 +39,9 @@ public class NextMethod {
 
                     if (!filename.contains(".java") && !pkg.isEmpty()
                             && !subroutineName.isEmpty() && !subroutineName.equals("(eval)")
-                            && !subroutineName.endsWith("::__ANON__")) {
+                            && !subroutineName.endsWith("::__ANON__")
+                            && !subroutineName.startsWith("next::")
+                            && !subroutineName.startsWith("maybe::next::")) {
                         String methodName;
                         String callerPackage;
                         int lastDoubleColon = subroutineName.lastIndexOf("::");

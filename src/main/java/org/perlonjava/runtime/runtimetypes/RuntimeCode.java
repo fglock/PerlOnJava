@@ -208,11 +208,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return argsStack.get().size();
     }
 
-    private static void pushActiveCode(RuntimeCode code) {
+    public static void pushActiveCode(RuntimeCode code) {
         activeCodeStack.get().push(code);
     }
 
-    private static void popActiveCode(RuntimeCode code) {
+    public static void popActiveCode(RuntimeCode code) {
         Deque<RuntimeCode> stack = activeCodeStack.get();
         if (!stack.isEmpty() && stack.peek() == code) {
             stack.pop();
@@ -227,6 +227,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (active == code) return true;
         }
         return false;
+    }
+
+    public static RuntimeCode getActiveCodeAt(int depth) {
+        if (depth < 0) return null;
+        int i = 0;
+        for (RuntimeCode active : activeCodeStack.get()) {
+            if (i++ == depth) {
+                return active;
+            }
+        }
+        return null;
     }
 
     /**
@@ -408,6 +419,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
             return new RuntimeList(result.scalar());
+        }
+        if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() == 1) {
+            RuntimeBase value = result.elements.getFirst();
+            if (value instanceof RuntimeScalar scalar && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                return new RuntimeList(scalar.tiedFetch());
+            }
         }
         return copyReadonlyListReturns(result, effectiveContext);
     }
@@ -2778,10 +2795,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
+
+                RuntimeCode activeCode = getActiveCodeAt(originalFrame);
+                if (activeCode != null) {
+                    subName = callerSubNameForCode(activeCode);
+                }
                 
                 // For the innermost frame (frame == 1 after skip), check currentSub first
                 // to honor set_subname() which modifies RuntimeCode.subName at runtime
-                if (frame == 1 && currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
+                if (subName == null && frame == 1 && currentSub != null && currentSub.type == RuntimeScalarType.CODE) {
                     RuntimeCode code = (RuntimeCode) currentSub.value;
                     if (code.subName != null && !code.subName.isEmpty()) {
                         String codePkg = code.packageName != null ? code.packageName : "main";
@@ -2821,16 +2843,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // an anon frame ends up as "Pkg::__ANON__"; if the package's
                 // *__ANON__ glob currently has a name override active, swap
                 // it in. See dev/modules/anon_sub_naming.md.
-                if (subName != null && subName.endsWith("::__ANON__")) {
-                    String anonPkg = subName.substring(0,
-                            subName.length() - "::__ANON__".length());
-                    RuntimeGlob anonGlob = GlobalVariable.peekGlobalIO(
-                            anonPkg + "::__ANON__");
-                    if (anonGlob != null && anonGlob.nameOverride != null
-                            && !anonGlob.nameOverride.isEmpty()) {
-                        subName = anonPkg + "::" + anonGlob.nameOverride;
-                    }
-                }
+                subName = applyAnonNameOverride(subName);
 
                 if (subName != null && !subName.isEmpty()) {
                     res.add(new RuntimeScalar(subName));  // subroutine
@@ -2962,6 +2975,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } // end if (hasExplicitExpr)
             }
         } else if (frame >= stackTraceSize) {
+            RuntimeCode activeCode = hasExplicitExpr ? getActiveCodeAt(originalFrame) : null;
+            if (activeCode != null && activeCode.explicitlyRenamed) {
+                String pkg = normalizeCallerPackage(activeCode.packageName);
+                if (ctx == RuntimeContextType.SCALAR) {
+                    res.add(new RuntimeScalar(pkg));
+                } else {
+                    res.add(new RuntimeScalar(pkg));
+                    res.add(new RuntimeScalar(activeCode.cvStartFile != null ? activeCode.cvStartFile : ""));
+                    res.add(new RuntimeScalar(activeCode.cvStartLine));
+                    String subName = applyAnonNameOverride(callerSubNameForCode(activeCode));
+                    res.add(subName != null && !subName.isEmpty()
+                            ? new RuntimeScalar(subName)
+                            : RuntimeScalarCache.scalarUndef);
+                    Boolean hasArgsFromStack = getHasArgsAt(originalFrame);
+                    res.add(hasArgsFromStack != null && hasArgsFromStack
+                            ? RuntimeScalarCache.scalarTrue
+                            : RuntimeScalarCache.scalarUndef);
+                    res.add(RuntimeScalarCache.scalarUndef);
+                    res.add(RuntimeScalarCache.scalarUndef);
+                    res.add(RuntimeScalarCache.scalarUndef);
+                    int hints = WarningBitsRegistry.getCallerHintsAtFrame(frame - 1);
+                    res.add(new RuntimeScalar(hints >= 0 ? hints : 0));
+                    String warningBits = WarningBitsRegistry.getCallerBitsAtFrame(frame - 1);
+                    res.add(warningBits != null
+                            ? new RuntimeScalar(warningBits)
+                            : RuntimeScalarCache.scalarUndef);
+                    java.util.Map<String, String> callerHintHash = HintHashRegistry.getCallerHintHashAtFrame(frame - 1);
+                    if (callerHintHash != null) {
+                        RuntimeHash snapshot = new RuntimeHash();
+                        for (java.util.Map.Entry<String, String> entry : callerHintHash.entrySet()) {
+                            snapshot.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+                        }
+                        res.add(snapshot.createReference());
+                    } else {
+                        res.add(RuntimeScalarCache.scalarUndef);
+                    }
+                }
+                return res;
+            }
             // Fallback: check CallerStack for synthetic frames pushed during compile-time
             // operations (e.g., MODIFY_*_ATTRIBUTES called from Java).
             // The excess frames beyond the Java stack trace are served from CallerStack.
@@ -2979,6 +3031,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return res;
+    }
+
+    private static String callerSubNameForCode(RuntimeCode code) {
+        if (code == null || code.subName == null || code.subName.isEmpty()
+                || code.subName.startsWith("(")) {
+            return null;
+        }
+        if (code.subName.contains("::")) {
+            return code.subName;
+        }
+        String pkg = normalizeCallerPackage(code.packageName);
+        return pkg + "::" + code.subName;
+    }
+
+    private static String applyAnonNameOverride(String subName) {
+        if (subName != null && subName.endsWith("::__ANON__")) {
+            String anonPkg = subName.substring(0,
+                    subName.length() - "::__ANON__".length());
+            RuntimeGlob anonGlob = GlobalVariable.peekGlobalIO(
+                    anonPkg + "::__ANON__");
+            if (anonGlob != null && anonGlob.nameOverride != null
+                    && !anonGlob.nameOverride.isEmpty()) {
+                return anonPkg + "::" + anonGlob.nameOverride;
+            }
+        }
+        return subName;
     }
 
     private static String normalizeCallerPackage(String packageName) {
