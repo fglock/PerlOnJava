@@ -52,6 +52,33 @@ public class BytecodeInterpreter {
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 
+    private static java.util.Set<RuntimeCode> collectReturnedClosures(RuntimeBase value) {
+        java.util.IdentityHashMap<RuntimeCode, Boolean> closures = new java.util.IdentityHashMap<>();
+        collectReturnedClosures(value, closures);
+        return closures.isEmpty() ? null : closures.keySet();
+    }
+
+    private static void collectReturnedClosures(RuntimeBase value, java.util.IdentityHashMap<RuntimeCode, Boolean> closures) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof RuntimeScalar scalar) {
+            if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
+                closures.put(code, Boolean.TRUE);
+            }
+            return;
+        }
+        if (value instanceof RuntimeControlFlowList flow && flow.returnValue != null) {
+            collectReturnedClosures(flow.returnValue, closures);
+            return;
+        }
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                collectReturnedClosures(element, closures);
+            }
+        }
+    }
+
     /**
      * Execute interpreted bytecode.
      *
@@ -154,6 +181,7 @@ public class BytecodeInterpreter {
         // This matches the JVM-compiled path where scopeExitCleanup releases
         // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
         java.util.List<RuntimeCode> createdClosures = null;
+        java.util.Set<RuntimeCode> returnedClosures = null;
 
         // Structure: try { while(true) { try { ...dispatch... } catch { handle eval/die } } } finally { cleanup }
         //
@@ -359,6 +387,7 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
+                                returnedClosures = collectReturnedClosures(retList);
 
                                 return retList;
                             }
@@ -374,6 +403,7 @@ public class BytecodeInterpreter {
                                 }
                                 RuntimeList retList = RuntimeCode.returnList(retVal, callContext);
                                 RuntimeCode.materializeSpecialVarsInResult(retList, callContext);
+                                returnedClosures = collectReturnedClosures(retList);
 
                                 return new RuntimeControlFlowList(retList, code.sourceName, code.sourceLine);
                             }
@@ -2553,7 +2583,8 @@ public class BytecodeInterpreter {
                 for (RuntimeCode closure : createdClosures) {
                     if (closure.capturedScalars != null
                             && closure.refCount == 0
-                            && closure.stashRefCount <= 0) {
+                            && closure.stashRefCount <= 0
+                            && (returnedClosures == null || !returnedClosures.contains(closure))) {
                         closure.releaseCaptures();
                     }
                 }

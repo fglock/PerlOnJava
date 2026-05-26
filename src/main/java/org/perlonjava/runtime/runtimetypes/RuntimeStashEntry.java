@@ -339,6 +339,41 @@ public class RuntimeStashEntry extends RuntimeGlob {
     }
 
     /**
+     * Returns the compact stash value that Perl exposes through ref($stash{name}),
+     * or null when this entry has been upgraded to a full GV.
+     */
+    public RuntimeScalar compactValueForRef() {
+        if (this.globName == null || this.type == RuntimeScalarType.UNDEF) {
+            return null;
+        }
+
+        // Typeglob assignment (e.g. *foo = sub {}) upgrades the stash entry to a
+        // full GV. A bare full GV is not a reference, so ref($stash{name}) is "".
+        if (GlobalVariable.globalGlobs.getOrDefault(this.globName, false)) {
+            return null;
+        }
+
+        boolean hasNonCodeSlot =
+                GlobalVariable.globalVariables.containsKey(this.globName)
+                        || GlobalVariable.globalArrays.containsKey(this.globName)
+                        || GlobalVariable.globalHashes.containsKey(this.globName)
+                        || GlobalVariable.globalIORefs.containsKey(this.globName)
+                        || GlobalVariable.globalFormatRefs.containsKey(this.globName);
+        if (hasNonCodeSlot) {
+            return null;
+        }
+
+        RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(this.globName);
+        if (codeRef != null
+                && codeRef.type == CODE
+                && codeRef.value instanceof RuntimeCode code
+                && (code.defined() || code.isDeclared)) {
+            return codeRef;
+        }
+        return null;
+    }
+
+    /**
      * Sets itself from a RuntimeList.
      *
      * @param value The RuntimeList from which this typeglob will be set.

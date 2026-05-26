@@ -883,7 +883,6 @@ public abstract class StringSegmentParser {
                 }
             }
         } else {
-            // Not a constant - use unimplemented marker
             if (isRecursive) {
                 segments.add(new StringNode(RegexMarkers.RECURSIVE_PATTERN, savedTokenIndex));
             } else {

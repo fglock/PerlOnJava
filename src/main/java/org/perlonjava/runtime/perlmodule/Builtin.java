@@ -1,11 +1,19 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.semantic.ScopedSymbolTable;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WeakRefRegistry;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
@@ -13,6 +21,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * The Builtin class provides functionalities similar to the Perl builtin module.
  */
 public class Builtin extends PerlModuleBase {
+    private static int lexicalExportCounter = 1;
 
     /**
      * Constructor initializes the module.
@@ -35,8 +44,9 @@ public class Builtin extends PerlModuleBase {
                 "is_bool", "true", "false", "weaken", "unweaken", "is_weak",
                 "blessed", "refaddr", "reftype", "ceil", "floor",
                 "is_tainted", "trim", "indexed", "inf", "nan",
-                "created_as_string", "created_as_number", "stringify"
-                // TODO "export_lexically", "load_module"
+                "created_as_string", "created_as_number", "stringify",
+                "export_lexically"
+                // TODO "load_module"
         );
 
         // Define the :5.40 tag bundle
@@ -65,6 +75,7 @@ public class Builtin extends PerlModuleBase {
             builtin.registerMethod("created_as_string", "createdAsString", "$");
             builtin.registerMethod("created_as_number", "createdAsNumber", "$");
             builtin.registerMethod("stringify", "stringify", "$");
+            builtin.registerMethod("export_lexically", "exportLexically", "@");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
@@ -216,5 +227,124 @@ public class Builtin extends PerlModuleBase {
     public static RuntimeList stringify(RuntimeArray args, int ctx) {
         RuntimeScalar scalar = args.get(0);
         return new RuntimeList(new RuntimeScalar(scalar.toString()));
+    }
+
+    public static RuntimeList exportLexically(RuntimeArray args, int ctx) {
+        ScopedSymbolTable scope = getCurrentScope();
+        if (scope == null) {
+            throw new PerlCompilerException("export_lexically can only be called at compile time");
+        }
+        if (args.size() % 2 != 0) {
+            throw new PerlCompilerException("Odd number of elements in export_lexically");
+        }
+
+        for (int i = 0; i < args.size(); i += 2) {
+            String name = args.get(i).toString();
+            RuntimeScalar symbol = args.get(i + 1);
+            if (name.isEmpty()) {
+                throw new PerlCompilerException("Missing name in export_lexically");
+            }
+
+            char sigil = name.charAt(0);
+            if (sigil == '$' || sigil == '@' || sigil == '%') {
+                exportLexicalVariable(scope, sigil, name.substring(1), symbol);
+            } else {
+                String subName = sigil == '&' ? name.substring(1) : name;
+                exportLexicalSub(scope, subName, symbol);
+            }
+        }
+        return new RuntimeList();
+    }
+
+    private static synchronized int nextLexicalExportId() {
+        return lexicalExportCounter++;
+    }
+
+    private static RuntimeScalar unwrapReadonly(RuntimeScalar value) {
+        while (value != null && value.type == READONLY_SCALAR && value.value instanceof RuntimeScalar inner) {
+            value = inner;
+        }
+        return value;
+    }
+
+    private static void exportLexicalVariable(ScopedSymbolTable scope, char sigil, String bareName, RuntimeScalar symbol) {
+        if (bareName.isEmpty()) {
+            throw new PerlCompilerException("Missing name in export_lexically");
+        }
+
+        int id = nextLexicalExportId();
+        String hiddenPackage = "PerlOnJava::_LEXICAL_EXPORT_" + id;
+        String hiddenName = hiddenPackage + "::" + bareName;
+        RuntimeScalar unwrapped = unwrapReadonly(symbol);
+
+        switch (sigil) {
+            case '$' -> {
+                if (unwrapped == null || unwrapped.type != REFERENCE || !(unwrapped.value instanceof RuntimeScalar target)) {
+                    throw new PerlCompilerException("Expected SCALAR reference in export_lexically");
+                }
+                GlobalVariable.globalVariables.put(hiddenName, target);
+            }
+            case '@' -> {
+                if (unwrapped == null || unwrapped.type != ARRAYREFERENCE || !(unwrapped.value instanceof RuntimeArray target)) {
+                    throw new PerlCompilerException("Expected ARRAY reference in export_lexically");
+                }
+                GlobalVariable.globalArrays.put(hiddenName, target);
+            }
+            case '%' -> {
+                if (unwrapped == null || unwrapped.type != HASHREFERENCE || !(unwrapped.value instanceof RuntimeHash target)) {
+                    throw new PerlCompilerException("Expected HASH reference in export_lexically");
+                }
+                GlobalVariable.globalHashes.put(hiddenName, target);
+            }
+            default -> throw new PerlCompilerException("Unsupported sigil in export_lexically");
+        }
+
+        scope.addVariable(sigil + bareName, "our", hiddenPackage, null);
+    }
+
+    private static void exportLexicalSub(ScopedSymbolTable scope, String subName, RuntimeScalar symbol) {
+        if (subName.isEmpty()) {
+            throw new PerlCompilerException("Missing name in export_lexically");
+        }
+
+        RuntimeScalar codeScalar = unwrapReadonly(symbol);
+        if (codeScalar != null && codeScalar.type == REFERENCE && codeScalar.value instanceof RuntimeScalar target) {
+            codeScalar = unwrapReadonly(target);
+        }
+        if (codeScalar == null || codeScalar.type != CODE) {
+            throw new PerlCompilerException("Expected CODE reference in export_lexically");
+        }
+
+        int id = nextLexicalExportId();
+        String currentPackage = scope.getCurrentPackage();
+        String hiddenVarName = "__leximport_" + id + "_" + sanitizeIdentifier(subName);
+        String hiddenFullName = currentPackage + "::" + hiddenVarName;
+
+        GlobalVariable.globalVariables.put(hiddenFullName, new RuntimeScalar(codeScalar));
+
+        OperatorNode marker = new OperatorNode("my",
+                new OperatorNode("&", new IdentifierNode(subName, -1), -1),
+                -1);
+        marker.setAnnotation("hiddenVarName", hiddenVarName);
+        marker.setAnnotation("declaringPackage", currentPackage);
+        if (codeScalar.value instanceof RuntimeCode code && code.prototype != null) {
+            marker.setAnnotation("prototype", code.prototype);
+        }
+
+        String lexicalKey = "&" + subName;
+        if (scope.getVariableIndexInCurrentScope(lexicalKey) >= 0) {
+            scope.replaceVariable(lexicalKey, "my", marker);
+        } else {
+            scope.addVariable(lexicalKey, "my", marker);
+        }
+    }
+
+    private static String sanitizeIdentifier(String name) {
+        StringBuilder result = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            result.append(Character.isLetterOrDigit(ch) || ch == '_' ? ch : '_');
+        }
+        return result.toString();
     }
 }

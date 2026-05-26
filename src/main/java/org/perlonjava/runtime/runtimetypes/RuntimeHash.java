@@ -493,6 +493,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
      */
     public RuntimeScalar getForLocal(String key) {
+        if (type == TIED_HASH) {
+            return new RuntimeTiedHashProxyEntry(this, new RuntimeScalar(key));
+        }
         RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key);
         RuntimeScalar existing = elements.get(key);
         if (existing != null) {
@@ -513,6 +516,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A RuntimeHashProxyEntry with lvalue pre-initialized if the key exists.
      */
     public RuntimeScalar getForLocal(RuntimeScalar keyScalar) {
+        if (type == TIED_HASH) {
+            return new RuntimeTiedHashProxyEntry(this, keyScalar);
+        }
         String key = keyScalar.toString();
         boolean isByteKey = keyScalar.type == BYTE_STRING;
         RuntimeHashProxyEntry proxy = new RuntimeHashProxyEntry(this, key, isByteKey);

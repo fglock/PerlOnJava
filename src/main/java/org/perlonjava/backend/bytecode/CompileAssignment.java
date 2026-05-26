@@ -1211,11 +1211,12 @@ public class CompileAssignment {
                     if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                         bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
                     }
-                    // Handle scalar ref aliasing: \$y = $ref
-                    if (leftOp.operand instanceof OperatorNode varNode && varNode.operator.equals("$")) {
+                    // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
+                    if (leftOp.operand instanceof OperatorNode varNode
+                            && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
                         String varName;
                         if (varNode.operand instanceof IdentifierNode idNode) {
-                            varName = "$" + idNode.name;
+                            varName = varNode.operator + idNode.name;
                         } else {
                             bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target");
                             return;
@@ -1223,13 +1224,16 @@ public class CompileAssignment {
 
                         if (bytecodeCompiler.hasVariable(varName)) {
                             int targetReg = bytecodeCompiler.getVariableRegister(varName);
-                            // Dereference the RHS to get the aliased scalar
                             int derefReg = bytecodeCompiler.allocateRegister();
-                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                            switch (varNode.operator) {
+                                case "$" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                                case "@" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                                case "%" -> bytecodeCompiler.emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                                default -> throw new IllegalStateException("Unexpected ref aliasing target: " + varNode.operator);
+                            }
                             bytecodeCompiler.emitReg(derefReg);
                             bytecodeCompiler.emitReg(valueReg);
                             // Alias: make targetReg share the same object as derefReg
-                            // This creates a true alias (same RuntimeScalar object)
                             bytecodeCompiler.emit(Opcodes.ALIAS);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(derefReg);

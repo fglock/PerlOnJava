@@ -93,6 +93,7 @@ public class SubroutineParser {
                 boolean useExplicitParen = nextToken.text.equals("(");
                 boolean hasPrototype = lexicalPrototype != null;
                 boolean nextIsIdentifier = nextToken.type == LexerTokenType.IDENTIFIER;
+                boolean nextIsMethodDereference = nextToken.text.equals("->");
                 boolean nextIsStatementModifier = nextIsIdentifier && isStatementModifierKeyword(nextToken.text);
 
                 if (useExplicitParen || hasPrototype || !nextIsIdentifier || nextIsStatementModifier || parser.parsingForLoopVariable) {
@@ -137,7 +138,9 @@ public class SubroutineParser {
 
                         // Parse arguments using prototype if available
                         ListNode arguments;
-                        if (useExplicitParen) {
+                        if (nextIsMethodDereference) {
+                            arguments = new ListNode(parser.tokenIndex);
+                        } else if (useExplicitParen) {
                             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "(");
                             if (hasPrototype) {
                                 // Use prototype to parse arguments (already consumed opening paren)
@@ -787,7 +790,8 @@ public class SubroutineParser {
             // doesn't already have a body. Perl 5 ignores prototype changes from
             // forward redeclarations of already-defined subs.
             boolean hasBody = codeRef.subroutine != null || codeRef.methodHandle != null
-                    || codeRef.compilerSupplier != null;
+                    || codeRef.compilerSupplier != null
+                    || codeRef.constantValue != null;
             if (!hasBody) {
                 codeRef.prototype = prototype;
                 codeRef.attributes = attributes;
