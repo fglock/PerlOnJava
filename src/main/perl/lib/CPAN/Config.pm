@@ -49,6 +49,7 @@ sub _bootstrap_prefs {
         'Test2-Plugin-NoWarnings.yml' => 'PerlOnJava/CpanDistroprefs/Test2-Plugin-NoWarnings.yml',
         'Params-ValidationCompiler.yml' => 'PerlOnJava/CpanDistroprefs/Params-ValidationCompiler.yml',
         'Test-Deep.yml'              => 'PerlOnJava/CpanDistroprefs/Test-Deep.yml',
+        'Test-Deep-JSON.yml'         => 'PerlOnJava/CpanDistroprefs/Test-Deep-JSON.yml',
         'Test-Warnings.yml'          => 'PerlOnJava/CpanDistroprefs/Test-Warnings.yml',
         'File-Copy-Recursive.yml'    => 'PerlOnJava/CpanDistroprefs/File-Copy-Recursive.yml',
         'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',

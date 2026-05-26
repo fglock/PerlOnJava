@@ -4,6 +4,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -62,12 +63,29 @@ public class Lib extends PerlModuleBase {
         // Process in reverse order and unshift, matching Perl's lib.pm behavior:
         // directories are prepended to @INC so they take precedence over existing paths
         for (int i = args.size() - 1; i >= 1; i--) {
-            String dir = args.get(i).toString();
-            // Remove any existing occurrence first (dedup), then prepend
-            INC.elements.removeIf(path -> path.toString().equals(dir));
-            RuntimeArray.unshift(INC, new RuntimeScalar(dir));
+            RuntimeScalar entry = args.get(i);
+            if (isIncHook(entry)) {
+                RuntimeArray.unshift(INC, entry);
+            } else {
+                String dir = entry.toString();
+                // Remove any existing occurrence first (dedup), then prepend.
+                // Only compare non-hook entries; @INC hooks may stringify like
+                // CODE(0x...), but must remain callable references.
+                INC.elements.removeIf(path -> !isIncHook(path) && path.toString().equals(dir));
+                RuntimeArray.unshift(INC, new RuntimeScalar(dir));
+            }
         }
         return new RuntimeList();
+    }
+
+    private static boolean isIncHook(RuntimeScalar scalar) {
+        if (scalar == null) {
+            return false;
+        }
+        if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+            scalar = scalar.tiedFetch();
+        }
+        return RuntimeScalarType.isReference(scalar);
     }
 
     private static void initOrigInc(RuntimeArray INC) {
@@ -90,10 +108,28 @@ public class Lib extends PerlModuleBase {
         RuntimeArray INC = GlobalVariable.getGlobalArray("main::INC");
         initOrigInc(INC);
         for (int i = 1; i < args.size(); i++) {
-            String dir = args.get(i).toString();
-            INC.elements.removeIf(path -> path.toString().equals(dir));
+            RuntimeScalar entry = args.get(i);
+            if (isIncHook(entry)) {
+                INC.elements.removeIf(path -> sameIncHook(path, entry));
+            } else {
+                String dir = entry.toString();
+                INC.elements.removeIf(path -> !isIncHook(path) && path.toString().equals(dir));
+            }
         }
         return new RuntimeScalar().getList();
+    }
+
+    private static boolean sameIncHook(RuntimeScalar left, RuntimeScalar right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left.type == RuntimeScalarType.TIED_SCALAR) {
+            left = left.tiedFetch();
+        }
+        if (right.type == RuntimeScalarType.TIED_SCALAR) {
+            right = right.tiedFetch();
+        }
+        return left.type == right.type && left.value == right.value;
     }
 
     /**

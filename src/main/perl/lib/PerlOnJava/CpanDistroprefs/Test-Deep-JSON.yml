@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for Test::Deep::JSON.
+
+  Build.PL uses Module::Build::Tiny, and PerlOnJava may fall back to a
+  generated Makefile when that toolchain is not fully installed yet. Make the
+  runtime prerequisites explicit so CPAN follows them before the fallback test
+  phase runs.
+match:
+  distribution: "^MOTEMEN/Test-Deep-JSON-"
+depends:
+  requires:
+    Exporter::Lite: 0
+    JSON::MaybeXS: 0
+    Test::Deep: 0

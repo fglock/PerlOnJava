@@ -24,9 +24,10 @@ These modules have optimized Java implementations built into PerlOnJava:
 | Time::HiRes | TimeHiRes.java | - | Uses System.nanoTime() |
 | DBI | Dbi.java | - | JDBC backend |
 
-## Modules with Built-in PP Fallbacks
+## Modules with PP Fallbacks or Shims
 
-These CPAN modules automatically fall back to pure Perl when XS is unavailable:
+These modules either fall back to pure Perl when XS is unavailable, or are
+replaced by a bundled PerlOnJava shim:
 
 | Module | Fallback Module | Detection Pattern | Notes |
 |--------|-----------------|-------------------|-------|
@@ -35,7 +36,7 @@ These CPAN modules automatically fall back to pure Perl when XS is unavailable:
 | Cpanel::JSON::XS | JSON::PP | `/loadable object/` | Bundled shim inherits `JSON::PP` (same stack as `JSON`) |
 | List::Util | List::Util::PP | varies | Some functions only |
 | Params::Util | Params::Util::PP | varies | Separate distribution |
-| Class::XSAccessor | fallback in .pm | `/loadable object/` | Pure Perl accessors |
+| Class::XSAccessor | bundled Perl shim | n/a | Pure-Perl hash/array accessors; XS entersub optimizer disabled |
 
 ## Modules Requiring Java XS Implementation
 
