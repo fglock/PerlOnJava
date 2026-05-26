@@ -136,6 +136,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("A")).set("");    // initialize $^A to "" - format accumulator variable
         GlobalVariable.getGlobalVariable(encodeSpecialVar("P")).set(0);    // initialize $^P to 0 - debugger flags
+        GlobalVariable.getGlobalVariable(OPEN);    // initialize ${^OPEN} to undef, but make its typeglob visible
         GlobalVariable.getGlobalVariable(encodeSpecialVar("WARNING_SCOPE")).set(0);    // initialize ${^WARNING_SCOPE} to 0 - runtime warning scope ID
         // Initialize $^I (in-place editing extension) from -i switch
         if (compilerOptions.inPlaceEdit) {
