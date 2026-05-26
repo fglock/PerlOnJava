@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.operators.VersionHelper;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -54,9 +55,19 @@ public class Version extends PerlModuleBase {
             version.registerMethod("stringify", "$");
             version.registerMethod("parse", "$");
             version.registerMethod("new", "declare", "$");
+            registerOverload("((", "stringify");
+            registerOverload("(\"\"", "stringify");
+            registerOverload("(<=>", "vcmp");
+            registerOverload("(cmp", "vcmp");
+            NameNormalizer.invalidateBlessIdCache();
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Version method: " + e.getMessage());
         }
+    }
+
+    private static void registerOverload(String overloadName, String methodName) {
+        RuntimeScalar method = getGlobalCodeRef("version::" + methodName);
+        getGlobalCodeRef("version::" + overloadName).set(method);
     }
 
     /**

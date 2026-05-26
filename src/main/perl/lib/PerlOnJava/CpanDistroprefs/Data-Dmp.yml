@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for Data::Dmp.
+
+  Data::Dmp's tests expect full B::Deparse output for arbitrary coderefs.
+  PerlOnJava's B::Deparse is intentionally a source-preserving stub, so patch
+  Data::Dmp to fall back to its dummy coderef representation and skip the
+  full-deparse-only assertions.
+match:
+  distribution: "^.*/Data-Dmp-0\\.242"
+patches:
+  - "Data-Dmp-0.242/PerlOnJava.patch"

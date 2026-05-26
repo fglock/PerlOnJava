@@ -55,6 +55,7 @@ sub _bootstrap_prefs {
         'Test-File-ShareDir.yml'     => 'PerlOnJava/CpanDistroprefs/Test-File-ShareDir.yml',
         'DateTime-Locale.yml'        => 'PerlOnJava/CpanDistroprefs/DateTime-Locale.yml',
         'Test-File.yml'              => 'PerlOnJava/CpanDistroprefs/Test-File.yml',
+        'Data-Dmp.yml'               => 'PerlOnJava/CpanDistroprefs/Data-Dmp.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -147,6 +148,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/OpenAI-API-0.37/NoNetworkTests.patch' ],
         [ 'Image-BMP-1.26/BMP.pm.patch',
           'PerlOnJava/CpanPatches/Image-BMP-1.26/BMP.pm.patch' ],
+        [ 'Data-Dmp-0.242/PerlOnJava.patch',
+          'PerlOnJava/CpanPatches/Data-Dmp-0.242/PerlOnJava.patch' ],
     );
 
     my $slurp = sub {

@@ -14,7 +14,11 @@ our $VERSION = '1.00_perlonjava';
 
 sub new {
     my $class = shift;
-    my %opts = @_;
+    my %opts;
+    while (@_) {
+        my $opt = shift;
+        $opts{$opt} = (@_ && $opt !~ /^-/) ? shift : 1;
+    }
     bless \%opts, $class;
 }
 
