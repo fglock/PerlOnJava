@@ -200,6 +200,12 @@ public class ReferenceOperators {
                 }
                 break;
             case GLOB:
+                if (runtimeScalar instanceof RuntimeStashEntry stashEntry) {
+                    RuntimeScalar compactValue = stashEntry.compactValueForRef();
+                    if (compactValue != null) {
+                        return ref(compactValue);
+                    }
+                }
                 // In Perl 5, ref(*glob) always returns "" (empty string) because a
                 // bare glob is NOT a reference — it is a value type like a string or
                 // number.  Only *references to* globs produce non-empty ref():

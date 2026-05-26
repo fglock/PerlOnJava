@@ -790,7 +790,8 @@ public class SubroutineParser {
             // doesn't already have a body. Perl 5 ignores prototype changes from
             // forward redeclarations of already-defined subs.
             boolean hasBody = codeRef.subroutine != null || codeRef.methodHandle != null
-                    || codeRef.compilerSupplier != null;
+                    || codeRef.compilerSupplier != null
+                    || codeRef.constantValue != null;
             if (!hasBody) {
                 codeRef.prototype = prototype;
                 codeRef.attributes = attributes;
