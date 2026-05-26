@@ -156,32 +156,32 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
         if (isGlobalMatch) flagString.append('g');
         if (preservesMatch) flagString.append('p');
-        if (isCaseInsensitive) flagString.append('i');
+        if (isAscii) flagString.append('a');
+        if (isUnicode) flagString.append('u');
         if (isMultiLine) flagString.append('m');
         if (isDotAll) flagString.append('s');
-        if (isNonCapturing) flagString.append('n');
+        if (isCaseInsensitive) flagString.append('i');
         if (isExtended) flagString.append('x');
+        if (isNonCapturing) flagString.append('n');
         if (isNonDestructive) flagString.append('r');
-        if (isUnicode) flagString.append('u');
-        if (isAscii) flagString.append('a');
 
         return flagString.toString();
     }
 
     /**
      * Returns the modifier string as Perl's regexp_pattern() would return it.
-     * Only includes pattern-level modifiers (i, m, s, x, n, a, u), not
+     * Only includes pattern-level modifiers (a, u, m, s, i, x, n), not
      * match-level ones like g, p, r.
      */
     public String toModifierString() {
         StringBuilder sb = new StringBuilder();
+        if (isAscii) sb.append('a');
+        if (isUnicode) sb.append('u');
         if (isMultiLine) sb.append('m');
         if (isDotAll) sb.append('s');
         if (isCaseInsensitive) sb.append('i');
         if (isExtended) sb.append('x');
         if (isNonCapturing) sb.append('n');
-        if (isAscii) sb.append('a');
-        if (isUnicode) sb.append('u');
         return sb.toString();
     }
 }
