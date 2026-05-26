@@ -475,47 +475,84 @@ public class FileSpec extends PerlModuleBase {
      * @return A {@link RuntimeList} containing the constructed path.
      */
     public static RuntimeList catpath(RuntimeArray args, int ctx) {
-        if (args.size() != 4) {
+        if (args.size() > 4) {
             throw new IllegalStateException("Bad number of arguments for catpath() method");
         }
 
-        String volume = args.get(1).toString();
-        String directory = args.get(2).toString();
-        String file = args.get(3).toString();
+        String volume = args.size() > 1 ? args.get(1).toString() : "";
+        String directory = args.size() > 2 ? args.get(2).toString() : "";
+        String file = args.size() > 3 ? args.get(3).toString() : "";
 
-        StringBuilder fullPath = new StringBuilder();
+        if (SystemUtils.osIsWindows()) {
+            StringBuilder fullPath = new StringBuilder(volume);
 
-        // Add volume (for Windows drive letters)
-        if (!volume.isEmpty()) {
-            fullPath.append(volume);
-            // Ensure volume ends with colon on Windows
-            if (SystemUtils.osIsWindows() && !volume.endsWith(":")) {
-                fullPath.append(":");
+            if (isUncVolume(volume) && startsWithoutSeparator(directory)) {
+                fullPath.append(volume.charAt(0));
             }
-        }
 
-        // Add directory
-        if (!directory.isEmpty()) {
             fullPath.append(directory);
-            // Ensure directory ends with separator if file is provided
-            if (!file.isEmpty()) {
-                char lastChar = directory.charAt(directory.length() - 1);
-                if (lastChar != '/' && lastChar != '\\') {
-                    fullPath.append(File.separator);
-                }
+
+            if (!isDriveVolumeOnly(fullPath.toString())
+                    && endsWithoutSeparator(fullPath)
+                    && containsNonSeparator(file)) {
+                fullPath.append(firstSeparatorOrDefault(fullPath, '\\'));
             }
+
+            fullPath.append(file);
+            return new RuntimeScalar(fullPath.toString()).getList();
         }
 
-        // Add file
-        fullPath.append(file);
+        if (!directory.isEmpty()
+                && !file.isEmpty()
+                && directory.charAt(directory.length() - 1) != '/'
+                && file.charAt(0) != '/') {
+            directory += "/" + file;
+        } else {
+            directory += file;
+        }
 
-        // Clean up the path
-        String result = canonpath(new RuntimeArray(
-                new RuntimeScalar("dummy"),
-                new RuntimeScalar(fullPath.toString())
-        ), 0).elements.get(0).toString();
+        return new RuntimeScalar(directory).getList();
+    }
 
-        return new RuntimeScalar(result).getList();
+    private static boolean isUncVolume(String volume) {
+        return volume.matches("^[\\\\/][\\\\/][^\\\\/]+[\\\\/][^\\\\/]+$");
+    }
+
+    private static boolean startsWithoutSeparator(String value) {
+        return !value.isEmpty() && !isSeparator(value.charAt(0));
+    }
+
+    private static boolean endsWithoutSeparator(CharSequence value) {
+        return value.length() > 0 && !isSeparator(value.charAt(value.length() - 1));
+    }
+
+    private static boolean containsNonSeparator(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (!isSeparator(value.charAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static char firstSeparatorOrDefault(CharSequence value, char defaultSeparator) {
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (isSeparator(ch)) {
+                return ch;
+            }
+        }
+        return defaultSeparator;
+    }
+
+    private static boolean isDriveVolumeOnly(String value) {
+        return value.length() == 2
+                && Character.isLetter(value.charAt(0))
+                && value.charAt(1) == ':';
+    }
+
+    private static boolean isSeparator(char ch) {
+        return ch == '/' || ch == '\\';
     }
 
     /**
