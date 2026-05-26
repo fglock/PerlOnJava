@@ -537,7 +537,9 @@ sub parsefile {
 
     open( my $fh, '<', $_[0] ) or croak "Couldn't open $_[0]:\n$!";
     binmode($fh);
-    my $ret = $self->parse($fh);
+    # Pass an old-style typeglob for compatibility with subclasses that
+    # identify filehandles by probing *{$arg}{IO}.
+    my $ret = $self->parse(*{$fh});
     close($fh);
     $ret;
 }
