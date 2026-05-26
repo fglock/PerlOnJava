@@ -857,8 +857,11 @@ public class RuntimeIO extends RuntimeScalar {
         fh.ioHandle = scalarIO;
         addHandle(fh.ioHandle);
 
-        // Apply any I/O layers
-        fh.binmode(ioLayers);
+        // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
+        // open should not inherit the platform text layer such as Windows :crlf.
+        if (!ioLayers.isEmpty()) {
+            fh.binmode(ioLayers);
+        }
 
         return fh;
     }

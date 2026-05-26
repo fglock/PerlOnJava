@@ -3,6 +3,8 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.ForkOpenCompleteException;
 import org.perlonjava.runtime.ForkOpenState;
+import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -471,9 +473,11 @@ public class SystemOperator {
     private static void writeToPerlStderrBytes(byte[] buffer, int bytesRead) {
         try {
             RuntimeIO perlStderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
-            String text = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.ISO_8859_1);
+            if (writeRawBytesToPerlHandle(perlStderr, buffer, bytesRead)) {
+                return;
+            }
             if (perlStderr != null) {
-                perlStderr.write(text);
+                perlStderr.write(bytesToByteString(buffer, bytesRead));
             } else {
                 System.err.write(buffer, 0, bytesRead);
             }
@@ -490,15 +494,36 @@ public class SystemOperator {
     private static void writeToPerlStdoutBytes(byte[] buffer, int bytesRead) {
         try {
             RuntimeIO perlStdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
-            String text = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.ISO_8859_1);
+            if (writeRawBytesToPerlHandle(perlStdout, buffer, bytesRead)) {
+                return;
+            }
             if (perlStdout != null) {
-                perlStdout.write(text);
+                perlStdout.write(bytesToByteString(buffer, bytesRead));
             } else {
                 System.out.write(buffer, 0, bytesRead);
             }
         } catch (Exception e) {
             System.out.write(buffer, 0, bytesRead);
         }
+    }
+
+    private static String bytesToByteString(byte[] buffer, int bytesRead) {
+        return new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.ISO_8859_1);
+    }
+
+    private static boolean writeRawBytesToPerlHandle(RuntimeIO perlHandle, byte[] buffer, int bytesRead) {
+        if (perlHandle == null || perlHandle instanceof TieHandle || perlHandle.ioHandle == null) {
+            return false;
+        }
+
+        IOHandle rawHandle = perlHandle.ioHandle;
+        while (rawHandle instanceof LayeredIOHandle layered) {
+            rawHandle = layered.getDelegate();
+        }
+
+        rawHandle.write(bytesToByteString(buffer, bytesRead));
+        rawHandle.flush();
+        return true;
     }
 
     /**

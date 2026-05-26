@@ -205,6 +205,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.type = scalar.type;
         this.value = scalar.value;
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
+        if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob glob
+                && glob.globName == null) {
+            glob.ioHolderCount++;
+        }
     }
 
     public RuntimeScalar(RuntimeCode value) {
@@ -2826,10 +2830,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             RuntimeScalar ioSlot = glob.getIO();
             if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
                     && !(io.ioHandle instanceof ClosedIOHandle)) {
-                // Only unregister the fd number — do NOT close the IO stream.
-                // This frees the fd for reuse while keeping the IO functional
-                // for any other variables that reference the same glob.
-                io.unregisterFileno();
+                if (glob.ioHolderCount > 0) {
+                    glob.ioHolderCount--;
+                }
+                if (glob.ioHolderCount <= 0) {
+                    // Only unregister the fd number — do NOT close the IO stream.
+                    // This frees the fd for reuse while keeping the IO functional
+                    // for any other variables that reference the same glob.
+                    io.unregisterFileno();
+                }
             }
         }
 

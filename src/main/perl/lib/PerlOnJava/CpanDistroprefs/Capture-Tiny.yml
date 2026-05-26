@@ -1,0 +1,11 @@
+---
+comment: |
+  PerlOnJava distroprefs for Capture::Tiny.
+
+  PerlOnJava does not implement POSIX fork(). Capture::Tiny's tee() path
+  requires fork; most upstream tee tests already skip on no-fork platforms,
+  but t/16-catch-errors.t exercises tee() without checking Config.
+match:
+  distribution: "^DAGOLDEN/Capture-Tiny-0\\.50"
+patches:
+  - "Capture-Tiny-0.50/NoForkTeeCatchErrors.patch"
