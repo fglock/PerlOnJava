@@ -3931,16 +3931,23 @@ sub test {
             $self->post_test();
             return $self->success("PERLONJAVA_SKIP -- test phase skipped");
         } elsif ($system eq 'PERLONJAVA_TEST_IGNORE_FAILURES') {
-            # Run the platform-appropriate 'make test', always report success.
+            # Run the platform-appropriate test command, always report success.
             # Replaces Unix-only "/usr/bin/make test; exit 0" idiom.
-            my $make_test_cmd = join " ", $self->_make_command(), "test";
-            system($make_test_cmd);
+            my $test_cmd = $self->{modulebuild}
+                ? sprintf("%s test", $self->_build_command())
+                : join " ", $self->_make_command(), "test";
+            my $make_test_arg = $self->_make_phase_arg("test");
+            $test_cmd = sprintf("%s%s",
+                                $test_cmd,
+                                $make_test_arg ? " $make_test_arg" : "",
+                               );
+            system($test_cmd);
             $self->{make_test} = CPAN::Distrostatus->new("YES");
             $CPAN::META->is_tested($self->{build_dir},$self->{make_test}{TIME});
             delete $self->{badtestcnt};
             $self->store_persistent_state;
             $self->post_test();
-            return $self->success("$make_test_cmd -- OK (failures ignored by PERLONJAVA_TEST_IGNORE_FAILURES)");
+            return $self->success("$test_cmd -- OK (failures ignored by PERLONJAVA_TEST_IGNORE_FAILURES)");
         }
     } elsif ($self->{modulebuild}) {
         $system = sprintf "%s test", $self->_build_command();
