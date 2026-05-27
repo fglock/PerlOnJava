@@ -1,0 +1,15 @@
+---
+comment: |
+  PerlOnJava distroprefs for Javascript-Menu-Full.
+
+  Tree::Numbered is packaged inside Javascript-Menu-Full 2.02.  The upstream
+  distribution also tests Javascript::Menu, which uses CGI.pm but declares no
+  CGI dependency in Makefile.PL or META.yml.  Modern Perls no longer bundle CGI,
+  so the same tests fail under system Perl unless CGI is installed separately.
+
+  Patch only Javascript::Menu's tiny HTML helper usage instead of pulling in
+  the full CGI dependency chain, which is much broader than Tree::Numbered.
+match:
+  distribution: "^YOSEFM/Javascript-Menu-Full-2\\.02"
+patches:
+  - "Javascript-Menu-Full-2.02/NoCGIDependency.patch"
