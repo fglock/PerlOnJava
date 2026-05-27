@@ -92,6 +92,7 @@ public class CompilerOptions implements Cloneable {
     public boolean unicodeArgs = false; // -CA
     public boolean unicodeLocale = false; // -CL
     public boolean warnFlag = false; // For -w (sets $^W = 1)
+    public int warningOverride = 0; // For -W/-X: 1 forces warnings on, -1 forces warnings off
     public RuntimeScalar incHook = null; // For storing @INC hook reference
     List<ArgumentParser.ModuleUseStatement> moduleUseStatements = new ArrayList<>(); // For -m -M
 
@@ -145,7 +146,8 @@ public class CompilerOptions implements Cloneable {
                 "    unicodeInput=" + unicodeInput + ",\n" +
                 "    unicodeOutput=" + unicodeOutput + ",\n" +
                 "    unicodeArgs=" + unicodeArgs + ",\n" +
-                "    unicodeLocale=" + unicodeLocale + "\n" +
+                "    unicodeLocale=" + unicodeLocale + ",\n" +
+                "    warningOverride=" + warningOverride + "\n" +
                 "}";
     }
 }

@@ -722,7 +722,30 @@ sub _create_install_makefile {
     my $blib_script_cmds_str = join("\n", @blib_script_cmds) || "\t\@true";
     my $file_count = scalar(keys %$pm) + scalar(keys %$scripts);
 
-    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} } keys %$pm);
+    # Build PL_FILES commands (prefixed with - so failures are non-fatal;
+    # many .PL scripts generate optional CLI tools that aren't needed for
+    # the module's core functionality). Track generated targets so missing
+    # generated PM files do not become hard pm_to_blib prerequisites before
+    # pl_files has had a chance to create them.
+    my @pl_cmds;
+    my %pl_targets;
+    if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
+        for my $pl (sort keys %{$args->{PL_FILES}}) {
+            my $target = $args->{PL_FILES}{$pl};
+            if (ref $target eq 'ARRAY') {
+                for my $t (@$target) {
+                    $pl_targets{$t} = 1;
+                    push @pl_cmds, "\t-$perl $pl $t";
+                }
+            } else {
+                $pl_targets{$target} = 1;
+                push @pl_cmds, "\t-$perl $pl $target";
+            }
+        }
+    }
+    my $pl_cmds_str = join("\n", @pl_cmds) || "\t\@true";
+
+    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !($pl_targets{$_} && !-e $_) } keys %$pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op
@@ -733,24 +756,6 @@ sub _create_install_makefile {
     }
 
     my $depend_rules_str = _make_depend_rules($args->{depend});
-    
-    # Build PL_FILES commands (prefixed with - so failures are non-fatal;
-    # many .PL scripts generate optional CLI tools that aren't needed for
-    # the module's core functionality)
-    my @pl_cmds;
-    if ($args->{PL_FILES} && %{$args->{PL_FILES}}) {
-        for my $pl (sort keys %{$args->{PL_FILES}}) {
-            my $target = $args->{PL_FILES}{$pl};
-            if (ref $target eq 'ARRAY') {
-                for my $t (@$target) {
-                    push @pl_cmds, "\t-$perl $pl $t";
-                }
-            } else {
-                push @pl_cmds, "\t-$perl $pl $target";
-            }
-        }
-    }
-    my $pl_cmds_str = join("\n", @pl_cmds) || "\t\@true";
     
     # Build PREREQ_PM comment (MakeMaker writes these for tools to parse)
     my $prereq_comment = '';
@@ -820,7 +825,7 @@ MOD_INSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 UNINSTALL = \$(NOECHO) \$(PERLRUN) -e "1"
 $extra_macros_str
 
-all:: pm_to_blib pure_all pl_files blib_scripts config
+all:: pl_files pm_to_blib pure_all blib_scripts config
 \t\@echo "PerlOnJava: $name v$version built ($file_count files in ./blib)"
 
 $depend_rules_str

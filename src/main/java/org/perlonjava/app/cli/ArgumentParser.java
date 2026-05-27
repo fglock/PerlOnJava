@@ -498,10 +498,12 @@ public class ArgumentParser {
                     break;
                 case 'W':
                     // enable all warnings
+                    parsedArgs.warningOverride = 1;
                     parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", "all", false));
                     break;
                 case 'X':
                     // disable all warnings
+                    parsedArgs.warningOverride = -1;
                     parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, "warnings", null, true));
                     break;
                 case 'D':

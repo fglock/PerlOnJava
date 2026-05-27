@@ -829,6 +829,12 @@ public class ScopedSymbolTable {
     }
 
     public boolean isWarningCategoryEnabled(String category) {
+        if (WarningFlags.areWarningsForcedOff()) {
+            return false;
+        }
+        if (WarningFlags.areWarningsForcedOn()) {
+            return true;
+        }
         Integer bitPosition = warningBitPositions.get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
     }
@@ -840,6 +846,18 @@ public class ScopedSymbolTable {
     public boolean isWarningCategoryDisabled(String category) {
         Integer bitPosition = warningBitPositions.get(category);
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
+    }
+
+    public Set<String> getDisabledWarningCategories() {
+        Set<String> categories = new HashSet<>();
+        BitSet disabled = warningDisabledStack.peek();
+        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+            int bitPosition = entry.getValue();
+            if (bitPosition >= 0 && disabled.get(bitPosition)) {
+                categories.add(entry.getKey());
+            }
+        }
+        return categories;
     }
 
     /**

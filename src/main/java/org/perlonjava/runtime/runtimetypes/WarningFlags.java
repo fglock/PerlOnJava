@@ -28,6 +28,9 @@ public class WarningFlags {
     
     // Global flag to track if "use warnings" has been called (for runtime checks)
     private static boolean globalWarningsEnabled = false;
+
+    // Command-line override from -W/-X. 1 forces warnings on, -1 forces them off.
+    private static int commandLineWarningOverride = 0;
     
     // Scope ID counter for generating unique scope IDs
     private static final AtomicInteger scopeIdCounter = new AtomicInteger(0);
@@ -359,6 +362,12 @@ public class WarningFlags {
      * {@code ${^WARNING_BITS}} (e.g. AnyEvent's generated {@code AnyEvent::common_sense}).
      */
     public static boolean ckWarnForScope(ScopedSymbolTable scope, String category) {
+        if (commandLineWarningOverride < 0) {
+            return false;
+        }
+        if (commandLineWarningOverride > 0) {
+            return true;
+        }
         if (scope != null && scope.isWarningCategoryDisabled(category)) {
             return false;
         }
@@ -621,12 +630,11 @@ public class WarningFlags {
     public static int registerScopeWarnings(Set<String> categories) {
         int scopeId = scopeIdCounter.incrementAndGet();
         
-        // Expand categories to include subcategories
+        // Callers pass the current disabled bitset from ScopedSymbolTable, where
+        // parent categories have already been propagated to subcategories and
+        // later use-warnings pragmas have cleared re-enabled categories.
         Set<String> expanded = new HashSet<>(categories);
-        for (String category : categories) {
-            expandCategory(category, expanded);
-        }
-        
+
         scopeDisabledWarnings.put(scopeId, expanded);
         
         // Set lastScopeId for StatementParser to read
@@ -657,7 +665,7 @@ public class WarningFlags {
     public static boolean isWarningDisabledInScope(int scopeId, String category) {
         Set<String> disabled = scopeDisabledWarnings.get(scopeId);
         if (disabled != null) {
-            return disabled.contains(category) || disabled.contains("all");
+            return disabled.contains(category);
         }
         return false;
     }
@@ -671,9 +679,27 @@ public class WarningFlags {
      * @return True if the category is suppressed in the current runtime scope.
      */
     public static boolean isWarningSuppressedAtRuntime(String category) {
+        if (commandLineWarningOverride > 0) {
+            return false;
+        }
+        if (commandLineWarningOverride < 0) {
+            return true;
+        }
         RuntimeScalar scopeVar = GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE);
         int scopeId = scopeVar.getInt();
         return scopeId > 0 && isWarningDisabledInScope(scopeId, category);
+    }
+
+    public static void setCommandLineWarningOverride(int override) {
+        commandLineWarningOverride = override;
+    }
+
+    public static boolean areWarningsForcedOn() {
+        return commandLineWarningOverride > 0;
+    }
+
+    public static boolean areWarningsForcedOff() {
+        return commandLineWarningOverride < 0;
     }
     
     /**
@@ -801,6 +827,12 @@ public class WarningFlags {
      * @return True if the category is enabled, false otherwise.
      */
     public boolean isWarningEnabled(String category) {
+        if (commandLineWarningOverride < 0) {
+            return false;
+        }
+        if (commandLineWarningOverride > 0) {
+            return true;
+        }
         ScopedSymbolTable scope = getCurrentScope();
         if (scope != null && scope.isWarningCategoryEnabled(category)) {
             return true;
@@ -826,6 +858,12 @@ public class WarningFlags {
      * @return True if the category was explicitly disabled, false otherwise.
      */
     public boolean isWarningDisabled(String category) {
+        if (commandLineWarningOverride < 0) {
+            return true;
+        }
+        if (commandLineWarningOverride > 0) {
+            return false;
+        }
         return getCurrentScope().isWarningCategoryDisabled(category);
     }
 }

@@ -37,6 +37,7 @@ public class GlobalContext {
 
         // Clear package versions from previous runs
         ScopedSymbolTable.clearPackageVersions();
+        WarningFlags.setCommandLineWarningOverride(compilerOptions.warningOverride);
 
         // Initialize regex state and special variables
         RuntimeRegex.initialize();
