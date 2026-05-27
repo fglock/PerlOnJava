@@ -343,6 +343,17 @@ shadowJar {
     }
 }
 
+// Some Perl unit tests spawn a child interpreter via $^X. Under Gradle those
+// children go through the repository launcher, so the target jar must be built
+// before tests run; otherwise a stale target/perlonjava-*.jar can be executed.
+tasks.withType(Test).configureEach { t ->
+    t.dependsOn shadowJar
+
+    def jperlLauncher = org.gradle.internal.os.OperatingSystem.current().isWindows()
+            ? "jperl.bat" : "jperl"
+    t.environment 'PERLONJAVA_EXECUTABLE', file(jperlLauncher).absolutePath
+}
+
 // Task to generate Perl SBOM
 tasks.register('generatePerlSbom', Exec) {
     description = 'Generate SBOM for bundled Perl modules'
