@@ -1,0 +1,62 @@
+--- Javascript/Menu.pm.orig
++++ Javascript/Menu.pm
+@@ -2,9 +2,49 @@ package Javascript::Menu;
+ 
+ use strict;
+ 
+-use CGI;
+ use Tree::Numbered;
+ 
++{
++    package Javascript::Menu::_HTML;
++    use strict;
++
++    sub new { bless {}, shift }
++
++    sub _attrs {
++        my ($self, $attrs) = @_;
++        return '' unless ref $attrs eq 'HASH';
++
++        my @pairs;
++        for my $key (sort keys %$attrs) {
++            my $name = $key;
++            $name =~ s/^-//;
++            my $value = defined $attrs->{$key} ? $attrs->{$key} : '';
++            push @pairs, qq{$name="$value"};
++        }
++        return @pairs ? ' ' . join(' ', @pairs) : '';
++    }
++
++    sub _tag {
++        my ($self, $name, @args) = @_;
++        my $attrs = ref $args[0] eq 'HASH' ? shift @args : undef;
++        return '<' . $name . $self->_attrs($attrs) . '>'
++             . join('', @args)
++             . '</' . $name . '>';
++    }
++
++    sub div { my $self = shift; return $self->_tag('div', @_) }
++    sub Tr  { my $self = shift; return $self->_tag('tr', @_) }
++    sub td  { my $self = shift; return $self->_tag('td', @_) }
++
++    sub start_table {
++        my ($self, @args) = @_;
++        my $attrs = ref $args[0] eq 'HASH' ? shift @args : undef;
++        return '<table' . $self->_attrs($attrs) . '>';
++    }
++
++    sub end_table { return '</table>' }
++}
++
+ use constant DEFAULT_STYLES => {caption => 'caption', 
+ 				Mmenu => 'Mmenu', 
+ 				Smenu => 'Smenu'};
+@@ -16,7 +56,7 @@ our $VERSION = '2.02';
+ our @ISA = qw(Tree::Numbered);
+ 
+ # package stuff:
+-my $cgi = CGI->new;    # Just for HTML shortcuts.
++my $cgi = Javascript::Menu::_HTML->new;    # Just for HTML shortcuts.
+ 
+ # A default action generator. See the args passed to it:
+ my $default_action = sub {
