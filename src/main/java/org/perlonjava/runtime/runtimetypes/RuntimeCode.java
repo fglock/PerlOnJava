@@ -579,6 +579,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public String cvStartFile;
     public int cvStartLine;
+    /**
+     * True when the parser recognized this CV as a compile-time constant sub
+     * (for example {@code sub foo () { 1 }}). {@link #constantValue} covers
+     * constants installed through {@code use constant} and stash assignment.
+     */
+    public boolean isConstantCv;
 
     /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
@@ -832,6 +838,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.stashInstallPackage = this.stashInstallPackage;
         clone.stashInstallSub = this.stashInstallSub;
         clone.installedViaAnonGlobAssign = this.installedViaAnonGlobAssign;
+        clone.cvStartFile = this.cvStartFile;
+        clone.cvStartLine = this.cvStartLine;
+        clone.isConstantCv = this.isConstantCv;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
