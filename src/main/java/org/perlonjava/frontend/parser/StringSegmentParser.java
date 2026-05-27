@@ -1110,7 +1110,7 @@ public abstract class StringSegmentParser {
         if (token.type == LexerTokenType.OPERATOR) {
             // Only specific operators can follow @ for valid array variables
             return switch (token.text) {
-                case "{", "$", "+", "-", "_", "^" -> true;
+                case "{", "$", "+", "-", "_" -> true;
                 default -> false;
             };
         }

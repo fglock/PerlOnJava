@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for IPC::Run.
+
+  IPC::Run installs as pure Perl, but its upstream test suite is centered on
+  fork, process control, PTYs, and child file descriptor behavior that
+  PerlOnJava does not implement.  Keep the test output visible for signal, but
+  allow CPAN to mark the test phase successful so modules that only need
+  IPC::Run as a prerequisite can install.
+match:
+  distribution: "^TODDR/IPC-Run-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
