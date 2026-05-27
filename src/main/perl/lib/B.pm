@@ -357,6 +357,19 @@ package B::SPECIAL {
     }
 }
 
+package B::AV {
+    our @ISA = ('B::SV');
+
+    sub new {
+        my ($class, $ref) = @_;
+        return bless { ref => $ref }, $class;
+    }
+
+    sub object_2svref {
+        return $_[0]->{ref};
+    }
+}
+
 package B::STASH {
     sub new {
         my ($class, $pkg) = @_;
@@ -475,6 +488,11 @@ sub svref_2object {
     }
 
     return B::SV->new($_[0]);
+}
+
+sub end_av {
+    require Internals;
+    return B::AV->new(Internals::jperl_end_av_ref());
 }
 
 # Export CVf_ANON as a function
