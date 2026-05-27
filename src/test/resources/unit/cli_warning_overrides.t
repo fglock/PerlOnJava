@@ -2,15 +2,10 @@ use strict;
 use warnings;
 use Test::More;
 use File::Temp qw(tempdir);
+use IPC::Open3;
 
 my $tmpdir = tempdir(CLEANUP => 1);
 my $seq = 0;
-
-sub shell_quote {
-    my ($arg) = @_;
-    $arg =~ s/'/'\\''/g;
-    return "'$arg'";
-}
 
 sub run_child {
     my ($switch, $code) = @_;
@@ -19,12 +14,18 @@ sub run_child {
     print {$fh} $code;
     close $fh or die "Cannot close $script: $!";
 
-    my $jperl = $^X eq 'jperl' ? './jperl' : $^X;
-    my $cmd = join ' ', map { shell_quote($_) } ($jperl, $switch, $script);
-    open my $pipe, "$cmd 2>&1 |" or die "Cannot run $cmd: $!";
+    my $jperl = $^X;
+    if ($jperl eq 'jperl') {
+        $jperl = $^O eq 'MSWin32' ? 'jperl.bat' : './jperl';
+    }
+
+    my ($in, $out);
+    my $pid = open3($in, $out, undef, $jperl, $switch, $script);
+    close $in;
     local $/;
-    my $output = <$pipe>;
-    close $pipe;
+    my $output = <$out> // '';
+    close $out;
+    waitpid($pid, 0);
     return $output;
 }
 
