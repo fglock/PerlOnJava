@@ -15,11 +15,22 @@ public class PerlDieException extends RuntimeException {
     private final RuntimeBase payload;
 
     public PerlDieException(RuntimeBase payload) {
-        super(payload == null ? null : payload.toString());
+        super(safeMessage(payload));
         this.payload = payload;
     }
 
     public RuntimeBase getPayload() {
         return payload;
+    }
+
+    private static String safeMessage(RuntimeBase payload) {
+        if (payload == null) return null;
+
+        RuntimeScalar first = payload.getFirst();
+        if (first != null && RuntimeScalarType.isReference(first)) {
+            return first.toStringNoOverload();
+        }
+
+        return payload.toString();
     }
 }

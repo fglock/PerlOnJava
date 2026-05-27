@@ -407,13 +407,18 @@ public class WarnDie {
     public static RuntimeBase die(RuntimeBase message, RuntimeScalar where, String fileName, int lineNumber) {
         var errVariable = getGlobalVariable("main::@");
         var oldErr = new RuntimeScalar(errVariable);
+        RuntimeScalar first = message.getFirst();
+        boolean objectMessage = RuntimeScalarType.isReference(first)
+                && first.type != RuntimeScalarType.REGEX;
 
-        if (message.toString().isEmpty()) {
+        if (!objectMessage && message.toString().isEmpty()) {
             // Empty message
             message = dieEmptyMessage(oldErr, fileName, lineNumber);
+            first = message.getFirst();
+            objectMessage = RuntimeScalarType.isReference(first)
+                    && first.type != RuntimeScalarType.REGEX;
         }
-        if (!RuntimeScalarType.isReference(message.getFirst())
-                || message.getFirst().type == RuntimeScalarType.REGEX) {
+        if (!objectMessage) {
             // Error message
             String out = message.toString();
             if (!out.endsWith("\n")) {
@@ -432,7 +437,7 @@ public class WarnDie {
             errVariable.set(out);
         } else {
             // Error object
-            errVariable.set(message.getFirst());
+            errVariable.set(first);
         }
 
         // System.out.println("die :" + errVariable);
