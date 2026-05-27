@@ -185,6 +185,242 @@ public class SystemOperator {
     }
 
     /**
+     * Java's ProcessBuilder does not reliably perform execvp-style PATH lookup
+     * for argv-list commands. Perl's system LIST, exec LIST, and simple qx// do.
+     */
+    private static List<String> resolveCommandForProcessBuilder(List<String> commandArgs) {
+        if (commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+
+        String command = commandArgs.getFirst();
+        if (command == null || command.isEmpty()) {
+            return commandArgs;
+        }
+        if (commandHasPathComponent(command)) {
+            return expandResolvedCommandForProcessBuilder(commandArgs);
+        }
+
+        String path = getPerlEnvValue("PATH");
+        if (path == null || path.isEmpty()) {
+            return commandArgs;
+        }
+
+        String userDir = System.getProperty("user.dir");
+        String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
+        for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
+            File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
+            if (!pathDir.isAbsolute()) {
+                pathDir = new File(userDir, dir);
+            }
+
+            for (String candidateName : executableCandidateNames(command)) {
+                File candidate = new File(pathDir, candidateName);
+                if (isExecutableCandidate(candidate, candidateName)) {
+                    List<String> resolved = new ArrayList<>(commandArgs);
+                    resolved.set(0, candidate.getAbsolutePath());
+                    return expandResolvedCommandForProcessBuilder(resolved);
+                }
+            }
+        }
+
+        return commandArgs;
+    }
+
+    private static List<String> expandResolvedCommandForProcessBuilder(List<String> commandArgs) {
+        if (SystemUtils.osIsWindows()) {
+            return expandWindowsBatchForProcessBuilder(commandArgs);
+        }
+        return expandJperlShebangForProcessBuilder(commandArgs);
+    }
+
+    private static boolean isExecutableCandidate(File candidate, String candidateName) {
+        if (!candidate.isFile()) {
+            return false;
+        }
+        if (!SystemUtils.osIsWindows()) {
+            return candidate.canExecute();
+        }
+        return candidate.canExecute() || hasWindowsExecutableSuffix(candidateName);
+    }
+
+    private static List<String> expandWindowsBatchForProcessBuilder(List<String> commandArgs) {
+        if (!SystemUtils.osIsWindows() || commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+
+        String command = commandArgs.getFirst();
+        if (!hasWindowsBatchSuffix(command)) {
+            return commandArgs;
+        }
+
+        File script = new File(command);
+        if (!script.isAbsolute()) {
+            script = new File(System.getProperty("user.dir"), command);
+        }
+
+        StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
+        for (String arg : commandArgs.subList(1, commandArgs.size())) {
+            commandLine.append(' ').append(quoteForCmd(arg));
+        }
+
+        return Arrays.asList("cmd.exe", "/x", "/d", "/c", commandLine.toString());
+    }
+
+    private static boolean hasWindowsBatchSuffix(String command) {
+        String lower = command.toLowerCase();
+        return lower.endsWith(".bat") || lower.endsWith(".cmd");
+    }
+
+    private static String quoteForCmd(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    private static List<String> expandJperlShebangForProcessBuilder(List<String> commandArgs) {
+        if (SystemUtils.osIsWindows() || commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+
+        File script = new File(commandArgs.getFirst());
+        if (!script.isAbsolute()) {
+            script = new File(System.getProperty("user.dir"), commandArgs.getFirst());
+        }
+        if (!script.isFile()) {
+            return commandArgs;
+        }
+
+        String shebang = readShebang(script);
+        if (shebang == null) {
+            return commandArgs;
+        }
+
+        List<String> shebangWords = splitShebangWords(shebang);
+        if (shebangWords.isEmpty() || !isCurrentJperlWrapper(shebangWords.getFirst())) {
+            return commandArgs;
+        }
+
+        List<String> expanded = new ArrayList<>();
+        expanded.add("/bin/bash");
+        expanded.add(shebangWords.getFirst());
+        expanded.addAll(shebangWords.subList(1, shebangWords.size()));
+        expanded.add(script.getAbsolutePath());
+        expanded.addAll(commandArgs.subList(1, commandArgs.size()));
+        return expanded;
+    }
+
+    private static String readShebang(File script) {
+        try (BufferedReader reader = java.nio.file.Files.newBufferedReader(
+                script.toPath(), java.nio.charset.StandardCharsets.ISO_8859_1)) {
+            String firstLine = reader.readLine();
+            if (firstLine != null && firstLine.startsWith("#!")) {
+                return firstLine.substring(2).trim();
+            }
+        } catch (IOException e) {
+            // Let ProcessBuilder report the real execution error.
+        }
+        return null;
+    }
+
+    private static List<String> splitShebangWords(String shebang) {
+        List<String> words = new ArrayList<>();
+        for (String word : shebang.split("\\s+")) {
+            if (!word.isEmpty()) {
+                words.add(word);
+            }
+        }
+        return words;
+    }
+
+    private static boolean isCurrentJperlWrapper(String interpreter) {
+        if (interpreter == null || interpreter.isEmpty()) {
+            return false;
+        }
+        if ("jperl".equals(new File(interpreter).getName())) {
+            return true;
+        }
+
+        String current = getCurrentJperlPath();
+        if (current == null || current.isEmpty()) {
+            return false;
+        }
+
+        try {
+            return new File(interpreter).getCanonicalFile()
+                    .equals(new File(current).getCanonicalFile());
+        } catch (IOException e) {
+            return new File(interpreter).getAbsolutePath()
+                    .equals(new File(current).getAbsolutePath());
+        }
+    }
+
+    private static String getCurrentJperlPath() {
+        try {
+            RuntimeScalar value = GlobalVariable.getGlobalVariable("main::^X");
+            if (value != null && value.defined().getBoolean()) {
+                return value.toString();
+            }
+        } catch (Exception e) {
+            // Fall back to the launcher environment below.
+        }
+        return System.getenv("PERLONJAVA_EXECUTABLE");
+    }
+
+    private static boolean commandHasPathComponent(String command) {
+        return command.contains("/") || command.contains("\\")
+                || (SystemUtils.osIsWindows()
+                && command.length() >= 2
+                && Character.isLetter(command.charAt(0))
+                && command.charAt(1) == ':');
+    }
+
+    private static List<String> executableCandidateNames(String command) {
+        if (!SystemUtils.osIsWindows() || hasWindowsExecutableSuffix(command)) {
+            return List.of(command);
+        }
+
+        String pathext = getPerlEnvValue("PATHEXT");
+        if (pathext == null || pathext.isEmpty()) {
+            pathext = ".COM;.EXE;.BAT;.CMD";
+        }
+
+        List<String> candidates = new ArrayList<>();
+        candidates.add(command);
+        for (String ext : pathext.split(";", -1)) {
+            if (!ext.isEmpty()) {
+                candidates.add(command + ext);
+            }
+        }
+        return candidates;
+    }
+
+    private static boolean hasWindowsExecutableSuffix(String command) {
+        String lower = command.toLowerCase();
+        String pathext = getPerlEnvValue("PATHEXT");
+        if (pathext == null || pathext.isEmpty()) {
+            pathext = ".COM;.EXE;.BAT;.CMD";
+        }
+        for (String ext : pathext.toLowerCase().split(";", -1)) {
+            if (!ext.isEmpty() && lower.endsWith(ext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String getPerlEnvValue(String key) {
+        try {
+            RuntimeHash envHash = GlobalVariable.getGlobalHash("main::ENV");
+            RuntimeScalar value = envHash.get(key);
+            if (value != null && value.defined().getBoolean()) {
+                return value.toString();
+            }
+        } catch (Exception e) {
+            // Fall back to the JVM environment below.
+        }
+        return System.getenv(key);
+    }
+
+    /**
      * Common method to execute a command through the shell.
      *
      * @param command       The command to execute.
@@ -310,7 +546,7 @@ public class SystemOperator {
         try {
             flushAllHandles();
 
-            ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+            ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
             
@@ -362,7 +598,7 @@ public class SystemOperator {
         try {
             flushAllHandles();
 
-            ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+            ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
             String userDir = System.getProperty("user.dir");
             processBuilder.directory(new File(userDir));
             
@@ -707,7 +943,7 @@ public class SystemOperator {
             }
             
             // Run command and capture output
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(command));
             processBuilder.directory(new File(System.getProperty("user.dir")));
             copyPerlEnvToProcessBuilder(processBuilder);
             processBuilder.redirectErrorStream(false);  // Keep stderr separate
@@ -791,7 +1027,7 @@ public class SystemOperator {
      * @throws InterruptedException if the command execution is interrupted.
      */
     private static int execCommandDirect(List<String> commandArgs) throws IOException, InterruptedException {
-        ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
+        ProcessBuilder processBuilder = new ProcessBuilder(resolveCommandForProcessBuilder(commandArgs));
         String userDir = System.getProperty("user.dir");
         processBuilder.directory(new File(userDir));
         
