@@ -10,8 +10,8 @@ our $VERSION = '1.00_perlonjava';
 # 
 # This stub provides minimal functionality:
 # 1. For Sub::Quote created subs, return the stored source code
-# 2. For simple anonymous subs whose source file is still available, return
-#    the source-visible body
+# 2. For simple anonymous subs and prototype blocks whose source file is
+#    still available, return the source-visible body
 # 3. For other subs, return a placeholder
 
 sub new {
@@ -78,34 +78,54 @@ sub _source_visible_anon_sub {
     my @lines = <$fh>;
     close $fh;
 
-    my $source = join '', @lines[($line - 1) .. ($line + 8 < @lines ? $line + 8 : $#lines)];
-    return unless $source =~ /\bsub\s*(?:\([^)]*\)\s*)?\{/;
+    my $source = join '', @lines;
+    return _extract_source_visible_block($source, $line);
+}
 
-    my $start = $-[0];
-    my $brace = index($source, '{', $start);
-    return if $brace < 0;
+sub _extract_source_visible_block {
+    my ($source, $target_line) = @_;
 
-    my $depth = 0;
-    my $end = -1;
-    for (my $i = $brace; $i < length($source); $i++) {
+    my @stack;
+    my @candidates;
+    my $line = 1;
+    for (my $i = 0; $i < length($source); $i++) {
         my $ch = substr($source, $i, 1);
         if ($ch eq '{') {
-            $depth++;
+            push @stack, [$i, $line, _looks_like_code_block_open($source, $i)];
         } elsif ($ch eq '}') {
-            $depth--;
-            if ($depth == 0) {
-                $end = $i;
-                last;
-            }
+            my $open = pop @stack;
+            next unless $open;
+            my ($start, $start_line, $looks_like_code) = @$open;
+            next unless $looks_like_code;
+            next unless $start_line <= $target_line && $target_line <= $line;
+            push @candidates, [$start, $i];
+        } elsif ($ch eq "\n") {
+            $line++;
         }
     }
-    return if $end < 0;
+    return unless @candidates;
+
+    @candidates = sort {
+        ($a->[1] - $a->[0]) <=> ($b->[1] - $b->[0])
+            || $b->[0] <=> $a->[0]
+    } @candidates;
+    my ($brace, $end) = @{$candidates[0]};
 
     my $body = substr($source, $brace + 1, $end - $brace - 1);
     $body =~ s/^\s+//;
     $body =~ s/\s+$//;
     $body .= ';' if length($body) && $body !~ /[;}]\z/;
     return "{ $body }";
+}
+
+sub _looks_like_code_block_open {
+    my ($source, $brace) = @_;
+    my $prefix = substr($source, 0, $brace);
+    $prefix =~ s/[ \t\r\n]+\z//;
+
+    return 1 if $prefix =~ /\bsub\s*(?:\([^)]*\)\s*)?\z/;
+    return 1 if $prefix =~ /(?:^|[^\w:\$\@\%])(?:[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)\z/;
+    return 0;
 }
 
 # Additional methods that might be called
@@ -144,8 +164,8 @@ For subroutines created via Sub::Quote, the stored source code is returned.
 
 =item *
 
-For simple anonymous subroutines whose source file is still available, the
-source-visible body is returned.
+For simple anonymous subroutines and prototype blocks whose source file is
+still available, the source-visible body is returned.
 
 =item *
 

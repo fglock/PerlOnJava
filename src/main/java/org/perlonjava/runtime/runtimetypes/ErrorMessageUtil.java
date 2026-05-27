@@ -429,10 +429,18 @@ public class ErrorMessageUtil {
                                     currentFileName = directiveFile;
                                 }
                             }
-                        } else if (j < tokens.size() && tokens.get(j).type == LexerTokenType.IDENTIFIER) {
+                        } else if (j < tokens.size() && isUnquotedLineFilenameToken(tokens.get(j))) {
                             // Unquoted filename: #line N filename
-                            // Perl allows unquoted bareword filenames in #line directives
-                            currentFileName = tokens.get(j).text;
+                            // Perl allows unquoted filenames such as lib/Foo/Bar.pm.
+                            StringBuilder filenameBuilder = new StringBuilder();
+                            while (j < tokens.size() && isUnquotedLineFilenameToken(tokens.get(j))) {
+                                filenameBuilder.append(tokens.get(j).text);
+                                j++;
+                            }
+                            String directiveFile = filenameBuilder.toString();
+                            if (!directiveFile.isEmpty()) {
+                                currentFileName = directiveFile;
+                            }
                         }
 
                         if (directiveLine >= 0) {
@@ -453,6 +461,12 @@ public class ErrorMessageUtil {
         }
 
         return new SourceLocation(currentFileName, lineNumber);
+    }
+
+    private static boolean isUnquotedLineFilenameToken(LexerToken token) {
+        return token.type != LexerTokenType.WHITESPACE
+                && token.type != LexerTokenType.NEWLINE
+                && token.type != LexerTokenType.EOF;
     }
 
     public record SourceLocation(String fileName, int lineNumber) {
@@ -492,4 +506,3 @@ public class ErrorMessageUtil {
         return lines.toArray(new String[0]);
     }
 }
-

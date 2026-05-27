@@ -148,17 +148,29 @@ public class Whitespace {
                         // Update the context (ErrorMessageUtil instance) with the new file name
                         parser.ctx.errorUtil.setFileName(filename);
                     }
-                } else if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.IDENTIFIER) {
+                } else if (tokenIndex < tokens.size() && isUnquotedLineFilenameToken(tokens.get(tokenIndex))) {
                     // Unquoted filename: #line N filename
-                    // Perl allows unquoted bareword filenames in #line directives
-                    String filename = tokens.get(tokenIndex).text;
-                    parser.ctx.errorUtil.setFileName(filename);
-                    tokenIndex++; // Skip the filename token
+                    // Perl allows unquoted filenames such as lib/Foo/Bar.pm.
+                    StringBuilder filenameBuilder = new StringBuilder();
+                    while (tokenIndex < tokens.size() && isUnquotedLineFilenameToken(tokens.get(tokenIndex))) {
+                        filenameBuilder.append(tokens.get(tokenIndex).text);
+                        tokenIndex++;
+                    }
+                    String filename = filenameBuilder.toString();
+                    if (!filename.isEmpty()) {
+                        parser.ctx.errorUtil.setFileName(filename);
+                    }
                 }
             } catch (NumberFormatException e) {
                 // Handle the error if the line number is not valid
             }
         }
         return tokenIndex;
+    }
+
+    private static boolean isUnquotedLineFilenameToken(LexerToken token) {
+        return token.type != LexerTokenType.WHITESPACE
+                && token.type != LexerTokenType.NEWLINE
+                && token.type != LexerTokenType.EOF;
     }
 }
