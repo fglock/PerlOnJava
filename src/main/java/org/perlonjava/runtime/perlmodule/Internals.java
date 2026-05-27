@@ -60,9 +60,17 @@ public class Internals extends PerlModuleBase {
             // such as Pod::Coverage can skip imported helpers.
             internals.registerMethod("jperl_is_imported_sub", "jperl_is_imported_sub", "$");
             internals.registerMethod("jperl_cv_start_location", "jperlCvStartLocation", "$");
+            internals.registerMethod("jperl_end_av_ref", "jperlEndAvRef", "");
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Internals method: " + e.getMessage());
         }
+    }
+
+    /**
+     * Return a reference to the live END block queue for B::end_av().
+     */
+    public static RuntimeList jperlEndAvRef(RuntimeArray args, int ctx) {
+        return SpecialBlock.endBlocks.createReference().getList();
     }
 
     /**

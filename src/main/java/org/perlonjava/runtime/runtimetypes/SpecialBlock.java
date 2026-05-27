@@ -7,9 +7,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariab
  * that can be saved and executed in a specific order. This class provides methods to save and run
  * these blocks, ensuring they are executed based on their defined order and conditions.
  * <p>
- * The order of execution is influenced by how blocks are added:
- * - Blocks added with `push` are executed in Last-In-First-Out (LIFO) order.
- * - Blocks added with `unshift` are executed in First-In-First-Out (FIFO) order.
+ * The order of execution is influenced by how each queue is consumed:
+ * - END blocks are stored newest-first and consumed from the front.
+ * - INIT blocks are stored newest-first and consumed from the back.
+ * - CHECK blocks are stored oldest-first and consumed from the back.
  */
 public class SpecialBlock {
 
@@ -20,12 +21,15 @@ public class SpecialBlock {
 
     /**
      * Saves a code reference to the endBlocks array.
-     * Blocks are added using `push`, meaning they will be executed in LIFO order.
+     * Blocks are added using `unshift`, meaning they will be executed in LIFO order
+     * when runEndBlocks() removes from the front. This layout also matches Perl's
+     * B::end_av behavior: code that appends to the exposed END queue while END
+     * blocks are running fires after the remaining queued END blocks.
      *
      * @param codeRef the code reference to be saved
      */
     public static void saveEndBlock(RuntimeScalar codeRef) {
-        RuntimeArray.push(endBlocks, codeRef);
+        RuntimeArray.unshift(endBlocks, codeRef);
     }
 
     /**
@@ -62,7 +66,7 @@ public class SpecialBlock {
         }
         
         while (!endBlocks.isEmpty()) {
-            RuntimeScalar block = RuntimeArray.pop(endBlocks);
+            RuntimeScalar block = RuntimeArray.shift(endBlocks);
             if (block.getDefinedBoolean()) {
                 RuntimeCode.apply(block, new RuntimeArray(), RuntimeContextType.VOID);
             }
