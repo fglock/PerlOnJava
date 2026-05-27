@@ -4,8 +4,7 @@ use Test::More;
 use File::Temp qw(tempdir);
 use IPC::Open3;
 
-plan skip_all => 'nested jperl launcher requires built target jar'
-    if $^X eq 'jperl' && !-f 'target/perlonjava-5.42.0.jar';
+my $skip_launcher = $^X eq 'jperl' && !-f 'target/perlonjava-5.42.0.jar';
 
 my $tmpdir = tempdir(CLEANUP => 1);
 my $seq = 0;
@@ -32,22 +31,26 @@ sub run_child {
     return $output;
 }
 
-is(
-    run_child('-X', 'use warnings; my $b = $a + 0;'),
-    '',
-    '-X suppresses later use warnings',
-);
+SKIP: {
+    skip 'nested jperl launcher requires built target jar', 3 if $skip_launcher;
 
-is(
-    run_child('-X', 'use 5.036; my $b = $a + 0;'),
-    '',
-    '-X suppresses warnings enabled by use VERSION',
-);
+    is(
+        run_child('-X', 'use warnings; my $b = $a + 0;'),
+        '',
+        '-X suppresses later use warnings',
+    );
 
-like(
-    run_child('-W', 'no warnings; my $b = $a + 0;'),
-    qr/Use of uninitialized value .*in addition/,
-    '-W overrides later no warnings',
-);
+    is(
+        run_child('-X', 'use 5.036; my $b = $a + 0;'),
+        '',
+        '-X suppresses warnings enabled by use VERSION',
+    );
+
+    like(
+        run_child('-W', 'no warnings; my $b = $a + 0;'),
+        qr/Use of uninitialized value .*in addition/,
+        '-W overrides later no warnings',
+    );
+}
 
 done_testing();
