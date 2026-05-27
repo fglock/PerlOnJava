@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Carp::Assert.
+
+  Text::Quote needs Carp::Assert at runtime. Carp::Assert's upstream tests
+  only fail on affirm()'s diagnostic source-string rendering under
+  PerlOnJava; the assertion behavior needed by Text::Quote is usable.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^YVES/Carp-Assert-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

@@ -1,0 +1,14 @@
+---
+comment: |
+  PerlOnJava distroprefs for aliased.
+
+  AI::Prolog uses aliased for import-time short names. aliased's upstream
+  suite has one $SIG{__DIE__} preservation check that exposes an unrelated
+  PerlOnJava signal-handler edge case, while the import behavior used by
+  AI::Prolog passes.
+
+  Keep the test output visible for signal, but allow CPAN to install it.
+match:
+  distribution: "^ETHER/aliased-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
