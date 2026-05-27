@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for String::ShellQuote.
+
+  The module's pure quoting tests run under PerlOnJava.  Its final script
+  tests use open '-|' and exec a blib script through fork-style control flow,
+  which PerlOnJava does not implement.  Patch only those script tests to skip
+  on PerlOnJava.
+match:
+  distribution: "^ROSCH/String-ShellQuote-1\\.04"
+patches:
+  - "String-ShellQuote-1.04/SkipForkScriptTests.patch"

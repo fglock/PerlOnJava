@@ -1,0 +1,13 @@
+--- test.t.orig
++++ test.t
+@@ -103,8 +103,10 @@
+ }
+ 
+ if ($^O eq 'MSWin32') {
+     print "ok # skip not working on MSWin32\n" x 4;
++} elsif ($ENV{PERLONJAVA_EXECUTABLE} || $^X =~ /(?:^|[\/\\])jperl(?:\z|[.])/) {
++    print "ok # skip script tests require fork-compatible open\n" x 4;
+ } else {
+     $testsub = \&via_shell;
+     test '';
+     test qq{a\n},			'a';

@@ -582,7 +582,7 @@ sub _create_install_makefile {
     };
     
     # Get the Perl interpreter path
-    my $perl = $^X;
+    my $perl = _current_perl_path();
     
     # Build test command - use TESTS from WriteMakefile args if provided, else default to t/*.t
     # Set PERL5LIB to include blib/lib and blib/arch so test subprocesses can find the module
@@ -697,6 +697,7 @@ sub _create_install_makefile {
                 push @script_cmds, _shell_mkdir($dir);
             }
             push @script_cmds, _shell_cp($src, $dest);
+            push @script_cmds, _shell_fixin($dest);
         }
     }
 
@@ -713,6 +714,7 @@ sub _create_install_makefile {
                 push @blib_script_cmds, _shell_mkdir($blib_dir);
             }
             push @blib_script_cmds, _shell_cp($src, $blib_dest);
+            push @blib_script_cmds, _shell_fixin($blib_dest);
         }
     }
 
@@ -913,6 +915,24 @@ sub _shell_mkdir {
     return "\t\@mkdir -p '$dir'";
 }
 
+sub _current_perl_path {
+    my $perl = $ENV{PERLONJAVA_EXECUTABLE} || $Config{perlpath} || $^X;
+    return $perl if File::Spec->file_name_is_absolute($perl);
+
+    for my $base ($ENV{PWD}, getcwd()) {
+        next unless defined $base && length $base;
+        my $candidate = File::Spec->catfile($base, $perl);
+        return abs_path($candidate) || $candidate if -x $candidate;
+    }
+
+    for my $dir (File::Spec->path()) {
+        my $candidate = File::Spec->catfile($dir, $perl);
+        return abs_path($candidate) || $candidate if -x $candidate;
+    }
+
+    return $perl;
+}
+
 # Helper: generate a shell cp command for Makefile.
 # Tolerant of missing source files: some distributions generate .pm files
 # from .pm.PL scripts that require XS bootstrap (e.g. Term::ReadKey) and
@@ -930,6 +950,21 @@ sub _shell_cp {
         $autosplit = " && if grep -q '^__END__\$\$' '$dest'; then \$(PERL) -MAutoSplit -e 'autosplit(\$\$ARGV[0], \$\$ARGV[1], 0, 1, 1)' '$dest' '$autosplit_dir'; fi";
     }
     return "\t\@if [ -f '$src' ]; then rm -f '$dest' && cp '$src' '$dest'$autosplit; else echo 'PerlOnJava: skipping missing source: $src'; fi";
+}
+
+# Helper: rewrite staged script shebangs such as "#!perl -w" to a shell wrapper
+# that execs the current jperl against a hidden copy of the original script.
+# Some CPAN tests execute blib/script/* directly; a plain "#!/path/to/jperl"
+# shebang is not portable because jperl itself is a launcher script.
+sub _shell_fixin {
+    my ($file) = @_;
+    return "\t\@true" if $^O eq 'MSWin32';
+    my $payload_name = "." . basename($file) . ".perlonjava";
+    my $payload = File::Spec->catfile(dirname($file), $payload_name);
+    for ($file, $payload, $payload_name) {
+        s/'/'\\''/g;
+    }
+    return "\t\@\$(PERL) -e 'my (\$\$f,\$\$payload,\$\$payload_name,\$\$perl)=\@ARGV; open my \$\$in,q{<},\$\$f or exit 0; my \@lines=<\$\$in>; close \$\$in; exit 0 unless \@lines && \$\$lines[0] =~ /^#!.*\\bperl(?:\\s+(.*))?\\r?\\n?\\z/; my \$\$args=defined \$\$1 ? q{ }.\$\$1 : q{}; open my \$\$payload_fh,q{>},\$\$payload or die \$\$!; print \$\$payload_fh \@lines; close \$\$payload_fh or die \$\$!; chmod 0644,\$\$payload; my \$\$d=chr 36; my \$\$at=chr 64; open my \$\$out,q{>},\$\$f or die \$\$!; print \$\$out qq{#!/bin/sh\\n}; print \$\$out q{dir=}.\$\$d.q{(dirname \"}.\$\$d.q{0\")}.qq{\\n}; print \$\$out q{exec \"}.\$\$perl.q{\"}.\$\$args.q{ \"}.\$\$d.q{dir/}.\$\$payload_name.q{\" \"}.\$\$d.\$\$at.q{\"}.qq{\\n}; close \$\$out or die \$\$!; chmod 0755,\$\$f;' '$file' '$payload' '$payload_name' '\$(PERL)'";
 }
 
 # Helper: generate postamble for File::ShareDir::Install

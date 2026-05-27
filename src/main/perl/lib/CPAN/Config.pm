@@ -43,6 +43,7 @@ sub _bootstrap_prefs {
         'Module-Build.yml'           => 'PerlOnJava/CpanDistroprefs/Module-Build.yml',
         'Class-Method-Modifiers.yml' => 'PerlOnJava/CpanDistroprefs/Class-Method-Modifiers.yml',
         'Sub-Quote.yml'              => 'PerlOnJava/CpanDistroprefs/Sub-Quote.yml',
+        'IPC-Run.yml'                => 'PerlOnJava/CpanDistroprefs/IPC-Run.yml',
         'IPC-Run3.yml'               => 'PerlOnJava/CpanDistroprefs/IPC-Run3.yml',
         'Exception-Class.yml'        => 'PerlOnJava/CpanDistroprefs/Exception-Class.yml',
         'Module-Pluggable.yml'       => 'PerlOnJava/CpanDistroprefs/Module-Pluggable.yml',
@@ -58,6 +59,7 @@ sub _bootstrap_prefs {
         'Test-File.yml'              => 'PerlOnJava/CpanDistroprefs/Test-File.yml',
         'Data-Dmp.yml'               => 'PerlOnJava/CpanDistroprefs/Data-Dmp.yml',
         'Capture-Tiny.yml'           => 'PerlOnJava/CpanDistroprefs/Capture-Tiny.yml',
+        'String-ShellQuote.yml'      => 'PerlOnJava/CpanDistroprefs/String-ShellQuote.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
     );
@@ -158,6 +160,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Data-Dmp-0.242/PerlOnJava.patch' ],
         [ 'Capture-Tiny-0.50/NoForkTeeCatchErrors.patch',
           'PerlOnJava/CpanPatches/Capture-Tiny-0.50/NoForkTeeCatchErrors.patch' ],
+        [ 'String-ShellQuote-1.04/SkipForkScriptTests.patch',
+          'PerlOnJava/CpanPatches/String-ShellQuote-1.04/SkipForkScriptTests.patch' ],
         [ 'Type-Tiny-2.010001/SkipRegexCallbackTests.patch',
           'PerlOnJava/CpanPatches/Type-Tiny-2.010001/SkipRegexCallbackTests.patch' ],
     );
