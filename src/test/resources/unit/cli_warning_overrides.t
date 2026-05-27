@@ -4,6 +4,9 @@ use Test::More;
 use File::Temp qw(tempdir);
 use IPC::Open3;
 
+plan skip_all => 'nested jperl launcher requires built target jar'
+    if $^X eq 'jperl' && !-f 'target/perlonjava-5.42.0.jar';
+
 my $tmpdir = tempdir(CLEANUP => 1);
 my $seq = 0;
 
