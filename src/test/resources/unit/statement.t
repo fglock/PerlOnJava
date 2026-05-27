@@ -167,4 +167,13 @@ is($scope_test, 12, 'scope in loops calculation');
     is(state_unless_test(), 0, '... and still 0 on subsequent call');
 }
 
+# foreach statement modifier with multiple my declarations in the list
+{
+    my $got = "a b";
+    my $expected = "ab";
+    s/\s+//g for (my $got_nows = $got), (my $expected_nows = $expected);
+    is($got_nows, "ab", 'modifier foreach list my declaration remains in scope');
+    is($expected_nows, "ab", 'modifier foreach list second my declaration remains in scope');
+}
+
 done_testing();
