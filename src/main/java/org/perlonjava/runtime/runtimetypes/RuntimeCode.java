@@ -103,6 +103,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     private static final ThreadLocal<ArrayDeque<EvalRuntimeContext>> evalRuntimeContextStack =
             ThreadLocal.withInitial(ArrayDeque::new);
+    private static final ThreadLocal<ArrayDeque<ArrayList<String>>> syntheticCallerFrames =
+            ThreadLocal.withInitial(ArrayDeque::new);
     // Cache for memoization of evalStringHelper results
     private static final int CLASS_CACHE_SIZE = 100;
     private static final Map<String, Class<?>> evalCache = new LinkedHashMap<String, Class<?>>(CLASS_CACHE_SIZE, 0.75f, true) {
@@ -1165,6 +1167,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    private static void pushSyntheticEvalCallerFrame(String packageName, String filename, int line) {
+        ArrayList<String> frame = new ArrayList<>();
+        frame.add(packageName != null && !packageName.isEmpty() ? packageName : "main");
+        frame.add(filename != null ? filename : "(eval)");
+        frame.add(String.valueOf(line));
+        frame.add("(eval)");
+        frame.add("virtual-eval");
+        syntheticCallerFrames.get().addLast(frame);
+    }
+
+    private static void popSyntheticEvalCallerFrame() {
+        ArrayDeque<ArrayList<String>> stack = syntheticCallerFrames.get();
+        if (!stack.isEmpty()) {
+            stack.removeLast();
+        }
+        if (stack.isEmpty()) {
+            syntheticCallerFrames.remove();
+        }
+    }
+
     private static void registerEvalRuntimeAlias(EvalRuntimeContext context, char sigil, String fullName, RuntimeBase value) {
         context.aliases().add(new EvalRuntimeAlias(sigil, fullName, value));
     }
@@ -2043,6 +2065,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     int level = DynamicVariableManager.getLocalLevel();
                     DynamicVariableManager.pushLocalVariable(sig);
 
+                    evalDepth++;
+                    boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
+                    boolean pushedSyntheticEvalFrame = false;
+                    if (!pushedEvalFrame) {
+                        pushSyntheticEvalCallerFrame(
+                                InterpreterState.currentPackage.get().toString(),
+                                evalCompilerOptions.fileName,
+                                1);
+                        pushedSyntheticEvalFrame = true;
+                    }
                     try {
                         RuntimeArray handlerArgs = new RuntimeArray();
                         RuntimeArray.push(handlerArgs, new RuntimeScalar(err));
@@ -2062,6 +2094,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         // If handler throws other exceptions, ignore them (keep original error in $@)
                     } finally {
+                        if (pushedEvalFrame) {
+                            InterpreterState.pop();
+                        }
+                        if (pushedSyntheticEvalFrame) {
+                            popSyntheticEvalCallerFrame();
+                        }
+                        evalDepth--;
                         // Restore $SIG{__DIE__}
                         DynamicVariableManager.popToLocalLevel(level);
                     }
@@ -2751,6 +2790,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Throwable t = new Throwable();
         ExceptionFormatter.StackTraceResult result = ExceptionFormatter.formatExceptionDetailed(t);
         ArrayList<ArrayList<String>> stackTrace = result.frames();
+        ArrayDeque<ArrayList<String>> syntheticFrames = syntheticCallerFrames.get();
+        if (!syntheticFrames.isEmpty()) {
+            int baseSkip = result.firstFrameFromInterpreter() ? 0 : 1;
+            int insertAt = Math.min(baseSkip + 1, stackTrace.size());
+            ArrayList<ArrayList<String>> framesToInsert = new ArrayList<>();
+            for (Iterator<ArrayList<String>> it = syntheticFrames.descendingIterator(); it.hasNext(); ) {
+                framesToInsert.add(new ArrayList<>(it.next()));
+            }
+            stackTrace.addAll(insertAt, framesToInsert);
+        }
         java.util.ArrayList<String> javaClassNames = extractJavaClassNames(t);
         int stackTraceSize = stackTrace.size();
 
@@ -2795,9 +2844,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // The subroutine name at frame N is actually stored at frame N-1
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
+                String frameSubName = frameInfo.size() > 3 ? frameInfo.get(3) : null;
+                boolean virtualEvalFrame = frameInfo.size() > 4
+                        && "virtual-eval".equals(frameInfo.get(4));
+
+                // Synthetic frames such as eval blocks describe the frame itself,
+                // not the previous caller, so preserve their own subroutine name.
+                if (virtualEvalFrame && frameSubName != null && frameSubName.startsWith("(")) {
+                    subName = frameSubName;
+                }
 
                 RuntimeCode activeCode = getActiveCodeAt(originalFrame);
-                if (activeCode != null) {
+                if (subName == null && activeCode != null) {
                     subName = callerSubNameForCode(activeCode);
                 }
                 

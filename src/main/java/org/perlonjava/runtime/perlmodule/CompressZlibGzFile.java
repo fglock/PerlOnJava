@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.*;
@@ -20,6 +21,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
     private static final String MODE_KEY = "_mode";
     private static final String EOF_KEY = "_eof";
     private static final String PUSHBACK_KEY = "_pushback";
+    private static final String POS_KEY = "_pos";
 
     public CompressZlibGzFile() {
         super("Compress::Zlib::gzFile", false);
@@ -32,6 +34,10 @@ public class CompressZlibGzFile extends PerlModuleBase {
             gzFile.registerMethod("gzwrite", null);
             gzFile.registerMethod("gzreadline", null);
             gzFile.registerMethod("gzeof", null);
+            gzFile.registerMethod("gztell", null);
+            gzFile.registerMethod("gzseek", null);
+            gzFile.registerMethod("gzflush", null);
+            gzFile.registerMethod("gzsetparams", null);
             gzFile.registerMethod("gzclose", null);
             gzFile.registerMethod("gzerror", null);
         } catch (NoSuchMethodException e) {
@@ -46,7 +52,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
      */
     public static RuntimeList gzread(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
-            return new RuntimeScalar(-1).getList();
+            return new RuntimeScalar(-2).getList(); // Z_STREAM_ERROR
         }
 
         RuntimeHash self = args.get(0).hashDeref();
@@ -55,7 +61,7 @@ public class CompressZlibGzFile extends PerlModuleBase {
         RuntimeScalar streamScalar = self.get(STREAM_KEY);
         if (streamScalar == null || streamScalar.type != RuntimeScalarType.JAVAOBJECT
                 || !(streamScalar.value instanceof InputStream is)) {
-            return new RuntimeScalar(-1).getList();
+            return new RuntimeScalar(-2).getList(); // Z_STREAM_ERROR
         }
 
         try {
@@ -76,9 +82,19 @@ public class CompressZlibGzFile extends PerlModuleBase {
                 return new RuntimeScalar(0).getList();
             }
 
-            String data = new String(buf, 0, totalRead, StandardCharsets.ISO_8859_1);
             // Modify the buffer argument in-place via @_ alias
-            args.get(1).set(data);
+            byte[] data = new byte[totalRead];
+            System.arraycopy(buf, 0, data, 0, totalRead);
+            args.get(1).set(new RuntimeScalar(data));
+            addPosition(self, totalRead);
+            if (totalRead == nbytes && is instanceof PushbackInputStream pushback) {
+                int next = pushback.read();
+                if (next == -1) {
+                    self.put(EOF_KEY, new RuntimeScalar(1));
+                } else {
+                    pushback.unread(next);
+                }
+            }
             return new RuntimeScalar(totalRead).getList();
         } catch (IOException e) {
             return new RuntimeScalar(-1).getList();
@@ -91,21 +107,30 @@ public class CompressZlibGzFile extends PerlModuleBase {
      */
     public static RuntimeList gzwrite(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
+            if (!args.isEmpty()) {
+                RuntimeHash self = args.get(0).hashDeref();
+                RuntimeScalar mode = self.get(MODE_KEY);
+                if (mode != null && mode.toString().startsWith("r")) {
+                    return new RuntimeScalar(-2).getList(); // Z_STREAM_ERROR
+                }
+            }
             return new RuntimeScalar(0).getList();
         }
 
         RuntimeHash self = args.get(0).hashDeref();
         String data = args.get(1).toString();
+        StringParser.assertNoWideCharacters(data, "gzwrite");
 
         RuntimeScalar streamScalar = self.get(STREAM_KEY);
         if (streamScalar == null || streamScalar.type != RuntimeScalarType.JAVAOBJECT
                 || !(streamScalar.value instanceof OutputStream os)) {
-            return new RuntimeScalar(0).getList();
+            return new RuntimeScalar(-2).getList(); // Z_STREAM_ERROR
         }
 
         try {
             byte[] bytes = data.getBytes(StandardCharsets.ISO_8859_1);
             os.write(bytes);
+            addPosition(self, bytes.length);
             return new RuntimeScalar(bytes.length).getList();
         } catch (IOException e) {
             return new RuntimeScalar(0).getList();
@@ -148,7 +173,18 @@ public class CompressZlibGzFile extends PerlModuleBase {
 
             String result = line.toString();
             // Modify the line argument in-place via @_ alias
-            args.get(1).set(result);
+            args.get(1).set(new RuntimeScalar(result.getBytes(StandardCharsets.ISO_8859_1)));
+            addPosition(self, result.length());
+            if (c == -1) {
+                self.put(EOF_KEY, new RuntimeScalar(1));
+            } else if (c == '\n' && is instanceof PushbackInputStream pushback) {
+                int next = pushback.read();
+                if (next == -1) {
+                    self.put(EOF_KEY, new RuntimeScalar(1));
+                } else {
+                    pushback.unread(next);
+                }
+            }
             return new RuntimeScalar(result.length()).getList();
         } catch (IOException e) {
             return new RuntimeScalar(-1).getList();
@@ -168,6 +204,118 @@ public class CompressZlibGzFile extends PerlModuleBase {
         RuntimeScalar eofScalar = self.get(EOF_KEY);
         int eof = (eofScalar != null) ? eofScalar.getInt() : 0;
         return new RuntimeScalar(eof).getList();
+    }
+
+    public static RuntimeList gztell(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(-1).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar pos = self.get(POS_KEY);
+        return new RuntimeScalar(pos != null ? pos.getLong() : 0).getList();
+    }
+
+    public static RuntimeList gzseek(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            throw new IllegalArgumentException("gzseek: not enough arguments");
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        long offset = args.get(1).getLong();
+        int whence = args.get(2).getInt();
+        long current = self.get(POS_KEY) != null ? self.get(POS_KEY).getLong() : 0;
+        RuntimeScalar mode = self.get(MODE_KEY);
+        long target;
+        if (whence == 0) {
+            target = offset;
+        } else if (whence == 1) {
+            target = current + offset;
+        } else if (whence == 2) {
+            if (mode != null && mode.toString().startsWith("r")) {
+                throw new IllegalArgumentException("gzseek: SEEK_END not allowed");
+            }
+            throw new IllegalArgumentException("gzseek: cannot seek backwards");
+        } else {
+            throw new IllegalArgumentException("gzseek: unknown value, " + whence + ", for whence parameter");
+        }
+        if (target < current) {
+            throw new IllegalArgumentException("gzseek: cannot seek backwards");
+        }
+        long gap = target - current;
+        long newPosition = target;
+        if (gap > 0 && mode != null && mode.toString().startsWith("r")) {
+            RuntimeScalar streamScalar = self.get(STREAM_KEY);
+            if (streamScalar != null && streamScalar.type == RuntimeScalarType.JAVAOBJECT
+                    && streamScalar.value instanceof InputStream is) {
+                try {
+                    long remaining = gap;
+                    while (remaining > 0) {
+                        long skipped = is.skip(remaining);
+                        if (skipped > 0) {
+                            remaining -= skipped;
+                            continue;
+                        }
+                        int one = is.read();
+                        if (one == -1) {
+                            self.put(EOF_KEY, new RuntimeScalar(1));
+                            break;
+                        }
+                        remaining--;
+                    }
+                    gap -= remaining;
+                    newPosition = current + gap;
+                } catch (IOException e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            }
+        } else if (gap > 0 && mode != null && mode.toString().startsWith("w")) {
+            RuntimeScalar streamScalar = self.get(STREAM_KEY);
+            if (streamScalar != null && streamScalar.type == RuntimeScalarType.JAVAOBJECT
+                    && streamScalar.value instanceof OutputStream os) {
+                try {
+                    byte[] zeros = new byte[(int) Math.min(gap, 8192)];
+                    while (gap > 0) {
+                        int chunk = (int) Math.min(gap, zeros.length);
+                        os.write(zeros, 0, chunk);
+                        gap -= chunk;
+                    }
+                } catch (IOException e) {
+                    return new RuntimeScalar(0).getList();
+                }
+            }
+        }
+        self.put(POS_KEY, new RuntimeScalar(newPosition));
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList gzflush(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(-2).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar streamScalar = self.get(STREAM_KEY);
+        if (streamScalar == null || streamScalar.type != RuntimeScalarType.JAVAOBJECT) {
+            return new RuntimeScalar(-2).getList();
+        }
+        try {
+            if (streamScalar.value instanceof OutputStream os) {
+                os.flush();
+            }
+            return new RuntimeScalar(0).getList();
+        } catch (IOException e) {
+            return new RuntimeScalar(-2).getList();
+        }
+    }
+
+    public static RuntimeList gzsetparams(RuntimeArray args, int ctx) {
+        if (args.size() < 3) {
+            throw new IllegalArgumentException("Usage: Compress::Zlib::gzFile::gzsetparams(file, level, strategy)");
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar mode = self.get(MODE_KEY);
+        if (mode != null && mode.toString().startsWith("r")) {
+            return new RuntimeScalar(-2).getList();
+        }
+        return new RuntimeScalar(0).getList();
     }
 
     /**
@@ -215,6 +363,12 @@ public class CompressZlibGzFile extends PerlModuleBase {
             result.add(new RuntimeScalar(0)); // Z_OK
             return result;
         }
-        return new RuntimeScalar("").getList();
+        return new RuntimeScalar(0).getList();
+    }
+
+    private static void addPosition(RuntimeHash self, long amount) {
+        RuntimeScalar pos = self.get(POS_KEY);
+        long current = pos != null ? pos.getLong() : 0;
+        self.put(POS_KEY, new RuntimeScalar(current + amount));
     }
 }

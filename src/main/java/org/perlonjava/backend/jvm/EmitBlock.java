@@ -389,6 +389,7 @@ public class EmitBlock {
                                 "setCallSiteHintHashId",
                                 "(I)V", false);
                     }
+                    emitPostBlockStrictOptions(mv, an);
                 }
 
                 if (i < lastNonNullIndex) {
@@ -443,11 +444,12 @@ public class EmitBlock {
                     "org/perlonjava/runtime/runtimetypes/RegexState", "restore", "()V", false);
         }
 
-        // Flush mortal list for non-subroutine, non-do blocks. Subroutine body
-        // blocks and do-blocks must NOT flush here because the implicit return value
-        // may be on the JVM stack and flushing could destroy it before the caller
-        // captures it. Example: $self->{cursor} ||= do { my $x = ...; create_obj() }
-        // — the do-block's scope exit would flush pending decrements from create_obj's
+        // Flush mortal list for void non-subroutine blocks. Value-producing blocks
+        // must NOT flush here because the implicit return value may still be on the
+        // JVM stack or in the parent simple-block result register; flushing could
+        // destroy it before the caller captures it. Example:
+        //   $self->{cursor} ||= do { my $x = ...; create_obj() }
+        // The do-block's scope exit would flush pending decrements from create_obj's
         // scope exit, destroying the return value before ||= can store it.
         //
         // EXCEPTION: do-blocks whose last expression is a "fresh-result"
@@ -459,10 +461,27 @@ public class EmitBlock {
         boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
         boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
         boolean doBlockFreshResult = isDoBlock && doBlockResultIsAlwaysFresh(node);
-        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
-                !isSubBody && (!isDoBlock || doBlockFreshResult));
+        Object blockResultRegObj = node.getAnnotation("resultRegister");
+        boolean hasBlockResultRegister = blockResultRegObj instanceof Integer && (Integer) blockResultRegObj >= 0;
+        boolean blockMayNeedResultAfterScopeExit = emitterVisitor.ctx.contextType != RuntimeContextType.VOID
+                || hasBlockResultRegister;
+        boolean flushAtScopeExit = !isSubBody
+                && (isDoBlock ? doBlockFreshResult : !blockMayNeedResultAfterScopeExit);
+        EmitStatement.emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, flushAtScopeExit);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
+        emitPostBlockStrictOptions(mv, node);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("generateCodeBlock end");
+    }
+
+    private static void emitPostBlockStrictOptions(MethodVisitor mv, AbstractNode node) {
+        Object strictOptionsObj = node.getAnnotation("postBlockStrictOptions");
+        if (strictOptionsObj instanceof Integer strictOptions) {
+            mv.visitLdcInsn(strictOptions);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/WarningBitsRegistry",
+                    "setCallSiteHints",
+                    "(I)V", false);
+        }
     }
 
 }

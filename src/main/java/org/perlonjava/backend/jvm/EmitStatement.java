@@ -289,7 +289,8 @@ public class EmitStatement {
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                 node.thenBranch.accept(emitterVisitor);
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
+                        emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                 for (int i = 0; i < branchLabelsPushed; i++) {
@@ -304,7 +305,8 @@ public class EmitStatement {
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
                     node.elseBranch.accept(emitterVisitor);
-                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+                    emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
+                            emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
                     for (int i = 0; i < branchLabelsPushed; i++) {
@@ -376,7 +378,8 @@ public class EmitStatement {
         emitterVisitor.ctx.mv.visitLabel(endLabel);
 
         // Exit the scope in the symbol table
-        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+        emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
+                emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
         emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
 
         for (int i = 0; i < branchLabelsPushed; i++) {
@@ -574,7 +577,8 @@ public class EmitStatement {
 
             // Exit the scope in the symbol table
             if (node.useNewScope) {
-                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex, true);
+                emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
+                        !(node.isSimpleBlock && needsReturnValue));
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
             }
 

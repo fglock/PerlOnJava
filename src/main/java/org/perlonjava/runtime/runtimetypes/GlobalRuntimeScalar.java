@@ -76,9 +76,11 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
         if (originalVariable instanceof OutputRecordSeparator) {
             OutputRecordSeparator.saveInternalORS();
             newLocal = new OutputRecordSeparator();
+            newLocal.set(RuntimeScalarCache.scalarUndef);
         } else if (originalVariable instanceof OutputFieldSeparator) {
             OutputFieldSeparator.saveInternalOFS();
             newLocal = new OutputFieldSeparator();
+            newLocal.set(RuntimeScalarCache.scalarUndef);
         } else {
             newLocal = new GlobalRuntimeScalar(fullName);
         }

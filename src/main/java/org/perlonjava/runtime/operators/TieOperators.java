@@ -116,7 +116,8 @@ public class TieOperators {
                 RuntimeGlob glob = variable.globDeref();
                 RuntimeIO previousValue = (RuntimeIO) glob.IO.value;
                 glob.IO.type = TIED_SCALAR;
-                TieHandle tieHandle = new TieHandle(className, previousValue, self);
+                boolean selfIsTiedGlob = self != null && self.value == glob;
+                TieHandle tieHandle = new TieHandle(className, previousValue, self, !selfIsTiedGlob);
                 // Propagate the glob name so select() returns the correct name
                 // (e.g., "main::STDOUT") even when the handle is tied.
                 if (previousValue != null) {

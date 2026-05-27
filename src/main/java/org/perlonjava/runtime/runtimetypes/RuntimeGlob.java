@@ -865,12 +865,29 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeIO oldSelected = existingIO == RuntimeIO.selectedHandle ? existingIO : null;
             existingIO.replaceStateFrom(io);
             existingIO.globName = this.globName;
+            Integer standardFd = standardFdForGlobName(this.globName);
+            if (standardFd != null) {
+                existingIO.registerExternalFd(standardFd);
+            }
             if (oldSelected != null) {
                 RuntimeIO.selectedHandle = existingIO;
             }
             return this;
         }
         return setIO(io);
+    }
+
+    private static Integer standardFdForGlobName(String globName) {
+        if ("main::STDIN".equals(globName)) {
+            return 0;
+        }
+        if ("main::STDOUT".equals(globName)) {
+            return 1;
+        }
+        if ("main::STDERR".equals(globName)) {
+            return 2;
+        }
+        return null;
     }
 
     /**

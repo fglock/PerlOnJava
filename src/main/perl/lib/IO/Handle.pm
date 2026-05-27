@@ -17,6 +17,7 @@ use 5.38.0;
 XSLoader::load( 'IO::Handle' );
 
 our $VERSION = '1.52';
+my %AUTOFLUSH;
 
 use Exporter 'import';
 our @EXPORT = qw();
@@ -40,6 +41,9 @@ our @EXPORT_OK = qw(
     _IOFBF
     _IOLBF
     _IONBF
+    SEEK_SET
+    SEEK_CUR
+    SEEK_END
 );
 
 # Constants for setvbuf
@@ -166,11 +170,9 @@ sub truncate {
 
 sub autoflush {
     my $fh = shift;
-    my $old_fh = select($fh);
-    my $old_val = $|;
-    $| = shift if @_;
-    $| = 1 if !defined $| && !@_;  # Default to turning on autoflush
-    select($old_fh);
+    my $key = defined fileno($fh) ? fileno($fh) : "$fh";
+    my $old_val = $AUTOFLUSH{$key} // 0;
+    $AUTOFLUSH{$key} = @_ ? ($_[0] ? 1 : 0) : 1;
     return $old_val;
 }
 
@@ -336,10 +338,16 @@ sub _open_mode_string {
 sub write {
     my $fh = shift;
     my $buf = shift;
-    my $len = shift || length($buf);
-    my $offset = shift || 0;
+    my $len = @_ ? shift : length($buf);
+    my $offset = @_ ? shift : 0;
 
-    my $data = substr($buf, $offset, $len);
+    my $data;
+    {
+        use bytes;
+        $data = substr($buf, $offset, $len);
+    }
+    utf8::encode($data) if utf8::is_utf8($data);
+    local $\;
     print $fh $data;
 }
 

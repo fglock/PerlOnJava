@@ -181,12 +181,18 @@ public class SubroutineParser {
         String prototype = null;
         List<String> attributes = null;
         RuntimeScalar parseTimeCodeRef = null;
+        String prototypeErrorName = fullName;
         if (!isNewMethod && !isMethod && GlobalVariable.existsGlobalCodeRef(fullName)) {
             RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
             parseTimeCodeRef = codeRef;
             if (codeRef.value instanceof RuntimeCode runtimeCode) {
                 prototype = runtimeCode.prototype;
                 attributes = runtimeCode.attributes;
+                if (runtimeCode.packageName != null && runtimeCode.subName != null
+                        && !runtimeCode.packageName.isEmpty() && !runtimeCode.subName.isEmpty()
+                        && !runtimeCode.subName.equals("__ANON__")) {
+                    prototypeErrorName = runtimeCode.packageName + "::" + runtimeCode.subName;
+                }
                 subExists = runtimeCode.subroutine != null
                         || runtimeCode.methodHandle != null
                         || runtimeCode.compilerSupplier != null
@@ -530,7 +536,7 @@ public class SubroutineParser {
 
         try {
             // Set the subroutine being called for error messages
-            parser.ctx.symbolTable.setCurrentSubroutine(fullName);
+            parser.ctx.symbolTable.setCurrentSubroutine(prototypeErrorName);
 
             // Handle the parameter list for the subroutine call
             ListNode arguments;

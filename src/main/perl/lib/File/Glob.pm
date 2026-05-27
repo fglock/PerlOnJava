@@ -10,6 +10,7 @@ use Exporter 'import';
 our @EXPORT_OK = qw(
     glob
     bsd_glob
+    csh_glob
     GLOB_ERROR
     GLOB_CSH
     GLOB_NOMAGIC
@@ -28,6 +29,7 @@ our %EXPORT_TAGS = (
     'glob' => [ qw(
         glob
         bsd_glob
+        csh_glob
         GLOB_ERROR
         GLOB_CSH
         GLOB_NOMAGIC
@@ -67,7 +69,6 @@ sub bsd_glob {
 
     if ($pattern eq '~' || $pattern =~ m{^~/}) {
         my @matches = CORE::glob($pattern);
-        @matches = map { _dequote($_) } @matches;
         return wantarray ? @matches : $matches[0];
     }
 
@@ -77,13 +78,17 @@ sub bsd_glob {
     }
 
     my @matches = CORE::glob($pattern);
-    @matches = map { _dequote($_) } @matches;
+    @matches = sort @matches unless $flags & GLOB_NOSORT;
 
     if (!@matches && ($flags & GLOB_NOCHECK)) {
         @matches = (_dequote($pattern));
     }
 
     return wantarray ? @matches : $matches[0];
+}
+
+sub csh_glob {
+    return bsd_glob(@_);
 }
 
 # Regular glob - just use built-in

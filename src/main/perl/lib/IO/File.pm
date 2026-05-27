@@ -195,6 +195,11 @@ sub open {
             return open($fh, IO::Handle::_open_mode_string($mode), $file);
         }
     }
+    if (!ref($file) && $file =~ /^\s*([+<>]*|>>)\s+-\s*$/) {
+        my $mode = $1 || '<';
+        return open($fh, "<&=STDIN") if $mode =~ /</;
+        return open($fh, ">&=STDOUT") if $mode =~ />/;
+    }
     open($fh, $file);
 }
 

@@ -151,6 +151,8 @@ public class ScalarGlobOperator {
             if (results.isEmpty() && !ScalarGlobOperatorHelper.containsGlobChars(pattern)) {
                 results.add(pattern);
             }
+
+            Collections.sort(results);
         } catch (Exception e) {
             // Return empty results on error
         }
@@ -314,8 +316,6 @@ public class ScalarGlobOperator {
 
         List<String> results = ScalarGlobOperatorHelper.processPattern(this, pattern);
 
-        // Preserve match/discovery order (matches perl File::DosGlob read-dir semantics).
-        // Lexicographic sort broke DosGlob.t parity vs subroutine glob().
         this.iterator = results.iterator();
     }
 

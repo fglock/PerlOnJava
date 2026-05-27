@@ -107,6 +107,7 @@ public class WarnDie {
             // by the eval catch block, but the handler should see $^S=1 since we are
             // conceptually still inside eval (Perl 5 calls the handler before unwinding).
             RuntimeCode.evalDepth++;
+            boolean pushedEvalFrame = InterpreterState.pushEvalFrameForCurrentInterpreter();
             try {
                 RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
             } catch (Throwable handlerException) {
@@ -124,6 +125,9 @@ public class WarnDie {
                     err.set(new RuntimeScalar(ErrorMessageUtil.stringifyException(handlerException)));
                 }
             } finally {
+                if (pushedEvalFrame) {
+                    InterpreterState.pop();
+                }
                 RuntimeCode.evalDepth--;
                 // Restore $SIG{__DIE__}
                 DynamicVariableManager.popToLocalLevel(level);
@@ -445,22 +449,29 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeList res = RuntimeCode.apply(sigHandler, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
+            boolean pushedEvalFrame = RuntimeCode.evalDepth > 0
+                    && InterpreterState.pushEvalFrameForCurrentInterpreter();
+            try {
+                RuntimeList res = RuntimeCode.apply(sigHandler, message.getArrayOfAlias(), RuntimeContextType.SCALAR);
 
-            // Handle TAILCALL with trampoline loop (for goto &sub in __DIE__ handlers)
-            while (res.isNonLocalGoto()) {
-                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
-                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                    RuntimeArray callArgs = flow.getTailCallArgs();
-                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
-                } else {
-                    break;
+                // Handle TAILCALL with trampoline loop (for goto &sub in __DIE__ handlers)
+                while (res.isNonLocalGoto()) {
+                    RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                        RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                        RuntimeArray callArgs = flow.getTailCallArgs();
+                        res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                    } else {
+                        break;
+                    }
                 }
+            } finally {
+                if (pushedEvalFrame) {
+                    InterpreterState.pop();
+                }
+                // Restore $SIG{__DIE__}
+                DynamicVariableManager.popToLocalLevel(level);
             }
-
-            // Restore $SIG{__DIE__}
-            DynamicVariableManager.popToLocalLevel(level);
 
             throw new PerlDieException(errVariable);
         }
