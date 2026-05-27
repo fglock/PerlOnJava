@@ -1,0 +1,101 @@
+--- Pure.pm.orig
++++ Pure.pm
+@@ -10,8 +10,8 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $TYPE_DEFAULT => 'Die';
+-Readonly::Scalar my $LEVEL_DEFAULT => 4;
++my $TYPE_DEFAULT = 'Die';
++my $LEVEL_DEFAULT = 4;
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/AllError.pm.orig
++++ Pure/AllError.pm
+@@ -11,7 +11,7 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EVAL => 'eval {...}';
++my $EVAL = 'eval {...}';
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/Die.pm.orig
++++ Pure/Die.pm
+@@ -11,8 +11,8 @@ use Readonly;
+ our $VERSION = 0.34;
+ 
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EVAL => 'eval {...}';
+-Readonly::Scalar my $EMPTY_STR => q{};
++my $EVAL = 'eval {...}';
++my $EMPTY_STR = q{};
+ 
+ # Process error.
+ sub err {
+--- Pure/Error.pm.orig
++++ Pure/Error.pm
+@@ -11,7 +11,7 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EVAL => 'eval {...}';
++my $EVAL = 'eval {...}';
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/ErrorList.pm.orig
++++ Pure/ErrorList.pm
+@@ -11,7 +11,7 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EVAL => 'eval {...}';
++my $EVAL = 'eval {...}';
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/Print.pm.orig
++++ Pure/Print.pm
+@@ -11,8 +11,8 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EMPTY_STR => q{};
+-Readonly::Scalar my $EVAL => 'eval {...}';
++my $EMPTY_STR = q{};
++my $EVAL = 'eval {...}';
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/PrintVar.pm.orig
++++ Pure/PrintVar.pm
+@@ -11,8 +11,8 @@ use Readonly;
+ 
+ # Constants.
+ Readonly::Array our @EXPORT_OK => qw(err);
+-Readonly::Scalar my $EMPTY_STR => q{};
+-Readonly::Scalar my $EVAL => 'eval {...}';
++my $EMPTY_STR = q{};
++my $EVAL = 'eval {...}';
+ 
+ our $VERSION = 0.34;
+ 
+--- Pure/Utils.pm.orig
++++ Pure/Utils.pm
+@@ -10,10 +10,10 @@ our $VERSION = 0.34;
+ 
+ Readonly::Array our @EXPORT_OK => qw(clean err_get err_helper err_msg err_msg_hr);
+-Readonly::Scalar my $DOTS => '...';
+-Readonly::Scalar my $EMPTY_STR => q{};
+-Readonly::Scalar my $EVAL => 'eval {...}';
+-Readonly::Scalar my $UNDEF => 'undef';
++my $DOTS = '...';
++my $EMPTY_STR = q{};
++my $EVAL = 'eval {...}';
++my $UNDEF = 'undef';
+ 
+ # Errors array.
+ our @ERRORS;

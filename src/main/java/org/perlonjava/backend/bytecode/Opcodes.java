@@ -2352,6 +2352,16 @@ public class Opcodes {
      */
     public static final short REGISTER_MY_VAR = 490;
 
+    /**
+     * Assign to an existing lexical scalar.
+     * Plain lexicals are replaced with a fresh RuntimeScalar, preserving the
+     * current interpreter behavior for local/alias restoration. Magical lexicals
+     * such as tied scalars and Internals::SvREADONLY scalars are assigned in
+     * place so STORE/read-only checks still fire.
+     * Format: ASSIGN_LEXICAL_SCALAR rd rs
+     */
+    public static final short ASSIGN_LEXICAL_SCALAR = 491;
+
     private Opcodes() {
     } // Utility class - no instantiation
 }

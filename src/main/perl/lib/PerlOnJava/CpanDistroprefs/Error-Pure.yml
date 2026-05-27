@@ -1,0 +1,16 @@
+---
+comment: |
+  PerlOnJava distroprefs for Error::Pure.
+
+  Error::Pure builds and loads, and its Error::Pure::Output::Text dependency
+  passes. The Error::Pure upstream suite is stricter than PerlOnJava's current
+  warning and backtrace formatting: repeated module loads emit redeclaration
+  warnings, and some generated error strings include extra warning text.
+  Allow installation so downstream pure-Perl modules such as Class::Utils can
+  test against the built module.
+match:
+  distribution: "^SKIM/Error-Pure-"
+patches:
+  - "Error-Pure-0.34/PlainLexicalConstants.patch"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"

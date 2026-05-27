@@ -835,16 +835,10 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         } else {
-                            // Regular lexical - create a fresh RuntimeScalar, then copy the value into it.
-                            // LOAD_UNDEF allocates a new mutable RuntimeScalar in the target register;
-                            // SET_SCALAR copies the source value into it.
-                            // This avoids two bugs:
-                            //   - ALIAS shares constants from the pool, corrupting them on later mutation
-                            //   - SET_SCALAR alone modifies the existing object in-place, which breaks
-                            //     'local' variable restoration when the register was shared
-                            bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                            bytecodeCompiler.emitReg(targetReg);
-                            bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                            // Regular lexical assignment normally replaces the scalar object
+                            // to avoid alias/local restoration bugs, but must preserve magical
+                            // lexicals so tied STORE and read-only checks still fire.
+                            bytecodeCompiler.emit(Opcodes.ASSIGN_LEXICAL_SCALAR);
                             bytecodeCompiler.emitReg(targetReg);
                             bytecodeCompiler.emitReg(valueReg);
                         }

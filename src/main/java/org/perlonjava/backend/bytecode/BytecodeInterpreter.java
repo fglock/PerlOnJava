@@ -52,6 +52,13 @@ public class BytecodeInterpreter {
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 
+    private static boolean lexicalAssignmentMustPreserveSlot(RuntimeBase val) {
+        if (!(val instanceof RuntimeScalar scalar)) return false;
+        return scalar instanceof ReadOnlyAlias
+                || scalar.type == RuntimeScalarType.TIED_SCALAR
+                || scalar.type == RuntimeScalarType.READONLY_SCALAR;
+    }
+
     private static java.util.Set<RuntimeCode> collectReturnedClosures(RuntimeBase value) {
         java.util.IdentityHashMap<RuntimeCode, Boolean> closures = new java.util.IdentityHashMap<>();
         collectReturnedClosures(value, closures);
@@ -805,6 +812,20 @@ public class BytecodeInterpreter {
                                     rdScalar = rdVal.scalar();
                                 }
                                 registers[rs].addToScalar(rdScalar);
+                            }
+
+                            case Opcodes.ASSIGN_LEXICAL_SCALAR -> {
+                                int rd = bytecode[pc++];
+                                int rs = bytecode[pc++];
+                                RuntimeBase target = registers[rd];
+                                RuntimeScalar targetScalar;
+                                if (lexicalAssignmentMustPreserveSlot(target)) {
+                                    targetScalar = (RuntimeScalar) target;
+                                } else {
+                                    targetScalar = new RuntimeScalar();
+                                    registers[rd] = targetScalar;
+                                }
+                                registers[rs].addToScalar(targetScalar);
                             }
 
                             // =================================================================
