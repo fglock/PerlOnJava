@@ -829,6 +829,12 @@ public class ScopedSymbolTable {
     }
 
     public boolean isWarningCategoryEnabled(String category) {
+        if (WarningFlags.areWarningsForcedOff()) {
+            return false;
+        }
+        if (WarningFlags.areWarningsForcedOn()) {
+            return true;
+        }
         Integer bitPosition = warningBitPositions.get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
     }

@@ -263,6 +263,10 @@ public class WarnDie {
 
     public static RuntimeBase warnWithCategory(RuntimeBase message, RuntimeScalar where, String category,
                                                 String fileName, int lineNumber) {
+        if (WarningFlags.areWarningsForcedOff()) {
+            return new RuntimeScalar();
+        }
+
         // Get the warning bits for the current Perl execution context.
         // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)
         // and look up its warning bits in WarningBitsRegistry.
@@ -279,7 +283,11 @@ public class WarnDie {
 
         
         // If warning bits are available, check if this category is enabled
-        if (warningBits != null) {
+        if (WarningFlags.areWarningsForcedOn()) {
+            if (warningBits != null && WarningFlags.isFatalInBits(warningBits, category)) {
+                return die(message, where, fileName, lineNumber);
+            }
+        } else if (warningBits != null) {
             if (WarningFlags.isEnabledInBits(warningBits, category)) {
                 // Category is lexically enabled - check for FATAL
                 if (WarningFlags.isFatalInBits(warningBits, category)) {
