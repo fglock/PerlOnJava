@@ -769,13 +769,10 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
                 false);
 
-        // Set debug line number to the call site. Perl reports the line where a
-        // multi-line call expression completes for caller(), not the line
-        // containing the function name. The argument ListNode is indexed at the
-        // closing token.
-        int callSiteIndex = node.right != null && node.right.getIndex() > 0
-                ? node.right.getIndex()
-                : (node.getIndex() > 0 ? node.getIndex() : (node.left != null ? node.left.getIndex() : -1));
+        // Set debug line number to the call site. Ordinary direct calls report
+        // the completed call expression's closing line, but prototyped calls
+        // whose first prototype slot is not `&` report the expression start.
+        int callSiteIndex = callerLineCallSiteIndex(node);
         if (callSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
@@ -897,6 +894,51 @@ public class EmitSubroutine {
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
+    }
+
+    private static int callerLineCallSiteIndex(BinaryOperatorNode node) {
+        if (usesExpressionStartLine(node)) {
+            return expressionStartIndex(node);
+        }
+
+        if (node.right != null && node.right.getIndex() > 0) {
+            return node.right.getIndex();
+        }
+        return expressionStartIndex(node);
+    }
+
+    private static int expressionStartIndex(BinaryOperatorNode node) {
+        if (node.getIndex() > 0) {
+            return node.getIndex();
+        }
+        return node.left != null ? node.left.getIndex() : -1;
+    }
+
+    private static boolean usesExpressionStartLine(BinaryOperatorNode node) {
+        String prototype = directCallPrototype(node);
+        if (prototype == null) {
+            return false;
+        }
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+            if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                continue;
+            }
+            return c != '&';
+        }
+
+        return true;
+    }
+
+    private static String directCallPrototype(BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode operatorNode)
+                || !operatorNode.operator.equals("&")
+                || !(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef)
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return null;
+        }
+        return code.prototype;
     }
 
     /**

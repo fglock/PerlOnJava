@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -417,11 +418,11 @@ public class CompileBinaryOperator {
             // Check if this is a &func (no parens) call that should share caller's @_
             boolean shareCallerArgs = node.getBooleanAnnotation("shareCallerArgs");
 
-            // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode
-            // Pass node.left.getIndex() so pcToTokenIndex maps the call to the function
-            // name / reference token index (call-site line) rather than the closing ')'.
-            int callSiteToken = (node.left != null && node.left.getIndex() > 0)
-                    ? node.left.getIndex() : node.getIndex();
+            // Emit CALL_SUB or CALL_SUB_SHARE_ARGS opcode. Ordinary named calls
+            // report the closing line, but non-& prototyped calls report the
+            // expression start; keep the interpreter mapping aligned with the
+            // JVM emitter.
+            int callSiteToken = callerLineCallSiteToken(node);
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                     bytecodeCompiler, node.operator, rs1, rs2, callSiteToken,
                     shareCallerArgs);
@@ -777,6 +778,51 @@ public class CompileBinaryOperator {
         bytecodeCompiler.emitReg(listReg);
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static int callerLineCallSiteToken(BinaryOperatorNode node) {
+        if (usesExpressionStartLine(node)) {
+            return expressionStartIndex(node);
+        }
+
+        if (node.right != null && node.right.getIndex() > 0) {
+            return node.right.getIndex();
+        }
+        return expressionStartIndex(node);
+    }
+
+    private static int expressionStartIndex(BinaryOperatorNode node) {
+        if (node.getIndex() > 0) {
+            return node.getIndex();
+        }
+        return node.left != null ? node.left.getIndex() : -1;
+    }
+
+    private static boolean usesExpressionStartLine(BinaryOperatorNode node) {
+        String prototype = directCallPrototype(node);
+        if (prototype == null) {
+            return false;
+        }
+
+        for (int i = 0; i < prototype.length(); i++) {
+            char c = prototype.charAt(i);
+            if (Character.isWhitespace(c) || c == ';' || c == ',') {
+                continue;
+            }
+            return c != '&';
+        }
+
+        return true;
+    }
+
+    private static String directCallPrototype(BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode operatorNode)
+                || !operatorNode.operator.equals("&")
+                || !(operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef)
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return null;
+        }
+        return code.prototype;
     }
 
     static boolean isArrayLikeNode(Node node) {
