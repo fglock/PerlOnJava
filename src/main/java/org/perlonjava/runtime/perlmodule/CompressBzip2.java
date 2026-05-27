@@ -25,6 +25,16 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class CompressBzip2 extends PerlModuleBase {
 
+    static final class DecompressResult {
+        final byte[] output;
+        final int consumed;
+
+        DecompressResult(byte[] output, int consumed) {
+            this.output = output;
+            this.consumed = consumed;
+        }
+    }
+
     public CompressBzip2() {
         super("Compress::Bzip2", false);
     }
@@ -103,6 +113,62 @@ public class CompressBzip2 extends PerlModuleBase {
         return s;
     }
 
+    static byte[] compressBytes(byte[] input) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(64, input.length / 2));
+        try (BZip2CompressorOutputStream out = new BZip2CompressorOutputStream(baos)) {
+            out.write(input);
+        }
+        return baos.toByteArray();
+    }
+
+    static byte[] compressBytes(byte[] input, int blockSize100k) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(64, input.length / 2));
+        try (BZip2CompressorOutputStream out = new BZip2CompressorOutputStream(baos, blockSize100k)) {
+            out.write(input);
+        }
+        return baos.toByteArray();
+    }
+
+    static byte[] decompressBytes(byte[] input) throws IOException {
+        try (BZip2CompressorInputStream in = new BZip2CompressorInputStream(
+                new ByteArrayInputStream(input), true)) {
+            return readAll(in, input.length * 4);
+        }
+    }
+
+    static DecompressResult decompressFirstStream(byte[] input) throws IOException {
+        byte[] output = decompressPrefix(input, input.length);
+        int low = 0;
+        int high = input.length;
+        while (low < high) {
+            int mid = low + ((high - low) / 2);
+            try {
+                decompressPrefix(input, mid);
+                high = mid;
+            } catch (IOException e) {
+                low = mid + 1;
+            }
+        }
+        return new DecompressResult(output, low);
+    }
+
+    private static byte[] decompressPrefix(byte[] input, int length) throws IOException {
+        try (BZip2CompressorInputStream in = new BZip2CompressorInputStream(
+                new ByteArrayInputStream(input, 0, length), false)) {
+            return readAll(in, length * 4);
+        }
+    }
+
+    private static byte[] readAll(InputStream in, int initialSize) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(64, initialSize));
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            baos.write(buf, 0, n);
+        }
+        return baos.toByteArray();
+    }
+
     /**
      * memBzip($data) — one-shot compression. Returns the bzip2 stream or
      * undef on error (matching the upstream module).
@@ -111,11 +177,7 @@ public class CompressBzip2 extends PerlModuleBase {
         if (args.isEmpty()) return scalarUndef.getList();
         byte[] input = getInputBytes(args.get(0));
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(Math.max(64, input.length / 2));
-            try (BZip2CompressorOutputStream out = new BZip2CompressorOutputStream(baos)) {
-                out.write(input);
-            }
-            byte[] result = baos.toByteArray();
+            byte[] result = compressBytes(input);
             return bytesToScalar(result, result.length).getList();
         } catch (IOException e) {
             return scalarUndef.getList();
@@ -129,15 +191,8 @@ public class CompressBzip2 extends PerlModuleBase {
     public static RuntimeList memBunzip(RuntimeArray args, int ctx) {
         if (args.isEmpty()) return scalarUndef.getList();
         byte[] input = getInputBytes(args.get(0));
-        try (BZip2CompressorInputStream in = new BZip2CompressorInputStream(
-                new ByteArrayInputStream(input), true)) {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(input.length * 4);
-            byte[] buf = new byte[4096];
-            int n;
-            while ((n = in.read(buf)) != -1) {
-                baos.write(buf, 0, n);
-            }
-            byte[] result = baos.toByteArray();
+        try {
+            byte[] result = decompressBytes(input);
             return bytesToScalar(result, result.length).getList();
         } catch (IOException e) {
             return scalarUndef.getList();

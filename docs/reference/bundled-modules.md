@@ -286,6 +286,8 @@ These are loaded automatically or via `use`:
 |--------|---------------|-------|
 | `Archive::Tar` | Perl | |
 | `Archive::Zip` | Java + Perl | Uses `java.util.zip` |
+| `Compress::Bzip2` | Java + Perl | Uses Apache Commons Compress |
+| `Compress::Raw::Bzip2` | Java + Perl | Uses Apache Commons Compress |
 | `Compress::Raw::Zlib` | Java | Uses `java.util.zip` |
 | `Compress::Zlib` | Java + Perl | |
 | `IO::Zlib` | Perl | |
