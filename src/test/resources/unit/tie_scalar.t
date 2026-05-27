@@ -293,6 +293,36 @@ subtest 'References to tied scalars' => sub {
     is($scalar, "new value", 'assignment through reference works');
 };
 
+subtest 'eval string preserves tied lexical assignment' => sub {
+    @TrackedTiedScalar::method_calls = ();
+
+    my $result = eval q{
+        tie my $scalar, 'TrackedTiedScalar';
+        $scalar = "eval value";
+        (ref(tied($scalar)) || "untied") . ":" . $scalar;
+    };
+
+    is($@, '', 'eval string completed');
+    is($result, 'TrackedTiedScalar:eval value',
+        'assignment inside eval string keeps lexical tied');
+
+    my $store_count = grep {
+        $_->[0] eq 'STORE' && $_->[1] eq 'eval value'
+    } @TrackedTiedScalar::method_calls;
+    is($store_count, 1, 'assignment inside eval string dispatches STORE');
+};
+
+subtest 'eval string preserves readonly lexical assignment' => sub {
+    eval q{
+        my $scalar = 1;
+        Internals::SvREADONLY($scalar, 1);
+        $scalar = 2;
+    };
+
+    like($@, qr/Modification of a read-only value attempted/,
+        'assignment inside eval string honors Internals::SvREADONLY');
+};
+
 subtest 'DESTROY called on untie' => sub {
     # Test with TrackedTiedScalar to verify DESTROY is called
     {

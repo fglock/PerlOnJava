@@ -1,0 +1,17 @@
+---
+comment: |
+  PerlOnJava distroprefs for Readonly.
+
+  Readonly itself works for the scalar/array/hash semantics needed by
+  downstream pure-Perl modules, but two upstream test areas still expose
+  PerlOnJava compatibility gaps:
+    * assignment-to-Readonly(...) reports PerlOnJava's non-lvalue message
+      instead of Readonly's older "Invalid initialization by assignment";
+    * Readonly::Clone depends on Storable dclone behavior that does not yet
+      strip readonly state from cloned values.
+  Allow installation so modules such as Error::Pure and Class::Utils can use
+  Readonly at runtime.
+match:
+  distribution: "^SANKO/Readonly-"
+test:
+  commandline: "PERLONJAVA_TEST_IGNORE_FAILURES"
