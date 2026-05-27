@@ -59,11 +59,10 @@ public class Warnings extends PerlModuleBase {
      * @return The warning bits string, or null if not available
      */
     private static String getWarningBitsAtLevel(int level) {
-        // Level 0 = the Perl code that called the warnings:: function
-        // We add 1 to skip the Java implementation frame (Warnings.java) that appears
-        // in the caller() stack trace when called from Java code
+        // Level 0 = the Perl code that called the warnings:: function.
+        // Add one to skip this Java implementation frame in caller().
         RuntimeList caller = RuntimeCode.caller(
-            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)), 
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
             RuntimeContextType.LIST
         );
         if (caller.size() > 9) {
@@ -86,7 +85,7 @@ public class Warnings extends PerlModuleBase {
      */
     private static String getCallerPackageAtLevel(int level) {
         RuntimeList caller = RuntimeCode.caller(
-            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)), 
+            new RuntimeList(RuntimeScalarCache.getScalarInt(level + 1)),
             RuntimeContextType.LIST
         );
         if (caller.size() > 0) {
@@ -299,14 +298,15 @@ public class Warnings extends PerlModuleBase {
      * @return A RuntimeList.
      */
     public static RuntimeList useWarnings(RuntimeArray args, int ctx) {
+        ScopedSymbolTable symbolTable = getCurrentScope();
+
         // If no arguments, enable all warnings (use warnings;)
         if (args.size() == 1) {
             warningManager.initializeEnabledWarnings();
+            WarningFlags.registerScopeWarnings(symbolTable.getDisabledWarningCategories());
             return new RuntimeScalar().getList();
         }
 
-        ScopedSymbolTable symbolTable = getCurrentScope();
-        
         // Track current modifier: null = normal, "FATAL" = make fatal, "NONFATAL" = make non-fatal
         String currentModifier = null;
         
@@ -355,7 +355,8 @@ public class Warnings extends PerlModuleBase {
             
             currentModifier = null;  // Reset modifier after use
         }
-        
+
+        WarningFlags.registerScopeWarnings(symbolTable.getDisabledWarningCategories());
         return new RuntimeScalar().getList();
     }
 
@@ -420,8 +421,11 @@ public class Warnings extends PerlModuleBase {
             }
         }
         
-        // Register scope for runtime checking (sets lastScopeId for StatementParser)
-        WarningFlags.registerScopeWarnings(categories);
+        // Register the full current disabled set so consecutive warning pragmas
+        // replace the runtime suppression scope instead of losing earlier changes.
+        ScopedSymbolTable symbolTable = getCurrentScope();
+        WarningFlags.registerScopeWarnings(
+                symbolTable != null ? symbolTable.getDisabledWarningCategories() : categories);
         
         return new RuntimeScalar().getList();
     }
@@ -461,11 +465,6 @@ public class Warnings extends PerlModuleBase {
             category = (pkg != null) ? pkg : "all";
         }
         
-        // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
-        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
-            return new RuntimeScalar(false).getList();
-        }
-        
         // For custom (registered) categories, walk past the registered package
         // to find the external caller's warning bits
         String bits;
@@ -473,6 +472,10 @@ public class Warnings extends PerlModuleBase {
             bits = findExternalCallerBits();
         } else {
             bits = getWarningBitsAtLevel(0);
+        }
+        // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar(false).getList();
         }
         boolean isEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
         return new RuntimeScalar(isEnabled).getList();
@@ -519,17 +522,16 @@ public class Warnings extends PerlModuleBase {
             category = (pkg != null) ? pkg : "all";
         }
         
-        // Check scope-based runtime suppression first
-        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
-            return new RuntimeScalar(false).getList();
-        }
-        
         // For custom categories, walk past the registered package
         String bits;
         if (WarningFlags.isCustomCategory(category)) {
             bits = findExternalCallerBits();
         } else {
             bits = getWarningBitsAtLevel(0);
+        }
+        // Check scope-based runtime suppression first
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar(false).getList();
         }
         boolean isFatal = bits != null && WarningFlags.isFatalInBits(bits, category);
         return new RuntimeScalar(isFatal).getList();
@@ -607,7 +609,7 @@ public class Warnings extends PerlModuleBase {
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar().getList();
         }
-        
+
         // For custom (registered) categories, walk past the registered package
         // to find the external caller's warning bits
         String bits;
@@ -624,6 +626,10 @@ public class Warnings extends PerlModuleBase {
                 }
             }
         } else {
+            // Built-in warnings::warnif reports and checks the caller of the
+            // routine that called warnif(), e.g. File::pushd reports the user's
+            // pushd() call site rather than File/pushd.pm's warnif line.
+            bitsLevel = 1;
             // Walk up the call stack to find the first caller NOT in an internal
             // package (attributes, warnings). This is the "responsible caller"
             // whose location should be reported. This approximates Perl 5's
@@ -705,6 +711,9 @@ public class Warnings extends PerlModuleBase {
         
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new RuntimeScalar().getList();
+        }
         
         // Get caller location for warning/error messages
         RuntimeScalar where = getCallerLocation(level);

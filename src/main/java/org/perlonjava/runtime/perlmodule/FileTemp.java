@@ -254,10 +254,6 @@ public class FileTemp extends PerlModuleBase {
                         Files.newByteChannel(ioFilePath, options).close();
                     }
 
-                    // Register for cleanup
-                    long pid = ProcessHandle.current().pid();
-                    TEMP_FILES.computeIfAbsent(pid, k -> new HashSet<>()).add(ioFilePath);
-
                     // Return file descriptor and path
                     int fd = openFile ? openFileDescriptor(ioFilePath) : -1;
                     return new RuntimeList(
@@ -341,10 +337,6 @@ public class FileTemp extends PerlModuleBase {
                         // Windows doesn't support POSIX permissions
                         Files.createDirectory(ioDirPath);
                     }
-
-                    // Register for cleanup
-                    long pid = ProcessHandle.current().pid();
-                    TEMP_DIRS.computeIfAbsent(pid, k -> new HashSet<>()).add(ioDirPath);
 
                     return dirPath;
 

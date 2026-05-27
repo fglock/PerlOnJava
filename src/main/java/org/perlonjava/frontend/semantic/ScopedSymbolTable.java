@@ -842,6 +842,18 @@ public class ScopedSymbolTable {
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
+    public Set<String> getDisabledWarningCategories() {
+        Set<String> categories = new HashSet<>();
+        BitSet disabled = warningDisabledStack.peek();
+        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+            int bitPosition = entry.getValue();
+            if (bitPosition >= 0 && disabled.get(bitPosition)) {
+                categories.add(entry.getKey());
+            }
+        }
+        return categories;
+    }
+
     /**
      * Enables FATAL mode for a warning category.
      * When a warning is FATAL, it throws an exception instead of printing a warning.

@@ -621,12 +621,11 @@ public class WarningFlags {
     public static int registerScopeWarnings(Set<String> categories) {
         int scopeId = scopeIdCounter.incrementAndGet();
         
-        // Expand categories to include subcategories
+        // Callers pass the current disabled bitset from ScopedSymbolTable, where
+        // parent categories have already been propagated to subcategories and
+        // later use-warnings pragmas have cleared re-enabled categories.
         Set<String> expanded = new HashSet<>(categories);
-        for (String category : categories) {
-            expandCategory(category, expanded);
-        }
-        
+
         scopeDisabledWarnings.put(scopeId, expanded);
         
         // Set lastScopeId for StatementParser to read
@@ -657,7 +656,7 @@ public class WarningFlags {
     public static boolean isWarningDisabledInScope(int scopeId, String category) {
         Set<String> disabled = scopeDisabledWarnings.get(scopeId);
         if (disabled != null) {
-            return disabled.contains(category) || disabled.contains("all");
+            return disabled.contains(category);
         }
         return false;
     }
