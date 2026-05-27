@@ -1026,6 +1026,17 @@ public class SubroutineParser {
         return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
 
+    private static boolean isConstantCvBody(String prototype, BlockNode block) {
+        if (prototype == null || !prototype.isEmpty() || block == null || block.elements.size() != 1) {
+            return false;
+        }
+        Node node = block.elements.get(0);
+        while (node instanceof ListNode list && list.handle == null && list.elements.size() == 1) {
+            node = list.elements.get(0);
+        }
+        return node instanceof NumberNode || node instanceof StringNode;
+    }
+
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // `sub BEGIN { ... }` / `sub END { ... }` / etc.: phaser-named subs
         // are treated like the corresponding `BEGIN { ... }` block — the body
@@ -1233,6 +1244,13 @@ public class SubroutineParser {
         // from fullName so caller()/set_subname see a consistent pair.
         int lastSep = fullName.lastIndexOf("::");
         placeholder.subName = lastSep >= 0 ? fullName.substring(lastSep + 2) : subName;
+        // For `sub X::foo { }` in package main, packageName should be "X",
+        // not "main". Set this before MODIFY_CODE_ATTRIBUTES so attribute
+        // callbacks that introspect the half-compiled CV see the real CvSTASH.
+        placeholder.packageName = lastSep >= 0
+                ? fullName.substring(0, lastSep)
+                : parser.ctx.symbolTable.getCurrentPackage();
+        placeholder.isConstantCv = isConstantCvBody(prototype, block);
 
         // Call MODIFY_CODE_ATTRIBUTES if attributes are present
         // In Perl, this is called at compile time after the sub is defined.
@@ -1245,12 +1263,6 @@ public class SubroutineParser {
                     : packageToUse;
             callModifyCodeAttributes(attrPackage, codeRef, attributes, parser, block.tokenIndex);
         }
-
-        // Set packageName from the sub's fully-qualified name (CvSTASH equivalent).
-        // For `sub X::foo { }` in package main, packageName should be "X", not "main".
-        placeholder.packageName = lastSep >= 0
-                ? fullName.substring(0, lastSep)
-                : parser.ctx.symbolTable.getCurrentPackage();
 
         // B::CV->START line must be available before lazy compilation instantiates
         // the JVM/interpreted body — e.g. Fennec::Lite calls B::svref_2object($cr)

@@ -20,7 +20,7 @@ our $VERSION = '1.88';
 
 # Export functionality
 use Exporter 'import';
-our @EXPORT_OK = qw(svref_2object class perlstring CVf_ANON SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
+our @EXPORT_OK = qw(svref_2object class perlstring CVf_ANON CVf_CONST SVf_IOK SVf_NOK SVf_POK SVp_IOK SVp_NOK SVp_POK);
 our %EXPORT_TAGS = (
     all => \@EXPORT_OK,
 );
@@ -40,10 +40,11 @@ use constant {
 
 # CV flags
 use constant {
-    CVf_ANON      => 0x0004,
-    CVf_UNIQUE    => 0x0008,
-    CVf_METHOD    => 0x0040,
-    CVf_ISXSUB    => 0x0080,
+    CVf_METHOD    => 0x0001,
+    CVf_CONST     => 0x0004,
+    CVf_ISXSUB    => 0x0008,
+    CVf_ANON      => 0x0080,
+    CVf_UNIQUE    => 0x0100,
 };
 
 # Stub classes for B objects
@@ -181,7 +182,19 @@ package B::CV {
                     # (or Sub::Util::set_subname) carry a private flag; in
                     # real Perl their CvGV points to a free-floating GV with
                     # the assigned name, and NAME should always reflect that.
-                    if ($renamed || defined &{"$fqn"}) {
+                    my $slot_matches = 0;
+                    if (!$renamed) {
+                        no strict 'refs';
+                        my $slot = *{$fqn}{CODE};
+                        if (defined $slot) {
+                            local $@;
+                            $slot_matches = eval {
+                                require Scalar::Util;
+                                Scalar::Util::refaddr($slot) == Scalar::Util::refaddr($self->{ref});
+                            } ? 1 : 0;
+                        }
+                    }
+                    if ($renamed || $slot_matches) {
                         $self->{_pkg_name} = $pkg;
                         $self->{_sub_name} = $name;
                         $self->{_is_anon}  = ($name eq '__ANON__') ? 1 : 0;
@@ -224,7 +237,7 @@ package B::CV {
         my $ref = $self->{ref};
         if ($ref && ref($ref) eq 'CODE') {
             local $@;
-            eval { require Internals; 1 } or return B::COP->new("-e", 0);
+            eval { require Internals; 1 } or return B::NULL->new();
             my @loc = Internals::jperl_cv_start_location($ref);
             if (@loc >= 2) {
                 my ($file, $line) = @loc;
@@ -235,7 +248,7 @@ package B::CV {
                 }
             }
         }
-        return B::COP->new("-e", 0);
+        return B::NULL->new();
     }
     
     sub ROOT {
@@ -256,7 +269,12 @@ package B::CV {
     sub CvFLAGS {
         my $self = shift;
         $self->_introspect;
-        return $self->{_is_anon} ? 0x0004 : 0;  # CVf_ANON for anonymous subs
+        my $flags = $self->{_is_anon} ? B::CVf_ANON() : 0;
+        local $@;
+        if (eval { require Internals; Internals::jperl_cv_is_constant($self->{ref}) }) {
+            $flags |= B::CVf_CONST();
+        }
+        return $flags;
     }
 
     sub XSUB {
@@ -401,15 +419,13 @@ package B::OP {
 }
 
 package B::NULL {
-    our @ISA = ('B::OP');
     sub new {
         my $class = shift;
         return bless {}, $class;
     }
 
     sub next {
-        # NULL is terminal -- return self to prevent infinite loops
-        return $_[0];
+        return undef;
     }
 }
 
@@ -495,8 +511,9 @@ sub end_av {
     return B::AV->new(Internals::jperl_end_av_ref());
 }
 
-# Export CVf_ANON as a function
-sub CVf_ANON() { return 0x0004; }
+# Export CV flags as functions
+sub CVf_CONST() { return 0x0004; }
+sub CVf_ANON() { return 0x0080; }
 
 # GV flag for "this CV was imported". Real Perl uses 0x80 in older perls and
 # 0x4000 in newer ones; Pod::Coverage falls back to 0x80 when this is missing.
