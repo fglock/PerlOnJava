@@ -797,33 +797,9 @@ public class StatementResolver {
                     // the loop in a BlockNode (for local $_), we must hoist the 'my'
                     // declaration before the BlockNode to preserve correct scoping.
                     // This is analogous to handleStatementModifierWithMy for if/unless.
-                    Node hoistedMyDecl = null;
-
-                    // Unwrap single-element ListNode from outer parentheses.
-                    // "for (my @w = LIST)" parses as ListNode([BinaryOperatorNode])
-                    // while "for my @w = LIST" parses as BinaryOperatorNode directly.
-                    Node listExprCandidate = modifierExpression;
-                    if (listExprCandidate instanceof ListNode ln && ln.elements.size() == 1) {
-                        listExprCandidate = ln.elements.get(0);
-                    }
-
-                    if (listExprCandidate instanceof BinaryOperatorNode assignNode
-                            && assignNode.operator.equals("=")) {
-                        Node left = assignNode.left;
-                        if (left instanceof OperatorNode myNode && myNode.operator.equals("my")) {
-                            // Extract "my @w" or "my ($s, @a)" as a standalone declaration
-                            hoistedMyDecl = left;
-                            // Replace "my @w = LIST" with "@w = LIST" in the foreach list
-                            Node newAssign = new BinaryOperatorNode(
-                                    "=", myNode.operand, assignNode.right, parser.tokenIndex);
-                            // Preserve ListNode wrapper if present (from outer parens)
-                            if (modifierExpression instanceof ListNode) {
-                                modifierExpression = new ListNode(List.of(newAssign), parser.tokenIndex);
-                            } else {
-                                modifierExpression = newAssign;
-                            }
-                        }
-                    }
+                    List<Node> hoistedMyDecls = new ArrayList<>();
+                    modifierExpression = hoistMyAssignmentsFromForeachList(
+                            modifierExpression, hoistedMyDecls, parser.tokenIndex);
 
                     // Hoist 'my' declarations from the loop-body expression, too.
                     // "my @long_list = EXPR for LIST" declares @long_list in the
@@ -848,20 +824,20 @@ public class StatementResolver {
                                         new OperatorNode("local", varNode, parser.tokenIndex),
                                         forNode
                                 ), parser.tokenIndex);
-                        if (hoistedMyDecl != null || bodyHoistedMyDecl != null) {
+                        if (!hoistedMyDecls.isEmpty() || bodyHoistedMyDecl != null) {
                             java.util.List<Node> hoisted = new java.util.ArrayList<>();
                             if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);
-                            if (hoistedMyDecl != null) hoisted.add(hoistedMyDecl);
+                            hoisted.addAll(hoistedMyDecls);
                             hoisted.add(result);
                             yield new ListNode(hoisted, parser.tokenIndex);
                         }
                         yield result;
                     }
                     Node result = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
-                    if (hoistedMyDecl != null || bodyHoistedMyDecl != null) {
+                    if (!hoistedMyDecls.isEmpty() || bodyHoistedMyDecl != null) {
                         java.util.List<Node> hoisted = new java.util.ArrayList<>();
                         if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);
-                        if (hoistedMyDecl != null) hoisted.add(hoistedMyDecl);
+                        hoisted.addAll(hoistedMyDecls);
                         hoisted.add(result);
                         yield new ListNode(hoisted, parser.tokenIndex);
                     }
@@ -1302,6 +1278,46 @@ public class StatementResolver {
             return myNode;
         }
         return null;
+    }
+
+    /**
+     * Hoist top-level {@code my} assignments out of a foreach statement-modifier
+     * list. Perl keeps those lexicals visible in the enclosing scope:
+     * {@code s/foo/bar/ for (my $x = $y), (my $z = $w); print $x}.
+     */
+    private static Node hoistMyAssignmentsFromForeachList(
+            Node modifierExpression, List<Node> hoistedMyDecls, int tokenIndex) {
+        if (modifierExpression instanceof ListNode listNode) {
+            boolean changed = false;
+            List<Node> rewrittenElements = new ArrayList<>();
+            for (Node element : listNode.elements) {
+                Node rewritten = rewriteMyAssignmentForHoist(element, hoistedMyDecls, tokenIndex);
+                rewrittenElements.add(rewritten);
+                if (rewritten != element) {
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                return modifierExpression;
+            }
+            ListNode rewrittenList = new ListNode(rewrittenElements, listNode.getIndex());
+            rewrittenList.handle = listNode.handle;
+            return rewrittenList;
+        }
+
+        return rewriteMyAssignmentForHoist(modifierExpression, hoistedMyDecls, tokenIndex);
+    }
+
+    private static Node rewriteMyAssignmentForHoist(
+            Node candidate, List<Node> hoistedMyDecls, int tokenIndex) {
+        if (candidate instanceof BinaryOperatorNode assignNode
+                && assignNode.operator.equals("=")
+                && assignNode.left instanceof OperatorNode myNode
+                && myNode.operator.equals("my")) {
+            hoistedMyDecls.add(myNode);
+            return new BinaryOperatorNode("=", myNode.operand, assignNode.right, tokenIndex);
+        }
+        return candidate;
     }
 
     /**
