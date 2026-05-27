@@ -1104,6 +1104,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeBase replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         // Convert the input string to a Java string
         String inputStr = string.toString();
+        boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
+        boolean resultNeedsUtf8 = !wasByteString;
 
         // Extract the regex pattern from the quotedRegex object
         RuntimeRegex regex = resolveRegex(quotedRegex);
@@ -1273,9 +1275,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
                     RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
                     RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
+                    if (Utf8.isUtf8(result.scalar())) {
+                        resultNeedsUtf8 = true;
+                    }
                     replacementStr = result.toString();
                 } else {
                     // Replace the match with the replacement string
+                    if (Utf8.isUtf8(replacement)) {
+                        resultNeedsUtf8 = true;
+                    }
                     replacementStr = replacement.toString();
                 }
 
@@ -1321,7 +1329,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (found > 0) {
             String finalResult = resultBuffer.toString();
-            boolean wasByteString = (string.type == RuntimeScalarType.BYTE_STRING);
 
             // Store as last successful pattern for empty pattern reuse
             lastMatchUsedPFlag = regex.hasPreservesMatch;
@@ -1330,14 +1337,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regex.regexFlags.isNonDestructive()) {
                 // /r modifier: return the modified string
                 RuntimeScalar rv = new RuntimeScalar(finalResult);
-                if (wasByteString && !containsWideChars(finalResult)) {
+                if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
                     rv.type = RuntimeScalarType.BYTE_STRING;
                 }
                 return rv;
             } else {
                 // Save the modified string back to the original scalar
                 string.set(finalResult);
-                if (wasByteString && !containsWideChars(finalResult)) {
+                if (wasByteString && !resultNeedsUtf8 && !containsWideChars(finalResult)) {
                     string.type = RuntimeScalarType.BYTE_STRING;
                 }
                 // Return the number of substitutions made
