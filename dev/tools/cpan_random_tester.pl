@@ -359,8 +359,9 @@ for my $module (@selected) {
                 $fail_modules{$mod} = $r;
                 $regressed++;
                 printf "  ! REGRESS %-38s PASS -> FAIL", $mod;
-                printf " (%s/%s)", $r->{pass_count} // '?', $r->{tests}
-                    if $r->{tests};
+                if (my $counts = result_count_label($r)) {
+                    printf " (%s)", $counts;
+                }
                 if ($r->{error}) {
                     my $err = $r->{error};
                     $err = substr($err, 0, 45) . '...' if length($err) > 48;
@@ -377,7 +378,9 @@ for my $module (@selected) {
             $new_fail++;
             $fail_modules{$mod} = $r;
             printf "  - FAIL    %-38s", $mod;
-            printf " (%s/%s)", $r->{pass_count} // '?', $r->{tests} if $r->{tests};
+            if (my $counts = result_count_label($r)) {
+                printf " (%s)", $counts;
+            }
             if ($r->{error}) {
                 my $err = $r->{error};
                 $err = substr($err, 0, 45) . '...' if length($err) > 48;
@@ -499,17 +502,17 @@ sub parse_all_module_results {
             reason     => '',
         );
 
-        my $total_tests   = 0;
-        my $subtests_fail = 0;
+        my $total_tests = 0;
 
         if ($text =~ /Files=\d+, Tests=(\d+)/) {
             $total_tests = $1;
         }
-        while ($text =~ /Failed\s+(\d+)\/(\d+)\s+subtests/g) {
-            $subtests_fail += $1;
-        }
 
-        if ($text =~ /All tests successful/ || $text =~ /Result: PASS/) {
+        my %failure_counts = parse_harness_failure_counts($text);
+
+        if (($text =~ /All tests successful/ || $text =~ /Result: PASS/)
+            && $text !~ /Result: FAIL/
+            && $text !~ /(?:make|Build) test -- NOT OK/) {
             $r{status}     = 'PASS';
             $r{tests}      = $total_tests || undef;
             $r{pass_count} = $total_tests || undef;
@@ -534,12 +537,17 @@ sub parse_all_module_results {
         if ($text =~ /Result: FAIL/ || $text =~ /(?:make|Build) test -- NOT OK/) {
             $r{status} = 'FAIL';
             if ($total_tests > 0) {
-                $r{tests}      = $total_tests;
-                $r{pass_count} = $total_tests > $subtests_fail
-                    ? $total_tests - $subtests_fail : 0;
-                $r{error} = sprintf('%d/%d subtests failed',
-                    $subtests_fail, $total_tests) if $subtests_fail;
+                $r{tests} = $total_tests;
+                if (defined $failure_counts{subtests_failed}
+                    && defined $failure_counts{subtests_total}) {
+                    $r{pass_count} = $failure_counts{subtests_failed} > 0
+                        ? $failure_counts{subtests_total} - $failure_counts{subtests_failed}
+                        : undef;
+                }
             }
+
+            $r{error} = format_harness_failure_error(%failure_counts);
+
             if (!$r{error}) {
                 if ($text =~ /Can't locate (\S+\.pm)/m) {
                     $r{error} = "Missing: $1";
@@ -627,6 +635,69 @@ sub is_bundled_skip_output {
 sub is_perlonjava_distropref_skip_output {
     my ($text) = @_;
     return $text =~ /PERLONJAVA_SKIP -- (?:configure|make|test|install) phase skipped/ ? 1 : 0;
+}
+
+sub parse_harness_failure_counts {
+    my ($text) = @_;
+    my %counts;
+
+    if ($text =~ /Failed\s+(\d+)\/(\d+)\s+test programs?\.\s+(\d+)\/(\d+)\s+subtests failed\./) {
+        @counts{qw(test_programs_failed test_programs_total subtests_failed subtests_total)}
+            = ($1, $2, $3, $4);
+        return %counts;
+    }
+
+    if ($text =~ /Failed\s+(\d+)\/(\d+)\s+test programs?\./) {
+        @counts{qw(test_programs_failed test_programs_total)} = ($1, $2);
+    }
+    if ($text =~ /(\d+)\/(\d+)\s+subtests failed\./) {
+        @counts{qw(subtests_failed subtests_total)} = ($1, $2);
+    }
+
+    if (!defined $counts{subtests_failed}) {
+        my $failed_in_files = 0;
+        while ($text =~ /Failed\s+(\d+)\/(\d+)\s+subtests\b/g) {
+            $failed_in_files += $1;
+        }
+        $counts{subtests_failed_in_files} = $failed_in_files
+            if $failed_in_files;
+    }
+
+    return %counts;
+}
+
+sub format_harness_failure_error {
+    my (%counts) = @_;
+    my ($subtest_part, $program_part);
+
+    if (defined $counts{subtests_failed} && defined $counts{subtests_total}) {
+        $subtest_part = sprintf('%d/%d subtests failed',
+            $counts{subtests_failed}, $counts{subtests_total});
+    } elsif (defined $counts{subtests_failed_in_files}) {
+        $subtest_part = sprintf('%d subtests failed in test files',
+            $counts{subtests_failed_in_files});
+    }
+
+    if (defined $counts{test_programs_failed} && defined $counts{test_programs_total}) {
+        $program_part = sprintf('%d/%d test programs failed',
+            $counts{test_programs_failed}, $counts{test_programs_total});
+    }
+
+    my @parts;
+    if (($counts{subtests_failed} // 0) == 0 && defined $program_part) {
+        @parts = grep { defined } ($program_part, $subtest_part);
+    } else {
+        @parts = grep { defined } ($subtest_part, $program_part);
+    }
+
+    return join('; ', @parts);
+}
+
+sub result_count_label {
+    my ($r) = @_;
+    return undef unless defined $r->{tests} && $r->{tests} ne '';
+    return undef unless defined $r->{pass_count} && $r->{pass_count} ne '';
+    return "$r->{pass_count}/$r->{tests}";
 }
 
 
@@ -886,10 +957,7 @@ HEADER
             print $fh "| Module | Pass/Total | Error | Date |\n";
             print $fh "|--------|-----------|-------|------|\n";
             for my $r (sort { $a->{module} cmp $b->{module} } @mods) {
-                my $tests = '';
-                if (defined $r->{tests} && $r->{tests} > 0) {
-                    $tests = ($r->{pass_count} // '?') . '/' . $r->{tests};
-                }
+                my $tests = result_count_label($r) // '';
                 my $error = $r->{error} // '';
                 $error =~ s/\|/\\|/g;
                 my $date = $r->{date} // '';
