@@ -727,7 +727,9 @@ public class RuntimeIO extends RuntimeScalar {
                     // Use SeekableJarHandle to support seek operations (needed by Module::Metadata)
                     fh.ioHandle = new SeekableJarHandle(is);
                     addHandle(fh.ioHandle);
-                    fh.binmode(ioLayers);
+                    if (!fh.applyOpenLayers(ioLayers)) {
+                        return null;
+                    }
                     return fh;
                 } catch (IOException e) {
                     handleIOException(e, "open failed");
@@ -766,13 +768,33 @@ public class RuntimeIO extends RuntimeScalar {
             }
 
             // Apply any I/O layers
-            fh.binmode(ioLayers);
+            if (!fh.applyOpenLayers(ioLayers)) {
+                return null;
+            }
 
         } catch (IOException e) {
             handleIOException(e, "open failed");
             fh = null;
         }
         return fh;
+    }
+
+    private boolean applyOpenLayers(String ioLayers) {
+        RuntimeScalar status = binmode(ioLayers);
+        if (status.getBoolean()) {
+            return true;
+        }
+
+        if (containsViaLayer(ioLayers)) {
+            close();
+            return false;
+        }
+
+        return true;
+    }
+
+    private static boolean containsViaLayer(String ioLayers) {
+        return ioLayers != null && ioLayers.contains("via(");
     }
 
     /**
@@ -864,7 +886,9 @@ public class RuntimeIO extends RuntimeScalar {
         // PerlIO::scalar is not a real OS file descriptor, so a plain scalar
         // open should not inherit the platform text layer such as Windows :crlf.
         if (!ioLayers.isEmpty()) {
-            fh.binmode(ioLayers);
+            if (!fh.applyOpenLayers(ioLayers)) {
+                return null;
+            }
         }
 
         return fh;
@@ -955,7 +979,9 @@ public class RuntimeIO extends RuntimeScalar {
 
             // Apply any I/O layers (excluding the already-processed :noshell)
             if (!ioLayers.isEmpty()) {
-                fh.binmode(ioLayers);
+                if (!fh.applyOpenLayers(ioLayers)) {
+                    return null;
+                }
             }
         } catch (IOException e) {
             handleIOException(e, "open failed");
@@ -1292,7 +1318,7 @@ public class RuntimeIO extends RuntimeScalar {
      *
      * @param ioLayer the layer specification (e.g., ":utf8", ":crlf", ":raw")
      */
-    public void binmode(String ioLayer) {
+    public RuntimeScalar binmode(String ioLayer) {
         if (ioLayer.isEmpty()) {
             // No layers specified, check ${^OPEN} for default layers
             ioLayer = getGlobalVariable(GlobalContext.OPEN).toString();
@@ -1307,6 +1333,7 @@ public class RuntimeIO extends RuntimeScalar {
         }
 
         // Unwrap all layers to get to the base handle
+        IOHandle originalHandle = ioHandle;
         IOHandle baseHandle = ioHandle;
         while (baseHandle instanceof LayeredIOHandle) {
             baseHandle = ((LayeredIOHandle) baseHandle).getDelegate();
@@ -1314,14 +1341,24 @@ public class RuntimeIO extends RuntimeScalar {
 
         // Special handling for :raw mode - just use the base handle directly
         if (ioLayer.equals(":raw") || ioLayer.equals(":bytes") || ioLayer.equals(":unix")) {
+            if (originalHandle instanceof LayeredIOHandle layered) {
+                layered.popAllLayers();
+            }
             ioHandle = baseHandle;
-            return;
+            return scalarTrue;
         }
 
         // For other modes, wrap the IOHandle and set the ioLayer
         LayeredIOHandle wrappedHandle = new LayeredIOHandle(baseHandle);
-        wrappedHandle.binmode(ioLayer);
+        RuntimeScalar status = wrappedHandle.binmode(ioLayer);
+        if (!status.getBoolean()) {
+            return status;
+        }
+        if (originalHandle instanceof LayeredIOHandle layered) {
+            layered.popAllLayers();
+        }
         ioHandle = wrappedHandle;
+        return scalarTrue;
     }
 
     /**
@@ -1578,6 +1615,7 @@ public class RuntimeIO extends RuntimeScalar {
                 || ioHandle instanceof PipeOutputChannel
                 || ioHandle instanceof InternalPipeHandle
                 || ioHandle instanceof LayeredIOHandle
+                || ioHandle instanceof BorrowedIOHandle
                 || ioHandle instanceof SocketIO
                 || ioHandle instanceof ProcessInputHandle
                 || ioHandle instanceof ProcessOutputHandle) {

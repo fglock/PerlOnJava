@@ -99,6 +99,14 @@ public class LayeredIOHandle implements IOHandle {
         return delegate;
     }
 
+    private IOLayer topInterceptingLayer() {
+        if (activeLayers.isEmpty()) {
+            return null;
+        }
+        IOLayer layer = activeLayers.get(activeLayers.size() - 1);
+        return layer.interceptsIO() ? layer : null;
+    }
+
     /**
      * Writes data to the handle, applying all output layers.
      *
@@ -116,6 +124,14 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar write(String data) {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onWrite(data);
+            if (result != null) {
+                return result;
+            }
+        }
+
         // Apply output pipeline
         String processed = outputPipeline.apply(data);
         return delegate.write(processed);
@@ -145,6 +161,14 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onRead(maxBytes, charset);
+            if (result != null) {
+                return result;
+            }
+        }
+
         // If no active layers, delegate directly (byte-based reading)
         if (activeLayers.isEmpty()) {
             return delegate.doRead(maxBytes, charset);
@@ -233,18 +257,7 @@ public class LayeredIOHandle implements IOHandle {
      */
     public RuntimeScalar binmode(String modeStr) {
         try {
-            // Reset all pipelines
-            inputPipeline = Function.identity();
-            outputPipeline = Function.identity();
-
-            // Clear decoded character buffer (layer change invalidates buffered data)
-            decodedCharBuffer.setLength(0);
-
-            // Reset and clear existing layers
-            for (IOLayer layer : activeLayers) {
-                layer.reset();
-            }
-            activeLayers.clear();
+            resetLayerState(true);
 
             // Parse and apply new layers
             parseAndSetLayers(modeStr);
@@ -259,8 +272,36 @@ public class LayeredIOHandle implements IOHandle {
                     new RuntimeScalar(""));
             return new RuntimeScalar(0);
         } catch (Exception e) {
+            if (e.getMessage() != null && !e.getMessage().isEmpty()) {
+                org.perlonjava.runtime.operators.WarnDie.warn(
+                        new RuntimeScalar(e.getMessage() + "\n"),
+                        new RuntimeScalar(""));
+            }
             return new RuntimeScalar(0);
         }
+    }
+
+    public void popAllLayers() {
+        for (int i = activeLayers.size() - 1; i >= 0; i--) {
+            activeLayers.get(i).onPopped();
+        }
+        resetLayerState(false);
+    }
+
+    private void resetLayerState(boolean notifyPopped) {
+        inputPipeline = Function.identity();
+        outputPipeline = Function.identity();
+        decodedCharBuffer.setLength(0);
+
+        if (notifyPopped) {
+            for (int i = activeLayers.size() - 1; i >= 0; i--) {
+                activeLayers.get(i).onPopped();
+            }
+        }
+        for (IOLayer layer : activeLayers) {
+            layer.reset();
+        }
+        activeLayers.clear();
     }
 
     /**
@@ -281,9 +322,18 @@ public class LayeredIOHandle implements IOHandle {
         String[] layers = splitLayers(modeStr);
 
         for (String layer : layers) {
+            layer = normalizeLayerSpec(layer);
             if (layer.isEmpty()) continue;
             addLayer(layer);
         }
+    }
+
+    private String normalizeLayerSpec(String layerSpec) {
+        layerSpec = layerSpec.trim();
+        while (!layerSpec.isEmpty() && layerSpec.charAt(layerSpec.length() - 1) == '\0') {
+            layerSpec = layerSpec.substring(0, layerSpec.length() - 1).trim();
+        }
+        return layerSpec;
     }
 
     /**
@@ -361,6 +411,13 @@ public class LayeredIOHandle implements IOHandle {
      * @throws IllegalArgumentException if the layer specification is unknown
      */
     private void addLayer(String layerSpec) {
+        IOLayer viaLayer = topInterceptingLayer();
+        if (viaLayer instanceof ViaLayer && !isNoOpLayer(layerSpec)) {
+            throw new PerlJavaUnimplementedException(
+                    "PerlIO layer " + layerSpec + " above :via(...) is not implemented " +
+                            "in PerlOnJava (see dev/design/perlio-via.md)");
+        }
+
         switch (layerSpec) {
             case "bytes", "raw", "unix" -> {
                 // No-op layers - binary mode with no transformation
@@ -406,22 +463,49 @@ public class LayeredIOHandle implements IOHandle {
                         throw new IllegalArgumentException("Unknown encoding: " + charsetName);
                     }
                 } else if (layerSpec.startsWith("via(") && layerSpec.endsWith(")")) {
-                    // :via(Foo) invokes a Perl-implemented PerlIO layer. PerlOnJava
-                    // does not yet bridge the :via(...) layer dispatch back into
-                    // Perl callbacks (PUSHED / FILL / READ / WRITE / CLOSE ...).
-                    // Fail loudly so users don't get a silent no-op; see
-                    // dev/modules/perlio_via.md for the plan to make this
-                    // functional. Under JPERL_UNIMPLEMENTED=warn this is still
-                    // caught by binmode()/open() and surfaced via $!.
+                    if (hasViaLayer()) {
+                        throw new PerlJavaUnimplementedException(
+                                "Stacked PerlIO :via(...) layers are not implemented " +
+                                        "in PerlOnJava (see dev/design/perlio-via.md)");
+                    }
                     String className = layerSpec.substring(4, layerSpec.length() - 1);
-                    throw new PerlJavaUnimplementedException(
-                            "PerlIO layer :via(" + className + ") not implemented " +
-                                    "in PerlOnJava (see dev/modules/perlio_via.md)");
+                    ViaLayer layer = new ViaLayer(className, currentLowerHandle(), currentMode());
+                    activeLayers.add(layer);
                 } else {
                     throw new IllegalArgumentException("Unknown layer: " + layerSpec);
                 }
             }
         }
+    }
+
+    private boolean isNoOpLayer(String layerSpec) {
+        return layerSpec.equals("bytes") || layerSpec.equals("raw") || layerSpec.equals("unix");
+    }
+
+    private boolean hasViaLayer() {
+        for (IOLayer layer : activeLayers) {
+            if (layer instanceof ViaLayer) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private IOHandle currentLowerHandle() {
+        String lowerLayerSpec = getCurrentLayers();
+        if (lowerLayerSpec.isEmpty()) {
+            return delegate;
+        }
+        LayeredIOHandle lower = new LayeredIOHandle(delegate);
+        RuntimeScalar ok = lower.binmode(lowerLayerSpec);
+        if (!ok.getBoolean()) {
+            throw new IllegalArgumentException("Could not build lower PerlIO layer stack: " + lowerLayerSpec);
+        }
+        return lower;
+    }
+
+    private String currentMode() {
+        return getCurrentLayers();
     }
 
     /**
@@ -435,6 +519,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar flush() {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onFlush();
+            if (result != null) {
+                return result;
+            }
+        }
         return delegate.flush();
     }
 
@@ -467,12 +558,15 @@ public class LayeredIOHandle implements IOHandle {
     @Override
     public RuntimeScalar close() {
         flush();
-        // Reset all layers to clear any internal state
-        for (IOLayer layer : activeLayers) {
-            layer.reset();
+        IOLayer interceptingLayer = topInterceptingLayer();
+        RuntimeScalar closeResult = null;
+        if (interceptingLayer != null) {
+            closeResult = interceptingLayer.onClose();
         }
+        popAllLayers();
         decodedCharBuffer.setLength(0);
-        return delegate.close();
+        RuntimeScalar delegateResult = delegate.close();
+        return closeResult != null ? closeResult : delegateResult;
     }
 
     /**
@@ -485,6 +579,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar fileno() {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onFileno();
+            if (result != null) {
+                return result;
+            }
+        }
         return delegate.fileno();
     }
 
@@ -498,6 +599,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar eof() {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onEof();
+            if (result != null) {
+                return result;
+            }
+        }
         // If there are buffered decoded characters, we're not at EOF
         if (decodedCharBuffer.length() > 0) {
             return new RuntimeScalar(0);
@@ -516,6 +624,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar tell() {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onTell();
+            if (result != null) {
+                return result;
+            }
+        }
         return delegate.tell();
     }
 
@@ -534,6 +649,13 @@ public class LayeredIOHandle implements IOHandle {
      */
     @Override
     public RuntimeScalar seek(long pos, int whence) {
+        IOLayer interceptingLayer = topInterceptingLayer();
+        if (interceptingLayer != null) {
+            RuntimeScalar result = interceptingLayer.onSeek(pos, whence);
+            if (result != null) {
+                return result;
+            }
+        }
         // Reset all layers when seeking to clear any partial state
         for (IOLayer layer : activeLayers) {
             layer.reset();
@@ -593,13 +715,7 @@ public class LayeredIOHandle implements IOHandle {
         // Return the currently applied layers as a string
         StringBuilder layers = new StringBuilder();
         for (IOLayer layer : this.activeLayers) {
-            if (layer instanceof CrlfLayer) {
-                layers.append(":crlf");
-            } else if (layer instanceof EncodingLayer) {
-                // You might need to store the encoding name
-                layers.append(":encoding");
-            }
-            // Add other layer types as needed
+            layers.append(":").append(layer.getLayerName());
         }
         return layers.toString();
     }

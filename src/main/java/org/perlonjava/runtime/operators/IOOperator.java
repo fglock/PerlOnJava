@@ -142,7 +142,8 @@ public class IOOperator {
                 RuntimeIO rio = RuntimeIO.getByFileno(fd);
                 if (rio == null) continue;
 
-                if (rio.ioHandle instanceof SocketIO socketIO) {
+                IOHandle pollHandle = selectableHandle(rio.ioHandle);
+                if (pollHandle instanceof SocketIO socketIO) {
                     SelectableChannel ch = socketIO.getSelectableChannel();
                     if (ch == null) {
                         // SSL sockets created without an underlying SocketChannel
@@ -216,10 +217,10 @@ public class IOOperator {
                     // using FileDescriptorTable.isReadReady/isWriteReady instead of
                     // assuming always-ready (which causes POE's event loop to busy-loop).
                     boolean ready = false;
-                    if (wantRead && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                    if (wantRead && FileDescriptorTable.isReadReady(pollHandle)) {
                         ready = true;
                     }
-                    if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                    if (wantWrite && FileDescriptorTable.isWriteReady(pollHandle)) {
                         ready = true;
                     }
                     if (ready) {
@@ -261,16 +262,17 @@ public class IOOperator {
                         if (rio == null) continue;
                         boolean wantRead = isBitSet(rdata, fd);
                         boolean wantWrite = isBitSet(wdata, fd);
-                        if (wantRead && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                        IOHandle pollHandle = selectableHandle(rio.ioHandle);
+                        if (wantRead && FileDescriptorTable.isReadReady(pollHandle)) {
                             nonSocketReady++;
                         }
-                        if (wantWrite && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                        if (wantWrite && FileDescriptorTable.isWriteReady(pollHandle)) {
                             nonSocketReady++;
                         }
                     }
                     for (int fd : pollableSslFds) {
                         RuntimeIO rio = RuntimeIO.getByFileno(fd);
-                        if (rio == null || !(rio.ioHandle instanceof SocketIO socketIO)) continue;
+                        if (rio == null || !(selectableHandle(rio.ioHandle) instanceof SocketIO socketIO)) continue;
                         try {
                             if (socketIO.available() > 0) {
                                 immediateReadReadyFds.add(fd);
@@ -318,7 +320,8 @@ public class IOOperator {
                 RuntimeIO rio = RuntimeIO.getByFileno(fd);
                 if (rio == null) continue;
 
-                if (rio.ioHandle instanceof SocketIO socketIO) {
+                IOHandle pollHandle = selectableHandle(rio.ioHandle);
+                if (pollHandle instanceof SocketIO socketIO) {
                     // Only handle SocketIO with null channel (SSL sockets)
                     if (socketIO.getSelectableChannel() != null) continue;
 
@@ -334,10 +337,10 @@ public class IOOperator {
                 }
 
                 // Non-socket handles
-                if (isBitSet(rdata, fd) && FileDescriptorTable.isReadReady(rio.ioHandle)) {
+                if (isBitSet(rdata, fd) && FileDescriptorTable.isReadReady(pollHandle)) {
                     setBit(rresult, fd); totalReady++;
                 }
-                if (isBitSet(wdata, fd) && FileDescriptorTable.isWriteReady(rio.ioHandle)) {
+                if (isBitSet(wdata, fd) && FileDescriptorTable.isWriteReady(pollHandle)) {
                     setBit(wresult, fd); totalReady++;
                 }
             }
@@ -414,6 +417,20 @@ public class IOOperator {
             data[i] = (byte) s.charAt(i);
         }
         return data;
+    }
+
+    private static IOHandle selectableHandle(IOHandle handle) {
+        while (true) {
+            if (handle instanceof BorrowedIOHandle borrowedHandle) {
+                handle = borrowedHandle.getDelegate();
+                continue;
+            }
+            if (handle instanceof LayeredIOHandle layeredHandle) {
+                handle = layeredHandle.getDelegate();
+                continue;
+            }
+            return handle;
+        }
     }
 
     /**
@@ -553,7 +570,10 @@ public class IOOperator {
         if (ioLayer.isEmpty()) {
             ioLayer = ":raw";
         }
-        fh.binmode(ioLayer);
+        RuntimeScalar status = fh.binmode(ioLayer);
+        if (!status.getBoolean()) {
+            return scalarUndef;
+        }
         return fileHandle;
     }
 

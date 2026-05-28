@@ -1,5 +1,9 @@
 package org.perlonjava.runtime.io;
 
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
+import java.nio.charset.Charset;
+
 /**
  * Base interface for implementing Perl-style IO layers in Java.
  *
@@ -125,5 +129,44 @@ public interface IOLayer {
     default void reset() {
         // Default no-op implementation
         // Stateless layers don't need to override this
+    }
+
+    default RuntimeScalar onRead(int maxBytes, Charset charset) {
+        return null;
+    }
+
+    default RuntimeScalar onWrite(String data) {
+        return null;
+    }
+
+    default RuntimeScalar onFlush() {
+        return null;
+    }
+
+    default RuntimeScalar onClose() {
+        return null;
+    }
+
+    default RuntimeScalar onFileno() {
+        return null;
+    }
+
+    default RuntimeScalar onEof() {
+        return null;
+    }
+
+    default RuntimeScalar onTell() {
+        return null;
+    }
+
+    default RuntimeScalar onSeek(long pos, int whence) {
+        return null;
+    }
+
+    default void onPopped() {
+    }
+
+    default boolean interceptsIO() {
+        return false;
     }
 }
