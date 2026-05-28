@@ -1478,7 +1478,7 @@ public class RegexPreprocessor {
 
     private static int handleCharacterClass(String s, boolean flag_xx, StringBuilder sb, int c, int offset) {
         final int length = s.length();
-        int len = sb.length();
+        int classStart = sb.length();
         sb.append(Character.toChars(c));  // Append the '['
         offset++;
 
@@ -1533,6 +1533,13 @@ public class RegexPreprocessor {
 
         StringBuilder rejected = new StringBuilder();
         offset = RegexPreprocessorHelper.handleRegexCharacterClassEscape(offset, s, sb, length, flag_xx, rejected);
+        String processedClass = sb.substring(classStart);
+        if (processedClass.startsWith("[^")) {
+            sb.setLength(classStart);
+            sb.append("(?:\\x{FFFD}<[0-9A-F]+>|");
+            sb.append(processedClass);
+            sb.append(')');
+        }
         // Note: rejected is kept for future use but currently \b is handled by direct substitution to \x08
         return offset;
     }
