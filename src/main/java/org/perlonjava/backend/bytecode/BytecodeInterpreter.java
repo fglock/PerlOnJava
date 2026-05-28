@@ -55,6 +55,8 @@ public class BytecodeInterpreter {
     private static boolean lexicalAssignmentMustPreserveSlot(RuntimeBase val) {
         if (!(val instanceof RuntimeScalar scalar)) return false;
         return scalar instanceof ReadOnlyAlias
+                || scalar.captureCount > 0
+                || scalar.captureRefCountOwned > 0
                 || scalar.type == RuntimeScalarType.TIED_SCALAR
                 || scalar.type == RuntimeScalarType.READONLY_SCALAR;
     }
