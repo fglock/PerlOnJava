@@ -203,9 +203,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     && (firstType == RuntimeScalarType.HASHREFERENCE || firstType == RuntimeScalarType.ARRAYREFERENCE))
                     ? "Reference found where even-sized list expected"
                     : "Odd number of elements in hash assignment";
-            return createHashInternal(value, warning);
+            return createHashInternal(value, warning, true);
         } else {
-            return createHashNoWarn(value);
+            return createHashNoWarn(value, true);
         }
     }
 
@@ -217,6 +217,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A new RuntimeHash populated with the elements from the list.
      */
     private static RuntimeHash createHashInternal(RuntimeBase value, String oddWarningMessage) {
+        return createHashInternal(value, oddWarningMessage, false);
+    }
+
+    private static RuntimeHash createHashInternal(RuntimeBase value, String oddWarningMessage,
+                                                  boolean trackValues) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
 
@@ -240,6 +245,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             String key = iterator.next().toString();
             RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             resultHash.put(key, val);
+            if (trackValues) {
+                RuntimeScalar.incrementRefCountForContainerStore(val);
+            }
         }
         return result;
     }
@@ -251,6 +259,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
      * @return A new RuntimeHash populated with the elements from the list.
      */
     private static RuntimeHash createHashNoWarn(RuntimeBase value) {
+        return createHashNoWarn(value, false);
+    }
+
+    private static RuntimeHash createHashNoWarn(RuntimeBase value, boolean trackValues) {
         RuntimeHash result = new RuntimeHash();
         Map<String, RuntimeScalar> resultHash = result.elements;
         Iterator<RuntimeScalar> iterator = value.iterator();
@@ -258,6 +270,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             String key = iterator.next().toString();
             RuntimeScalar val = iterator.hasNext() ? new RuntimeScalar(iterator.next()) : new RuntimeScalar();
             resultHash.put(key, val);
+            if (trackValues) {
+                RuntimeScalar.incrementRefCountForContainerStore(val);
+            }
         }
         return result;
     }

@@ -607,6 +607,8 @@ public class EmitterMethodCreator implements Opcodes {
             // or can use a minimal null-store fast path. See CleanupNeededVisitor
             // and JavaClassInfo.cleanupNeeded. JPERL_FORCE_CLEANUP=1 bypasses the
             // analysis (forces cleanupNeeded=true) as an escape hatch.
+            ctx.javaClassInfo.isLvalueSubroutine =
+                    Boolean.TRUE.equals(ast.getAnnotation("subroutineIsLvalue"));
             if (FORCE_CLEANUP) {
                 ctx.javaClassInfo.cleanupNeeded = true;
             } else {
@@ -781,10 +783,11 @@ public class EmitterMethodCreator implements Opcodes {
             // Materialize it into a local slot immediately so all subsequent control-flow
             // checks operate from locals and join points don't depend on operand stack shape.
             mv.visitVarInsn(Opcodes.ILOAD, 2);
+            mv.visitInsn(ctx.javaClassInfo.isLvalueSubroutine ? Opcodes.ICONST_0 : Opcodes.ICONST_1);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "returnList",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
             mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
 

@@ -3,6 +3,9 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.frontend.analysis.Visitor;
 import org.perlonjava.frontend.astnode.*;
 
+import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.Deque;
 import java.util.Set;
 
 /**
@@ -18,6 +21,7 @@ import java.util.Set;
 public class VariableCollectorVisitor implements Visitor {
     private final Set<String> variables;
     private boolean hasEvalString = false;
+    private final Deque<Set<String>> localScopes = new ArrayDeque<>();
 
     /**
      * Create a new VariableCollectorVisitor.
@@ -26,6 +30,7 @@ public class VariableCollectorVisitor implements Visitor {
      */
     public VariableCollectorVisitor(Set<String> variables) {
         this.variables = variables;
+        this.localScopes.push(new HashSet<>());
     }
 
     /**
@@ -35,6 +40,71 @@ public class VariableCollectorVisitor implements Visitor {
      */
     public boolean hasEvalString() {
         return hasEvalString;
+    }
+
+    private boolean isDeclarationOperator(String op) {
+        return op.equals("my") || op.equals("state") || op.equals("our");
+    }
+
+    private boolean isVariableOperator(String op) {
+        return op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&");
+    }
+
+    private boolean isDeclaredLocal(String varName) {
+        for (Set<String> scope : localScopes) {
+            if (scope.contains(varName)) return true;
+        }
+        return false;
+    }
+
+    private void declare(String varName) {
+        localScopes.peek().add(varName);
+    }
+
+    private void declareFrom(Node node) {
+        if (node == null) return;
+        if (node instanceof OperatorNode opNode) {
+            if (isDeclarationOperator(opNode.operator)) {
+                declareFrom(opNode.operand);
+            } else if (isVariableOperator(opNode.operator)
+                    && opNode.operand instanceof IdentifierNode idNode) {
+                declare(opNode.operator + idNode.name);
+            } else {
+                declareFrom(opNode.operand);
+            }
+        } else if (node instanceof ListNode listNode && listNode.elements != null) {
+            for (Node element : listNode.elements) {
+                declareFrom(element);
+            }
+        }
+    }
+
+    private boolean containsDeclaration(Node node) {
+        if (node == null) return false;
+        if (node instanceof OperatorNode opNode) {
+            return isDeclarationOperator(opNode.operator) || containsDeclaration(opNode.operand);
+        }
+        if (node instanceof ListNode listNode && listNode.elements != null) {
+            for (Node element : listNode.elements) {
+                if (containsDeclaration(element)) return true;
+            }
+        }
+        return false;
+    }
+
+    private void visitAssignmentTarget(Node node) {
+        if (node == null) return;
+        if (node instanceof OperatorNode opNode && isDeclarationOperator(opNode.operator)) {
+            declareFrom(opNode.operand);
+            return;
+        }
+        if (node instanceof ListNode listNode && listNode.elements != null) {
+            for (Node element : listNode.elements) {
+                visitAssignmentTarget(element);
+            }
+            return;
+        }
+        node.accept(this);
     }
 
     @Override
@@ -54,16 +124,25 @@ public class VariableCollectorVisitor implements Visitor {
         }
 
         // Check if this is a variable reference (sigil + identifier)
-        if ((op.equals("$") || op.equals("@") || op.equals("%") || op.equals("&"))
-                && node.operand instanceof IdentifierNode idNode) {
+        if (isDeclarationOperator(op)) {
+            declareFrom(node.operand);
+            return;
+        }
+
+        if (isVariableOperator(op) && node.operand instanceof IdentifierNode idNode) {
             // This is a variable reference
             String varName = op + idNode.name;
-            variables.add(varName);
+            if (!isDeclaredLocal(varName)) {
+                variables.add(varName);
+            }
         }
 
         // $#arr references @arr (array last index)
         if (op.equals("$#") && node.operand instanceof IdentifierNode idNode) {
-            variables.add("@" + idNode.name);
+            String varName = "@" + idNode.name;
+            if (!isDeclaredLocal(varName)) {
+                variables.add(varName);
+            }
         }
 
         // Visit operand if it exists
@@ -74,17 +153,31 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(BinaryOperatorNode node) {
+        if ("=".equals(node.operator) && containsDeclaration(node.left)) {
+            if (node.right != null) {
+                node.right.accept(this);
+            }
+            visitAssignmentTarget(node.left);
+            return;
+        }
+
         // $a{key}, @a{keys}, %a{keys} all access hash %a
         if ("{".equals(node.operator) && node.left instanceof OperatorNode leftOp
                 && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
                 && leftOp.operand instanceof IdentifierNode idNode) {
-            variables.add("%" + idNode.name);
+            String varName = "%" + idNode.name;
+            if (!isDeclaredLocal(varName)) {
+                variables.add(varName);
+            }
         }
         // $a[idx], @a[indices], %a[indices] all access array @a
         if ("[".equals(node.operator) && node.left instanceof OperatorNode leftOp
                 && ("$".equals(leftOp.operator) || "@".equals(leftOp.operator) || "%".equals(leftOp.operator))
                 && leftOp.operand instanceof IdentifierNode idNode) {
-            variables.add("@" + idNode.name);
+            String varName = "@" + idNode.name;
+            if (!isDeclaredLocal(varName)) {
+                variables.add(varName);
+            }
         }
         if (node.left != null) {
             node.left.accept(this);
@@ -96,6 +189,7 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(BlockNode node) {
+        localScopes.push(new HashSet<>());
         if (node.elements != null) {
             for (Node element : node.elements) {
                 if (element != null) {
@@ -103,6 +197,7 @@ public class VariableCollectorVisitor implements Visitor {
                 }
             }
         }
+        localScopes.pop();
     }
 
     @Override
@@ -153,11 +248,12 @@ public class VariableCollectorVisitor implements Visitor {
 
     @Override
     public void visit(For1Node node) {
-        if (node.variable != null) {
-            node.variable.accept(this);
-        }
+        localScopes.push(new HashSet<>());
         if (node.list != null) {
             node.list.accept(this);
+        }
+        if (node.variable != null) {
+            visitAssignmentTarget(node.variable);
         }
         if (node.body != null) {
             node.body.accept(this);
@@ -165,10 +261,12 @@ public class VariableCollectorVisitor implements Visitor {
         if (node.continueBlock != null) {
             node.continueBlock.accept(this);
         }
+        localScopes.pop();
     }
 
     @Override
     public void visit(For3Node node) {
+        localScopes.push(new HashSet<>());
         if (node.initialization != null) {
             node.initialization.accept(this);
         }
@@ -189,6 +287,7 @@ public class VariableCollectorVisitor implements Visitor {
         if (node.continueBlock != null) {
             node.continueBlock.accept(this);
         }
+        localScopes.pop();
     }
 
     @Override

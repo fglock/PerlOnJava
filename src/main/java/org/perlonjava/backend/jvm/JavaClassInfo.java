@@ -91,6 +91,13 @@ public class JavaClassInfo {
     public boolean isMapGrepBlock;
 
     /**
+     * True when this generated method belongs to a subroutine with the
+     * {@code :lvalue} attribute. Non-lvalue return copying must be disabled
+     * for these subs so callers can assign through returned aliases.
+     */
+    public boolean isLvalueSubroutine;
+
+    /**
      * Counter tracking nesting depth inside finally blocks.
      * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.
      * This is a counter rather than a boolean to handle nested finally blocks.

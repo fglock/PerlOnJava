@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -822,7 +823,25 @@ public class CompileAssignment {
                 if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                     String varName = "$" + ((IdentifierNode) leftOp.operand).name;
 
-                    if (bytecodeCompiler.hasVariable(varName)) {
+                    if (bytecodeCompiler.hasVariable(varName) && bytecodeCompiler.isOurVariable(varName)) {
+                        SymbolTable.SymbolEntry ourEntry = bytecodeCompiler.symbolTable.getSymbolEntry(varName);
+                        String ourPkg = (ourEntry != null && ourEntry.perlPackage() != null)
+                                ? ourEntry.perlPackage()
+                                : bytecodeCompiler.getCurrentPackage();
+                        String bareVarName = varName.substring(1);
+                        String normalizedName = NameNormalizer.normalizeVariableName(bareVarName, ourPkg);
+                        int nameIdx = bytecodeCompiler.addToStringPool(normalizedName);
+
+                        bytecodeCompiler.emit(Opcodes.STORE_GLOBAL_SCALAR);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.emitReg(valueReg);
+
+                        int lvalReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                        bytecodeCompiler.emitReg(lvalReg);
+                        bytecodeCompiler.emit(nameIdx);
+                        bytecodeCompiler.lastResultReg = lvalReg;
+                    } else if (bytecodeCompiler.hasVariable(varName)) {
                         // Lexical variable - check if it's captured
                         int targetReg = bytecodeCompiler.getVariableRegister(varName);
 

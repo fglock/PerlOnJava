@@ -176,10 +176,12 @@ public class ReachabilityWalker {
             if (cur instanceof RuntimeHash h) {
                 if (h.elements instanceof HashSpecialVariable) continue;
                 for (RuntimeScalar v : h.elements.values()) {
+                    addReachable(v, todo);
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeArray a) {
                 for (RuntimeScalar v : a.elements) {
+                    addReachable(v, todo);
                     visitScalar(v, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
@@ -212,14 +214,19 @@ public class ReachabilityWalker {
                                    java.util.ArrayDeque<RuntimeBase> todo) {
         if (code.capturedScalars != null) {
             for (RuntimeScalar cap : code.capturedScalars) {
+                addReachable(cap, todo);
                 visitScalar(cap, todo);
             }
         }
-        visitReflectiveCodeScalars(code, cap -> visitScalar(cap, todo));
+        visitReflectiveCodeScalars(code, cap -> {
+            addReachable(cap, todo);
+            visitScalar(cap, todo);
+        });
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
                 if (cap instanceof RuntimeScalar scalar) {
+                    addReachable(scalar, todo);
                     visitScalar(scalar, todo);
                 } else if (cap != null) {
                     addReachable(cap, todo);
@@ -848,6 +855,17 @@ public class ReachabilityWalker {
      */
     public static boolean isReachableFromExternalRoot(RuntimeBase target) {
         return new ExternalRootSnapshot().isReachable(target);
+    }
+
+    public static boolean isReachableFromTemporaryRoots(RuntimeBase target) {
+        if (target == null) return false;
+        ReachabilityWalker walker = new ReachabilityWalker();
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        for (RuntimeBase tempRoot : MortalList.snapshotTemporaryRoots()) {
+            walker.addReachable(tempRoot, todo);
+        }
+        walker.bfs(todo, true);
+        return walker.reachable.contains(target);
     }
 
     /**

@@ -44,6 +44,9 @@ public class SubroutineNode extends AbstractNode {
 
         if (block instanceof AbstractNode abstractNode) {
             abstractNode.setAnnotation("blockIsSubroutine", true);
+            if (attributes != null && attributes.contains("lvalue")) {
+                abstractNode.setAnnotation("subroutineIsLvalue", true);
+            }
         }
     }
 
@@ -60,4 +63,3 @@ public class SubroutineNode extends AbstractNode {
         visitor.visit(this);
     }
 }
-
