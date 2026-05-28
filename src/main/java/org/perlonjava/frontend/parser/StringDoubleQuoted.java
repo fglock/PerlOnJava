@@ -88,7 +88,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param parseEscapes        Whether to process escape sequences or preserve them literally
      * @param interpolateVariable Whether to interpolate variables
      * @param isRegexReplacement  Whether this is in a regex replacement context
-     * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
+     * @return An AST node representing the parsed string
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement) {
         return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, null, null, true);
@@ -106,7 +106,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param interpolateVariable Whether to interpolate variables
      * @param isRegexReplacement  Whether this is in a regex replacement context
      * @param sharedHeredocNodes  Optional list of heredoc nodes to share with parent parser
-     * @return An AST node representing the parsed string (StringNode, BinaryOperatorNode for join, etc.)
+     * @return An AST node representing the parsed string
      */
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes) {
         return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable, isRegexReplacement, sharedHeredocNodes, null, true);
@@ -357,17 +357,27 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     /**
-     * Creates a join node for multiple segments or returns single segment.
+     * Creates an interpolation node from string segments.
      *
-     * <p>This utility method handles the common pattern of joining string segments:
+     * <p>This utility method handles Perl's double-quoted string context:
      * <ul>
      *   <li>Empty list: returns empty string node</li>
-     *   <li>Single segment: returns it directly (no join needed)</li>
-     *   <li>Multiple segments: creates join("", segment1, segment2, ...)</li>
+     *   <li>Single string segment: returns it directly</li>
+     *   <li>Single non-string segment: stringifies it</li>
+     *   <li>Multiple segments: concatenates left-to-right so {@code .}
+     *       overload is preserved</li>
      * </ul>
      *
-     * @param nodes The list of nodes to join
-     * @return A single node representing the joined content
+     * <p>Do not lower multiple interpolation segments to
+     * {@code join("", ...)}. System Perl stringifies a single {@code "$obj"},
+     * but multi-segment interpolation such as {@code "$obj suffix"} behaves
+     * like concatenation and dispatches {@code .} overload. {@code join}
+     * would bypass that overload and force plain stringification. Array
+     * interpolation still arrives here as its own {@code join($", @array)}
+     * segment, so the special list separator behavior is preserved.
+     *
+     * @param nodes The list of interpolation segments
+     * @return A single node representing the interpolated content
      */
     private Node createJoinNode(List<Node> nodes) {
         return switch (nodes.size()) {

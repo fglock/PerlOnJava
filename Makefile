@@ -5,7 +5,7 @@ all: build
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	mvn clean test -B
+	gradlew.bat classes shadowJar --no-daemon --stacktrace
 else
 	./gradlew build --no-daemon --stacktrace
 endif
@@ -226,4 +226,3 @@ check-links:
 	@command -v lychee >/dev/null 2>&1 || { echo "Error: lychee not found. Install with: brew install lychee"; exit 1; }
 	@echo "Checking documentation links..."
 	lychee --offline *.md docs/ dev/design/ dev/architecture/
-

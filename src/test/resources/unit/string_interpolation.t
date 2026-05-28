@@ -11,6 +11,11 @@ subtest 'Basic variable interpolation' => sub {
     
     is("$var world", "hello world", "Simple scalar interpolation");
     is("@arr", "1 2 3", "Simple array interpolation");
+    {
+        local $" = "|";
+        is("prefix:@arr:suffix", "prefix:1|2|3:suffix",
+            'Array interpolation preserves custom list separator inside surrounding text');
+    }
     is("${var}_suffix", "hello_suffix", "Braced scalar interpolation");
     is("@{arr}_suffix", "1 2 3_suffix", "Braced array interpolation");
 };
