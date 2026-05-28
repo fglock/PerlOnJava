@@ -255,10 +255,10 @@ sub _install_pure_perl {
         my $parent_dir = @parts ? join('/', @parts) : '';
         (my $full_path = ($name || '')) =~ s{::}{/}g;
         my $libdir = $parent_dir
-            ? File::Spec->catdir($INSTALL_BASE, $parent_dir)
+            ? _install_dest($INSTALL_BASE, $parent_dir)
             : $INSTALL_BASE;
         my $autodir = $full_path
-            ? File::Spec->catdir($INSTALL_BASE, 'auto', $full_path)
+            ? _install_dest($INSTALL_BASE, "auto/$full_path")
             : $INSTALL_BASE;
         for my $key (keys %pm) {
             my $val = $pm{$key};
@@ -289,7 +289,7 @@ sub _install_pure_perl {
                     return unless -f && /$installable_re/;
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^lib/}{};
-                    $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                    $pm{$src} = _install_dest($INSTALL_BASE, $rel);
                     $pm_rel_seen{$rel} = 1;
                 },
                 no_chdir => 1,
@@ -306,7 +306,7 @@ sub _install_pure_perl {
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^blib/lib/}{};
                     return if $pm_rel_seen{$rel};
-                    $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel);
+                    $pm{$src} = _install_dest($INSTALL_BASE, $rel);
                     $pm_rel_seen{$rel} = 1;
                 },
                 no_chdir => 1,
@@ -333,7 +333,7 @@ sub _install_pure_perl {
                     my $dest_rel = $parent_dir
                         ? File::Spec->catfile($parent_dir, $file)
                         : $file;
-                    $pm{$file} = File::Spec->catfile($INSTALL_BASE, $dest_rel)
+                    $pm{$file} = _install_dest($INSTALL_BASE, $dest_rel)
                         unless exists $pm{$file};
                 }
                 closedir($dh);
@@ -349,7 +349,7 @@ sub _install_pure_perl {
                         my $rel = $parent_dir
                             ? File::Spec->catfile($parent_dir, $src)
                             : $src;
-                        $pm{$src} = File::Spec->catfile($INSTALL_BASE, $rel)
+                        $pm{$src} = _install_dest($INSTALL_BASE, $rel)
                             unless exists $pm{$src};
                     },
                     no_chdir => 1,
@@ -376,6 +376,11 @@ sub _install_pure_perl {
     # allowing other files from the same distribution to be installed
     # (e.g. IO::Socket::SSL::Utils from the IO-Socket-SSL dist).
     #
+    # Secondary bundled modules still need to be staged into blib/lib for
+    # this distribution's own tests.  IO-Compress ships lib/Compress/Zlib.pm
+    # as a compatibility layer; dropping it from blib makes its tests load
+    # PerlOnJava's bundled shim instead of the source under test.
+    #
     # Also track whether the *primary* module of this distribution was
     # the one we SKIPped: if so, the upstream tarball's t/*.t suite is
     # almost certainly testing a different architecture from our JAR
@@ -385,16 +390,22 @@ sub _install_pure_perl {
     (my $primary_rel = $name) =~ s{::}{/}g;
     $primary_rel .= '.pm';
     my $primary_pm_bundled = 0;
+    my %blib_only_pm;
     for my $src (sort keys %pm) {
         my $dest = $pm{$src};
         (my $rel = $dest) =~ s{^\Q$INSTALL_BASE\E/?}{};
         if ($rel && -f "jar:PERL5LIB/$rel") {
             print "  SKIP: $rel (bundled in PerlOnJava JAR)\n";
-            $primary_pm_bundled = 1 if $rel eq $primary_rel;
+            if ($rel eq $primary_rel) {
+                $primary_pm_bundled = 1;
+            } else {
+                $blib_only_pm{$src} = $dest;
+            }
             delete $pm{$src};
         }
     }
     $args->{_primary_pm_bundled} = $primary_pm_bundled;
+    $args->{_blib_only_pm} = \%blib_only_pm;
     if ($primary_pm_bundled && !$ENV{JCPAN_RUN_BUNDLED_TESTS}) {
         print "  NOTE: $primary_rel is bundled; upstream test suite will be skipped.\n";
         print "        Set JCPAN_RUN_BUNDLED_TESTS=1 to run it anyway.\n";
@@ -486,10 +497,10 @@ sub _build_share_file_mapping {
             
             my $dest_base;
             if ($type eq 'dist') {
-                $dest_base = File::Spec->catdir($INSTALL_BASE, 'auto', 'share', 'dist', $dist_name);
+                $dest_base = _install_dest($INSTALL_BASE, "auto/share/dist/$dist_name");
             } elsif ($type eq 'module' && $def->{module}) {
                 (my $mod_path = $def->{module}) =~ s/::/\//g;
-                $dest_base = File::Spec->catdir($INSTALL_BASE, 'auto', 'share', 'module', $mod_path);
+                $dest_base = _install_dest($INSTALL_BASE, "auto/share/module/$mod_path");
             } else {
                 next;
             }
@@ -522,7 +533,7 @@ sub _build_share_file_mapping {
                     
                     my $src = $File::Find::name;
                     (my $rel = $src) =~ s{^\Q$src_dir\E/?}{};
-                    $files{$src} = File::Spec->catfile($dest_base, $rel);
+                    $files{$src} = _install_dest($dest_base, $rel);
                 },
                 no_chdir => 1,
                 preprocess => sub {
@@ -543,6 +554,13 @@ sub _build_share_file_mapping {
     }
     
     return %files;
+}
+
+sub _install_dest {
+    my ($base, $rel) = @_;
+    return $base unless defined $rel && length $rel;
+    $rel =~ s{\\}{/}g;
+    return $base =~ m{[\\/]$} ? "$base$rel" : "$base/$rel";
 }
 
 sub _extract_version {
@@ -656,6 +674,7 @@ sub _create_install_makefile {
     # Merge share files into pm hash so they're staged to blib
     # This happens before the loop that processes %$pm
     %$pm = (%$pm, %share_files);
+    my %blib_pm = (%$pm, %{ $args->{_blib_only_pm} || {} });
     
     for my $src (sort keys %$pm) {
         my $dest = $pm->{$src};
@@ -664,7 +683,11 @@ sub _create_install_makefile {
             push @install_cmds, _shell_mkdir($dir);
         }
         push @install_cmds, _shell_cp($src, $dest, "$INSTALL_BASE/auto");
-        
+    }
+
+    for my $src (sort keys %blib_pm) {
+        my $dest = $blib_pm{$src};
+
         # Build blib/lib copy command: derive relative path from source
         # Source is like "lib/Text/CSV.pm" -> blib dest is "blib/lib/Text/CSV.pm"
         my $blib_rel;
@@ -747,13 +770,13 @@ sub _create_install_makefile {
     }
     my $pl_cmds_str = join("\n", @pl_cmds) || "\t\@true";
 
-    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !($pl_targets{$_} && !-e $_) } keys %$pm);
+    my $pm_deps_str = join(' ', sort grep { $_ !~ m{^blib/lib/} && !($pl_targets{$_} && !-e $_) } keys %blib_pm);
     $pm_deps_str = " $pm_deps_str" if length $pm_deps_str;
     
     # Make pm_to_blib target conditional - if no .pm files, make it a no-op
     # This handles cases like File::ShareDir::Install tests that only have share files
     my $pm_to_blib_target = "pm_to_blib::";
-    if (%$pm) {
+    if (%blib_pm) {
         $pm_to_blib_target = "pm_to_blib::$pm_deps_str";
     }
 

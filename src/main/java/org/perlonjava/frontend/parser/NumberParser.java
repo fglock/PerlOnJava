@@ -234,6 +234,10 @@ public class NumberParser {
             String actualNumberPart = initialPart.substring(0, pIndex);
             exponentStr = initialPart.substring(pIndex + 1);
             numberStr.append(cleanUnderscores(actualNumberPart));
+            if (exponentStr.isEmpty()) {
+                exponentStr = parseRequiredExponentTail(parser,
+                        "Malformed hexadecimal floating-point exponent");
+            }
         } else {
             numberStr.append(cleanUnderscores(initialPart));
         }
@@ -242,6 +246,7 @@ public class NumberParser {
         if (exponentStr.isEmpty() && parser.tokenIndex < parser.tokens.size() &&
                 parser.tokens.get(parser.tokenIndex).text.equals(".")) {
 
+            int beforeFractionalPart = parser.tokenIndex;
             hasFractionalPart = true;
             TokenUtils.consume(parser); // consume '.'
 
@@ -269,6 +274,10 @@ public class NumberParser {
                         }
                         exponentStr = currentToken.substring(tokenPIndex + 1);
                         TokenUtils.consume(parser);
+                        if (exponentStr.isEmpty()) {
+                            exponentStr = parseRequiredExponentTail(parser,
+                                    "Malformed hexadecimal floating-point exponent");
+                        }
                         break;
                     } else if (format.digitValidator.test(currentToken.replaceAll("_", ""))) {
                         String digitStr = cleanUnderscores(TokenUtils.consume(parser).text);
@@ -278,12 +287,22 @@ public class NumberParser {
                     }
                 } else if (currentToken.equalsIgnoreCase("p")) {
                     TokenUtils.consume(parser);
+                    exponentStr = parseRequiredExponentTail(parser,
+                            "Malformed hexadecimal floating-point exponent");
                     break;
                 } else {
                     break;
                 }
             }
-            numberStr.append(".").append(fractionalPart);
+            if (format == HEX_FORMAT && exponentStr.isEmpty()) {
+                if (numberStr.isEmpty()) {
+                    parser.throwError("Invalid hexadecimal number");
+                }
+                parser.tokenIndex = beforeFractionalPart;
+                hasFractionalPart = false;
+            } else {
+                numberStr.append(".").append(fractionalPart);
+            }
         }
 
         // Parse exponent if not found yet
@@ -296,7 +315,7 @@ public class NumberParser {
             } else {
                 // Save token index for backtracking
                 int savedTokenIndex = parser.tokenIndex;
-                exponentStr = parseHexExponentTokens(parser);
+                exponentStr = checkHexExponent(parser);
                 if (exponentStr.isEmpty()) {
                     // No exponent found, backtrack
                     parser.tokenIndex = savedTokenIndex;
@@ -406,28 +425,6 @@ public class NumberParser {
         }
     }
 
-    private static String parseHexExponentTokens(Parser parser) {
-        if (parser.tokenIndex >= parser.tokens.size()) {
-            return "";
-        }
-
-        StringBuilder exponentStr = new StringBuilder();
-        String currentToken = parser.tokens.get(parser.tokenIndex).text;
-        if (currentToken.equals("-") || currentToken.equals("+")) {
-            exponentStr.append(TokenUtils.consume(parser).text);
-        }
-
-        if (parser.tokenIndex < parser.tokens.size() &&
-                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
-            exponentStr.append(cleanUnderscores(TokenUtils.consume(parser).text));
-        } else {
-            // Not a valid exponent - return empty string
-            return "";
-        }
-
-        return exponentStr.toString();
-    }
-
     private static String checkHexExponent(Parser parser) {
         if (parser.tokenIndex >= parser.tokens.size()) {
             return "";
@@ -440,18 +437,8 @@ public class NumberParser {
             TokenUtils.consume(parser);
 
             if (exponentStr.isEmpty()) {
-                if (parser.tokenIndex < parser.tokens.size() &&
-                        (parser.tokens.get(parser.tokenIndex).text.equals("-") ||
-                                parser.tokens.get(parser.tokenIndex).text.equals("+"))) {
-                    exponentStr += TokenUtils.consume(parser).text;
-                }
-
-                if (parser.tokenIndex < parser.tokens.size() &&
-                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
-                    exponentStr += TokenUtils.consume(parser).text;
-                } else {
-                    parser.throwError("Malformed hexadecimal floating-point exponent");
-                }
+                exponentStr = parseRequiredExponentTail(parser,
+                        "Malformed hexadecimal floating-point exponent");
             }
             return cleanUnderscores(exponentStr);
         } else if (currentTokenText.toLowerCase().startsWith("p")) {
@@ -459,23 +446,31 @@ public class NumberParser {
             TokenUtils.consume(parser);
 
             if (exponentStr.isEmpty()) {
-                if (parser.tokenIndex < parser.tokens.size() &&
-                        (parser.tokens.get(parser.tokenIndex).text.equals("-") ||
-                                parser.tokens.get(parser.tokenIndex).text.equals("+"))) {
-                    exponentStr += TokenUtils.consume(parser).text;
-                }
-
-                if (parser.tokenIndex < parser.tokens.size() &&
-                        parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
-                    exponentStr += TokenUtils.consume(parser).text;
-                } else {
-                    parser.throwError("Malformed floating-point exponent");
-                }
+                exponentStr = parseRequiredExponentTail(parser,
+                        "Malformed floating-point exponent");
             }
             return cleanUnderscores(exponentStr);
         }
 
         return "";
+    }
+
+    private static String parseRequiredExponentTail(Parser parser, String errorMessage) {
+        StringBuilder exponentStr = new StringBuilder();
+        if (parser.tokenIndex < parser.tokens.size() &&
+                (parser.tokens.get(parser.tokenIndex).text.equals("-") ||
+                        parser.tokens.get(parser.tokenIndex).text.equals("+"))) {
+            exponentStr.append(TokenUtils.consume(parser).text);
+        }
+
+        if (parser.tokenIndex < parser.tokens.size() &&
+                parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+            exponentStr.append(TokenUtils.consume(parser).text);
+        } else {
+            parser.throwError(errorMessage);
+        }
+
+        return cleanUnderscores(exponentStr.toString());
     }
 
     private static int checkBinaryExponent(Parser parser) {

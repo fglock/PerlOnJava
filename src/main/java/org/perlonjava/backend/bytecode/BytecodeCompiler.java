@@ -1230,12 +1230,13 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Exit scope restores register state.
-        // Flush mortal list for non-subroutine, non-do blocks so DESTROY fires
-        // promptly at scope exit. Subroutine body blocks and do-blocks must NOT
-        // flush — the implicit return value may still be in a register and
-        // flushing could destroy it before the caller captures it.
+        // Flush mortal list for void non-subroutine, non-do blocks so DESTROY fires
+        // promptly at scope exit. Value-producing blocks must NOT flush — their
+        // implicit result may still be in a register and flushing could destroy it
+        // before the parent expression or caller captures it.
         exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
-                && !node.getBooleanAnnotation("blockIsDoBlock"));
+                && !node.getBooleanAnnotation("blockIsDoBlock")
+                && outerResultReg < 0);
 
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -1406,9 +1407,10 @@ public class BytecodeCompiler implements Visitor {
             opcode = Opcodes.LOAD_VSTRING;
         } else if (node.forceByteString) {
             opcode = Opcodes.LOAD_BYTE_STRING;
+        } else if (isAsciiOnly(node.value)) {
+            opcode = Opcodes.LOAD_BYTE_STRING;
         } else if (emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
-                && !emitterContext.compilerOptions.isUnicodeSource) {
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
             // Under `no utf8` - use BYTE_STRING, unless it contains wide characters (> 255)
             // Wide characters (like \x{100}) force the string to be UTF-8 even without `use utf8`
             boolean hasWideChars = false;
@@ -1450,6 +1452,15 @@ public class BytecodeCompiler implements Visitor {
         emit(strIndex);
 
         lastResultReg = rd;
+    }
+
+    private static boolean isAsciiOnly(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 127) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

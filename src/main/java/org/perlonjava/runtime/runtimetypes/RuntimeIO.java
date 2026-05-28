@@ -328,6 +328,10 @@ public class RuntimeIO extends RuntimeScalar {
      * @param fd the file descriptor number to register at
      */
     public void registerExternalFd(int fd) {
+        Integer oldFd = ioToFileno.remove(this);
+        if (oldFd != null && oldFd != fd) {
+            filenoToIO.remove(oldFd);
+        }
         filenoToIO.put(fd, this);
         ioToFileno.put(this, fd);
         // Advance nextFileno past this fd to avoid collisions
@@ -1167,7 +1171,7 @@ public class RuntimeIO extends RuntimeScalar {
         if (fh == null) {
             // Check if object is eligible for overloading `*{}`
             int blessId = RuntimeScalarType.blessedId(runtimeScalar);
-            if (blessId < 0) {
+            if (blessId != 0) {
                 // Prepare overload context and check if object is eligible for overloading
                 OverloadContext ctx = OverloadContext.prepare(blessId);
                 if (ctx != null) {

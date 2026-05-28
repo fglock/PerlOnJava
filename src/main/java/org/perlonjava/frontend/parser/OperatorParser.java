@@ -868,12 +868,6 @@ public class OperatorParser {
                     blockNode.elements.size() == 1 &&
                     blockNode.elements.get(0) instanceof StringNode stringNode) {
 
-                // Check strict refs at parse time - but only for defined operator
-                // Standard Perl allows &{string} with strict refs for exists/delete
-                if (operator.equals("defined") && parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_STRICT_REFS)) {
-                    throw new PerlCompilerException("Can't use string (\"" + stringNode.value + "\") as a subroutine ref while \"strict refs\" in use");
-                }
-
                 // Don't transform &{string} patterns - handle them directly in emitter
                 // This preserves the semantic difference between &{string} and \&{string}
                 // For all operators (defined/exists/delete), keep &{string} as-is and handle in emitter

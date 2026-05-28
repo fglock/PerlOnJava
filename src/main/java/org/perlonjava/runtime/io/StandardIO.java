@@ -119,6 +119,20 @@ public class StandardIO implements IOHandle {
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
         try {
             if (inputStream != null) {
+                if (StandardCharsets.ISO_8859_1.equals(charset)) {
+                    byte[] buffer = new byte[maxBytes];
+                    int bytesRead = inputStream.read(buffer);
+
+                    if (bytesRead == -1) {
+                        isEOF = true;
+                        return new RuntimeScalar("");
+                    }
+
+                    byte[] result = new byte[bytesRead];
+                    System.arraycopy(buffer, 0, result, 0, bytesRead);
+                    return new RuntimeScalar(result);
+                }
+
                 if (decoderHelper == null) {
                     decoderHelper = new CharsetDecoderHelper();
                 }
@@ -192,13 +206,9 @@ public class StandardIO implements IOHandle {
                     return new RuntimeScalar("");
                 }
 
-                // Convert bytes to string representation
-                StringBuilder result = new StringBuilder(bytesRead);
-                for (int i = 0; i < bytesRead; i++) {
-                    result.append((char) (buffer[i] & 0xFF));
-                }
-
-                return new RuntimeScalar(result.toString());
+                byte[] result = new byte[bytesRead];
+                System.arraycopy(buffer, 0, result, 0, bytesRead);
+                return new RuntimeScalar(result);
             } catch (IOException e) {
                 getGlobalVariable("main::!").set(e.getMessage());
                 return new RuntimeScalar(); // undef

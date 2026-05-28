@@ -1,6 +1,10 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
+
+import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
@@ -10,6 +14,36 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  * It includes both numeric and string comparison methods.
  */
 public class CompareOperators {
+    private static boolean bytesHintActive() {
+        return (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
+    }
+
+    private static String bytesForStringCompare(RuntimeScalar scalar) {
+        String value = scalar.toString();
+        if (scalar.type == RuntimeScalarType.BYTE_STRING) {
+            return value;
+        }
+        if (isLatin1(value)) {
+            return value;
+        }
+        return new String(value.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
+    }
+
+    private static boolean isLatin1(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 0xFF) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean stringEquals(RuntimeScalar arg1, RuntimeScalar arg2) {
+        if (bytesHintActive()) {
+            return bytesForStringCompare(arg1).equals(bytesForStringCompare(arg2));
+        }
+        return arg1.toString().equals(arg2.toString());
+    }
 
     /**
      * Gets the location string for warning messages using caller().
@@ -461,7 +495,7 @@ public class CompareOperators {
             throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "eq");
         }
 
-        return getScalarBoolean(runtimeScalar.toString().equals(arg2.toString()));
+        return getScalarBoolean(stringEquals(runtimeScalar, arg2));
     }
 
     /**
@@ -494,7 +528,7 @@ public class CompareOperators {
             throwIfFallbackDenied(runtimeScalar, blessId, arg2, blessId2, "ne");
         }
 
-        return getScalarBoolean(!runtimeScalar.toString().equals(arg2.toString()));
+        return getScalarBoolean(!stringEquals(runtimeScalar, arg2));
     }
 
     /**

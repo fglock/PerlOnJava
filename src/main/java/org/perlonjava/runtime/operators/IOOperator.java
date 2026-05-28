@@ -1081,6 +1081,9 @@ public class IOOperator {
                 }
                 return argv.eof();
             }
+            if (fileHandle.value instanceof RuntimeGlob) {
+                return scalarTrue;
+            }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));
             return scalarUndef;
@@ -1109,6 +1112,9 @@ public class IOOperator {
                     return scalarTrue;
                 }
                 return argv.eof();
+            }
+            if (fileHandle.value instanceof RuntimeGlob) {
+                return scalarTrue;
             }
             GlobalVariable.getGlobalVariable("main::!")
                     .set(new RuntimeScalar(9));

@@ -1,5 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -29,35 +31,78 @@ public class CompressZlib extends PerlModuleBase {
             cz.registerMethod("memGunzip", null);
             cz.registerMethod("crc32", null);
             cz.registerMethod("adler32", null);
+            cz.registerMethod("zlib_version", "zlibVersion", null);
+            cz.registerMethod("ZLIB_VERSION", null);
+            cz.registerMethod("ZLIB_VERNUM", null);
             cz.registerMethod("Z_OK", null);
             cz.registerMethod("Z_STREAM_END", null);
+            cz.registerMethod("Z_NEED_DICT", null);
+            cz.registerMethod("Z_ERRNO", null);
             cz.registerMethod("Z_STREAM_ERROR", null);
             cz.registerMethod("Z_DATA_ERROR", null);
+            cz.registerMethod("Z_MEM_ERROR", null);
             cz.registerMethod("Z_BUF_ERROR", null);
+            cz.registerMethod("Z_VERSION_ERROR", null);
+            cz.registerMethod("Z_NO_COMPRESSION", null);
             cz.registerMethod("Z_NO_FLUSH", null);
+            cz.registerMethod("Z_PARTIAL_FLUSH", null);
             cz.registerMethod("Z_SYNC_FLUSH", null);
             cz.registerMethod("Z_FULL_FLUSH", null);
             cz.registerMethod("Z_FINISH", null);
+            cz.registerMethod("Z_BLOCK", null);
+            cz.registerMethod("Z_TREES", null);
             cz.registerMethod("Z_DEFAULT_COMPRESSION", null);
             cz.registerMethod("Z_BEST_SPEED", null);
             cz.registerMethod("Z_BEST_COMPRESSION", null);
             cz.registerMethod("Z_FILTERED", null);
             cz.registerMethod("Z_HUFFMAN_ONLY", null);
+            cz.registerMethod("Z_RLE", null);
+            cz.registerMethod("Z_FIXED", null);
             cz.registerMethod("Z_DEFAULT_STRATEGY", null);
             cz.registerMethod("Z_DEFLATED", null);
+            cz.registerMethod("Z_NULL", null);
+            cz.registerMethod("Z_ASCII", null);
+            cz.registerMethod("Z_BINARY", null);
+            cz.registerMethod("Z_UNKNOWN", null);
             cz.registerMethod("WANT_GZIP", null);
             cz.registerMethod("WANT_GZIP_OR_ZLIB", null);
             cz.registerMethod("MAX_WBITS", null);
+            cz.registerMethod("MAX_MEM_LEVEL", null);
+            cz.registerMethod("DEF_WBITS", null);
+            cz.registerMethod("OS_CODE", null);
             cz.registerMethod("inflate", "inflateMethod", null);
             cz.registerMethod("deflate", "deflateMethod", null);
             cz.registerMethod("flush", null);
+            cz.registerMethod("msg", null);
+            cz.registerMethod("total_in", "totalIn", null);
+            cz.registerMethod("total_out", "totalOut", null);
+            cz.registerMethod("dict_adler", "dictAdler", null);
+            cz.registerMethod("get_Level", "getLevel", null);
+            cz.registerMethod("get_Strategy", "getStrategy", null);
+            cz.registerMethod("get_Bufsize", "getBufsize", null);
+            cz.registerMethod("deflateParams", null);
+            cz.registerMethod("inflateSync", null);
             cz.registerMethod("gzopen", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing Compress::Zlib method: " + e.getMessage());
         }
 
+        GlobalVariable.getGlobalVariable("Compress::Zlib::gzerrno").set(new RuntimeScalar(0));
+
         // Initialize gzFile methods (gzread, gzwrite, gzreadline, gzeof, gzclose)
         CompressZlibGzFile.initialize();
+    }
+
+    public static RuntimeList zlibVersion(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("1.2.13").getList();
+    }
+
+    public static RuntimeList ZLIB_VERSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar("1.2.13").getList();
+    }
+
+    public static RuntimeList ZLIB_VERNUM(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0x12D0).getList();
     }
 
     public static RuntimeList Z_OK(RuntimeArray args, int ctx) {
@@ -68,6 +113,14 @@ public class CompressZlib extends PerlModuleBase {
         return new RuntimeScalar(1).getList();
     }
 
+    public static RuntimeList Z_NEED_DICT(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(2).getList();
+    }
+
+    public static RuntimeList Z_ERRNO(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(-1).getList();
+    }
+
     public static RuntimeList Z_STREAM_ERROR(RuntimeArray args, int ctx) {
         return new RuntimeScalar(-2).getList();
     }
@@ -76,12 +129,28 @@ public class CompressZlib extends PerlModuleBase {
         return new RuntimeScalar(-3).getList();
     }
 
+    public static RuntimeList Z_MEM_ERROR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(-4).getList();
+    }
+
     public static RuntimeList Z_BUF_ERROR(RuntimeArray args, int ctx) {
         return new RuntimeScalar(-5).getList();
     }
 
+    public static RuntimeList Z_VERSION_ERROR(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(-6).getList();
+    }
+
+    public static RuntimeList Z_NO_COMPRESSION(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
     public static RuntimeList Z_NO_FLUSH(RuntimeArray args, int ctx) {
         return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList Z_PARTIAL_FLUSH(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
     }
 
     public static RuntimeList Z_SYNC_FLUSH(RuntimeArray args, int ctx) {
@@ -94,6 +163,14 @@ public class CompressZlib extends PerlModuleBase {
 
     public static RuntimeList Z_FINISH(RuntimeArray args, int ctx) {
         return new RuntimeScalar(4).getList();
+    }
+
+    public static RuntimeList Z_BLOCK(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(5).getList();
+    }
+
+    public static RuntimeList Z_TREES(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(6).getList();
     }
 
     public static RuntimeList Z_DEFAULT_COMPRESSION(RuntimeArray args, int ctx) {
@@ -116,12 +193,36 @@ public class CompressZlib extends PerlModuleBase {
         return new RuntimeScalar(2).getList();
     }
 
+    public static RuntimeList Z_RLE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(3).getList();
+    }
+
+    public static RuntimeList Z_FIXED(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(4).getList();
+    }
+
     public static RuntimeList Z_DEFAULT_STRATEGY(RuntimeArray args, int ctx) {
         return new RuntimeScalar(0).getList();
     }
 
     public static RuntimeList Z_DEFLATED(RuntimeArray args, int ctx) {
         return new RuntimeScalar(8).getList();
+    }
+
+    public static RuntimeList Z_NULL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList Z_ASCII(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(1).getList();
+    }
+
+    public static RuntimeList Z_BINARY(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList Z_UNKNOWN(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(2).getList();
     }
 
     public static RuntimeList WANT_GZIP(RuntimeArray args, int ctx) {
@@ -136,15 +237,29 @@ public class CompressZlib extends PerlModuleBase {
         return new RuntimeScalar(15).getList();
     }
 
+    public static RuntimeList MAX_MEM_LEVEL(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(9).getList();
+    }
+
+    public static RuntimeList DEF_WBITS(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(15).getList();
+    }
+
+    public static RuntimeList OS_CODE(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(3).getList();
+    }
+
     /**
      * Helper to extract byte data from a scalar or scalar reference.
      */
-    private static byte[] getInputBytes(RuntimeScalar dataScalar) {
+    private static byte[] getInputBytes(RuntimeScalar dataScalar, String operation) {
         RuntimeScalar actual = dataScalar;
         if (dataScalar.type == RuntimeScalarType.REFERENCE) {
             actual = dataScalar.scalarDeref();
         }
-        return actual.toString().getBytes(StandardCharsets.ISO_8859_1);
+        String data = actual.toString();
+        StringParser.assertNoWideCharacters(data, operation);
+        return data.getBytes(StandardCharsets.ISO_8859_1);
     }
 
     /**
@@ -158,7 +273,7 @@ public class CompressZlib extends PerlModuleBase {
         }
 
         int level = Deflater.DEFAULT_COMPRESSION;
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "compress");
 
         if (args.size() > 1) {
             level = args.get(1).getInt();
@@ -200,7 +315,7 @@ public class CompressZlib extends PerlModuleBase {
             return scalarUndef.getList();
         }
 
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "uncompress");
 
         try {
             Inflater inflater = new Inflater(false); // nowrap=false for zlib format
@@ -243,7 +358,7 @@ public class CompressZlib extends PerlModuleBase {
             return scalarUndef.getList();
         }
 
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "memGzip");
 
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream(input.length + 64);
@@ -269,7 +384,7 @@ public class CompressZlib extends PerlModuleBase {
             return scalarUndef.getList();
         }
 
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "memGunzip");
 
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(input);
@@ -301,7 +416,7 @@ public class CompressZlib extends PerlModuleBase {
             return new RuntimeScalar(0).getList();
         }
 
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "crc32");
         CRC32 crc = new CRC32();
 
         if (args.size() > 1 && args.get(1).getDefinedBoolean()) {
@@ -364,7 +479,7 @@ public class CompressZlib extends PerlModuleBase {
             return new RuntimeScalar(1).getList(); // Adler-32 of empty data is 1
         }
 
-        byte[] input = getInputBytes(args.get(0));
+        byte[] input = getInputBytes(args.get(0), "adler32");
         Adler32 adler = new Adler32();
 
         if (args.size() > 1 && args.get(1).getDefinedBoolean()) {
@@ -403,6 +518,8 @@ public class CompressZlib extends PerlModuleBase {
             Inflater inflater = new Inflater(nowrap);
             RuntimeHash self = new RuntimeHash();
             self.put(INFLATER_KEY, new RuntimeScalar(inflater));
+            self.put("_dict_adler", new RuntimeScalar(0));
+            self.put("_bufsize", new RuntimeScalar(4096));
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Zlib"));
             return ref.getList();
@@ -435,6 +552,10 @@ public class CompressZlib extends PerlModuleBase {
             Deflater deflater = new Deflater(level, nowrap);
             RuntimeHash self = new RuntimeHash();
             self.put(DEFLATER_KEY, new RuntimeScalar(deflater));
+            self.put("_level", new RuntimeScalar(level));
+            self.put("_strategy", new RuntimeScalar(0));
+            self.put("_dict_adler", new RuntimeScalar(0));
+            self.put("_bufsize", new RuntimeScalar(4096));
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Zlib"));
             return ref.getList();
@@ -564,40 +685,172 @@ public class CompressZlib extends PerlModuleBase {
         return outputScalar.getList();
     }
 
+    public static RuntimeList msg(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return scalarUndef.getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar msg = self.get("_msg");
+        if (msg == null || !msg.getDefinedBoolean() || msg.toString().isEmpty()) {
+            return scalarUndef.getList();
+        }
+        return msg.getList();
+    }
+
+    public static RuntimeList totalIn(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
+        if (deflaterScalar != null && deflaterScalar.value instanceof Deflater deflater) {
+            return new RuntimeScalar(deflater.getBytesRead()).getList();
+        }
+        RuntimeScalar inflaterScalar = self.get(INFLATER_KEY);
+        if (inflaterScalar != null && inflaterScalar.value instanceof Inflater inflater) {
+            return new RuntimeScalar(inflater.getBytesRead()).getList();
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList totalOut(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
+        if (deflaterScalar != null && deflaterScalar.value instanceof Deflater deflater) {
+            return new RuntimeScalar(deflater.getBytesWritten()).getList();
+        }
+        RuntimeScalar inflaterScalar = self.get(INFLATER_KEY);
+        if (inflaterScalar != null && inflaterScalar.value instanceof Inflater inflater) {
+            return new RuntimeScalar(inflater.getBytesWritten()).getList();
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList dictAdler(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar dictAdler = self.get("_dict_adler");
+        return (dictAdler == null ? new RuntimeScalar(0) : dictAdler).getList();
+    }
+
+    public static RuntimeList getLevel(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(Deflater.DEFAULT_COMPRESSION).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar level = self.get("_level");
+        return (level == null ? new RuntimeScalar(Deflater.DEFAULT_COMPRESSION) : level).getList();
+    }
+
+    public static RuntimeList getStrategy(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(0).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar strategy = self.get("_strategy");
+        return (strategy == null ? new RuntimeScalar(0) : strategy).getList();
+    }
+
+    public static RuntimeList getBufsize(RuntimeArray args, int ctx) {
+        if (args.isEmpty()) {
+            return new RuntimeScalar(4096).getList();
+        }
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar bufsize = self.get("_bufsize");
+        return (bufsize == null ? new RuntimeScalar(4096) : bufsize).getList();
+    }
+
+    public static RuntimeList deflateParams(RuntimeArray args, int ctx) {
+        if (args.size() < 3 || args.size() % 2 == 0) {
+            throw new PerlCompilerException("Compress::Raw::Zlib::deflateParams needs Level and/or Strategy");
+        }
+
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar deflaterScalar = self.get(DEFLATER_KEY);
+        if (deflaterScalar == null || !(deflaterScalar.value instanceof Deflater deflater)) {
+            return new RuntimeScalar(-2).getList();
+        }
+
+        boolean sawKnown = false;
+        for (int i = 1; i < args.size() - 1; i += 2) {
+            String key = args.get(i).toString();
+            int value = args.get(i + 1).getInt();
+            if (key.equals("-Level") || key.equals("Level")) {
+                deflater.setLevel(value);
+                self.put("_level", new RuntimeScalar(value));
+                sawKnown = true;
+            } else if (key.equals("-Strategy") || key.equals("Strategy")) {
+                deflater.setStrategy(value);
+                self.put("_strategy", new RuntimeScalar(value));
+                sawKnown = true;
+            } else {
+                throw new PerlCompilerException("Compress::Raw::Zlib::deflateStream::deflateParams: unknown key value");
+            }
+        }
+        if (!sawKnown) {
+            throw new PerlCompilerException("Compress::Raw::Zlib::deflateParams needs Level and/or Strategy");
+        }
+        return new RuntimeScalar(0).getList();
+    }
+
+    public static RuntimeList inflateSync(RuntimeArray args, int ctx) {
+        return new RuntimeScalar(0).getList();
+    }
+
     /**
      * gzopen($filename, $mode)
-     * Opens a gzip file for reading ('rb') or writing ('wb').
+     * Opens a gzip file for reading ('rb'), writing ('wb'), or appending ('ab').
      * Returns a blessed Compress::Zlib::gzFile object, or undef on error.
      */
     public static RuntimeList gzopen(RuntimeArray args, int ctx) {
         if (args.size() < 2) {
-            return scalarUndef.getList();
+            throw new PerlCompilerException("Not enough arguments for Compress::Zlib::gzopen");
         }
 
         // Skip 'self' if called as Compress::Zlib->gzopen() (class method)
         int argOffset = 0;
         String firstArg = args.get(0).toString();
-        if (firstArg.equals("Compress::Zlib") || firstArg.contains("::")) {
+        if (args.get(0).isString() && firstArg.equals("Compress::Zlib")) {
             argOffset = 1;
         }
 
         if (args.size() < argOffset + 2) {
-            return scalarUndef.getList();
+            throw new PerlCompilerException("Not enough arguments for Compress::Zlib::gzopen");
         }
 
-        String filename = args.get(argOffset).toString();
+        RuntimeScalar target = args.get(argOffset);
+        String filename = target.toString();
         String mode = args.get(argOffset + 1).toString();
 
         try {
             RuntimeHash self = new RuntimeHash();
             self.put("_mode", new RuntimeScalar(mode));
             self.put("_eof", new RuntimeScalar(0));
+            self.put("_pos", new RuntimeScalar(0));
+            GlobalVariable.getGlobalVariable("Compress::Zlib::gzerrno").set(new RuntimeScalar(0));
 
             if (mode.startsWith("r")) {
                 // Read mode. zlib's gzopen transparently reads non-gzip files
                 // in 'rb' mode, so detect the gzip magic and fall back to a
                 // plain InputStream when the file isn't actually gzip-compressed.
-                InputStream fis = new BufferedInputStream(new FileInputStream(filename));
+                InputStream fis;
+                if (filename.equals("-")) {
+                    RuntimeIO stdin = GlobalVariable.getGlobalIO("main::STDIN").getRuntimeIO();
+                    fis = new BufferedInputStream(new RuntimeIOInputStream(stdin, false));
+                } else if (!target.isString()) {
+                    RuntimeIO fh = target.getRuntimeIO();
+                    if (fh == null || fh.ioHandle == null) {
+                        return scalarUndef.getList();
+                    }
+                    fis = new BufferedInputStream(new RuntimeIOInputStream(fh, true));
+                } else {
+                    fis = new BufferedInputStream(new FileInputStream(filename));
+                }
                 fis.mark(2);
                 int b1 = fis.read();
                 int b2 = fis.read();
@@ -608,10 +861,23 @@ public class CompressZlib extends PerlModuleBase {
                 } else {
                     is = fis;
                 }
-                self.put("_stream", new RuntimeScalar(is));
-            } else if (mode.startsWith("w")) {
-                // Write mode - check for compression level
-                OutputStream fos = new FileOutputStream(filename);
+                self.put("_stream", new RuntimeScalar(new PushbackInputStream(is, 1)));
+            } else if (mode.startsWith("w") || mode.startsWith("a")) {
+                // Appending writes an additional gzip member, which gzip readers
+                // concatenate when reading the stream back.
+                OutputStream fos;
+                if (filename.equals("-")) {
+                    RuntimeIO stdout = GlobalVariable.getGlobalIO("main::STDOUT").getRuntimeIO();
+                    fos = new RuntimeIOOutputStream(stdout, false);
+                } else if (!target.isString()) {
+                    RuntimeIO fh = target.getRuntimeIO();
+                    if (fh == null || fh.ioHandle == null) {
+                        return scalarUndef.getList();
+                    }
+                    fos = new RuntimeIOOutputStream(fh, true);
+                } else {
+                    fos = new FileOutputStream(filename, mode.startsWith("a"));
+                }
                 GZIPOutputStream gos = new GZIPOutputStream(fos);
                 self.put("_stream", new RuntimeScalar(gos));
             } else {
@@ -622,7 +888,90 @@ public class CompressZlib extends PerlModuleBase {
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Zlib::gzFile"));
             return ref.getList();
         } catch (IOException e) {
+            GlobalVariable.getGlobalVariable("Compress::Zlib::gzerrno").set(new RuntimeScalar(-1));
             return scalarUndef.getList();
+        }
+    }
+
+    private static class RuntimeIOInputStream extends InputStream {
+        private final RuntimeIO fh;
+        private final boolean closeUnderlying;
+
+        RuntimeIOInputStream(RuntimeIO fh, boolean closeUnderlying) {
+            this.fh = fh;
+            this.closeUnderlying = closeUnderlying;
+        }
+
+        @Override
+        public int read() throws IOException {
+            byte[] one = new byte[1];
+            int count = read(one, 0, 1);
+            return count < 0 ? -1 : one[0] & 0xFF;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (len == 0) {
+                return 0;
+            }
+            RuntimeScalar chunk = fh.ioHandle.read(len);
+            if (chunk == null || !chunk.getDefinedBoolean()) {
+                return -1;
+            }
+            String data = chunk.toString();
+            if (data.isEmpty()) {
+                return -1;
+            }
+            int count = Math.min(len, data.length());
+            for (int i = 0; i < count; i++) {
+                b[off + i] = (byte) (data.charAt(i) & 0xFF);
+            }
+            return count;
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closeUnderlying) {
+                fh.ioHandle.close();
+            }
+        }
+    }
+
+    private static class RuntimeIOOutputStream extends OutputStream {
+        private final RuntimeIO fh;
+        private final boolean closeUnderlying;
+
+        RuntimeIOOutputStream(RuntimeIO fh, boolean closeUnderlying) {
+            this.fh = fh;
+            this.closeUnderlying = closeUnderlying;
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            byte[] one = new byte[] { (byte) b };
+            write(one, 0, 1);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            String data = new String(b, off, len, StandardCharsets.ISO_8859_1);
+            RuntimeScalar ok = fh.ioHandle.write(data);
+            if (ok == null || !ok.getDefinedBoolean()) {
+                throw new IOException("write failed");
+            }
+        }
+
+        @Override
+        public void flush() throws IOException {
+            fh.ioHandle.flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            flush();
+            if (closeUnderlying) {
+                fh.ioHandle.close();
+            }
         }
     }
 }

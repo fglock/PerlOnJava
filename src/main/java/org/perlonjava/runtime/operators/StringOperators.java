@@ -4,6 +4,8 @@ import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
 import com.ibm.icu.text.CaseMap;
 import org.perlonjava.frontend.parser.NumberParser;
+import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -18,6 +20,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
  * A utility class that provides various string operations on {@link RuntimeScalar} objects.
  */
 public class StringOperators {
+    private static boolean bytesHintActive() {
+        return (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
+    }
 
     /**
      * Returns the length of the string representation of the given {@link RuntimeScalar}.
@@ -432,6 +437,10 @@ public class StringOperators {
         String bStr = b.toString();
         String aStr = runtimeScalar.toString();
 
+        if (bytesHintActive()) {
+            return stringConcatBytes(aStr, bStr);
+        }
+
         // In Perl, concatenation produces a UTF-8 string only if at least one
         // operand has the UTF-8 flag on (STRING type). Non-STRING types
         // (BYTE_STRING, INTEGER, DOUBLE, UNDEF) are all byte-compatible.
@@ -485,6 +494,10 @@ public class StringOperators {
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
         String bStr = bResolved.toString();
+
+        if (bytesHintActive()) {
+            return stringConcatBytes(aStr, bStr);
+        }
 
         if (aResolved.type == RuntimeScalarType.STRING || bResolved.type == RuntimeScalarType.STRING) {
             return new RuntimeScalar(aStr + bStr);
@@ -836,6 +849,10 @@ public class StringOperators {
         String aStr = runtimeScalar.toStringNoOverload();
         String bStr = b.toStringNoOverload();
 
+        if (bytesHintActive()) {
+            return stringConcatBytes(aStr, bStr);
+        }
+
         if (runtimeScalar.type == RuntimeScalarType.STRING || b.type == RuntimeScalarType.STRING) {
             return new RuntimeScalar(aStr + bStr);
         }
@@ -873,6 +890,31 @@ public class StringOperators {
         }
 
         return new RuntimeScalar(aStr + bStr);
+    }
+
+    private static RuntimeScalar stringConcatBytes(String a, String b) {
+        byte[] aBytes = stringBytesForBytesPragma(a);
+        byte[] bBytes = stringBytesForBytesPragma(b);
+        byte[] out = new byte[aBytes.length + bBytes.length];
+        System.arraycopy(aBytes, 0, out, 0, aBytes.length);
+        System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
+        return new RuntimeScalar(out);
+    }
+
+    private static byte[] stringBytesForBytesPragma(String value) {
+        if (isLatin1(value)) {
+            return value.getBytes(StandardCharsets.ISO_8859_1);
+        }
+        return value.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static boolean isLatin1(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

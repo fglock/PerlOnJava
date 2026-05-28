@@ -34,6 +34,7 @@ public class TieHandle extends RuntimeIO {
      * The tied object (handler) that implements the tie interface methods.
      */
     private final RuntimeScalar self;
+    private final boolean holdsSelfReference;
 
     /**
      * The package name that this handle is tied to.
@@ -53,11 +54,17 @@ public class TieHandle extends RuntimeIO {
      * @param self          the blessed object returned by TIEHANDLE
      */
     public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self) {
+        this(tiedPackage, previousValue, self, true);
+    }
+
+    public TieHandle(String tiedPackage, RuntimeIO previousValue, RuntimeScalar self, boolean holdSelfReference) {
         this.tiedPackage = tiedPackage;
         this.previousValue = previousValue;
         this.self = self;
+        this.holdsSelfReference = holdSelfReference;
         // Increment refCount: the tie wrapper holds a strong reference to the tied object.
-        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+        if (holdSelfReference
+                && self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
@@ -238,6 +245,9 @@ public class TieHandle extends RuntimeIO {
      * Decrements refCount and triggers DESTROY if it reaches 0.
      */
     public void releaseTiedObject() {
+        if (!holdsSelfReference) {
+            return;
+        }
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
             if (base.refCount > 0 && --base.refCount == 0) {

@@ -1749,6 +1749,40 @@ public class RegexPreprocessor {
                 // Handle escape sequences
                 pos += 2;
                 totalLength++;
+            } else if (ch == '[') {
+                // A character class inside lookbehind has fixed width 1.
+                // Skip over its contents so literal braces like [${FOO}]
+                // are not misread as {n,m} quantifiers.
+                pos++;
+                boolean inEscape = false;
+                boolean first = true;
+                while (pos < pattern.length()) {
+                    char cc = pattern.charAt(pos);
+                    if (inEscape) {
+                        inEscape = false;
+                        pos++;
+                        first = false;
+                        continue;
+                    }
+                    if (cc == '\\') {
+                        inEscape = true;
+                        pos++;
+                        first = false;
+                        continue;
+                    }
+                    if (cc == ']' && !first) {
+                        pos++;
+                        break;
+                    }
+                    if (cc == '^' && first) {
+                        pos++;
+                        first = false;
+                        continue;
+                    }
+                    pos++;
+                    first = false;
+                }
+                totalLength++;
             } else if (ch == '.') {
                 // Check if followed by * or +
                 if (pos + 1 < pattern.length()) {
@@ -1771,7 +1805,7 @@ public class RegexPreprocessor {
             } else if (ch == '{') {
                 // Handle {n,m} quantifiers
                 int endBrace = pattern.indexOf('}', pos);
-                if (endBrace > pos) {
+                if (endBrace > pos && isValidQuantifierAt(pattern, pos)) {
                     String quantifier = pattern.substring(pos + 1, endBrace);
                     int multiplier = parseQuantifierMax(quantifier);
                     if (multiplier == -1) {

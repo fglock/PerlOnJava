@@ -32,9 +32,12 @@ public class CompressRawZlib extends PerlModuleBase {
     private static final int Z_VERSION_ERROR = -6;
 
     private static final int Z_NO_FLUSH = 0;
+    private static final int Z_PARTIAL_FLUSH = 1;
     private static final int Z_SYNC_FLUSH = 2;
     private static final int Z_FULL_FLUSH = 3;
     private static final int Z_FINISH = 4;
+    private static final int Z_BLOCK = 5;
+    private static final int Z_TREES = 6;
 
     private static final int Z_DEFAULT_COMPRESSION = -1;
 
@@ -126,6 +129,7 @@ public class CompressRawZlib extends PerlModuleBase {
             crz.registerMethod("adler32", "adler32Func", null);
             crz.registerMethod("_deflateInit", "deflateInit", null);
             crz.registerMethod("_inflateInit", "inflateInit", null);
+            crz.registerMethod("_inflateScanInit", "inflateScanInit", null);
             crz.registerMethod("zlib_version", "zlibVersion", null);
             crz.registerMethod("zlibCompileFlags", null);
             crz.registerMethod("is_zlib_native", "isZlibNative", null);
@@ -153,6 +157,15 @@ public class CompressRawZlib extends PerlModuleBase {
             "compressedBytes", "uncompressedBytes", "DESTROY"
         };
         registerStreamMethods("Compress::Raw::Zlib::inflateStream", inflateMethods, "is_");
+
+        String[] inflateScanMethods = {
+            "scan", "inflate", "inflateReset", "inflateSync", "_createDeflateStream",
+            "createDeflateStream", "getLastBlockOffset", "getEndOffset", "resetLastBlockByte",
+            "crc32", "adler32", "total_in", "total_out", "msg",
+            "dict_adler", "get_Bufsize",
+            "compressedBytes", "uncompressedBytes", "DESTROY"
+        };
+        registerStreamMethods("Compress::Raw::Zlib::inflateScanStream", inflateScanMethods, "iss_");
 
         // Set $Compress::Raw::Zlib::gzip_os_code
         GlobalVariable.getGlobalVariable("Compress::Raw::Zlib::gzip_os_code")
@@ -286,7 +299,7 @@ public class CompressRawZlib extends PerlModuleBase {
         // int memLevel = args.size() > 4 ? args.get(4).getInt() : MAX_MEM_LEVEL;
         int strategy  = args.size() > 5 ? args.get(5).getInt() : 0;
         int bufsize   = args.size() > 6 ? args.get(6).getInt() : 4096;
-        String dict   = args.size() > 7 ? args.get(7).toString() : "";
+        byte[] dictBytes = args.size() > 7 ? getInputBytes(args.get(7)) : new byte[0];
 
         try {
             boolean nowrap;
@@ -311,9 +324,10 @@ public class CompressRawZlib extends PerlModuleBase {
             if (strategy == 1) deflater.setStrategy(Deflater.FILTERED);
             else if (strategy == 2) deflater.setStrategy(Deflater.HUFFMAN_ONLY);
 
-            if (!dict.isEmpty()) {
-                byte[] dictBytes = dict.getBytes(StandardCharsets.ISO_8859_1);
+            long dictAdler = 0;
+            if (dictBytes.length > 0) {
                 deflater.setDictionary(dictBytes);
+                dictAdler = adler32WithSeed(dictBytes, 1L);
             }
 
             // Create the stream object
@@ -327,8 +341,8 @@ public class CompressRawZlib extends PerlModuleBase {
             self.put("_total_out", new RuntimeScalar(0));
             self.put("_crc32", new RuntimeScalar(0L));
             self.put("_adler32", new RuntimeScalar(1L));
-            self.put("_dict_adler", new RuntimeScalar(0));
-            self.put("_msg", new RuntimeScalar(""));
+            self.put("_dict_adler", new RuntimeScalar(dictAdler));
+            self.put("_msg", new RuntimeScalar());
 
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::deflateStream"));
@@ -366,7 +380,8 @@ public class CompressRawZlib extends PerlModuleBase {
         int flags   = args.size() > 0 ? args.get(0).getInt() : 0;
         int wbits   = args.size() > 1 ? args.get(1).getInt() : MAX_WBITS;
         int bufsize = args.size() > 2 ? args.get(2).getInt() : 4096;
-        String dict = args.size() > 3 ? args.get(3).toString() : "";
+        byte[] dictBytes = args.size() > 3 ? getInputBytes(args.get(3)) : new byte[0];
+        String dict = new String(dictBytes, StandardCharsets.ISO_8859_1);
 
         try {
             boolean nowrap;
@@ -382,11 +397,6 @@ public class CompressRawZlib extends PerlModuleBase {
 
             Inflater inflater = new Inflater(nowrap);
 
-            if (!dict.isEmpty()) {
-                byte[] dictBytes = dict.getBytes(StandardCharsets.ISO_8859_1);
-                inflater.setDictionary(dictBytes);
-            }
-
             RuntimeHash self = new RuntimeHash();
             self.put("_inflater", new RuntimeScalar(inflater));
             self.put("_flags", new RuntimeScalar(flags));
@@ -396,7 +406,11 @@ public class CompressRawZlib extends PerlModuleBase {
             self.put("_crc32", new RuntimeScalar(0L));
             self.put("_adler32", new RuntimeScalar(1L));
             self.put("_dict_adler", new RuntimeScalar(0));
-            self.put("_msg", new RuntimeScalar(""));
+            RuntimeScalar dictionaryScalar = new RuntimeScalar(dict);
+            dictionaryScalar.type = RuntimeScalarType.BYTE_STRING;
+            self.put("_dictionary", dictionaryScalar);
+            self.put("_dictionary_used", new RuntimeScalar(0));
+            self.put("_msg", new RuntimeScalar());
 
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::inflateStream"));
@@ -424,6 +438,26 @@ public class CompressRawZlib extends PerlModuleBase {
             result.add(new RuntimeScalar(Z_STREAM_ERROR));
             return result;
         }
+    }
+
+    public static RuntimeList inflateScanInit(RuntimeArray args, int ctx) {
+        RuntimeList result = inflateInit(args, ctx);
+        if (ctx == RuntimeContextType.SCALAR || result.isEmpty()) {
+            if (!result.isEmpty()) {
+                RuntimeScalar ref = result.elements.get(0).scalar();
+                if (ref.getDefinedBoolean()) {
+                    ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::inflateScanStream"));
+                    initializeInflateScanState(ref.hashDeref());
+                }
+            }
+            return result;
+        }
+        RuntimeScalar ref = result.elements.get(0).scalar();
+        if (ref.getDefinedBoolean()) {
+            ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::inflateScanStream"));
+            initializeInflateScanState(ref.hashDeref());
+        }
+        return result;
     }
 
     // =============================================
@@ -471,10 +505,11 @@ public class CompressRawZlib extends PerlModuleBase {
         long totalOut = self.get("_total_out").getLong() + baos.size();
         self.put("_total_in", new RuntimeScalar(totalIn));
         self.put("_total_out", new RuntimeScalar(totalOut));
+        self.put("_msg", new RuntimeScalar());
 
         // Write output
         if (outputRef != null) {
-            writeOutput(outputRef, baos, flags);
+            writeDeflateOutput(self, outputRef, baos, flags, false);
         }
 
         return new RuntimeScalar(Z_OK).getList();
@@ -490,6 +525,10 @@ public class CompressRawZlib extends PerlModuleBase {
 
         Deflater deflater = getDeflater(self);
         if (deflater == null) return new RuntimeScalar(Z_STREAM_ERROR).getList();
+        if (flushType < Z_NO_FLUSH || flushType > Z_TREES) {
+            self.put("_msg", new RuntimeScalar("stream error"));
+            return new RuntimeScalar(Z_STREAM_ERROR).getList();
+        }
 
         int flags = self.get("_flags").getInt();
 
@@ -522,13 +561,13 @@ public class CompressRawZlib extends PerlModuleBase {
 
         long totalOut = self.get("_total_out").getLong() + baos.size();
         self.put("_total_out", new RuntimeScalar(totalOut));
+        self.put("_msg", new RuntimeScalar());
 
         if (outputRef != null) {
-            writeOutput(outputRef, baos, flags);
+            writeDeflateOutput(self, outputRef, baos, flags, flushType == Z_FINISH);
         }
 
-        int status = deflater.finished() ? Z_STREAM_END : Z_OK;
-        return new RuntimeScalar(status).getList();
+        return new RuntimeScalar(Z_OK).getList();
     }
 
     public static RuntimeList ds_deflateReset(RuntimeArray args, int ctx) {
@@ -540,6 +579,7 @@ public class CompressRawZlib extends PerlModuleBase {
         self.put("_total_out", new RuntimeScalar(0));
         self.put("_crc32", new RuntimeScalar(0L));
         self.put("_adler32", new RuntimeScalar(1L));
+        self.put("_msg", new RuntimeScalar());
         return new RuntimeScalar(Z_OK).getList();
     }
 
@@ -548,20 +588,21 @@ public class CompressRawZlib extends PerlModuleBase {
         RuntimeHash self = args.get(0).hashDeref();
         Deflater deflater = getDeflater(self);
         if (deflater == null) return new RuntimeScalar(Z_STREAM_ERROR).getList();
+        int flags = args.size() > 1 ? args.get(1).getInt() : 0;
 
-        if (args.size() > 2) {
+        if ((flags & 1) != 0 && args.size() > 2) {
             int level = args.get(2).getInt();
             deflater.setLevel(level);
             self.put("_level", new RuntimeScalar(level));
         }
-        if (args.size() > 3) {
+        if ((flags & 2) != 0 && args.size() > 3) {
             int strategy = args.get(3).getInt();
             if (strategy == 1) deflater.setStrategy(Deflater.FILTERED);
             else if (strategy == 2) deflater.setStrategy(Deflater.HUFFMAN_ONLY);
             else deflater.setStrategy(Deflater.DEFAULT_STRATEGY);
             self.put("_strategy", new RuntimeScalar(strategy));
         }
-        if (args.size() > 4) {
+        if ((flags & 4) != 0 && args.size() > 4) {
             self.put("_bufsize", args.get(4));
         }
         return new RuntimeScalar(Z_OK).getList();
@@ -685,6 +726,9 @@ public class CompressRawZlib extends PerlModuleBase {
                         break;
                     }
                 } else if (inflater.needsDictionary()) {
+                    if (applyInflaterDictionary(self, inflater)) {
+                        continue;
+                    }
                     status = Z_NEED_DICT;
                     break;
                 } else {
@@ -694,6 +738,9 @@ public class CompressRawZlib extends PerlModuleBase {
 
             if (inflater.finished()) {
                 status = Z_STREAM_END;
+            }
+            if (status == Z_OK || status == Z_STREAM_END) {
+                self.put("_msg", new RuntimeScalar());
             }
         } catch (DataFormatException e) {
             self.put("_msg", new RuntimeScalar(e.getMessage() != null ? e.getMessage() : "data error"));
@@ -719,6 +766,13 @@ public class CompressRawZlib extends PerlModuleBase {
         if ((flags & FLAG_ADLER) != 0) {
             long adler = adler32WithSeed(outputBytes, self.get("_adler32").getLong() & 0xFFFFFFFFL);
             self.put("_adler32", new RuntimeScalar(adler));
+        }
+
+        if (isInflateScanStream(self)) {
+            appendScanInput(self, input, consumed);
+            if (status == Z_STREAM_END) {
+                updateInflateScanState(self);
+            }
         }
 
         // FLAG_CONSUME_INPUT: modify input to remove consumed bytes
@@ -759,11 +813,47 @@ public class CompressRawZlib extends PerlModuleBase {
         self.put("_total_out", new RuntimeScalar(0));
         self.put("_crc32", new RuntimeScalar(0L));
         self.put("_adler32", new RuntimeScalar(1L));
+        self.put("_dict_adler", new RuntimeScalar(0));
+        self.put("_dictionary_used", new RuntimeScalar(0));
+        self.put("_msg", new RuntimeScalar());
         return new RuntimeScalar(Z_OK).getList();
     }
 
     public static RuntimeList is_inflateSync(RuntimeArray args, int ctx) {
-        // Stub - not commonly used
+        RuntimeHash self = args.get(0).hashDeref();
+        Inflater inflater = getInflater(self);
+        if (inflater == null || args.size() < 2) {
+            return new RuntimeScalar(Z_STREAM_ERROR).getList();
+        }
+
+        RuntimeScalar inputScalar = args.get(1);
+        RuntimeScalar actualInput = inputScalar.type == RuntimeScalarType.REFERENCE
+            ? inputScalar.scalarDeref()
+            : inputScalar;
+
+        String previousTail = "";
+        RuntimeScalar tailScalar = self.get("_sync_tail");
+        if (tailScalar != null && tailScalar.getDefinedBoolean()) {
+            previousTail = tailScalar.toString();
+        }
+
+        String inputString = actualInput.toString();
+        byte[] combined = (previousTail + inputString).getBytes(StandardCharsets.ISO_8859_1);
+        int marker = findFullFlushMarker(combined);
+
+        if (marker < 0) {
+            int tailLength = Math.min(3, combined.length);
+            String tail = new String(combined, combined.length - tailLength, tailLength, StandardCharsets.ISO_8859_1);
+            self.put("_sync_tail", new RuntimeScalar(tail));
+            setScalarBytes(actualInput, "");
+            return new RuntimeScalar(Z_DATA_ERROR).getList();
+        }
+
+        int afterMarker = marker + 4;
+        String remaining = new String(combined, afterMarker, combined.length - afterMarker, StandardCharsets.ISO_8859_1);
+        self.put("_sync_tail", new RuntimeScalar(""));
+        self.put("_inflater", new RuntimeScalar(new Inflater(true)));
+        setScalarBytes(actualInput, remaining);
         return new RuntimeScalar(Z_OK).getList();
     }
 
@@ -819,6 +909,100 @@ public class CompressRawZlib extends PerlModuleBase {
         return new RuntimeList();
     }
 
+    public static RuntimeList iss_scan(RuntimeArray args, int ctx) {
+        return is_inflate(args, ctx);
+    }
+
+    public static RuntimeList iss_inflate(RuntimeArray args, int ctx) {
+        return is_inflate(args, ctx);
+    }
+
+    public static RuntimeList iss_inflateReset(RuntimeArray args, int ctx) {
+        return is_inflateReset(args, ctx);
+    }
+
+    public static RuntimeList iss_inflateSync(RuntimeArray args, int ctx) {
+        return is_inflateSync(args, ctx);
+    }
+
+    public static RuntimeList iss__createDeflateStream(RuntimeArray args, int ctx) {
+        return createDeflateStreamFromScan(args, sliceArgs(args, 1), ctx);
+    }
+
+    public static RuntimeList iss_createDeflateStream(RuntimeArray args, int ctx) {
+        return createDeflateStreamFromScan(args, deflateInitArgsFromScanCreate(args), ctx);
+    }
+
+    public static RuntimeList iss_getLastBlockOffset(RuntimeArray args, int ctx) {
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar offset = self.get("_scan_last_block_offset");
+        return new RuntimeScalar(offset != null ? offset.getLong() : 0).getList();
+    }
+
+    public static RuntimeList iss_getEndOffset(RuntimeArray args, int ctx) {
+        RuntimeHash self = args.get(0).hashDeref();
+        RuntimeScalar offset = self.get("_scan_end_offset");
+        if (offset != null) {
+            return offset.getList();
+        }
+        return is_total_in(args, ctx);
+    }
+
+    public static RuntimeList iss_resetLastBlockByte(RuntimeArray args, int ctx) {
+        RuntimeHash self = args.get(0).hashDeref();
+        if (args.size() > 1) {
+            RuntimeScalar byteScalar = args.get(1).scalar();
+            String value = byteScalar.toString();
+            if (!value.isEmpty()) {
+                RuntimeScalar maskScalar = self.get("_scan_last_block_mask");
+                int mask = maskScalar != null ? maskScalar.getInt() : 1;
+                int rewritten = (value.charAt(0) & 0xFF) ^ mask;
+                setScalarBytes(byteScalar, Character.toString((char) rewritten));
+            }
+        }
+        return new RuntimeScalar(Z_OK).getList();
+    }
+
+    public static RuntimeList iss_crc32(RuntimeArray args, int ctx) {
+        return is_crc32(args, ctx);
+    }
+
+    public static RuntimeList iss_adler32(RuntimeArray args, int ctx) {
+        return is_adler32(args, ctx);
+    }
+
+    public static RuntimeList iss_total_in(RuntimeArray args, int ctx) {
+        return is_total_in(args, ctx);
+    }
+
+    public static RuntimeList iss_total_out(RuntimeArray args, int ctx) {
+        return is_total_out(args, ctx);
+    }
+
+    public static RuntimeList iss_msg(RuntimeArray args, int ctx) {
+        return is_msg(args, ctx);
+    }
+
+    public static RuntimeList iss_dict_adler(RuntimeArray args, int ctx) {
+        return is_dict_adler(args, ctx);
+    }
+
+    public static RuntimeList iss_get_Bufsize(RuntimeArray args, int ctx) {
+        return is_get_Bufsize(args, ctx);
+    }
+
+    public static RuntimeList iss_compressedBytes(RuntimeArray args, int ctx) {
+        return is_compressedBytes(args, ctx);
+    }
+
+    public static RuntimeList iss_uncompressedBytes(RuntimeArray args, int ctx) {
+        return is_uncompressedBytes(args, ctx);
+    }
+
+    public static RuntimeList iss_DESTROY(RuntimeArray args, int ctx) {
+        return is_DESTROY(args, ctx);
+    }
+
     // =============================================
     // Helper methods
     // =============================================
@@ -847,9 +1031,252 @@ public class CompressRawZlib extends PerlModuleBase {
         return null;
     }
 
+    private static boolean applyInflaterDictionary(RuntimeHash self, Inflater inflater) {
+        RuntimeScalar used = self.get("_dictionary_used");
+        if (used != null && used.getBoolean()) {
+            return false;
+        }
+
+        RuntimeScalar dictionary = self.get("_dictionary");
+        if (dictionary == null || !dictionary.getDefinedBoolean()) {
+            return false;
+        }
+
+        byte[] dictBytes = getInputBytes(dictionary);
+        if (dictBytes.length == 0) {
+            return false;
+        }
+
+        try {
+            inflater.setDictionary(dictBytes);
+            self.put("_dict_adler", new RuntimeScalar(adler32WithSeed(dictBytes, 1L)));
+            self.put("_dictionary_used", new RuntimeScalar(1));
+            self.put("_msg", new RuntimeScalar());
+            return true;
+        } catch (IllegalArgumentException e) {
+            self.put("_msg", new RuntimeScalar(e.getMessage() != null ? e.getMessage() : "dictionary error"));
+            return false;
+        }
+    }
+
+    private static RuntimeArray sliceArgs(RuntimeArray args, int start) {
+        RuntimeArray sliced = new RuntimeArray(Math.max(0, args.size() - start));
+        for (int i = start; i < args.size(); i++) {
+            sliced.elements.add(args.get(i));
+        }
+        return sliced;
+    }
+
+    private static void initializeInflateScanState(RuntimeHash self) {
+        self.put("_scan_last_block_offset", new RuntimeScalar(0));
+        self.put("_scan_last_block_mask", new RuntimeScalar(1));
+        self.put("_scan_end_offset", new RuntimeScalar(0));
+        self.put("_scan_prime_bits", new RuntimeScalar(0));
+        self.put("_scan_prime_carry", new RuntimeScalar(0));
+        self.put("_scan_prime_final_emitted", new RuntimeScalar(0));
+        self.put("_scan_input", new RuntimeScalar(new ByteArrayOutputStream()));
+    }
+
+    private static boolean isInflateScanStream(RuntimeHash self) {
+        return self.get("_scan_input") != null;
+    }
+
+    private static void appendScanInput(RuntimeHash self, byte[] input, int consumed) {
+        if (consumed <= 0) {
+            return;
+        }
+        RuntimeScalar scanInput = self.get("_scan_input");
+        ByteArrayOutputStream baos;
+        if (scanInput != null && scanInput.type == RuntimeScalarType.JAVAOBJECT
+                && scanInput.value instanceof ByteArrayOutputStream existing) {
+            baos = existing;
+        } else {
+            baos = new ByteArrayOutputStream();
+            self.put("_scan_input", new RuntimeScalar(baos));
+        }
+        baos.write(input, 0, Math.min(consumed, input.length));
+    }
+
+    private static void updateInflateScanState(RuntimeHash self) {
+        RuntimeScalar scanInput = self.get("_scan_input");
+        if (scanInput == null || scanInput.type != RuntimeScalarType.JAVAOBJECT
+                || !(scanInput.value instanceof ByteArrayOutputStream baos)) {
+            return;
+        }
+
+        byte[] data = baos.toByteArray();
+        DeflateScanInfo info = DeflateScanInfo.scan(data);
+        if (info == null) {
+            self.put("_scan_end_offset", self.get("_total_in"));
+            self.put("_scan_prime_bits", new RuntimeScalar(0));
+            self.put("_scan_prime_carry", new RuntimeScalar(0));
+            return;
+        }
+
+        int endByteOffset = info.endBit / 8;
+        int primeBits = info.endBit & 7;
+        int primeCarry = 0;
+        if (primeBits != 0 && endByteOffset < data.length) {
+            primeCarry = data[endByteOffset] & ((1 << primeBits) - 1);
+        }
+
+        self.put("_scan_last_block_offset", new RuntimeScalar(info.lastBlockBit / 8));
+        self.put("_scan_last_block_mask", new RuntimeScalar(1 << (info.lastBlockBit & 7)));
+        self.put("_scan_end_offset", new RuntimeScalar(endByteOffset));
+        self.put("_scan_prime_bits", new RuntimeScalar(primeBits));
+        self.put("_scan_prime_carry", new RuntimeScalar(primeCarry));
+        self.put("_scan_prime_final_emitted", new RuntimeScalar(0));
+    }
+
+    private static RuntimeList createDeflateStreamFromScan(RuntimeArray args, RuntimeArray initArgs, int ctx) {
+        RuntimeHash scanSelf = args.get(0).hashDeref();
+        RuntimeList result = deflateInit(initArgs, ctx);
+        if (!result.isEmpty()) {
+            RuntimeScalar ref = result.elements.get(0).scalar();
+            if (ref.getDefinedBoolean()) {
+                RuntimeHash deflateSelf = ref.hashDeref();
+                copyScanScalar(scanSelf, deflateSelf, "_scan_prime_bits", "_prime_bits");
+                copyScanScalar(scanSelf, deflateSelf, "_scan_prime_carry", "_prime_carry");
+                deflateSelf.put("_prime_final_emitted", new RuntimeScalar(0));
+            }
+        }
+        return result;
+    }
+
+    private static void copyScanScalar(RuntimeHash from, RuntimeHash to, String fromKey, String toKey) {
+        RuntimeScalar value = from.get(fromKey);
+        if (value != null) {
+            to.put(toKey, new RuntimeScalar(value.getLong()));
+        }
+    }
+
+    private static RuntimeArray deflateInitArgsFromScanCreate(RuntimeArray args) {
+        if (args.size() > 1 && isIntegerLike(args.get(1))) {
+            return sliceArgs(args, 1);
+        }
+
+        int flags = 0;
+        int level = Z_DEFAULT_COMPRESSION;
+        int method = 8;
+        int windowBits = -MAX_WBITS;
+        int memLevel = MAX_MEM_LEVEL;
+        int strategy = 0;
+        int bufsize = 4096;
+
+        for (int i = 1; i < args.size() - 1; i += 2) {
+            String key = normalizeOption(args.get(i).toString());
+            RuntimeScalar value = args.get(i + 1);
+            switch (key) {
+                case "AppendOutput" -> {
+                    if (value.getBoolean()) flags |= FLAG_APPEND;
+                }
+                case "CRC32" -> {
+                    if (value.getBoolean()) flags |= FLAG_CRC;
+                }
+                case "ADLER32" -> {
+                    if (value.getBoolean()) flags |= FLAG_ADLER;
+                }
+                case "Bufsize" -> bufsize = value.getInt();
+                case "Level" -> level = value.getInt();
+                case "Method" -> method = value.getInt();
+                case "WindowBits" -> windowBits = value.getInt();
+                case "MemLevel" -> memLevel = value.getInt();
+                case "Strategy" -> strategy = value.getInt();
+                default -> throw new PerlCompilerException(
+                    "Compress::Raw::Zlib::InflateScan::createDeflateStream: unknown key value(s) " + key);
+            }
+        }
+
+        if (bufsize < 1) {
+            throw new PerlCompilerException(
+                "Compress::Raw::Zlib::InflateScan::createDeflateStream: Bufsize must be >= 1, you specified "
+                    + bufsize);
+        }
+
+        RuntimeArray initArgs = new RuntimeArray(7);
+        initArgs.elements.add(new RuntimeScalar(flags));
+        initArgs.elements.add(new RuntimeScalar(level));
+        initArgs.elements.add(new RuntimeScalar(method));
+        initArgs.elements.add(new RuntimeScalar(windowBits));
+        initArgs.elements.add(new RuntimeScalar(memLevel));
+        initArgs.elements.add(new RuntimeScalar(strategy));
+        initArgs.elements.add(new RuntimeScalar(bufsize));
+        return initArgs;
+    }
+
+    private static boolean isIntegerLike(RuntimeScalar scalar) {
+        String value = scalar.toString();
+        if (value.isEmpty()) return false;
+        int start = (value.charAt(0) == '-' || value.charAt(0) == '+') ? 1 : 0;
+        if (start == value.length()) return false;
+        for (int i = start; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String normalizeOption(String key) {
+        while (key.startsWith("-")) {
+            key = key.substring(1);
+        }
+        return key;
+    }
+
+    private static int findFullFlushMarker(byte[] input) {
+        for (int i = 0; i <= input.length - 4; i++) {
+            if (input[i] == 0
+                    && input[i + 1] == 0
+                    && (input[i + 2] & 0xFF) == 0xFF
+                    && (input[i + 3] & 0xFF) == 0xFF) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static void setScalarBytes(RuntimeScalar scalar, String value) {
+        RuntimeScalar replacement = new RuntimeScalar(value);
+        replacement.type = RuntimeScalarType.BYTE_STRING;
+        scalar.set(replacement);
+    }
+
     /**
      * Write output bytes to a Perl scalar reference, respecting FLAG_APPEND.
      */
+    private static void writeDeflateOutput(RuntimeHash self, RuntimeScalar outputRef,
+                                           ByteArrayOutputStream baos, int flags, boolean finishing) {
+        RuntimeScalar bitsScalar = self.get("_prime_bits");
+        int primeBits = bitsScalar != null ? bitsScalar.getInt() : 0;
+        if (primeBits <= 0 || primeBits >= 8) {
+            writeOutput(outputRef, baos, flags);
+            return;
+        }
+
+        byte[] input = baos.toByteArray();
+        ByteArrayOutputStream shifted = new ByteArrayOutputStream(input.length + (finishing ? 1 : 0));
+        RuntimeScalar carryScalar = self.get("_prime_carry");
+        int carry = carryScalar != null ? carryScalar.getInt() : 0;
+
+        for (byte value : input) {
+            int b = value & 0xFF;
+            shifted.write((carry | ((b << primeBits) & 0xFF)) & 0xFF);
+            carry = b >>> (8 - primeBits);
+        }
+
+        RuntimeScalar finalEmittedScalar = self.get("_prime_final_emitted");
+        boolean finalEmitted = finalEmittedScalar != null && finalEmittedScalar.getBoolean();
+        if (finishing && !finalEmitted) {
+            shifted.write(carry & 0xFF);
+            carry = 0;
+            self.put("_prime_final_emitted", new RuntimeScalar(1));
+        }
+
+        self.put("_prime_carry", new RuntimeScalar(carry));
+        writeOutput(outputRef, shifted, flags);
+    }
+
     private static void writeOutput(RuntimeScalar outputRef, ByteArrayOutputStream baos, int flags) {
         String outStr = baos.toString(StandardCharsets.ISO_8859_1);
         RuntimeScalar outScalar;
@@ -888,5 +1315,271 @@ public class CompressRawZlib extends PerlModuleBase {
             s2 = (s2 + s1) % 65521;
         }
         return (s2 << 16) | s1;
+    }
+
+    private static final class DeflateScanInfo {
+        final int lastBlockBit;
+        final int endBit;
+
+        DeflateScanInfo(int lastBlockBit, int endBit) {
+            this.lastBlockBit = lastBlockBit;
+            this.endBit = endBit;
+        }
+
+        static DeflateScanInfo scan(byte[] data) {
+            try {
+                BitReader reader = new BitReader(data);
+                int lastBlockBit;
+                boolean last;
+                do {
+                    lastBlockBit = reader.bitPosition();
+                    last = reader.readBits(1) != 0;
+                    int type = reader.readBits(2);
+                    switch (type) {
+                        case 0 -> skipStored(reader);
+                        case 1 -> skipCompressed(reader, fixedLiteralLengthTree(), fixedDistanceTree());
+                        case 2 -> {
+                            HuffmanTrees trees = readDynamicTrees(reader);
+                            skipCompressed(reader, trees.literalLength, trees.distance);
+                        }
+                        default -> {
+                            return null;
+                        }
+                    }
+                } while (!last);
+                return new DeflateScanInfo(lastBlockBit, reader.bitPosition());
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        }
+
+        private static void skipStored(BitReader reader) {
+            reader.alignToByte();
+            int len = reader.readBits(16);
+            int nlen = reader.readBits(16);
+            if (((len ^ 0xFFFF) & 0xFFFF) != nlen) {
+                throw new IllegalArgumentException("stored block length mismatch");
+            }
+            reader.skipBits(len * 8);
+        }
+
+        private static void skipCompressed(BitReader reader, HuffmanTree literalLength, HuffmanTree distance) {
+            while (true) {
+                int symbol = literalLength.decode(reader);
+                if (symbol < 256) {
+                    continue;
+                }
+                if (symbol == 256) {
+                    return;
+                }
+                if (symbol > 285) {
+                    throw new IllegalArgumentException("bad length symbol");
+                }
+
+                int lengthIndex = symbol - 257;
+                reader.skipBits(LENGTH_EXTRA_BITS[lengthIndex]);
+                int distanceSymbol = distance.decode(reader);
+                if (distanceSymbol < 0 || distanceSymbol >= DISTANCE_EXTRA_BITS.length) {
+                    throw new IllegalArgumentException("bad distance symbol");
+                }
+                reader.skipBits(DISTANCE_EXTRA_BITS[distanceSymbol]);
+            }
+        }
+
+        private static HuffmanTrees readDynamicTrees(BitReader reader) {
+            int hlit = reader.readBits(5) + 257;
+            int hdist = reader.readBits(5) + 1;
+            int hclen = reader.readBits(4) + 4;
+
+            int[] codeLengthLengths = new int[19];
+            for (int i = 0; i < hclen; i++) {
+                codeLengthLengths[CODE_LENGTH_ORDER[i]] = reader.readBits(3);
+            }
+            HuffmanTree codeLengthTree = new HuffmanTree(codeLengthLengths);
+
+            int[] lengths = new int[hlit + hdist];
+            int index = 0;
+            while (index < lengths.length) {
+                int symbol = codeLengthTree.decode(reader);
+                if (symbol <= 15) {
+                    lengths[index++] = symbol;
+                } else if (symbol == 16) {
+                    if (index == 0) {
+                        throw new IllegalArgumentException("repeat with no previous length");
+                    }
+                    int repeat = reader.readBits(2) + 3;
+                    int previous = lengths[index - 1];
+                    for (int i = 0; i < repeat && index < lengths.length; i++) {
+                        lengths[index++] = previous;
+                    }
+                } else if (symbol == 17) {
+                    int repeat = reader.readBits(3) + 3;
+                    for (int i = 0; i < repeat && index < lengths.length; i++) {
+                        lengths[index++] = 0;
+                    }
+                } else if (symbol == 18) {
+                    int repeat = reader.readBits(7) + 11;
+                    for (int i = 0; i < repeat && index < lengths.length; i++) {
+                        lengths[index++] = 0;
+                    }
+                } else {
+                    throw new IllegalArgumentException("bad code length symbol");
+                }
+            }
+
+            int[] litLen = new int[hlit];
+            System.arraycopy(lengths, 0, litLen, 0, hlit);
+            int[] dist = new int[hdist];
+            System.arraycopy(lengths, hlit, dist, 0, hdist);
+            return new HuffmanTrees(new HuffmanTree(litLen), new HuffmanTree(dist));
+        }
+
+        private static HuffmanTree fixedLiteralLengthTree() {
+            int[] lengths = new int[288];
+            for (int i = 0; i <= 143; i++) lengths[i] = 8;
+            for (int i = 144; i <= 255; i++) lengths[i] = 9;
+            for (int i = 256; i <= 279; i++) lengths[i] = 7;
+            for (int i = 280; i <= 287; i++) lengths[i] = 8;
+            return new HuffmanTree(lengths);
+        }
+
+        private static HuffmanTree fixedDistanceTree() {
+            int[] lengths = new int[32];
+            for (int i = 0; i < lengths.length; i++) {
+                lengths[i] = 5;
+            }
+            return new HuffmanTree(lengths);
+        }
+
+        private static int reverseBits(int code, int length) {
+            int reversed = 0;
+            for (int i = 0; i < length; i++) {
+                reversed = (reversed << 1) | (code & 1);
+                code >>>= 1;
+            }
+            return reversed;
+        }
+
+        private static final int[] LENGTH_EXTRA_BITS = {
+            0, 0, 0, 0, 0, 0, 0, 0,
+            1, 1, 1, 1,
+            2, 2, 2, 2,
+            3, 3, 3, 3,
+            4, 4, 4, 4,
+            5, 5, 5, 5,
+            0
+        };
+
+        private static final int[] DISTANCE_EXTRA_BITS = {
+            0, 0, 0, 0,
+            1, 1,
+            2, 2,
+            3, 3,
+            4, 4,
+            5, 5,
+            6, 6,
+            7, 7,
+            8, 8,
+            9, 9,
+            10, 10,
+            11, 11,
+            12, 12,
+            13, 13
+        };
+
+        private static final int[] CODE_LENGTH_ORDER = {
+            16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
+        };
+
+        private record HuffmanTrees(HuffmanTree literalLength, HuffmanTree distance) {}
+
+        private static final class HuffmanTree {
+            private final Map<Integer, Integer> symbols = new HashMap<>();
+            private final int maxBits;
+
+            HuffmanTree(int[] lengths) {
+                int max = 0;
+                for (int length : lengths) {
+                    max = Math.max(max, length);
+                }
+                this.maxBits = max;
+                int[] counts = new int[max + 1];
+                for (int length : lengths) {
+                    if (length > 0) {
+                        counts[length]++;
+                    }
+                }
+
+                int[] nextCode = new int[max + 1];
+                int code = 0;
+                for (int bits = 1; bits <= max; bits++) {
+                    code = (code + counts[bits - 1]) << 1;
+                    nextCode[bits] = code;
+                }
+
+                for (int symbol = 0; symbol < lengths.length; symbol++) {
+                    int length = lengths[symbol];
+                    if (length == 0) {
+                        continue;
+                    }
+                    int canonical = nextCode[length]++;
+                    int reversed = reverseBits(canonical, length);
+                    symbols.put((length << 16) | reversed, symbol);
+                }
+            }
+
+            int decode(BitReader reader) {
+                int code = 0;
+                for (int length = 1; length <= maxBits; length++) {
+                    code |= reader.readBits(1) << (length - 1);
+                    Integer symbol = symbols.get((length << 16) | code);
+                    if (symbol != null) {
+                        return symbol;
+                    }
+                }
+                throw new IllegalArgumentException("bad huffman code");
+            }
+        }
+
+        private static final class BitReader {
+            private final byte[] data;
+            private int bitPosition;
+
+            BitReader(byte[] data) {
+                this.data = data;
+            }
+
+            int bitPosition() {
+                return bitPosition;
+            }
+
+            int readBits(int count) {
+                if (count < 0 || bitPosition + count > data.length * 8) {
+                    throw new IllegalArgumentException("deflate stream is truncated");
+                }
+                int value = 0;
+                for (int i = 0; i < count; i++) {
+                    int byteIndex = bitPosition >>> 3;
+                    int bitIndex = bitPosition & 7;
+                    value |= ((data[byteIndex] >>> bitIndex) & 1) << i;
+                    bitPosition++;
+                }
+                return value;
+            }
+
+            void skipBits(int count) {
+                if (count < 0 || bitPosition + count > data.length * 8) {
+                    throw new IllegalArgumentException("deflate stream is truncated");
+                }
+                bitPosition += count;
+            }
+
+            void alignToByte() {
+                int remainder = bitPosition & 7;
+                if (remainder != 0) {
+                    skipBits(8 - remainder);
+                }
+            }
+        }
     }
 }

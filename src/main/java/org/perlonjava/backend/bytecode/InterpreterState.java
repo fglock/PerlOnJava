@@ -107,6 +107,31 @@ public class InterpreterState {
     }
 
     /**
+     * Push a virtual eval-frame for caller() while an interpreted eval block is
+     * active but has not created a separate Java/interpreter call frame.
+     *
+     * @return true if a frame was pushed and must be popped by the caller
+     */
+    public static boolean pushEvalFrameForCurrentInterpreter() {
+        InterpreterFrame current = current();
+        if (current == null || current.code() == null) {
+            return false;
+        }
+
+        String packageName = currentPackage.get().toString();
+        if (packageName == null || packageName.isEmpty()) {
+            packageName = current.packageName();
+        }
+
+        frameStack.get().push(new InterpreterFrame(current.code(), packageName, "(eval)", true));
+
+        ArrayList<int[]> pcs = pcStack.get();
+        int currentPc = pcs.isEmpty() ? 0 : pcs.getLast()[0];
+        pcs.add(new int[]{currentPc});
+        return true;
+    }
+
+    /**
      * Pop the current interpreter frame from the stack.
      * Called at exit from BytecodeInterpreter.execute() (in finally block).
      */
@@ -187,7 +212,13 @@ public class InterpreterState {
          * Represents a single interpreter call frame.
          * Contains minimal information needed for stack trace formatting.
          */
-        public record InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
+        public record InterpreterFrame(InterpretedCode code,
+                                       String packageName,
+                                       String subroutineName,
+                                       boolean virtualEvalFrame) {
+            public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
+                this(code, packageName, subroutineName, false);
+            }
     }
 
 }

@@ -115,14 +115,20 @@ public class ParseBlock {
             statements.add(new ListNode(parser.tokenIndex));
         }
 
+        Integer postBlockStrictOptions = null;
+
         // Exit the current scope before returning (unless delayed)
         if (exitScope) {
             parser.ctx.symbolTable.exitScope(scopeIndex);
+            postBlockStrictOptions = parser.ctx.symbolTable.getStrictOptions();
         }
 
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex, parser);
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
+        if (postBlockStrictOptions != null) {
+            blockNode.setAnnotation("postBlockStrictOptions", postBlockStrictOptions);
+        }
         return new BlockWithScope(blockNode, scopeIndex);
     }
 

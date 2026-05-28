@@ -2518,7 +2518,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // make the still-live callback forget the variables it closed over.
         // Captures are released when the CODE object's counted references
         // truly reach zero.
-        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code) {
+        if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             boolean releasedCode = false;
             if (this.refCountOwned && code.refCount > 0) {
                 this.refCountOwned = false;

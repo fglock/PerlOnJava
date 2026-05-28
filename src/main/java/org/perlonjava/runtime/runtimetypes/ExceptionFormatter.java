@@ -229,6 +229,9 @@ public class ExceptionFormatter {
                         entry.add(filename);
                         entry.add(line);
                         entry.add(subName);
+                        if (frame.virtualEvalFrame()) {
+                            entry.add("virtual-eval");
+                        }
                         // Interpreter frames from tokenIndex/PC represent the sub's OWN
                         // location (like JVM frames), so firstFrameFromInterpreter stays
                         // false and caller() will skip this frame to reach the actual caller.

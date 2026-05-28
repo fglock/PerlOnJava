@@ -178,8 +178,17 @@ public class Utf8 extends PerlModuleBase {
                 // The string is already representable in ISO-8859-1, so the downgrade
                 // is logically successful even if we can't modify the scalar in-place.
                 if (!(scalar instanceof RuntimeScalarReadOnly)) {
-                    // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding
-                    scalar.set(new String(bytes, StandardCharsets.ISO_8859_1));
+                    // Ensure the UTF-8 flag is off by using the ISO-8859-1 encoding.
+                    // A substr lvalue of a read-only literal can throw while trying
+                    // to propagate the unchanged bytes back to its parent; Perl treats
+                    // utf8::downgrade($that, 1) as successful when the value itself
+                    // is representable, so keep the proxy's local byte-string state.
+                    String decodedBytes = new String(bytes, StandardCharsets.ISO_8859_1);
+                    try {
+                        scalar.set(decodedBytes);
+                    } catch (PerlCompilerException e) {
+                        scalar.value = decodedBytes;
+                    }
                     scalar.type = BYTE_STRING;
                 }
                 return new RuntimeScalar(true).getList();
