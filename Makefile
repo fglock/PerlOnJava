@@ -5,7 +5,7 @@ all: build
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat classes testClasses --no-daemon --stacktrace
+	gradlew.bat classes testClasses shadowJar --no-daemon --stacktrace
 else
 	./gradlew build --no-daemon --stacktrace
 endif
