@@ -57,7 +57,9 @@ To add a new core module import:
 `sync.pl` copy from `perl5/` into this repo (`patch -p0`). Patches applied when
 end users install **CPAN distributions** with `jcpan` live under
 `src/main/perl/lib/PerlOnJava/CpanPatches/` and ship as YAML distroprefs in
-`PerlOnJava/CpanDistroprefs/`. See the canonical map in
+`PerlOnJava/CpanDistroprefs/`. See
+[CPAN Distroprefs for PerlOnJava](cpan-distroprefs.md) for when to use them and
+the canonical map in
 [dev/design/patch-and-cpan-prefs-layout.md](../../dev/design/patch-and-cpan-prefs-layout.md).
 
 > **TODO:** `sync.pl` should be updated to copy core module tests into
@@ -568,5 +570,6 @@ Run with `perl` (not `jperl`) because it uses fork.
 - [Bundled Modules Reference](../reference/bundled-modules.md) — Complete list of included modules (update when adding new ones)
 - [XS Compatibility Reference](../reference/xs-compatibility.md) — XS modules with Java implementations and PP fallbacks
 - [Using CPAN Modules](using-cpan-modules.md) — Installing and using CPAN modules with jcpan
+- [CPAN Distroprefs for PerlOnJava](cpan-distroprefs.md) — Install-time CPAN phase overrides and patches
 - [Feature Matrix](../reference/feature-matrix.md) — Perl feature compatibility
 - [GitHub Discussion #25](https://github.com/fglock/PerlOnJava/discussions/25) — Perl/Java module loading from project directories

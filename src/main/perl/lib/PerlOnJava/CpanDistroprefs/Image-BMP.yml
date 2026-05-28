@@ -7,6 +7,6 @@ comment: |
   jcpan tests and runtime match the module author's intent on PerlOnJava
   (ivsize=4; see perl5_t/t/op/bop.t).
 match:
-  distribution: "^.*/Image-BMP-1\\.26"
+  distribution: "^.*/Image-BMP-"
 patches:
   - "Image-BMP-1.26/BMP.pm.patch"

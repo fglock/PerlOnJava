@@ -7,6 +7,6 @@ comment: |
   Data::Dmp to fall back to its dummy coderef representation and skip the
   full-deparse-only assertions.
 match:
-  distribution: "^.*/Data-Dmp-0\\.242"
+  distribution: "^.*/Data-Dmp-"
 patches:
   - "Data-Dmp-0.242/PerlOnJava.patch"

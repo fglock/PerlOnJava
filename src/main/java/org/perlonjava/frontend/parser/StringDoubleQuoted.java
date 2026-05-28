@@ -388,9 +388,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
             }
             default -> {
-                var listNode = new ListNode(parser.tokenIndex);
-                listNode.elements.addAll(nodes);
-                yield new BinaryOperatorNode("join", new StringNode("", parser.tokenIndex), listNode, parser.tokenIndex);
+                Node result = nodes.getFirst();
+                for (int i = 1; i < nodes.size(); i++) {
+                    result = new BinaryOperatorNode(".", result, nodes.get(i), parser.tokenIndex);
+                }
+                yield result;
             }
         };
     }

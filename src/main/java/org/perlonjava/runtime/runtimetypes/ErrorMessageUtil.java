@@ -289,7 +289,7 @@ public class ErrorMessageUtil {
     public String errorMessage(int index, String message) {
         SourceLocation loc = getSourceLocationAccurate(index);
 
-        String nearString = buildNearString(index);
+        String nearString = buildNearString(index, message);
 
         return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";
     }
@@ -306,7 +306,14 @@ public class ErrorMessageUtil {
         return " at " + loc.fileName() + " line " + loc.lineNumber();
     }
 
-    private String buildNearString(int index) {
+    private String buildNearString(int index, String message) {
+        if ("syntax error".equals(message)) {
+            String previousContext = buildPreviousNotContext(index);
+            if (previousContext != null) {
+                return previousContext;
+            }
+        }
+
         int end = Math.min(tokens.size() - 1, index + 5);
         StringBuilder sb = new StringBuilder();
         int nonWsCount = 0;
@@ -323,6 +330,74 @@ public class ErrorMessageUtil {
         String near = sb.toString();
         near = near.replaceAll("^\\s+", "");
         return near;
+    }
+
+    // Perl reports `program not perl`-style parse errors before the operand of
+    // `not`, e.g. near "program not ", not near the operand token itself.
+    private String buildPreviousNotContext(int index) {
+        if (index <= 0 || tokens.isEmpty()) {
+            return null;
+        }
+
+        int searchStart = index;
+        while (searchStart > 0 && tokens.get(searchStart - 1).type != LexerTokenType.NEWLINE) {
+            searchStart--;
+        }
+
+        int searchEnd = Math.min(index, tokens.size() - 1);
+        while (searchEnd + 1 < tokens.size()
+                && tokens.get(searchEnd + 1).type != LexerTokenType.NEWLINE
+                && tokens.get(searchEnd + 1).type != LexerTokenType.EOF) {
+            searchEnd++;
+        }
+        for (int notIndex = searchEnd; notIndex >= 0; notIndex--) {
+            if (notIndex < searchStart) {
+                break;
+            }
+            LexerToken notToken = tokens.get(notIndex);
+            if (!"not".equals(notToken.text)) {
+                continue;
+            }
+
+            int beforeNot = previousNonWhitespaceToken(notIndex - 1);
+            int operand = nextNonWhitespaceToken(notIndex + 1);
+            if (beforeNot < searchStart || operand < 0 || operand > searchEnd) {
+                continue;
+            }
+            if (tokens.get(beforeNot).type != LexerTokenType.IDENTIFIER
+                    || tokens.get(operand).type != LexerTokenType.IDENTIFIER) {
+                continue;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = beforeNot; i < operand; i++) {
+                LexerToken tok = tokens.get(i);
+                if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) {
+                    break;
+                }
+                sb.append(tok.text);
+            }
+            return sb.toString().replaceAll("^\\s+", "");
+        }
+        return null;
+    }
+
+    private int previousNonWhitespaceToken(int index) {
+        for (int i = index; i >= 0; i--) {
+            if (tokens.get(i).type != LexerTokenType.WHITESPACE) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int nextNonWhitespaceToken(int index) {
+        for (int i = index; i < tokens.size(); i++) {
+            if (tokens.get(i).type != LexerTokenType.WHITESPACE) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

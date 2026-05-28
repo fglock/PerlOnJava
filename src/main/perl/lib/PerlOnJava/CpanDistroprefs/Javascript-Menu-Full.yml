@@ -10,6 +10,6 @@ comment: |
   Patch only Javascript::Menu's tiny HTML helper usage instead of pulling in
   the full CGI dependency chain, which is much broader than Tree::Numbered.
 match:
-  distribution: "^YOSEFM/Javascript-Menu-Full-2\\.02"
+  distribution: "^YOSEFM/Javascript-Menu-Full-"
 patches:
   - "Javascript-Menu-Full-2.02/NoCGIDependency.patch"

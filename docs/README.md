@@ -19,6 +19,7 @@ How-to guides for common tasks:
 - **[Web Server (PSGI)](../examples/http_server_plack/README.md)** - Run web apps with Plack::Handler::Netty
 - **[Java Integration](guides/java-integration.md)** - Call Perl from Java (JSR-223)
 - **[Using CPAN Modules](guides/using-cpan-modules.md)** - Install and use CPAN modules
+- **[CPAN Distroprefs](guides/cpan-distroprefs.md)** - Maintain bundled CPAN install/test overrides
 - **[Module Porting](guides/module-porting.md)** - Port Perl modules to PerlOnJava
 
 ## Reference

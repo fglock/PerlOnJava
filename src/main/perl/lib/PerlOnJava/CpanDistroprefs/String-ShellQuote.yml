@@ -7,6 +7,6 @@ comment: |
   which PerlOnJava does not implement.  Patch only those script tests to skip
   on PerlOnJava.
 match:
-  distribution: "^ROSCH/String-ShellQuote-1\\.04"
+  distribution: "^ROSCH/String-ShellQuote-"
 patches:
   - "String-ShellQuote-1.04/SkipForkScriptTests.patch"

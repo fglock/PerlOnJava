@@ -20,17 +20,19 @@ comment: |
        don't die mid-scan.
 
   Running `jcpan -i DBI` (directly or as a transitive dep) would
-  install upstream 1.647 into ~/.perlonjava/lib/DBI/ which is
-  PRE-JAR in @INC — silently shadowing our bundled patched copy
-  and breaking DBIC. Prevent that: make all build/test/install
-  steps a no-op. The JAR-bundled copy is authoritative.
+  install upstream DBI into ~/.perlonjava/lib/DBI/ which is PRE-JAR
+  in @INC — silently shadowing our bundled patched copy and breaking
+  DBIC. Prevent that for any upstream DBI release: make all
+  build/test/install steps a no-op. The JAR-bundled copy is
+  authoritative.
 
   When PerlOnJava wants to adopt a newer DBI, bump the bundled
   files in src/main/perl/lib/DBI*, regenerate the reference patch
   set in src/main/perl/lib/PerlOnJava/CpanPatches/DBI-X.YZ/, and
-  update the distribution-match regex below.
+  keep this distropref matching all CPAN DBI releases so user-local
+  installs cannot shadow the bundled copy.
 match:
-  distribution: "/DBI-1\\.647(?:\\b|\\.)"
+  distribution: "/DBI-"
 pl:
   commandline: "PERLONJAVA_SKIP"
 make:
