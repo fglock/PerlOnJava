@@ -1,0 +1,19 @@
+---
+comment: |
+  PerlOnJava distroprefs for PerlIO::via::Timeout 0.32.
+
+  PerlOnJava ships a loading-only PerlIO::via stub and deliberately fails
+  loudly when code tries to push a :via(...) layer at open/binmode time. The
+  target distribution's t/01_socket_timeout.t exercises exactly that runtime
+  layer, using Test::TCP/fork to spin up a helper server. Fork and functional
+  :via(...) layers are both outside the current PerlOnJava support boundary.
+
+  Keep the distribution installable and keep t/00-compile.t as signal by
+  patching only the unsupported runtime test to skip under jperl. The same
+  patch removes Test::TCP from build_requires because, after the skip, it is
+  no longer used by the PerlOnJava test phase and otherwise pulls in
+  Test::SharedFork/fork-only test suites.
+match:
+  distribution: "^DAMS/PerlIO-via-Timeout-0\\.32"
+patches:
+  - "PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch"

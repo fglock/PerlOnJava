@@ -1,0 +1,30 @@
+--- META.yml.orig
++++ META.yml
+@@ -5,7 +5,6 @@
+   File::Spec: 0
+   IO::Handle: 0
+   IPC::Open3: 0
+   Test::More: 0
+-  Test::TCP: 0
+ configure_requires:
+   ExtUtils::MakeMaker: 0
+   Module::Build::Tiny: 0.039
+--- t/01_socket_timeout.t.orig
++++ t/01_socket_timeout.t
+@@ -1,6 +1,16 @@
+ use strict;
+ use warnings;
+ 
++BEGIN {
++    my $is_perlonjava = ($ENV{PERLONJAVA_EXECUTABLE} || $^X || '')
++        =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
++    if ($is_perlonjava) {
++        require Test::More;
++        Test::More::plan(skip_all =>
++            'PerlOnJava does not implement :via(...) PerlIO layers yet');
++    }
++}
++
+ use Test::More;
+ use PerlIO::via::Timeout qw(:all);
+ 

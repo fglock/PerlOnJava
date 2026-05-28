@@ -73,6 +73,7 @@ run_one SKIP_CPAN_FINDDEPS      CPAN::FindDependencies   600
 run_one SKIP_NET_SERVER         Net::Server              600
 run_one SKIP_PARAMS_VALIDATE    Params::Validate         900
 run_one SKIP_IO_ASYNC           IO::Async                1200
+run_one SKIP_PERLIO_VIA_TIMEOUT PerlIO::via::Timeout    600
 # OpenAI::API may recurse into IO::Async and other deps on a cold CPAN home; allow
 # enough wall clock for first-time fetches + Build.PL chains.
 run_one SKIP_OPENAI_API         OpenAI::API              3600

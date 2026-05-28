@@ -75,6 +75,7 @@ sub _bootstrap_prefs {
         'HTTP-Daemon.yml'            => 'PerlOnJava/CpanDistroprefs/HTTP-Daemon.yml',
         'WWW-RobotRules.yml'         => 'PerlOnJava/CpanDistroprefs/WWW-RobotRules.yml',
         'libwww-perl.yml'            => 'PerlOnJava/CpanDistroprefs/libwww-perl.yml',
+        'PerlIO-via-Timeout.yml'     => 'PerlOnJava/CpanDistroprefs/PerlIO-via-Timeout.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -179,6 +180,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/String-ShellQuote-1.04/SkipForkScriptTests.patch' ],
         [ 'Type-Tiny-2.010001/SkipRegexCallbackTests.patch',
           'PerlOnJava/CpanPatches/Type-Tiny-2.010001/SkipRegexCallbackTests.patch' ],
+        [ 'PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch',
+          'PerlOnJava/CpanPatches/PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch' ],
     );
 
     my $slurp = sub {

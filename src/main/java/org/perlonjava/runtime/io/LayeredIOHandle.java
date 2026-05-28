@@ -410,13 +410,13 @@ public class LayeredIOHandle implements IOHandle {
                     // does not yet bridge the :via(...) layer dispatch back into
                     // Perl callbacks (PUSHED / FILL / READ / WRITE / CLOSE ...).
                     // Fail loudly so users don't get a silent no-op; see
-                    // dev/modules/perlio_via.md for the plan to make this
+                    // dev/design/perlio-via.md for the plan to make this
                     // functional. Under JPERL_UNIMPLEMENTED=warn this is still
                     // caught by binmode()/open() and surfaced via $!.
                     String className = layerSpec.substring(4, layerSpec.length() - 1);
                     throw new PerlJavaUnimplementedException(
                             "PerlIO layer :via(" + className + ") not implemented " +
-                                    "in PerlOnJava (see dev/modules/perlio_via.md)");
+                                    "in PerlOnJava (see dev/design/perlio-via.md)");
                 } else {
                     throw new IllegalArgumentException("Unknown layer: " + layerSpec);
                 }
