@@ -223,6 +223,7 @@ sub child {
     # Clear $TODO for the child.
     my $orig_TODO = $self->find_TODO(undef, 1, undef);
 
+    my $subtest_buffered = $parent->format ? 0 : 1;
     my $subevents = [];
 
     my $hub = $ctx->stack->new_hub(
@@ -238,7 +239,7 @@ sub child {
         return $e;
     }, inherit => 1) if $orig_TODO;
 
-    $hub->listen(sub { push @$subevents => $_[1] });
+    $hub->listen(sub { push @$subevents => $_[1] }) if $subtest_buffered;
 
     $hub->set_nested( $parent->nested + 1 );
 
@@ -251,7 +252,7 @@ sub child {
     $meta->{subevents} = $subevents;
     $meta->{subtest_id} = $hub->id;
     $meta->{subtest_uuid} = $hub->uuid;
-    $meta->{subtest_buffered} = $parent->format ? 0 : 1;
+    $meta->{subtest_buffered} = $subtest_buffered;
 
     $self->_add_ts_hooks;
 
@@ -942,6 +943,31 @@ my %numeric_cmps = map { ( $_, 1 ) } ( "<", "<=", ">", ">=", "==", "!=", "<=>" )
 # Bad, these are not comparison operators. Should we include more?
 my %cmp_ok_bl = map { ( $_, 1 ) } ( "=", "+=", ".=", "x=", "^=", "|=", "||=", "&&=", "...");
 
+my %cmp_ok_cacheable = map { ( $_, 1 ) }
+  qw(< <= > >= == != <=> eq ne lt le gt ge cmp =~ !~ && ||);
+my %cmp_ok_check_cache;
+my %cmp_ok_fast = map { ( $_, 1 ) }
+  qw(< <= > >= == != <=> eq ne lt le gt ge cmp);
+
+sub _cmp_ok_fast_compare {
+    my ($got, $type, $expect) = @_;
+
+    return $got <   $expect if $type eq '<';
+    return $got <=  $expect if $type eq '<=';
+    return $got >   $expect if $type eq '>';
+    return $got >=  $expect if $type eq '>=';
+    return $got ==  $expect if $type eq '==';
+    return $got !=  $expect if $type eq '!=';
+    return $got <=> $expect if $type eq '<=>';
+    return $got eq  $expect if $type eq 'eq';
+    return $got ne  $expect if $type eq 'ne';
+    return $got lt  $expect if $type eq 'lt';
+    return $got le  $expect if $type eq 'le';
+    return $got gt  $expect if $type eq 'gt';
+    return $got ge  $expect if $type eq 'ge';
+    return $got cmp $expect;
+}
+
 sub cmp_ok {
     my( $self, $got, $type, $expect, $name ) = @_;
     my $ctx = $self->ctx;
@@ -959,26 +985,51 @@ sub cmp_ok {
 
         my($pack, $file, $line) = $ctx->trace->call();
         my $warning_bits = $ctx->trace->warning_bits;
-        # convert this to a code string so the BEGIN doesn't have to close
-        # over it, which can lead to issues with Devel::Cover
-        my $bits_code = defined $warning_bits ? qq["\Q$warning_bits\E"] : 'undef';
 
-        # Make sure warnings and location matches the caller. Can't do the
-        # comparison directly in the eval, as closing over variables can
-        # capture them forever when running with Devel::Cover.
-        my $check;
-        $succ = eval qq[
+        if ($cmp_ok_fast{$type}) {
+            $succ = eval {
+                local ${^WARNING_BITS} = $warning_bits;
+                $test = _cmp_ok_fast_compare($got, $type, $expect);
+                1;
+            };
+        }
+        else {
+            # convert this to a code string so the BEGIN doesn't have to close
+            # over it, which can lead to issues with Devel::Cover
+            my $bits_code = defined $warning_bits ? qq["\Q$warning_bits\E"] : 'undef';
+
+            my $check;
+            my $cache_key;
+            if ($cmp_ok_cacheable{$type}) {
+                $cache_key = join "\0",
+                  $type,
+                  defined($warning_bits) ? length($warning_bits) . ":$warning_bits" : "undef",
+                  defined($file) ? $file : "undef",
+                  defined($line) ? $line : "undef";
+                $check = $cmp_ok_check_cache{$cache_key};
+                $succ = 1 if $check;
+            }
+
+            # Make sure warnings and location matches the caller. Can't do the
+            # comparison directly in the eval, as closing over variables can
+            # capture them forever when running with Devel::Cover.
+            unless ($check) {
+            $succ = eval qq[
 BEGIN {\${^WARNING_BITS} = $bits_code};
 #line $line "(eval in cmp_ok) $file"
 \$check = sub { \$_[0] $type \$_[1] };
 1;
 ];
+                $cmp_ok_check_cache{$cache_key} = $check
+                  if $succ && defined $cache_key && $check;
+            }
 
-        if ($succ) {
-            $succ = eval {
-                $test = $check->($got, $expect);
-                1;
-            };
+            if ($succ) {
+                $succ = eval {
+                    $test = $check->($got, $expect);
+                    1;
+                };
+            }
         }
         $error = $@;
     }

@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for HTTP::Daemon.
+
+  HTTP::Daemon is a build/test dependency of libwww-perl. Its upstream
+  suite starts local daemon/socket tests that are not a useful gate for
+  staging LWP::Simple under PerlOnJava. Skip the dependency test phase so
+  `jcpan -t LWP::Online` can continue to the target distribution.
+match:
+  distribution: "^OALDERS/HTTP-Daemon-"
+test:
+  commandline: "PERLONJAVA_SKIP"

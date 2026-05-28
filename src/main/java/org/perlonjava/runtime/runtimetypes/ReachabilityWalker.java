@@ -851,6 +851,83 @@ public class ReachabilityWalker {
     }
 
     /**
+     * Target-specific reachability query for scope-exit cleanup of a named
+     * lexical container. The container's own my-variable slot is still present
+     * in {@link MyVarCleanupStack} while cleanup runs, so this deliberately
+     * skips that direct root and only returns true for another root path.
+     */
+    public static boolean isReachableFromExternalRootExcludingDirectLexical(RuntimeBase target) {
+        if (target == null) return false;
+        final int MAX_VISITS = 50_000;
+
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+
+        for (RuntimeScalar sc : GlobalVariable.globalCodeRefs.values()) {
+            seedTarget(sc, target, seen, todo);
+            if (seen.contains(target)) return true;
+            if (sc != null && sc.value instanceof RuntimeCode code
+                    && followGlobalCodeCaptures(code, target, seen, todo)) {
+                return true;
+            }
+        }
+        for (RuntimeScalar sc : GlobalVariable.globalVariables.values()) {
+            seedTarget(sc, target, seen, todo);
+            if (seen.contains(target)) return true;
+        }
+        for (RuntimeArray array : GlobalVariable.globalArrays.values()) {
+            if (array == target) return true;
+            if (seen.add(array)) todo.addLast(array);
+        }
+        for (RuntimeHash hash : GlobalVariable.globalHashes.values()) {
+            if (hash == target) return true;
+            if (seen.add(hash)) todo.addLast(hash);
+        }
+        for (RuntimeBase rescued : DestroyDispatch.snapshotRescuedForWalk()) {
+            if (rescued == target) return true;
+            if (seen.add(rescued)) todo.addLast(rescued);
+        }
+        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+            if (sc == null) continue;
+            if (sc.captureCount > 0) continue;
+            if (WeakRefRegistry.isweak(sc)) continue;
+            if (sc.scopeExited) continue;
+            if (!MyVarCleanupStack.isLive(sc) && !sc.refCountOwned) continue;
+            if (followScalar(sc, target, seen, todo)) return true;
+        }
+        for (Object liveVar : MyVarCleanupStack.snapshotLiveVars()) {
+            if (liveVar == target) continue;
+            if (liveVar instanceof RuntimeScalar sc) {
+                if (WeakRefRegistry.isweak(sc)) continue;
+                if (followScalar(sc, target, seen, todo)) return true;
+            } else if (liveVar instanceof RuntimeBase rb) {
+                if (seen.add(rb)) todo.addLast(rb);
+            }
+        }
+
+        int visits = 0;
+        while (!todo.isEmpty() && visits < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            visits++;
+            if (cur == target) return true;
+            if (cur instanceof RuntimeStash) continue;
+            if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) continue;
+                for (RuntimeScalar v : h.elements.values()) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeScalar sc) {
+                if (followScalar(sc, target, seen, todo)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Cached equivalent of {@link #isReachableFromExternalRoot(RuntimeBase)}.
      * <p>
      * The package/rescued root graph is snapshotted separately from live
