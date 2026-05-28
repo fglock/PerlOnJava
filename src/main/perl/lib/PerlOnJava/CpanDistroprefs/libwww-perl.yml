@@ -7,7 +7,12 @@ comment: |
   that are not stable prerequisites for testing LWP::Online here. Skip the
   dependency test phase so CPAN can stage LWP::Simple; the LWP::Online
   suite still runs normally.
+
+  Do not apply this dependency-only skip when libwww-perl itself is the
+  requested jcpan target. The LWP suite is expected to run in that case.
 match:
   distribution: "^OALDERS/libwww-perl-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])(?:LWP|LWP::UserAgent)($|[[:space:]])"
 test:
   commandline: "PERLONJAVA_SKIP"
