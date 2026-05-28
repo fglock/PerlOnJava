@@ -37,6 +37,8 @@ sub _bootstrap_prefs {
         'CPAN-FindDependencies.yml'  => 'PerlOnJava/CpanDistroprefs/CPAN-FindDependencies.yml',
         'Error-Pure.yml'             => 'PerlOnJava/CpanDistroprefs/Error-Pure.yml',
         'IO-Async.yml'               => 'PerlOnJava/CpanDistroprefs/IO-Async.yml',
+        'IO-Compress.yml'            => 'PerlOnJava/CpanDistroprefs/IO-Compress.yml',
+        'IO-HTML.yml'                => 'PerlOnJava/CpanDistroprefs/IO-HTML.yml',
         'Image-BMP.yml'              => 'PerlOnJava/CpanDistroprefs/Image-BMP.yml',
         'Javascript-Menu-Full.yml'   => 'PerlOnJava/CpanDistroprefs/Javascript-Menu-Full.yml',
         'ExtUtils-CBuilder.yml'      => 'PerlOnJava/CpanDistroprefs/ExtUtils-CBuilder.yml',
@@ -64,9 +66,12 @@ sub _bootstrap_prefs {
         'Data-Dmp.yml'               => 'PerlOnJava/CpanDistroprefs/Data-Dmp.yml',
         'Capture-Tiny.yml'           => 'PerlOnJava/CpanDistroprefs/Capture-Tiny.yml',
         'Readonly.yml'               => 'PerlOnJava/CpanDistroprefs/Readonly.yml',
+        'String-Print.yml'           => 'PerlOnJava/CpanDistroprefs/String-Print.yml',
         'String-ShellQuote.yml'      => 'PerlOnJava/CpanDistroprefs/String-ShellQuote.yml',
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
+        'HTML-Parser.yml'            => 'PerlOnJava/CpanDistroprefs/HTML-Parser.yml',
+        'HTTP-Message.yml'           => 'PerlOnJava/CpanDistroprefs/HTTP-Message.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

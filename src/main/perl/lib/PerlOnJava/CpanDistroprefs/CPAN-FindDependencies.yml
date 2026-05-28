@@ -8,6 +8,6 @@ comment: |
   in place and loses the parent process. Patch the helper to use a timed
   subprocess when running under jperl.
 match:
-  distribution: "^DCANTRELL/CPAN-FindDependencies-3\\.13"
+  distribution: "^DCANTRELL/CPAN-FindDependencies-"
 patches:
   - "CPAN-FindDependencies-3.13/MakeMaker.pm.patch"

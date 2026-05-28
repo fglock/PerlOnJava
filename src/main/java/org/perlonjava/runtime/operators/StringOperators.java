@@ -431,6 +431,9 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        RuntimeScalar overloaded = tryStringConcatOverload(runtimeScalar, b);
+        if (overloaded != null) return overloaded;
+
         // b.toString() may trigger FETCH for tied vars, potentially modifying runtimeScalar.
         // Read b first so runtimeScalar.toString() reflects any FETCH side-effects,
         // matching Perl's behavior where the left SV is read after tied-var resolution.
@@ -476,6 +479,16 @@ public class StringOperators {
         return new RuntimeScalar(aStr + bStr);
     }
 
+    private static RuntimeScalar tryStringConcatOverload(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        int blessId = RuntimeScalarType.blessedId(runtimeScalar);
+        int blessId2 = RuntimeScalarType.blessedId(b);
+        if (blessId < 0 || blessId2 < 0) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(runtimeScalar, b, blessId, blessId2, "(.");
+            if (result != null) return result;
+        }
+        return null;
+    }
+
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
         // For tied variables, we must only FETCH once, then use the result for both
         // the definedness check and the actual concatenation.
@@ -490,6 +503,9 @@ public class StringOperators {
             WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
+
+        RuntimeScalar overloaded = tryStringConcatOverload(aResolved, bResolved);
+        if (overloaded != null) return overloaded;
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();

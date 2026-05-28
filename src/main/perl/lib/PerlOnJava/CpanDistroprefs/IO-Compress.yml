@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for IO::Compress.
+
+  HTTP::Message depends on IO::Compress modules, but the upstream
+  IO-Compress test matrix is much broader than PerlOnJava's current
+  compression compatibility and is very slow when failures cascade. Skip this
+  dependency test phase during CPAN resolution.
+match:
+  distribution: "^PMQS/IO-Compress-"
+test:
+  commandline: "PERLONJAVA_SKIP"

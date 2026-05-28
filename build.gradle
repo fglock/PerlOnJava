@@ -358,13 +358,21 @@ tasks.withType(Test).configureEach { t ->
 tasks.register('generatePerlSbom', Exec) {
     description = 'Generate SBOM for bundled Perl modules'
     group = 'sbom'
+    def outputFile = layout.buildDirectory.file("reports/perl-bom.json")
     
     workingDir = projectDir
-    commandLine 'bash', '-c', 
-        "mkdir -p build/reports && perl dev/tools/generate-perl-sbom.pl > build/reports/perl-bom.json"
+    commandLine 'perl', 'dev/tools/generate-perl-sbom.pl'
+    doFirst {
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        standardOutput = new FileOutputStream(file)
+    }
+    doLast {
+        standardOutput.close()
+    }
     
     // Declare output so Gradle waits for completion
-    outputs.file("build/reports/perl-bom.json")
+    outputs.file(outputFile)
 }
 
 // Task to merge Java and Perl SBOMs
@@ -372,17 +380,26 @@ tasks.register('mergeSbom', Exec) {
     description = 'Merge Java and Perl SBOMs into combined SBOM'
     group = 'sbom'
     dependsOn cyclonedxBom, generatePerlSbom
+    def outputFile = layout.buildDirectory.file("reports/sbom.json")
     
     // Declare inputs so Gradle knows dependencies
     inputs.file("build/reports/bom.json")
     inputs.file("build/reports/perl-bom.json")
     
     workingDir = projectDir
-    commandLine 'bash', '-c',
-        "perl dev/tools/merge-sbom.pl build/reports/bom.json build/reports/perl-bom.json > build/reports/sbom.json"
+    commandLine 'perl', 'dev/tools/merge-sbom.pl',
+        'build/reports/bom.json', 'build/reports/perl-bom.json'
+    doFirst {
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        standardOutput = new FileOutputStream(file)
+    }
+    doLast {
+        standardOutput.close()
+    }
     
     // Declare output
-    outputs.file("build/reports/sbom.json")
+    outputs.file(outputFile)
 }
 
 // Ensure combined SBOM is generated before shadowJar

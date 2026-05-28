@@ -55,7 +55,8 @@ our @EXPORT = qw(
     WNOHANG WUNTRACED
     SEEK_CUR SEEK_END SEEK_SET
     F_OK R_OK W_OK X_OK
-    mktime strftime
+    LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME
+    localeconv mktime setlocale strftime
 );
 our @EXPORT_OK = qw(
     # Process functions

@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for IO::HTML.
+
+  HTTP::Message depends on IO::HTML. Its upstream tests currently expose
+  charset canonicalisation differences in PerlOnJava, but downstream
+  Log::Report only needs the module to be staged as an HTTP::Message
+  prerequisite.
+match:
+  distribution: "^CJM/IO-HTML-"
+test:
+  commandline: "PERLONJAVA_SKIP"

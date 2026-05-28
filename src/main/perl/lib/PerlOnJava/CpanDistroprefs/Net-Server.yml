@@ -13,6 +13,6 @@ comment: |
   Apply a tiny source patch that adds these symbols to @EXPORT_OK so import
   works and Starman tests can proceed (with expected fork-related skips).
 match:
-  distribution: "^BBB/Net-Server-2\\.018"
+  distribution: "^BBB/Net-Server-"
 patches:
   - "Net-Server-2.018/Proto.pm.patch"

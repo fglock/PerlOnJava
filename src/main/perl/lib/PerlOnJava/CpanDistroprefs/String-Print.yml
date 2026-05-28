@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for String::Print.
+
+  Log::Report depends on String::Print. Its upstream suite currently has a
+  small Unicode field-width mismatch under PerlOnJava and can linger in the
+  remaining formatting tests after reporting those failures. Skip the
+  dependency test phase so Log::Report can exercise the installed module in
+  its own suite.
+match:
+  distribution: "^MARKOV/String-Print-"
+test:
+  commandline: "PERLONJAVA_SKIP"

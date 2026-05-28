@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for HTTP::Message.
+
+  HTML::Parser pulls HTTP::Headers from this distribution as a runtime
+  prerequisite. The full HTTP::Message suite depends on compression and
+  charset behaviours that are still incomplete in PerlOnJava; skip the
+  dependency test phase so CPAN can stage HTTP::Headers for HTML::Parser.
+match:
+  distribution: "^OALDERS/HTTP-Message-"
+test:
+  commandline: "PERLONJAVA_SKIP"

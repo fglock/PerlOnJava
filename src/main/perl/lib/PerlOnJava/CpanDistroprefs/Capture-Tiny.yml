@@ -6,6 +6,6 @@ comment: |
   requires fork; most upstream tee tests already skip on no-fork platforms,
   but t/16-catch-errors.t exercises tee() without checking Config.
 match:
-  distribution: "^DAGOLDEN/Capture-Tiny-0\\.50"
+  distribution: "^DAGOLDEN/Capture-Tiny-"
 patches:
   - "Capture-Tiny-0.50/NoForkTeeCatchErrors.patch"

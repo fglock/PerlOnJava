@@ -1,0 +1,12 @@
+---
+comment: |
+  PerlOnJava distroprefs for HTML::Parser.
+
+  PerlOnJava supplies a Java-backed HTML::Parser / HTML::Entities XS
+  implementation. The upstream distribution's full parser conformance suite
+  currently exercises XS behaviours that are broader than what downstream
+  Log::Report needs, so skip the dependency test phase during CPAN resolution.
+match:
+  distribution: "^OALDERS/HTML-Parser-"
+test:
+  commandline: "PERLONJAVA_SKIP"
