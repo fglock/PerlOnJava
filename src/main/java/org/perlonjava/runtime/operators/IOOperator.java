@@ -2826,8 +2826,8 @@ public class IOOperator {
 
     /**
      * Find a RuntimeIO handle by its file descriptor number.
-     * Checks multiple registries: IOOperator's local fileDescriptorMap, standard fds,
-     * and the RuntimeIO fileno registry (which includes dup'd handles and sockets).
+     * Checks multiple registries: IOOperator's local fileDescriptorMap, the RuntimeIO
+     * fileno registry (which includes dup'd handles and sockets), and standard fds.
      */
     private static RuntimeIO findFileHandleByDescriptor(int fd) {
         // Check if we have it in our mapping
@@ -2836,7 +2836,15 @@ public class IOOperator {
             return handle;
         }
 
-        // Handle standard file descriptors
+        // Prefer live registry entries. When fd 1 or 2 has been closed and a
+        // later file open reuses that number, Perl's numeric dup targets the
+        // new file, not the original static STDOUT/STDERR object.
+        RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+
+        // Handle standard file descriptors if no current registry owner exists.
         switch (fd) {
             case 0: // STDIN
                 return RuntimeIO.stdin;
@@ -2845,11 +2853,6 @@ public class IOOperator {
             case 2: // STDERR
                 return RuntimeIO.stderr;
             default:
-                // Check the RuntimeIO fileno registry (used by all file/pipe/socket handles)
-                RuntimeIO fromRegistry = RuntimeIO.getByFileno(fd);
-                if (fromRegistry != null) {
-                    return fromRegistry;
-                }
                 return null; // Unknown file descriptor
         }
     }

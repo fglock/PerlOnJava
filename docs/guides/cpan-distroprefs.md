@@ -81,6 +81,18 @@ Skipping the target distribution's test phase is a last resort. If you do it,
 document the supported subset and keep a separate smoke test or downstream test
 that proves the behavior PerlOnJava claims to support.
 
+The `jcpan` launchers export `PERLONJAVA_JCPAN_ARGS` with the CPAN arguments
+after wrapper-only options such as `--jobs`. Dependency-only skips can use an
+`env` `not_PERLONJAVA_JCPAN_ARGS` match to stay out of direct target runs.
+For example:
+
+```yaml
+match:
+  distribution: "^AUTHOR/Example-Module-"
+  env:
+    not_PERLONJAVA_JCPAN_ARGS: "(^|[[:space:]])Example::Module($|[[:space:]])"
+```
+
 ## Basic YAML Shape
 
 A distropref should include a detailed `comment`, a narrow `match`, and only the

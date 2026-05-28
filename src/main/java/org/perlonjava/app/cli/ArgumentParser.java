@@ -843,6 +843,9 @@ public class ArgumentParser {
                 case "git_commit_date":
                     value = Configuration.gitCommitDate;
                     break;
+                case "osname":
+                    value = SystemUtils.getPerlOsName();
+                    break;
                 default:
                     value = System.getProperty(configVar, "UNKNOWN");
             }

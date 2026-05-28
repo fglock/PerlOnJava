@@ -68,6 +68,33 @@ my $user_home = getProperty('user.home') || '';
 my $user_dir = getProperty('user.dir') || '';
 my $java_home = getProperty('java.home') || '';
 my $user_name = getProperty('user.name') || 'unknown';
+my $perlonjava_home = $user_home
+    ? _catdir($file_separator, $user_home, '.perlonjava')
+    : '.perlonjava';
+my $core_privlib = _catdir($file_separator, $perlonjava_home, 'core', 'lib', 'perl5', '5.42.0');
+my $core_archlib = _catdir($file_separator, $core_privlib, "java-$java_version-$os_arch");
+_ensure_dir(_catdir($file_separator, $core_archlib, 'CORE'));
+
+sub _perl_os_name {
+    my ($name) = @_;
+    my $lc = lc($name || 'unknown');
+    return 'MSWin32' if $lc =~ /^win/;
+    return 'darwin'  if $lc =~ /^(?:mac|darwin)/;
+    return 'linux'   if $lc =~ /(?:nix|nux|linux)/;
+    return 'solaris' if $lc =~ /(?:sunos|solaris)/;
+    return 'aix'     if $lc =~ /aix/;
+    return 'freebsd' if $lc =~ /freebsd/;
+    return 'openbsd' if $lc =~ /openbsd/;
+    $lc =~ s/\s+//g;
+    return $lc;
+}
+
+sub _perl_launcher_suffix {
+    my ($is_windows, $perl_path) = @_;
+    return '' unless $is_windows;
+    return lc $1 if defined($perl_path) && $perl_path =~ /(\.(?:bat|cmd|exe))\z/i;
+    return '.bat';
+}
 
 # Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
 my $host_name = eval {
@@ -104,9 +131,10 @@ my $system_cc = do {
     $found || ($is_win ? 'cl' : 'cc');
 };
 
-# Normalize OS name
-$os_name = lc($os_name);
-$os_name =~ s/\s+/_/g;
+# Normalize OS name to Perl's $^O conventions.
+$os_name = _perl_os_name($os_name);
+my $is_windows = $os_name eq 'MSWin32';
+my $perl_launcher_suffix = _perl_launcher_suffix($is_windows, $^X);
 
 # tie returns the object, so the value returned to require will be true.
 %Config = (
@@ -133,6 +161,8 @@ $os_name =~ s/\s+/_/g;
     # implement full taint checking. This allows tests that check for taint
     # support to skip gracefully.
     ccflags => '-DSILENT_NO_TAINT_SUPPORT',
+    ldflags => '',
+    lddlflags => '',
     optimize => '',
 
     # Library/path configuration
@@ -154,9 +184,10 @@ $os_name =~ s/\s+/_/g;
     cf_by     => $user_name,
     myhostname => $host_name,
 
-    # Standard Perl paths (relative to jar or filesystem)
-    archlibexp => 'perlonjava/lib/perl5/5.42.0/' . "java-$java_version-$os_arch",
-    privlibexp => 'perlonjava/lib/perl5/5.42.0',
+    # Standard Perl paths. The core exp paths must be real directories because
+    # CPAN build helpers such as ExtUtils::CBuilder probe $archlibexp/CORE.
+    archlibexp => $core_archlib,
+    privlibexp => $core_privlib,
     sitearchexp => 'perlonjava/lib/perl5/site_perl/5.42.0/' . "java-$java_version-$os_arch",
     sitelibexp => 'perlonjava/lib/perl5/site_perl/5.42.0',
     vendorarchexp => 'perlonjava/lib/perl5/vendor_perl/5.42.0/' . "java-$java_version-$os_arch",
@@ -258,17 +289,17 @@ $os_name =~ s/\s+/_/g;
     # Signal handling - signal 0 is ZERO (used for process existence checks)
     # Note: Signal names vary by OS. This is a common POSIX subset.
     # The index in the space-separated list corresponds to the signal number.
-    sig_name => ($os_name =~ /win/
+    sig_name => ($is_windows
         ? 'ZERO INT ILL FPE SEGV TERM ABRT BREAK'
         : 'ZERO HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM'),
-    sig_num => ($os_name =~ /win/
+    sig_num => ($is_windows
         ? '0 2 4 8 11 15 22 21'
         : '0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15'),
 
     # Executable
     obj_ext => '.o',
-    exe_ext => $os_name =~ /win/ ? '.exe' : '',
-    _exe => $os_name =~ /win/ ? '.exe' : '',
+    exe_ext => $is_windows ? '.exe' : '',
+    _exe => $perl_launcher_suffix,
     perlpath => $^X,  # Path to the perl interpreter (jperl)
     startperl => '#!' . $^X,  # Shebang line for Perl scripts
     sharpbang => '#!',  # Shebang prefix
@@ -350,6 +381,33 @@ $os_name =~ s/\s+/_/g;
 
 sub non_bincompat_options() {}
 sub bincompat_options() {}
+
+sub _catdir {
+    my ($sep, @parts) = @_;
+    my $path = shift @parts;
+    for my $part (@parts) {
+        next unless defined $part && length $part;
+        $path =~ s/\Q$sep\E+\z//;
+        $path .= $sep . $part;
+    }
+    return $path;
+}
+
+sub _ensure_dir {
+    my ($dir) = @_;
+    return if -d $dir;
+
+    my $sep = $file_separator;
+    my @parts = grep length, split /\Q$sep\E+/, $dir;
+    my $current = $dir =~ /^\Q$sep\E/ ? $sep : '';
+
+    for my $part (@parts) {
+        $current = length($current) && $current ne $sep
+            ? _catdir($sep, $current, $part)
+            : $current . $part;
+        mkdir $current unless -d $current;
+    }
+}
 
 # Return a string describing the perl configuration (like perl -V)
 sub myconfig {

@@ -35,5 +35,6 @@ rem etc.) can find jperl/jcpan without tokens that don't expand in
 rem POSIX sh. See src/main/perl/lib/CPAN/Config.pm (Moose.yml).
 set "JPERL_BIN=%SCRIPT_DIR%jperl.bat"
 set "JCPAN_BIN=%SCRIPT_DIR%jcpan.bat"
+set "PERLONJAVA_JCPAN_ARGS=%JCPAN_ARGS%"
 set "PATH=%SCRIPT_DIR%;%PATH%"
 "%SCRIPT_DIR%jperl.bat" "%SCRIPT_DIR%src\main\perl\bin\cpan" %JCPAN_ARGS%

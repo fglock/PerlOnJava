@@ -84,6 +84,7 @@ case "$JCPAN_BIN" in
     /*) ;;                       # already absolute
     *)  JCPAN_BIN="$SCRIPT_DIR/jcpan" ;;
 esac
+export PERLONJAVA_JCPAN_ARGS="${ARGS[*]}"
 export PATH="$SCRIPT_DIR:$PATH"
 
 exec "$SCRIPT_DIR/jperl" "$CPAN_SCRIPT" "${ARGS[@]}"
