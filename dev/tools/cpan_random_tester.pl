@@ -524,6 +524,13 @@ sub parse_all_module_results {
             next;
         }
 
+        if (is_perlonjava_distropref_skip_output($text)) {
+            $r{status} = 'SKIP';
+            $r{reason} = 'distroprefs';
+            push @results, \%r;
+            next;
+        }
+
         if ($text =~ /Result: FAIL/ || $text =~ /(?:make|Build) test -- NOT OK/) {
             $r{status} = 'FAIL';
             if ($total_tests > 0) {
@@ -556,7 +563,7 @@ sub parse_all_module_results {
 
     # --- Pass 3: catch modules that never reached the test phase ---
     # (configure failures, build failures, etc.)
-    my %pending_bundled_skip;
+    my %pending_skip;
     for my $line (split /\n/, $output) {
         if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
             $last_mod = $1;
@@ -590,16 +597,19 @@ sub parse_all_module_results {
         # output shapes may omit the standard make-test block, so keep this
         # fallback too. Defer recording until after the scan so a later
         # configure/build failure still wins.
-        $pending_bundled_skip{$last_mod} = 1
+        $pending_skip{$last_mod} = 'bundled'
             if $last_mod && !$seen{$last_mod} && is_bundled_skip_output($line);
+
+        $pending_skip{$last_mod} ||= 'distroprefs'
+            if $last_mod && !$seen{$last_mod} && is_perlonjava_distropref_skip_output($line);
     }
 
-    for my $mod (sort keys %pending_bundled_skip) {
+    for my $mod (sort keys %pending_skip) {
         next if $seen{$mod}++;
         my %r = (
             module => $mod, status => 'SKIP',
             tests => undef, pass_count => undef,
-            error => '', reason => 'bundled',
+            error => '', reason => $pending_skip{$mod},
         );
         push @results, \%r;
     }
@@ -612,6 +622,11 @@ sub is_bundled_skip_output {
     return 1 if $text =~ /PerlOnJava:\s+.+?\s+is bundled in the JAR;\s+skipping upstream test suite/i;
     return 1 if $text =~ /NOTE:\s+\S+\.pm\s+is bundled;\s+upstream test suite will be skipped/i;
     return 0;
+}
+
+sub is_perlonjava_distropref_skip_output {
+    my ($text) = @_;
+    return $text =~ /PERLONJAVA_SKIP -- (?:configure|make|test|install) phase skipped/ ? 1 : 0;
 }
 
 
