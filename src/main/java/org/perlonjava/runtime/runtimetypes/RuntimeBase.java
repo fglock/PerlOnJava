@@ -63,6 +63,33 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      */
     public boolean isPackageGlobalRoot = false;
 
+    /**
+     * Number of closures that capture this aggregate lexical directly
+     * (currently RuntimeArray / RuntimeHash pads). While positive, scope-exit
+     * cleanup of the aggregate's contents is deferred until the last closure
+     * releases it.
+     */
+    public int captureCount = 0;
+    public boolean scopeExited = false;
+
+    public void retainClosureCapture() {
+        captureCount++;
+    }
+
+    public void releaseClosureCapture() {
+        if (captureCount > 0) {
+            captureCount--;
+        }
+        if (captureCount == 0 && scopeExited) {
+            scopeExited = false;
+            if (this instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+            } else if (this instanceof RuntimeArray array) {
+                MortalList.scopeExitCleanupArray(array);
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // D-W6.13: production-grade ownership tracking.
     // Active for blessed objects that have at least one weak reference

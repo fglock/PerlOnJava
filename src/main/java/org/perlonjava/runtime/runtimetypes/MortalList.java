@@ -57,8 +57,10 @@ public class MortalList {
     public static void popTemporaryRoot(RuntimeBase root) {
         if (root != null) {
             ArrayDeque<RuntimeBase> roots = temporaryRoots.get();
-            if (!roots.isEmpty()) {
+            if (!roots.isEmpty() && roots.peek() == root) {
                 roots.pop();
+            } else {
+                roots.removeFirstOccurrence(root);
             }
         }
     }
@@ -345,6 +347,10 @@ public class MortalList {
         // variable no longer holds a strong reference.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
+        if (hash.captureCount > 0) {
+            hash.scopeExited = true;
+            return;
+        }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
         // data), we must still cascade decrements so their weak-ref entries
@@ -408,6 +414,10 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
+        if (arr.captureCount > 0) {
+            arr.scopeExited = true;
+            return;
+        }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
         if (!RuntimeBase.blessedObjectExists && !WeakRefRegistry.weakRefsExist) return;
@@ -544,6 +554,20 @@ public class MortalList {
                     }
                     base.releaseActiveOwner(s);
                     pending.add(base);
+                    if (base.activeOwnerCount() > 0
+                            || (base.refCount > 1
+                            && !containerHasWeakElementRefs(base)
+                            && isReachableFromExternalRootCached(base))) {
+                        continue;
+                    }
+                } else if (base.refCount > 0
+                        && (base.activeOwnerCount() > 0
+                        || (!containerHasWeakElementRefs(base)
+                        && isReachableFromExternalRootCached(base)))) {
+                    // This scalar is a non-owning copy of a still-live container.
+                    // Cleaning it up must not walk into the shared container and
+                    // release the original owner's children.
+                    continue;
                 }
                 // Walk into unblessed containers to find nested blessed refs
                 if (base instanceof RuntimeArray arr) {
@@ -557,6 +581,23 @@ public class MortalList {
                 }
             }
         }
+    }
+
+    private static boolean containerHasWeakElementRefs(RuntimeBase base) {
+        if (base instanceof RuntimeArray arr) {
+            for (RuntimeScalar elem : arr.elements) {
+                if (elem != null && WeakRefRegistry.hasWeakRefsTo(elem)) {
+                    return true;
+                }
+            }
+        } else if (base instanceof RuntimeHash hash) {
+            for (RuntimeScalar value : hash.elements.values()) {
+                if (value != null && WeakRefRegistry.hasWeakRefsTo(value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -695,6 +736,9 @@ public class MortalList {
     }
 
     private static boolean isReachableFromExternalRootCached(RuntimeBase base) {
+        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
+            return true;
+        }
         if (externalRootSnapshot == null) {
             externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
         }
@@ -786,7 +830,9 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && isReachableFromExternalRootCached(base)) {
+                    && (RuntimeCode.argsStackDepth() > 1
+                    || isReachableFromExternalRootCached(base)
+                    || ReachabilityWalker.isReachableFromRoots(base))) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing

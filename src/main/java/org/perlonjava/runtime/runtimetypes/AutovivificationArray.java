@@ -43,6 +43,7 @@ public class AutovivificationArray extends ArrayList<RuntimeScalar> {
 
             arrayProxy.scalarToAutovivify.value = array;
             arrayProxy.scalarToAutovivify.type = RuntimeScalarType.ARRAYREFERENCE;
+            RuntimeScalar.incrementRefCountForContainerStore(arrayProxy.scalarToAutovivify);
         }
     }
 

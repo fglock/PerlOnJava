@@ -946,14 +946,23 @@ public class OpcodeHandlerExtended {
         // Without this, scopeExitCleanup() doesn't know the variable is still alive
         // via this closure, and may prematurely clear weak references to its value.
         java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
+        java.util.List<RuntimeBase> capturedAggregates = new java.util.ArrayList<>();
         for (RuntimeBase captured : capturedVars) {
             if (captured instanceof RuntimeScalar s) {
                 capturedScalars.add(s);
-                s.captureCount++;
+                s.retainClosureCapture();
+            } else if (captured instanceof RuntimeArray || captured instanceof RuntimeHash) {
+                capturedAggregates.add(captured);
+                captured.retainClosureCapture();
             }
         }
         if (!capturedScalars.isEmpty()) {
             closureCode.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+        }
+        if (!capturedAggregates.isEmpty()) {
+            closureCode.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+        }
+        if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
             closureCode.refCount = 0;
         }
 

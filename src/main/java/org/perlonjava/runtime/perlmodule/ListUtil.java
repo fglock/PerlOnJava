@@ -708,7 +708,7 @@ public class ListUtil extends PerlModuleBase {
      * they provide ->key / ->value / ->TO_JSON methods.
      */
     public static RuntimeList pairs(RuntimeArray args, int ctx) {
-        RuntimeArray result = new RuntimeArray();
+        RuntimeList result = new RuntimeList();
         RuntimeScalar pairClass = new RuntimeScalar("List::Util::_Pair");
 
         for (int i = 0; i < args.size(); i += 2) {
@@ -719,57 +719,57 @@ public class ListUtil extends PerlModuleBase {
             } else {
                 pair.push(scalarUndef);
             }
-            RuntimeScalar pairRef = pair.createReference();
+            RuntimeScalar pairRef = pair.createAnonymousReference();
             org.perlonjava.runtime.operators.ReferenceOperators.bless(pairRef, pairClass);
-            result.push(pairRef);
+            result.add(pairRef);
         }
 
-        return result.getList();
+        return result;
     }
 
     /**
      * Flattens pairs back to a list.
      */
     public static RuntimeList unpairs(RuntimeArray args, int ctx) {
-        RuntimeArray result = new RuntimeArray();
+        RuntimeList result = new RuntimeList();
 
         for (RuntimeScalar pairRef : args.elements) {
             if (pairRef.type == RuntimeScalarType.ARRAYREFERENCE) {
                 RuntimeArray pair = (RuntimeArray) pairRef.value;
                 // Always emit exactly two values (key, value), padding with undef
                 // when the input arrayref has fewer than two elements.
-                result.push(pair.size() >= 1 ? pair.get(0) : scalarUndef);
-                result.push(pair.size() >= 2 ? pair.get(1) : scalarUndef);
+                result.add(pair.size() >= 1 ? pair.get(0) : scalarUndef);
+                result.add(pair.size() >= 2 ? pair.get(1) : scalarUndef);
             }
         }
 
-        return result.getList();
+        return result;
     }
 
     /**
      * Returns the first values of each pair (keys).
      */
     public static RuntimeList pairkeys(RuntimeArray args, int ctx) {
-        RuntimeArray result = new RuntimeArray();
+        RuntimeList result = new RuntimeList();
 
         for (int i = 0; i < args.size(); i += 2) {
-            result.push(args.get(i));
+            result.add(args.get(i));
         }
 
-        return result.getList();
+        return result;
     }
 
     /**
      * Returns the second values of each pair (values).
      */
     public static RuntimeList pairvalues(RuntimeArray args, int ctx) {
-        RuntimeArray result = new RuntimeArray();
+        RuntimeList result = new RuntimeList();
 
         for (int i = 1; i < args.size(); i += 2) {
-            result.push(args.get(i));
+            result.add(args.get(i));
         }
 
-        return result.getList();
+        return result;
     }
 
     /**
@@ -975,7 +975,7 @@ public class ListUtil extends PerlModuleBase {
                     tuple.push(RuntimeScalarCache.scalarUndef);
                 }
             }
-            result.push(tuple.createReference());
+            result.push(tuple.createAnonymousReference());
         }
 
         return result.getList();

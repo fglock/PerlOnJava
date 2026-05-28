@@ -104,6 +104,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public int captureCount;
 
     /**
+     * Number of closure-capture owners currently retained on this scalar's
+     * referent. This is separate from {@link #captureCount}: a weak scalar, an
+     * untracked referent, or a scalar that already owns a normal refCount slot
+     * may be captured without adding an extra selective refCount owner.
+     */
+    public int captureRefCountOwned;
+
+    /**
      * True if {@link #scopeExitCleanup} has been called for this variable
      * (i.e., the variable's declaring scope has exited), but cleanup was
      * deferred because {@code captureCount > 0}. Used by
@@ -113,6 +121,66 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * will be decremented later by scopeExitCleanup when the scope exits).
      */
     public boolean scopeExited;
+
+    public void retainClosureCapture() {
+        captureCount++;
+    }
+
+    public void releaseClosureCapture() {
+        releaseOneClosureCaptureReferent();
+        if (captureCount > 0) {
+            captureCount--;
+        }
+    }
+
+    private void retainClosureCaptureReferent() {
+        RuntimeBase base = closureCaptureReferent();
+        if (base == null) return;
+        base.traceRefCount(+1, "RuntimeScalar.retainClosureCaptureReferent");
+        base.refCount++;
+        base.hadCountedReference = true;
+        captureRefCountOwned++;
+    }
+
+    private void retainMissingClosureCaptureReferents() {
+        while (captureRefCountOwned < captureCount) {
+            int before = captureRefCountOwned;
+            retainClosureCaptureReferent();
+            if (captureRefCountOwned == before) break;
+        }
+    }
+
+    private RuntimeBase closureCaptureReferent() {
+        if (WeakRefRegistry.isweak(this)) return null;
+        if ((type & RuntimeScalarType.REFERENCE_BIT) == 0 || !(value instanceof RuntimeBase base)) {
+            return null;
+        }
+        if (refCountOwned && !(base instanceof RuntimeCode)) return null;
+        if (base.refCount < 0 || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                || base.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return base;
+    }
+
+    private void releaseOneClosureCaptureReferent() {
+        if (captureRefCountOwned <= 0) return;
+        if ((type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase base
+                && base.refCount > 0) {
+            MortalList.deferDecrement(base);
+        }
+        captureRefCountOwned--;
+    }
+
+    private void releaseAllClosureCaptureReferents(RuntimeBase oldBase) {
+        while (captureRefCountOwned > 0) {
+            if (oldBase != null && oldBase.refCount > 0) {
+                MortalList.deferDecrement(oldBase);
+            }
+            captureRefCountOwned--;
+        }
+    }
 
     /**
      * True if this scalar "owns" a refCount increment on its referent.
@@ -1173,7 +1241,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean scalarRefContentTrackingNeeded =
                 this.ownsScalarReferenceContents || scalarReferenceContentsNeedRetain(value);
         if (!scalarRefContentTrackingNeeded
-                && !this.refCountOwned && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
+                && !this.refCountOwned && this.captureCount == 0 && this.captureRefCountOwned == 0
+                && this.type != GLOBREFERENCE && value.type != GLOBREFERENCE) {
             // Both old and new are non-GLOB references. Check if referents are untracked.
             boolean oldUntracked = (this.type & REFERENCE_BIT) == 0
                     || this.value == null
@@ -1275,6 +1344,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && oldBase.blessId != 0
                 && WeakRefRegistry.weakRefsExist
                 && blessedClassHasDestroy(oldBase);
+        if (oldBase != null && this.captureRefCountOwned > 0) {
+            releaseAllClosureCaptureReferents(oldBase);
+        }
 
         // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
         // at refCount==-1 are promoted to 0 here (aligned with
@@ -1441,6 +1513,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Update ownership: this scalar now owns a refCount iff we incremented.
         this.refCountOwned = newOwned;
+        retainMissingClosureCaptureReferents();
         retainScalarReferenceContents(value);
 
         // Flush deferred mortal decrements from the current function scope.
@@ -1627,10 +1700,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // we. Detect by identity first, then by depth via a ThreadLocal
                 // guard inside Overload.stringify (handles the transitive case).
                 RuntimeScalar overloaded = Overload.stringify(this);
-                if (overloaded == this) yield toStringRef();
+                if (isSameOverloadStringificationTarget(overloaded, this)) yield toStringRef();
                 yield overloaded.toString();
             }
         };
+    }
+
+    private static boolean isSameOverloadStringificationTarget(RuntimeScalar overloaded,
+                                                               RuntimeScalar original) {
+        RuntimeScalar resolvedOverloaded = unwrapReadonlyScalar(overloaded);
+        RuntimeScalar resolvedOriginal = unwrapReadonlyScalar(original);
+        if (resolvedOverloaded == resolvedOriginal) return true;
+        if (resolvedOverloaded == null || resolvedOriginal == null) return false;
+        if ((resolvedOverloaded.type & REFERENCE_BIT) == 0
+                || (resolvedOriginal.type & REFERENCE_BIT) == 0) {
+            return false;
+        }
+        return resolvedOverloaded.value != null
+                && resolvedOverloaded.value == resolvedOriginal.value;
+    }
+
+    private static RuntimeScalar unwrapReadonlyScalar(RuntimeScalar scalar) {
+        while (scalar != null && scalar.type == READONLY_SCALAR) {
+            scalar = (RuntimeScalar) scalar.value;
+        }
+        return scalar;
     }
 
     /**
@@ -2521,6 +2615,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // truly reach zero.
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             boolean releasedCode = false;
+            releaseAllClosureCaptureReferents(code);
             if (this.refCountOwned && code.refCount > 0) {
                 this.refCountOwned = false;
                 code.releaseActiveOwner(this);
@@ -2545,6 +2640,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value instanceof RuntimeBase base
                 && base.refCount != -1 && base.refCount != Integer.MIN_VALUE) {
             oldBase = base;
+        }
+        if (oldBase != null && this.captureRefCountOwned > 0) {
+            releaseAllClosureCaptureReferents(oldBase);
         }
 
         // Close IO handles when dropping a glob reference.
@@ -2765,7 +2863,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
                 if (selfRef) {
                     // Decrement our captureCount (the closure captured us)
-                    scalar.captureCount--;
+                    scalar.releaseClosureCapture();
                     // Remove self from capturedScalars to prevent double-decrement
                     // when releaseCaptures runs later during CODE ref destruction
                     RuntimeScalar[] old = code.capturedScalars;
@@ -2784,6 +2882,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // Mark that this variable's scope has exited. When releaseCaptures
             // later decrements captureCount to 0, it will know the scope is gone.
             scalar.scopeExited = true;
+            scalar.retainMissingClosureCaptureReferents();
             // For CODE refs: still decrement the VALUE's refCount so the RuntimeCode
             // is eventually destroyed and its releaseCaptures fires (decrementing
             // captureCount on all the variables IT captured). This is critical for

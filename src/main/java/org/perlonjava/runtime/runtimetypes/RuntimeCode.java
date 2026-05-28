@@ -392,6 +392,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static RuntimeList returnList(RuntimeBase retVal, int callContext) {
+        return returnList(retVal, callContext, true);
+    }
+
+    public static RuntimeList returnList(RuntimeBase retVal, int callContext, boolean copyReferenceScalars) {
         if (retVal == null) {
             return new RuntimeList();
         }
@@ -401,7 +405,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             result.add(retVal);
             return result;
         }
-        return retVal.getList();
+        RuntimeList result = retVal.getList();
+        if (copyReferenceScalars && callContext == RuntimeContextType.LIST) {
+            RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true);
+            if (copied != result) {
+                MortalList.pushTemporaryRoot(copied);
+            }
+            return copied;
+        }
+        return result;
     }
 
     /**
@@ -413,22 +425,63 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * tear down shared JDBC state before the outer method ran.
      */
     public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext) {
-        if (result == null) {
-            return null;
+        return coerceScalarCallResult(result, effectiveContext, effectiveContext, true);
+    }
+
+    public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext, int originalContext) {
+        return coerceScalarCallResult(result, effectiveContext, originalContext, true);
+    }
+
+    public static RuntimeList coerceScalarCallResult(RuntimeList result, int effectiveContext,
+                                                     int originalContext, boolean copyCapturedScalars) {
+        try {
+            if (result == null) {
+                return null;
+            }
+            if (result instanceof RuntimeControlFlowList) {
+                return result;
+            }
+            if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
+                return copyReturnedReferenceScalars(new RuntimeList(result.scalar()), originalContext, copyCapturedScalars);
+            }
+            if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() == 1) {
+                RuntimeBase value = result.elements.getFirst();
+                if (value instanceof RuntimeScalar scalar && scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                    return copyReturnedReferenceScalars(new RuntimeList(scalar.tiedFetch()), originalContext, copyCapturedScalars);
+                }
+            }
+            return copyReturnedReferenceScalars(copyReadonlyListReturns(result, effectiveContext),
+                    originalContext, copyCapturedScalars);
+        } finally {
+            MortalList.popTemporaryRoot(result);
         }
-        if (result instanceof RuntimeControlFlowList) {
+    }
+
+    private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
+                                                        boolean copyCapturedScalars) {
+        if (result == null
+                || result instanceof RuntimeControlFlowList
+                || !copyCapturedScalars
+                || originalContext == RuntimeContextType.LVALUE
+                || originalContext == RuntimeContextType.LVALUE_LIST) {
             return result;
         }
-        if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
-            return new RuntimeList(result.scalar());
-        }
-        if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() == 1) {
-            RuntimeBase value = result.elements.getFirst();
-            if (value instanceof RuntimeScalar scalar && scalar.type == RuntimeScalarType.TIED_SCALAR) {
-                return new RuntimeList(scalar.tiedFetch());
+        for (RuntimeBase value : result.elements) {
+            if (value instanceof RuntimeScalar scalar
+                    && !isCodeScalar(scalar)
+                    && (RuntimeScalarType.isReference(scalar) || scalar.captureCount > 0)) {
+                return result.cloneScalars();
             }
         }
-        return copyReadonlyListReturns(result, effectiveContext);
+        return result;
+    }
+
+    private static boolean isCodeScalar(RuntimeScalar scalar) {
+        RuntimeScalar current = scalar;
+        while (current != null && current.type == RuntimeScalarType.READONLY_SCALAR) {
+            current = (RuntimeScalar) current.value;
+        }
+        return current != null && current.type == RuntimeScalarType.CODE;
     }
 
     private static RuntimeList copyReadonlyListReturns(RuntimeList result, int effectiveContext) {
@@ -696,6 +749,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar[] capturedScalars;
 
     /**
+     * Captured aggregate lexicals (arrays/hashes). Their element cleanup is
+     * deferred while the closure keeps the aggregate alive.
+     */
+    public RuntimeBase[] capturedAggregates;
+
+    /**
      * Tracks the number of stash (glob) entries that reference this CODE object.
      * Stash entries created via {@code *Foo::bar = $coderef} are invisible to the
      * selective refCount because glob assignments go through a container that
@@ -750,7 +809,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeScalar[] scalars = capturedScalars;
             capturedScalars = null;  // null out first to prevent re-entry
             for (RuntimeScalar s : scalars) {
-                s.captureCount--;
+                s.releaseClosureCapture();
                 if (s.captureCount == 0) {
                     // If the captured scalar itself holds a CODE ref with captures,
                     // release those recursively (handles nested closures).
@@ -763,13 +822,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // closure is alive). Now that the last closure is releasing this
                     // capture, decrement refCount to balance the original increment.
                     //
-                    // Only cascade for BLESSED referents. For unblessed containers
-                    // (arrays, hashes), the selective refCount from releaseCaptures
-                    // can falsely reach 0 (because closure captures hold JVM references
-                    // not counted in refCount). Cascading to callDestroy for such
-                    // containers would clear weak references prematurely, breaking
-                    // Sub::Defer/Moo's %DEFERRED and %QUOTED weak ref tables.
-                    // The JVM GC handles truly-dead unblessed containers eventually.
+                    // Balance the captured lexical's owned reference now that the
+                    // last closure is gone. MortalList handles the weak-ref rescue
+                    // cases for unblessed containers whose selective refCount can
+                    // transiently reach zero while still reachable through live CODE.
                     if (s.scopeExited) {
                         if (s.type == RuntimeScalarType.TIED_SCALAR
                                 && s.value instanceof TiedVariableBase tiedVariable) {
@@ -779,11 +835,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         }
                         if ((s.type & RuntimeScalarType.REFERENCE_BIT) != 0
                                 && s.value instanceof RuntimeBase rb
-                                && rb.blessId != 0) {
+                                && (rb.blessId != 0 || !WeakRefRegistry.hasWeakRefsTo(rb))) {
                             MortalList.releaseCapturedDecrement(s);
                         }
                         MortalList.noteDeferredCaptureMayBeReady();
                     }
+                }
+            }
+        }
+        if (capturedAggregates != null) {
+            RuntimeBase[] aggregates = capturedAggregates;
+            capturedAggregates = null;
+            for (RuntimeBase aggregate : aggregates) {
+                if (aggregate != null) {
+                    aggregate.releaseClosureCapture();
                 }
             }
         }
@@ -2295,17 +2360,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // can decrement blessed ref refCounts when the closure is discarded.
         Field[] allFields = clazz.getDeclaredFields();
         List<RuntimeScalar> captured = new ArrayList<>();
+        List<RuntimeBase> capturedAggregates = new ArrayList<>();
         for (Field f : allFields) {
             if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
                     captured.add(capturedVar);
-                    capturedVar.captureCount++;
+                    capturedVar.retainClosureCapture();
+                }
+            } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
+                RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
+                if (capturedAggregate != null) {
+                    capturedAggregates.add(capturedAggregate);
+                    capturedAggregate.retainClosureCapture();
                 }
             }
         }
         if (!captured.isEmpty()) {
             code.capturedScalars = captured.toArray(new RuntimeScalar[0]);
+        }
+        if (!capturedAggregates.isEmpty()) {
+            code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+        }
+        if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
             // Enable refCount tracking for closures with captures.
             // When the CODE ref's refCount drops to 0, releaseCaptures()
             // fires (via DestroyDispatch.callDestroy), letting captured
@@ -3357,15 +3434,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         MortalList.flushAboveMark();
                         return result;
                     }
-                    return coerceScalarCallResult(result, effectiveContext);
+                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 }
             } catch (PerlNonLocalReturnException e) {
                 // Non-local return from map/grep block
                 if (code.isMapGrepBlock || code.isEvalBlock) {
                     throw e;  // Propagate through map/grep blocks and eval blocks
                 }
-                // Consume at normal subroutine boundary
-                return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                // Consume at normal subroutine boundary.
+                RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
             } catch (RuntimeException e) {
                 // On die: run scopeExitCleanup for my-variables whose normal
                 // SCOPE_EXIT_CLEANUP bytecodes were skipped by the exception.
@@ -3640,8 +3718,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (code.isMapGrepBlock || code.isEvalBlock) {
                         throw e;  // Propagate through map/grep blocks and eval blocks
                     }
-                    // Consume at normal subroutine boundary
-                    return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                    // Consume at normal subroutine boundary.
+                    RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
                     if (!(e instanceof PerlExitException)) {
                         MyVarCleanupStack.unwindTo(cleanupMark);
@@ -3888,8 +3967,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (code.isMapGrepBlock || code.isEvalBlock) {
                         throw e;  // Propagate through map/grep blocks and eval blocks
                     }
-                    // Consume at normal subroutine boundary
-                    return e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                    // Consume at normal subroutine boundary.
+                    RuntimeList result = e.returnValue != null ? e.returnValue.getList() : new RuntimeList();
+                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
                 } catch (RuntimeException e) {
                     if (!(e instanceof PerlExitException)) {
                         MyVarCleanupStack.unwindTo(cleanupMark);
@@ -4346,7 +4426,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return coerceScalarCallResult(result, effectiveContext);
+                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this));
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
@@ -4465,7 +4545,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return coerceScalarCallResult(result, effectiveContext);
+                return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this));
             } finally {
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();

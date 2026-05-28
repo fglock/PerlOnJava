@@ -1469,6 +1469,9 @@ public class SubroutineParser {
 
         Supplier<Void> subroutineCreationTaskSupplier = () -> {
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
+            if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
+                block.setAnnotation("subroutineIsLvalue", true);
+            }
             RuntimeCode runtimeCode =
                     EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
 
@@ -1599,14 +1602,24 @@ public class SubroutineParser {
         }
 
         ArrayList<RuntimeScalar> capturedScalars = new ArrayList<>();
+        ArrayList<RuntimeBase> capturedAggregates = new ArrayList<>();
         for (Object value : capturedValues) {
             if (value instanceof RuntimeScalar scalar) {
                 capturedScalars.add(scalar);
-                scalar.captureCount++;
+                scalar.retainClosureCapture();
+            } else if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
+                RuntimeBase aggregate = (RuntimeBase) value;
+                capturedAggregates.add(aggregate);
+                aggregate.retainClosureCapture();
             }
         }
         if (!capturedScalars.isEmpty()) {
             code.capturedScalars = capturedScalars.toArray(new RuntimeScalar[0]);
+        }
+        if (!capturedAggregates.isEmpty()) {
+            code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
+        }
+        if (!capturedScalars.isEmpty() || !capturedAggregates.isEmpty()) {
             code.refCount = 0;
         }
     }

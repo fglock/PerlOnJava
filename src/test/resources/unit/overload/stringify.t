@@ -68,4 +68,13 @@ my @objects = ($basic, $advanced);
 my $joined = join ", ", @objects;
 ok(!($joined ne "Number: 42, Advanced Number: 100"), 'stringification works in join');
 
+{
+    package BrokenStringify;
+    use overload '""' => sub { $_[0] };
+}
+
+my $broken = bless {}, 'BrokenStringify';
+like("$broken", qr/^BrokenStringify=HASH\(0x[0-9a-f]+\)$/i,
+     'string overload returning same referent falls back to reference string');
+
 done_testing();

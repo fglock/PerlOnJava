@@ -695,10 +695,10 @@ public class RuntimeList extends RuntimeBase {
                 }
                 // Undo materialized copies' refCount increments.
                 // createHashForAssignment creates new RuntimeScalars for hash values
-                // (via createHashNoWarn's `new RuntimeScalar(iterator.next())`), which
-                // do NOT inherit refCountOwned. The original rhs elements' refCount
-                // increments (from materialization via addToArray → setLarge) are now
-                // redundant and would leak since nobody decrements them.
+                // and gives those hash slots their own container-store ownership.
+                // The original rhs elements' refCount increments (from materialization
+                // via addToArray -> setLarge) are now redundant and would leak since
+                // nobody decrements them.
                 for (RuntimeScalar r : remainingArr.elements) {
                     if (r.refCountOwned && (r.type & RuntimeScalarType.REFERENCE_BIT) != 0
                             && r.value instanceof RuntimeBase base && base.refCount > 0) {
