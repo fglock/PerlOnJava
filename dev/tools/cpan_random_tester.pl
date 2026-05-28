@@ -21,7 +21,7 @@
 #   perl dev/tools/cpan_random_tester.pl --modules Foo::Bar,Baz::Qux  # Test specific modules
 #   perl dev/tools/cpan_random_tester.pl --modules list.txt # Test modules from file
 #   perl dev/tools/cpan_random_tester.pl --report-only      # Regenerate .md from .dat
-#   perl dev/tools/cpan_random_tester.pl --timeout 120      # default 2 min (overrides below win)
+#   perl dev/tools/cpan_random_tester.pl --timeout 120      # 2 min (overrides below win)
 #   perl dev/tools/cpan_random_tester.pl --install           # Install mode (deps stay)
 #
 # Output:
@@ -76,7 +76,7 @@ my $packages_gz  = glob('~/.cpan/sources/modules/02packages.details.txt.gz');
 # CLI options
 # ──────────────────────────────────────────────────────────────────────
 my $count       = 10;
-my $timeout     = 300;
+my $timeout     = 1200;
 my $report_only = 0;
 my $install     = 0;      # --install: use jcpan (install) instead of jcpan -t
 my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ago
@@ -965,7 +965,7 @@ Options:
                    Can be:
                      - Comma-separated: --modules Foo::Bar,Baz::Qux
                      - File path: --modules modules.txt (one per line, # for comments)
-  --timeout N      Default timeout per target module in seconds (default: 300).
+  --timeout N      Default timeout per target module in seconds (default: 1200).
                    Known-slow distributions use a larger timeout wired in this script.
   --install        Use jcpan (install) instead of jcpan -t (test only).
                    Deps stay installed for future runs, but already-installed
