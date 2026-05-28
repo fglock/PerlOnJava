@@ -538,6 +538,9 @@ public class PrototypeArgs {
         if (slots < 2) {
             return false;
         }
+        if (!nextTokenStartsQwWordList(parser)) {
+            return false;
+        }
         int saved = parser.tokenIndex;
         List<OperatorNode> savedHeredocs = ParseHeredoc.saveHeredocState(parser);
         Node expr = parser.parseExpression(parser.getPrecedence(","));
@@ -578,6 +581,13 @@ public class PrototypeArgs {
             break;
         }
         return count;
+    }
+
+    private static boolean nextTokenStartsQwWordList(Parser parser) {
+        int i = skipHorizontalWhitespaceTokens(parser.tokens, parser.tokenIndex);
+        return i < parser.tokens.size()
+                && parser.tokens.get(i).type == LexerTokenType.IDENTIFIER
+                && parser.tokens.get(i).text.equals("qw");
     }
 
     /** True if every element is a {@link StringNode} (parenthesis-free qw word list). */
