@@ -21,7 +21,7 @@
 +    if ($is_perlonjava) {
 +        require Test::More;
 +        Test::More::plan(skip_all =>
-+            'PerlOnJava does not implement :via(...) PerlIO layers yet');
++            'PerlOnJava does not implement fork/Test::TCP helper servers yet');
 +    }
 +}
 +

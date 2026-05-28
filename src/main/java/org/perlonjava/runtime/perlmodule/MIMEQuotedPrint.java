@@ -137,11 +137,6 @@ public class MIMEQuotedPrint extends PerlModuleBase {
             output.append(currentLine);
         }
 
-        // Add soft line break at end unless EOL is empty
-        if (!eol.isEmpty() && output.length() > 0) {
-            output.append("=").append(eol);
-        }
-
         return output.toString();
     }
 

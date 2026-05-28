@@ -278,7 +278,7 @@ CPAN/end-to-end checks:
 
 ## Progress Tracking
 
-### Current Status: design ready, implementation pending
+### Current Status: V1 implemented (2026-05-28)
 
 ### Completed Phases
 
@@ -287,19 +287,53 @@ CPAN/end-to-end checks:
   - Updated `LayeredIOHandle` to fail clearly when `:via(...)` is used.
 - [x] `PerlIO::via::Timeout` CPAN install/test workaround (2026-05-28)
   - Added a bundled CPAN distropref and patch for `PerlIO-via-Timeout-0.32`.
-  - The patch skips the unsupported runtime socket test under `jperl` and
-    removes the unused `Test::TCP` build prerequisite while via runtime support
-    is pending.
+  - The patch skips the fork/Test::TCP-dependent runtime socket test under
+    `jperl` and removes the unused `Test::TCP` build prerequisite for the
+    PerlOnJava test phase.
+- [x] Hook scaffolding and runtime dispatch (2026-05-28)
+  - Added optional intercepting hooks to `IOLayer`.
+  - Routed `LayeredIOHandle` read, write, flush, close, fileno, eof, tell, and
+    seek through the topmost intercepting layer.
+  - Files: `IOLayer.java`, `LayeredIOHandle.java`.
+- [x] `ViaLayer` lifecycle and callbacks (2026-05-28)
+  - Added `ViaLayer` with exact/fallback package resolution, `require`,
+    `PUSHED`, optional callback discovery, object retention, and `POPPED`.
+  - Implemented `READ`, `FILL`, `WRITE`, `CLOSE`, `FLUSH`, `FILENO`, `EOF`,
+    `SEEK`, and `TELL`.
+  - Created a glob-backed borrowed below handle for callbacks.
+  - Files: `ViaLayer.java`, `BorrowedIOHandle.java` integration via existing
+    wrapper.
+- [x] Safe `binmode` push and CPAN integration (2026-05-28)
+  - Changed `RuntimeIO.binmode()` to return status and preserve the original
+    handle when layer push fails.
+  - Updated `IOOperator.binmode()` to return undef on failed layer push.
+  - Added `unit/perlio_via.t`.
+  - Fixed `MIME::QuotedPrint::encode_qp` final soft-break parity exposed by
+    `PerlIO::via::QuotedPrint`.
+  - Files: `RuntimeIO.java`, `IOOperator.java`, `MIMEQuotedPrint.java`,
+    `mime_quotedprint.t`, `perlio_via.t`.
+
+### Verification Results
+
+- `timeout 1200 make` passed.
+- `timeout 120 ./jperl src/test/resources/unit/perlio_via.t` passed.
+- `timeout 120 ./jperl src/test/resources/unit/mime_quotedprint.t` passed.
+- `timeout 600 ./jcpan -t PerlIO::via::QuotedPrint` passed.
+- `timeout 600 ./jcpan -t PerlIO::via::Timeout` passed with the upstream
+  socket test skipped for fork/Test::TCP.
+- `timeout 120 ./jperl -I.../PerlIO-via-Timeout... -MPerlIO::via::Timeout=:all`
+  file-write smoke passed.
 
 ### Next Steps
 
-1. Implement hook scaffolding with no behavior change for existing layers.
-2. Implement `ViaLayer` lifecycle and below-handle creation.
-3. Implement read/write/lifecycle callbacks.
-4. Enable `binmode($fh, ":via(...)")` on existing handles.
-5. Remove or narrow the `PerlIO::via::Timeout` CPAN skip once its runtime test
-   passes.
-6. Record final verification results here.
+1. Add support for deferred PerlIO callbacks: `UNREAD`, `FDOPEN`, and
+   `SYSOPEN`.
+2. Add full UTF8 flag propagation for via callback buffers.
+3. Support multiple stacked `:via(...)` layers and arbitrary transform layers
+   above via.
+4. Remove the `PerlIO::via::Timeout` CPAN skip after fork/Test::TCP has a
+   supported path or the test is patched to use a forkless helper.
+5. Run broader downstream checks such as Redis and DBI trace-style handles.
 
 ### Open Questions
 
