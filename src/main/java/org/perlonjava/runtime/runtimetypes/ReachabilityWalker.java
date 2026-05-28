@@ -222,6 +222,7 @@ public class ReachabilityWalker {
             addReachable(cap, todo);
             visitScalar(cap, todo);
         });
+        visitReflectiveCodeBases(code, base -> addReachable(base, todo));
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
@@ -1209,6 +1210,16 @@ public class ReachabilityWalker {
             }
         });
         if (foundReflectiveCapture[0]) return true;
+        final boolean[] foundReflectiveBase = {false};
+        visitReflectiveCodeBases(code, base -> {
+            if (foundReflectiveBase[0]) return;
+            if (base == target) {
+                foundReflectiveBase[0] = true;
+            } else if (seen.add(base)) {
+                todo.addLast(base);
+            }
+        });
+        if (foundReflectiveBase[0]) return true;
         if (code instanceof org.perlonjava.backend.bytecode.InterpretedCode interpreted
                 && interpreted.capturedVars != null) {
             for (RuntimeBase cap : interpreted.capturedVars) {
@@ -1231,6 +1242,28 @@ public class ReachabilityWalker {
             for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
                 if (field.getType() == RuntimeScalar.class && !"__SUB__".equals(field.getName())) {
                     RuntimeScalar cap = (RuntimeScalar) field.get(closureObject);
+                    if (cap != null) {
+                        visitor.accept(cap);
+                    }
+                }
+            }
+        } catch (IllegalAccessException ignored) {
+            // Generated closure fields are public. If another implementation
+            // denies reflective access, callers still have capturedScalars and
+            // interpreter capturedVars metadata as fallbacks.
+        }
+    }
+
+    private static void visitReflectiveCodeBases(RuntimeCode code,
+                                                 java.util.function.Consumer<RuntimeBase> visitor) {
+        Object closureObject = code.codeObject != null ? code.codeObject : code.subroutine;
+        if (closureObject == null) return;
+        try {
+            for (java.lang.reflect.Field field : closureObject.getClass().getDeclaredFields()) {
+                Class<?> fieldType = field.getType();
+                if (fieldType != RuntimeScalar.class
+                        && RuntimeBase.class.isAssignableFrom(fieldType)) {
+                    RuntimeBase cap = (RuntimeBase) field.get(closureObject);
                     if (cap != null) {
                         visitor.accept(cap);
                     }
@@ -1318,6 +1351,19 @@ public class ReachabilityWalker {
                         continue;
                     }
                 }
+                // Quiet auto-sweeps can run while a deferred CODE ref is being
+                // returned to its caller. Sub::Quote stores weak registry
+                // entries in hashes/arrays that are strongly captured by that
+                // CODE, but the caller's lexical may not be visible as a root
+                // yet. Keep this exception limited to unblessed metadata
+                // containers and only for quiet statement-boundary sweeps;
+                // explicit jperl_gc() keeps the stricter root-based behavior.
+                if (quiet
+                        && referent.blessId == 0
+                        && (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
+                        && isCapturedByWeakBackrefCode(referent)) {
+                    continue;
+                }
                 toClear.add(referent);
             }
         }
@@ -1346,5 +1392,46 @@ public class ReachabilityWalker {
             cleared++;
         }
         return cleared;
+    }
+
+    private static boolean isCapturedByWeakBackrefCode(RuntimeBase target) {
+        for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
+            if (referent instanceof RuntimeCode code
+                    && WeakRefRegistry.hasWeakRefsTo(code)
+                    && isReachableThroughCodeCaptures(code, target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isReachableThroughCodeCaptures(RuntimeCode code, RuntimeBase target) {
+        Set<RuntimeBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        if (followGlobalCodeCaptures(code, target, seen, todo)) return true;
+
+        int visits = 0;
+        final int MAX_VISITS = 10_000;
+        while (!todo.isEmpty() && visits++ < MAX_VISITS) {
+            RuntimeBase cur = todo.removeFirst();
+            if (cur == target) return true;
+            if (cur instanceof RuntimeStash) {
+                continue;
+            } else if (cur instanceof RuntimeHash h) {
+                if (h.elements instanceof HashSpecialVariable) continue;
+                for (RuntimeScalar v : h.elements.values()) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeArray a) {
+                for (RuntimeScalar v : a.elements) {
+                    if (followScalar(v, target, seen, todo)) return true;
+                }
+            } else if (cur instanceof RuntimeCode nestedCode) {
+                if (followGlobalCodeCaptures(nestedCode, target, seen, todo)) return true;
+            } else if (cur instanceof RuntimeScalar s) {
+                if (followScalar(s, target, seen, todo)) return true;
+            }
+        }
+        return false;
     }
 }

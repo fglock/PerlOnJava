@@ -4022,7 +4022,9 @@ sub test {
     $self->debug("Changed directory to $self->{build_dir}")
         if $CPAN::DEBUG;
 
-    if (open my $perlonjava_perl5lib_fh, ">", ".perlonjava-cpan-perl5lib") {
+    mkdir "blib" unless -d "blib";
+    unlink ".perlonjava-cpan-perl5lib";
+    if (open my $perlonjava_perl5lib_fh, ">", "blib/.perlonjava-cpan-perl5lib") {
         print {$perlonjava_perl5lib_fh} $ENV{PERL5LIB} || "";
         close $perlonjava_perl5lib_fh;
     }

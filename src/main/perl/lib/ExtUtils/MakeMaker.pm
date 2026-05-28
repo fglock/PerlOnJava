@@ -889,7 +889,7 @@ INST_LIB = $inst_lib
 INST_ARCHLIB = $inst_archlib
 INST_LIBDIR = \$(INST_LIB)
 INST_ARCHLIBDIR = \$(INST_ARCHLIB)
-PERLONJAVA_CPAN_PERL5LIB = \$(shell test -f .perlonjava-cpan-perl5lib && cat .perlonjava-cpan-perl5lib)
+PERLONJAVA_CPAN_PERL5LIB = \$(shell if test -f blib/.perlonjava-cpan-perl5lib; then cat blib/.perlonjava-cpan-perl5lib; elif test -f .perlonjava-cpan-perl5lib; then cat .perlonjava-cpan-perl5lib; fi)
 PERLONJAVA_TEST_PERL5LIB = \$(INST_LIB):\$(INST_ARCHLIB):\$(PERLONJAVA_CPAN_PERL5LIB):\$\$PERL5LIB
 $siteprefix_var
 INSTALLSITELIB = $installsitelib

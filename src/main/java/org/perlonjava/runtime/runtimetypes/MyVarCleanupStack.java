@@ -50,6 +50,19 @@ public class MyVarCleanupStack {
     }
 
     /**
+     * True when {@code var} is currently registered as a lexical, regardless
+     * of whether weak-ref tracking has populated {@link #liveCounts}. Used by
+     * first-bless paths that can run before the first {@code weaken()} call.
+     */
+    public static boolean isRegistered(Object var) {
+        if (var == null) return false;
+        for (Object entry : stack) {
+            if (entry == var) return true;
+        }
+        return false;
+    }
+
+    /**
      * Snapshot the currently-live my-variables. Used by the
      * reachability walker's per-object query
      * ({@link ReachabilityWalker#isReachableFromRoots}) to seed from

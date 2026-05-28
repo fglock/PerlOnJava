@@ -154,7 +154,17 @@ public class ReferenceOperators {
                     // statement boundary flushes, fixing method chain temporaries
                     // like `Foo->new()->method()` where the invocant was never
                     // tracked.
-                    referent.refCount = 1;
+                    boolean existingScalarOwner =
+                            runtimeScalar.type == RuntimeScalarType.REFERENCE
+                            && !runtimeScalar.refCountOwned
+                            && (runtimeScalar instanceof GlobalRuntimeScalar
+                            || GlobalVariable.globalVariables.containsValue(runtimeScalar)
+                            || MyVarCleanupStack.isRegistered(runtimeScalar));
+                    referent.refCount = existingScalarOwner ? 2 : 1;
+                    if (existingScalarOwner) {
+                        referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
+                        runtimeScalar.refCountOwned = true;
+                    }
                     MortalList.deferDecrement(referent);
                 }
                 // Activate the mortal mechanism
