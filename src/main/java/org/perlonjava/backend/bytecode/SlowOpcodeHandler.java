@@ -115,10 +115,7 @@ public class SlowOpcodeHandler {
     public static int executeFork(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
 
-        // fork() is not supported in Java - return -1 (error)
-        // Real implementation would need JNI or native library
-        registers[rd] = new RuntimeScalar(-1);
-        GlobalVariable.getGlobalVariable("main::!").set("fork not supported on this platform");
+        registers[rd] = SystemOperator.fork(RuntimeContextType.SCALAR);
         return pc;
     }
 
