@@ -34,6 +34,19 @@ is( code_ref_proto { 99 }, 99, "Code reference prototype works" );
 sub multi_proto ($$) { $_[0] + $_[1] }
 is( multi_proto( 2, 3 ), 5, "Multiple argument prototype works" );
 
+{
+    sub assign_proto_arg ($$) { $_[0] = $_[1] }
+
+    assign_proto_arg my $captured_by_named_sub => 42;
+    sub read_proto_arg_capture { $captured_by_named_sub }
+
+    is(
+        read_proto_arg_capture(),
+        42,
+        "Parenthesis-free multi-scalar prototype call preserves my lexical captured by named sub"
+    );
+}
+
 sub optional_proto (;$) { defined $_[0] ? $_[0] : "default" }
 is( optional_proto(),       "default", "Optional argument prototype works without arg" );
 is( optional_proto("test"), "test",    "Optional argument prototype works with arg" );
