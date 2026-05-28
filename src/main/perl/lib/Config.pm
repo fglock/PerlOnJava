@@ -83,6 +83,13 @@ sub _perl_os_name {
     return $lc;
 }
 
+sub _perl_launcher_suffix {
+    my ($is_windows, $perl_path) = @_;
+    return '' unless $is_windows;
+    return lc $1 if defined($perl_path) && $perl_path =~ /(\.(?:bat|cmd|exe))\z/i;
+    return '.bat';
+}
+
 # Best-effort hostname; falls back to "localhost" if Java doesn't expose it.
 my $host_name = eval {
     require Sys::Hostname;
@@ -121,6 +128,7 @@ my $system_cc = do {
 # Normalize OS name to Perl's $^O conventions.
 $os_name = _perl_os_name($os_name);
 my $is_windows = $os_name eq 'MSWin32';
+my $perl_launcher_suffix = _perl_launcher_suffix($is_windows, $^X);
 
 # tie returns the object, so the value returned to require will be true.
 %Config = (
@@ -282,7 +290,7 @@ my $is_windows = $os_name eq 'MSWin32';
     # Executable
     obj_ext => '.o',
     exe_ext => $is_windows ? '.exe' : '',
-    _exe => $is_windows ? '.exe' : '',
+    _exe => $perl_launcher_suffix,
     perlpath => $^X,  # Path to the perl interpreter (jperl)
     startperl => '#!' . $^X,  # Shebang line for Perl scripts
     sharpbang => '#!',  # Shebang prefix
